@@ -30,7 +30,8 @@ from pyspark.serializers import (
     write_with_length,
     SpecialLengths,
 )
-from pyspark.sql.types import _parse_datatype_json_string
+from pyspark.sql.functions import PartitioningColumn
+from pyspark.sql.types import _parse_datatype_json_string, StructType
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
 from pyspark.util import handle_worker_exception
 from pyspark.worker_util import (
@@ -116,12 +117,95 @@ def main(infile: IO, outfile: IO) -> None:
         handler = read_udtf(infile)
         args, kwargs = read_arguments(infile)
 
+        def error_prefix():
+            return f"Failed to evaluate the user-defined table function '{handler.__name__}'"
+
+        # Check invariants about the 'analyze' method before running it.
+        expected = inspect.getfullargspec(handler.analyze)
+        if (expected.varargs is None and expected.varkw is None and expected.defaults is None and
+                len(args) + len(kwargs) != len(expected.args)):
+            # The UDTF call provided the wrong number of positional arguments.
+            def arguments(num):
+                return f"{num} argument{'' if num == 1 else 's'}"
+            raise PySparkValueError(
+                f"{error_prefix()} because its static 'analyze' method expects exactly "
+                f"{arguments(len(expected.args))}, but the function call provided "
+                f"{arguments(len(args) + len(kwargs))} instead. Please update the query so that "
+                f"it provides exactly {arguments(len(expected.args))}, "
+                f"or else update the table function so that its 'analyze' method accepts "
+                f"exactly {arguments(len(args))}, and then try the query again."
+            )
+        expected_arg_names = set(expected.args)
+        provided_positional_arg_names = set(expected.args[: len(args)])
+        for arg_name in kwargs.keys():
+            if expected.varkw is None and arg_name not in expected_arg_names:
+                # The UDTF call provided a keyword argument whose name was not expected.
+                raise PySparkValueError(
+                    f"{error_prefix()} because its static 'analyze' method expects arguments "
+                    f"whose names appear in the set ({', '.join(expected_arg_names)}), but the "
+                    f"function call provided a keyword argument with unexpected name '{arg_name}' "
+                    f"instead. Please update the query so that it provides only keyword arguments "
+                    f"whose names appear in this set, or else update the table function so that "
+                    f"its 'analyze' method accepts argument names including "
+                    f"'{arg_name}', and then try the query again."
+                )
+            elif arg_name in provided_positional_arg_names:
+                # The UDTF call provided a duplicate keyword argument when a value for that argument
+                # was already specified positionally.
+                raise PySparkValueError(
+                    f"{error_prefix()} because the function call provided keyword argument "
+                    f"'{arg_name}' whose corresponding value was already specified positionally. "
+                    f"Note that the UDTF's static 'analyze' method expects positional argument "
+                    f"names in the list: {', '.join(expected_arg_names)}. Please update the "
+                    f"query so that it provides this argument's value exactly once instead, "
+                    f"and then try the query again."
+                )
+
+        # Invoke the UDTF's 'analyze' method.
         result = handler.analyze(*args, **kwargs)  # type: ignore[attr-defined]
 
+        # Check invariants about the 'analyze' method after running it.
         if not isinstance(result, AnalyzeResult):
             raise PySparkValueError(
-                "Output of `analyze` static method of Python UDTFs expects "
-                f"a pyspark.sql.udtf.AnalyzeResult but got: {type(result)}"
+                f"{error_prefix()} because the static 'analyze' method expects a result of type "
+                f"pyspark.sql.udtf.AnalyzeResult, but instead this method returned a value of "
+                f"type: {type(result)}"
+            )
+        elif not isinstance(result.schema, StructType):
+            raise PySparkValueError(
+                f"{error_prefix()} because the static 'analyze' method expects a result of type "
+                f"pyspark.sql.udtf.AnalyzeResult with a 'schema' field comprising a StructType, "
+                f"but the 'schema' field had the wrong type: {type(result.schema)}"
+            )
+        has_table_arg = (len([arg for arg in args if arg.isTable]) +
+                         len([arg for arg in kwargs.items() if arg[-1].isTable])) > 0
+        if not has_table_arg and result.withSinglePartition:
+            raise PySparkValueError(
+                f"{error_prefix()} because the static 'analyze' method returned an 'AnalyzeResult' "
+                f"object with the 'withSinglePartition' field set to 'true', but the function call "
+                f"did not provide any table argument. Please update the query so that it provides "
+                f"a table argument, or else update the table function so that its "
+                f"'analyze' method returns an 'AnalyzeResult' object with the "
+                f"'withSinglePartition' field set to 'false', and then try the query again."
+            )
+        elif not has_table_arg and len(result.partitionBy) > 0:
+            raise PySparkValueError(
+                f"{error_prefix()} because the static 'analyze' method returned an 'AnalyzeResult' "
+                f"object with the 'partitionBy' list set to non-empty, but the function call "
+                f"did not provide any table argument. Please update the query so that it provides "
+                f"a table argument, or else update the table function so that its "
+                f"'analyze' method returns an 'AnalyzeResult' object with the "
+                f"'partitionBy' list set to empty, and then try the query again."
+            )
+        elif (hasattr(result, 'partitionBy') and
+              isinstance(result.partitionBy, (list, tuple)) and
+              (len(result.partitionBy) > 0 and
+               not all([isinstance(val, PartitioningColumn) for val in result.partitionBy]))):
+            raise PySparkValueError(
+                f"{error_prefix()} because the static 'analyze' method returned an 'AnalyzeResult' "
+                f"object with the 'partitionBy' field set to a value besides a list or tuple of "
+                f"'PartitioningColumn' objects. " +
+                f"Please update the table function and then try the query again."
             )
 
         # Return the analyzed schema.

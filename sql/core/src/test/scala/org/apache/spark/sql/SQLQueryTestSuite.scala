@@ -644,25 +644,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
             s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
         }
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udtf")) {
-        Seq(TestUDTFSet(Seq(
-          TestPythonUDTF("udtf"),
-          TestPythonUDTFCountSumLast,
-          TestPythonUDTFLastString,
-          TestPythonUDTFWithSinglePartition,
-          TestPythonUDTFPartitionBy,
-          InvalidPartitionByAndWithSinglePartition,
-          InvalidOrderByWithoutPartitionBy,
-          InvalidEvalReturnsNoneToNonNullableColumnScalarType,
-          InvalidEvalReturnsNoneToNonNullableColumnArrayType,
-          InvalidEvalReturnsNoneToNonNullableColumnArrayElementType,
-          InvalidEvalReturnsNoneToNonNullableColumnStructType,
-          InvalidEvalReturnsNoneToNonNullableColumnMapType,
-          InvalidTerminateReturnsNoneToNonNullableColumnScalarType,
-          InvalidTerminateReturnsNoneToNonNullableColumnArrayType,
-          InvalidTerminateReturnsNoneToNonNullableColumnArrayElementType,
-          InvalidTerminateReturnsNoneToNonNullableColumnStructType,
-          InvalidTerminateReturnsNoneToNonNullableColumnMapType
-        ))).map { udtfSet =>
+        Seq(TestUDTFSet(AllTestUDTFs)).map { udtfSet =>
           UDTFSetTestCase(
             s"$testCaseName - Python UDTFs", absPath, resultFile, udtfSet)
         }

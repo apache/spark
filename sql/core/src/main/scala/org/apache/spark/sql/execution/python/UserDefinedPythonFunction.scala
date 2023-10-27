@@ -226,6 +226,9 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
     val length = dataIn.readInt()
     if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
+        // Remove the leading traceback stack trace from the error message string, if any, since it
+        // usually only includes the "analyze_udtf.py" filename and a line number.
+        .split("PySparkValueError:").last.strip()
       throw QueryCompilationErrors.tableValuedFunctionFailedToAnalyseInPythonError(msg)
     }
 

@@ -299,7 +299,7 @@ class BaseUDTFTestsMixin:
                 yield a,
 
         with self.assertRaisesRegex(
-            PythonException, r"__init__\(\) missing 1 required positional argument: 'a'"
+            PythonException, r".*constructor has more than one argument.*"
         ):
             TestUDTF(lit(1)).show()
 
@@ -1581,8 +1581,9 @@ class BaseUDTFTestsMixin:
 
         with self.assertRaisesRegex(
             AnalysisException,
-            "Output of `analyze` static method of Python UDTFs expects "
-            "a pyspark.sql.udtf.AnalyzeResult but got: <class 'pyspark.sql.types.StringType'>",
+            "static 'analyze' method expects a result of type pyspark.sql.udtf.AnalyzeResult, "
+            "but instead this method returned a value of type: "
+            "<class 'pyspark.sql.types.StringType'>",
         ):
             func().collect()
 
@@ -1627,17 +1628,17 @@ class BaseUDTFTestsMixin:
         func = udtf(TestUDTF)
 
         with self.assertRaisesRegex(
-            AnalysisException, r"analyze\(\) missing 1 required positional argument: 'b'"
+            AnalysisException, r"arguments"
         ):
             func(lit(1)).collect()
 
         with self.assertRaisesRegex(
-            AnalysisException, r"analyze\(\) takes 2 positional arguments but 3 were given"
+            AnalysisException, r"arguments"
         ):
             func(lit(1), lit(2), lit(3)).collect()
 
         with self.assertRaisesRegex(
-            PythonException, r"eval\(\) takes 2 positional arguments but 3 were given"
+            PythonException, r"arguments"
         ):
             func(lit(1), lit(2)).collect()
 
