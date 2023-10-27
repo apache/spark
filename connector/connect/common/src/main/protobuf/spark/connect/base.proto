@@ -850,10 +850,10 @@ message FetchErrorDetailsResponse {
     string fragment = 5;
 
     // The user code (call site of the API) that caused throwing the exception.
-    optional string callSite = 6;
+    string callSite = 6;
 
     // Summary of the exception cause.
-    optional string summary = 7;
+    string summary = 7;
   }
 
   // SparkThrowable defines the schema for SparkThrowable exceptions.
