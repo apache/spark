@@ -209,7 +209,6 @@ public class TransportContext implements Closeable {
     try {
       TransportChannelHandler channelHandler = createChannelHandler(channel, channelRpcHandler);
       ChannelPipeline pipeline = channel.pipeline();
-
       if (nettyLogger.getLoggingHandler() != null) {
         pipeline.addLast("loggingHandler", nettyLogger.getLoggingHandler());
       }
@@ -217,8 +216,7 @@ public class TransportContext implements Closeable {
       if (sslEncryptionEnabled()) {
         SslHandler sslHandler;
         try {
-          sslHandler = new SslHandler(
-            sslFactory.createSSLEngine(isClient, pipeline.channel().alloc()));
+          sslHandler = new SslHandler(sslFactory.createSSLEngine(isClient, channel.alloc()));
         } catch (Exception e) {
           throw new RuntimeException("Error creating Netty SslHandler", e);
         }
@@ -275,7 +273,7 @@ public class TransportContext implements Closeable {
       } else {
         logger.error("RPC SSL encryption enabled but keys not found!" +
           "Please ensure the configured keys are present.");
-        throw new RuntimeException("RPC SSL encryption enabled but keys not found!");
+        throw new IllegalArgumentException("RPC SSL encryption enabled but keys not found!");
       }
     } else {
       return null;

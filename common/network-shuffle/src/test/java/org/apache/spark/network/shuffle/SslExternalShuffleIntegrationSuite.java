@@ -33,63 +33,18 @@ import org.apache.spark.network.ssl.SslSampleConfigs;
 
 public class SslExternalShuffleIntegrationSuite extends ExternalShuffleIntegrationSuite {
 
-  private static TransportConf createTransportConf(String maxRetries, String rddEnabled) {
+  private static TransportConf createTransportConf(int maxRetries, boolean rddEnabled) {
     HashMap<String, String> config = new HashMap<>();
-    config.put("spark.shuffle.io.maxRetries", maxRetries);
-    config.put(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, rddEnabled);
+    config.put("spark.shuffle.io.maxRetries", String.valueOf(maxRetries));
+    config.put(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, String.valueOf(rddEnabled));
     return new TransportConf(
       "shuffle",
       SslSampleConfigs.createDefaultConfigProviderForRpcNamespaceWithAdditionalEntries(config)
     );
   }
 
-  @Override
-  protected TransportConf createTransportConfForFetchNoServerTest() {
-    return createTransportConf("0", "false");
-  }
-
   @BeforeAll
   public static void beforeAll() throws IOException {
-    Random rand = new Random();
-
-    for (byte[] block : exec0Blocks) {
-      rand.nextBytes(block);
-    }
-    for (byte[] block: exec1Blocks) {
-      rand.nextBytes(block);
-    }
-    rand.nextBytes(exec0RddBlockValid);
-    rand.nextBytes(exec0RddBlockToRemove);
-
-    dataContext0 = new TestShuffleDataContext(2, 5);
-    dataContext0.create();
-    dataContext0.insertSortShuffleData(0, 0, exec0Blocks);
-    dataContext0.insertCachedRddData(RDD_ID, SPLIT_INDEX_VALID_BLOCK, exec0RddBlockValid);
-    dataContext0.insertCachedRddData(RDD_ID, SPLIT_INDEX_VALID_BLOCK_TO_RM, exec0RddBlockToRemove);
-
-    conf = createTransportConf("0", "true");
-    handler = new ExternalBlockHandler(
-      new OneForOneStreamManager(),
-      new ExternalShuffleBlockResolver(conf, null) {
-        @Override
-        public ManagedBuffer getRddBlockData(String appId, String execId, int rddId, int splitIdx) {
-          ManagedBuffer res;
-          if (rddId == RDD_ID) {
-            switch (splitIdx) {
-              case SPLIT_INDEX_CORRUPT_LENGTH:
-                res = new FileSegmentManagedBuffer(
-                  conf, new File("missing.file"), 0, 12);
-                break;
-              default:
-                res = super.getRddBlockData(appId, execId, rddId, splitIdx);
-            }
-          } else {
-            res = super.getRddBlockData(appId, execId, rddId, splitIdx);
-          }
-          return res;
-        }
-    });
-    transportContext = new TransportContext(conf, handler);
-    server = transportContext.createServer();
+    doBeforeAllWithConfig(createTransportConf(0, true));
   }
 }

@@ -85,19 +85,20 @@ public class ExternalShuffleIntegrationSuite {
     new byte[54321],
   };
 
-  private static TransportConf createTransportConf(String maxRetries, String rddEnabled) {
+  private static TransportConf createTransportConf(int maxRetries, boolean rddEnabled) {
     HashMap<String, String> config = new HashMap<>();
-    config.put("spark.shuffle.io.maxRetries", maxRetries);
-    config.put(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, rddEnabled);
+    config.put("spark.shuffle.io.maxRetries", String.valueOf(maxRetries));
+    config.put(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, String.valueOf(rddEnabled));
     return new TransportConf("shuffle", new MapConfigProvider(config));
   }
 
-  protected TransportConf createTransportConfForFetchNoServerTest() {
-    return createTransportConf("0", "false");
-  }
-
+  // This is split out so it can be invoked in a subclass with a different config
   @BeforeAll
   public static void beforeAll() throws IOException {
+    doBeforeAllWithConfig(createTransportConf(0, true));
+  }
+
+  public static void doBeforeAllWithConfig(TransportConf transportConf) throws IOException {
     Random rand = new Random();
 
     for (byte[] block : exec0Blocks) {
@@ -115,7 +116,7 @@ public class ExternalShuffleIntegrationSuite {
     dataContext0.insertCachedRddData(RDD_ID, SPLIT_INDEX_VALID_BLOCK, exec0RddBlockValid);
     dataContext0.insertCachedRddData(RDD_ID, SPLIT_INDEX_VALID_BLOCK_TO_RM, exec0RddBlockToRemove);
 
-    conf = createTransportConf("0", "true");
+    conf = transportConf;
     handler = new ExternalBlockHandler(
       new OneForOneStreamManager(),
       new ExternalShuffleBlockResolver(conf, null) {
@@ -326,7 +327,7 @@ public class ExternalShuffleIntegrationSuite {
 
   @Test
   public void testFetchNoServer() throws Exception {
-    TransportConf clientConf = createTransportConfForFetchNoServerTest();
+    TransportConf clientConf = createTransportConf(0, false);
     registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
     FetchResult execFetch = fetchBlocks("exec-0",
       new String[]{"shuffle_1_0_0", "shuffle_1_0_1"}, clientConf, 1 /* port */);

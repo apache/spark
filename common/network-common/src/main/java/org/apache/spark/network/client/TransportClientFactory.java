@@ -305,16 +305,18 @@ public class TransportClientFactory implements Closeable {
             if (handshakeFuture.isSuccess()) {
               logger.debug("{} successfully completed TLS handshake to ", address);
             } else {
-              if (logger.isDebugEnabled()) {
-                logger.debug(
-                  "failed to complete TLS handshake to " + address,
-                  handshakeFuture.cause());
-              }
+              logger.info(
+                "failed to complete TLS handshake to " + address, handshakeFuture.cause());
               cf.channel().close();
             }
           }
       });
-      future.await(conf.connectionTimeoutMs());
+      if (!future.await(conf.connectionTimeoutMs())) {
+        logger.info("failed to connect to " + address + " within connection timeout");
+        cf.channel().close();
+        throw new IOException(
+          String.format("Failed to connect to %s within connection timeout", address));
+      }
     }
 
     TransportClient client = clientRef.get();

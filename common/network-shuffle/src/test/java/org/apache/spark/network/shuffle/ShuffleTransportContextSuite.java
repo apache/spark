@@ -40,7 +40,6 @@ import static org.mockito.Mockito.when;
 
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.protocol.Message;
-import org.apache.spark.network.protocol.MessageDecoder;
 import org.apache.spark.network.protocol.MessageEncoder;
 import org.apache.spark.network.protocol.MessageWithHeader;
 import org.apache.spark.network.protocol.RpcRequest;
@@ -94,16 +93,15 @@ public class ShuffleTransportContextSuite {
   public void testInitializePipeline() throws IOException {
     // SPARK-43987: test that the FinalizedHandler is added to the pipeline only when configured
     for (boolean enabled : new boolean[]{true, false}) {
-      for (boolean isClient: new boolean[]{true, false}) {
+      for (boolean client: new boolean[]{true, false}) {
         // Since the decoder is not Shareable, reset it between test runs to avoid errors since it's
         // used both across ShuffleTransportContextSuite and SslShuffleTransportContextSuite
         // and server/clients
-        ShuffleTransportContext.SHUFFLE_DECODER = new ShuffleTransportContext.ShuffleMessageDecoder(
-          MessageDecoder.INSTANCE);
+        ShuffleTransportContext.resetDecoderForTesting();
         ShuffleTransportContext ctx = createShuffleTransportContext(enabled);
         SocketChannel channel = new NioSocketChannel();
         RpcHandler rpcHandler = mock(RpcHandler.class);
-        ctx.initializePipeline(channel, rpcHandler, isClient);
+        ctx.initializePipeline(channel, rpcHandler, client);
         String handlerName = ShuffleTransportContext.FinalizedHandler.HANDLER_NAME;
         if (enabled) {
           Assertions.assertNotNull(channel.pipeline().get(handlerName));

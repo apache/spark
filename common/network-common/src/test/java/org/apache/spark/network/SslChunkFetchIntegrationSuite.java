@@ -16,23 +16,8 @@
  */
 package org.apache.spark.network;
 
-import java.io.File;
-import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
-import java.util.Random;
-
-import com.google.common.io.Closeables;
 import org.junit.jupiter.api.BeforeAll;
 
-import static org.junit.jupiter.api.Assertions.*;
-
-import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
-import org.apache.spark.network.buffer.ManagedBuffer;
-import org.apache.spark.network.buffer.NioManagedBuffer;
-import org.apache.spark.network.client.RpcResponseCallback;
-import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.server.RpcHandler;
-import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.ssl.SslSampleConfigs;
 
@@ -41,60 +26,7 @@ public class SslChunkFetchIntegrationSuite extends ChunkFetchIntegrationSuite {
 
   @BeforeAll
   public static void setUp() throws Exception {
-    int bufSize = 100000;
-    final ByteBuffer buf = ByteBuffer.allocate(bufSize);
-    for (int i = 0; i < bufSize; i ++) {
-      buf.put((byte) i);
-    }
-    buf.flip();
-    bufferChunk = new NioManagedBuffer(buf);
-
-    testFile = File.createTempFile("shuffle-test-file", "txt");
-    testFile.deleteOnExit();
-    RandomAccessFile fp = new RandomAccessFile(testFile, "rw");
-    boolean shouldSuppressIOException = true;
-    try {
-      byte[] fileContent = new byte[1024];
-      new Random().nextBytes(fileContent);
-      fp.write(fileContent);
-      shouldSuppressIOException = false;
-    } finally {
-      Closeables.close(fp, shouldSuppressIOException);
-    }
-
-    final TransportConf conf = new TransportConf(
-      "shuffle", SslSampleConfigs.createDefaultConfigProviderForRpcNamespace());
-    fileChunk = new FileSegmentManagedBuffer(conf, testFile, 10, testFile.length() - 25);
-
-    streamManager = new StreamManager() {
-      @Override
-      public ManagedBuffer getChunk(long streamId, int chunkIndex) {
-        assertEquals(STREAM_ID, streamId);
-        if (chunkIndex == BUFFER_CHUNK_INDEX) {
-          return new NioManagedBuffer(buf);
-        } else if (chunkIndex == FILE_CHUNK_INDEX) {
-          return new FileSegmentManagedBuffer(conf, testFile, 10, testFile.length() - 25);
-        } else {
-          throw new IllegalArgumentException("Invalid chunk index: " + chunkIndex);
-        }
-      }
-    };
-    RpcHandler handler = new RpcHandler() {
-      @Override
-      public void receive(
-          TransportClient client,
-          ByteBuffer message,
-          RpcResponseCallback callback) {
-        throw new UnsupportedOperationException();
-      }
-
-      @Override
-      public StreamManager getStreamManager() {
-        return streamManager;
-      }
-    };
-    context = new TransportContext(conf, handler);
-    server = context.createServer();
-    clientFactory = context.createClientFactory();
+    doSetUpWithConfig(new TransportConf(
+      "shuffle", SslSampleConfigs.createDefaultConfigProviderForRpcNamespace()));
   }
 }
