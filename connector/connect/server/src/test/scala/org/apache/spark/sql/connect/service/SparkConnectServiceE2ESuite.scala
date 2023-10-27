@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.connect.service
 
+import java.util.UUID
+
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
 
@@ -24,7 +26,7 @@ import org.apache.spark.sql.connect.SparkConnectServerTest
 class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
 
   test("ReleaseSession releases all queries and does not allow more requests in the session") {
-    withClient { client =>
+    withClient(sessionId = UUID.randomUUID.toString()) { client =>
       val query1 = client.execute(buildPlan("select * from range(10)"))
       val query2 = client.execute(buildPlan("select * from range(1)"))
       // just creating the iterator is lazy, trigger the query to be sent.
