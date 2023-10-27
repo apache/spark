@@ -70,6 +70,7 @@ jobs:
         GPG_KEY: "not_used"
         GPG_PASSPHRASE: "not_used"
         GIT_REF: ${{ matrix.branch }}
+        MAVEN_MXM_OPT: 2g
       run: |
         while true
         do
