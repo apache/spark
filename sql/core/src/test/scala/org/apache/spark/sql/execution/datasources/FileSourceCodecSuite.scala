@@ -17,7 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.util.Locale
+
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.execution.datasources.parquet.ParquetCompressionCodec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
@@ -58,9 +63,10 @@ class ParquetCodecSuite extends FileSourceCodecSuite {
   // Exclude "lzo" because it is GPL-licenced so not included in Hadoop.
   // Exclude "brotli" because the com.github.rdblue:brotli-codec dependency is not available
   // on Maven Central.
-  override protected def availableCodecs: Seq[String] = {
-    Seq("none", "uncompressed", "snappy", "gzip", "zstd", "lz4", "lz4_raw")
-  }
+  override protected def availableCodecs: Seq[String] =
+    (ParquetCompressionCodec.NONE +:
+      ParquetCompressionCodec.availableCodecs.asScala.iterator.to(Seq))
+      .map(_.name().toLowerCase(Locale.ROOT)).iterator.to(Seq)
 }
 
 class OrcCodecSuite extends FileSourceCodecSuite {
