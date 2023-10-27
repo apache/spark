@@ -28,10 +28,10 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 
-import org.apache.spark.sql.catalyst.bcvar.ArrayWrapper;
-import org.apache.spark.sql.execution.joins.BroadcastedJoinKeysWrapperImpl;
 import scala.reflect.ClassTag;
 
+import org.apache.spark.sql.catalyst.bcvar.ArrayWrapper;
+import org.apache.spark.sql.execution.joins.BroadcastedJoinKeysWrapperImpl;
 import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
@@ -51,7 +51,9 @@ import org.apache.spark.sql.types.StructType;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class BroadcastedJoinKeysWrapperTest {
   private transient SparkSession spark;
 
