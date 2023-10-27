@@ -103,7 +103,7 @@ trait AliasAwareQueryOutputOrdering[T <: QueryPlan[T]]
       // but if only `b AS y` can be projected we can't return `Seq(SortOrder(y))`.
       orderingExpressions.iterator.map { sortOrder =>
         val orderingSet = mutable.Set.empty[Expression]
-        val sameOrderings = sortOrder.children.toStream
+        val sameOrderings = sortOrder.children.to(LazyList)
           .flatMap(projectExpression)
           .filter(e => orderingSet.add(e.canonicalized))
           .take(aliasCandidateLimit)
