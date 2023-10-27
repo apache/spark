@@ -190,8 +190,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         } else {
           // check shuffle hash join
           if (hintToShuffleHashJoinLeft(hint)) invalidBuildSideInHint(hint.leftHint.get, "left")
-          if (hintToShuffleHashJoinRight(hint))
+          if (hintToShuffleHashJoinRight(hint)) {
             invalidBuildSideInHint(hint.rightHint.get, "right")
+          }
         }
       }
     }

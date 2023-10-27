@@ -349,8 +349,9 @@ object SQLConf {
       .internal()
       .doc(
         "When true, distinct count statistics will be used for computing the data size of the " +
-          "partitioned table after dynamic partition pruning, in order to evaluate if it is worth " +
-          "adding an extra subquery as the pruning filter if broadcast reuse is not applicable.")
+          "partitioned table after dynamic partition pruning, in order to evaluate if it is " +
+          "worth adding an extra subquery as the pruning filter if broadcast reuse is not " +
+          "applicable.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
@@ -600,8 +601,8 @@ object SQLConf {
   val AUTO_BROADCASTJOIN_THRESHOLD = buildConf("spark.sql.autoBroadcastJoinThreshold")
     .doc(
       "Configures the maximum size in bytes for a table that will be broadcast to all worker " +
-        "nodes when performing a join.  By setting this value to -1 broadcasting can be disabled. " +
-        "Note that currently statistics are only supported for Hive Metastore tables where the " +
+        "nodes when performing a join.  By setting this value to -1 broadcasting can be disabled." +
+        " Note that currently statistics are only supported for Hive Metastore tables where the " +
         "command `ANALYZE TABLE <tableName> COMPUTE STATISTICS noscan` has been " +
         "run, and file-based data source tables where the statistics are computed directly on " +
         "the files of data.")
@@ -943,9 +944,9 @@ object SQLConf {
     .internal()
     .doc(
       "When true, the query optimizer will infer and propagate data constraints in the query " +
-        "plan to optimize them. Constraint propagation can sometimes be computationally expensive " +
-        "for certain kinds of query plans (such as those with a large number of predicates and " +
-        "aliases) which might negatively impact overall runtime.")
+        "plan to optimize them. Constraint propagation can sometimes be computationally " +
+        "expensive for certain kinds of query plans (such as those with a large number of " +
+        "predicates and aliases) which might negatively impact overall runtime.")
     .version("2.2.0")
     .booleanConf
     .createWithDefault(true)
@@ -973,8 +974,8 @@ object SQLConf {
     .internal()
     .doc(
       "When estimating the output data size of a table scan, multiply the file size with this " +
-        "factor as the estimated data size, in case the data is compressed in the file and lead to" +
-        " a heavily underestimated result.")
+        "factor as the estimated data size, in case the data is compressed in the file and lead " +
+        " to a heavily underestimated result.")
     .version("2.3.1")
     .doubleConf
     .checkValue(_ > 0, "the value of fileCompressionFactor must be greater than 0")
@@ -1093,7 +1094,8 @@ object SQLConf {
 
   val PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED =
     buildConf("spark.sql.parquet.filterPushdown.string.startsWith")
-      .doc("If true, enables Parquet filter push-down optimization for string startsWith function. " +
+      .doc("If true, enables Parquet filter push-down optimization for string startsWith " +
+        "function. " +
         s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
         "enabled.")
       .version("2.4.0")
@@ -1335,8 +1337,8 @@ object SQLConf {
     buildConf("spark.sql.hive.metastorePartitionPruningFallbackOnException")
       .doc(
         "Whether to fallback to get all partitions from Hive metastore and perform partition " +
-          "pruning on Spark client side, when encountering MetaException from the metastore. Note " +
-          "that Spark query performance may degrade if this is enabled and there are many " +
+          "pruning on Spark client side, when encountering MetaException from the metastore. " +
+          " Note that Spark query performance may degrade if this is enabled and there are many " +
           "partitions to be listed. If this is disabled, Spark will fail the query instead.")
       .version("3.3.0")
       .booleanConf
@@ -2008,8 +2010,8 @@ object SQLConf {
       .internal()
       .doc(
         "When true, check if the data from state store is valid or not when running streaming " +
-          "queries. This can happen if the state store format has been changed. Note, the feature " +
-          "is only effective in the build-in HDFS state store provider now.")
+          "queries. This can happen if the state store format has been changed. Note, the " +
+          "feature is only effective in the build-in HDFS state store provider now.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
@@ -2119,8 +2121,8 @@ object SQLConf {
       .doc(
         "Running multiple runs of the same streaming query concurrently is not supported. " +
           "If we find a concurrent active run for a streaming query (in the same or different " +
-          "SparkSessions on the same cluster) and this flag is true, we will stop the old streaming " +
-          "query run to start the new one.")
+          "SparkSessions on the same cluster) and this flag is true, we will stop the old " +
+          " streaming query run to start the new one.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
@@ -4342,7 +4344,8 @@ object SQLConf {
       .internal()
       .doc(
         "The build side legs under BroadcastExchangeExec may be reusable unless broadcast var " +
-          "push down make them non identical preventing reuse of exchange operator. default is false ")
+          "push down make them non identical preventing reuse of exchange operator. default is " +
+          "false ")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
@@ -4610,9 +4613,9 @@ object SQLConf {
       .internal()
       .doc(
         "Enable resolving implicit lateral column alias defined in the same SELECT list. For " +
-          "example, with this conf turned on, for query `SELECT 1 AS a, a + 1` the `a` in `a + 1` " +
-          "can be resolved as the previously defined `1 AS a`. But note that table column has " +
-          "higher resolution priority than the lateral column alias.")
+          "example, with this conf turned on, for query `SELECT 1 AS a, a + 1` the `a` in " +
+          "`a + 1` can be resolved as the previously defined `1 AS a`. But note that table " +
+          "column  has higher resolution priority than the lateral column alias.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)

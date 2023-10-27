@@ -156,8 +156,10 @@ object BroadcastHashJoinUtil {
         val jkdsOfInterest = bs.proxyForPushedBroadcastVar.get.collect {
           case proxy
               if (proxy.buildLegPlan.eq(buildLp) || proxy.buildLegPlan.canonicalized ==
-                buildLp.canonicalized) && (proxy.buildLegProxyBroadcastVarAndStageIdentifiers.isEmpty || (buildLegProxies.size == proxy.buildLegProxyBroadcastVarAndStageIdentifiers.size &&
-                buildLegProxies.forall(
+                buildLp.canonicalized) && (
+                proxy.buildLegProxyBroadcastVarAndStageIdentifiers.isEmpty || (
+                  buildLegProxies.size == proxy.buildLegProxyBroadcastVarAndStageIdentifiers.size &&
+                  buildLegProxies.forall(
                   proxy.buildLegProxyBroadcastVarAndStageIdentifiers.contains))) =>
             proxy.joiningKeysData.filter(jkd =>
               canonicalizedBuildKeys.exists(_ ==

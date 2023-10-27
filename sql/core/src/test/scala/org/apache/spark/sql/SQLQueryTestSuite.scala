@@ -359,7 +359,7 @@ class SQLQueryTestSuite
         testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }
-    } else
+    } else {
       testCase match {
         case udfTestCase: UDFTest
             if udfTestCase.udf.isInstanceOf[TestPythonUDF] && !shouldTestPythonUDFs =>
@@ -389,6 +389,7 @@ class SQLQueryTestSuite
             runSqlTestCase(testCase, listTestCases)
           }
       }
+    }
   }
 
   /** Run a test case. */
@@ -738,7 +739,8 @@ class SQLQueryTestSuite
         newTestCases.flatMap { test =>
           test match {
             case _: UDAFTestCase =>
-              // Skip creating analyzer test cases for UDAF tests as they are hard to update locally.
+              // Skip creating analyzer test cases for UDAF tests as they are hard to update
+              // locally.
               Seq(test)
             case _ =>
               Seq(

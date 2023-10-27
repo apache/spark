@@ -79,7 +79,7 @@ case class AdaptiveSparkPlanExec(
 
   @transient private val lock = new Object()
 
-  @transient private val logOnLevel: (=> String) => Unit = conf.adaptiveExecutionLogLevel match {
+  @transient private val logOnLevel: ( => String) => Unit = conf.adaptiveExecutionLogLevel match {
     case "TRACE" => logTrace(_)
     case "DEBUG" => logDebug(_)
     case "INFO" => logInfo(_)
@@ -147,7 +147,8 @@ case class AdaptiveSparkPlanExec(
     CoalesceShufflePartitions(context.session),
     // `OptimizeShuffleWithLocalRead` needs to make use of 'AQEShuffleReadExec.partitionSpecs'
     // added by `CoalesceShufflePartitions`, and must be executed after it.
-    OptimizeShuffleWithLocalRead) ++ context.session.sessionState.adaptiveRulesHolder.queryStageOptimizerRules
+    OptimizeShuffleWithLocalRead) ++
+    context.session.sessionState.adaptiveRulesHolder.queryStageOptimizerRules
 
   // This rule is stateful as it maintains the codegen stage ID. We can't create a fresh one every
   // time and need to keep it in a variable.

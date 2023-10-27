@@ -137,7 +137,8 @@ case class BatchScanExec(
               "During runtime filtering, data source must not report new " +
                 "partition values that are not present in the original partitioning.")
           }
-          groupPartitions(newPartitions).map(_.groupedParts.map(_.parts)).getOrElse(Seq.empty)
+          groupPartitions(newPartitions).map(_.groupedParts.map(_.parts)).
+            getOrElse(Seq.empty)
 
         case _ =>
           // no validation is needed as the data source did not report any specific partitioning
@@ -214,9 +215,10 @@ case class BatchScanExec(
                   }
 
                   // When partially clustered, the input partitions are not grouped by partition
-                  // values. Here we'll need to check `commonPartitionValues` and decide how to group
-                  // and replicate splits within a partition.
-                  if (spjParams.commonPartitionValues.isDefined && spjParams.applyPartialClustering) {
+                  // values. Here we'll need to check `commonPartitionValues` and decide how to
+                  // group and replicate splits within a partition.
+                  if (spjParams.commonPartitionValues.isDefined &&
+                    spjParams.applyPartialClustering) {
                     // A mapping from the common partition values to how many splits the partition
                     // should contain.
                     val commonPartValuesMap = spjParams.commonPartitionValues.get
@@ -224,7 +226,8 @@ case class BatchScanExec(
                       .toMap
                     val nestGroupedPartitions = groupedPartitions.map {
                       case (partValue, splits) =>
-                        // `commonPartValuesMap` should contain the part value since it's the super set.
+                        // `commonPartValuesMap` should contain the part value since it's the super
+                        // set.
                         val numSplits = commonPartValuesMap
                           .get(InternalRowComparableWrapper(partValue, partExpressions))
                         assert(
@@ -233,14 +236,16 @@ case class BatchScanExec(
                             "common partition values from Spark plan")
 
                         val newSplits = if (spjParams.replicatePartitions) {
-                          // We need to also replicate partitions according to the other side of join
+                          // We need to also replicate partitions according to the other side of
+                          // join
                           Seq.fill(numSplits.get)(splits)
                         } else {
                           // Not grouping by partition values: this could be the side with partially
-                          // clustered distribution. Because of dynamic filtering, we'll need to check
-                          // if the final number of splits of a partition is smaller than the original
-                          // number, and fill with empty splits if so. This is necessary so that both
-                          // sides of a join will have the same number of partitions & splits.
+                          // clustered distribution. Because of dynamic filtering, we'll need to
+                          // check if the final number of splits of a partition is smaller than the
+                          // original number, and fill with empty splits if so. This is necessary so
+                          // that both sides of a join will have the same number of partitions &
+                          // splits.
                           splits.map(Seq(_)).padTo(numSplits.get, Seq.empty)
                         }
                         (InternalRowComparableWrapper(partValue, partExpressions), newSplits)
@@ -324,7 +329,8 @@ case class BatchScanExec(
           val joinKeysStr = proxy.joiningKeysData
             .map(jkd =>
               s"build side join" +
-                s" key index= ${jkd.joinKeyIndexInJoiningKeys} and stream side join key index at leaf =" +
+                s" key index= ${jkd.joinKeyIndexInJoiningKeys} and stream side join key index" +
+                s" at leaf =" +
                 s" ${jkd.streamsideLeafJoinAttribIndex}")
             .mkString(";")
           s"for this buildleg : join col and streaming col = $joinKeysStr"
