@@ -4131,10 +4131,10 @@ object SQLConf {
     buildConf("spark.sql.execution.broadcastHashJoin.preferBroadcastVarPushDownOverDPP")
       .internal()
       .doc("For BroadcastHashJoin prefer the leg whose plan has already been broadcasted once," +
-        " for BuildSide")
+        " for BuildSide.  This has a bug in code so it is defaulted to false")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val PREFER_AS_BUILDSIDE_LEG_ALREADY_BROADCASTED =
     buildConf("spark.sql.execution.broadcastHashJoin.preferAsBuildSideLegAlreadyBroadcasted")
