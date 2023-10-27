@@ -2943,29 +2943,12 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             start_index: builtins.int = ...,
             stop_index: builtins.int = ...,
             fragment: builtins.str = ...,
-            callSite: builtins.str | None = ...,
-            summary: builtins.str | None = ...,
+            callSite: builtins.str = ...,
+            summary: builtins.str = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_callSite",
-                b"_callSite",
-                "_summary",
-                b"_summary",
-                "callSite",
-                b"callSite",
-                "summary",
-                b"summary",
-            ],
-        ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "_callSite",
-                b"_callSite",
-                "_summary",
-                b"_summary",
                 "callSite",
                 b"callSite",
                 "context_type",
@@ -2984,14 +2967,6 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
                 b"summary",
             ],
         ) -> None: ...
-        @typing.overload
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_callSite", b"_callSite"]
-        ) -> typing_extensions.Literal["callSite"] | None: ...
-        @typing.overload
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_summary", b"_summary"]
-        ) -> typing_extensions.Literal["summary"] | None: ...
 
     class SparkThrowable(google.protobuf.message.Message):
         """SparkThrowable defines the schema for SparkThrowable exceptions."""
