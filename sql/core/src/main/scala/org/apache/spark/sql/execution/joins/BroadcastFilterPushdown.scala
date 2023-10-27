@@ -35,7 +35,7 @@ import org.apache.spark.sql.types.DataType
 object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
   override def apply(plan: SparkPlan): SparkPlan = {
     val shouldAttemptBroadcastVarPushdown = plan.conf.pushBroadcastedJoinKeysASFilterToScan &&
-        !plan.isInstanceOf[V2TableWriteExec]
+      !plan.isInstanceOf[V2TableWriteExec]
     if (shouldAttemptBroadcastVarPushdown) {
       val (newPlan, removedDpps) = useTopDownPush(plan)
       if (!removedDpps.isEmpty) {
@@ -43,8 +43,8 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
         val allDpps = removedDpps.values().asScala.flatten.toSeq
         val newlpOpt = plan.logicalLink.map(lp =>
           lp.transformAllExpressionsWithPruning(
-              _.containsAnyPattern(DYNAMIC_PRUNING_EXPRESSION, DYNAMIC_PRUNING_SUBQUERY)) {
-            case dp: DynamicPruning if allDpps.exists(_ eq dp ) => Literal.TrueLiteral
+            _.containsAnyPattern(DYNAMIC_PRUNING_EXPRESSION, DYNAMIC_PRUNING_SUBQUERY)) {
+            case dp: DynamicPruning if allDpps.exists(_ eq dp) => Literal.TrueLiteral
           })
         newlpOpt.foreach(newPlan.setLogicalLink)
         newPlan
@@ -56,8 +56,8 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
     }
   }
 
-  private def buildLegsBlockingAncestorsPushForReusePreference(plan: SparkPlan):
-      util.IdentityHashMap[SparkPlan, SparkPlan] = {
+  private def buildLegsBlockingAncestorsPushForReusePreference(
+      plan: SparkPlan): util.IdentityHashMap[SparkPlan, SparkPlan] = {
     val buildLegBlockingPushFromAncestors = new util.IdentityHashMap[SparkPlan, SparkPlan]()
     val canonicalizedBuildLegToOriginal = mutable.Map[SparkPlan, SparkPlan]()
     val nodesToTraverse = mutable.ListBuffer[SparkPlan](plan)
@@ -70,100 +70,139 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
 
             case _ => (bhj.left.canonicalized, bhj.left)
           }
-          val cached = canonicalizedBuildLegToOriginal.getOrElseUpdate(buildLegCanonicalized,
-              buildLeg)
+          val cached =
+            canonicalizedBuildLegToOriginal.getOrElseUpdate(buildLegCanonicalized, buildLeg)
           if (cached.ne(buildLeg)) {
             buildLegBlockingPushFromAncestors.put(cached, cached)
             buildLegBlockingPushFromAncestors.put(buildLeg, buildLeg)
           }
           nodesToTraverse.prepend(bhj.left, bhj.right)
 
-        case _ => val children = nodeToAnalyze.children
-        if (children.nonEmpty) {
-          nodesToTraverse.prepend(children : _*)
-        }
+        case _ =>
+          val children = nodeToAnalyze.children
+          if (children.nonEmpty) {
+            nodesToTraverse.prepend(children: _*)
+          }
       }
     }
     buildLegBlockingPushFromAncestors
   }
 
-  private def useTopDownPush(plan: SparkPlan):
-      (SparkPlan, java.util.IdentityHashMap[LogicalPlan, Seq[DynamicPruning]]) = {
-    val buildLegsBlockingPushFromAncestors = if (conf.preferReuseExchangeOverBroadcastVarPushdown) {
-      buildLegsBlockingAncestorsPushForReusePreference(plan)
-    } else {
-      new util.IdentityHashMap[SparkPlan, SparkPlan]()
-    }
-    val batchScanToJoinLegMapping = new util.IdentityHashMap[BatchScanExec,
-        mutable.Map[LogicalPlan, Seq[JoiningKeyData]]]()
+  private def useTopDownPush(plan: SparkPlan)
+      : (SparkPlan, java.util.IdentityHashMap[LogicalPlan, Seq[DynamicPruning]]) = {
+    val buildLegsBlockingPushFromAncestors =
+      if (conf.preferReuseExchangeOverBroadcastVarPushdown) {
+        buildLegsBlockingAncestorsPushForReusePreference(plan)
+      } else {
+        new util.IdentityHashMap[SparkPlan, SparkPlan]()
+      }
+    val batchScanToJoinLegMapping =
+      new util.IdentityHashMap[BatchScanExec, mutable.Map[LogicalPlan, Seq[JoiningKeyData]]]()
     val batchScanToRemoveDpp = new util.IdentityHashMap[BatchScanExec, BatchScanExec]()
     val removedDpps = new util.IdentityHashMap[LogicalPlan, Seq[DynamicPruning]]()
-    val buildLegPlanToOriginalBatchScans = new util.IdentityHashMap[LogicalPlan,
-        Seq[BatchScanExec]]()
+    val buildLegPlanToOriginalBatchScans =
+      new util.IdentityHashMap[LogicalPlan, Seq[BatchScanExec]]()
     val originalBatchScanToNewBatchScan = new util.IdentityHashMap[BatchScanExec, BatchScanExec]()
     val batchScanToStreamingCol = new util.IdentityHashMap[BatchScanExec, Seq[Int]]()
     val transformedPlanPart1 = plan transformDown {
       case BroadcastHashJoinExtractorForBCPush(bhj) =>
-        val (buildPlan, streamedPlan, streamedKeys, buildKeys, canonicalizedStreamKeys,
-        canonicalizedJoinKeys) =
+        val (
+          buildPlan,
+          streamedPlan,
+          streamedKeys,
+          buildKeys,
+          canonicalizedStreamKeys,
+          canonicalizedJoinKeys) =
           bhj.buildSide match {
-          case BuildLeft => (bhj.left, bhj.right, bhj.rightKeys, bhj.leftKeys,
-            bhj.canonicalized.asInstanceOf[BroadcastHashJoinExec].rightKeys,
-            bhj.canonicalized.asInstanceOf[BroadcastHashJoinExec].leftKeys)
+            case BuildLeft =>
+              (
+                bhj.left,
+                bhj.right,
+                bhj.rightKeys,
+                bhj.leftKeys,
+                bhj.canonicalized.asInstanceOf[BroadcastHashJoinExec].rightKeys,
+                bhj.canonicalized.asInstanceOf[BroadcastHashJoinExec].leftKeys)
 
-          case BuildRight => (bhj.right, bhj.left, bhj.leftKeys, bhj.rightKeys,
-            bhj.canonicalized.asInstanceOf[BroadcastHashJoinExec].leftKeys,
-            bhj.canonicalized.asInstanceOf[BroadcastHashJoinExec].rightKeys)
-        }
+            case BuildRight =>
+              (
+                bhj.right,
+                bhj.left,
+                bhj.leftKeys,
+                bhj.rightKeys,
+                bhj.canonicalized.asInstanceOf[BroadcastHashJoinExec].leftKeys,
+                bhj.canonicalized.asInstanceOf[BroadcastHashJoinExec].rightKeys)
+          }
         var pushingAnyFilter = false
-        val temp = BroadcastHashJoinUtil.canPushBroadcastedKeysAsFilter(conf, streamedKeys,
-            buildKeys, streamedPlan, buildPlan, batchScanToJoinLegMapping,
-            buildLegsBlockingPushFromAncestors)
+        val temp = BroadcastHashJoinUtil.canPushBroadcastedKeysAsFilter(
+          conf,
+          streamedKeys,
+          buildKeys,
+          streamedPlan,
+          buildPlan,
+          batchScanToJoinLegMapping,
+          buildLegsBlockingPushFromAncestors)
         val groupingOnBasisOfBatchScanExec = temp.groupBy(_.targetBatchScanExec)
         val logicalNode = buildPlan.logicalLink.get
-        buildLegPlanToOriginalBatchScans.put(logicalNode, BroadcastHashJoinUtil
+        buildLegPlanToOriginalBatchScans.put(
+          logicalNode,
+          BroadcastHashJoinUtil
             .getAllBatchScansForSparkPlan(buildPlan))
 
-        groupingOnBasisOfBatchScanExec.foreach {
-          case (bsExec, list) =>
-            val keysToPush = list.filter {
-              case BroadcastVarPushDownData(baseStreamCol, _, _, _, _) =>
-                !batchScanToStreamingCol.containsKey(bsExec) ||
-                  !batchScanToStreamingCol.get(bsExec).contains(baseStreamCol)
+        groupingOnBasisOfBatchScanExec.foreach { case (bsExec, list) =>
+          val keysToPush = list.filter {
+            case BroadcastVarPushDownData(baseStreamCol, _, _, _, _) =>
+              !batchScanToStreamingCol.containsKey(bsExec) ||
+              !batchScanToStreamingCol.get(bsExec).contains(baseStreamCol)
+          }
+          if (keysToPush.nonEmpty) {
+            val removeDpp = keysToPush.exists(_.requiresDPPRemoval)
+            pushingAnyFilter = true
+            if (removeDpp) {
+              batchScanToRemoveDpp.put(bsExec, bsExec)
             }
-            if (keysToPush.nonEmpty) {
-              val removeDpp = keysToPush.exists(_.requiresDPPRemoval)
-              pushingAnyFilter = true
-              if (removeDpp) {
-                batchScanToRemoveDpp.put(bsExec, bsExec)
-              }
-              keysToPush.foreach {
-                case BroadcastVarPushDownData(streamingColLeafIndex, _, joiningColDataType,
-                    joinIndex, _) =>
-                  batchScanToJoinLegMapping.compute(bsExec, (_, prevVal) => {
-                      val mappings = if (prevVal eq null) {
-                        mutable.Map[LogicalPlan, Seq[JoiningKeyData]]()
-                      } else {
-                        prevVal
-                      }
-                      val joiningKeysDataOpt = mappings.get(logicalNode)
-                      val joiningKeysData = joiningKeysDataOpt.
-                        fold(Seq(JoiningKeyData(canonicalizedStreamKeys(joinIndex),
-                          canonicalizedJoinKeys(joinIndex), streamingColLeafIndex,
-                          joiningColDataType, joinIndex)))(
-                          _ :+ JoiningKeyData(canonicalizedStreamKeys(joinIndex),
-                            canonicalizedJoinKeys(joinIndex),
-                            streamingColLeafIndex, joiningColDataType, joinIndex))
-                      mappings += (logicalNode -> joiningKeysData)
-                      mappings
+            keysToPush.foreach {
+              case BroadcastVarPushDownData(
+                    streamingColLeafIndex,
+                    _,
+                    joiningColDataType,
+                    joinIndex,
+                    _) =>
+                batchScanToJoinLegMapping.compute(
+                  bsExec,
+                  (_, prevVal) => {
+                    val mappings = if (prevVal eq null) {
+                      mutable.Map[LogicalPlan, Seq[JoiningKeyData]]()
+                    } else {
+                      prevVal
+                    }
+                    val joiningKeysDataOpt = mappings.get(logicalNode)
+                    val joiningKeysData = joiningKeysDataOpt.fold(
+                      Seq(
+                        JoiningKeyData(
+                          canonicalizedStreamKeys(joinIndex),
+                          canonicalizedJoinKeys(joinIndex),
+                          streamingColLeafIndex,
+                          joiningColDataType,
+                          joinIndex)))(
+                      _ :+ JoiningKeyData(
+                        canonicalizedStreamKeys(joinIndex),
+                        canonicalizedJoinKeys(joinIndex),
+                        streamingColLeafIndex,
+                        joiningColDataType,
+                        joinIndex))
+                    mappings += (logicalNode -> joiningKeysData)
+                    mappings
                   })
-                  batchScanToStreamingCol.compute(bsExec, (_, v) => if (v eq null) {
-                    Seq(streamingColLeafIndex)
-                  } else {
-                    v :+ streamingColLeafIndex
-                  })
-              }
+                batchScanToStreamingCol.compute(
+                  bsExec,
+                  (_, v) =>
+                    if (v eq null) {
+                      Seq(streamingColLeafIndex)
+                    } else {
+                      v :+ streamingColLeafIndex
+                    })
             }
+          }
         }
         if (pushingAnyFilter) {
           val newBhj = bhj.copy(bcVarPushNode = SELF_PUSH)
@@ -178,41 +217,55 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
 
       case bs: BatchScanExec if batchScanToJoinLegMapping.containsKey(bs) =>
         val buildLeg = batchScanToJoinLegMapping.get(bs)
-        val newBs = if (conf.preferBroadcastVarPushdownOverDPP && batchScanToRemoveDpp.
-            containsKey(bs)) {
-          val newBatchScan = bs.copy(proxyForPushedBroadcastVar = Option(buildLeg.toSeq.sortBy(
-              _._1.hashCode()).map {
-                case (sp, joinData) => new ProxyBroadcastVarAndStageIdentifier(sp, joinData.
-                  sortBy(_.joinKeyIndexInJoiningKeys))
-              }.toSeq), runtimeFilters = Seq.empty)
+        val newBs =
+          if (conf.preferBroadcastVarPushdownOverDPP && batchScanToRemoveDpp.containsKey(bs)) {
+            val newBatchScan = bs.copy(
+              proxyForPushedBroadcastVar = Option(
+                buildLeg.toSeq
+                  .sortBy(_._1.hashCode())
+                  .map { case (sp, joinData) =>
+                    new ProxyBroadcastVarAndStageIdentifier(
+                      sp,
+                      joinData.sortBy(_.joinKeyIndexInJoiningKeys))
+                  }
+                  .toSeq),
+              runtimeFilters = Seq.empty)
 
-          val dppRemoved = bs.runtimeFilters.filter(_.isInstanceOf[DynamicPruning]).
-              map(_.asInstanceOf[DynamicPruning])
-          bs.logicalLink.foreach(lpForBs => {
-            val leafForBs = lpForBs.collectLeaves().head
-            removedDpps.put(leafForBs, dppRemoved)
-            newBatchScan.setLogicalLink(leafForBs)
-          })
-          newBatchScan
-        } else {
-          bs.copy(proxyForPushedBroadcastVar = Option(buildLeg.toSeq.sortBy(_._1.hashCode()).map {
-            case (lp, streamSideJoinKeysForBuildLeg) => new ProxyBroadcastVarAndStageIdentifier(
-                lp, streamSideJoinKeysForBuildLeg.sortBy(_.joinKeyIndexInJoiningKeys))
-          }.toSeq))
-        }
+            val dppRemoved = bs.runtimeFilters
+              .filter(_.isInstanceOf[DynamicPruning])
+              .map(_.asInstanceOf[DynamicPruning])
+            bs.logicalLink.foreach(lpForBs => {
+              val leafForBs = lpForBs.collectLeaves().head
+              removedDpps.put(leafForBs, dppRemoved)
+              newBatchScan.setLogicalLink(leafForBs)
+            })
+            newBatchScan
+          } else {
+            bs.copy(proxyForPushedBroadcastVar = Option(
+              buildLeg.toSeq
+                .sortBy(_._1.hashCode())
+                .map { case (lp, streamSideJoinKeysForBuildLeg) =>
+                  new ProxyBroadcastVarAndStageIdentifier(
+                    lp,
+                    streamSideJoinKeysForBuildLeg.sortBy(_.joinKeyIndexInJoiningKeys))
+                }
+                .toSeq))
+          }
         originalBatchScanToNewBatchScan.put(bs, newBs)
         newBs
     }
-    val finalTransformedPlan = insertBuildLegProxiesOnBatchScans(transformedPlanPart1,
-        buildLegPlanToOriginalBatchScans, originalBatchScanToNewBatchScan)
+    val finalTransformedPlan = insertBuildLegProxiesOnBatchScans(
+      transformedPlanPart1,
+      buildLegPlanToOriginalBatchScans,
+      originalBatchScanToNewBatchScan)
     finalTransformedPlan -> removedDpps
   }
 
   private def insertBuildLegProxiesOnBatchScans(
       sparkPlan: SparkPlan,
       buildLegPlanToOriginalBatchScans: util.IdentityHashMap[LogicalPlan, Seq[BatchScanExec]],
-      originalBatchScanToNewBatchScan: util.IdentityHashMap[BatchScanExec, BatchScanExec]
-  ): SparkPlan = {
+      originalBatchScanToNewBatchScan: util.IdentityHashMap[BatchScanExec, BatchScanExec])
+      : SparkPlan = {
     sparkPlan match {
       case bs: BatchScanExec if bs.proxyForPushedBroadcastVar.isDefined =>
         val currentProxy = bs.proxyForPushedBroadcastVar.get
@@ -233,26 +286,32 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
             }
           })
         })
-        val newProxies = currentProxy.zip(buildProxyiesData).map {
-          case (proxy, buildLegPrxoxies) =>
-            new ProxyBroadcastVarAndStageIdentifier(proxy.buildLegPlan,
-            proxy.joiningKeysData, buildLegPrxoxies)
-        }
+        val newProxies =
+          currentProxy.zip(buildProxyiesData).map { case (proxy, buildLegPrxoxies) =>
+            new ProxyBroadcastVarAndStageIdentifier(
+              proxy.buildLegPlan,
+              proxy.joiningKeysData,
+              buildLegPrxoxies)
+          }
         val newBs = bs.copy(proxyForPushedBroadcastVar = Option(newProxies))
         bs.logicalLink.foreach(newBs.setLogicalLink)
         //  make another entry which is for the bs to new batch scan, which is send update
         originalBatchScanToNewBatchScan.put(bs, newBs)
         newBs
       case bhj: BroadcastHashJoinExec =>
-        val(buildPlan, streamPlan) = bhj.buildSide match {
+        val (buildPlan, streamPlan) = bhj.buildSide match {
           case BuildRight => bhj.right -> bhj.left
 
           case BuildLeft => bhj.left -> bhj.right
         }
-        val newBuildPlan = insertBuildLegProxiesOnBatchScans(buildPlan,
-            buildLegPlanToOriginalBatchScans, originalBatchScanToNewBatchScan)
-        val newStreamPlan = insertBuildLegProxiesOnBatchScans(streamPlan,
-            buildLegPlanToOriginalBatchScans, originalBatchScanToNewBatchScan)
+        val newBuildPlan = insertBuildLegProxiesOnBatchScans(
+          buildPlan,
+          buildLegPlanToOriginalBatchScans,
+          originalBatchScanToNewBatchScan)
+        val newStreamPlan = insertBuildLegProxiesOnBatchScans(
+          streamPlan,
+          buildLegPlanToOriginalBatchScans,
+          originalBatchScanToNewBatchScan)
         val newBhj = bhj.buildSide match {
           case BuildRight => bhj.copy(right = newBuildPlan, left = newStreamPlan)
 
@@ -265,8 +324,11 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
         if (sparkPlan.children.isEmpty) {
           sparkPlan
         } else {
-          val newChildren = sparkPlan.children.map(pl => insertBuildLegProxiesOnBatchScans(pl,
-            buildLegPlanToOriginalBatchScans, originalBatchScanToNewBatchScan))
+          val newChildren = sparkPlan.children.map(pl =>
+            insertBuildLegProxiesOnBatchScans(
+              pl,
+              buildLegPlanToOriginalBatchScans,
+              originalBatchScanToNewBatchScan))
           val newSp = sparkPlan.withNewChildren(newChildren)
           sparkPlan.logicalLink.foreach(newSp.setLogicalLink)
           newSp
@@ -301,14 +363,15 @@ class ProxyBroadcastVarAndStageIdentifier(
     val buildLegPlan: LogicalPlan,
     val joiningKeysData: Seq[JoiningKeyData],
     val buildLegProxyBroadcastVarAndStageIdentifiers: Seq[ProxyBroadcastVarAndStageIdentifier] =
-    Seq.empty[ProxyBroadcastVarAndStageIdentifier]
-) {
+      Seq.empty[ProxyBroadcastVarAndStageIdentifier]) {
   override def toString(): String = s"ProxyBroadcastVar..: buildlegPlan=not" +
     s" printing:${joiningKeysData.mkString(",")}: proxy identifiers for buildleg" +
     s"=${buildLegProxyBroadcastVarAndStageIdentifiers.mkString(",")}"
 
   lazy val canonicalized: ProxyBroadcastVarAndStageIdentifier =
-   new ProxyBroadcastVarAndStageIdentifier(buildLegPlan.canonicalized, this.joiningKeysData,
+    new ProxyBroadcastVarAndStageIdentifier(
+      buildLegPlan.canonicalized,
+      this.joiningKeysData,
       buildLegProxyBroadcastVarAndStageIdentifiers.map(_.canonicalized))
 
   override def equals(that: Any): Boolean =
@@ -322,7 +385,9 @@ class ProxyBroadcastVarAndStageIdentifier(
     }
 
   override def hashCode(): Int =
-    Objects.hashCode(this.buildLegPlan.canonicalized, this.joiningKeysData,
+    Objects.hashCode(
+      this.buildLegPlan.canonicalized,
+      this.joiningKeysData,
       this.buildLegProxyBroadcastVarAndStageIdentifiers.map(_.canonicalized))
 }
 

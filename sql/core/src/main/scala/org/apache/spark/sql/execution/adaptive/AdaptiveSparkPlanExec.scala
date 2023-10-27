@@ -55,14 +55,14 @@ import org.apache.spark.util.{SparkFatalException, ThreadUtils, Utils}
 
 /**
  * A root node to execute the query plan adaptively. It splits the query plan into independent
- * stages and executes them in order according to their dependencies. The query stage
- * materializes its output at the end. When one stage completes, the data statistics of the
- * materialized output will be used to optimize the remainder of the query.
+ * stages and executes them in order according to their dependencies. The query stage materializes
+ * its output at the end. When one stage completes, the data statistics of the materialized output
+ * will be used to optimize the remainder of the query.
  *
- * To create query stages, we traverse the query tree bottom up. When we hit an exchange node,
- * and if all the child query stages of this exchange node are materialized, we create a new
- * query stage for this exchange node. The new stage is then materialized asynchronously once it
- * is created.
+ * To create query stages, we traverse the query tree bottom up. When we hit an exchange node, and
+ * if all the child query stages of this exchange node are materialized, we create a new query
+ * stage for this exchange node. The new stage is then materialized asynchronously once it is
+ * created.
  *
  * When one query stage finishes materialization, the rest query is re-optimized and planned based
  * on the latest statistics provided by all materialized stages. Then we traverse the query plan
@@ -75,11 +75,11 @@ case class AdaptiveSparkPlanExec(
     @transient preprocessingRules: Seq[Rule[SparkPlan]],
     @transient isSubquery: Boolean,
     @transient override val supportsColumnar: Boolean = false)
-  extends LeafExecNode {
+    extends LeafExecNode {
 
   @transient private val lock = new Object()
 
-  @transient private val logOnLevel: ( => String) => Unit = conf.adaptiveExecutionLogLevel match {
+  @transient private val logOnLevel: (=> String) => Unit = conf.adaptiveExecutionLogLevel match {
     case "TRACE" => logTrace(_)
     case "DEBUG" => logDebug(_)
     case "INFO" => logInfo(_)
@@ -91,8 +91,8 @@ case class AdaptiveSparkPlanExec(
   @transient private val planChangeLogger = new PlanChangeLogger[SparkPlan]()
 
   // The logical plan optimizer for re-optimizing the current logical plan.
-  @transient private val optimizer = new AQEOptimizer(conf,
-    session.sessionState.adaptiveRulesHolder.runtimeOptimizerRules)
+  @transient private val optimizer =
+    new AQEOptimizer(conf, session.sessionState.adaptiveRulesHolder.runtimeOptimizerRules)
 
   // `EnsureRequirements` may remove user-specified repartition and assume the query plan won't
   // change its output partitioning. This assumption is not true in AQE. Here we check the
@@ -134,8 +134,8 @@ case class AdaptiveSparkPlanExec(
       RemoveRedundantSorts,
       RemoveRedundantWindowGroupLimits,
       DisableUnnecessaryBucketedScan,
-      OptimizeSkewedJoin(ensureRequirements)
-    ) ++ context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules
+      OptimizeSkewedJoin(
+        ensureRequirements)) ++ context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules
   }
 
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
@@ -147,8 +147,7 @@ case class AdaptiveSparkPlanExec(
     CoalesceShufflePartitions(context.session),
     // `OptimizeShuffleWithLocalRead` needs to make use of 'AQEShuffleReadExec.partitionSpecs'
     // added by `CoalesceShufflePartitions`, and must be executed after it.
-    OptimizeShuffleWithLocalRead
-  ) ++ context.session.sessionState.adaptiveRulesHolder.queryStageOptimizerRules
+    OptimizeShuffleWithLocalRead) ++ context.session.sessionState.adaptiveRulesHolder.queryStageOptimizerRules
 
   // This rule is stateful as it maintains the codegen stage ID. We can't create a fresh one every
   // time and need to keep it in a variable.
@@ -159,9 +158,9 @@ case class AdaptiveSparkPlanExec(
   // plan to these rules has exchange as its root node.
   private def postStageCreationRules(outputsColumnar: Boolean) = Seq(
     ApplyColumnarRulesAndInsertTransitions(
-      context.session.sessionState.columnarRules, outputsColumnar),
-    collapseCodegenStagesRule
-  )
+      context.session.sessionState.columnarRules,
+      outputsColumnar),
+    collapseCodegenStagesRule)
 
   private def optimizeQueryStage(plan: SparkPlan, isFinalStage: Boolean): SparkPlan = {
     val optimized = queryStageOptimizerRules.foldLeft(plan) { case (latestPlan, rule) =>
@@ -179,8 +178,9 @@ case class AdaptiveSparkPlanExec(
           if (ValidateRequirements.validate(applied, distribution)) {
             applied
           } else {
-            logDebug(s"Rule ${rule.ruleName} is not applied as it breaks the " +
-              "distribution requirement of the query plan.")
+            logDebug(
+              s"Rule ${rule.ruleName} is not applied as it breaks the " +
+                "distribution requirement of the query plan.")
             latestPlan
           }
         case _ => applied
@@ -194,7 +194,9 @@ case class AdaptiveSparkPlanExec(
 
   @transient val initialPlan = context.session.withActive {
     applyPhysicalRules(
-      inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
+      inputPlan,
+      queryStagePreparationRules,
+      Some((planChangeLogger, "AQE Preparations")))
   }
 
   @volatile private var currentPhysicalPlan = initialPlan
@@ -205,16 +207,18 @@ case class AdaptiveSparkPlanExec(
 
   /**
    * Return type for `createQueryStages`
-   * @param newPlan the new plan with created query stages.
-   * @param allChildStagesMaterialized whether all child stages have been materialized.
-   * @param newStages the newly created query stages, including new reused query stages.
+   * @param newPlan
+   *   the new plan with created query stages.
+   * @param allChildStagesMaterialized
+   *   whether all child stages have been materialized.
+   * @param newStages
+   *   the newly created query stages, including new reused query stages.
    */
   private case class CreateStageResult(
-    newPlan: SparkPlan,
-    allChildStagesMaterialized: Boolean,
-    newStages: Seq[QueryStageExec],
-    orphanBatchScansWithProxyVar: Seq[BatchScanExec]
-  )
+      newPlan: SparkPlan,
+      allChildStagesMaterialized: Boolean,
+      newStages: Seq[QueryStageExec],
+      orphanBatchScansWithProxyVar: Seq[BatchScanExec])
 
   def executedPlan: SparkPlan = currentPhysicalPlan
 
@@ -257,7 +261,7 @@ case class AdaptiveSparkPlanExec(
   private def getFinalPhysicalPlan(): SparkPlan = lock.synchronized {
     if (isFinalPlan) return currentPhysicalPlan
     // TODO: Asif: try to find a clean solution to this:
-     /*
+    /*
        right now  a case like:
               bhj
          |          |
@@ -269,7 +273,7 @@ case class AdaptiveSparkPlanExec(
        re optimization , with partial broadcast var added.
        till we come to a proper criteria in terms of say we do not re optimize till all the
        pushdown bhjs are satisfied, or some thing else. we will go with this criteria.
-    */
+     */
     // In case of this adaptive plan being executed out of `withActive` scoped functions, e.g.,
     // `plan.queryExecution.rdd`, we need to set active session here as new plan nodes can be
     // created in the middle of the execution.
@@ -281,22 +285,22 @@ case class AdaptiveSparkPlanExec(
       val doBroadcastVarPush = conf.pushBroadcastedJoinKeysASFilterToScan
       var allStages = Map[Int, QueryStageExec]()
       val cachedBatchScansForStage = mutable.Map[Int, Seq[BatchScanExec]]()
-      val stageIdToBuildsideJoinKeys = mutable.Map[Int, (LogicalPlan,
-        Seq[ProxyBroadcastVarAndStageIdentifier], Seq[Expression])] ()
+      val stageIdToBuildsideJoinKeys = mutable
+        .Map[Int, (LogicalPlan, Seq[ProxyBroadcastVarAndStageIdentifier], Seq[Expression])]()
       var allStageIdsProcessed = Set[Int]()
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
       val errors = new mutable.ArrayBuffer[Throwable]()
       var stagesToReplace = Seq.empty[QueryStageExec]
       var delayedStages = Set[Int]()
       var orphanBatchScans = Set[BatchScanExec]()
-      var result = createQueryStages(currentPhysicalPlan, stageIdToBuildsideJoinKeys,
-        OrphanBSCollect.orphan)
+      var result =
+        createQueryStages(currentPhysicalPlan, stageIdToBuildsideJoinKeys, OrphanBSCollect.orphan)
       var loopCount = 0
       var consecutiveNoDelayedStagesFound = 0
       orphanBatchScans ++= result.orphanBatchScansWithProxyVar
       var collectOrphans = OrphanBSCollect.no_collect
       while (!result.allChildStagesMaterialized ||
-        (consecutiveNoDelayedStagesFound < 2 && loopCount > 0) ) {
+        (consecutiveNoDelayedStagesFound < 2 && loopCount > 0)) {
         if (Utils.isTesting) {
           assertBroadcastPushPresenceInBHJ(result.newPlan)
         }
@@ -308,12 +312,12 @@ case class AdaptiveSparkPlanExec(
           BroadcastHashJoinUtil.isStageReadyForMaterialization(_, cachedBatchScansForStage))
         // check from the existing delayed batch, if any stages are ready for materialization
         // and not already in process
-        val prevStgsNowReady = getDelayedStagesNowReady(allStages, cachedBatchScansForStage,
-          delayedStages)
+        val prevStgsNowReady =
+          getDelayedStagesNowReady(allStages, cachedBatchScansForStage, delayedStages)
         val stgsReadyForMat = newReadyStages ++ prevStgsNowReady
         delayedStages ++= newUnreadyStages.map(_.id)
         // we will come to know if there are any delayed statges in picture after 1st iteration
-        if (loopCount == 0 &&  delayedStages.isEmpty) {
+        if (loopCount == 0 && delayedStages.isEmpty) {
           consecutiveNoDelayedStagesFound = 5 // arbit number > 2 so as to break loop
         }
         val stagesToMaterialize = {
@@ -322,8 +326,8 @@ case class AdaptiveSparkPlanExec(
           // and put those also in materialization. if reuse id does not exist in allStages that
           // means it is in other plans, and hence materialized.
 
-          val reuseStageNowReady = filterReusingStagesNowReady(allStages, delayedStages,
-            stgsReadyForMat)
+          val reuseStageNowReady =
+            filterReusingStagesNowReady(allStages, delayedStages, stgsReadyForMat)
           val totalStagesReady = stgsReadyForMat ++ reuseStageNowReady.map(allStages)
           // if no new stage is going to be materialized and all scheduled stages are materialized
           // then do a check if delayed stages are satisfied by any of the
@@ -331,14 +335,19 @@ case class AdaptiveSparkPlanExec(
           // throw exception instead of going to wait queue
           if (totalStagesReady.isEmpty && (allStageIdsProcessed.size + delayedStages.size) ==
               allStages.size && delayedStages.nonEmpty) {
-            pushBroadcastVarToDelayedStages(allStages, stageIdToBuildsideJoinKeys.toMap,
-            allStageIdsProcessed, delayedStages, cachedBatchScansForStage)
+            pushBroadcastVarToDelayedStages(
+              allStages,
+              stageIdToBuildsideJoinKeys.toMap,
+              allStageIdsProcessed,
+              delayedStages,
+              cachedBatchScansForStage)
             // see if new stages are available for materialization now
-            val anyReadyStages = getDelayedStagesNowReady(allStages, cachedBatchScansForStage,
-              delayedStages)
+            val anyReadyStages =
+              getDelayedStagesNowReady(allStages, cachedBatchScansForStage, delayedStages)
             if (anyReadyStages.isEmpty) {
-              throw new IllegalStateException("Unsatisfied stages or orphan batch scan remain " +
-                s" all problematic stages = ${delayedStages.mkString(",")}")
+              throw new IllegalStateException(
+                "Unsatisfied stages or orphan batch scan remain " +
+                  s" all problematic stages = ${delayedStages.mkString(",")}")
             } else {
               anyReadyStages
             }
@@ -348,8 +357,8 @@ case class AdaptiveSparkPlanExec(
         }
         currentPhysicalPlan = result.newPlan
 
-        val schdlStagesWithDpndntStrm = stagesToMaterialize.filter(
-          _.hasStreamSidePushdownDependent).map(_.id).to(mutable.Set)
+        val schdlStagesWithDpndntStrm =
+          stagesToMaterialize.filter(_.hasStreamSidePushdownDependent).map(_.id).to(mutable.Set)
         val immutableSchdlStagesWithDpndntStrm = schdlStagesWithDpndntStrm.toSet
         if (stagesToMaterialize.nonEmpty || result.newStages.nonEmpty) {
           if (result.newStages.nonEmpty) {
@@ -379,13 +388,18 @@ case class AdaptiveSparkPlanExec(
           } while (schdlStagesWithDpndntStrm.nonEmpty)
           val batchScansToBePushedAggresively = orphanBatchScans ++
             (if (immutableSchdlStagesWithDpndntStrm.nonEmpty) {
-              BroadcastHashJoinUtil.getAllBatchScansForSparkPlan(currentPhysicalPlan,
-                goInsideStageExec = false).filterNot(BroadcastHashJoinUtil.isBatchScanReady)
-            } else {
-              Set.empty
-            })
-          pushBroadcastVarToDelayedStages(allStages, stageIdToBuildsideJoinKeys.toMap,
-            allStageIdsProcessed, delayedStages, cachedBatchScansForStage,
+               BroadcastHashJoinUtil
+                 .getAllBatchScansForSparkPlan(currentPhysicalPlan, goInsideStageExec = false)
+                 .filterNot(BroadcastHashJoinUtil.isBatchScanReady)
+             } else {
+               Set.empty
+             })
+          pushBroadcastVarToDelayedStages(
+            allStages,
+            stageIdToBuildsideJoinKeys.toMap,
+            allStageIdsProcessed,
+            delayedStages,
+            cachedBatchScansForStage,
             batchScansToBePushedAggresively)
         }
         // In case of errors, we cancel all running stages and throw exception.
@@ -424,30 +438,31 @@ case class AdaptiveSparkPlanExec(
         } else {
           consecutiveNoDelayedStagesFound = 0
         }
-          val logicalPlan = replaceWithQueryStagesInLogicalPlan(currentLogicalPlan, stagesToReplace)
-          val afterReOptimize = reOptimize(logicalPlan)
-          if (afterReOptimize.isDefined) {
-            val (newPhysicalPlan, newLogicalPlan) = afterReOptimize.get
-            val origCost = costEvaluator.evaluateCost(currentPhysicalPlan)
-            val newCost = costEvaluator.evaluateCost(newPhysicalPlan)
-            if (newCost < origCost ||
-                (newCost == origCost && currentPhysicalPlan != newPhysicalPlan)) {
-              logOnLevel(s"Plan changed from $currentPhysicalPlan to $newPhysicalPlan")
-              cleanUpTempTags(newPhysicalPlan)
-              currentPhysicalPlan = newPhysicalPlan
-              currentLogicalPlan = newLogicalPlan
-              stagesToReplace = Seq.empty[QueryStageExec]
-              // remove all the remaining orphans as there batchscan instances may have been re
-              // created and that too without proxyBCVar.
-              orphanBatchScans = Set.empty[BatchScanExec]
-              // also at this point we would want to recollect the orphans if any
-              // once the BroadcastFilterPushdown rule is added for re optimized plan.
-              collectOrphans = OrphanBSCollect.no_collect
-            }
+        val logicalPlan = replaceWithQueryStagesInLogicalPlan(currentLogicalPlan, stagesToReplace)
+        val afterReOptimize = reOptimize(logicalPlan)
+        if (afterReOptimize.isDefined) {
+          val (newPhysicalPlan, newLogicalPlan) = afterReOptimize.get
+          val origCost = costEvaluator.evaluateCost(currentPhysicalPlan)
+          val newCost = costEvaluator.evaluateCost(newPhysicalPlan)
+          if (newCost < origCost ||
+            (newCost == origCost && currentPhysicalPlan != newPhysicalPlan)) {
+            logOnLevel(s"Plan changed from $currentPhysicalPlan to $newPhysicalPlan")
+            cleanUpTempTags(newPhysicalPlan)
+            currentPhysicalPlan = newPhysicalPlan
+            currentLogicalPlan = newLogicalPlan
+            stagesToReplace = Seq.empty[QueryStageExec]
+            // remove all the remaining orphans as there batchscan instances may have been re
+            // created and that too without proxyBCVar.
+            orphanBatchScans = Set.empty[BatchScanExec]
+            // also at this point we would want to recollect the orphans if any
+            // once the BroadcastFilterPushdown rule is added for re optimized plan.
+            collectOrphans = OrphanBSCollect.no_collect
           }
+        }
 
         // Now that some stages have finished, we can try creating new stages.
-        result = createQueryStages(currentPhysicalPlan, stageIdToBuildsideJoinKeys, collectOrphans)
+        result =
+          createQueryStages(currentPhysicalPlan, stageIdToBuildsideJoinKeys, collectOrphans)
         collectOrphans = OrphanBSCollect.no_collect
         loopCount += 1
       }
@@ -456,7 +471,6 @@ case class AdaptiveSparkPlanExec(
       // now that all child statges are materialized, recheck if any newly materialized
       // broadcast variables need to be pushed to the scans, which might have been missed
       // when the stage got materialized while we were in the create query stage function
-
 
       // Run the final plan when there's no more unfinished stages.
       currentPhysicalPlan = applyPhysicalRules(
@@ -473,12 +487,14 @@ case class AdaptiveSparkPlanExec(
       allStages: Map[Int, QueryStageExec],
       delayedStages: Set[Int],
       stgsReadyForMat: Seq[QueryStageExec]): Set[Int] = delayedStages.filter(id => {
-      val stg = allStages(id)
-      stg.reuseSource.fold(false)(reuseId => !allStages.contains(reuseId) ||
+    val stg = allStages(id)
+    stg.reuseSource.fold(false)(reuseId =>
+      !allStages.contains(reuseId) ||
         stgsReadyForMat.exists(_.id == reuseId))
-    })
+  })
 
-  private def scheduleStagesForMaterialization(stagesToMaterialize: Seq[QueryStageExec],
+  private def scheduleStagesForMaterialization(
+      stagesToMaterialize: Seq[QueryStageExec],
       events: LinkedBlockingQueue[StageMaterializationEvent]): Unit = {
     val reorderedNewStages = stagesToMaterialize
       .sortWith {
@@ -489,13 +505,15 @@ case class AdaptiveSparkPlanExec(
     // Start materialization of all new stages and fail fast if any stages failed eagerly
     reorderedNewStages.foreach { stage =>
       try {
-        stage.materialize().onComplete { res =>
-          if (res.isSuccess) {
-            events.offer(StageSuccess(stage, res.get))
-          } else {
-            events.offer(StageFailure(stage, res.failed.get))
-          }
-        }(AdaptiveSparkPlanExec.executionContext)
+        stage
+          .materialize()
+          .onComplete { res =>
+            if (res.isSuccess) {
+              events.offer(StageSuccess(stage, res.get))
+            } else {
+              events.offer(StageFailure(stage, res.failed.get))
+            }
+          }(AdaptiveSparkPlanExec.executionContext)
       } catch {
         case e: Throwable =>
           cleanUpAndThrowException(Seq(e), Some(stage.id))
@@ -505,18 +523,23 @@ case class AdaptiveSparkPlanExec(
 
   private def pushBroadcastVarToDelayedStages(
       allStages: Map[Int, QueryStageExec],
-      stageIdToBuildsideJoinKeys: Map[Int, (LogicalPlan,
-        Seq[ProxyBroadcastVarAndStageIdentifier], Seq[Expression])],
+      stageIdToBuildsideJoinKeys: Map[
+        Int,
+        (LogicalPlan, Seq[ProxyBroadcastVarAndStageIdentifier], Seq[Expression])],
       allStageIdsProcessed: Set[Int],
       delayedStages: Set[Int],
       cachedBatchScansForStage: mutable.Map[Int, Seq[BatchScanExec]],
       anyOtherUnsatisfiedBatchScans: Set[BatchScanExec] = Set.empty): Unit = {
     val delayedStagesBatchscans = delayedStages.flatMap(id =>
-      BroadcastHashJoinUtil.partitionBatchScansToReadyAndUnready(allStages(id),
-        cachedBatchScansForStage)._2) ++ anyOtherUnsatisfiedBatchScans
+      BroadcastHashJoinUtil
+        .partitionBatchScansToReadyAndUnready(allStages(id), cachedBatchScansForStage)
+        ._2) ++ anyOtherUnsatisfiedBatchScans
     if (delayedStagesBatchscans.nonEmpty) {
-      pushBroadcastVarToUnreadyBatchScans(delayedStagesBatchscans.toSeq,
-        stageIdToBuildsideJoinKeys, allStages, allStageIdsProcessed)
+      pushBroadcastVarToUnreadyBatchScans(
+        delayedStagesBatchscans.toSeq,
+        stageIdToBuildsideJoinKeys,
+        allStages,
+        allStageIdsProcessed)
     }
   }
 
@@ -524,18 +547,20 @@ case class AdaptiveSparkPlanExec(
       allStages: Map[Int, QueryStageExec],
       cachedBatchScansForStage: mutable.Map[Int, Seq[BatchScanExec]],
       delayedStages: Set[Int]): Seq[QueryStageExec] =
-    delayedStages.flatMap(id => {
-      val stage = allStages(id)
-      if (BroadcastHashJoinUtil.isStageReadyForMaterialization(stage, cachedBatchScansForStage)
-      && stage.reuseSource.isEmpty) {
-        Seq(stage)
-      } else {
-        Seq.empty
-      }
-    }).toSeq
+    delayedStages
+      .flatMap(id => {
+        val stage = allStages(id)
+        if (BroadcastHashJoinUtil.isStageReadyForMaterialization(stage, cachedBatchScansForStage)
+          && stage.reuseSource.isEmpty) {
+          Seq(stage)
+        } else {
+          Seq.empty
+        }
+      })
+      .toSeq
 
-  private def waitForNextStageToMaterialize(events: LinkedBlockingQueue[StageMaterializationEvent]):
-  (Set[Int], Seq[Throwable]) = {
+  private def waitForNextStageToMaterialize(
+      events: LinkedBlockingQueue[StageMaterializationEvent]): (Set[Int], Seq[Throwable]) = {
     // Wait on the next completed stage, which indicates new stats are available and probably
     // new stages can be created. There might be other stages that finish at around the same
     // time, so we process those stages too in order to reduce re-planning.
@@ -559,37 +584,37 @@ case class AdaptiveSparkPlanExec(
 
   private def pushBroadcastVarToUnreadyBatchScans(
       allUnreadyBatchScans: Seq[BatchScanExec],
-      stageIdToBuildsideJoinKeys: Map[Int, (LogicalPlan,
-        Seq[ProxyBroadcastVarAndStageIdentifier], Seq[Expression])],
+      stageIdToBuildsideJoinKeys: Map[
+        Int,
+        (LogicalPlan, Seq[ProxyBroadcastVarAndStageIdentifier], Seq[Expression])],
       allStages: Map[Int, QueryStageExec],
       allProcessedStageIds: Set[Int]): Unit = {
     val identityHashMap = new util.IdentityHashMap[BatchScanExec, java.util.Set[java.lang.Long]]()
-    allUnreadyBatchScans.map(bs =>
-      bs -> bs.scan.asInstanceOf[SupportsRuntimeV2Filtering].getPushedBroadcastVarIds).foreach {
-      case (bs, set) => identityHashMap.put(bs, set)
-    }
+    allUnreadyBatchScans
+      .map(bs => bs -> bs.scan.asInstanceOf[SupportsRuntimeV2Filtering].getPushedBroadcastVarIds)
+      .foreach { case (bs, set) =>
+        identityHashMap.put(bs, set)
+      }
     val stagesAndBatchScanForPush =
-      allProcessedStageIds.filter(stageIdToBuildsideJoinKeys.contains).map(id => {
-        val joinLegAndKeysOpt = stageIdToBuildsideJoinKeys.get(id)
-        val batchScansToPush = allUnreadyBatchScans.flatMap(bs => {
-          if (!identityHashMap.get(bs).contains(java.lang.Long.valueOf(id)))  {
-            val proxyVars = bs.proxyForPushedBroadcastVar.get
-            proxyVars.flatMap(proxy => {
-              val buildLegPlan = proxy.buildLegPlan
-                if (joinLegAndKeysOpt.fold(false) {
-                  case(buildLp, buildProxies, _) =>
-                    (buildLp.eq(buildLegPlan) || buildLp.canonicalized == buildLegPlan
-                     .canonicalized) &&
+      allProcessedStageIds
+        .filter(stageIdToBuildsideJoinKeys.contains)
+        .map(id => {
+          val joinLegAndKeysOpt = stageIdToBuildsideJoinKeys.get(id)
+          val batchScansToPush = allUnreadyBatchScans.flatMap(bs => {
+            if (!identityHashMap.get(bs).contains(java.lang.Long.valueOf(id))) {
+              val proxyVars = bs.proxyForPushedBroadcastVar.get
+              proxyVars.flatMap(proxy => {
+                val buildLegPlan = proxy.buildLegPlan
+                if (joinLegAndKeysOpt.fold(false) { case (buildLp, buildProxies, _) =>
+                    (buildLp.eq(
+                      buildLegPlan) || buildLp.canonicalized == buildLegPlan.canonicalized) &&
                     (proxy.buildLegProxyBroadcastVarAndStageIdentifiers.isEmpty ||
                       (buildProxies.size ==
                         proxy.buildLegProxyBroadcastVarAndStageIdentifiers.size &&
                         buildProxies.forall(
-                          proxy.buildLegProxyBroadcastVarAndStageIdentifiers.contains)
-                      )
-                    )
-                }
-              ) {
-                  proxy.joiningKeysData.flatMap {jkd =>
+                          proxy.buildLegProxyBroadcastVarAndStageIdentifiers.contains)))
+                  }) {
+                  proxy.joiningKeysData.flatMap { jkd =>
                     joinLegAndKeysOpt.fold(Seq.empty[(BatchScanExec, JoiningKeyData)]) {
                       case (_, _, exprs) =>
                         if (exprs.exists(_.canonicalized ==
@@ -600,31 +625,38 @@ case class AdaptiveSparkPlanExec(
                         }
                     }
                   }
-              } else {
-                Seq.empty
-              }
-            })
-          } else {
-            Seq.empty
-          }
+                } else {
+                  Seq.empty
+                }
+              })
+            } else {
+              Seq.empty
+            }
+          })
+          id -> batchScansToPush
         })
-        id -> batchScansToPush
-      })
 
-    stagesAndBatchScanForPush.foreach {
-      case (stageId, data) =>
-        if (data.nonEmpty) {
-          val hashedRelation = allStages.getOrElse(stageId,
-            context.stageCache.find(_._2.id == stageId).getOrElse(
-              throw new IllegalStateException(s"Stage with id = $stageId not found"))).
-                asInstanceOf[BroadcastQueryStageExec].
-              broadcast.relationFuture.get().asInstanceOf[Broadcast[HashedRelation]]
-              val pushData = data.map {
-                case (bs, jkd) => BroadcastHashJoinUtil.convertJoinKeyDataToPushDownData(bs, jkd)
-              }
-            BroadcastHashJoinUtil.pushBroadcastVar(hashedRelation,
-              stageIdToBuildsideJoinKeys(stageId)._3, pushData)
+    stagesAndBatchScanForPush.foreach { case (stageId, data) =>
+      if (data.nonEmpty) {
+        val hashedRelation = allStages
+          .getOrElse(
+            stageId,
+            context.stageCache
+              .find(_._2.id == stageId)
+              .getOrElse(throw new IllegalStateException(s"Stage with id = $stageId not found")))
+          .asInstanceOf[BroadcastQueryStageExec]
+          .broadcast
+          .relationFuture
+          .get()
+          .asInstanceOf[Broadcast[HashedRelation]]
+        val pushData = data.map { case (bs, jkd) =>
+          BroadcastHashJoinUtil.convertJoinKeyDataToPushDownData(bs, jkd)
         }
+        BroadcastHashJoinUtil.pushBroadcastVar(
+          hashedRelation,
+          stageIdToBuildsideJoinKeys(stageId)._3,
+          pushData)
+      }
     }
   }
 
@@ -764,17 +796,17 @@ case class AdaptiveSparkPlanExec(
    * stage or try reusing an existing stage if the current node is an [[Exchange]] node and all of
    * its child stages have been materialized.
    *
-   * With each call, it returns:
-   * 1) The new plan replaced with [[QueryStageExec]] nodes where new stages are created.
-   * 2) Whether the child query stages (if any) of the current node have all been materialized.
-   * 3) A list of the new query stages that have been created.
+   * With each call, it returns: 1) The new plan replaced with [[QueryStageExec]] nodes where new
+   * stages are created. 2) Whether the child query stages (if any) of the current node have all
+   * been materialized. 3) A list of the new query stages that have been created.
    */
-  private def createQueryStages(plan: SparkPlan,
-      stageIdToBuildsideJoinKeys: mutable.Map[Int, (LogicalPlan,
-        Seq[ProxyBroadcastVarAndStageIdentifier], Seq[Expression])],
+  private def createQueryStages(
+      plan: SparkPlan,
+      stageIdToBuildsideJoinKeys: mutable.Map[
+        Int,
+        (LogicalPlan, Seq[ProxyBroadcastVarAndStageIdentifier], Seq[Expression])],
       orphanBSCollect: OrphanBSCollect,
-      hasStreamSidePushdownDependent: Boolean = false)
-  : CreateStageResult = plan match {
+      hasStreamSidePushdownDependent: Boolean = false): CreateStageResult = plan match {
     case e: Exchange =>
       // First have a quick check in the `stageCache` without having to traverse down the node.
       context.stageCache.get(e.canonicalized) match {
@@ -785,26 +817,27 @@ case class AdaptiveSparkPlanExec(
             newPlan = stage,
             allChildStagesMaterialized = isMaterialized,
             newStages = if (isMaterialized) Seq.empty else Seq(stage),
-            orphanBatchScansWithProxyVar = Seq.empty
-            )
+            orphanBatchScansWithProxyVar = Seq.empty)
 
         case _ =>
-          val result = createQueryStages(e.child, stageIdToBuildsideJoinKeys,
+          val result = createQueryStages(
+            e.child,
+            stageIdToBuildsideJoinKeys,
             orphanBSCollect match {
               case OrphanBSCollect.no_collect => orphanBSCollect
               case _ => OrphanBSCollect.under_exchange_node
-          })
+            })
           val newPlan = e.withNewChildren(Seq(result.newPlan)).asInstanceOf[Exchange]
           // Create a query stage only when all the child query stages are ready.
           if (result.allChildStagesMaterialized) {
-            var newStage = newQueryStage(newPlan, hasStreamSidePushdownDependent).
-              asInstanceOf[ExchangeQueryStageExec]
+            var newStage = newQueryStage(newPlan, hasStreamSidePushdownDependent)
+              .asInstanceOf[ExchangeQueryStageExec]
             if (conf.exchangeReuseEnabled) {
               // Check the `stageCache` again for reuse. If a match is found, ditch the new stage
               // and reuse the existing stage found in the `stageCache`, otherwise update the
               // `stageCache` with the new stage.
-              val queryStage = context.stageCache.getOrElseUpdate(
-                newStage.plan.canonicalized, newStage)
+              val queryStage =
+                context.stageCache.getOrElseUpdate(newStage.plan.canonicalized, newStage)
               if (queryStage.ne(newStage)) {
                 newStage = reuseQueryStage(queryStage, e)
               }
@@ -816,7 +849,9 @@ case class AdaptiveSparkPlanExec(
               newStages = if (isMaterialized) Seq.empty else Seq(newStage),
               orphanBatchScansWithProxyVar = result.orphanBatchScansWithProxyVar)
           } else {
-            CreateStageResult(newPlan = newPlan, allChildStagesMaterialized = false,
+            CreateStageResult(
+              newPlan = newPlan,
+              allChildStagesMaterialized = false,
               newStages = result.newStages,
               result.orphanBatchScansWithProxyVar)
           }
@@ -824,34 +859,49 @@ case class AdaptiveSparkPlanExec(
 
     case bhj: BroadcastHashJoinExec if bhj.bcVarPushNode == SELF_PUSH =>
       val (buildPlan, streamPlan, buildKeysCanonicalized, _) = bhj.buildSide match {
-        case BuildRight => (bhj.right, bhj.left, bhj.canonicalized.
-          asInstanceOf[BroadcastHashJoinExec].rightKeys, bhj.leftKeys)
+        case BuildRight =>
+          (
+            bhj.right,
+            bhj.left,
+            bhj.canonicalized.asInstanceOf[BroadcastHashJoinExec].rightKeys,
+            bhj.leftKeys)
 
-        case BuildLeft => (bhj.left, bhj.right, bhj.canonicalized.
-          asInstanceOf[BroadcastHashJoinExec].leftKeys, bhj.rightKeys)
+        case BuildLeft =>
+          (
+            bhj.left,
+            bhj.right,
+            bhj.canonicalized.asInstanceOf[BroadcastHashJoinExec].leftKeys,
+            bhj.rightKeys)
       }
-      val buildSideStageResult = createQueryStages(buildPlan, stageIdToBuildsideJoinKeys,
-        orphanBSCollect, hasStreamSidePushdownDependent = true)
+      val buildSideStageResult = createQueryStages(
+        buildPlan,
+        stageIdToBuildsideJoinKeys,
+        orphanBSCollect,
+        hasStreamSidePushdownDependent = true)
 
-      val streamsideStageResult = createQueryStages(streamPlan, stageIdToBuildsideJoinKeys,
+      val streamsideStageResult = createQueryStages(
+        streamPlan,
+        stageIdToBuildsideJoinKeys,
         orphanBSCollect match {
           case OrphanBSCollect.no_collect => orphanBSCollect
 
           case _ => OrphanBSCollect.orphan
-          })
+        })
 
       val buildLPOpt = buildSideStageResult.newPlan match {
         case qse: QueryStageExec if !stageIdToBuildsideJoinKeys.contains(qse.id) =>
-          val buildLegProxies = BroadcastHashJoinUtil.getAllBatchScansForSparkPlan(buildPlan).
-            flatMap (_.proxyForPushedBroadcastVar.getOrElse(Seq.empty))
-          Option(qse.id -> (BroadcastHashJoinUtil.getOriginalLogicalPlanForBuildPlan(
-            bhj.logicalLink.get), buildLegProxies))
+          val buildLegProxies = BroadcastHashJoinUtil
+            .getAllBatchScansForSparkPlan(buildPlan)
+            .flatMap(_.proxyForPushedBroadcastVar.getOrElse(Seq.empty))
+          Option(
+            qse.id -> (BroadcastHashJoinUtil.getOriginalLogicalPlanForBuildPlan(
+              bhj.logicalLink.get), buildLegProxies))
 
         case _ => None
       }
-      buildLPOpt.foreach {
-        case (stgId, (buildLp, buildProxies)) => stageIdToBuildsideJoinKeys += stgId -> (buildLp,
-          buildProxies, buildKeysCanonicalized)
+      buildLPOpt.foreach { case (stgId, (buildLp, buildProxies)) =>
+        stageIdToBuildsideJoinKeys += stgId -> (buildLp,
+        buildProxies, buildKeysCanonicalized)
       }
       if (buildSideStageResult.allChildStagesMaterialized) {
         // we have to handle the case like of reuse of exchange, where build stage
@@ -859,21 +909,29 @@ case class AdaptiveSparkPlanExec(
         // the build stage is already materialized. so we have to push variable here itself
         val pushDownData = buildLPOpt.fold(Seq.empty[BroadcastVarPushDownData]) {
           case (_, buildLp) =>
-            BroadcastHashJoinUtil.getPushdownDataForBatchScansUsingJoinKeys(buildKeysCanonicalized,
-              streamPlan, buildLp)
+            BroadcastHashJoinUtil.getPushdownDataForBatchScansUsingJoinKeys(
+              buildKeysCanonicalized,
+              streamPlan,
+              buildLp)
         }
 
         if (pushDownData.nonEmpty) {
-          val hashedRelation = buildSideStageResult.newPlan.asInstanceOf[BroadcastQueryStageExec].
-            broadcast.relationFuture.get().asInstanceOf[Broadcast[HashedRelation]]
-          BroadcastHashJoinUtil.pushBroadcastVar(hashedRelation, buildKeysCanonicalized,
+          val hashedRelation = buildSideStageResult.newPlan
+            .asInstanceOf[BroadcastQueryStageExec]
+            .broadcast
+            .relationFuture
+            .get()
+            .asInstanceOf[Broadcast[HashedRelation]]
+          BroadcastHashJoinUtil.pushBroadcastVar(
+            hashedRelation,
+            buildKeysCanonicalized,
             pushDownData)
         }
       }
       val results = Seq(buildSideStageResult, streamsideStageResult)
 
-      val (leftPlan, rightPlan) = getLeftAndRightPlan(streamsideStageResult, buildSideStageResult,
-        bhj)
+      val (leftPlan, rightPlan) =
+        getLeftAndRightPlan(streamsideStageResult, buildSideStageResult, bhj)
 
       val newBhj = bhj.copy(left = leftPlan, right = rightPlan)
       newBhj.copyTagsFrom(bhj)
@@ -881,8 +939,7 @@ case class AdaptiveSparkPlanExec(
         newPlan = newBhj,
         allChildStagesMaterialized = results.forall(_.allChildStagesMaterialized),
         newStages = results.flatMap(_.newStages),
-        orphanBatchScansWithProxyVar = results.flatMap(_.orphanBatchScansWithProxyVar)
-      )
+        orphanBatchScansWithProxyVar = results.flatMap(_.orphanBatchScansWithProxyVar))
 
     case bs: BatchScanExec if bs.proxyForPushedBroadcastVar.isDefined =>
       // Because the LogicalNode for BatchScanExec might start from filter , we need to set
@@ -898,8 +955,11 @@ case class AdaptiveSparkPlanExec(
         Seq.empty
       }
 
-      CreateStageResult(newPlan = bs, allChildStagesMaterialized = true,
-        newStages = Seq.empty, orphanBatchScansWithProxyVar = orphans)
+      CreateStageResult(
+        newPlan = bs,
+        allChildStagesMaterialized = true,
+        newStages = Seq.empty,
+        orphanBatchScansWithProxyVar = orphans)
 
     // TODO: Asif check this thing..
     case i: InMemoryTableScanExec =>
@@ -909,29 +969,38 @@ case class AdaptiveSparkPlanExec(
       CreateStageResult(
         newPlan = newStage,
         allChildStagesMaterialized = false,
-        newStages = Seq(newStage), Seq.empty)
+        newStages = Seq(newStage),
+        Seq.empty)
 
     case q: QueryStageExec =>
-      CreateStageResult(newPlan = q, allChildStagesMaterialized = q.isMaterialized,
-        newStages = Seq.empty, orphanBatchScansWithProxyVar = Seq.empty)
+      CreateStageResult(
+        newPlan = q,
+        allChildStagesMaterialized = q.isMaterialized,
+        newStages = Seq.empty,
+        orphanBatchScansWithProxyVar = Seq.empty)
 
     case _ =>
       if (plan.children.isEmpty) {
-        CreateStageResult(newPlan = plan, allChildStagesMaterialized = true,
-          newStages = Seq.empty, orphanBatchScansWithProxyVar = Seq.empty)
+        CreateStageResult(
+          newPlan = plan,
+          allChildStagesMaterialized = true,
+          newStages = Seq.empty,
+          orphanBatchScansWithProxyVar = Seq.empty)
       } else {
-        val results = plan.children.map(sp => createQueryStages(sp,
-          stageIdToBuildsideJoinKeys, orphanBSCollect))
+        val results = plan.children.map(sp =>
+          createQueryStages(sp, stageIdToBuildsideJoinKeys, orphanBSCollect))
         val newPlan = plan.withNewChildren(results.map(_.newPlan))
-        CreateStageResult(newPlan = newPlan,
+        CreateStageResult(
+          newPlan = newPlan,
           allChildStagesMaterialized = results.forall(_.allChildStagesMaterialized),
           newStages = results.flatMap(_.newStages),
-          orphanBatchScansWithProxyVar = results.flatMap(_.orphanBatchScansWithProxyVar)
-        )
+          orphanBatchScansWithProxyVar = results.flatMap(_.orphanBatchScansWithProxyVar))
       }
   }
 
-  def getLeftAndRightPlan(streamStageResult: CreateStageResult, buildStageResult: CreateStageResult,
+  def getLeftAndRightPlan(
+      streamStageResult: CreateStageResult,
+      buildStageResult: CreateStageResult,
       bhj: BroadcastHashJoinExec): (SparkPlan, SparkPlan) =
     bhj.buildSide match {
       case BuildRight => (streamStageResult.newPlan, buildStageResult.newPlan)
@@ -939,8 +1008,9 @@ case class AdaptiveSparkPlanExec(
       case BuildLeft => (buildStageResult.newPlan, streamStageResult.newPlan)
     }
 
-  private def newQueryStage(plan: SparkPlan, hasStreamSidePushdownDependent: Boolean = false):
-  QueryStageExec = {
+  private def newQueryStage(
+      plan: SparkPlan,
+      hasStreamSidePushdownDependent: Boolean = false): QueryStageExec = {
     val queryStage = plan match {
       case e: Exchange =>
         val optimized = e.withNewChildren(Seq(optimizeQueryStage(e.child, isFinalStage = false)))
@@ -960,7 +1030,10 @@ case class AdaptiveSparkPlanExec(
             throw SparkException.internalError(
               "Custom columnar rules cannot transform broadcast node to something else.")
           }
-          BroadcastQueryStageExec(currentStageId, newPlan, e.canonicalized,
+          BroadcastQueryStageExec(
+            currentStageId,
+            newPlan,
+            e.canonicalized,
             hasStreamSidePushdownDependent = hasStreamSidePushdownDependent)
         }
       case i: InMemoryTableScanExec =>
@@ -990,13 +1063,14 @@ case class AdaptiveSparkPlanExec(
 
   /**
    * Set the logical node link of the `stage` as the corresponding logical node of the `plan` it
-   * encloses. If an `plan` has been transformed from a `Repartition`, it should have `logicalLink`
-   * available by itself; otherwise traverse down to find the first node that is not generated by
-   * `EnsureRequirements`.
+   * encloses. If an `plan` has been transformed from a `Repartition`, it should have
+   * `logicalLink` available by itself; otherwise traverse down to find the first node that is not
+   * generated by `EnsureRequirements`.
    */
   private def setLogicalLinkForNewQueryStage(stage: QueryStageExec, plan: SparkPlan): Unit = {
-    val link = plan.getTagValue(TEMP_LOGICAL_PLAN_TAG).orElse(
-      plan.logicalLink.orElse(plan.collectFirst {
+    val link = plan
+      .getTagValue(TEMP_LOGICAL_PLAN_TAG)
+      .orElse(plan.logicalLink.orElse(plan.collectFirst {
         case p if p.getTagValue(TEMP_LOGICAL_PLAN_TAG).isDefined =>
           p.getTagValue(TEMP_LOGICAL_PLAN_TAG).get
         case p if p.logicalLink.isDefined => p.logicalLink.get
@@ -1008,32 +1082,17 @@ case class AdaptiveSparkPlanExec(
   /**
    * For each query stage in `stagesToReplace`, find their corresponding logical nodes in the
    * `logicalPlan` and replace them with new [[LogicalQueryStage]] nodes.
-   * 1. If the query stage can be mapped to an integral logical sub-tree, replace the corresponding
-   *    logical sub-tree with a leaf node [[LogicalQueryStage]] referencing this query stage. For
-   *    example:
-   *        Join                   SMJ                      SMJ
-   *      /     \                /    \                   /    \
-   *    r1      r2    =>    Xchg1     Xchg2    =>    Stage1     Stage2
-   *                          |        |
-   *                          r1       r2
-   *    The updated plan node will be:
-   *                               Join
-   *                             /     \
-   *    LogicalQueryStage1(Stage1)     LogicalQueryStage2(Stage2)
+   *   1. If the query stage can be mapped to an integral logical sub-tree, replace the
+   *      corresponding logical sub-tree with a leaf node [[LogicalQueryStage]] referencing this
+   *      query stage. For example: Join SMJ SMJ / \ / \ / \ r1 r2 => Xchg1 Xchg2 => Stage1 Stage2
+   * \| | r1 r2 The updated plan node will be: Join / \ LogicalQueryStage1(Stage1)
+   * LogicalQueryStage2(Stage2)
    *
    * 2. Otherwise (which means the query stage can only be mapped to part of a logical sub-tree),
-   *    replace the corresponding logical sub-tree with a leaf node [[LogicalQueryStage]]
-   *    referencing to the top physical node into which this logical node is transformed during
-   *    physical planning. For example:
-   *     Agg           HashAgg          HashAgg
-   *      |               |                |
-   *    child    =>     Xchg      =>     Stage1
-   *                      |
-   *                   HashAgg
-   *                      |
-   *                    child
-   *    The updated plan node will be:
-   *    LogicalQueryStage(HashAgg - Stage1)
+   * replace the corresponding logical sub-tree with a leaf node [[LogicalQueryStage]] referencing
+   * to the top physical node into which this logical node is transformed during physical
+   * planning. For example: Agg HashAgg HashAgg \| | | child => Xchg => Stage1 \| HashAgg \| child
+   * The updated plan node will be: LogicalQueryStage(HashAgg - Stage1)
    */
   private def replaceWithQueryStagesInLogicalPlan(
       plan: LogicalPlan,
@@ -1045,9 +1104,11 @@ case class AdaptiveSparkPlanExec(
         assert(logicalNodeOpt.isDefined)
         val logicalNode = logicalNodeOpt.get
         val physicalNode = currentPhysicalPlan.collectFirst {
-          case p if p.eq(stage) ||
-            p.getTagValue(TEMP_LOGICAL_PLAN_TAG).exists(logicalNode.eq) ||
-            p.logicalLink.exists(logicalNode.eq) => p
+          case p
+              if p.eq(stage) ||
+                p.getTagValue(TEMP_LOGICAL_PLAN_TAG).exists(logicalNode.eq) ||
+                p.logicalLink.exists(logicalNode.eq) =>
+            p
         }
         assert(physicalNode.isDefined)
         // Set the temp link for those nodes that are wrapped inside a `LogicalQueryStage` node for
@@ -1087,8 +1148,8 @@ case class AdaptiveSparkPlanExec(
       // Here, we also need to avoid to insert the `BroadcastExchangeExec` node when the newPlan is
       // already the `BroadcastExchangeExec` plan after apply the `LogicalQueryStageStrategy` rule.
       val finalPlan = inputPlan match {
-        case b: BroadcastExchangeLike
-          if (!newPlan.isInstanceOf[BroadcastExchangeLike]) => b.withNewChildren(Seq(newPlan))
+        case b: BroadcastExchangeLike if (!newPlan.isInstanceOf[BroadcastExchangeLike]) =>
+          b.withNewChildren(Seq(newPlan))
         case _ => newPlan
       }
       Some((finalPlan, optimized))
@@ -1127,14 +1188,15 @@ case class AdaptiveSparkPlanExec(
       val newMetrics = newSubPlans.flatMap { p =>
         p.flatMap(_.metrics.values.map(m => SQLPlanMetric(m.name.get, m.id, m.metricType)))
       }
-      context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveSQLMetricUpdates(
-        executionId, newMetrics))
+      context.session.sparkContext.listenerBus
+        .post(SparkListenerSQLAdaptiveSQLMetricUpdates(executionId, newMetrics))
     } else {
       val planDescriptionMode = ExplainMode.fromString(conf.uiExplainMode)
-      context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
-        executionId,
-        context.qe.explainString(planDescriptionMode),
-        SparkPlanInfo.fromSparkPlan(context.qe.executedPlan)))
+      context.session.sparkContext.listenerBus.post(
+        SparkListenerSQLAdaptiveExecutionUpdate(
+          executionId,
+          context.qe.explainString(planDescriptionMode),
+          SparkPlanInfo.fromSparkPlan(context.qe.executedPlan)))
     }
   }
 
@@ -1143,8 +1205,8 @@ case class AdaptiveSparkPlanExec(
    * materialization errors and stage cancellation errors.
    */
   private def cleanUpAndThrowException(
-       errors: Seq[Throwable],
-       earlyFailedStage: Option[Int]): Unit = {
+      errors: Seq[Throwable],
+      earlyFailedStage: Option[Int]): Unit = {
     currentPhysicalPlan.foreach {
       // earlyFailedStage is the stage which failed before calling doMaterialize,
       // so we should avoid calling cancel on it to re-trigger the failure again.
@@ -1186,12 +1248,12 @@ object AdaptiveSparkPlanExec {
   /**
    * The temporary [[LogicalPlan]] link for query stages.
    *
-   * Physical nodes wrapped in a [[LogicalQueryStage]] can be shared among different physical plans
-   * and thus their usual logical links can be overwritten during query planning, leading to
+   * Physical nodes wrapped in a [[LogicalQueryStage]] can be shared among different physical
+   * plans and thus their usual logical links can be overwritten during query planning, leading to
    * situations where those nodes point to a new logical plan and the rest point to the current
    * logical plan. In this case we use temp logical links to make sure we can always trace back to
-   * the original logical links until a new physical plan is adopted, by which time we can clear up
-   * the temp logical links.
+   * the original logical links until a new physical plan is adopted, by which time we can clear
+   * up the temp logical links.
    */
   val TEMP_LOGICAL_PLAN_TAG = TreeNodeTag[LogicalPlan]("temp_logical_plan")
 
@@ -1218,11 +1280,11 @@ object AdaptiveSparkPlanExec {
 
   private def assertBroadcastPushPresenceInBHJ(plan: SparkPlan): Unit = {
     def recurseAndCheck(plan: SparkPlan): Seq[BroadcastHashJoinExec] = {
-      val bhjs = plan.collect {
-        case bhj: BroadcastHashJoinExec => bhj
+      val bhjs = plan.collect { case bhj: BroadcastHashJoinExec =>
+        bhj
       }
-      val stages = plan.collect {
-        case queryStageExec: QueryStageExec => queryStageExec
+      val stages = plan.collect { case queryStageExec: QueryStageExec =>
+        queryStageExec
       }
       val otherBhjs = stages.flatMap(stg => recurseAndCheck(stg.plan))
       bhjs ++ otherBhjs
@@ -1273,7 +1335,6 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
   val stageCache: TrieMap[SparkPlan, ExchangeQueryStageExec] =
     new TrieMap[SparkPlan, ExchangeQueryStageExec]()
 }
-
 
 /**
  * The event type for stage materialization.

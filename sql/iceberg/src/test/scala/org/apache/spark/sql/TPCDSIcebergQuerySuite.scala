@@ -38,7 +38,7 @@ class TPCDSIcebergQuerySuite extends TPCDSQuerySuite with TPCDSIcebergBase {
 class TPCDSIcebergQueryWithStatsSuite extends TPCDSIcebergQuerySuite {
   override def injectStats: Boolean = true
 }
-*/
+ */
 
 @ExtendedSQLTest
 class TPCDSIcebergQueryANSISuite extends TPCDSIcebergQuerySuite {

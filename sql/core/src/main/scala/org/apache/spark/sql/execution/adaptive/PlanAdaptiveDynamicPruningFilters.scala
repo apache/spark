@@ -29,8 +29,9 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, HashedRelati
 /**
  * A rule to insert dynamic pruning predicates in order to reuse the results of broadcast.
  */
-case class PlanAdaptiveDynamicPruningFilters(
-    rootPlan: AdaptiveSparkPlanExec) extends Rule[SparkPlan] with AdaptiveSparkPlanHelper {
+case class PlanAdaptiveDynamicPruningFilters(rootPlan: AdaptiveSparkPlanExec)
+    extends Rule[SparkPlan]
+    with AdaptiveSparkPlanHelper {
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.dynamicPartitionPruningEnabled) {
       return plan
@@ -38,11 +39,23 @@ case class PlanAdaptiveDynamicPruningFilters(
 
     plan.transformAllExpressionsWithPruning(
       _.containsAllPatterns(DYNAMIC_PRUNING_EXPRESSION, IN_SUBQUERY_EXEC)) {
-      case DynamicPruningExpression(InSubqueryExec(
-          value, SubqueryAdaptiveBroadcastExec(name, index, onlyInBroadcast, buildPlan, buildKeys,
-          adaptivePlan: AdaptiveSparkPlanExec), exprId, _, _, _)) =>
+      case DynamicPruningExpression(
+            InSubqueryExec(
+              value,
+              SubqueryAdaptiveBroadcastExec(
+                name,
+                index,
+                onlyInBroadcast,
+                buildPlan,
+                buildKeys,
+                adaptivePlan: AdaptiveSparkPlanExec),
+              exprId,
+              _,
+              _,
+              _)) =>
         val packedKeys = BindReferences.bindReferences(
-          HashJoin.rewriteKeyExpr(buildKeys), adaptivePlan.executedPlan.output)
+          HashJoin.rewriteKeyExpr(buildKeys),
+          adaptivePlan.executedPlan.output)
         val mode = HashedRelationBroadcastMode(packedKeys)
         // TODO: Asif: check if broadcastvar push down makes sense here
         // plan a broadcast exchange of the build side of the join
@@ -61,8 +74,7 @@ case class PlanAdaptiveDynamicPruningFilters(
           exchange.setLogicalLink(adaptivePlan.executedPlan.logicalLink.get)
           val newAdaptivePlan = adaptivePlan.copy(inputPlan = exchange)
 
-          val broadcastValues = SubqueryBroadcastExec(
-            name, index, buildKeys, newAdaptivePlan)
+          val broadcastValues = SubqueryBroadcastExec(name, index, buildKeys, newAdaptivePlan)
           DynamicPruningExpression(InSubqueryExec(value, broadcastValues, exprId))
         } else if (onlyInBroadcast) {
           DynamicPruningExpression(Literal.TrueLiteral)
@@ -72,8 +84,8 @@ case class PlanAdaptiveDynamicPruningFilters(
           val aggregate = Aggregate(Seq(alias), Seq(alias), buildPlan)
 
           val session = adaptivePlan.context.session
-          val sparkPlan = QueryExecution.prepareExecutedPlan(
-            session, aggregate, adaptivePlan.context)
+          val sparkPlan =
+            QueryExecution.prepareExecutedPlan(session, aggregate, adaptivePlan.context)
           assert(sparkPlan.isInstanceOf[AdaptiveSparkPlanExec])
           val newAdaptivePlan = sparkPlan.asInstanceOf[AdaptiveSparkPlanExec]
           val values = SubqueryExec(name, newAdaptivePlan)

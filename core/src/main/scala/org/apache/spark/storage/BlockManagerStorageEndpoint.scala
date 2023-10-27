@@ -26,19 +26,20 @@ import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
- * An RpcEndpoint to take commands from the master to execute options. For example,
- * this is used to remove blocks from the storage endpoint's BlockManager.
+ * An RpcEndpoint to take commands from the master to execute options. For example, this is used
+ * to remove blocks from the storage endpoint's BlockManager.
  */
-private[storage]
-class BlockManagerStorageEndpoint(
+private[storage] class BlockManagerStorageEndpoint(
     override val rpcEnv: RpcEnv,
     blockManager: BlockManager,
     mapOutputTracker: MapOutputTracker)
-  extends IsolatedThreadSafeRpcEndpoint with Logging {
+    extends IsolatedThreadSafeRpcEndpoint
+    with Logging {
 
   private val asyncThreadPool =
     ThreadUtils.newDaemonCachedThreadPool("block-manager-storage-async-thread-pool", 100)
-  private implicit val asyncExecutionContext = ExecutionContext.fromExecutorService(asyncThreadPool)
+  private implicit val asyncExecutionContext =
+    ExecutionContext.fromExecutorService(asyncThreadPool)
 
   // Operations that involve removing blocks may be slow and should be done asynchronously
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -66,8 +67,8 @@ class BlockManagerStorageEndpoint(
 
     case RemoveBroadcast(broadcastId, _) =>
       doAsync[Int]("removing broadcast " + broadcastId, context) {
-        Option(SparkEnv.get).foreach(_.broadcastManager.
-          invokeBroadcastLifeCycleListeners(broadcastId))
+        Option(SparkEnv.get).foreach(
+          _.broadcastManager.invokeBroadcastLifeCycleListeners(broadcastId))
         blockManager.removeBroadcast(broadcastId, tellMaster = true)
       }
 

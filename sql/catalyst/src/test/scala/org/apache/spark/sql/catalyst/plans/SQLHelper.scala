@@ -35,9 +35,12 @@ trait SQLHelper {
    * Sets all SQL configurations specified in `pairs`, calls `f`, and then restores all SQL
    * configurations, and returns the result of the f.
    *
-   * @param pairs Sql con f properties
-   * @param f Function to execute
-   * @return T return value
+   * @param pairs
+   *   Sql con f properties
+   * @param f
+   *   Function to execute
+   * @return
+   *   T return value
    */
   protected def withSQLConf[T](pairs: (String, String)*)(f: => T): T = {
     val conf = SQLConf.get
@@ -55,7 +58,8 @@ trait SQLHelper {
       }
       conf.setConfString(k, v)
     }
-    try f finally {
+    try f
+    finally {
       keys.zip(currentValues).foreach {
         case (key, Some(value)) => conf.setConfString(key, value)
         case (key, None) => conf.unsetConf(key)
@@ -64,15 +68,15 @@ trait SQLHelper {
   }
 
   /**
-   * Generates a temporary path without creating the actual file/directory, then pass it to `f`. If
-   * a file/directory is created there by `f`, it will be delete after `f` returns.
+   * Generates a temporary path without creating the actual file/directory, then pass it to `f`.
+   * If a file/directory is created there by `f`, it will be delete after `f` returns.
    */
   protected def withTempPath(f: File => Unit): Unit = {
     val path = Utils.createTempDir()
     path.delete()
-    try f(path) finally Utils.deleteRecursively(path)
+    try f(path)
+    finally Utils.deleteRecursively(path)
   }
-
 
   def testSpecialDatetimeValues[T](test: ZoneId => T): Unit = {
     DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>

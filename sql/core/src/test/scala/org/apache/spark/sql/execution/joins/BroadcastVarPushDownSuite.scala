@@ -28,24 +28,36 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 class BroadcastVarPushDownSuite extends QueryTest with BroadcastVarPushdownUtils {
 
   test("test broadcast variables push on simple join") {
-    val planToTest = () => non_part_table1.where("c1_1".attr > 10).join(non_part_table2, Inner,
-        Option("c1_2".attr === "c2_2".attr))
+    val planToTest = () =>
+      non_part_table1
+        .where("c1_1".attr > 10)
+        .join(non_part_table2, Inner, Option("c1_2".attr === "c2_2".attr))
 
     runTest(planToTest)
   }
 
   test("test  broadcast variables push on nested joins") {
-    val planToTest = () => non_part_table1.where("c1_2".attr > 10).join(non_part_table2, Inner,
-      Option("c1_1".attr === "c2_2".attr && "c1_3".attr === "c2_3".attr)).join(non_part_table3.
-      where("c3_1".attr > 1), Inner, Option("c2_1".attr === "c3_2".attr))
+    val planToTest = () =>
+      non_part_table1
+        .where("c1_2".attr > 10)
+        .join(
+          non_part_table2,
+          Inner,
+          Option("c1_1".attr === "c2_2".attr && "c1_3".attr === "c2_3".attr))
+        .join(non_part_table3.where("c3_1".attr > 1), Inner, Option("c2_1".attr === "c3_2".attr))
 
     runTest(planToTest)
   }
 
   test("test broadcast var push with multi target batch scan") {
-    val planToTest = () => non_part_table1.where("c1_2".attr > 10).join(non_part_table2, Inner,
-        Option("c1_1".attr === "c2_2".attr && "c1_3".attr === "c2_3".attr)).join(non_part_table3.
-        where("c3_1".attr > 1), Inner, Option("c1_1".attr === "c3_2".attr))
+    val planToTest = () =>
+      non_part_table1
+        .where("c1_2".attr > 10)
+        .join(
+          non_part_table2,
+          Inner,
+          Option("c1_1".attr === "c2_2".attr && "c1_3".attr === "c2_3".attr))
+        .join(non_part_table3.where("c3_1".attr > 1), Inner, Option("c1_1".attr === "c3_2".attr))
     runTest(planToTest)
   }
 
@@ -66,23 +78,29 @@ class BroadcastVarPushDownSuite extends QueryTest with BroadcastVarPushdownUtils
     // hash join
     // collect all batch scans
     val (batchScansWithBCVar, batchScansWithoutBCVar) = {
-      val temp = Seq(dfWithBroadcastVarPush.queryExecution.executedPlan,
+      val temp = Seq(
+        dfWithBroadcastVarPush.queryExecution.executedPlan,
         dfWithoutBroadcastVarPush.queryExecution.executedPlan).map {
-        case aqe: AdaptiveSparkPlanExec => BroadcastHashJoinUtil.getAllBatchScansForSparkPlan(
-          aqe.finalPhysicalPlan)
+        case aqe: AdaptiveSparkPlanExec =>
+          BroadcastHashJoinUtil.getAllBatchScansForSparkPlan(aqe.finalPhysicalPlan)
         case x => BroadcastHashJoinUtil.getAllBatchScansForSparkPlan(x)
       }
       temp.head -> temp(1)
     }
 
-    val pairedBatchScansWithBCVarToWthoutBCVar = batchScansWithBCVar.filter(
-      x => x.scan.isInstanceOf[SupportsRuntimeV2Filtering] && x.scan
-        .asInstanceOf[SupportsRuntimeV2Filtering].hasPushedBroadCastFilter).map(bs =>
-      batchScansWithoutBCVar.find(x => x.table.name == bs.table.name && x.schema == bs.schema).
-        map(bs -> _).get)
+    val pairedBatchScansWithBCVarToWthoutBCVar = batchScansWithBCVar
+      .filter(x =>
+        x.scan.isInstanceOf[SupportsRuntimeV2Filtering] && x.scan
+          .asInstanceOf[SupportsRuntimeV2Filtering]
+          .hasPushedBroadCastFilter)
+      .map(bs =>
+        batchScansWithoutBCVar
+          .find(x => x.table.name == bs.table.name && x.schema == bs.schema)
+          .map(bs -> _)
+          .get)
     assert(pairedBatchScansWithBCVarToWthoutBCVar.nonEmpty)
-    assert(pairedBatchScansWithBCVarToWthoutBCVar.forall {
-      case (withBc, withoutBC) => withBc.metrics("numOutputRows").value <
+    assert(pairedBatchScansWithBCVarToWthoutBCVar.forall { case (withBc, withoutBC) =>
+      withBc.metrics("numOutputRows").value <
         withoutBC.metrics("numOutputRows").value
     })
   }

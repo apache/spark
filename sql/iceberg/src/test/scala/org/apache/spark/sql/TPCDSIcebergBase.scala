@@ -20,12 +20,11 @@ package org.apache.spark.sql
 trait TPCDSIcebergBase extends TPCDSBase with IcebergSharedSparkSession {
 
   override def createTable(
-                            spark: SparkSession,
-                            tableName: String,
-                            format: String = "iceberg",
-                            options: Seq[String] = Nil): Unit = {
-    spark.sql(
-      s"""
+      spark: SparkSession,
+      tableName: String,
+      format: String = "iceberg",
+      options: Seq[String] = Nil): Unit = {
+    spark.sql(s"""
          |CREATE TABLE `$tableName` (${tableColumns(tableName)})
          |USING $format
          |${partitionedByClause(tableName)}

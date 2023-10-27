@@ -34,13 +34,18 @@ import org.apache.spark.util.Utils
 /**
  * A logical plan representing a data source v2 table.
  *
- * @param table   The table that this relation represents.
- * @param output the output attributes of this relation.
- * @param catalog catalogPlugin for the table. None if no catalog is specified.
- * @param identifier the identifier for the table. None if no identifier is defined.
- * @param options The options for this table operation. It's used to create fresh
- *                [[org.apache.spark.sql.connector.read.ScanBuilder]] and
- *                [[org.apache.spark.sql.connector.write.WriteBuilder]].
+ * @param table
+ *   The table that this relation represents.
+ * @param output
+ *   the output attributes of this relation.
+ * @param catalog
+ *   catalogPlugin for the table. None if no catalog is specified.
+ * @param identifier
+ *   the identifier for the table. None if no identifier is defined.
+ * @param options
+ *   The options for this table operation. It's used to create fresh
+ *   [[org.apache.spark.sql.connector.read.ScanBuilder]] and
+ *   [[org.apache.spark.sql.connector.write.WriteBuilder]].
  */
 case class DataSourceV2Relation(
     table: Table,
@@ -48,18 +53,22 @@ case class DataSourceV2Relation(
     catalog: Option[CatalogPlugin],
     identifier: Option[Identifier],
     options: CaseInsensitiveStringMap)
-  extends LeafNode with MultiInstanceRelation with NamedRelation with ExposesMetadataColumns {
+    extends LeafNode
+    with MultiInstanceRelation
+    with NamedRelation
+    with ExposesMetadataColumns {
 
   import DataSourceV2Implicits._
 
-  lazy val funCatalog: Option[FunctionCatalog] = catalog.collect {
-    case c: FunctionCatalog => c
+  lazy val funCatalog: Option[FunctionCatalog] = catalog.collect { case c: FunctionCatalog =>
+    c
   }
 
   override lazy val metadataOutput: Seq[AttributeReference] = table match {
     case hasMeta: SupportsMetadataColumns =>
       metadataOutputWithOutConflicts(
-        hasMeta.metadataColumns.toAttributes, hasMeta.canRenameConflictingMetadataColumns)
+        hasMeta.metadataColumns.toAttributes,
+        hasMeta.canRenameConflictingMetadataColumns)
     case _ =>
       Nil
   }
@@ -116,19 +125,26 @@ case class DataSourceV2Relation(
  * plan. This ensures that the stats that are used by the optimizer account for the filters and
  * projection that will be pushed down.
  *
- * @param relation a [[DataSourceV2Relation]]
- * @param scan a DSv2 [[Scan]]
- * @param output the output attributes of this relation
- * @param keyGroupedPartitioning if set, the partitioning expressions that are used to split the
- *                               rows in the scan across different partitions
- * @param ordering if set, the ordering provided by the scan
+ * @param relation
+ *   a [[DataSourceV2Relation]]
+ * @param scan
+ *   a DSv2 [[Scan]]
+ * @param output
+ *   the output attributes of this relation
+ * @param keyGroupedPartitioning
+ *   if set, the partitioning expressions that are used to split the rows in the scan across
+ *   different partitions
+ * @param ordering
+ *   if set, the ordering provided by the scan
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
     scan: Scan,
     output: Seq[AttributeReference],
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
-    ordering: Option[Seq[SortOrder]] = None) extends LeafNode with NamedRelation {
+    ordering: Option[Seq[SortOrder]] = None)
+    extends LeafNode
+    with NamedRelation {
 
   override def name: String = relation.table.name()
 
@@ -168,7 +184,11 @@ case class DataSourceV2ScanRelation(
 
       case _ => this.scan.hashCode()
     }
-    Objects.hashCode(Integer.valueOf(batchHashCode), this.relation, this.output, this.ordering,
+    Objects.hashCode(
+      Integer.valueOf(batchHashCode),
+      this.relation,
+      this.output,
+      this.ordering,
       this.keyGroupedPartitioning)
   }
 
@@ -185,19 +205,19 @@ case class DataSourceV2ScanRelation(
   override def doCanonicalize(): DataSourceV2ScanRelation =
     this.copy(
       output = output.map(QueryPlan.normalizeExpressions(_, output)),
-      keyGroupedPartitioning = keyGroupedPartitioning.map(
-        _.map(QueryPlan.normalizeExpressions(_, output))),
+      keyGroupedPartitioning =
+        keyGroupedPartitioning.map(_.map(QueryPlan.normalizeExpressions(_, output))),
       ordering = ordering.map(_.map(QueryPlan.normalizeExpressions(_, output))),
-      relation = relation.canonicalized.asInstanceOf[DataSourceV2Relation]
-      )
+      relation = relation.canonicalized.asInstanceOf[DataSourceV2Relation])
 }
 
 /**
  * A specialization of [[DataSourceV2Relation]] with the streaming bit set to true.
  *
- * Note that, this plan has a mutable reader, so Spark won't apply operator push-down for this plan,
- * to avoid making the plan mutable. We should consolidate this plan and [[DataSourceV2Relation]]
- * after we figure out how to apply operator push-down for streaming data sources.
+ * Note that, this plan has a mutable reader, so Spark won't apply operator push-down for this
+ * plan, to avoid making the plan mutable. We should consolidate this plan and
+ * [[DataSourceV2Relation]] after we figure out how to apply operator push-down for streaming data
+ * sources.
  */
 case class StreamingDataSourceV2Relation(
     output: Seq[Attribute],
@@ -207,7 +227,8 @@ case class StreamingDataSourceV2Relation(
     identifier: Option[Identifier],
     startOffset: Option[Offset] = None,
     endOffset: Option[Offset] = None)
-  extends LeafNode with MultiInstanceRelation {
+    extends LeafNode
+    with MultiInstanceRelation {
 
   override def isStreaming: Boolean = true
 
@@ -286,8 +307,10 @@ object DataSourceV2Relation {
         val histogram = if (colStat.histogram().isPresent) {
           val v2Histogram = colStat.histogram().get()
           val bins = v2Histogram.bins()
-          Some(Histogram(v2Histogram.height(),
-            bins.map(bin => HistogramBin(bin.lo, bin.hi, bin.ndv))))
+          Some(
+            Histogram(
+              v2Histogram.height(),
+              bins.map(bin => HistogramBin(bin.lo, bin.hi, bin.ndv))))
         } else {
           None
         }

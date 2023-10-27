@@ -26,8 +26,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, J
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.internal.SQLConf
 
-
-
 class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
 
   private val left = StatsTestPlan(
@@ -53,8 +51,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       Inner,
       JoinHint(hintBroadcast, None),
       hintOnly = true,
-      SQLConf.get
-    )
+      SQLConf.get)
     assert(broadcastSide === Some(BuildLeft))
   }
 
@@ -65,8 +62,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       Inner,
       JoinHint(None, hintBroadcast),
       hintOnly = true,
-      SQLConf.get
-    )
+      SQLConf.get)
     assert(broadcastSide === Some(BuildRight))
   }
 
@@ -77,8 +73,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       Inner,
       JoinHint(hintBroadcast, hintBroadcast),
       hintOnly = true,
-      SQLConf.get
-    )
+      SQLConf.get)
     assert(broadcastSide === Some(BuildRight))
   }
 
@@ -89,8 +84,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       Inner,
       JoinHint(None, None),
       hintOnly = true,
-      SQLConf.get
-    )
+      SQLConf.get)
     assert(broadcastSide === None)
   }
 
@@ -101,8 +95,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       Inner,
       JoinHint(None, None),
       hintOnly = false,
-      SQLConf.get
-    )
+      SQLConf.get)
     assert(broadcastSide === Some(BuildRight))
   }
 
@@ -112,10 +105,9 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
         left,
         right,
         Inner,
-        JoinHint(None, hintNotToBroadcast ),
+        JoinHint(None, hintNotToBroadcast),
         hintOnly = false,
-        SQLConf.get
-      )
+        SQLConf.get)
       assert(broadcastSide === None)
     }
   }
@@ -127,8 +119,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       Inner,
       JoinHint(hintShuffleHash, None),
       hintOnly = true,
-      SQLConf.get
-    )
+      SQLConf.get)
     assert(broadcastSide === Some(BuildLeft))
   }
 
@@ -139,8 +130,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       Inner,
       JoinHint(None, hintShuffleHash),
       hintOnly = true,
-      SQLConf.get
-    )
+      SQLConf.get)
     assert(broadcastSide === Some(BuildRight))
   }
 
@@ -151,8 +141,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       Inner,
       JoinHint(hintShuffleHash, hintShuffleHash),
       hintOnly = true,
-      SQLConf.get
-    )
+      SQLConf.get)
     assert(broadcastSide === Some(BuildRight))
   }
 
@@ -163,8 +152,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       Inner,
       JoinHint(None, None),
       hintOnly = true,
-      SQLConf.get
-    )
+      SQLConf.get)
     assert(broadcastSide === None)
   }
 
@@ -175,8 +163,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       Inner,
       JoinHint(None, None),
       hintOnly = false,
-      SQLConf.get
-    )
+      SQLConf.get)
     assert(broadcastSide === Some(BuildRight))
   }
 
@@ -196,8 +183,8 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       val smallerLeg = right
       val biggerLeg = left
       val biggerLegOuter = SubqueryAlias("outerLeg", biggerLeg)
-      val join1 = SubqueryAlias("j1", Join(smallerLeg, biggerLeg, Inner, Some("a" === "d"),
-        JoinHint.NONE))
+      val join1 =
+        SubqueryAlias("j1", Join(smallerLeg, biggerLeg, Inner, Some("a" === "d"), JoinHint.NONE))
       val broadCastExchangePlans = mutable.Set[LogicalPlan]()
       val broadcastSideOuterJoin = getBroadcastBuildSide(
         biggerLegOuter,
@@ -206,8 +193,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
         JoinHint.NONE,
         hintOnly = false,
         SQLConf.get,
-        broadCastExchangePlans
-      )
+        broadCastExchangePlans)
       broadcastSideOuterJoin.foreach {
         case BuildRight => broadCastExchangePlans += join1.canonicalized
         case BuildLeft => broadCastExchangePlans += biggerLegOuter.canonicalized
@@ -221,8 +207,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
         JoinHint.NONE,
         hintOnly = false,
         SQLConf.get,
-        broadCastExchangePlans
-      )
+        broadCastExchangePlans)
       assert(broadcastSideInnerJoin.get == BuildRight)
     }
   }

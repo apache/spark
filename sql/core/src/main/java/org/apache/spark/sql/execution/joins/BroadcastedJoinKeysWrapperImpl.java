@@ -24,14 +24,17 @@ import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+
+import scala.Function1;
+import scala.collection.Iterator;
+import scala.jdk.CollectionConverters;
 
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 
-import java.util.concurrent.ExecutionException;
-
-import java.util.concurrent.TimeUnit;
 import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.sql.catalyst.CatalystTypeConverters;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -42,9 +45,7 @@ import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.IntegerType$;
 import org.apache.spark.sql.types.LongType$;
 import org.apache.spark.sql.types.ShortType$;
-import scala.Function1;
-import scala.collection.Iterator;
-import scala.jdk.CollectionConverters;
+
 
 public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrapper {
   private Broadcast<HashedRelation> bcVar;
@@ -88,21 +89,21 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
                 LongHashedRelation lhr = (LongHashedRelation) bcVar.getValue();
                 if (bcjk.totalJoinKeys == 1) {
                   if (bcjk.keyDataTypes[0].equals(LongType$.MODULE$)) {
-                    return JavaConverters.asJavaCollection(lhr.keys().map(f -> f.get(
-                        0, LongType$.MODULE$)).toList()).toArray();
+                    return CollectionConverters.SeqHasAsJava(lhr.keys().map(f -> f.get(
+                        0, LongType$.MODULE$)).toList()).asJava().toArray();
                   } else if (bcjk.keyDataTypes[0].equals(IntegerType$.MODULE$)) {
-                    return JavaConverters.asJavaCollection(lhr.keys().map(f -> ((Long)f.get(
-                        0, LongType$.MODULE$)).intValue()).toList()).toArray();
+                    return CollectionConverters.SeqHasAsJava(lhr.keys().map(f -> ((Long)f.get(
+                        0, LongType$.MODULE$)).intValue()).toList()).asJava().toArray();
                   } else if (bcjk.keyDataTypes[0].equals(ShortType$.MODULE$)) {
-                    return JavaConverters.asJavaCollection(lhr.keys().map(f -> ((Long)f.get(
-                        0, LongType$.MODULE$)).shortValue()).toList()).toArray();
+                    return CollectionConverters.SeqHasAsJava(lhr.keys().map(f -> ((Long)f.get(
+                        0, LongType$.MODULE$)).shortValue()).toList()).asJava().toArray();
                   } else {
-                    return JavaConverters.asJavaCollection(lhr.keys().map(f -> ((Long)f.get(
-                        0, LongType$.MODULE$)).byteValue()).toList()).toArray();
+                    return CollectionConverters.SeqHasAsJava(lhr.keys().map(f -> ((Long)f.get(
+                        0, LongType$.MODULE$)).byteValue()).toList()).asJava().toArray();
                   }
                 } else {
                   if (bcjk.indexesOfInterest.length == 1) {
-                    return JavaConverters.asJavaCollection(
+                    return CollectionConverters.SeqHasAsJava(
                         lhr.keys().map(ir -> {
                           long hashedKey = ir.getLong(0);
                           int actualkey;
@@ -118,7 +119,7 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
                           } else {
                             return (byte)actualkey;
                           }
-                        }).toList()).toArray();
+                        }).toList()).asJava().toArray();
                   } else {
                     return getObjects(lhr, bcjk);
                   }
@@ -134,7 +135,7 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
                     Object x = f.get(actualIndex, keyDataType);
                     return toScalaConverter.apply(x);
                   });
-                  return JavaConverters.asJavaCollection(keysAsScala.toList()).toArray();
+                  return CollectionConverters.SeqHasAsJava(keysAsScala.toList()).asJava().toArray();
                 } else {
                   Function1<Object, Object>[] toScalaConverters =
                       new Function1[bcjk.indexesOfInterest.length];
@@ -153,7 +154,7 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
                     }
                     return arr;
                   });
-                  return JavaConverters.asJavaCollection(keysAsScala.toList()).toArray(
+                  return CollectionConverters.SeqHasAsJava(keysAsScala.toList()).asJava().toArray(
                       new Object[0][]);
                 }
               }
@@ -170,7 +171,7 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
       DataType keyDataType = bcjk.keyDataTypes[i];
       toScalaConverters[i] = CatalystTypeConverters.createToScalaConverter(keyDataType);
     }
-    return JavaConverters.asJavaCollection(
+    return CollectionConverters.SeqHasAsJava(
       lhr.keys().map(ir -> {
         long hashedKey = Long.reverse(ir.getLong(0));
         buff.putLong(0, hashedKey);
@@ -183,7 +184,7 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
           actualkeys[i] =  toScalaConverters[i].apply(temp);
         }
         return actualkeys;
-      }).toList()).toArray(new Object[0][]);
+      }).toList()).asJava().toArray(new Object[0][]);
   }
 
   public BroadcastedJoinKeysWrapperImpl() {}

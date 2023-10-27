@@ -30,12 +30,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.internal.Logging
 
-
-
-
-
-private[spark] class BroadcastManager(
-    val isDriver: Boolean, conf: SparkConf) extends Logging {
+private[spark] class BroadcastManager(val isDriver: Boolean, conf: SparkConf) extends Logging {
   private val broadcastLifeCycleListeners = new CopyOnWriteArraySet[BroadcastLifeCycleListener]()
   private var initialized = false
   private var broadcastFactory: BroadcastFactory = null
@@ -64,8 +59,7 @@ private[spark] class BroadcastManager(
   private[broadcast] val cachedValues =
     Collections.synchronizedMap(
       new ReferenceMap(ReferenceStrength.HARD, ReferenceStrength.WEAK)
-        .asInstanceOf[java.util.Map[Any, Any]]
-    )
+        .asInstanceOf[java.util.Map[Any, Any]])
 
   def newBroadcast[T: ClassTag](
       value_ : T,
