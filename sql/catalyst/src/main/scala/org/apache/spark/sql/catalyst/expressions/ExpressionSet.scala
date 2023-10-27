@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.{mutable, GenTraversableOnce}
-import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.sql.catalyst.util.BigArrayBuffer
 
 object ExpressionSet {
   /** Constructs a new [[ExpressionSet]] by applying [[Canonicalize]] to `expressions`. */
@@ -58,7 +59,7 @@ object ExpressionSet {
  */
 class ExpressionSet protected(
     private val baseSet: mutable.Set[Expression] = new mutable.HashSet,
-    private val originals: mutable.Buffer[Expression] = new ArrayBuffer)
+    private val originals: mutable.Buffer[Expression] = new BigArrayBuffer)
   extends Iterable[Expression] {
 
   //  Note: this class supports Scala 2.12. A parallel source tree has a 2.13 implementation.
