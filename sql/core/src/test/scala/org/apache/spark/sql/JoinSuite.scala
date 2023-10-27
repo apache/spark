@@ -754,13 +754,11 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       }
 
       val expected = new ListBuffer[Row]()
-      expected.append(
-        Row(1, "1", 1, 1),
-        Row(1, "1", 1, 2),
-        Row(2, "2", 2, 1),
-        Row(2, "2", 2, 2),
-        Row(3, "3", 3, 1),
-        Row(3, "3", 3, 2))
+      expected.appendAll(Seq(
+        Row(1, "1", 1, 1), Row(1, "1", 1, 2),
+        Row(2, "2", 2, 1), Row(2, "2", 2, 2),
+        Row(3, "3", 3, 1), Row(3, "3", 3, 2))
+      )
       for (i <- 4 to 100) {
         expected.append(Row(i, i.toString, null, null))
       }
@@ -824,13 +822,11 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       }
 
       val expected = new ListBuffer[Row]()
-      expected.append(
-        Row(1, "1", 1, 1),
-        Row(1, "1", 1, 2),
-        Row(2, "2", 2, 1),
-        Row(2, "2", 2, 2),
-        Row(3, "3", 3, 1),
-        Row(3, "3", 3, 2))
+      expected.appendAll(Seq(
+        Row(1, "1", 1, 1), Row(1, "1", 1, 2),
+        Row(2, "2", 2, 1), Row(2, "2", 2, 2),
+        Row(3, "3", 3, 1), Row(3, "3", 3, 2))
+      )
       for (i <- 4 to 100) {
         expected.append(Row(i, i.toString, null, null))
       }
