@@ -19,49 +19,165 @@
 Python to Spark Type Conversions
 ================================
 
+.. TODO: Add additional information on conversions when Arrow is enabled..
+.. TODO: Add in-depth explanation and table for type conversions (SPARK-44734).
+
 .. currentmodule:: pyspark.sql.types
 
-All data types of Spark SQL are located in the package of `pyspark.sql.types`.
+When working with PySpark, you will often need to consider the conversions between Python-native
+objects to their Spark equivalents. For instance, when working with user-defined functions, the
+function return type will be cast by Spark to an appropriate Spark SQL type. Or, when creating a
+``DataFrame``, you may supply ``numpy`` or ``pandas`` objects as the inputted data. This guide will cover
+the various conversions between Python and Spark SQL types.
+
+Browsing Type Conversions
+-------------------------
+
+Though this document provides a comprehensive list of type conversions, you may find it easier to
+interactively check the conversion behavior of Spark. To do so, you can test small examples of
+user-defined functions, and use the ``spark.createDataFrame`` interface.
+
+All data types of Spark SQL are located in the package of ``pyspark.sql.types``.
 You can access them by doing:
 
 .. code-block:: python
 
     from pyspark.sql.types import *
 
-The conversion between native types and Spark SQL types is especially important to consider when writing Python UDFs.
+Configuration
+-------------
+There are several configurations that affect the behavior of type conversions. These configurations
+are listed below:
+
+.. list-table::
+    :header-rows: 1
+
+    * - Configuration
+      - Description
+      - Default
+    * - spark.sql.execution.pythonUDF.arrow.enabled
+      - Enable PyArrow in PySpark. See more `here <arrow_pandas.rst>`_.
+      - False
+    * - spark.sql.pyspark.inferNestedDictAsStruct.enabled
+      - When enabled, nested dictionaries are inferred as StructType. Otherwise, they are inferred as MapType.
+      - False
+    * - spark.sql.timestampType
+      - If set to `TIMESTAMP_NTZ`, the default timestamp type is ``TimestampNTZType``. Otherwise, the default timestamp type is TimestampType.
+      - ""
+
+Conversions in Practice - UDFs
+------------------------------
+A common conversion case is returning a Python value from a UDF. In this case, the return type of
+the UDF must match the provided return type.
+
+.. note:: If the actual return type of your function does not match the provided return type, Spark will implicitly cast the value to null.
 
 .. code-block:: python
 
-    from pyspark.sql.types import (
-        StructType,
-        StructField,
-        IntegerType,
-        StringType,
-        FloatType,
-    )
-    from pyspark.sql.functions import udf, col
+  from pyspark.sql.types import (
+      StructType,
+      StructField,
+      IntegerType,
+      StringType,
+      FloatType,
+  )
+  from pyspark.sql.functions import udf, col
 
-    df = spark.createDataFrame(
-        [[1]], schema=StructType([StructField("int", IntegerType())])
-    )
+  df = spark.createDataFrame(
+      [[1]], schema=StructType([StructField("int", IntegerType())])
+  )
 
-    @udf(returnType=StringType())
-    def to_string(value):
-        # Must cast return value to str to convert to StringType.
-        return str(value)
+  @udf(returnType=StringType())
+  def to_string(value):
+      return str(value)
 
+  @udf(returnType=FloatType())
+  def to_float(value):
+      return float(value)
 
-    @udf(returnType=FloatType())
-    def to_float(value):
-        # Must cast return value to float to convert to FloatType.
-        return float(value)
+  df.withColumn("cast_int", to_float(col("int"))).withColumn(
+      "cast_str", to_string(col("int"))
+  ).printSchema()
+  # root
+  # |-- int: integer (nullable = true)
+  # |-- cast_int: float (nullable = true)
+  # |-- cast_str: string (nullable = true)
 
+Conversions in Practice - Creating DataFrames
+---------------------------------------------
+Another common conversion case is when creating a DataFrame from values in Python. In this case,
+you can supply a schema, or allow Spark to infer the schema from the provided data.
 
-    df.withColumn("cast_int", to_float(col("int"))).withColumn(
-        "cast_str", to_string(col("int"))
-    ).show()
+.. code-block:: python
 
-All conversions can be found below:
+  data = [
+      ["Wei", "Math", 93.0, 1],
+      ["Jerry", "Physics", 85.0, 4],
+      ["Katrina", "Geology", 90.0, 2],
+  ]
+  cols = ["Name", "Subject", "Score", "Period"]
+
+  spark.createDataFrame(data, cols).printSchema()
+  # root
+  # |-- Name: string (nullable = true)
+  # |-- Subject: string (nullable = true)
+  # |-- Score: double (nullable = true)
+  # |-- Period: long (nullable = true)
+
+  import pandas as pd
+
+  df = pd.DataFrame(data, columns=cols)
+  spark.createDataFrame(df).printSchema()
+  # root
+  # |-- Name: string (nullable = true)
+  # |-- Subject: string (nullable = true)
+  # |-- Score: double (nullable = true)
+  # |-- Period: long (nullable = true)
+
+  import numpy as np
+
+  spark.createDataFrame(np.zeros([3, 2], "int8")).printSchema()
+  # root
+  # |-- _1: byte (nullable = true)
+  # |-- _2: byte (nullable = true)
+
+Conversions in Practice - Nested Data Types
+-------------------------------------------
+Nested data types will convert to ``StructType``, ``MapType``, and ``ArrayType``, depending on the passed data.
+
+.. code-block:: python
+
+  data = [
+      ["Wei", [[1, 2]], {"RecordType": "Scores", "Math": { "H1": 93.0, "H2": 85.0}}],
+  ]
+  cols = ["Name", "ActiveHalfs", "Record"]
+
+  spark.createDataFrame(data, cols).printSchema()
+  # root
+  #  |-- Name: string (nullable = true)
+  #  |-- ActiveHalfs: array (nullable = true)
+  #  |    |-- element: array (containsNull = true)
+  #  |    |    |-- element: long (containsNull = true)
+  #  |-- Record: map (nullable = true)
+  #  |    |-- key: string
+  #  |    |-- value: string (valueContainsNull = true)
+
+  spark.conf.set('spark.sql.pyspark.inferNestedDictAsStruct.enabled', True)
+
+  spark.createDataFrame(data, cols).printSchema()
+  # root
+  #  |-- Name: string (nullable = true)
+  #  |-- ActiveHalfs: array (nullable = true)
+  #  |    |-- element: array (containsNull = true)
+  #  |    |    |-- element: long (containsNull = true)
+  #  |-- Record: struct (nullable = true)
+  #  |    |-- RecordType: string (nullable = true)
+  #  |    |-- Math: struct (nullable = true)
+  #  |    |    |-- H1: double (nullable = true)
+  #  |    |    |-- H2: double (nullable = true)
+
+All Conversions
+---------------
 
 .. list-table::
     :header-rows: 1
@@ -92,7 +208,7 @@ All conversions can be found below:
       - float
       - DoubleType()
     * - **DecimalType**
-      - decimal.Decimal 
+      - decimal.Decimal
       - DecimalType()|
     * - **StringType**
       - string
@@ -131,5 +247,3 @@ All conversions can be found below:
       - The value type in Python of the data type of this field. For example, Int for a StructField with the data type IntegerType.
       - StructField(*name*, *dataType*, [*nullable*])
           .. note:: The default value of *nullable* is True.
-
-.. TODO: Add explanation and table for type conversions (SPARK-44734).
