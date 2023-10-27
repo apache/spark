@@ -44,7 +44,7 @@ import org.apache.spark.sql.types.LongType$;
 import org.apache.spark.sql.types.ShortType$;
 import scala.Function1;
 import scala.collection.Iterator;
-import scala.collection.JavaConverters;
+import scala.jdk.CollectionConverters;
 
 public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrapper {
   private Broadcast<HashedRelation> bcVar;

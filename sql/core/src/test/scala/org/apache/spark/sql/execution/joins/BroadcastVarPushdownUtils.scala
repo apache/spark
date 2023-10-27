@@ -63,7 +63,7 @@ trait DisableBroadcastFilterPushdownSuite extends SQLTestUtils {
 
 trait BroadcastVarPushdownUtils extends SharedSparkSession {
 
-  import scala.collection.JavaConverters._
+  import scala.jdk.CollectionConverters._
 
   val non_part_table1_name = "non_part_tab1"
   val non_part_table2_name = "non_part_tab2"

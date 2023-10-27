@@ -460,7 +460,7 @@ abstract class InMemoryBaseTable(
               val broadcastVarClass = Class.forName(BROADCASTED_JOIN_KEYS_WRAPPER_CLASS)
               // scalastyle:on classforname
               val getKeysMthd = broadcastVarClass.getMethod("getKeysAsSet")
-              import scala.collection.JavaConverters._
+              import scala.jdk.CollectionConverters._
               val matchingKeys = getKeysMthd.invoke(valueArray(0)).
                 asInstanceOf[java.util.Set[Any]].asScala.map(_.toString)
               data = data.filter(partition => {
@@ -518,7 +518,7 @@ abstract class InMemoryBaseTable(
     }
 
     override def getPushedBroadcastFilters(): java.util.List[PushedBroadcastFilterData] = {
-      import scala.collection.JavaConverters._
+      import scala.jdk.CollectionConverters._
       new util.ArrayList[PushedBroadcastFilterData](
         this.broadcastVarFilters.map(f => {
           val inFilter = f.asInstanceOf[In]
@@ -538,7 +538,7 @@ abstract class InMemoryBaseTable(
       readSchema.fields.map(sf => FieldReference(sf.name))
 
     override def getPushedBroadcastVarIds(): java.util.Set[java.lang.Long] = {
-      import scala.collection.JavaConverters._
+      import scala.jdk.CollectionConverters._
       this.getPushedBroadcastFilters().asScala.map(x => java.lang.Long.valueOf(x.bcVar
         .getBroadcastVarId)).toSet.asJava
       }
