@@ -69,7 +69,7 @@ object BuildCommons {
     dockerIntegrationTests, hadoopCloud, kubernetesIntegrationTests) =
     Seq("kubernetes", "yarn",
       "ganglia-lgpl", "streaming-kinesis-asl",
-      "docker-integration-tests", "hadoop-cloud", "kubernetes-integration-tests", "iceberg").
+      "docker-integration-tests", "hadoop-cloud", "kubernetes-integration-tests").
       map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(networkYarn, streamingKafka010Assembly, streamingKinesisAslAssembly) =
@@ -1406,11 +1406,11 @@ object Unidoc {
 
     (ScalaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, iceberg, connectCommon, connect, connectClient,
+        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient,
         protobuf),
     (JavaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, iceberg, connectCommon, connect, connectClient,
+        yarn, tags, streamingKafka010, sqlKafka010,  connectCommon, connect, connectClient,
         protobuf),
 
     (ScalaUnidoc / unidoc / unidocAllClasspaths) := {
