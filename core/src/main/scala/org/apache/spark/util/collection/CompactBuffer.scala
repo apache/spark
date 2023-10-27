@@ -105,7 +105,7 @@ private[spark] class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable
         }
 
       case _ =>
-        values.foreach(e => this += e)
+        values.iterator.foreach(e => this += e)
     }
     this
   }
