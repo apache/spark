@@ -399,8 +399,10 @@ public class LevelDBSuite {
       for (int i = 0; i < 8192; i++) {
         dbForCleanerTest.write(createCustomType1(i));
       }
-      LevelDBIterator<CustomType1> levelDBIterator = (LevelDBIterator<CustomType1>) dbForCleanerTest.view(CustomType1.class).iterator();
-      Reference<LevelDBIterator<?>> reference = getRocksDBIteratorRef(levelDBIterator, dbForCleanerTest);
+      LevelDBIterator<CustomType1> levelDBIterator =
+        (LevelDBIterator<CustomType1>) dbForCleanerTest.view(CustomType1.class).iterator();
+      Reference<LevelDBIterator<?>> reference =
+        getRocksDBIteratorRef(levelDBIterator, dbForCleanerTest);
       assertNotNull(reference);
       JniDBIterator it = (JniDBIterator) levelDBIterator.internalIterator();
       Field iteratorField = it.getClass().getDeclaredField("iterator");
@@ -427,7 +429,9 @@ public class LevelDBSuite {
     }
   }
 
-  private Reference<LevelDBIterator<?>> getRocksDBIteratorRef(LevelDBIterator<?> rocksDBIterator, LevelDB levelDB) {
+  private Reference<LevelDBIterator<?>> getRocksDBIteratorRef(
+      LevelDBIterator<?> rocksDBIterator,
+      LevelDB levelDB) {
     for (Reference<LevelDBIterator<?>> levelDBIteratorReference : levelDB.getIteratorTracker()) {
       if (rocksDBIterator == levelDBIteratorReference.get()) {
         return levelDBIteratorReference;

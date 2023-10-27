@@ -393,8 +393,10 @@ public class RocksDBSuite {
       for (int i = 0; i < 8192; i++) {
         dbForCleanerTest.write(createCustomType1(i));
       }
-      RocksDBIterator<CustomType1> rocksDBIterator = (RocksDBIterator<CustomType1>) dbForCleanerTest.view(CustomType1.class).iterator();
-      Reference<RocksDBIterator<?>> reference = getRocksDBIteratorRef(rocksDBIterator, dbForCleanerTest);
+      RocksDBIterator<CustomType1> rocksDBIterator =
+        (RocksDBIterator<CustomType1>) dbForCleanerTest.view(CustomType1.class).iterator();
+      Reference<RocksDBIterator<?>> reference =
+        getRocksDBIteratorRef(rocksDBIterator, dbForCleanerTest);
       assertNotNull(reference);
       RocksIterator it = rocksDBIterator.internalIterator();
       // it has not been closed yet, isOwningHandle should be true.
@@ -410,7 +412,8 @@ public class RocksDBSuite {
       }
       // check rocksDBIterator should be GCed
       assertTrue(reference.refersTo(null));
-      // Verify that the Cleaner will be executed after a period of time, and it.isOwningHandle() will become false.
+      // Verify that the Cleaner will be executed after a period of time,
+      // and it.isOwningHandle() will become false.
       assertTimeout(java.time.Duration.ofSeconds(5), () -> assertFalse(it.isOwningHandle()));
     } finally {
       dbForCleanerTest.close();
@@ -418,7 +421,9 @@ public class RocksDBSuite {
     }
   }
 
-  private Reference<RocksDBIterator<?>> getRocksDBIteratorRef(RocksDBIterator<?> rocksDBIterator, RocksDB rocksDB) {
+  private Reference<RocksDBIterator<?>> getRocksDBIteratorRef(
+      RocksDBIterator<?> rocksDBIterator,
+      RocksDB rocksDB) {
     for (Reference<RocksDBIterator<?>> rocksDBIteratorReference : rocksDB.getIteratorTracker()) {
       if (rocksDBIterator == rocksDBIteratorReference.get()) {
         return rocksDBIteratorReference;
