@@ -630,7 +630,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException("SELECT CAST(struct(1,2,3) AS STRUCT<INT>)"),
       errorClass = "PARSE_SYNTAX_ERROR",
       sqlState = "42601",
-      parameters = Map("error" -> "'>'", "hint" -> ""))
+      parameters = Map("error" -> "'<'", "hint" -> ": missing ')'"))
   }
 
   test("INCOMPLETE_TYPE_DEFINITION: map type definition is incomplete") {
@@ -651,7 +651,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException("SELECT CAST(map('1',2) AS MAP<STRING>)"),
       errorClass = "PARSE_SYNTAX_ERROR",
       sqlState = "42601",
-      parameters = Map("error" -> "'>'", "hint" -> ""))
+      parameters = Map("error" -> "'<'", "hint" -> ": missing ')'"))
   }
 
   test("INVALID_ESC: Escape string must contain only one character") {

@@ -45,7 +45,6 @@ from collections.abc import Iterable
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
-from pyspark.sql.observation import Observation
 from pyspark.sql.types import Row, StructType, _create_row
 from pyspark.sql.dataframe import (
     DataFrame as PySparkDataFrame,
@@ -92,6 +91,7 @@ if TYPE_CHECKING:
         PandasMapIterFunction,
         ArrowMapIterFunction,
     )
+    from pyspark.sql.connect.observation import Observation
     from pyspark.sql.connect.session import SparkSession
     from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
 
@@ -1051,6 +1051,8 @@ class DataFrame:
         observation: Union["Observation", str],
         *exprs: Column,
     ) -> "DataFrame":
+        from pyspark.sql.connect.observation import Observation
+
         if len(exprs) == 0:
             raise PySparkValueError(
                 error_class="CANNOT_BE_EMPTY",
@@ -1063,10 +1065,7 @@ class DataFrame:
             )
 
         if isinstance(observation, Observation):
-            return DataFrame.withPlan(
-                plan.CollectMetrics(self._plan, str(observation._name), list(exprs)),
-                self._session,
-            )
+            return observation._on(self, *exprs)
         elif isinstance(observation, str):
             return DataFrame.withPlan(
                 plan.CollectMetrics(self._plan, observation, list(exprs)),
@@ -1722,13 +1721,13 @@ class DataFrame:
 
     def _to_table(self) -> Tuple["pa.Table", Optional[StructType]]:
         query = self._plan.to_proto(self._session.client)
-        table, schema = self._session.client.to_table(query)
+        table, schema = self._session.client.to_table(query, self._plan.observations)
         assert table is not None
         return (table, schema)
 
     def toPandas(self) -> "pandas.DataFrame":
         query = self._plan.to_proto(self._session.client)
-        return self._session.client.to_pandas(query)
+        return self._session.client.to_pandas(query, self._plan.observations)
 
     toPandas.__doc__ = PySparkDataFrame.toPandas.__doc__
 
@@ -1865,7 +1864,7 @@ class DataFrame:
         command = plan.CreateView(
             child=self._plan, name=name, is_global=False, replace=False
         ).command(session=self._session.client)
-        self._session.client.execute_command(command)
+        self._session.client.execute_command(command, self._plan.observations)
 
     createTempView.__doc__ = PySparkDataFrame.createTempView.__doc__
 
@@ -1873,7 +1872,7 @@ class DataFrame:
         command = plan.CreateView(
             child=self._plan, name=name, is_global=False, replace=True
         ).command(session=self._session.client)
-        self._session.client.execute_command(command)
+        self._session.client.execute_command(command, self._plan.observations)
 
     createOrReplaceTempView.__doc__ = PySparkDataFrame.createOrReplaceTempView.__doc__
 
@@ -1881,7 +1880,7 @@ class DataFrame:
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=False
         ).command(session=self._session.client)
-        self._session.client.execute_command(command)
+        self._session.client.execute_command(command, self._plan.observations)
 
     createGlobalTempView.__doc__ = PySparkDataFrame.createGlobalTempView.__doc__
 
@@ -1889,7 +1888,7 @@ class DataFrame:
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=True
         ).command(session=self._session.client)
-        self._session.client.execute_command(command)
+        self._session.client.execute_command(command, self._plan.observations)
 
     createOrReplaceGlobalTempView.__doc__ = PySparkDataFrame.createOrReplaceGlobalTempView.__doc__
 
@@ -1936,7 +1935,9 @@ class DataFrame:
         query = self._plan.to_proto(self._session.client)
 
         schema: Optional[StructType] = None
-        for schema_or_table in self._session.client.to_table_as_iterator(query):
+        for schema_or_table in self._session.client.to_table_as_iterator(
+            query, self._plan.observations
+        ):
             if isinstance(schema_or_table, StructType):
                 assert schema is None
                 schema = schema_or_table

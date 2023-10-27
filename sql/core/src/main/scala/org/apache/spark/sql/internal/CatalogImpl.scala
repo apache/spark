@@ -314,7 +314,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
           isTemporary = true)
 
       case _ =>
-        val catalogPath = (currentCatalog +:
+        val catalogPath = (currentCatalog() +:
           sparkSession.sessionState.catalogManager.currentNamespace).mkString(".")
         throw QueryCompilationErrors.unresolvedRoutineError(ident, Seq(catalogPath), plan.origin)
     }

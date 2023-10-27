@@ -57,7 +57,7 @@ from pyspark.errors import PySparkAssertionError, PySparkException
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import Row
-from pyspark.sql.types import StructType, AtomicType, StructField
+from pyspark.sql.types import StructType, StructField
 from pyspark.sql.functions import col, when
 
 

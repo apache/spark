@@ -118,6 +118,12 @@ Unable to find batch `<batchMetadataFile>`.
 
 The method `<methodName>` can not be called on streaming Dataset/DataFrame.
 
+### CANNOT_ALTER_PARTITION_COLUMN
+
+[SQLSTATE: 428FR](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+ALTER TABLE (ALTER|CHANGE) COLUMN is not supported for partition columns, but found the partition column `<columnName>` in the table `<tableName>`.
+
 ### CANNOT_CAST_DATATYPE
 
 [SQLSTATE: 42846](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -573,6 +579,12 @@ For more details see [EXPECT_VIEW_NOT_TABLE](sql-error-conditions-expect-view-no
 [SQLSTATE: 42846](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Failed to decode a row to a value of the expressions: `<expressions>`.
+
+### EXPRESSION_ENCODING_FAILED
+
+[SQLSTATE: 42846](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to encode a value of the expressions: `<expressions>` to a row.
 
 ### EXPRESSION_TYPE_IS_NOT_ORDERABLE
 
@@ -1170,6 +1182,12 @@ The input schema `<inputSchema>` is not a valid schema string.
 
 For more details see [INVALID_SCHEMA](sql-error-conditions-invalid-schema-error-class.html)
 
+### INVALID_SCHEMA_OR_RELATION_NAME
+
+[SQLSTATE: 42602](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+`<name>` is not a valid name for tables/schemas. Valid names only contain alphabet characters, numbers and _.
+
 ### INVALID_SET_SYNTAX
 
 [SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1650,6 +1668,12 @@ Unable to locate Message `<messageName>` in Descriptor.
 [SQLSTATE: 42K0G](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Protobuf type not yet supported: `<protobufType>`.
+
+### PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON
+
+[SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
+
+Failed to plan Python data source `<type>` in Python: `<msg>`
 
 ### RECURSIVE_PROTOBUF_SCHEMA
 

@@ -96,6 +96,14 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
   override private[spark] def asNullable: ArrayType =
     ArrayType(elementType.asNullable, containsNull = true)
 
+  /**
+   * Returns the same data type but set all nullability fields are true
+   * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
+   *
+   * @since 4.0.0
+   */
+  def toNullable: ArrayType = asNullable
+
   override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
     f(this) || elementType.existsRecursively(f)
   }

@@ -173,7 +173,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       .mapPartitions(_.map(elem => (elem, elem)))
       .filter(elem => elem._1 % 2 == 0)
       .reduceByKey(_ + _)
-      .collect
+      .collect()
     sc.stop()
 
     val eventLogStream = EventLogFileReader.openEventLog(new Path(testDirPath, appId), fileSystem)

@@ -104,6 +104,12 @@
     ],
     "sqlState" : "42KDE"
   },
+  "CANNOT_ALTER_PARTITION_COLUMN" : {
+    "message" : [
+      "ALTER TABLE (ALTER|CHANGE) COLUMN is not supported for partition columns, but found the partition column <columnName> in the table <tableName>."
+    ],
+    "sqlState" : "428FR"
+  },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [
       "Cannot cast <sourceType> to <targetType>."
@@ -982,6 +988,12 @@
   "EXPRESSION_DECODING_FAILED" : {
     "message" : [
       "Failed to decode a row to a value of the expressions: <expressions>."
+    ],
+    "sqlState" : "42846"
+  },
+  "EXPRESSION_ENCODING_FAILED" : {
+    "message" : [
+      "Failed to encode a value of the expressions: <expressions> to a row."
     ],
     "sqlState" : "42846"
   },
@@ -2039,6 +2051,12 @@
     },
     "sqlState" : "42K07"
   },
+  "INVALID_SCHEMA_OR_RELATION_NAME" : {
+    "message" : [
+      "<name> is not a valid name for tables/schemas. Valid names only contain alphabet characters, numbers and _."
+    ],
+    "sqlState" : "42602"
+  },
   "INVALID_SET_SYNTAX" : {
     "message" : [
       "Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include special characters in key, or include semicolon in value, please use backquotes, e.g., SET `key`=`value`."
@@ -2726,6 +2744,12 @@
       "Protobuf type not yet supported: <protobufType>."
     ],
     "sqlState" : "42K0G"
+  },
+  "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON" : {
+    "message" : [
+      "Failed to plan Python data source <type> in Python: <msg>"
+    ],
+    "sqlState" : "38000"
   },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
@@ -3969,11 +3993,6 @@
       "<msg>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0061" : {
-    "message" : [
-      "<msg>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0062" : {
     "message" : [
       "<msg>."
@@ -4171,11 +4190,6 @@
       "ALTER COLUMN cannot find column <colName> in v1 table. Available: <fieldNames>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1055" : {
-    "message" : [
-      "The database name is not valid: <quoted>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1057" : {
     "message" : [
       "SHOW COLUMNS with conflicting databases: '<dbA>' != '<dbB>'."
@@ -4194,11 +4208,6 @@
   "_LEGACY_ERROR_TEMP_1060" : {
     "message" : [
       "<command> does not support nested column: <column>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1065" : {
-    "message" : [
-      "`<name>` is not a valid name for tables/databases. Valid names only contain alphabet characters, numbers and _."
     ]
   },
   "_LEGACY_ERROR_TEMP_1066" : {
@@ -5716,12 +5725,6 @@
   "_LEGACY_ERROR_TEMP_2150" : {
     "message" : [
       "Due to Scala's limited support of tuple, tuple with more than 22 elements are not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2152" : {
-    "message" : [
-      "Error while encoding: <e>",
-      "<expressions>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2154" : {

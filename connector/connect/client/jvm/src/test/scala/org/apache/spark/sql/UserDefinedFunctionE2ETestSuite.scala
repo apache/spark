@@ -111,7 +111,7 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
 
     val result2 = Seq((1, "a b c"), (2, "a b"), (3, "a"))
       .toDF("number", "letters")
-      .explode('letters) { case Row(letters: String) =>
+      .explode(Symbol("letters")) { case Row(letters: String) =>
         letters.split(' ').map(Tuple1.apply).toSeq
       }
       .as[(Int, String, String)]
@@ -340,7 +340,7 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
       assert(kvgds == null)
       i + 1
     }
-    val result = df.select(f($"id")).as[Long].head
+    val result = df.select(f($"id")).as[Long].head()
     assert(result == 1L)
   }
 }

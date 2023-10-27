@@ -917,6 +917,7 @@ private[deploy] class Master(
   private def decommissionWorkersOnHosts(hostnames: Seq[String]): Integer = {
     val hostnamesSet = hostnames.map(_.toLowerCase(Locale.ROOT)).toSet
     val workersToRemove = addressToWorker
+      .view
       .filterKeys(addr => hostnamesSet.contains(addr.host.toLowerCase(Locale.ROOT)))
       .values
 

@@ -128,7 +128,7 @@ class SqlResourceWithActualMetricsSuite
       .filter(_.getAs[Int]("age") <= 30)
       .sort()
 
-    ds.toDF
+    ds.toDF()
   }
 
   test("SPARK-44334: Status of a failed DDL/DML with no jobs should be FAILED") {

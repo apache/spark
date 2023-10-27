@@ -85,6 +85,12 @@ def get_json(url):
                 + "dev/merge_spark_pr.py to configure an OAuth token for making authenticated "
                 + "GitHub requests."
             )
+        elif e.code == 401:
+            print(
+                "GITHUB_OAUTH_KEY is invalid or expired. Please regenerate a new one with "
+                + "at least the 'public_repo' scope on https://github.com/settings/tokens and "
+                + "update your local settings before you try again."
+            )
         else:
             print("Unable to fetch URL, exiting: %s" % url)
         sys.exit(-1)
