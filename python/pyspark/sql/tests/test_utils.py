@@ -1645,7 +1645,8 @@ class UtilsTestsMixin:
         df1 = self.spark.createDataFrame([(1, "a"), (2, "b"), (3, "c"), (4, "d")], ["id", "value"])
         df2 = self.spark.createDataFrame([(1, "a"), (2, "z"), (3, "x"), (4, "y")], ["id", "value"])
 
-        # We expect differences in rows 2, 3, and 4. Setting maxErrors to 2 will limit the reported errors.
+        # We expect differences in rows 2, 3, and 4.
+        # Setting maxErrors to 2 will limit the reported errors.
         maxErrors = 2
         with self.assertRaises(PySparkAssertionError) as context:
             assertDataFrameEqual(df1, df2, maxErrors=maxErrors)
