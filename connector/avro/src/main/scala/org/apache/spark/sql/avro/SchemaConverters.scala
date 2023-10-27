@@ -49,7 +49,7 @@ object SchemaConverters {
   /**
    * Converts an Avro schema to a corresponding Spark SQL schema.
    *
-   * @since 2.5.0
+   * @since 4.0.0
    */
   def toSqlType(avroSchema: Schema, useStableIdForUnionType: Boolean): SchemaType = {
     toSqlTypeHelper(avroSchema, Set.empty, useStableIdForUnionType)
