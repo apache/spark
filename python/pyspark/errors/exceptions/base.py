@@ -34,7 +34,6 @@ class PySparkException(Exception):
         message: Optional[str] = None,
         error_class: Optional[str] = None,
         message_parameters: Optional[Dict[str, str]] = None,
-        data: Optional[Iterable["Row"]] = None,
     ):
         # `message` vs `error_class` & `message_parameters` are mutually exclusive.
         assert (message is not None and (error_class is None and message_parameters is None)) or (
@@ -52,7 +51,6 @@ class PySparkException(Exception):
 
         self.error_class = error_class
         self.message_parameters = message_parameters
-        self.data = data
 
     def getErrorClass(self) -> Optional[str]:
         """
@@ -226,6 +224,16 @@ class PySparkAssertionError(PySparkException, AssertionError):
     """
     Wrapper class for AssertionError to support error classes.
     """
+
+    def __init__(
+        self,
+        message: Optional[str] = None,
+        error_class: Optional[str] = None,
+        message_parameters: Optional[Dict[str, str]] = None,
+        data: Optional[Iterable["Row"]] = None,
+    ):
+        super().__init__(message, error_class, message_parameters)
+        self.data = data
 
 
 class PySparkNotImplementedError(PySparkException, NotImplementedError):
