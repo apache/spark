@@ -221,7 +221,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
    * same size and index.
    */
   private def toBlockList(
-      blockIds: Traversable[BlockId],
+      blockIds: Iterable[BlockId],
       blockSize: Long,
       blockMapIndex: Int): Seq[(BlockId, Long, Int)] = {
     blockIds.map(blockId => (blockId, blockSize, blockMapIndex)).toSeq
