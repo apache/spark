@@ -134,7 +134,7 @@ class QueryPlanningTracker(
    * and the recorded end time will be the end time of the last call.
    */
   def measurePhase[T](phase: String)(f: => T): T = {
-    val startTime = System.currentTimeMillis()
+    val startTime = System.currentTimeMillis
     val ret = f
     val endTime = System.currentTimeMillis
 
