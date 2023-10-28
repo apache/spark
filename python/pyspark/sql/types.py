@@ -1234,7 +1234,7 @@ class StructType(DataType):
         ... )
 
         >>> s.treeString()
-        'root\n |-- level1: struct (nullable = true)\n |    |-- f1: string (nullable = true)\n'
+        'root\\n |-- level1: struct (nullable = true)\\n |    |-- f1: string (nullable = true)\\n'
         >>> print(s.treeString())
         root
          |-- level1: struct (nullable = true)
