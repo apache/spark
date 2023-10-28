@@ -29,12 +29,6 @@ import org.apache.spark.util.Utils
 class HiveShimSuite(version: String) extends HiveVersionSuite(version) {
 
   private val shim = version match {
-    case "0.12" => new Shim_v0_12()
-    case "0.13" => new Shim_v0_13()
-    case "0.14" => new Shim_v0_14()
-    case "1.0" => new Shim_v1_0()
-    case "1.1" => new Shim_v1_1()
-    case "1.2" => new Shim_v1_2()
     case "2.0" => new Shim_v2_0()
     case "2.1" => new Shim_v2_1()
     case "2.2" => new Shim_v2_2()
@@ -49,6 +43,7 @@ class HiveShimSuite(version: String) extends HiveVersionSuite(version) {
 
     hiveConf.set("hive.metastore.schema.verification", "false")
     hiveConf.set("hive.metastore.warehouse.dir", warehousePath.toString)
+    hiveConf.set("datanucleus.schema.autoCreateAll", "true")
 
     getHive(hiveConf)
   }
