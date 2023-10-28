@@ -520,7 +520,7 @@ package object dsl {
         .setProject(
           Project
             .newBuilder()
-            .addAllExpressions(exprs.toIterable.asJava)
+            .addAllExpressions(exprs.asJava)
             .build())
         .build()
     }
@@ -533,7 +533,7 @@ package object dsl {
             Project
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllExpressions(exprs.toIterable.asJava)
+              .addAllExpressions(exprs.asJava)
               .build())
           .build()
       }

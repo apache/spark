@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.utils
 import java.util.UUID
 
 import scala.annotation.tailrec
+import scala.collection.immutable
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -90,21 +91,21 @@ private[connect] object ErrorUtils extends Logging {
 
       if (serverStackTraceEnabled) {
         builder.addAllStackTrace(
-          currentError.getStackTrace
-            .map { stackTraceElement =>
-              val stackTraceBuilder = FetchErrorDetailsResponse.StackTraceElement
-                .newBuilder()
-                .setDeclaringClass(stackTraceElement.getClassName)
-                .setMethodName(stackTraceElement.getMethodName)
-                .setLineNumber(stackTraceElement.getLineNumber)
+          immutable.ArraySeq
+            .unsafeWrapArray(currentError.getStackTrace
+              .map { stackTraceElement =>
+                val stackTraceBuilder = FetchErrorDetailsResponse.StackTraceElement
+                  .newBuilder()
+                  .setDeclaringClass(stackTraceElement.getClassName)
+                  .setMethodName(stackTraceElement.getMethodName)
+                  .setLineNumber(stackTraceElement.getLineNumber)
 
-              if (stackTraceElement.getFileName != null) {
-                stackTraceBuilder.setFileName(stackTraceElement.getFileName)
-              }
+                if (stackTraceElement.getFileName != null) {
+                  stackTraceBuilder.setFileName(stackTraceElement.getFileName)
+                }
 
-              stackTraceBuilder.build()
-            }
-            .toIterable
+                stackTraceBuilder.build()
+              })
             .asJava)
       }
 

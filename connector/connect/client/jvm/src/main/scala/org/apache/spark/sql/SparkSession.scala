@@ -21,6 +21,7 @@ import java.net.URI
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
+import scala.collection.immutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 
@@ -247,7 +248,7 @@ class SparkSession private[sql] (
         proto.SqlCommand
           .newBuilder()
           .setSql(sqlText)
-          .addAllPosArguments(args.map(lit(_).expr).toIterable.asJava)))
+          .addAllPosArguments(immutable.ArraySeq.unsafeWrapArray(args.map(lit(_).expr)).asJava)))
     val plan = proto.Plan.newBuilder().setCommand(cmd)
     // .toBuffer forces that the iterator is consumed and closed
     val responseSeq = client.execute(plan.build()).toBuffer.toSeq
