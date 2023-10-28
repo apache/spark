@@ -60,8 +60,6 @@ public class BroadcastedJoinKeysWrapperTest {
 
   private SparkPlan sp;
 
-  private final DummyBroadcast bc = new DummyBroadcast(1);
-
   private final LocalDateTime now = LocalDateTime.now();
 
   private final StructType schema = new StructType(
@@ -121,123 +119,133 @@ public class BroadcastedJoinKeysWrapperTest {
 
   @Test
   public void testIntegerTypeForSingleKeyHashedRelation() {
+    DummyBroadcast bc = new DummyBroadcast(1);
     int count = 10;
     Integer[] expectedKeys = new Integer[count];
     for (int i = 0; i < count; ++i) {
       expectedKeys[i] = i;
     }
     this.testDataTypeForSingleKeyHashedRelation(DataTypes.IntegerType,
-        new HashSet<>(Arrays.asList(expectedKeys)),  1000);
+        new HashSet<>(Arrays.asList(expectedKeys)),  1000, bc);
   }
 
   @Test
   public void testLongTypeForSingleKeyHashedRelation() {
+    DummyBroadcast bc = new DummyBroadcast(2);
     int count = 15;
     Long[] expectedKeys = new Long[count];
     for (int i = 0; i < count; ++i) {
       expectedKeys[i] = Integer.MAX_VALUE + (long)i;
     }
     this.testDataTypeForSingleKeyHashedRelation(DataTypes.LongType,
-        new HashSet<>(Arrays.asList(expectedKeys)), 15);
+        new HashSet<>(Arrays.asList(expectedKeys)), 15, bc);
   }
 
   @Test
   public void testByteTypeForSingleKeyHashedRelation() {
+    DummyBroadcast bc = new DummyBroadcast(3);
     int count = 127;
     Byte[] expectedKeys = new Byte[count];
     for (int i = 0; i < count; ++i) {
       expectedKeys[i] = (byte)i;
     }
     this.testDataTypeForSingleKeyHashedRelation(DataTypes.ByteType,
-        new HashSet<>(Arrays.asList(expectedKeys)), 1000);
+        new HashSet<>(Arrays.asList(expectedKeys)), 1000, bc);
   }
 
   @Test
   public void testShortTypeForSingleKeyHashedRelation() {
+    DummyBroadcast bc = new DummyBroadcast(4);
     int count = 50;
     Short[] expectedKeys = new Short[count];
     for (int i = 0; i < count; ++i) {
       expectedKeys[i] = (short) i;
     }
     this.testDataTypeForSingleKeyHashedRelation(DataTypes.ShortType,
-        new HashSet<>(Arrays.asList(expectedKeys)), 1000);
+        new HashSet<>(Arrays.asList(expectedKeys)), 1000, bc);
   }
 
 
   @Test
   public void testStringTypeForSingleKeyHashedRelation() {
+    DummyBroadcast bc = new DummyBroadcast(5);
     int count = 20;
     String[] expectedKeys = new String[count];
     for (int i = 0; i < count; ++i) {
       expectedKeys[i] = "String" + i;
     }
     this.testDataTypeForSingleKeyHashedRelation(DataTypes.StringType,
-        new HashSet<>(Arrays.asList(expectedKeys)), 1000);
+        new HashSet<>(Arrays.asList(expectedKeys)), 1000, bc);
   }
 
   @Test
   public void testDateTypeForSingleKeyHashedRelation() {
     int count = 10;
+    DummyBroadcast bc = new DummyBroadcast(6);
     Date[] expectedKeys = new Date[count];
 
     for (int i = 0; i < count; ++i) {
       expectedKeys[i] = java.sql.Date.valueOf(now.minusDays(i).toLocalDate());
     }
     this.testDataTypeForSingleKeyHashedRelation(DataTypes.DateType,
-        new HashSet<>(Arrays.asList(expectedKeys)), 1000);
+        new HashSet<>(Arrays.asList(expectedKeys)), 1000, bc);
   }
 
   @Test
   public void testTimestampTypeForSingleKeyHashedRelation() {
     int count = 15;
+    DummyBroadcast bc = new DummyBroadcast(7);
     Timestamp[] expectedKeys = new Timestamp[count];
 
     for (int i = 0; i < count; ++i) {
       expectedKeys[i] = Timestamp.valueOf(now.minusHours(i));
     }
     this.testDataTypeForSingleKeyHashedRelation(DataTypes.TimestampType,
-        new HashSet<>(Arrays.asList(expectedKeys)), 1000);
+        new HashSet<>(Arrays.asList(expectedKeys)), 1000, bc);
   }
 
   @Test
   public void testDoubleTypeForSingleKeyHashedRelation() {
     int count = 75;
+    DummyBroadcast bc = new DummyBroadcast(8);
     Double[] expectedKeys = new Double[count];
 
     for (int i = 0; i < count; ++i) {
       expectedKeys[i] = Double.valueOf(i  + ".67367363615d");
     }
     this.testDataTypeForSingleKeyHashedRelation(DataTypes.DoubleType,
-        new HashSet<>(Arrays.asList(expectedKeys)), 1000);
+        new HashSet<>(Arrays.asList(expectedKeys)), 1000, bc);
   }
 
   @Test
   public void testFloatTypeForSingleKeyHashedRelation() {
     int count = 30;
+    DummyBroadcast bc = new DummyBroadcast(9);
     Float[] expectedKeys = new Float[count];
 
     for (int i = 0; i < count; ++i) {
       expectedKeys[i] = Float.valueOf(i  + ".67365f");
     }
     this.testDataTypeForSingleKeyHashedRelation(DataTypes.FloatType,
-        new HashSet<>(Arrays.asList(expectedKeys)), 1000);
+        new HashSet<>(Arrays.asList(expectedKeys)), 1000, bc);
   }
 
   @Test
   public void testBigDecimalTypeForSingleKeyHashedRelation() {
     int count = 43;
+    DummyBroadcast bc = new DummyBroadcast(10);
     BigDecimal[] expectedKeys = new BigDecimal[count];
 
     for (int i = 0; i < count; ++i) {
       expectedKeys[i] = new BigDecimal( BigInteger.valueOf(Integer.MAX_VALUE + (long)i ), 3);
     }
     this.testDataTypeForSingleKeyHashedRelation(DataTypes.createDecimalType(22, 3),
-        new HashSet<>(Arrays.asList(expectedKeys)), 1000);
+        new HashSet<>(Arrays.asList(expectedKeys)), 1000, bc);
   }
 
 
   private void testDataTypeForSingleKeyHashedRelation(DataType dataType, Set<Object> expectedKeys,
-      int expectedObjArrLengt) {
+      int expectedObjArrLengt, DummyBroadcast bc) {
     int indexOfAttrib =  sp.output().indexWhere(attr -> attr.dataType().equals(dataType));
     Expression expr = new BoundReference(indexOfAttrib, sp.output().apply(indexOfAttrib).dataType(),
         false);
@@ -247,9 +255,9 @@ public class BroadcastedJoinKeysWrapperTest {
     final HashedRelation hr = HashedRelation.apply(sp.executeToIterator(), temp.toSeq(),
         64, null, false, false,
         false);
-    this.bc.setHashedRelation(hr);
+    bc.setHashedRelation(hr);
     BroadcastedJoinKeysWrapper wrapper =
-        new BroadcastedJoinKeysWrapperImpl(this.bc, new DataType[]{dataType},
+        new BroadcastedJoinKeysWrapperImpl(bc, new DataType[]{dataType},
             0, new int[]{0}, 1);
     ArrayWrapper<? extends Object> keys = wrapper.getKeysArray();
     assert (keys.getLength() == expectedObjArrLengt);
