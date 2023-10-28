@@ -45,22 +45,10 @@ object LogicalQueryStageStrategy extends Strategy {
     case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, otherCondition, _, left, right, hint)
         if isBroadcastStage(left) || isBroadcastStage(right) =>
       val preserveBuildPlan = plan.getTagValue(Join.PRESERVE_JOIN_WITH_SELF_PUSH_HASH)
-
-      def bcVarPushType(lp: LogicalPlan): BCVarPushNodeType =
-        if (lp
-            .asInstanceOf[LogicalQueryStage]
-            .physicalPlan
-            .asInstanceOf[BroadcastQueryStageExec]
-            .hasStreamSidePushdownDependent
-          || preserveBuildPlan.isDefined) {
-          SELF_PUSH
-        } else {
-          PASS_THROUGH
-        }
       val (buildSide, bcVarPush) = if (isBroadcastStage(left)) {
-        (BuildLeft, bcVarPushType(left))
+        (BuildLeft, bcVarPushType(left, preserveBuildPlan.isDefined))
       } else {
-        (BuildRight, bcVarPushType(right))
+        (BuildRight, bcVarPushType(right, preserveBuildPlan.isDefined))
       }
 
       val newbhj = BroadcastHashJoinExec(
@@ -80,8 +68,9 @@ object LogicalQueryStageStrategy extends Strategy {
 
     case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
         if isBroadcastStage(j.right) =>
-      Seq(
-        joins.BroadcastHashJoinExec(
+      val preserveBuildPlan = plan.getTagValue(Join.PRESERVE_JOIN_WITH_SELF_PUSH_HASH)
+      val bcVarPush = bcVarPushType(j.right, preserveBuildPlan.isDefined)
+      val newbhj = joins.BroadcastHashJoinExec(
           leftKeys,
           rightKeys,
           LeftAnti,
@@ -89,8 +78,12 @@ object LogicalQueryStageStrategy extends Strategy {
           None,
           planLater(j.left),
           planLater(j.right),
-          isNullAwareAntiJoin = true))
-
+          isNullAwareAntiJoin = true,
+        bcVarPushNode = bcVarPush)
+      preserveBuildPlan.foreach { case (_, originalBuildLp) =>
+        newbhj.preserveLogicalJoinAsHashSelfPush(originalBuildLp)
+      }
+      Seq(newbhj)
     case j @ Join(left, right, joinType, condition, _)
         if isBroadcastStage(left) || isBroadcastStage(right) =>
       val buildSide = if (isBroadcastStage(left)) BuildLeft else BuildRight
@@ -106,4 +99,16 @@ object LogicalQueryStageStrategy extends Strategy {
 
     case _ => Nil
   }
+
+  def bcVarPushType(lp: LogicalPlan, preserveBuildPlan: Boolean): BCVarPushNodeType =
+    if (lp
+      .asInstanceOf[LogicalQueryStage]
+      .physicalPlan
+      .asInstanceOf[BroadcastQueryStageExec]
+      .hasStreamSidePushdownDependent
+      || preserveBuildPlan) {
+      SELF_PUSH
+    } else {
+      PASS_THROUGH
+    }
 }
