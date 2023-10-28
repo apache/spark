@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.benchmark
 
 import java.io.File
-import java.util.Locale
 
 import scala.util.Random
 
@@ -54,7 +53,7 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
       .setIfMissing("spark.executor.memory", "3g")
       .setIfMissing("orc.compression", OrcCompressionCodec.SNAPPY.lowerCaseName())
       .setIfMissing("spark.sql.parquet.compression.codec",
-        ParquetCompressionCodec.SNAPPY.name().toLowerCase(Locale.ROOT))
+        ParquetCompressionCodec.SNAPPY.lowerCaseName())
 
     SparkSession.builder().config(conf).getOrCreate()
   }
