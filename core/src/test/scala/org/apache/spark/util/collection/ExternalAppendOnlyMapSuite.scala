@@ -453,7 +453,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     val first50Keys = for ( _ <- 0 until 50) yield {
       val (k, vs) = it.next()
       val sortedVs = vs.sorted
-      assert(sortedVs.seq == (0 until 10).map(10 * k + _))
+      assert(sortedVs == (0 until 10).map(10 * k + _))
       k
     }
     assert(map.numSpills == 0)
@@ -474,7 +474,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     val next50Keys = for ( _ <- 0 until 50) yield {
       val (k, vs) = it.next()
       val sortedVs = vs.sorted
-      assert(sortedVs.seq == (0 until 10).map(10 * k + _))
+      assert(sortedVs == (0 until 10).map(10 * k + _))
       k
     }
     assert(!it.hasNext)
@@ -506,7 +506,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     val keys = it.map{
       case (k, vs) =>
         val sortedVs = vs.sorted
-        assert(sortedVs.seq == (0 until 10).map(10 * k + _))
+        assert(sortedVs == (0 until 10).map(10 * k + _))
         k
     }
     .toList
