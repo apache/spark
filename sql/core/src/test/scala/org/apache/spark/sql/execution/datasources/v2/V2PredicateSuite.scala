@@ -186,7 +186,7 @@ class V2PredicateSuite extends SparkFunSuite {
     var expected = "a IN ("
     for (i <- 0 until 1000) {
       values(i) = LiteralValue(i, IntegerType)
-      expected += i + ", "
+      expected += s"$i, "
     }
     val predicate3 = new Predicate("IN", (ref("a") +: values).toArray[Expression])
     expected = expected.dropRight(2)  // remove the last ", "
