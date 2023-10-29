@@ -51,7 +51,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{SparkConfWithEnv, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
 class NoOverwriteFileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration)
@@ -3497,12 +3497,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         s"after load but was $threadId")
   }
 
-  test("SPARK-44639: Use Java tmp dir instead of configured local dirs") {
-    val conf = sqlConf
-    conf.setConfString(RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + "." +
-      RocksDBConf.FORCE_JAVA_TMP_DIR_CONF_KEY, "true")
-
+  test("SPARK-44639: Use Java tmp dir instead of configured local dirs on Yarn") {
     val provider = new RocksDBStateStoreProvider()
+    provider.sparkConf = new SparkConfWithEnv(Map("CONTAINER_ID" -> "1"))
     provider.init(
       StateStoreId(
         "/checkpoint",
@@ -3511,8 +3508,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       ),
       new StructType(),
       new StructType(),
-      0,
-      new StateStoreConf(conf),
+      NoPrefixKeyStateEncoderSpec(new StructType()),
+      false,
+      new StateStoreConf(sqlConf),
       new Configuration()
     )
 
