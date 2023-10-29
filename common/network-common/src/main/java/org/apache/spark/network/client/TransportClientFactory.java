@@ -312,7 +312,6 @@ public class TransportClientFactory implements Closeable {
           }
       });
       if (!future.await(conf.connectionTimeoutMs())) {
-        logger.info("failed to connect to " + address + " within connection timeout");
         cf.channel().close();
         throw new IOException(
           String.format("Failed to connect to %s within connection timeout", address));

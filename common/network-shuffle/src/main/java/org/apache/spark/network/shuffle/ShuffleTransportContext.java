@@ -53,7 +53,7 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  * */
 public class ShuffleTransportContext extends TransportContext {
   private static final Logger logger = LoggerFactory.getLogger(ShuffleTransportContext.class);
-  private static ShuffleMessageDecoder SHUFFLE_DECODER =
+  private static final ShuffleMessageDecoder SHUFFLE_DECODER =
       new ShuffleMessageDecoder(MessageDecoder.INSTANCE);
   private final EventLoopGroup finalizeWorkers;
 
