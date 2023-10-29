@@ -277,7 +277,7 @@ class ExecutorPodsAllocator(
         case _ => false
       }.keySet
 
-      val newFailedExecutorIds = currentFailedExecutorIds.diff(failedExecutorIds)
+      val newFailedExecutorIds = currentFailedExecutorIds.filterNot(failedExecutorIds)
       if (newFailedExecutorIds.nonEmpty) {
         logWarning(s"${newFailedExecutorIds.size} new failed executors.")
         newFailedExecutorIds.foreach { _ => failureTracker.registerExecutorFailure() }
