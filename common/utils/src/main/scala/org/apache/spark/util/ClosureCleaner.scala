@@ -95,7 +95,7 @@ private[spark] object ClosureCleaner extends Logging {
       if (cr != null) {
         val set = Set.empty[Class[_]]
         cr.accept(new InnerClosureFinder(set), 0)
-        for (cls <- set.filterNot(seen)) {
+        for (cls <- set.diff(seen)) {
           seen += cls
           stack.push(cls)
         }
