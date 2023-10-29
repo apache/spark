@@ -218,7 +218,7 @@ public class TransportContext implements Closeable {
         try {
           sslHandler = new SslHandler(sslFactory.createSSLEngine(isClient, channel.alloc()));
         } catch (Exception e) {
-          throw new RuntimeException("Error creating Netty SslHandler", e);
+          throw new IllegalStateException("Error creating Netty SslHandler", e);
         }
         pipeline.addFirst("NettySslEncryptionHandler", sslHandler);
         // Cannot use zero-copy with HTTPS, so we add in our ChunkedWriteHandler just before the

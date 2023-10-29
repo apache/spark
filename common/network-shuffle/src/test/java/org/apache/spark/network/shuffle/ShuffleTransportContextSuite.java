@@ -94,10 +94,6 @@ public class ShuffleTransportContextSuite {
     // SPARK-43987: test that the FinalizedHandler is added to the pipeline only when configured
     for (boolean enabled : new boolean[]{true, false}) {
       for (boolean client: new boolean[]{true, false}) {
-        // Since the decoder is not Shareable, reset it between test runs to avoid errors since it's
-        // used both across ShuffleTransportContextSuite and SslShuffleTransportContextSuite
-        // and server/clients
-        ShuffleTransportContext.resetDecoderForTesting();
         ShuffleTransportContext ctx = createShuffleTransportContext(enabled);
         SocketChannel channel = new NioSocketChannel();
         RpcHandler rpcHandler = mock(RpcHandler.class);

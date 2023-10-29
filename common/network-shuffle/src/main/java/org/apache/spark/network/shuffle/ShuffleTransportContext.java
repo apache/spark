@@ -20,9 +20,9 @@ package org.apache.spark.network.shuffle;
 import java.nio.ByteBuffer;
 import java.util.List;
 
-import com.google.common.annotations.VisibleForTesting;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -113,11 +113,7 @@ public class ShuffleTransportContext extends TransportContext {
     return finalizeWorkers == null ? super.getDecoder() : SHUFFLE_DECODER;
   }
 
-  @VisibleForTesting
-  protected static final void resetDecoderForTesting() {
-    SHUFFLE_DECODER = new ShuffleMessageDecoder(MessageDecoder.INSTANCE);
-  }
-
+  @ChannelHandler.Sharable
   static class ShuffleMessageDecoder extends MessageToMessageDecoder<ByteBuf> {
 
     private final MessageDecoder delegate;
