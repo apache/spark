@@ -1182,7 +1182,8 @@ class TypesTestsMixin:
             schema.treeString(),
             "".join(
                 [
-                    "root\n |-- level1: struct (nullable = true)\n",
+                    "root\n",
+                    " |-- level1: struct (nullable = true)\n",
                     " |    |-- f1: string (nullable = true)\n",
                 ]
             ),

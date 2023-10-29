@@ -1136,6 +1136,25 @@ class DataFrameTestsMixin:
             self.assertEqual(1, buf.getvalue().count("_1"))
             self.assertEqual(1, buf.getvalue().count("_2"))
 
+    def test_df_schema_tree_string(self):
+        schema = self.spark.createDataFrame([(1, (2, 2))], ["a", "b"]).schema
+        self.assertEqual(
+            schema.treeString(),
+            "".join(
+                [
+                    "root\n",
+                    " |-- a: long (nullable = true)\n",
+                    " |-- b: struct (nullable = true)\n",
+                    " |    |-- _1: long (nullable = true)\n",
+                    " |    |-- _2: long (nullable = true)\n",
+                ]
+            ),
+        )
+        self.assertEqual(
+            schema.treeString(1),
+            "root\n |-- a: long (nullable = true)\n |-- b: struct (nullable = true)\n",
+        )
+
     def test_join_without_on(self):
         df1 = self.spark.range(1).toDF("a")
         df2 = self.spark.range(1).toDF("b")
