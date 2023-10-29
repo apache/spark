@@ -279,7 +279,7 @@ case class MemoryStream[A : Encoder](
         s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
     }
 
-    batches.trimStart(offsetDiff)
+    batches.dropInPlace(offsetDiff)
     lastOffsetCommitted = newOffset
   }
 

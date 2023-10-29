@@ -1579,6 +1579,13 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
         self.assertEqual(r, expected)
         self.assertEqual(repr(r), "Row(b=1, a=2)")
 
+    def test_struct_field_from_json(self):
+        # SPARK-40820: fromJson with only name and type
+        json = {"name": "c1", "type": "string"}
+        struct_field = StructField.fromJson(json)
+
+        self.assertEqual(repr(struct_field), "StructField('c1', StringType(), True)")
+
 
 class TypesTests(TypesTestsMixin, ReusedSQLTestCase):
     pass
