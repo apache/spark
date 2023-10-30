@@ -384,6 +384,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         })
 
         operator match {
+          case RelationTimeTravel(u: UnresolvedRelation, _, _) =>
+            u.tableNotFound(u.multipartIdentifier)
+
           case etw: EventTimeWatermark =>
             etw.eventTime.dataType match {
               case s: StructType
@@ -396,6 +399,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                     "eventName" -> toSQLId(etw.eventTime.name),
                     "eventType" -> toSQLType(etw.eventTime.dataType)))
             }
+
           case f: Filter if f.condition.dataType != BooleanType =>
             f.failAnalysis(
               errorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
@@ -605,7 +609,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             val varName = toSQLId(
               ident.catalog.name +: ident.identifier.namespace :+ ident.identifier.name)
             throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
-              "CRETE VARIABLE",
+              "DECLARE VARIABLE",
               varName,
               c.defaultExpr.originalSQL)
 

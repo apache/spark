@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import scala.collection.generic.Growable
 import scala.collection.mutable
+import scala.collection.mutable.Growable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -170,7 +170,7 @@ case class CollectSet(
   override def eval(buffer: mutable.HashSet[Any]): Any = {
     val array = child.dataType match {
       case BinaryType =>
-        buffer.iterator.map(_.asInstanceOf[ArrayData].toByteArray).toArray
+        buffer.iterator.map(_.asInstanceOf[ArrayData].toByteArray()).toArray
       case _ => buffer.toArray
     }
     new GenericArrayData(array)

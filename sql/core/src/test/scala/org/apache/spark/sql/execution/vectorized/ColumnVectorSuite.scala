@@ -512,7 +512,7 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     }
 
     withVectors(16, dataType) { testVector =>
-      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build())
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
       assert(testVector.isNullAt(0))
@@ -536,7 +536,7 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     }
 
     withVectors(16, dataType) { testVector =>
-      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build())
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
       assert(testVector.isNullAt(0))
@@ -560,7 +560,7 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     }
 
     withVectors(16, dataType) { testVector =>
-      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build())
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
       assert(testVector.isNullAt(0))
@@ -584,7 +584,7 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     }
 
     withVectors(16, dataType) { testVector =>
-      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build())
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
       assert(testVector.isNullAt(0))
@@ -608,7 +608,7 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
       }
 
       withVectors(16, dataType) { testVector =>
-        val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+        val columnAccessor = ColumnAccessor(dataType, columnBuilder.build())
         ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
         assert(testVector.isNullAt(0))
@@ -633,7 +633,7 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     }
 
     withVectors(16, dataType) { testVector =>
-      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build())
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
       assert(testVector.isNullAt(0))
@@ -657,7 +657,7 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     }
 
     withVectors(16, dataType) { testVector =>
-      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build())
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
       assert(testVector.isNullAt(0))

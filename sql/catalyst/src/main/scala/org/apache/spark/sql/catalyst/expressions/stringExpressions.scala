@@ -2565,10 +2565,10 @@ object Decode {
         var default: Expression = Literal.create(null, StringType)
         val branches = ArrayBuffer.empty[(Expression, Expression)]
         while (itr.hasNext) {
-          val search = itr.next
+          val search = itr.next()
           if (itr.hasNext) {
             val condition = EqualNullSafe(input, search)
-            branches += ((condition, itr.next))
+            branches += ((condition, itr.next()))
           } else {
             default = search
           }

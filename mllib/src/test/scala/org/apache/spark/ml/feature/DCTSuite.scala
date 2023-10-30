@@ -34,14 +34,14 @@ class DCTSuite extends MLTest with DefaultReadWriteTest {
   import testImplicits._
 
   test("forward transform of discrete cosine matches jTransforms result") {
-    val data = Vectors.dense((0 until 128).map(_ => 2D * math.random - 1D).toArray)
+    val data = Vectors.dense((0 until 128).map(_ => 2D * math.random() - 1D).toArray)
     val inverse = false
 
     testDCT(data, inverse)
   }
 
   test("inverse transform of discrete cosine matches jTransforms result") {
-    val data = Vectors.dense((0 until 128).map(_ => 2D * math.random - 1D).toArray)
+    val data = Vectors.dense((0 until 128).map(_ => 2D * math.random() - 1D).toArray)
     val inverse = true
 
     testDCT(data, inverse)

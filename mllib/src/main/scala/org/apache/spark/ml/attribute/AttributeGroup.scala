@@ -179,7 +179,7 @@ class AttributeGroup private (
     sum
   }
 
-  override def toString: String = toMetadata.toString
+  override def toString: String = toMetadata().toString
 }
 
 /**

@@ -126,7 +126,7 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
             .toDF("k", "v")
             .where("k='Properties'")
             .where("v=''")
-            .count == 1, s"$key is a reserved namespace property and ignored")
+            .count() == 1, s"$key is a reserved namespace property and ignored")
           val meta =
             getCatalog(catalog).asNamespaceCatalog.loadNamespaceMetadata(namespaceArray)
           assert(meta.get(key) == null || !meta.get(key).contains("foo"),

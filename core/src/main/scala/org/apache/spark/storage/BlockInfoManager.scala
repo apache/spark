@@ -259,7 +259,7 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
   }
 
   /**
-   * Apply function `f` on the [[BlockInfo]] object and the aquisition [[Condition]] for `blockId`.
+   * Apply function `f` on the [[BlockInfo]] object and the acquisition [[Condition]] for `blockId`.
    * Function `f` will be executed while holding the lock for the [[BlockInfo]] object. If `blockId`
    * was not registered, an error will be thrown.
    */

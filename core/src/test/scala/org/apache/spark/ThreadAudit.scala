@@ -122,7 +122,7 @@ trait ThreadAudit extends Logging {
   }
 
   private def runningThreadNames(): Set[String] = {
-    runningThreads.map(_.getName).toSet
+    runningThreads().map(_.getName)
   }
 
   private def runningThreads(): Set[Thread] = {

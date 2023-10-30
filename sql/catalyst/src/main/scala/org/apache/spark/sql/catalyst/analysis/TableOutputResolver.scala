@@ -19,7 +19,9 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
@@ -34,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralType, MapType, StructType}
 
-object TableOutputResolver {
+object TableOutputResolver extends SQLConfHelper with Logging {
 
   def resolveVariableOutputColumns(
       expected: Seq[VariableReference],
@@ -111,7 +113,8 @@ object TableOutputResolver {
     }
 
     if (errors.nonEmpty) {
-      resolveColumnsByPosition(tableName, query.output, actualExpectedCols, conf, errors += _)
+      throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
+        tableName, actualExpectedCols.map(_.name).map(toSQLId).mkString(", "))
     }
 
     if (resolved == query.output) {
@@ -466,6 +469,19 @@ object TableOutputResolver {
       CheckOverflowInTableInsert(cast, columnName)
     } else {
       cast
+    }
+  }
+
+  def suitableForByNameCheck(
+      byName: Boolean,
+      expected: Seq[Attribute],
+      queryOutput: Seq[Attribute]): Unit = {
+    if (!byName && expected.size == queryOutput.size &&
+      expected.forall(e => queryOutput.exists(p => conf.resolver(p.name, e.name))) &&
+      expected.zip(queryOutput).exists(e => !conf.resolver(e._1.name, e._2.name))) {
+      logWarning("The query columns and the table columns have same names but different " +
+        "orders. You can use INSERT [INTO | OVERWRITE] BY NAME to reorder the query columns to " +
+        "align with the table columns.")
     }
   }
 

@@ -45,7 +45,6 @@ from collections.abc import Iterable
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
-from pyspark.sql.observation import Observation
 from pyspark.sql.types import Row, StructType, _create_row
 from pyspark.sql.dataframe import (
     DataFrame as PySparkDataFrame,
@@ -92,6 +91,7 @@ if TYPE_CHECKING:
         PandasMapIterFunction,
         ArrowMapIterFunction,
     )
+    from pyspark.sql.connect.observation import Observation
     from pyspark.sql.connect.session import SparkSession
     from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
 
@@ -169,7 +169,6 @@ class DataFrame:
 
     @property
     def write(self) -> "DataFrameWriter":
-        assert self._plan is not None
         return DataFrameWriter(self._plan, self._session)
 
     write.__doc__ = PySparkDataFrame.write.__doc__
@@ -1052,6 +1051,8 @@ class DataFrame:
         observation: Union["Observation", str],
         *exprs: Column,
     ) -> "DataFrame":
+        from pyspark.sql.connect.observation import Observation
+
         if len(exprs) == 0:
             raise PySparkValueError(
                 error_class="CANNOT_BE_EMPTY",
@@ -1064,10 +1065,7 @@ class DataFrame:
             )
 
         if isinstance(observation, Observation):
-            return DataFrame.withPlan(
-                plan.CollectMetrics(self._plan, str(observation._name), list(exprs)),
-                self._session,
-            )
+            return observation._on(self, *exprs)
         elif isinstance(observation, str):
             return DataFrame.withPlan(
                 plan.CollectMetrics(self._plan, observation, list(exprs)),
@@ -1096,11 +1094,6 @@ class DataFrame:
     union.__doc__ = PySparkDataFrame.union.__doc__
 
     def unionAll(self, other: "DataFrame") -> "DataFrame":
-        if other._plan is None:
-            raise PySparkValueError(
-                error_class="MISSING_VALID_PLAN",
-                message_parameters={"operator": "Union"},
-            )
         self._check_same_session(other)
         return DataFrame.withPlan(
             plan.SetOperation(self._plan, other._plan, "union", is_all=True), session=self._session
@@ -1646,13 +1639,11 @@ class DataFrame:
     sampleBy.__doc__ = PySparkDataFrame.sampleBy.__doc__
 
     def __getattr__(self, name: str) -> "Column":
-        if name in ["_jseq", "_jdf", "_jmap", "_jcols"]:
+        if name in ["_jseq", "_jdf", "_jmap", "_jcols", "rdd", "toJSON"]:
             raise PySparkAttributeError(
                 error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
             )
         elif name in [
-            "rdd",
-            "toJSON",
             "checkpoint",
             "localCheckpoint",
         ]:
@@ -1728,13 +1719,13 @@ class DataFrame:
 
     def _to_table(self) -> Tuple["pa.Table", Optional[StructType]]:
         query = self._plan.to_proto(self._session.client)
-        table, schema = self._session.client.to_table(query)
+        table, schema = self._session.client.to_table(query, self._plan.observations)
         assert table is not None
         return (table, schema)
 
     def toPandas(self) -> "pandas.DataFrame":
         query = self._plan.to_proto(self._session.client)
-        return self._session.client.to_pandas(query)
+        return self._session.client.to_pandas(query, self._plan.observations)
 
     toPandas.__doc__ = PySparkDataFrame.toPandas.__doc__
 
@@ -1871,7 +1862,7 @@ class DataFrame:
         command = plan.CreateView(
             child=self._plan, name=name, is_global=False, replace=False
         ).command(session=self._session.client)
-        self._session.client.execute_command(command)
+        self._session.client.execute_command(command, self._plan.observations)
 
     createTempView.__doc__ = PySparkDataFrame.createTempView.__doc__
 
@@ -1879,7 +1870,7 @@ class DataFrame:
         command = plan.CreateView(
             child=self._plan, name=name, is_global=False, replace=True
         ).command(session=self._session.client)
-        self._session.client.execute_command(command)
+        self._session.client.execute_command(command, self._plan.observations)
 
     createOrReplaceTempView.__doc__ = PySparkDataFrame.createOrReplaceTempView.__doc__
 
@@ -1887,7 +1878,7 @@ class DataFrame:
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=False
         ).command(session=self._session.client)
-        self._session.client.execute_command(command)
+        self._session.client.execute_command(command, self._plan.observations)
 
     createGlobalTempView.__doc__ = PySparkDataFrame.createGlobalTempView.__doc__
 
@@ -1895,7 +1886,7 @@ class DataFrame:
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=True
         ).command(session=self._session.client)
-        self._session.client.execute_command(command)
+        self._session.client.execute_command(command, self._plan.observations)
 
     createOrReplaceGlobalTempView.__doc__ = PySparkDataFrame.createOrReplaceGlobalTempView.__doc__
 
@@ -1942,7 +1933,9 @@ class DataFrame:
         query = self._plan.to_proto(self._session.client)
 
         schema: Optional[StructType] = None
-        for schema_or_table in self._session.client.to_table_as_iterator(query):
+        for schema_or_table in self._session.client.to_table_as_iterator(
+            query, self._plan.observations
+        ):
             if isinstance(schema_or_table, StructType):
                 assert schema is None
                 schema = schema_or_table
@@ -2030,8 +2023,6 @@ class DataFrame:
     mapInArrow.__doc__ = PySparkDataFrame.mapInArrow.__doc__
 
     def foreach(self, f: Callable[[Row], None]) -> None:
-        assert self._plan is not None
-
         def foreach_func(row: Any) -> None:
             f(row)
 
@@ -2042,8 +2033,6 @@ class DataFrame:
     foreach.__doc__ = PySparkDataFrame.foreach.__doc__
 
     def foreachPartition(self, f: Callable[[Iterator[Row]], None]) -> None:
-        assert self._plan is not None
-
         schema = self.schema
         field_converters = [
             ArrowTableToRowsConversion._create_converter(f.dataType) for f in schema.fields
@@ -2069,14 +2058,12 @@ class DataFrame:
 
     @property
     def writeStream(self) -> DataStreamWriter:
-        assert self._plan is not None
         return DataStreamWriter(plan=self._plan, session=self._session)
 
     writeStream.__doc__ = PySparkDataFrame.writeStream.__doc__
 
     def sameSemantics(self, other: "DataFrame") -> bool:
-        assert self._plan is not None
-        assert other._plan is not None
+        self._check_same_session(other)
         return self._session.client.same_semantics(
             plan=self._plan.to_proto(self._session.client),
             other=other._plan.to_proto(other._session.client),
@@ -2085,7 +2072,6 @@ class DataFrame:
     sameSemantics.__doc__ = PySparkDataFrame.sameSemantics.__doc__
 
     def semanticHash(self) -> int:
-        assert self._plan is not None
         return self._session.client.semantic_hash(
             plan=self._plan.to_proto(self._session.client),
         )
@@ -2093,7 +2079,6 @@ class DataFrame:
     semanticHash.__doc__ = PySparkDataFrame.semanticHash.__doc__
 
     def writeTo(self, table: str) -> "DataFrameWriterV2":
-        assert self._plan is not None
         return DataFrameWriterV2(self._plan, self._session, table)
 
     writeTo.__doc__ = PySparkDataFrame.writeTo.__doc__

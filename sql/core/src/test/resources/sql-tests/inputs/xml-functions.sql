@@ -1,4 +1,14 @@
--- from_json
+-- to_xml
+select to_xml(named_struct('a', 1, 'b', 2), map('indent', ''));
+select to_xml(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy', 'indent', ''));
+-- Check if errors handled
+select to_xml(array(named_struct('a', 1, 'b', 2)));
+select to_xml(map('a', 1));
+select to_xml(named_struct('a', 1, 'b', 2), named_struct('mode', 'PERMISSIVE'));
+select to_xml(named_struct('a', 1, 'b', 2), map('mode', 1));
+select to_xml();
+
+-- from_xml
 select from_xml('<p><a>1</a></p>', 'a INT');
 select from_xml('<p><time>26/08/2015</time></p>', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
 -- Check if errors handled
@@ -11,15 +21,15 @@ select from_xml();
 -- Clean up
 DROP VIEW IF EXISTS xmlTable;
 
--- from_json - complex types
+-- from_xml - complex types
 select from_xml('<p><a>1</a></p>', 'struct<a:array<int>>');
 select from_xml('<p><a>1</a><b>"2"</b></p>', 'struct<a:int,b:string>');
 
--- infer schema of json literal
+-- infer schema of xml literal
 select schema_of_xml('<p><a>1</a><b>"2"</b></p>');
 select from_xml('<p><a>1</a><a>2</a><a>3</a></p>', schema_of_xml('<p><a>1</a><a>2</a></p>'));
 
--- from_json - array type
+-- from_xml - array type
 select from_xml('<p><a>1</a><a>2</a></p>', 'struct<a:array<int>>');
 select from_xml('<p><a>1</a><a>"2"</a></p>', 'struct<a:array<int>>');
 select from_xml('<p><a>1</a><a></a></p>', 'struct<a:array<int>>');
