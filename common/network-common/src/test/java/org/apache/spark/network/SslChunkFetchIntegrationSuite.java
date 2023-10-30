@@ -14,21 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.network;
 
-package org.apache.spark.network.yarn
+import org.junit.jupiter.api.BeforeAll;
 
-import org.apache.spark.network.ssl.SslSampleConfigs
+import org.apache.spark.network.util.TransportConf;
+import org.apache.spark.network.ssl.SslSampleConfigs;
 
-class SslYarnShuffleServiceWithRocksDBBackendSuite
-  extends YarnShuffleServiceWithRocksDBBackendSuite {
 
-  /**
-   * Override to add "spark.ssl.rpc.*" configuration parameters...
-   */
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    // Same as SSLTestUtils.updateWithSSLConfig(), which is not available to import here.
-    SslSampleConfigs.createDefaultConfigMapForRpcNamespace().entrySet().
-      forEach(entry => yarnConfig.set(entry.getKey, entry.getValue))
+public class SslChunkFetchIntegrationSuite extends ChunkFetchIntegrationSuite {
+
+  @BeforeAll
+  public static void setUp() throws Exception {
+    doSetUpWithConfig(new TransportConf(
+      "shuffle", SslSampleConfigs.createDefaultConfigProviderForRpcNamespace()));
   }
 }

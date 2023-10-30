@@ -147,7 +147,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       seed: Long): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd.sampleByKey(
       withReplacement,
-      fractions.asScala.mapValues(_.toDouble).toMap, // map to Scala Double; toMap to serialize
+      fractions.asScala.view.mapValues(_.toDouble).toMap, // map to Scala Double; toMap to serialize
       seed))
 
   /**
@@ -179,7 +179,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       seed: Long): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd.sampleByKeyExact(
       withReplacement,
-      fractions.asScala.mapValues(_.toDouble).toMap, // map to Scala Double; toMap to serialize
+      fractions.asScala.view.mapValues(_.toDouble).toMap, // map to Scala Double; toMap to serialize
       seed))
 
   /**
