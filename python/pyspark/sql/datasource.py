@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 __all__ = ["DataSource", "DataSourceReader", "DataSourceWriter", "DataSourceRegistration"]
 
 
+@since(4.0)
 class DataSource(ABC):
     """
     A base class for data sources.
@@ -155,6 +156,7 @@ class DataSource(ABC):
         raise NotImplementedError
 
 
+@since(4.0)
 class DataSourceReader(ABC):
     """
     A base class for data source readers. Data source readers are responsible for
@@ -250,6 +252,7 @@ class DataSourceReader(ABC):
         ...
 
 
+@since(4.0)
 class DataSourceWriter(ABC):
     """
     A base class for data source writers. Data source writers are responsible for saving
