@@ -22,7 +22,7 @@ import java.io.Closeable
 import java.time.Duration
 import java.util.concurrent.TimeoutException
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaConsumer, OffsetOutOfRangeException}
@@ -701,7 +701,7 @@ private[kafka010] object KafkaDataConsumer extends Logging {
   def acquire(
       topicPartition: TopicPartition,
       kafkaParams: ju.Map[String, Object]): KafkaDataConsumer = {
-    if (TaskContext.get != null && TaskContext.get.attemptNumber >= 1) {
+    if (TaskContext.get() != null && TaskContext.get().attemptNumber() >= 1) {
       val cacheKey = new CacheKey(topicPartition, kafkaParams)
 
       // If this is reattempt at running the task, then invalidate cached consumer if any.

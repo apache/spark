@@ -23,8 +23,8 @@ import java.nio.file.{Files, Path}
 import java.util.{Locale, TimeZone}
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.io.FileUtils
 import org.apache.logging.log4j._
@@ -200,7 +200,7 @@ abstract class SparkFunSuite
 
   protected def logForFailedTest(): Unit = {
     LocalSparkCluster.get.foreach { localCluster =>
-      val workerLogfiles = localCluster.workerLogfiles
+      val workerLogfiles = localCluster.workerLogfiles()
       if (workerLogfiles.nonEmpty) {
         logInfo("\n\n===== EXTRA LOGS FOR THE FAILED TEST\n")
         workerLogfiles.foreach { logFile =>
@@ -298,6 +298,30 @@ abstract class SparkFunSuite
           logger.asInstanceOf[Logger].get().setLevel(restoreLevels(i))
         }
         LogManager.getContext(false).asInstanceOf[LoggerContext].updateLoggers()
+      }
+    }
+  }
+
+  /**
+   * Sets all configurations specified in `pairs` in SparkEnv SparkConf, calls `f`, and then
+   * restores all configurations.
+   */
+  protected def withSparkEnvConfs(pairs: (String, String)*)(f: => Unit): Unit = {
+    val conf = SparkEnv.get.conf
+    val (keys, values) = pairs.unzip
+    val currentValues = keys.map { key =>
+      if (conf.getOption(key).isDefined) {
+        Some(conf.get(key))
+      } else {
+        None
+      }
+    }
+    pairs.foreach { kv => conf.set(kv._1, kv._2) }
+    try f
+    finally {
+      keys.zip(currentValues).foreach {
+        case (key, Some(value)) => conf.set(key, value)
+        case (key, None) => conf.remove(key)
       }
     }
   }

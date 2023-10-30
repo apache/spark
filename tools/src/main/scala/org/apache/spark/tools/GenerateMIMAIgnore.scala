@@ -126,7 +126,7 @@ object GenerateMIMAIgnore {
       .writeAll(previousContents + privateClasses.mkString("\n"))
     // scalastyle:off println
     println("Created : .generated-mima-class-excludes in current directory.")
-    val previousMembersContents = Try(File(".generated-mima-member-excludes").lines)
+    val previousMembersContents = Try(File(".generated-mima-member-excludes").lines())
       .getOrElse(Iterator.empty).mkString("\n")
     File(".generated-mima-member-excludes").writeAll(previousMembersContents +
       privateMembers.mkString("\n"))
@@ -150,7 +150,7 @@ object GenerateMIMAIgnore {
   private def getClasses(packageName: String): Set[String] = {
     val finder = ClassFinder(maybeOverrideAsmVersion = Some(Opcodes.ASM7))
     finder
-      .getClasses
+      .getClasses()
       .map(_.name)
       .filter(_.startsWith(packageName))
       .filterNot(shouldExclude)

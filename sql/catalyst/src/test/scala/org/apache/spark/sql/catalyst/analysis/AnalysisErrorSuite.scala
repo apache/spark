@@ -1022,26 +1022,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     assertAnalysisError(plan2, "Accessing outer query column is not allowed in" :: Nil)
 
     val plan3 = Filter(
-      Exists(Intersect(LocalRelation(b),
-        Filter(EqualTo(UnresolvedAttribute("a"), c), LocalRelation(c)), isAll = true)),
-      LocalRelation(a))
-    assertAnalysisError(plan3, "Accessing outer query column is not allowed in" :: Nil)
-
-    val plan4 = Filter(
-      Exists(
-        Limit(1,
-          Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b)))
-      ),
-      LocalRelation(a))
-    assertAnalysisError(plan4, "Accessing outer query column is not allowed in" :: Nil)
-
-    val plan5 = Filter(
       Exists(
         Sample(0.0, 0.5, false, 1L,
           Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b))).select("b")
       ),
       LocalRelation(a))
-    assertAnalysisError(plan5,
+    assertAnalysisError(plan3,
                         "Accessing outer query column is not allowed in" :: Nil)
   }
 
@@ -1137,13 +1123,13 @@ class AnalysisErrorSuite extends AnalysisTest {
       expectedMessageParameters = Map("sqlExpr" -> "\"scalarsubquery(c1)\""))
   }
 
-  errorTest(
+  errorClassTest(
     "SPARK-34920: error code to error message",
     testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
-    "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with name " +
-      "`bad_column` cannot be resolved. Did you mean one of the following? " +
-      "[`a`, `c`, `d`, `b`, `e`]"
-      :: Nil)
+    errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+    messageParameters = Map(
+      "objectName" -> "`bad_column`",
+      "proposal" -> "`a`, `c`, `d`, `b`, `e`"))
 
   errorClassTest(
     "SPARK-39783: backticks in error message for candidate column with dots",
@@ -1164,31 +1150,6 @@ class AnalysisErrorSuite extends AnalysisTest {
     messageParameters = Map(
       "objectName" -> "`top.aField`",
       "proposal" -> "`top`"))
-
-  test("SPARK-35080: Unsupported correlated equality predicates in subquery") {
-    val a = AttributeReference("a", IntegerType)()
-    val b = AttributeReference("b", IntegerType)()
-    val c = AttributeReference("c", IntegerType)()
-    val d = AttributeReference("d", DoubleType)()
-    val t1 = LocalRelation(a, b, d)
-    val t2 = LocalRelation(c)
-    val conditions = Seq(
-      (abs($"a") === $"c", "abs(a#x) = outer(c#x)"),
-      (abs($"a") <=> $"c", "abs(a#x) <=> outer(c#x)"),
-      ($"a" + 1 === $"c", "(a#x + 1) = outer(c#x)"),
-      ($"a" + $"b" === $"c", "(a#x + b#x) = outer(c#x)"),
-      ($"a" + $"c" === $"b", "(a#x + outer(c#x)) = b#x"),
-      (And($"a" === $"c", Cast($"d", IntegerType) === $"c"), "CAST(d#x AS INT) = outer(c#x)"))
-    conditions.foreach { case (cond, msg) =>
-      val plan = Project(
-        Exists(
-          Aggregate(Nil, count(Literal(1)).as("cnt") :: Nil,
-            Filter(cond, t1))
-        ).as("sub") :: Nil,
-        t2)
-      assertAnalysisError(plan, s"Correlated column is not allowed in predicate: ($msg)" :: Nil)
-    }
-  }
 
   test("SPARK-35673: fail if the plan still contains UnresolvedHint after analysis") {
     val hintName = "some_random_hint_that_does_not_exist"

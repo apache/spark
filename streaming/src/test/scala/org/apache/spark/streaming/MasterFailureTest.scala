@@ -22,8 +22,8 @@ import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
 
@@ -333,7 +333,7 @@ class KillingThread(ssc: StreamingContext, maxKillWaitTime: Long) extends Thread
     try {
       // If it is the first killing, then allow the first checkpoint to be created
       val minKillWaitTime = if (MasterFailureTest.killCount == 0) 5000 else 2000
-      val killWaitTime = minKillWaitTime + math.abs(Random.nextLong % maxKillWaitTime)
+      val killWaitTime = minKillWaitTime + math.abs(Random.nextLong() % maxKillWaitTime)
       logInfo("Kill wait time = " + killWaitTime)
       Thread.sleep(killWaitTime)
       logInfo(

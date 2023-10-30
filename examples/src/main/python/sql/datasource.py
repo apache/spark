@@ -418,6 +418,54 @@ def jdbc_dataset_example(spark: SparkSession) -> None:
     # $example off:jdbc_dataset$
 
 
+def xml_dataset_example(spark: SparkSession) -> None:
+    # $example on:xml_dataset$
+    # Primitive types (Int, String, etc) and Product types (case classes) encoders are
+    # supported by importing this when creating a Dataset.
+    # An XML dataset is pointed to by path.
+    # The path can be either a single xml file or more xml files
+    path = "examples/src/main/resources/people.xml"
+    peopleDF = spark.read.option("rowTag", "person").format("xml").load(path)
+
+    # The inferred schema can be visualized using the printSchema() method
+    peopleDF.printSchema()
+    # root
+    #  |-- age: long (nullable = true)
+    #  |-- name: string (nullable = true)
+
+    # Creates a temporary view using the DataFrame
+    peopleDF.createOrReplaceTempView("people")
+
+    # SQL statements can be run by using the sql methods provided by spark
+    teenagerNamesDF = spark.sql("SELECT name FROM people WHERE age BETWEEN 13 AND 19")
+    teenagerNamesDF.show()
+    # +------+
+    # |  name|
+    # +------+
+    # |Justin|
+    # +------+
+
+    # Alternatively, a DataFrame can be created for an XML dataset represented by a Dataset[String]
+    xmlStrings = ["""
+          <person>
+              <name>laglangyue</name>
+              <job>Developer</job>
+              <age>28</age>
+          </person>
+        """]
+    xmlRDD = spark.sparkContext.parallelize(xmlStrings)
+    otherPeople = spark.read \
+        .option("rowTag", "person") \
+        .xml(xmlRDD)
+    otherPeople.show()
+    # +---+---------+----------+
+    # |age|      job|      name|
+    # +---+---------+----------+
+    # | 28|Developer|laglangyue|
+    # +---+---------+----------+
+    # $example off:xml_dataset$
+
+
 if __name__ == "__main__":
     spark = SparkSession \
         .builder \
@@ -432,5 +480,6 @@ if __name__ == "__main__":
     csv_dataset_example(spark)
     text_dataset_example(spark)
     jdbc_dataset_example(spark)
+    xml_dataset_example(spark)
 
     spark.stop()

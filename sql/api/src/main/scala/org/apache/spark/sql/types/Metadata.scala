@@ -137,6 +137,8 @@ object Metadata {
     jObj.obj.foreach {
       case (key, JInt(value)) =>
         builder.putLong(key, value.toLong)
+      case (key, JLong(value)) =>
+        builder.putLong(key, value.toLong)
       case (key, JDouble(value)) =>
         builder.putDouble(key, value)
       case (key, JBool(value)) =>
@@ -153,6 +155,8 @@ object Metadata {
           value.head match {
             case _: JInt =>
               builder.putLongArray(key, value.asInstanceOf[List[JInt]].map(_.num.toLong).toArray)
+            case _: JLong =>
+              builder.putLongArray(key, value.asInstanceOf[List[JLong]].map(_.num.toLong).toArray)
             case _: JDouble =>
               builder.putDoubleArray(key, value.asInstanceOf[List[JDouble]].map(_.num).toArray)
             case _: JBool =>
@@ -206,7 +210,7 @@ object Metadata {
       // `map.mapValues` return `Map` in Scala 2.12 and return `MapView` in Scala 2.13, call
       // `toMap` for Scala version compatibility.
       case map: Map[_, _] =>
-        map.mapValues(hash).toMap.##
+        map.view.mapValues(hash).toMap.##
       case arr: Array[_] =>
         // Seq.empty[T] has the same hashCode regardless of T.
         arr.toSeq.map(hash).##

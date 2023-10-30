@@ -618,7 +618,7 @@ BroadcastExchange (108)
 Output [2]: [d_date_sk#40, d_week_seq#100]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_week_seq), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_week_seq), EqualTo(d_week_seq,ScalarSubquery#101), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_week_seq:int>
 
 (105) ColumnarToRow [codegen id : 1]
@@ -626,7 +626,7 @@ Input [2]: [d_date_sk#40, d_week_seq#100]
 
 (106) Filter [codegen id : 1]
 Input [2]: [d_date_sk#40, d_week_seq#100]
-Condition : ((isnotnull(d_week_seq#100) AND (d_week_seq#100 = Subquery scalar-subquery#101, [id=#102])) AND isnotnull(d_date_sk#40))
+Condition : ((isnotnull(d_week_seq#100) AND (d_week_seq#100 = ReusedSubquery Subquery scalar-subquery#101, [id=#102])) AND isnotnull(d_date_sk#40))
 
 (107) Project [codegen id : 1]
 Output [1]: [d_date_sk#40]
@@ -636,7 +636,9 @@ Input [2]: [d_date_sk#40, d_week_seq#100]
 Input [1]: [d_date_sk#40]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=13]
 
-Subquery:6 Hosting operator id = 106 Hosting Expression = Subquery scalar-subquery#101, [id=#102]
+Subquery:6 Hosting operator id = 106 Hosting Expression = ReusedSubquery Subquery scalar-subquery#101, [id=#102]
+
+Subquery:7 Hosting operator id = 104 Hosting Expression = Subquery scalar-subquery#101, [id=#102]
 * Project (112)
 +- * Filter (111)
    +- * ColumnarToRow (110)
@@ -661,7 +663,7 @@ Condition : (((((isnotnull(d_year#104) AND isnotnull(d_moy#105)) AND isnotnull(d
 Output [1]: [d_week_seq#103]
 Input [4]: [d_week_seq#103, d_year#104, d_moy#105, d_dom#106]
 
-Subquery:7 Hosting operator id = 7 Hosting Expression = ss_sold_date_sk#11 IN dynamicpruning#12
+Subquery:8 Hosting operator id = 7 Hosting Expression = ss_sold_date_sk#11 IN dynamicpruning#12
 BroadcastExchange (117)
 +- * Project (116)
    +- * Filter (115)
@@ -691,13 +693,13 @@ Input [2]: [d_date_sk#24, d_year#107]
 Input [1]: [d_date_sk#24]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=14]
 
-Subquery:8 Hosting operator id = 13 Hosting Expression = cs_sold_date_sk#18 IN dynamicpruning#12
+Subquery:9 Hosting operator id = 13 Hosting Expression = cs_sold_date_sk#18 IN dynamicpruning#12
 
-Subquery:9 Hosting operator id = 36 Hosting Expression = ws_sold_date_sk#29 IN dynamicpruning#12
+Subquery:10 Hosting operator id = 36 Hosting Expression = ws_sold_date_sk#29 IN dynamicpruning#12
 
-Subquery:10 Hosting operator id = 81 Hosting Expression = ReusedSubquery Subquery scalar-subquery#52, [id=#53]
+Subquery:11 Hosting operator id = 81 Hosting Expression = ReusedSubquery Subquery scalar-subquery#52, [id=#53]
 
-Subquery:11 Hosting operator id = 67 Hosting Expression = ss_sold_date_sk#57 IN dynamicpruning#58
+Subquery:12 Hosting operator id = 67 Hosting Expression = ss_sold_date_sk#57 IN dynamicpruning#58
 BroadcastExchange (122)
 +- * Project (121)
    +- * Filter (120)
@@ -709,7 +711,7 @@ BroadcastExchange (122)
 Output [2]: [d_date_sk#64, d_week_seq#108]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_week_seq), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_week_seq), EqualTo(d_week_seq,ScalarSubquery#109), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_week_seq:int>
 
 (119) ColumnarToRow [codegen id : 1]
@@ -717,7 +719,7 @@ Input [2]: [d_date_sk#64, d_week_seq#108]
 
 (120) Filter [codegen id : 1]
 Input [2]: [d_date_sk#64, d_week_seq#108]
-Condition : ((isnotnull(d_week_seq#108) AND (d_week_seq#108 = Subquery scalar-subquery#109, [id=#110])) AND isnotnull(d_date_sk#64))
+Condition : ((isnotnull(d_week_seq#108) AND (d_week_seq#108 = ReusedSubquery Subquery scalar-subquery#109, [id=#110])) AND isnotnull(d_date_sk#64))
 
 (121) Project [codegen id : 1]
 Output [1]: [d_date_sk#64]
@@ -727,7 +729,9 @@ Input [2]: [d_date_sk#64, d_week_seq#108]
 Input [1]: [d_date_sk#64]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=15]
 
-Subquery:12 Hosting operator id = 120 Hosting Expression = Subquery scalar-subquery#109, [id=#110]
+Subquery:13 Hosting operator id = 120 Hosting Expression = ReusedSubquery Subquery scalar-subquery#109, [id=#110]
+
+Subquery:14 Hosting operator id = 118 Hosting Expression = Subquery scalar-subquery#109, [id=#110]
 * Project (126)
 +- * Filter (125)
    +- * ColumnarToRow (124)

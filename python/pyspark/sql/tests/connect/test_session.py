@@ -78,7 +78,7 @@ class SparkSessionTestCase(unittest.TestCase):
         session.stop()
 
 
-class ArrowParityTests(ReusedConnectTestCase):
+class JobCancellationTests(ReusedConnectTestCase):
     def test_tags(self):
         self.spark.clearTags()
         self.spark.addTag("a")
@@ -116,7 +116,6 @@ class ArrowParityTests(ReusedConnectTestCase):
     def check_job_cancellation(
         self, setter, canceller, thread_ids, thread_ids_to_cancel, thread_ids_to_run
     ):
-
         job_id_a = "job_ids_to_cancel"
         job_id_b = "job_ids_to_run"
         threads = []

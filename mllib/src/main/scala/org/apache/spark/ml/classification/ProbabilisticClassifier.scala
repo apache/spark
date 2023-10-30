@@ -157,7 +157,7 @@ abstract class ProbabilisticClassificationModel[
       this.logWarning(s"$uid: ProbabilisticClassificationModel.transform() does nothing" +
         " because no output columns were set.")
     }
-    outputData.toDF
+    outputData.toDF()
   }
 
   /**

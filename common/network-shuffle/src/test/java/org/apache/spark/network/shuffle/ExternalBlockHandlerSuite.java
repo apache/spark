@@ -28,12 +28,13 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.Metric;
 import com.codahale.metrics.Timer;
 import com.google.common.io.ByteStreams;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.roaringbitmap.RoaringBitmap;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -72,7 +73,7 @@ public class ExternalBlockHandlerSuite {
     new NioManagedBuffer(ByteBuffer.wrap(new byte[7]))
   };
 
-  @Before
+  @BeforeEach
   public void beforeEach() {
     streamManager = mock(OneForOneStreamManager.class);
     blockResolver = mock(ExternalShuffleBlockResolver.class);
@@ -138,29 +139,27 @@ public class ExternalBlockHandlerSuite {
       ByteStreams.readFully(checkedIn, buffer, 0, (int) blockMarkers[0].size());
       long checksumByWriter = checkedIn.getChecksum().getValue();
 
-      switch (expectedCaused) {
+      // when checksumByWriter == checksumRecalculated and checksumByReader != checksumByWriter
+      checksumByReader = switch (expectedCaused) {
         // when checksumByWriter != checksumRecalculated
-        case DISK_ISSUE:
+        case DISK_ISSUE -> {
           out.writeLong(checksumByWriter - 1);
-          checksumByReader = checksumByWriter;
-          break;
-
-        // when checksumByWriter == checksumRecalculated and checksumByReader != checksumByWriter
-        case NETWORK_ISSUE:
+          yield checksumByWriter;
+        }
+        case NETWORK_ISSUE -> {
           out.writeLong(checksumByWriter);
-          checksumByReader = checksumByWriter - 1;
-          break;
-
-        case UNKNOWN_ISSUE:
-          // write a int instead of a long to corrupt the checksum file
+          yield checksumByWriter - 1;
+        }
+        case UNKNOWN_ISSUE -> {
+          // write an int instead of a long to corrupt the checksum file
           out.writeInt(0);
-          checksumByReader = checksumByWriter;
-          break;
-
-        default:
+          yield checksumByWriter;
+        }
+        default -> {
           out.writeLong(checksumByWriter);
-          checksumByReader = checksumByWriter;
-      }
+          yield checksumByWriter;
+        }
+      };
     }
     out.close();
 
@@ -393,9 +392,9 @@ public class ExternalBlockHandlerSuite {
         ArgumentCaptor.forClass(ManagedBuffer.class);
       verify(callback, times(1)).onSuccess(numChunksResponse.capture(),
         chunkBitmapResponse.capture());
-      assertEquals("num chunks in merged block " + reduceId, expectedCount[reduceId],
-        numChunksResponse.getValue().intValue());
-      assertNotNull("chunks bitmap buffer " + reduceId, chunkBitmapResponse.getValue());
+      assertEquals(expectedCount[reduceId], numChunksResponse.getValue(),
+        "num chunks in merged block " + reduceId);
+      assertNotNull(chunkBitmapResponse.getValue(), "chunks bitmap buffer " + reduceId);
     }
   }
 

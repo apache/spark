@@ -65,8 +65,8 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
       if (conf.usePartitionEvaluator) {
         rddBarrier.mapPartitionsWithEvaluator(evaluatorFactory)
       } else {
-        rddBarrier.mapPartitions { iter =>
-          evaluatorFactory.createEvaluator().eval(0, iter)
+        rddBarrier.mapPartitionsWithIndex { (index, iter) =>
+          evaluatorFactory.createEvaluator().eval(index, iter)
         }
       }
     } else {
@@ -74,8 +74,8 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
       if (conf.usePartitionEvaluator) {
         inputRdd.mapPartitionsWithEvaluator(evaluatorFactory)
       } else {
-        inputRdd.mapPartitionsInternal { iter =>
-          evaluatorFactory.createEvaluator().eval(0, iter)
+        inputRdd.mapPartitionsWithIndexInternal { (index, iter) =>
+          evaluatorFactory.createEvaluator().eval(index, iter)
         }
       }
     }

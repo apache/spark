@@ -70,7 +70,6 @@ Indexing, iteration
    Series.keys
    Series.pop
    Series.items
-   Series.iteritems
    Series.item
    Series.xs
    Series.get
@@ -148,7 +147,6 @@ Computations / Descriptive Stats
    Series.ewm
    Series.filter
    Series.kurt
-   Series.mad
    Series.max
    Series.mean
    Series.min
@@ -172,7 +170,6 @@ Computations / Descriptive Stats
    Series.value_counts
    Series.round
    Series.diff
-   Series.is_monotonic
    Series.is_monotonic_increasing
    Series.is_monotonic_decreasing
 
@@ -247,7 +244,6 @@ Combining / joining / merging
 .. autosummary::
    :toctree: api/
 
-   Series.append
    Series.compare
    Series.replace
    Series.update
@@ -316,8 +312,7 @@ Datetime Properties
    Series.dt.minute
    Series.dt.second
    Series.dt.microsecond
-   Series.dt.week
-   Series.dt.weekofyear
+   Series.dt.isocalendar
    Series.dt.dayofweek
    Series.dt.weekday
    Series.dt.dayofyear

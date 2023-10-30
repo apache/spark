@@ -49,7 +49,7 @@ class SQLExecutionSuite extends SparkFunSuite {
   }
 
   test("concurrent query execution with fork-join pool (SPARK-13747)") {
-    val spark = SparkSession.builder
+    val spark = SparkSession.builder()
       .master("local[*]")
       .appName("test")
       .getOrCreate()
@@ -69,7 +69,7 @@ class SQLExecutionSuite extends SparkFunSuite {
    * Trigger SPARK-10548 by mocking a parent and its child thread executing queries concurrently.
    */
   private def testConcurrentQueryExecution(sc: SparkContext): Unit = {
-    val spark = SparkSession.builder.getOrCreate()
+    val spark = SparkSession.builder().getOrCreate()
     import spark.implicits._
 
     // Initialize local properties. This is necessary for the test to pass.
@@ -103,7 +103,7 @@ class SQLExecutionSuite extends SparkFunSuite {
 
 
   test("Finding QueryExecution for given executionId") {
-    val spark = SparkSession.builder.master("local[*]").appName("test").getOrCreate()
+    val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
     import spark.implicits._
 
     var queryExecution: QueryExecution = null
@@ -200,6 +200,36 @@ class SQLExecutionSuite extends SparkFunSuite {
       spark.sparkContext.listenerBus.waitUntilEmpty()
       assert(index.get() == 2)
     } finally {
+      spark.stop()
+    }
+  }
+
+  test("SPARK-44591: jobTags property") {
+    val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
+    val jobTag = "jobTag"
+    try {
+      spark.sparkContext.addJobTag(jobTag)
+
+      var jobTags: Option[String] = None
+      var sqlJobTags: Set[String] = Set.empty
+      spark.sparkContext.addSparkListener(new SparkListener {
+        override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+          jobTags = Some(jobStart.properties.getProperty(SparkContext.SPARK_JOB_TAGS))
+        }
+        override def onOtherEvent(event: SparkListenerEvent): Unit = {
+          event match {
+            case e: SparkListenerSQLExecutionStart =>
+              sqlJobTags = e.jobTags
+          }
+        }
+      })
+
+      spark.range(1).collect()
+
+      assert(jobTags.contains(jobTag))
+      assert(sqlJobTags.contains(jobTag))
+    } finally {
+      spark.sparkContext.removeJobTag(jobTag)
       spark.stop()
     }
   }

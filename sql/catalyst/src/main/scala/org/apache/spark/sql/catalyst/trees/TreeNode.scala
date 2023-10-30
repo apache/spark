@@ -20,8 +20,9 @@ package org.apache.spark.sql.catalyst.trees
 import java.util.UUID
 
 import scala.collection.{mutable, Map}
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
+import scala.util.hashing.MurmurHash3
 
 import org.apache.commons.lang3.ClassUtils
 import org.json4s.JsonAST._
@@ -53,6 +54,8 @@ import org.apache.spark.util.collection.BitSet
 private class MutableInt(var i: Int)
 
 // A tag of a `TreeNode`, which defines name and type
+// Note: In general, if developers only care about its tagging capabilities,
+// then Unit should be considered first before using Boolean.
 case class TreeNodeTag[T](name: String)
 
 // A functor that always returns true.
@@ -171,30 +174,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
 
   lazy val containsChild: Set[TreeNode[_]] = children.toSet
 
-  // Copied from Scala 2.13.1
-  // github.com/scala/scala/blob/v2.13.1/src/library/scala/util/hashing/MurmurHash3.scala#L56-L73
-  // to prevent the issue https://github.com/scala/bug/issues/10495
-  // TODO(SPARK-30848): Remove this once we drop Scala 2.12.
-  private final def productHash(x: Product, seed: Int, ignorePrefix: Boolean = false): Int = {
-    val arr = x.productArity
-    // Case objects have the hashCode inlined directly into the
-    // synthetic hashCode method, but this method should still give
-    // a correct result if passed a case object.
-    if (arr == 0) {
-      x.productPrefix.hashCode
-    } else {
-      var h = seed
-      if (!ignorePrefix) h = scala.util.hashing.MurmurHash3.mix(h, x.productPrefix.hashCode)
-      var i = 0
-      while (i < arr) {
-        h = scala.util.hashing.MurmurHash3.mix(h, x.productElement(i).##)
-        i += 1
-      }
-      scala.util.hashing.MurmurHash3.finalizeHash(h, arr)
-    }
-  }
+  lazy val height: Int = children.map(_.height).reduceOption(_ max _).getOrElse(0) + 1
 
-  private lazy val _hashCode: Int = productHash(this, scala.util.hashing.MurmurHash3.productSeed)
+  private lazy val _hashCode: Int = MurmurHash3.productHash(this)
   override def hashCode(): Int = _hashCode
 
   /**
@@ -259,7 +241,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    * Returns a Seq by applying a function to all nodes in this tree and using the elements of the
    * resulting collections.
    */
-  def flatMap[A](f: BaseType => TraversableOnce[A]): Seq[A] = {
+  def flatMap[A](f: BaseType => IterableOnce[A]): Seq[A] = {
     val ret = new collection.mutable.ArrayBuffer[A]()
     foreach(ret ++= f(_))
     ret.toSeq
@@ -383,7 +365,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
         // `map.mapValues().view.force` return `Map` in Scala 2.12 but return `IndexedSeq` in Scala
         // 2.13, call `toMap` method manually to compatible with Scala 2.12 and Scala 2.13
         // `mapValues` is lazy and we need to force it to materialize
-        m.mapValues(mapChild).view.force.toMap
+        m.view.mapValues(mapChild).view.force.toMap
       case arg: TreeNode[_] if containsChild(arg) => mapTreeNode(arg)
       case Some(child) => Some(mapChild(child))
       case nonChild: AnyRef => nonChild
@@ -804,7 +786,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
         Some(arg.asInstanceOf[BaseType].clone())
       // `map.mapValues().view.force` return `Map` in Scala 2.12 but return `IndexedSeq` in Scala
       // 2.13, call `toMap` method manually to compatible with Scala 2.12 and Scala 2.13
-      case m: Map[_, _] => m.mapValues {
+      case m: Map[_, _] => m.view.mapValues {
         case arg: TreeNode[_] if containsChild(arg) =>
           arg.asInstanceOf[BaseType].clone()
         case other => other

@@ -157,15 +157,6 @@ trait BaseGenericInternalRow extends InternalRow {
   }
 }
 
-class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
-  extends GenericRow(values) {
-
-  /** No-arg constructor for serialization. */
-  protected def this() = this(null, null)
-
-  override def fieldIndex(name: String): Int = schema.fieldIndex(name)
-}
-
 /**
  * An internal row implementation that uses an array of objects as the underlying storage.
  * Note that, while the array is not copied, and thus could technically be mutated after creation,

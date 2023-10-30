@@ -48,8 +48,8 @@ private[v1] class PrometheusResource extends ApiRequestContext {
     store.executorList(true).foreach { executor =>
       val prefix = "metrics_executor_"
       val labels = Seq(
-        "application_id" -> store.applicationInfo.id,
-        "application_name" -> store.applicationInfo.name,
+        "application_id" -> store.applicationInfo().id,
+        "application_name" -> store.applicationInfo().name,
         "executor_id" -> executor.id
       ).map { case (k, v) => s"""$k="$v"""" }.mkString("{", ", ", "}")
       sb.append(s"${prefix}rddBlocks$labels ${executor.rddBlocks}\n")
@@ -97,10 +97,10 @@ private[v1] class PrometheusResource extends ApiRequestContext {
         names.foreach { name =>
           sb.append(s"$prefix${name}_bytes$labels ${m.getMetricValue(name)}\n")
         }
-        Seq("MinorGCCount", "MajorGCCount").foreach { name =>
+        Seq("MinorGCCount", "MajorGCCount", "ConcurrentGCCount").foreach { name =>
           sb.append(s"$prefix${name}_total$labels ${m.getMetricValue(name)}\n")
         }
-        Seq("MinorGCTime", "MajorGCTime").foreach { name =>
+        Seq("MinorGCTime", "MajorGCTime", "ConcurrentGCTime").foreach { name =>
           sb.append(s"$prefix${name}_seconds_total$labels ${m.getMetricValue(name) * 0.001}\n")
         }
       }

@@ -62,6 +62,7 @@ ALTER TABLE test_change CHANGE a TYPE STRING
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NOT_SUPPORTED_CHANGE_COLUMN",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "newName" : "`a`",
     "newType" : "\"STRING\"",
@@ -86,7 +87,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "operation" : "ALTER COLUMN ... FIRST | ALTER",
+    "operation" : "ALTER COLUMN ... FIRST | AFTER",
     "tableName" : "`spark_catalog`.`default`.`test_change`"
   }
 }
@@ -100,7 +101,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "operation" : "ALTER COLUMN ... FIRST | ALTER",
+    "operation" : "ALTER COLUMN ... FIRST | AFTER",
     "tableName" : "`spark_catalog`.`default`.`test_change`"
   }
 }
@@ -206,12 +207,11 @@ ALTER TABLE temp_view CHANGE a TYPE INT
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1013",
+  "errorClass" : "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+  "sqlState" : "42809",
   "messageParameters" : {
-    "cmd" : "ALTER TABLE ... CHANGE COLUMN",
-    "hintStr" : "",
-    "nameParts" : "temp_view",
-    "viewStr" : "temp view"
+    "operation" : "ALTER TABLE ... CHANGE COLUMN",
+    "viewName" : "`temp_view`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -236,12 +236,11 @@ ALTER TABLE global_temp.global_temp_view CHANGE a TYPE INT
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1013",
+  "errorClass" : "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+  "sqlState" : "42809",
   "messageParameters" : {
-    "cmd" : "ALTER TABLE ... CHANGE COLUMN",
-    "hintStr" : "",
-    "nameParts" : "global_temp.global_temp_view",
-    "viewStr" : "temp view"
+    "operation" : "ALTER TABLE ... CHANGE COLUMN",
+    "viewName" : "`global_temp`.`global_temp_view`"
   },
   "queryContext" : [ {
     "objectType" : "",

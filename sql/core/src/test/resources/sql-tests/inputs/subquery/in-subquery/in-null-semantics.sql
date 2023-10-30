@@ -1,7 +1,7 @@
 create temp view v (c) as values (1), (null);
 create temp view v_empty (e) as select 1 where false;
 
--- Note: tables and temp views hit different optimization/execution codepaths
+-- Note: tables and temp views hit different optimization/execution codepaths: expressions over temp views are evaled at query compilation time by ConvertToLocalRelation
 create table t(c int) using json;
 insert into t values (1), (null);
 create table t2(d int) using json;
@@ -29,14 +29,19 @@ select null not in (select e from v_empty);
 
 -- IN subquery which is not rewritten to join - here we use IN in the ON condition because that is a case that doesn't get rewritten to join in RewritePredicateSubquery, so we can observe the execution behavior of InSubquery directly
 -- Correct results: column t2.d should be NULL because the ON condition is always false
--- This will be fixed by the execution fixes.
 select * from t left join t2 on (t.c in (select e from t_empty)) is null;
 select * from t left join t2 on (t.c not in (select e from t_empty)) is null;
 
+-- Should have the same results as above with optimize IN subqueries enabled
+set spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled=true;
 
+-- IN subquery which IS rewritten to join
+select * from t left join t2 on (t.c in (select e from t_empty)) is null;
+select * from t left join t2 on (t.c not in (select e from t_empty)) is null;
 
--- Test legacy behavior flag
 set spark.sql.legacy.nullInEmptyListBehavior = true;
+-- Disable optimize IN subqueries to joins because it affects null semantics
+set spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled=false;
 
 -- constant null IN (empty subquery) - rewritten by NullPropagation rule
 
@@ -51,6 +56,7 @@ select * from t left join t2 on (t.c in (select e from t_empty)) is null;
 select * from t left join t2 on (t.c not in (select e from t_empty)) is null;
 
 reset spark.sql.legacy.nullInEmptyListBehavior;
+reset spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled;
 
 drop table t;
 drop table t2;

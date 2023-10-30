@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{ArrayList => JArrayList, List => JList, Locale}
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import jline.console.ConsoleReader
 import jline.console.completer.{ArgumentCompleter, Completer, StringsCompleter}
@@ -218,7 +218,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Execute -i init files (always in silent mode)
     cli.processInitFiles(sessionState)
 
-    cli.printMasterAndAppId
+    cli.printMasterAndAppId()
 
     if (sessionState.execString != null) {
       exit(cli.processLine(sessionState.execString))
@@ -238,7 +238,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     reader.setBellEnabled(false)
     reader.setExpandEvents(false)
     // reader.setDebug(new PrintWriter(new FileWriter("writer.debug", true)))
-    getCommandCompleter.foreach(reader.addCompleter)
+    getCommandCompleter().foreach(reader.addCompleter)
 
     val historyDirectory = System.getProperty("user.home")
 

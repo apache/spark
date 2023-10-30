@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from distutils.version import LooseVersion
 import unittest
 
 import numpy as np
@@ -22,6 +21,7 @@ import pandas as pd
 from pandas.tseries.offsets import DateOffset
 
 from pyspark import pandas as ps
+from pyspark.errors import PySparkValueError
 from pyspark.pandas.config import option_context
 from pyspark.testing.pandasutils import ComparisonTestBase
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -115,10 +115,6 @@ class FrameReindexingMixin:
         with self.assertRaisesRegex(TypeError, "Index must be DatetimeIndex"):
             psdf.at_time("0:15")
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43557): Enable DataFrameSlowTests.test_between_time for pandas 2.0.0.",
-    )
     def test_between_time(self):
         idx = pd.date_range("2018-04-09", periods=4, freq="1D20min")
         pdf = pd.DataFrame({"A": [1, 2, 3, 4]}, index=idx)
@@ -167,6 +163,34 @@ class FrameReindexingMixin:
         psdf = ps.DataFrame({"A": [1, 2, 3, 4]})
         with self.assertRaisesRegex(TypeError, "Index must be DatetimeIndex"):
             psdf.between_time("0:15", "0:45")
+
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            pdf.between_time("0:15", "0:45", inclusive="neither").sort_index(),
+            psdf.between_time("0:15", "0:45", inclusive="neither").sort_index(),
+        )
+
+        self.assert_eq(
+            pdf.between_time("0:15", "0:45", inclusive="left").sort_index(),
+            psdf.between_time("0:15", "0:45", inclusive="left").sort_index(),
+        )
+
+        self.assert_eq(
+            pdf.between_time("0:15", "0:45", inclusive="right").sort_index(),
+            psdf.between_time("0:15", "0:45", inclusive="right").sort_index(),
+        )
+
+        with self.assertRaises(PySparkValueError) as ctx:
+            psdf.between_time("0:15", "0:45", inclusive="")
+
+        self.check_error(
+            exception=ctx.exception,
+            error_class="VALUE_NOT_ALLOWED",
+            message_parameters={
+                "arg_name": "inclusive",
+                "allowed_values": str(["left", "right", "both", "neither"]),
+            },
+        )
 
     def test_drop(self):
         pdf = pd.DataFrame({"x": [1, 2], "y": [3, 4], "z": [5, 6]}, index=np.random.rand(2))
@@ -797,31 +821,9 @@ class FrameReindexingMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
-            self.assert_eq(psdf.isin([4, 3, 1, 1, None]), pdf.isin([4, 3, 1, 1, None]))
-        else:
-            expected = pd.DataFrame(
-                {
-                    "a": [True, False, True, True, False, False],
-                    "b": [True, False, False, True, False, True],
-                    "c": [False, False, False, True, False, True],
-                }
-            )
-            self.assert_eq(psdf.isin([4, 3, 1, 1, None]), expected)
+        self.assert_eq(psdf.isin([4, 3, 1, 1, None]), pdf.isin([4, 3, 1, 1, None]))
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
-            self.assert_eq(
-                psdf.isin({"b": [4, 3, 1, 1, None]}), pdf.isin({"b": [4, 3, 1, 1, None]})
-            )
-        else:
-            expected = pd.DataFrame(
-                {
-                    "a": [False, False, False, False, False, False],
-                    "b": [True, False, False, True, False, True],
-                    "c": [False, False, False, False, False, False],
-                }
-            )
-            self.assert_eq(psdf.isin({"b": [4, 3, 1, 1, None]}), expected)
+        self.assert_eq(psdf.isin({"b": [4, 3, 1, 1, None]}), pdf.isin({"b": [4, 3, 1, 1, None]}))
 
     def test_sample(self):
         psdf = ps.DataFrame({"A": [0, 2, 4]}, index=["x", "y", "z"])

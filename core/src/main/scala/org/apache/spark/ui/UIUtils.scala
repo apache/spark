@@ -26,12 +26,11 @@ import java.util.{Date, Locale, TimeZone}
 import javax.servlet.http.HttpServletRequest
 import javax.ws.rs.core.{MediaType, MultivaluedMap, Response}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
 
-import org.apache.commons.text.StringEscapeUtils
 import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap
 
 import org.apache.spark.internal.Logging
@@ -709,7 +708,7 @@ private[spark] object UIUtils extends Logging {
 
   private final val ERROR_CLASS_REGEX = """\[(?<errorClass>[A-Z][A-Z_.]+[A-Z])]""".r
 
-  private def errorSummary(errorMessage: String): (String, Boolean) = {
+  def errorSummary(errorMessage: String): (String, Boolean) = {
     var isMultiline = true
     val maybeErrorClass =
       ERROR_CLASS_REGEX.findFirstMatchIn(errorMessage).map(_.group("errorClass"))
@@ -724,8 +723,7 @@ private[spark] object UIUtils extends Logging {
       errorMessage
     }
 
-    val errorSummary = StringEscapeUtils.escapeHtml4(errorClassOrBrief)
-    (errorSummary, isMultiline)
+    (errorClassOrBrief, isMultiline)
   }
 
   def errorMessageCell(errorMessage: String): Seq[Node] = {

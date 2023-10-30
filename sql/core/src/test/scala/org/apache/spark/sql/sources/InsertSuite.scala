@@ -52,7 +52,7 @@ case class SimpleInsert(userSpecifiedSchema: StructType)(@transient val sparkSes
   override def schema: StructType = userSpecifiedSchema
 
   override def insert(input: DataFrame, overwrite: Boolean): Unit = {
-    input.collect
+    input.collect()
   }
 }
 
@@ -962,11 +962,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       (1 to 10).map(i => Row(i, null))
     )
 
-    sql("INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt")
-    checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
-      (1 to 10).map(i => Row(i, null))
-    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt")
+      },
+      errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+      parameters = Map(
+        "tableName" -> "`unknown`",
+        "tableColumns" -> "`a`, `b`",
+        "dataColumns" -> "`a`"))
 
     sql("INSERT OVERWRITE TABLE jsonTable(a) SELECT a FROM jt")
     checkAnswer(
@@ -1027,7 +1031,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
     withTable("t") {
       sql("create table t(i int, s bigint default 42, x bigint) using parquet")
-      sql("insert into t values(1)")
+      sql("insert into t(i) values(1)")
       checkAnswer(spark.table("t"), Row(1, 42L, null))
     }
     // The table has a partitioning column and a default value is injected.
@@ -1108,11 +1112,11 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t1", "t2") {
         sql("create table t1(j int, s bigint default 42, x bigint default 43) using parquet")
         if (useDataFrames) {
-          Seq((1, 42, 43)).toDF.write.insertInto("t1")
-          Seq((2, 42, 43)).toDF.write.insertInto("t1")
-          Seq((3, 42, 43)).toDF.write.insertInto("t1")
-          Seq((4, 44, 43)).toDF.write.insertInto("t1")
-          Seq((5, 44, 43)).toDF.write.insertInto("t1")
+          Seq((1, 42, 43)).toDF().write.insertInto("t1")
+          Seq((2, 42, 43)).toDF().write.insertInto("t1")
+          Seq((3, 42, 43)).toDF().write.insertInto("t1")
+          Seq((4, 44, 43)).toDF().write.insertInto("t1")
+          Seq((5, 44, 43)).toDF().write.insertInto("t1")
         } else {
           sql("insert into t1(j) values(1)")
           sql("insert into t1(j, s) values(2, default)")
@@ -1205,7 +1209,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("insert into t values(false, default + 1)")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1339",
+        errorClass = "DEFAULT_PLACEMENT_INVALID",
         parameters = Map.empty
       )
     }
@@ -1216,7 +1220,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("insert into t select false, default + 1")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1339",
+        errorClass = "DEFAULT_PLACEMENT_INVALID",
         parameters = Map.empty
       )
     }
@@ -1495,7 +1499,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql(createTableIntCol)
       sql("alter table t add column s bigint default 42")
       sql("alter table t add column x bigint")
-      sql("insert into t values(1)")
+      sql("insert into t(i) values(1)")
       checkAnswer(spark.table("t"), Row(1, 42, null))
     }
     // The table has a partitioning column and a default value is injected.
@@ -1749,8 +1753,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("alter table t alter column i set default false")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1246",
-        parameters = Map("name" -> "i", "fieldNames" -> "[`s`, `q`]"))
+        errorClass = "CANNOT_ALTER_PARTITION_COLUMN",
+        parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`", "columnName" -> "`i`")
+      )
     }
   }
 
@@ -1764,7 +1769,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       }
       def withTableT(f: => Unit): Unit = {
         sql(s"create table t(a string, i int) using $dataSource")
-        insertIntoT
+        insertIntoT()
         withTable("t") { f }
       }
       // Positive tests:
@@ -1786,7 +1791,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTableT {
         sql("alter table t add column (s string default concat('abc', 'def'))")
         if (config.useDataFrames) {
-          Seq((null, null, null)).toDF.write.insertInto("t")
+          Seq((null, null, null)).toDF().write.insertInto("t")
         } else {
           sql("insert into t values(null, null, null)")
         }
@@ -1910,7 +1915,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql(s"create table t(a string, i int default 42) using parquet")
       checkError(
         exception = intercept[AnalysisException] {
-          Seq("xyz").toDF.select("value", "default").write.insertInto("t")
+          Seq("xyz").toDF().select("value", "default").write.insertInto("t")
         },
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map("objectName" -> "`default`", "proposal" -> "`value`"))
@@ -1979,7 +1984,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql(s"create table t(i boolean) using ${config.dataSource}")
         if (config.useDataFrames) {
-          Seq(false).toDF.write.insertInto("t")
+          Seq(false).toDF().write.insertInto("t")
         } else {
           sql("insert into t select false")
         }
@@ -1998,7 +2003,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql(s"create table t(i boolean) using ${config.dataSource}")
         if (config.useDataFrames) {
-          Seq((false)).toDF.write.insertInto("t")
+          Seq((false)).toDF().write.insertInto("t")
         } else {
           sql("insert into t select false")
         }
@@ -2036,7 +2041,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql(s"create table t(i boolean) using ${config.dataSource}")
         if (config.useDataFrames) {
-          Seq((false)).toDF.write.insertInto("t")
+          Seq((false)).toDF().write.insertInto("t")
         } else {
           sql("insert into t select false")
         }
@@ -2056,7 +2061,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql(s"create table t(i boolean) using ${config.dataSource}")
         if (config.useDataFrames) {
-          Seq((false)).toDF.write.insertInto("t")
+          Seq((false)).toDF().write.insertInto("t")
         } else {
           sql("insert into t select false")
         }
@@ -2094,7 +2099,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql(s"create table t(i boolean) using ${config.dataSource}")
         if (config.useDataFrames) {
-          Seq((false)).toDF.write.insertInto("t")
+          Seq((false)).toDF().write.insertInto("t")
         } else {
           sql("insert into t select false")
         }
@@ -2120,7 +2125,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("insert into t select 1, default")
         sql("alter table t alter column s drop default")
         if (config.useDataFrames) {
-          Seq((2, null)).toDF.write.insertInto("t")
+          Seq((2, null)).toDF().write.insertInto("t")
         } else {
           sql("insert into t select 2, default")
         }
@@ -2168,7 +2173,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql(s"create table t(i boolean) using ${config.dataSource}")
         if (config.useDataFrames) {
-          Seq((false)).toDF.write.insertInto("t")
+          Seq((false)).toDF().write.insertInto("t")
         } else {
           sql("insert into t select false")
         }

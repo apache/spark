@@ -1370,7 +1370,8 @@ abstract class DynamicPartitionPruningSuiteBase
         }
 
         assert(subqueryIds.size == 2, "Whole plan subquery reusing not working correctly")
-        assert(reusedSubqueryIds.size == 1, "Whole plan subquery reusing not working correctly")
+        assert(reusedSubqueryIds.distinct.size == 1,
+          "Whole plan subquery reusing not working correctly")
         assert(reusedSubqueryIds.forall(subqueryIds.contains(_)),
           "ReusedSubqueryExec should reuse an existing subquery")
       }
@@ -1657,7 +1658,7 @@ abstract class DynamicPartitionPruningDataSourceSuiteBase
   test("no partition pruning when the build side is a stream") {
     withTable("fact") {
       val input = MemoryStream[Int]
-      val stream = input.toDF.select($"value" as "one", ($"value" * 3) as "code")
+      val stream = input.toDF().select($"value" as "one", ($"value" * 3) as "code")
       spark.range(100).select(
         $"id",
         ($"id" + 1).as("one"),

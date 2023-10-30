@@ -17,24 +17,18 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException}
-import java.net.Socket
-import java.nio.charset.StandardCharsets
-import java.util.HashMap
+import java.io.{DataInputStream, DataOutputStream}
 
-import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import net.razorvine.pickle.Pickler
 
-import org.apache.spark.{SparkEnv, SparkException}
-import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonRDD, SpecialLengths}
-import org.apache.spark.internal.config.BUFFER_SIZE
-import org.apache.spark.internal.config.Python._
+import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.{Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, PythonUDAF, PythonUDF, PythonUDTF, UnresolvedPolymorphicPythonUDTF}
-import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, SortOrder, UnresolvedPolymorphicPythonUDTF}
+import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -48,6 +42,20 @@ case class UserDefinedPythonFunction(
     udfDeterministic: Boolean) {
 
   def builder(e: Seq[Expression]): Expression = {
+    if (pythonEvalType == PythonEvalType.SQL_BATCHED_UDF
+        || pythonEvalType ==PythonEvalType.SQL_ARROW_BATCHED_UDF
+        || pythonEvalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
+        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF) {
+      /*
+       * Check if the named arguments:
+       * - don't have duplicated names
+       * - don't contain positional arguments after named arguments
+       */
+      NamedParametersSupport.splitAndCheckNamedArguments(e, name)
+    } else if (e.exists(_.isInstanceOf[NamedArgumentExpression])) {
+      throw QueryCompilationErrors.namedArgumentsNotSupported(name)
+    }
+
     if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF) {
       PythonUDAF(name, func, dataType, e, udfDeterministic)
     } else {
@@ -99,12 +107,20 @@ case class UserDefinedPythonTableFunction(
   }
 
   def builder(exprs: Seq[Expression]): LogicalPlan = {
+    /*
+     * Check if the named arguments:
+     * - don't have duplicated names
+     * - don't contain positional arguments after named arguments
+     */
+    NamedParametersSupport.splitAndCheckNamedArguments(exprs, name)
+
     val udtf = returnType match {
       case Some(rt) =>
         PythonUDTF(
           name = name,
           func = func,
           elementSchema = rt,
+          pickledAnalyzeResult = None,
           children = exprs,
           evalType = pythonEvalType,
           udfDeterministic = udfDeterministic)
@@ -116,13 +132,17 @@ case class UserDefinedPythonTableFunction(
           case NamedArgumentExpression(_, _: FunctionTableSubqueryArgumentExpression) => true
           case _ => false
         }
+        val runAnalyzeInPython = (func: PythonFunction, exprs: Seq[Expression]) => {
+          val runner = new UserDefinedPythonTableFunctionAnalyzeRunner(func, exprs, tableArgs)
+          runner.runInPython()
+        }
         UnresolvedPolymorphicPythonUDTF(
           name = name,
           func = func,
           children = exprs,
           evalType = pythonEvalType,
           udfDeterministic = udfDeterministic,
-          resolveElementSchema = UserDefinedPythonTableFunction.analyzeInPython(_, _, tableArgs))
+          resolveElementMetadata = runAnalyzeInPython)
     }
     Generate(
       udtf,
@@ -141,122 +161,110 @@ case class UserDefinedPythonTableFunction(
   }
 }
 
-object UserDefinedPythonTableFunction {
+/**
+ * Runs the Python UDTF's `analyze` static method.
+ *
+ * When the Python UDTF is defined without a static return type,
+ * the analyzer will call this while resolving table-valued functions.
+ *
+ * This expects the Python UDTF to have `analyze` static method that take arguments:
+ *
+ * - The number and order of arguments are the same as the UDTF inputs
+ * - Each argument is an `AnalyzeArgument`, containing:
+ *   - dataType: DataType
+ *   - value: Any: if the argument is foldable; otherwise None
+ *   - isTable: bool: True if the argument is TABLE
+ *
+ * and that return an `AnalyzeResult`.
+ *
+ * It serializes/deserializes the data types via JSON,
+ * and the values for the case the argument is foldable are pickled.
+ *
+ * `AnalysisException` with the error class "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON"
+ * will be thrown when an exception is raised in Python.
+ */
+class UserDefinedPythonTableFunctionAnalyzeRunner(
+    func: PythonFunction,
+    exprs: Seq[Expression],
+    tableArgs: Seq[Boolean]) extends PythonPlannerRunner[PythonUDTFAnalyzeResult](func) {
 
-  private[this] val workerModule = "pyspark.sql.worker.analyze_udtf"
+  override val workerModule = "pyspark.sql.worker.analyze_udtf"
 
-  /**
-   * Runs the Python UDTF's `analyze` static method.
-   *
-   * When the Python UDTF is defined without a static return type,
-   * the analyzer will call this while resolving table-valued functions.
-   *
-   * This expects the Python UDTF to have `analyze` static method that take arguments:
-   *
-   * - The number and order of arguments are the same as the UDTF inputs
-   * - Each argument is an `AnalyzeArgument`, containing:
-   *   - data_type: DataType
-   *   - value: Any: if the argument is foldable; otherwise None
-   *   - is_table: bool: True if the argument is TABLE
-   *
-   * and that return an `AnalyzeResult`.
-   *
-   * It serializes/deserializes the data types via JSON,
-   * and the values for the case the argument is foldable are pickled.
-   *
-   * `AnalysisException` with the error class "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON"
-   * will be thrown when an exception is raised in Python.
-   */
-  def analyzeInPython(
-      func: PythonFunction, exprs: Seq[Expression], tableArgs: Seq[Boolean]): StructType = {
-    val env = SparkEnv.get
-    val bufferSize: Int = env.conf.get(BUFFER_SIZE)
-    val authSocketTimeout = env.conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
-    val reuseWorker = env.conf.get(PYTHON_WORKER_REUSE)
-    val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
+  override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
+    // Send Python UDTF
+    PythonWorkerUtils.writePythonFunction(func, dataOut)
 
-    val envVars = new HashMap[String, String](func.envVars)
-    val pythonExec = func.pythonExec
-    val pythonVer = func.pythonVer
-
-    if (reuseWorker) {
-      envVars.put("SPARK_REUSE_WORKER", "1")
-    }
-    if (simplifiedTraceback) {
-      envVars.put("SPARK_SIMPLIFIED_TRACEBACK", "1")
-    }
-    envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
-    envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
-
-    EvaluatePython.registerPicklers()
-    val pickler = new Pickler(/* useMemo = */ true,
-      /* valueCompare = */ false)
-
-    val (worker: Socket, _) =
-      env.createPythonWorker(pythonExec, workerModule, envVars.asScala.toMap)
-    var releasedOrClosed = false
-    try {
-      val dataOut =
-        new DataOutputStream(new BufferedOutputStream(worker.getOutputStream, bufferSize))
-      val dataIn = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
-
-      // Python version of driver
-      PythonRDD.writeUTF(pythonVer, dataOut)
-
-      // Send Python UDTF
-      dataOut.writeInt(func.command.length)
-      dataOut.write(func.command.toArray)
-
-      // Send arguments
-      dataOut.writeInt(exprs.length)
-      exprs.zip(tableArgs).foreach { case (expr, is_table) =>
-        PythonRDD.writeUTF(expr.dataType.json, dataOut)
-        if (expr.foldable) {
+    // Send arguments
+    dataOut.writeInt(exprs.length)
+    exprs.zip(tableArgs).foreach { case (expr, isTable) =>
+      PythonWorkerUtils.writeUTF(expr.dataType.json, dataOut)
+      val (key, value) = expr match {
+        case NamedArgumentExpression(k, v) => (Some(k), v)
+        case _ => (None, expr)
+      }
+      if (value.foldable) {
+        dataOut.writeBoolean(true)
+        val obj = pickler.dumps(EvaluatePython.toJava(value.eval(), value.dataType))
+        PythonWorkerUtils.writeBytes(obj, dataOut)
+      } else {
+        dataOut.writeBoolean(false)
+      }
+      dataOut.writeBoolean(isTable)
+      // If the expr is NamedArgumentExpression, send its name.
+      key match {
+        case Some(key) =>
           dataOut.writeBoolean(true)
-          val obj = pickler.dumps(EvaluatePython.toJava(expr.eval(), expr.dataType))
-          dataOut.writeInt(obj.length)
-          dataOut.write(obj)
-        } else {
-          dataOut.writeBoolean(false)
-        }
-        dataOut.writeBoolean(is_table)
-      }
-
-      dataOut.writeInt(SpecialLengths.END_OF_STREAM)
-      dataOut.flush()
-
-      // Receive the schema
-      val schema = dataIn.readInt() match {
-        case length if length >= 0 =>
-          val obj = new Array[Byte](length)
-          dataIn.readFully(obj)
-          DataType.fromJson(new String(obj, StandardCharsets.UTF_8)).asInstanceOf[StructType]
-
-        case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
-          val exLength = dataIn.readInt()
-          val obj = new Array[Byte](exLength)
-          dataIn.readFully(obj)
-          val msg = new String(obj, StandardCharsets.UTF_8)
-          throw QueryCompilationErrors.tableValuedFunctionFailedToAnalyseInPythonError(msg)
-      }
-
-      dataIn.readInt() match {
-        case SpecialLengths.END_OF_STREAM if reuseWorker =>
-          env.releasePythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
+          PythonWorkerUtils.writeUTF(key, dataOut)
         case _ =>
-          env.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
-      }
-      releasedOrClosed = true
-
-      schema
-    } catch {
-      case eof: EOFException =>
-        throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
-    } finally {
-      if (!releasedOrClosed) {
-        // An error happened. Force to close the worker.
-        env.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
+          dataOut.writeBoolean(false)
       }
     }
+  }
+
+  override protected def receiveFromPython(dataIn: DataInputStream): PythonUDTFAnalyzeResult = {
+    // Receive the schema or an exception raised in Python worker.
+    val length = dataIn.readInt()
+    if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryCompilationErrors.tableValuedFunctionFailedToAnalyseInPythonError(msg)
+    }
+
+    val schema = DataType.fromJson(
+      PythonWorkerUtils.readUTF(length, dataIn)).asInstanceOf[StructType]
+
+    // Receive the pickled AnalyzeResult buffer, if any.
+    val pickledAnalyzeResult: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
+
+    // Receive whether the "with single partition" property is requested.
+    val withSinglePartition = dataIn.readInt() == 1
+    // Receive the list of requested partitioning columns, if any.
+    val partitionByColumns = ArrayBuffer.empty[Expression]
+    val numPartitionByColumns = dataIn.readInt()
+    for (_ <- 0 until numPartitionByColumns) {
+      val columnName = PythonWorkerUtils.readUTF(dataIn)
+      partitionByColumns.append(UnresolvedAttribute(columnName))
+    }
+    // Receive the list of requested ordering columns, if any.
+    val orderBy = ArrayBuffer.empty[SortOrder]
+    val numOrderByItems = dataIn.readInt()
+    for (_ <- 0 until numOrderByItems) {
+      val columnName = PythonWorkerUtils.readUTF(dataIn)
+      val direction = if (dataIn.readInt() == 1) Ascending else Descending
+      val overrideNullsFirst = dataIn.readInt()
+      overrideNullsFirst match {
+        case 0 =>
+          orderBy.append(SortOrder(UnresolvedAttribute(columnName), direction))
+        case 1 => orderBy.append(
+          SortOrder(UnresolvedAttribute(columnName), direction, NullsFirst, Seq.empty))
+        case 2 => orderBy.append(
+          SortOrder(UnresolvedAttribute(columnName), direction, NullsLast, Seq.empty))
+      }
+    }
+    PythonUDTFAnalyzeResult(
+      schema = schema,
+      withSinglePartition = withSinglePartition,
+      partitionByExpressions = partitionByColumns.toSeq,
+      orderByExpressions = orderBy.toSeq,
+      pickledAnalyzeResult = pickledAnalyzeResult)
   }
 }

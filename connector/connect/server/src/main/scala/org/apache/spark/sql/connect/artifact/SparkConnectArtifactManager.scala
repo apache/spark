@@ -23,20 +23,22 @@ import java.nio.file.{Files, Path, Paths, StandardCopyOption}
 import java.util.concurrent.CopyOnWriteArrayList
 import javax.ws.rs.core.UriBuilder
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
+import io.grpc.Status
 import org.apache.commons.io.{FilenameUtils, FileUtils}
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
 import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.artifact.util.ArtifactUtils
 import org.apache.spark.sql.connect.config.Connect.CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.storage.{CacheId, StorageLevel}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ChildFirstURLClassLoader, StubClassLoader, Utils}
 
 /**
  * The Artifact Manager for the [[SparkConnectService]].
@@ -124,11 +126,18 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
     } else {
       val target = ArtifactUtils.concatenatePaths(artifactPath, remoteRelativePath)
       Files.createDirectories(target.getParent)
-      // Disallow overwriting non-classfile artifacts
+
+      // Disallow overwriting with modified version
       if (Files.exists(target)) {
-        throw new RuntimeException(
-          s"Duplicate Artifact: $remoteRelativePath. " +
+        // makes the query idempotent
+        if (FileUtils.contentEquals(target.toFile, serverLocalStagingPath.toFile)) {
+          return
+        }
+
+        throw Status.ALREADY_EXISTS
+          .withDescription(s"Duplicate Artifact: $remoteRelativePath. " +
             "Artifacts cannot be overwritten.")
+          .asRuntimeException()
       }
       Files.move(serverLocalStagingPath, target)
 
@@ -161,7 +170,41 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
    */
   def classloader: ClassLoader = {
     val urls = getSparkConnectAddedJars :+ classDir.toUri.toURL
-    new URLClassLoader(urls.toArray, Utils.getContextOrSparkClassLoader)
+    val prefixes = SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES)
+    val userClasspathFirst = SparkEnv.get.conf.get(EXECUTOR_USER_CLASS_PATH_FIRST)
+    val loader = if (prefixes.nonEmpty) {
+      // Two things you need to know about classloader for all of this to make sense:
+      // 1. A classloader needs to be able to fully define a class.
+      // 2. Classes are loaded lazily. Only when a class is used the classes it references are
+      //    loaded.
+      // This makes stubbing a bit more complicated then you'd expect. We cannot put the stubbing
+      // classloader as a fallback at the end of the loading process, because then classes that
+      // have been found in one of the parent classloaders and that contain a reference to a
+      // missing, to-be-stubbed missing class will still fail with classloading errors later on.
+      // The way we currently fix this is by making the stubbing class loader the last classloader
+      // it delegates to.
+      if (userClasspathFirst) {
+        // USER -> SYSTEM -> STUB
+        new ChildFirstURLClassLoader(
+          urls.toArray,
+          StubClassLoader(Utils.getContextOrSparkClassLoader, prefixes))
+      } else {
+        // SYSTEM -> USER -> STUB
+        new ChildFirstURLClassLoader(
+          urls.toArray,
+          StubClassLoader(null, prefixes),
+          Utils.getContextOrSparkClassLoader)
+      }
+    } else {
+      if (userClasspathFirst) {
+        new ChildFirstURLClassLoader(urls.toArray, Utils.getContextOrSparkClassLoader)
+      } else {
+        new URLClassLoader(urls.toArray, Utils.getContextOrSparkClassLoader)
+      }
+    }
+
+    logDebug(s"Using class loader: $loader, containing urls: $urls")
+    loader
   }
 
   /**
@@ -173,12 +216,14 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
         s"sessionId: ${sessionHolder.sessionId}")
 
     // Clean up added files
-    sessionHolder.session.sparkContext.addedFiles.remove(state.uuid)
-    sessionHolder.session.sparkContext.addedArchives.remove(state.uuid)
-    sessionHolder.session.sparkContext.addedJars.remove(state.uuid)
+    val fileserver = SparkEnv.get.rpcEnv.fileServer
+    val sparkContext = sessionHolder.session.sparkContext
+    sparkContext.addedFiles.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
+    sparkContext.addedArchives.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
+    sparkContext.addedJars.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeJar))
 
     // Clean up cached relations
-    val blockManager = sessionHolder.session.sparkContext.env.blockManager
+    val blockManager = sparkContext.env.blockManager
     blockManager.removeCache(sessionHolder.userId, sessionHolder.sessionId)
 
     // Clean up artifacts folder

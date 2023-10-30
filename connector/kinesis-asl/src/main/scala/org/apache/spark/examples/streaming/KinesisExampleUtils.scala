@@ -17,7 +17,7 @@
 
 package org.apache.spark.examples.streaming
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.amazonaws.regions.RegionUtils
 import com.amazonaws.services.kinesis.AmazonKinesis

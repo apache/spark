@@ -28,6 +28,7 @@ import java.nio.file.StandardOpenOption;
 
 import com.google.common.io.ByteStreams;
 import io.netty.channel.DefaultFileRegion;
+import io.netty.handler.stream.ChunkedStream;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 
@@ -135,6 +136,12 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
       FileChannel fileChannel = FileChannel.open(file.toPath(), StandardOpenOption.READ);
       return new DefaultFileRegion(fileChannel, offset, length);
     }
+  }
+
+  @Override
+  public Object convertToNettyForSsl() throws IOException {
+    // Cannot use zero-copy with HTTPS
+    return new ChunkedStream(createInputStream(), conf.sslShuffleChunkSize());
   }
 
   public File getFile() { return file; }

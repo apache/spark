@@ -18,29 +18,231 @@ package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
+import java.time.DateTimeException
 import java.util.Properties
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{SPARK_VERSION, SparkException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkUpgradeException}
+import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
-import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
-import org.apache.spark.sql.connect.client.util.SparkConnectServerUtils.port
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.sql.test.{IntegrationTestUtils, RemoteSparkSession, SQLHelper}
+import org.apache.spark.sql.test.SparkConnectServerUtils.port
 import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
+
+  test(s"throw SparkException with null filename in stack trace elements") {
+    withSQLConf("spark.sql.connect.enrichError.enabled" -> "true") {
+      val session = spark
+      import session.implicits._
+
+      val throwException =
+        udf((_: String) => {
+          val testError = new SparkException("test")
+          val stackTrace = testError.getStackTrace()
+          stackTrace(0) = new StackTraceElement(
+            stackTrace(0).getClassName,
+            stackTrace(0).getMethodName,
+            null,
+            stackTrace(0).getLineNumber)
+          testError.setStackTrace(stackTrace)
+          throw testError
+        })
+
+      val ex = intercept[SparkException] {
+        Seq("1").toDS().withColumn("udf_val", throwException($"value")).collect()
+      }
+
+      assert(ex.getCause.isInstanceOf[SparkException])
+      assert(ex.getCause.getStackTrace().length > 0)
+      assert(ex.getCause.getStackTrace()(0).getFileName == null)
+    }
+  }
+
+  for (enrichErrorEnabled <- Seq(false, true)) {
+    test(s"cause exception - ${enrichErrorEnabled}") {
+      withSQLConf("spark.sql.connect.enrichError.enabled" -> enrichErrorEnabled.toString) {
+        val ex = intercept[SparkUpgradeException] {
+          spark
+            .sql("""
+                |select from_json(
+                |  '{"d": "02-29"}',
+                |  'd date',
+                |  map('dateFormat', 'MM-dd'))
+                |""".stripMargin)
+            .collect()
+        }
+        if (enrichErrorEnabled) {
+          assert(ex.getCause.isInstanceOf[DateTimeException])
+        } else {
+          assert(ex.getCause == null)
+        }
+      }
+    }
+  }
+
+  test(s"throw SparkException with large cause exception") {
+    withSQLConf("spark.sql.connect.enrichError.enabled" -> "true") {
+      val session = spark
+      import session.implicits._
+
+      val throwException =
+        udf((_: String) => throw new SparkException("test" * 10000))
+
+      val ex = intercept[SparkException] {
+        Seq("1").toDS().withColumn("udf_val", throwException($"value")).collect()
+      }
+
+      assert(ex.getErrorClass != null)
+      assert(!ex.getMessageParameters.isEmpty)
+      assert(ex.getCause.isInstanceOf[SparkException])
+
+      val cause = ex.getCause.asInstanceOf[SparkException]
+      assert(cause.getErrorClass == null)
+      assert(cause.getMessageParameters.isEmpty)
+      assert(cause.getMessage.contains("test" * 10000))
+    }
+  }
+
+  for (isServerStackTraceEnabled <- Seq(false, true)) {
+    test(s"server-side stack trace is set in exceptions - ${isServerStackTraceEnabled}") {
+      withSQLConf(
+        "spark.sql.connect.serverStacktrace.enabled" -> isServerStackTraceEnabled.toString,
+        "spark.sql.pyspark.jvmStacktrace.enabled" -> "false") {
+        val ex = intercept[AnalysisException] {
+          spark.sql("select x").collect()
+        }
+        assert(ex.getErrorClass != null)
+        assert(!ex.messageParameters.isEmpty)
+        assert(ex.getSqlState != null)
+        assert(!ex.isInternalError)
+        assert(ex.getQueryContext.length == 1)
+        assert(ex.getQueryContext.head.startIndex() == 7)
+        assert(ex.getQueryContext.head.stopIndex() == 7)
+        assert(ex.getQueryContext.head.fragment() == "x")
+        assert(
+          ex.getStackTrace
+            .find(_.getClassName.contains("org.apache.spark.sql.catalyst.analysis.CheckAnalysis"))
+            .isDefined
+            == isServerStackTraceEnabled)
+      }
+    }
+  }
+
+  test("throw SparkArithmeticException") {
+    withSQLConf("spark.sql.ansi.enabled" -> "true") {
+      intercept[SparkArithmeticException] {
+        spark.sql("select 1/0").collect()
+      }
+    }
+  }
+
+  test("throw NoSuchDatabaseException") {
+    val ex = intercept[NoSuchDatabaseException] {
+      spark.sql("use database123")
+    }
+    assert(ex.getErrorClass != null)
+  }
+
+  test("throw NoSuchTableException") {
+    val ex = intercept[NoSuchTableException] {
+      spark.catalog.getTable("test_table")
+    }
+    assert(ex.getErrorClass != null)
+  }
+
+  test("throw NamespaceAlreadyExistsException") {
+    try {
+      spark.sql("create database test_db")
+      val ex = intercept[NamespaceAlreadyExistsException] {
+        spark.sql("create database test_db")
+      }
+      assert(ex.getErrorClass != null)
+    } finally {
+      spark.sql("drop database test_db")
+    }
+  }
+
+  test("throw TempTableAlreadyExistsException") {
+    try {
+      spark.sql("create temporary view test_view as select 1")
+      val ex = intercept[TempTableAlreadyExistsException] {
+        spark.sql("create temporary view test_view as select 1")
+      }
+      assert(ex.getErrorClass != null)
+    } finally {
+      spark.sql("drop view test_view")
+    }
+  }
+
+  test("throw TableAlreadyExistsException") {
+    withTable("testcat.test_table") {
+      spark.sql(s"create table testcat.test_table (id int)")
+      val ex = intercept[TableAlreadyExistsException] {
+        spark.sql(s"create table testcat.test_table (id int)")
+      }
+      assert(ex.getErrorClass != null)
+    }
+  }
+
+  test("throw ParseException") {
+    val ex = intercept[ParseException] {
+      spark.sql("selet 1").collect()
+    }
+    assert(ex.getErrorClass != null)
+    assert(!ex.messageParameters.isEmpty)
+    assert(ex.getSqlState != null)
+    assert(!ex.isInternalError)
+  }
+
+  test("spark deep recursion") {
+    var df = spark.range(1)
+    for (a <- 1 to 500) {
+      df = df.union(spark.range(a, a + 1))
+    }
+    assert(df.collect().length == 501)
+  }
+
+  test("handle unknown exception") {
+    var df = spark.range(1)
+    val limit = spark.conf.get("spark.connect.grpc.marshallerRecursionLimit").toInt + 1
+    for (a <- 1 to limit) {
+      df = df.union(spark.range(a, a + 1))
+    }
+    val ex = intercept[SparkException] {
+      df.collect()
+    }
+    assert(ex.getMessage.contains("io.grpc.StatusRuntimeException: UNKNOWN"))
+  }
+
+  test("many tables") {
+    withSQLConf("spark.sql.execution.arrow.maxRecordsPerBatch" -> "10") {
+      val numTables = 20
+      try {
+        for (i <- 0 to numTables) {
+          spark.sql(s"create table testcat.table${i} (id int)")
+        }
+        assert(spark.sql("show tables in testcat").collect().length == numTables + 1)
+      } finally {
+        for (i <- 0 to numTables) {
+          spark.sql(s"drop table if exists testcat.table${i}")
+        }
+      }
+    }
+  }
 
   // Spark Result
   test("spark result schema") {
@@ -63,7 +265,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     withTable("test_martin") {
       // Fails, because table does not exist.
-      assertThrows[SparkException] {
+      assertThrows[AnalysisException] {
         spark.sql("select * from test_martin").collect()
       }
       // Execute eager, DML
@@ -152,7 +354,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
             StructField("job", StringType) :: Nil))
       .csv(testDataPath.toString)
     // Failed because the path cannot be provided both via option and load method (csv).
-    assertThrows[SparkException] {
+    assertThrows[AnalysisException] {
       df.collect()
     }
   }
@@ -230,18 +432,16 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
   test("write jdbc") {
     assume(IntegrationTestUtils.isSparkHiveJarAvailable)
-    if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-      val url = "jdbc:derby:memory:1234"
-      val table = "t1"
-      try {
-        spark.range(10).write.jdbc(url = s"$url;create=true", table, new Properties())
-        val result = spark.read.jdbc(url = url, table, new Properties()).collect()
-        assert(result.length == 10)
-      } finally {
-        // clean up
-        assertThrows[SparkException] {
-          spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
-        }
+    val url = "jdbc:derby:memory:1234"
+    val table = "t1"
+    try {
+      spark.range(10).write.jdbc(url = s"$url;create=true", table, new Properties())
+      val result = spark.read.jdbc(url = url, table, new Properties()).collect()
+      assert(result.length == 10)
+    } finally {
+      // clean up
+      assertThrows[SparkException] {
+        spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
       }
     }
   }
@@ -356,7 +556,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     val df = spark.range(10)
     val outputFolderPath = Files.createTempDirectory("output").toAbsolutePath
     // Failed because the path cannot be provided both via option and save method.
-    assertThrows[SparkException] {
+    assertThrows[AnalysisException] {
       df.write.option("path", outputFolderPath.toString).save(outputFolderPath.toString)
     }
   }
@@ -450,8 +650,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("Dataset result collection") {
-    def checkResult(rows: TraversableOnce[java.lang.Long], expectedValues: Long*): Unit = {
-      rows.toIterator.zipAll(expectedValues.iterator, null, null).foreach {
+    def checkResult(rows: IterableOnce[java.lang.Long], expectedValues: Long*): Unit = {
+      rows.iterator.zipAll(expectedValues.iterator, null, null).foreach {
         case (actual, expected) => assert(actual === expected)
       }
     }
@@ -730,7 +930,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
   private def checkSameResult[E](expected: scala.collection.Seq[E], dataset: Dataset[E]): Unit = {
     dataset.withResult { result =>
-      assert(expected === result.iterator.asScala.toBuffer)
+      assert(expected === result.iterator.toBuffer)
     }
   }
 
@@ -811,9 +1011,9 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(df1.sameSemantics(df3) === false)
     assert(df3.sameSemantics(df4) === true)
 
-    assert(df1.semanticHash === df2.semanticHash)
-    assert(df1.semanticHash !== df3.semanticHash)
-    assert(df3.semanticHash === df4.semanticHash)
+    assert(df1.semanticHash() === df2.semanticHash())
+    assert(df1.semanticHash() !== df3.semanticHash())
+    assert(df3.semanticHash() === df4.semanticHash())
   }
 
   test("toJSON") {
@@ -929,7 +1129,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
   test("SparkSession.createDataFrame - large data set") {
     val threshold = 1024 * 1024
-    withSQLConf(SQLConf.LOCAL_RELATION_CACHE_THRESHOLD.key -> threshold.toString) {
+    withSQLConf(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY -> threshold.toString) {
       val count = 2
       val suffix = "abcdef"
       val str = scala.util.Random.alphanumeric.take(1024 * 1024).mkString + suffix
@@ -953,6 +1153,9 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(result2.length == 1)
     assert(result2(0).getInt(0) === 1)
     assert(result2(0).getString(1) === "abc")
+
+    val result3 = spark.sql("select element_at(?, 1)", Array(array(lit(1)))).collect()
+    assert(result3.length == 1 && result3(0).getInt(0) === 1)
   }
 
   test("sql() with named parameters") {
@@ -964,6 +1167,10 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
     val result2 = spark.sql("select :c0 limit :l0", Map("l0" -> 1, "c0" -> "abc")).collect()
     assert(result2.length == 1 && result2(0).getString(0) === "abc")
+
+    val result3 =
+      spark.sql("select element_at(:m, 'a')", Map("m" -> map(lit("a"), lit(1)))).collect()
+    assert(result3.length == 1 && result3(0).getInt(0) === 1)
   }
 
   test("joinWith, flat schema") {
@@ -1151,6 +1358,66 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     val ds2 = Seq(Some((1, 2)), Some((2, 3)), None).toDS().as("b")
     val joined = ds1.joinWith(ds2, $"a.value._1" === $"b.value._2", "inner")
     checkSameResult(Seq((Some((2, 3)), Some((1, 2)))), joined)
+  }
+
+  test("dropDuplicatesWithinWatermark not supported in batch DataFrame") {
+    def testAndVerify(df: Dataset[_]): Unit = {
+      val exc = intercept[AnalysisException] {
+        df.write.format("noop").mode(SaveMode.Append).save()
+      }
+
+      assert(exc.getMessage.contains("dropDuplicatesWithinWatermark is not supported"))
+      assert(exc.getMessage.contains("batch DataFrames/DataSets"))
+    }
+
+    val result = spark.range(10).dropDuplicatesWithinWatermark()
+    testAndVerify(result)
+
+    val result2 = spark
+      .range(10)
+      .withColumn("newcol", col("id"))
+      .dropDuplicatesWithinWatermark("newcol")
+    testAndVerify(result2)
+  }
+
+  test("Dataset.metadataColumn") {
+    val session: SparkSession = spark
+    import session.implicits._
+    withTempPath { file =>
+      val path = file.getAbsoluteFile.toURI.toString
+      spark
+        .range(0, 100, 1, 1)
+        .withColumn("_metadata", concat(lit("lol_"), col("id")))
+        .write
+        .parquet(file.toPath.toAbsolutePath.toString)
+
+      val df = spark.read.parquet(path)
+      val (filepath, rc) = df
+        .groupBy(df.metadataColumn("_metadata").getField("file_path"))
+        .count()
+        .as[(String, Long)]
+        .head()
+      assert(filepath.startsWith(path))
+      assert(rc == 100)
+    }
+  }
+
+  test("SPARK-45216: Non-deterministic functions with seed") {
+    val session: SparkSession = spark
+    import session.implicits._
+
+    val df = Seq(Array.range(0, 10)).toDF("a")
+
+    val r = rand()
+    val r2 = randn()
+    val r3 = random()
+    val r4 = uuid()
+    val r5 = shuffle(col("a"))
+    df.select(r, r.as("r"), r2, r2.as("r2"), r3, r3.as("r3"), r4, r4.as("r4"), r5, r5.as("r5"))
+      .collect()
+      .foreach { row =>
+        (0 until 5).foreach(i => assert(row.get(i * 2) === row.get(i * 2 + 1)))
+      }
   }
 }
 

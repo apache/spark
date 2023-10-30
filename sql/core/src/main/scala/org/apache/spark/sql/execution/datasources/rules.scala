@@ -284,10 +284,11 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       }
   }
 
-  private def fallBackV2ToV1(cls: Class[_]): Class[_] = cls.newInstance match {
-    case f: FileDataSourceV2 => f.fallbackFileFormat
-    case _ => cls
-  }
+  private def fallBackV2ToV1(cls: Class[_]): Class[_] =
+    cls.getDeclaredConstructor().newInstance() match {
+      case f: FileDataSourceV2 => f.fallbackFileFormat
+      case _ => cls
+    }
 
   private def normalizeCatalogTable(schema: StructType, table: CatalogTable): CatalogTable = {
     SchemaUtils.checkSchemaColumnNameDuplication(
@@ -403,8 +404,15 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
       insert.query
     }
     val newQuery = try {
+      val byName = hasColumnList || insert.byName
+      TableOutputResolver.suitableForByNameCheck(byName, expected = expectedColumns,
+        queryOutput = query.output)
       TableOutputResolver.resolveOutputColumns(
-        tblName, expectedColumns, query, byName = hasColumnList || insert.byName, conf,
+        tblName,
+        expectedColumns,
+        query,
+        byName,
+        conf,
         supportColDefaultValue = true)
     } catch {
       case e: AnalysisException if staticPartCols.nonEmpty &&

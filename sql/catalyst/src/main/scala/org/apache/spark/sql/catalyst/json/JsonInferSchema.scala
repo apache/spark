@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.json
 
-import java.io.CharConversionException
+import java.io.{CharConversionException, FileNotFoundException, IOException}
 import java.nio.charset.MalformedInputException
 import java.util.Comparator
 
@@ -25,6 +25,7 @@ import scala.util.control.Exception.allCatch
 
 import com.fasterxml.jackson.core._
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
@@ -32,11 +33,11 @@ import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
+private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
@@ -52,6 +53,9 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true,
     forTimestampNTZ = true)
+
+  private val ignoreCorruptFiles = options.ignoreCorruptFiles
+  private val ignoreMissingFiles = options.ignoreMissingFiles
 
   private def handleJsonErrorsByParseMode(parseMode: ParseMode,
       columnNameOfCorruptRecord: String, e: Throwable): Option[StructType] = {
@@ -88,8 +92,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
             Some(inferField(parser))
           }
         } catch {
-          case e @ (_: RuntimeException | _: JsonProcessingException |
-                    _: MalformedInputException) =>
+          case e @ (_: JsonProcessingException | _: MalformedInputException) =>
             handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, e)
           case e: CharConversionException if options.encoding.isEmpty =>
             val msg =
@@ -99,6 +102,13 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
             val wrappedCharException = new CharConversionException(msg)
             wrappedCharException.initCause(e)
             handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, wrappedCharException)
+          case e: FileNotFoundException if ignoreMissingFiles =>
+            logWarning("Skipped missing file", e)
+            Some(StructType(Nil))
+          case e: FileNotFoundException if !ignoreMissingFiles => throw e
+          case e @ (_: IOException | _: RuntimeException) if ignoreCorruptFiles =>
+            logWarning("Skipped the rest of the content in the corrupted file", e)
+            Some(StructType(Nil))
         }
       }.reduceOption(typeMerger).iterator
     }
@@ -148,11 +158,13 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
           val bigDecimal = decimalParser(field)
             DecimalType(bigDecimal.precision, bigDecimal.scale)
         }
+        val timestampType = SQLConf.get.timestampType
         if (options.prefersDecimal && decimalTry.isDefined) {
           decimalTry.get
-        } else if (options.inferTimestamp &&
+        } else if (options.inferTimestamp && (SQLConf.get.legacyTimeParserPolicy ==
+          LegacyBehaviorPolicy.LEGACY || timestampType == TimestampNTZType) &&
             timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
-          SQLConf.get.timestampType
+          timestampType
         } else if (options.inferTimestamp &&
             timestampFormatter.parseOptional(field).isDefined) {
           TimestampType

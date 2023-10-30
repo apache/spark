@@ -17,14 +17,14 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.DataOutputStream
-import java.net.Socket
 
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonRDD}
+import org.apache.spark.api.python.{BasePythonRunner, PythonRDD, PythonWorker}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.arrow
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
@@ -48,17 +48,13 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
   protected def pythonMetrics: Map[String, SQLMetric]
 
-  protected def writeIteratorToArrowStream(
+  protected def writeNextInputToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
       dataOut: DataOutputStream,
-      inputIterator: Iterator[IN]): Unit
+      inputIterator: Iterator[IN]): Boolean
 
-  protected def writeUDF(
-      dataOut: DataOutputStream,
-      funcs: Seq[ChainedPythonFunctions],
-      argOffsets: Array[Array[Int]]): Unit =
-    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
+  protected def writeUDF(dataOut: DataOutputStream): Unit
 
   protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {
     // Write config for the worker as a number of key -> value pairs of strings
@@ -68,51 +64,47 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
       PythonRDD.writeUTF(v, stream)
     }
   }
+  private val arrowSchema = ArrowUtils.toArrowSchema(
+    schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
+  private val allocator =
+    ArrowUtils.rootAllocator.newChildAllocator(s"stdout writer for $pythonExec", 0, Long.MaxValue)
+  protected val root = VectorSchemaRoot.create(arrowSchema, allocator)
+  protected var writer: ArrowStreamWriter = _
 
-  protected override def newWriterThread(
+protected def close(): Unit = {
+  Utils.tryWithSafeFinally {
+    // end writes footer to the output stream and doesn't clean any resources.
+    // It could throw exception if the output stream is closed, so it should be
+    // in the try block.
+    writer.end()
+  } {
+    root.close()
+    allocator.close()
+  }
+}
+
+  protected override def newWriter(
       env: SparkEnv,
-      worker: Socket,
+      worker: PythonWorker,
       inputIterator: Iterator[IN],
       partitionIndex: Int,
-      context: TaskContext): WriterThread = {
-    new WriterThread(env, worker, inputIterator, partitionIndex, context) {
+      context: TaskContext): Writer = {
+    new Writer(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
         handleMetadataBeforeExec(dataOut)
-        writeUDF(dataOut, funcs, argOffsets)
+        writeUDF(dataOut)
       }
 
-      protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
-        val arrowSchema = ArrowUtils.toArrowSchema(
-          schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
-        val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-          s"stdout writer for $pythonExec", 0, Long.MaxValue)
-        val root = VectorSchemaRoot.create(arrowSchema, allocator)
+      override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
 
-        Utils.tryWithSafeFinally {
-          val writer = new ArrowStreamWriter(root, null, dataOut)
+        if (writer == null) {
+          writer = new ArrowStreamWriter(root, null, dataOut)
           writer.start()
-
-          writeIteratorToArrowStream(root, writer, dataOut, inputIterator)
-
-          // end writes footer to the output stream and doesn't clean any resources.
-          // It could throw exception if the output stream is closed, so it should be
-          // in the try block.
-          writer.end()
-        } {
-          // If we close root and allocator in TaskCompletionListener, there could be a race
-          // condition where the writer thread keeps writing to the VectorSchemaRoot while
-          // it's being closed by the TaskCompletion listener.
-          // Closing root and allocator here is cleaner because root and allocator is owned
-          // by the writer thread and is only visible to the writer thread.
-          //
-          // If the writer thread is interrupted by TaskCompletionListener, it should either
-          // (1) in the try block, in which case it will get an InterruptedException when
-          // performing io, and goes into the finally block or (2) in the finally block,
-          // in which case it will ignore the interruption and close the resources.
-          root.close()
-          allocator.close()
         }
+
+        assert(writer != null)
+        writeNextInputToArrowStream(root, writer, dataOut, inputIterator)
       }
     }
   }
@@ -120,15 +112,15 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
 private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[InternalRow]] {
   self: BasePythonRunner[Iterator[InternalRow], _] =>
+  private val arrowWriter: arrow.ArrowWriter = ArrowWriter.create(root)
 
-  protected def writeIteratorToArrowStream(
+  protected def writeNextInputToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
       dataOut: DataOutputStream,
-      inputIterator: Iterator[Iterator[InternalRow]]): Unit = {
-    val arrowWriter = ArrowWriter.create(root)
+      inputIterator: Iterator[Iterator[InternalRow]]): Boolean = {
 
-    while (inputIterator.hasNext) {
+    if (inputIterator.hasNext) {
       val startData = dataOut.size()
       val nextBatch = inputIterator.next()
 
@@ -141,6 +133,10 @@ private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[In
       arrowWriter.reset()
       val deltaData = dataOut.size() - startData
       pythonMetrics("pythonDataSent") += deltaData
+      true
+    } else {
+      super[PythonArrowInput].close()
+      false
     }
   }
 }

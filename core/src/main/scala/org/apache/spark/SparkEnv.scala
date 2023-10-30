@@ -18,19 +18,18 @@
 package org.apache.spark
 
 import java.io.File
-import java.net.Socket
 import java.util.Locale
 
-import scala.collection.JavaConverters._
 import scala.collection.concurrent
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.Properties
 
 import com.google.common.cache.CacheBuilder
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.api.python.PythonWorkerFactory
+import org.apache.spark.api.python.{PythonWorker, PythonWorkerFactory}
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.ExecutorBackend
 import org.apache.spark.internal.{config, Logging}
@@ -129,7 +128,7 @@ class SparkEnv (
       pythonExec: String,
       workerModule: String,
       daemonModule: String,
-      envVars: Map[String, String]): (java.net.Socket, Option[Int]) = {
+      envVars: Map[String, String]): (PythonWorker, Option[Long]) = {
     synchronized {
       val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
       pythonWorkers.getOrElseUpdate(key,
@@ -140,7 +139,7 @@ class SparkEnv (
   private[spark] def createPythonWorker(
       pythonExec: String,
       workerModule: String,
-      envVars: Map[String, String]): (java.net.Socket, Option[Int]) = {
+      envVars: Map[String, String]): (PythonWorker, Option[Long]) = {
     createPythonWorker(
       pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars)
   }
@@ -150,7 +149,7 @@ class SparkEnv (
       workerModule: String,
       daemonModule: String,
       envVars: Map[String, String],
-      worker: Socket): Unit = {
+      worker: PythonWorker): Unit = {
     synchronized {
       val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
       pythonWorkers.get(key).foreach(_.stopWorker(worker))
@@ -161,7 +160,7 @@ class SparkEnv (
       pythonExec: String,
       workerModule: String,
       envVars: Map[String, String],
-      worker: Socket): Unit = {
+      worker: PythonWorker): Unit = {
     destroyPythonWorker(
       pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, worker)
   }
@@ -171,7 +170,7 @@ class SparkEnv (
       workerModule: String,
       daemonModule: String,
       envVars: Map[String, String],
-      worker: Socket): Unit = {
+      worker: PythonWorker): Unit = {
     synchronized {
       val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
       pythonWorkers.get(key).foreach(_.releaseWorker(worker))
@@ -182,7 +181,7 @@ class SparkEnv (
       pythonExec: String,
       workerModule: String,
       envVars: Map[String, String],
-      worker: Socket): Unit = {
+      worker: PythonWorker): Unit = {
     releasePythonWorker(
       pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, worker)
   }
@@ -309,7 +308,7 @@ object SparkEnv extends Logging {
     }
 
     ioEncryptionKey.foreach { _ =>
-      if (!securityManager.isEncryptionEnabled()) {
+      if (!(securityManager.isEncryptionEnabled() || securityManager.isSslRpcEnabled())) {
         logWarning("I/O encryption enabled without RPC encryption: keys will be visible on the " +
           "wire.")
       }
@@ -375,7 +374,12 @@ object SparkEnv extends Logging {
     }
 
     val externalShuffleClient = if (conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
-      val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores)
+      val transConf = SparkTransportConf.fromSparkConf(
+        conf,
+        "shuffle",
+        numUsableCores,
+        sslOptions = Some(securityManager.getRpcSSLOptions())
+      )
       Some(new ExternalBlockStoreClient(transConf, securityManager,
         securityManager.isAuthenticationEnabled(), conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT)))
     } else {

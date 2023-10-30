@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 import unittest
-from distutils.version import LooseVersion
 
 import pandas as pd
 
@@ -40,10 +39,6 @@ class GroupbyAggregateMixin:
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-44289): Enable GroupbyAggregateTests.test_aggregate for pandas 2.0.0.",
-    )
     def test_aggregate(self):
         pdf = pd.DataFrame(
             {"A": [1, 1, 2, 2], "B": [1, 2, 3, 4], "C": [0.362, 0.227, 1.267, -0.562]}
@@ -173,12 +168,8 @@ class GroupbyAggregateMixin:
         stats_psdf = psdf.groupby(10).agg({20: ["min", "max"], 30: "sum"})
         stats_pdf = pdf.groupby(10).agg({20: ["min", "max"], 30: "sum"})
         self.assert_eq(
-            stats_psdf.sort_values(by=[(20, "min"), (20, "max"), (30, "sum")]).reset_index(
-                drop=True
-            ),
-            stats_pdf.sort_values(by=[(20, "min"), (20, "max"), (30, "sum")]).reset_index(
-                drop=True
-            ),
+            stats_psdf.reset_index(drop=True),
+            stats_pdf.reset_index(drop=True),
         )
 
     def test_aggregate_func_str_list(self):
@@ -194,7 +185,6 @@ class GroupbyAggregateMixin:
 
         agg_funcs = ["max", "min", ["min", "max"]]
         for aggfunc in agg_funcs:
-
             # Since in Koalas groupby, the order of rows might be different
             # so sort on index to ensure they have same output
             sorted_agg_psdf = psdf.groupby("kind").agg(aggfunc).sort_index()

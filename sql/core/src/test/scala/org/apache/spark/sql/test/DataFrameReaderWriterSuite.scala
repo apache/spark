@@ -21,7 +21,7 @@ import java.io.File
 import java.util.{Locale, Random}
 import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -32,7 +32,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type.Repetition
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkContext, SparkException, TestUtils}
+import org.apache.spark.{SparkContext, TestUtils}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -252,7 +252,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
   }
 
   test("SPARK-32364: later option should override earlier options for save()") {
-    Seq(1).toDF.write
+    Seq(1).toDF().write
       .format("org.apache.spark.sql.test")
       .option("paTh", "1")
       .option("PATH", "2")
@@ -264,7 +264,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
 
     withClue("SPARK-32516: legacy path option behavior") {
       withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true") {
-        Seq(1).toDF.write
+        Seq(1).toDF().write
           .format("org.apache.spark.sql.test")
           .option("paTh", "1")
           .option("PATH", "2")
@@ -277,7 +277,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
   }
 
   test("pass partitionBy as options") {
-    Seq(1).toDF.write
+    Seq(1).toDF().write
       .format("org.apache.spark.sql.test")
       .partitionBy("col1", "col2")
       .save()
@@ -633,12 +633,12 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     testRead(Option(dir).map(spark.read.text).get, data, textSchema)
 
     // Reader, with user specified schema, should just apply user schema on the file data
-    val e = intercept[SparkException] { spark.read.schema(userSchema).textFile() }
+    val e = intercept[AnalysisException] { spark.read.schema(userSchema).textFile() }
     assert(e.getMessage.toLowerCase(Locale.ROOT).contains(
       "user specified schema not supported"))
-    intercept[SparkException] { spark.read.schema(userSchema).textFile(dir) }
-    intercept[SparkException] { spark.read.schema(userSchema).textFile(dir, dir) }
-    intercept[SparkException] { spark.read.schema(userSchema).textFile(Seq(dir, dir): _*) }
+    intercept[AnalysisException] { spark.read.schema(userSchema).textFile(dir) }
+    intercept[AnalysisException] { spark.read.schema(userSchema).textFile(dir, dir) }
+    intercept[AnalysisException] { spark.read.schema(userSchema).textFile(Seq(dir, dir): _*) }
   }
 
   test("csv - API and behavior regarding schema") {
@@ -969,7 +969,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
   test("SPARK-16848: table API throws an exception for user specified schema") {
     withTable("t") {
       val schema = StructType(StructField("a", StringType) :: Nil)
-      val e = intercept[SparkException] {
+      val e = intercept[AnalysisException] {
         spark.read.schema(schema).table("t")
       }.getMessage
       assert(e.contains("User specified schema not supported with `table`"))
@@ -1212,7 +1212,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true") {
       withTempDir { dir =>
         val path = dir.getCanonicalPath
-        Seq(1).toDF.write.mode("overwrite").parquet(path)
+        Seq(1).toDF().write.mode("overwrite").parquet(path)
 
         // When there is one path parameter to load(), "path" option is overwritten.
         checkAnswer(spark.read.format("parquet").option("path", path).load(path), Row(1))
@@ -1239,7 +1239,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         "Either remove the path option, or call save() without the parameter"))
     }
 
-    val df = Seq(1).toDF
+    val df = Seq(1).toDF()
     val path = "tmp"
     verifyLoadFails(df.write.option("path", path).parquet(path))
     verifyLoadFails(df.write.option("path", path).parquet(""))

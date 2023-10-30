@@ -314,7 +314,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
           isTemporary = true)
 
       case _ =>
-        val catalogPath = (currentCatalog +:
+        val catalogPath = (currentCatalog() +:
           sparkSession.sessionState.catalogManager.currentNamespace).mkString(".")
         throw QueryCompilationErrors.unresolvedRoutineError(ident, Seq(catalogPath), plan.origin)
     }
@@ -746,7 +746,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     val multiPartIdent = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     sparkSession.sessionState.executePlan(
       RecoverPartitions(
-        UnresolvedTable(multiPartIdent, "recoverPartitions()", None))).toRdd
+        UnresolvedTable(multiPartIdent, "recoverPartitions()"))).toRdd
   }
 
   /**
@@ -760,13 +760,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Caches the specified table or view in-memory.
+   * Persist the specified table or view with the default storage level,
    *
    * @group cachemgmt
    * @since 2.0.0
    */
   override def cacheTable(tableName: String): Unit = {
-    sparkSession.sharedState.cacheManager.cacheQuery(sparkSession.table(tableName), Some(tableName))
+    cacheTable(tableName, sparkSession.sessionState.conf.defaultCacheStorageLevel)
   }
 
   /**

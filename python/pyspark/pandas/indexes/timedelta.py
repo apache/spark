@@ -14,11 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import warnings
 from typing import cast, no_type_check, Any
 from functools import partial
 
 import pandas as pd
 from pandas.api.types import is_hashable  # type: ignore[attr-defined]
+import numpy as np
 
 from pyspark import pandas as ps
 from pyspark._globals import _NoValue
@@ -99,6 +101,12 @@ class TimedeltaIndex(Index):
         copy=False,
         name=None,
     ) -> "TimedeltaIndex":
+        if closed is not None:
+            warnings.warn(
+                "The 'closed' keyword in TimedeltaIndex construction is deprecated "
+                "and will be removed in a future version.",
+                FutureWarning,
+            )
         if not is_hashable(name):
             raise TypeError("Index.name must be a hashable type")
 
@@ -136,7 +144,7 @@ class TimedeltaIndex(Index):
         Number of days for each element.
         """
 
-        def pandas_days(x) -> int:  # type: ignore[no-untyped-def]
+        def pandas_days(x) -> np.int64:  # type: ignore[no-untyped-def]
             return x.days
 
         return Index(self.to_series().transform(pandas_days))

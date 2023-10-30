@@ -19,8 +19,8 @@ package org.apache.spark.ml
 
 import java.{util => ju}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.json4s._
@@ -307,7 +307,7 @@ class PipelineModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = instrumented(instr =>
       instr.withTransformEvent(this, dataset) {
     transformSchema(dataset.schema, logging = true)
-    stages.foldLeft(dataset.toDF)((cur, transformer) =>
+    stages.foldLeft(dataset.toDF())((cur, transformer) =>
       instr.withTransformEvent(transformer, cur)(transformer.transform(cur)))
   })
 

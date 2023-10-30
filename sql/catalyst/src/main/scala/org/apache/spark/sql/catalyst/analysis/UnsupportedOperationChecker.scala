@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, MonotonicallyIncreasingID, SessionWindow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
@@ -550,7 +551,7 @@ object UnsupportedOperationChecker extends Logging {
   }
 
   private def throwError(msg: String)(implicit operator: LogicalPlan): Nothing = {
-    throw new AnalysisException(
+    throw new ExtendedAnalysisException(
       msg, operator.origin.line, operator.origin.startPosition, Some(operator))
   }
 

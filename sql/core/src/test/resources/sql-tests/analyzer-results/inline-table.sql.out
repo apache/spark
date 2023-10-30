@@ -100,6 +100,7 @@ select * from values ("one", rand(5)), ("two", 3.0D) as data(a, b)
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "sqlState" : "42000",
   "messageParameters" : {
     "expr" : "\"rand(5)\""
   },
@@ -119,6 +120,7 @@ select * from values ("one", 2.0), ("two") as data(a, b)
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INLINE_TABLE.NUM_COLUMNS_MISMATCH",
+  "sqlState" : "42000",
   "messageParameters" : {
     "actualNumCols" : "1",
     "expectedNumCols" : "2",
@@ -140,6 +142,7 @@ select * from values ("one", array(0, 1)), ("two", struct(1, 2)) as data(a, b)
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INLINE_TABLE.INCOMPATIBLE_TYPES_IN_INLINE_TABLE",
+  "sqlState" : "42000",
   "messageParameters" : {
     "colName" : "`b`"
   },
@@ -159,6 +162,7 @@ select * from values ("one"), ("two") as data(a, b)
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INLINE_TABLE.NUM_COLUMNS_MISMATCH",
+  "sqlState" : "42000",
   "messageParameters" : {
     "actualNumCols" : "1",
     "expectedNumCols" : "2",
@@ -201,6 +205,7 @@ select * from values ("one", count(1)), ("two", 2) as data(a, b)
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "sqlState" : "42000",
   "messageParameters" : {
     "expr" : "\"count(1)\""
   },
@@ -220,3 +225,24 @@ select * from values (timestamp('1991-12-06 00:00:00.0'), array(timestamp('1991-
 Project [a#x, b#x]
 +- SubqueryAlias data
    +- LocalRelation [a#x, b#x]
+
+
+-- !query
+select * from values (try_add(5, 0))
+-- !query analysis
+Project [col1#x]
++- LocalRelation [col1#x]
+
+
+-- !query
+select * from values (try_divide(5, 0))
+-- !query analysis
+Project [col1#x]
++- LocalRelation [col1#x]
+
+
+-- !query
+select * from values (10 + try_divide(5, 0))
+-- !query analysis
+Project [col1#x]
++- LocalRelation [col1#x]

@@ -602,23 +602,9 @@ WHERE  t1a IN (SELECT t2a
                SELECT t3a
                FROM   t3)
 -- !query schema
-struct<>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (t2b#x = outer(t1b#x))\n+- SubqueryAlias t2\n   +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])\n      +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n         +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n            +- SubqueryAlias t2\n               +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 35,
-    "stopIndex" : 100,
-    "fragment" : "SELECT t2a\n               FROM   t2\n               WHERE t2b = t1b"
-  } ]
-}
+val1b	8	16	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
 
 
 -- !query
@@ -631,23 +617,9 @@ WHERE  t1a IN (SELECT t2a
                SELECT t3a
                FROM   t3)
 -- !query schema
-struct<>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (t2b#x = outer(t1b#x))\n+- SubqueryAlias t2\n   +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])\n      +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n         +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n            +- SubqueryAlias t2\n               +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 35,
-    "stopIndex" : 100,
-    "fragment" : "SELECT t2a\n               FROM   t2\n               WHERE t2b = t1b"
-  } ]
-}
+val1b	8	16	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
 
 
 -- !query
@@ -660,23 +632,9 @@ WHERE  t1a IN (SELECT t2a
                SELECT t3a
                FROM   t3)
 -- !query schema
-struct<>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (t2b#x = outer(t1b#x))\n+- SubqueryAlias t2\n   +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])\n      +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n         +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n            +- SubqueryAlias t2\n               +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 35,
-    "stopIndex" : 100,
-    "fragment" : "SELECT t2a\n               FROM   t2\n               WHERE t2b = t1b"
-  } ]
-}
+val1b	8	16	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
 
 
 -- !query
@@ -689,23 +647,9 @@ WHERE  t1a IN (SELECT t2a
                SELECT t3a
                FROM   t3)
 -- !query schema
-struct<>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (t2b#x = outer(t1b#x))\n+- SubqueryAlias t2\n   +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])\n      +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n         +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n            +- SubqueryAlias t2\n               +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 35,
-    "stopIndex" : 100,
-    "fragment" : "SELECT t2a\n               FROM   t2\n               WHERE t2b = t1b"
-  } ]
-}
+val1b	8	16	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
 
 
 -- !query
@@ -718,23 +662,9 @@ WHERE  t1a IN (SELECT t2a
                SELECT t3a
                FROM   t3)
 -- !query schema
-struct<>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (t2b#x = outer(t1b#x))\n+- SubqueryAlias t2\n   +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])\n      +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n         +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n            +- SubqueryAlias t2\n               +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 35,
-    "stopIndex" : 100,
-    "fragment" : "SELECT t2a\n               FROM   t2\n               WHERE t2b = t1b"
-  } ]
-}
+
 
 
 -- !query
@@ -747,23 +677,9 @@ WHERE  t1a IN (SELECT t2a
                SELECT t3a
                FROM   t3)
 -- !query schema
-struct<>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (t2b#x = outer(t1b#x))\n+- SubqueryAlias t2\n   +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])\n      +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n         +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n            +- SubqueryAlias t2\n               +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 35,
-    "stopIndex" : 100,
-    "fragment" : "SELECT t2a\n               FROM   t2\n               WHERE t2b = t1b"
-  } ]
-}
+
 
 
 -- !query
@@ -776,23 +692,19 @@ WHERE  t1a NOT IN (SELECT t2a
                SELECT t3a
                FROM   t3)
 -- !query schema
-struct<>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (t2b#x = outer(t1b#x))\n+- SubqueryAlias t2\n   +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])\n      +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n         +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n            +- SubqueryAlias t2\n               +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 39,
-    "stopIndex" : 104,
-    "fragment" : "SELECT t2a\n               FROM   t2\n               WHERE t2b = t1b"
-  } ]
-}
+val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
+val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04
+val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:00:00	2014-04-04
+val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:02:00.001	2014-04-04
+val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
+val1d	10	NULL	12	17.0	25.0	2600	2015-05-04 01:01:00	2015-05-04
+val1d	NULL	16	19	17.0	25.0	2600	2014-07-04 01:02:00.001	NULL
+val1d	NULL	16	22	17.0	25.0	2600	2014-06-04 01:01:00	NULL
+val1e	10	NULL	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
+val1e	10	NULL	19	17.0	25.0	2600	2014-09-04 01:02:00.001	2014-09-04
+val1e	10	NULL	25	17.0	25.0	2600	2014-08-04 01:01:00	2014-08-04
 
 
 -- !query
@@ -805,23 +717,19 @@ WHERE  t1a NOT IN (SELECT t2a
                SELECT t3a
                FROM   t3)
 -- !query schema
-struct<>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (t2b#x = outer(t1b#x))\n+- SubqueryAlias t2\n   +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])\n      +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n         +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n            +- SubqueryAlias t2\n               +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 39,
-    "stopIndex" : 104,
-    "fragment" : "SELECT t2a\n               FROM   t2\n               WHERE t2b = t1b"
-  } ]
-}
+val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
+val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04
+val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:00:00	2014-04-04
+val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:02:00.001	2014-04-04
+val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
+val1d	10	NULL	12	17.0	25.0	2600	2015-05-04 01:01:00	2015-05-04
+val1d	NULL	16	19	17.0	25.0	2600	2014-07-04 01:02:00.001	NULL
+val1d	NULL	16	22	17.0	25.0	2600	2014-06-04 01:01:00	NULL
+val1e	10	NULL	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
+val1e	10	NULL	19	17.0	25.0	2600	2014-09-04 01:02:00.001	2014-09-04
+val1e	10	NULL	25	17.0	25.0	2600	2014-08-04 01:01:00	2014-08-04
 
 
 -- !query
@@ -834,23 +742,19 @@ WHERE  t1a NOT IN (SELECT t2a
                SELECT t3a
                FROM   t3)
 -- !query schema
-struct<>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (t2b#x = outer(t1b#x))\n+- SubqueryAlias t2\n   +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])\n      +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n         +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n            +- SubqueryAlias t2\n               +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 39,
-    "stopIndex" : 104,
-    "fragment" : "SELECT t2a\n               FROM   t2\n               WHERE t2b = t1b"
-  } ]
-}
+val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
+val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04
+val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:00:00	2014-04-04
+val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:02:00.001	2014-04-04
+val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
+val1d	10	NULL	12	17.0	25.0	2600	2015-05-04 01:01:00	2015-05-04
+val1d	NULL	16	19	17.0	25.0	2600	2014-07-04 01:02:00.001	NULL
+val1d	NULL	16	22	17.0	25.0	2600	2014-06-04 01:01:00	NULL
+val1e	10	NULL	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
+val1e	10	NULL	19	17.0	25.0	2600	2014-09-04 01:02:00.001	2014-09-04
+val1e	10	NULL	25	17.0	25.0	2600	2014-08-04 01:01:00	2014-08-04
 
 
 -- !query
@@ -863,23 +767,19 @@ WHERE  t1a NOT IN (SELECT t2a
                SELECT t3a
                FROM   t3)
 -- !query schema
-struct<>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (t2b#x = outer(t1b#x))\n+- SubqueryAlias t2\n   +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])\n      +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n         +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n            +- SubqueryAlias t2\n               +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 39,
-    "stopIndex" : 104,
-    "fragment" : "SELECT t2a\n               FROM   t2\n               WHERE t2b = t1b"
-  } ]
-}
+val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
+val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04
+val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:00:00	2014-04-04
+val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:02:00.001	2014-04-04
+val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
+val1d	10	NULL	12	17.0	25.0	2600	2015-05-04 01:01:00	2015-05-04
+val1d	NULL	16	19	17.0	25.0	2600	2014-07-04 01:02:00.001	NULL
+val1d	NULL	16	22	17.0	25.0	2600	2014-06-04 01:01:00	NULL
+val1e	10	NULL	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
+val1e	10	NULL	19	17.0	25.0	2600	2014-09-04 01:02:00.001	2014-09-04
+val1e	10	NULL	25	17.0	25.0	2600	2014-08-04 01:01:00	2014-08-04
 
 
 -- !query
@@ -892,23 +792,20 @@ WHERE  t1a NOT IN (SELECT t2a
                SELECT t3a
                FROM   t3)
 -- !query schema
-struct<>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (t2b#x = outer(t1b#x))\n+- SubqueryAlias t2\n   +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])\n      +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n         +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n            +- SubqueryAlias t2\n               +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 39,
-    "stopIndex" : 104,
-    "fragment" : "SELECT t2a\n               FROM   t2\n               WHERE t2b = t1b"
-  } ]
-}
+val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
+val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04
+val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:00:00	2014-04-04
+val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:02:00.001	2014-04-04
+val1b	8	16	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
+val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
+val1d	10	NULL	12	17.0	25.0	2600	2015-05-04 01:01:00	2015-05-04
+val1d	NULL	16	19	17.0	25.0	2600	2014-07-04 01:02:00.001	NULL
+val1d	NULL	16	22	17.0	25.0	2600	2014-06-04 01:01:00	NULL
+val1e	10	NULL	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
+val1e	10	NULL	19	17.0	25.0	2600	2014-09-04 01:02:00.001	2014-09-04
+val1e	10	NULL	25	17.0	25.0	2600	2014-08-04 01:01:00	2014-08-04
 
 
 -- !query
@@ -921,20 +818,17 @@ WHERE  t1a NOT IN (SELECT t2a
                SELECT t3a
                FROM   t3)
 -- !query schema
-struct<>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (t2b#x = outer(t1b#x))\n+- SubqueryAlias t2\n   +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])\n      +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n         +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n            +- SubqueryAlias t2\n               +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 39,
-    "stopIndex" : 104,
-    "fragment" : "SELECT t2a\n               FROM   t2\n               WHERE t2b = t1b"
-  } ]
-}
+val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
+val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04
+val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:00:00	2014-04-04
+val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:02:00.001	2014-04-04
+val1b	8	16	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
+val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
+val1d	10	NULL	12	17.0	25.0	2600	2015-05-04 01:01:00	2015-05-04
+val1d	NULL	16	19	17.0	25.0	2600	2014-07-04 01:02:00.001	NULL
+val1d	NULL	16	22	17.0	25.0	2600	2014-06-04 01:01:00	NULL
+val1e	10	NULL	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
+val1e	10	NULL	19	17.0	25.0	2600	2014-09-04 01:02:00.001	2014-09-04
+val1e	10	NULL	25	17.0	25.0	2600	2014-08-04 01:01:00	2014-08-04

@@ -66,7 +66,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
    * Returns a future for retrieving the first num elements of the RDD.
    */
   def takeAsync(num: Int): FutureAction[Seq[T]] = self.withScope {
-    val callSite = self.context.getCallSite
+    val callSite = self.context.getCallSite()
     val localProperties = self.context.getLocalProperties
     // Cached thread pool to handle aggregation of subtasks.
     implicit val executionContext = AsyncRDDActions.futureExecutionContext

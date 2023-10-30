@@ -22,11 +22,10 @@ import tempfile
 import time
 from urllib.parse import urlparse
 from typing import Any, Dict, List
+
 from pyspark.ml.base import Params
-from pyspark.ml.util import _get_active_session
+from pyspark.sql import SparkSession
 from pyspark.sql.utils import is_remote
-
-
 from pyspark import __version__ as pyspark_version
 
 
@@ -34,7 +33,7 @@ _META_DATA_FILE_NAME = "metadata.json"
 
 
 def _copy_file_from_local_to_fs(local_path: str, dest_path: str) -> None:
-    session = _get_active_session(is_remote())
+    session = SparkSession.active()
     if is_remote():
         session.copyFromLocalToFs(local_path, dest_path)
     else:
@@ -228,7 +227,7 @@ class ParamsReadWrite(Params):
 
         .. versionadded:: 3.5.0
         """
-        session = _get_active_session(is_remote())
+        session = SparkSession.active()
         path_exist = True
         try:
             session.read.format("binaryFile").load(path).head()
@@ -256,7 +255,7 @@ class ParamsReadWrite(Params):
 
         .. versionadded:: 3.5.0
         """
-        session = _get_active_session(is_remote())
+        session = SparkSession.active()
 
         tmp_local_dir = tempfile.mkdtemp(prefix="pyspark_ml_model_")
         try:

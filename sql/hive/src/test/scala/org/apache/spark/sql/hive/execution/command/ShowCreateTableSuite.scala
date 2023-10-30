@@ -246,7 +246,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
       table.copy(
         createTime = 0L,
         lastAccessTime = 0L,
-        properties = table.properties.filterKeys(!nondeterministicProps.contains(_)).toMap,
+        properties = table.properties.view.filterKeys(!nondeterministicProps.contains(_)).toMap,
         stats = None,
         ignoredProperties = Map.empty,
         storage = table.storage.copy(properties = Map.empty),
@@ -357,11 +357,17 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
          """.stripMargin
       )
 
-      val cause = intercept[AnalysisException] {
-        checkCreateSparkTableAsHive("t1")
-      }
-
-      assert(cause.getMessage.contains("unsupported serde configuration"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          checkCreateSparkTableAsHive("t1")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1273",
+        parameters = Map(
+          "table" -> "t1",
+          "configs" -> (" SERDE: org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe " +
+            "INPUTFORMAT: org.apache.hadoop.hive.ql.io.RCFileInputFormat " +
+            "OUTPUTFORMAT: org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
+      )
     }
   }
 
@@ -423,13 +429,13 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
          """.stripMargin
       )
 
-
-      val cause = intercept[AnalysisException] {
-        sql("SHOW CREATE TABLE t1")
-      }
-
-      assert(cause.getMessage.contains(
-        "SHOW CREATE TABLE doesn't support transactional Hive table"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SHOW CREATE TABLE t1")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1272",
+        parameters = Map("table" -> "`spark_catalog`.`default`.`t1`")
+      )
     }
   }
 }

@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.Locale
 
+import scala.jdk.CollectionConverters._
 import scala.util.Properties.lineSeparator
 import scala.util.matching.Regex
 
@@ -64,13 +65,13 @@ class SparkThrowableSuite extends SparkFunSuite {
   }
 
   def checkIfUnique(ss: Seq[Any]): Unit = {
-    val dups = ss.groupBy(identity).mapValues(_.size).filter(_._2 > 1).keys.toSeq
-    assert(dups.isEmpty)
+    val dups = ss.groupBy(identity).view.mapValues(_.size).filter(_._2 > 1).keys.toSeq
+    assert(dups.isEmpty, s"Duplicate error classes: ${dups.mkString(", ")}")
   }
 
   def checkCondition(ss: Seq[String], fx: String => Boolean): Unit = {
     ss.foreach { s =>
-      assert(fx(s))
+      assert(fx(s), s)
     }
   }
 
@@ -112,6 +113,15 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
   }
 
+  test("SQLSTATE is mandatory") {
+    val errorClassesNoSqlState = errorReader.errorInfoMap.filter {
+      case (error: String, info: ErrorInfo) =>
+        !error.startsWith("_LEGACY_ERROR_TEMP") && info.sqlState.isEmpty
+    }.keys.toSeq
+    assert(errorClassesNoSqlState.isEmpty,
+      s"Error classes without SQLSTATE: ${errorClassesNoSqlState.mkString(", ")}")
+  }
+
   test("SQLSTATE invariants") {
     val sqlStates = errorReader.errorInfoMap.values.toSeq.flatMap(_.sqlState)
     val errorClassReadMe = Utils.getSparkClassLoader.getResource("error/README.md")
@@ -142,7 +152,8 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   test("Message format invariants") {
     val messageFormats = errorReader.errorInfoMap
-      .filterKeys(!_.startsWith("_LEGACY_ERROR_TEMP_"))
+      .view
+      .filterKeys(!_.startsWith("_LEGACY_ERROR_"))
       .filterKeys(!_.startsWith("INTERNAL_ERROR"))
       .values.toSeq.flatMap { i => Seq(i.messageTemplate) }
     checkCondition(messageFormats, s => s != null)
@@ -222,7 +233,20 @@ class SparkThrowableSuite extends SparkFunSuite {
          |---""".stripMargin
     }
 
-    val sqlErrorParentDocContent = errors.toSeq.filter(!_._1.startsWith("_LEGACY_ERROR_TEMP_"))
+    def orphanedGoldenFiles(): Iterable[File] = {
+      val subErrorFileNames = errors.filter(_._2.subClass.isDefined).map(error => {
+        getErrorPath(error._1) + ".md"
+      }).toSet
+
+      val docsDir = getWorkspaceFilePath("docs")
+      val orphans = FileUtils.listFiles(docsDir.toFile, Array("md"), false).asScala.filter { f =>
+        (f.getName.startsWith("sql-error-conditions-") && f.getName.endsWith("-error-class.md")) &&
+          !subErrorFileNames.contains(f.getName)
+      }
+      orphans
+    }
+
+    val sqlErrorParentDocContent = errors.toSeq.filter(!_._1.startsWith("_LEGACY_ERROR"))
       .sortBy(_._1).map(error => {
       val name = error._1
       val info = error._2
@@ -253,8 +277,7 @@ class SparkThrowableSuite extends SparkFunSuite {
          |
          |Also see [SQLSTATE Codes](sql-error-conditions-sqlstates.html).
          |
-         |$sqlErrorParentDocContent
-         |""".stripMargin
+         |$sqlErrorParentDocContent""".stripMargin
 
     errors.filter(_._2.subClass.isDefined).foreach(error => {
       val name = error._1
@@ -316,12 +339,29 @@ class SparkThrowableSuite extends SparkFunSuite {
         }
         FileUtils.writeStringToFile(
           parentDocPath.toFile,
-          sqlErrorParentDoc + lineSeparator,
+          sqlErrorParentDoc,
           StandardCharsets.UTF_8)
       }
     } else {
       assert(sqlErrorParentDoc.trim == commonErrorsInDoc.trim,
         "The error class document is not up to date. Please regenerate it.")
+    }
+
+    val orphans = orphanedGoldenFiles()
+    if (regenerateGoldenFiles) {
+      if (orphans.nonEmpty) {
+        logInfo(s"Orphaned error class documents (${orphans.size}) is not empty, " +
+          "executing cleanup operation.")
+        orphans.foreach { f =>
+          FileUtils.deleteQuietly(f)
+          logInfo(s"Cleanup orphaned error document: ${f.getName}.")
+        }
+      } else {
+        logInfo("Orphaned error class documents is empty")
+      }
+    } else {
+      assert(orphans.isEmpty,
+        "Exist orphaned error class documents. Please regenerate it.")
     }
   }
 
@@ -374,7 +414,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       "[DIVIDE_BY_ZERO] Division by zero. " +
       "Use `try_divide` to tolerate divisor being 0 and return NULL instead. " +
         "If necessary set foo to \"false\" " +
-        "to bypass this error.")
+        "to bypass this error. SQLSTATE: 22012")
   }
 
   test("Error message is formatted") {
@@ -383,8 +423,9 @@ class SparkThrowableSuite extends SparkFunSuite {
         "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         Map("objectName" -> "`foo`", "proposal" -> "`bar`, `baz`")
       ) ==
-      "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with " +
-        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]."
+      "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column, variable, or function parameter with " +
+        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]." +
+      " SQLSTATE: 42703"
     )
 
     assert(
@@ -395,8 +436,9 @@ class SparkThrowableSuite extends SparkFunSuite {
           "proposal" -> "`bar`, `baz`"),
         ""
       ) ==
-      "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with " +
-        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]."
+      "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column, variable, or function parameter with " +
+        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]." +
+        " SQLSTATE: 42703"
     )
   }
 
@@ -406,8 +448,9 @@ class SparkThrowableSuite extends SparkFunSuite {
         "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         Map("objectName" -> "`foo`", "proposal" -> "`${bar}`, `baz`")
       ) ==
-        "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with " +
-          "name `foo` cannot be resolved. Did you mean one of the following? [`${bar}`, `baz`]."
+        "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column, variable, or function parameter with " +
+          "name `foo` cannot be resolved. Did you mean one of the following? [`${bar}`, `baz`]." +
+          " SQLSTATE: 42703"
     )
   }
 
@@ -474,8 +517,9 @@ class SparkThrowableSuite extends SparkFunSuite {
 
     assert(SparkThrowableHelper.getMessage(e, PRETTY) ===
       "[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 " +
-      "and return NULL instead. If necessary set CONFIG to \"false\" to bypass this error." +
-      "\nQuery summary")
+        "and return NULL instead. If necessary set CONFIG to \"false\" to bypass this error." +
+        " SQLSTATE: 22012" +
+        "\nQuery summary")
     // scalastyle:off line.size.limit
     assert(SparkThrowableHelper.getMessage(e, MINIMAL) ===
       """{
@@ -515,6 +559,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       """{
         |  "errorClass" : "UNSUPPORTED_SAVE_MODE.EXISTENT_PATH",
         |  "messageTemplate" : "The save mode <saveMode> is not supported for: an existent path.",
+        |  "sqlState" : "0A000",
         |  "messageParameters" : {
         |    "saveMode" : "UNSUPPORTED_MODE"
         |  }

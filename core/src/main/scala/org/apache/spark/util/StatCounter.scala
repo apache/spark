@@ -27,7 +27,7 @@ import org.apache.spark.annotation.Since
  *
  * @constructor Initialize the StatCounter with the given values.
  */
-class StatCounter(values: TraversableOnce[Double]) extends Serializable {
+class StatCounter(values: IterableOnce[Double]) extends Serializable {
   private var n: Long = 0     // Running count of our values
   private var mu: Double = 0  // Running mean of our values
   private var m2: Double = 0  // Running variance numerator (sum of (x - mean)^2)
@@ -51,8 +51,8 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
   }
 
   /** Add multiple values into this StatCounter, updating the internal statistics. */
-  def merge(values: TraversableOnce[Double]): StatCounter = {
-    values.foreach(v => merge(v))
+  def merge(values: IterableOnce[Double]): StatCounter = {
+    values.iterator.foreach(v => merge(v))
     this
   }
 
@@ -155,7 +155,7 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
 
 object StatCounter {
   /** Build a StatCounter from a list of values. */
-  def apply(values: TraversableOnce[Double]): StatCounter = new StatCounter(values)
+  def apply(values: IterableOnce[Double]): StatCounter = new StatCounter(values)
 
   /** Build a StatCounter from a list of values passed as variable-length arguments. */
   def apply(values: Double*): StatCounter = new StatCounter(values)

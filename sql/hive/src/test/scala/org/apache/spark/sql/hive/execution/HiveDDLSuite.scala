@@ -26,7 +26,7 @@ import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
-import org.apache.spark.sql.execution.datasources.parquet.ParquetFooterReader
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, ParquetFooterReader}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
@@ -49,9 +49,12 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
-// TODO(gatorsmile): combine HiveCatalogedDDLSuite and HiveDDLSuite
 @SlowHiveTest
-class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeAndAfterEach {
+class HiveDDLSuite
+  extends DDLSuite with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
+  import testImplicits._
+  val hiveFormats = Seq("PARQUET", "ORC", "TEXTFILE", "SEQUENCEFILE", "RCFILE", "AVRO")
+
   override def afterEach(): Unit = {
     try {
       // drop all databases, tables and functions after each test
@@ -129,10 +132,25 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       createTime = 0L,
       lastAccessTime = 0L,
       owner = "",
-      properties = table.properties.filterKeys(!nondeterministicProps.contains(_)).toMap,
+      properties = table.properties.view.filterKeys(!nondeterministicProps.contains(_)).toMap,
       // View texts are checked separately
       viewText = None
     )
+  }
+
+  // check if the directory for recording the data of the table exists.
+  private def tableDirectoryExists(
+      tableIdentifier: TableIdentifier,
+      dbPath: Option[String] = None): Boolean = {
+    val expectedTablePath =
+      if (dbPath.isEmpty) {
+        hiveContext.sessionState.catalog.defaultTablePath(tableIdentifier)
+      } else {
+        new Path(new Path(dbPath.get), tableIdentifier.table).toUri
+      }
+    val filesystemPath = new Path(expectedTablePath.toString)
+    val fs = filesystemPath.getFileSystem(spark.sessionState.newHadoopConf())
+    fs.exists(filesystemPath)
   }
 
   test("alter table: set properties") {
@@ -175,14 +193,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     withView("v") {
       spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
       checkAnswer(sql("SELECT q.`a`, q.b FROM v"), Row("a", 1) :: Nil)
-
-      checkError(
-        exception = intercept[SparkException] {
-          spark.sql("ALTER VIEW v AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
-        },
-        errorClass = "CANNOT_RECOGNIZE_HIVE_TYPE",
-        parameters = Map("fieldType" -> "\"STRUCT<$A:STRING,B:INT>\"", "fieldName" -> "`q`")
-      )
     }
   }
 
@@ -379,36 +389,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     } finally {
       catalog.reset()
     }
-  }
-}
-
-@SlowHiveTest
-class HiveDDLSuite
-  extends QueryTest with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
-  import testImplicits._
-  val hiveFormats = Seq("PARQUET", "ORC", "TEXTFILE", "SEQUENCEFILE", "RCFILE", "AVRO")
-
-  override def afterEach(): Unit = {
-    try {
-      // drop all databases, tables and functions after each test
-      spark.sessionState.catalog.reset()
-    } finally {
-      super.afterEach()
-    }
-  }
-  // check if the directory for recording the data of the table exists.
-  private def tableDirectoryExists(
-      tableIdentifier: TableIdentifier,
-      dbPath: Option[String] = None): Boolean = {
-    val expectedTablePath =
-      if (dbPath.isEmpty) {
-        hiveContext.sessionState.catalog.defaultTablePath(tableIdentifier)
-      } else {
-        new Path(new Path(dbPath.get), tableIdentifier.table).toUri
-      }
-    val filesystemPath = new Path(expectedTablePath.toString)
-    val fs = filesystemPath.getFileSystem(spark.sessionState.newHadoopConf())
-    fs.exists(filesystemPath)
   }
 
   test("drop tables") {
@@ -896,11 +876,10 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1015",
+          errorClass = "EXPECT_VIEW_NOT_TABLE.USE_ALTER_TABLE",
           parameters = Map(
-            "identifier" -> s"default.$tabName",
-            "cmd" -> "ALTER VIEW ... SET TBLPROPERTIES",
-            "hintStr" -> " Please use ALTER TABLE instead."),
+            "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$tabName`",
+            "operation" -> "ALTER VIEW ... SET TBLPROPERTIES"),
           context = ExpectedContext(fragment = tabName, start = 11, stop = 14)
         )
 
@@ -908,12 +887,10 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1013",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
           parameters = Map(
-            "nameParts" -> s"$SESSION_CATALOG_NAME.default.$oldViewName",
-            "viewStr" -> "view",
-            "cmd" -> "ALTER TABLE ... SET TBLPROPERTIES",
-            "hintStr" -> " Please use ALTER VIEW instead."),
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
+            "operation" -> "ALTER TABLE ... SET TBLPROPERTIES"),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -921,11 +898,10 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1015",
+          errorClass = "EXPECT_VIEW_NOT_TABLE.USE_ALTER_TABLE",
           parameters = Map(
-            "identifier" -> s"default.$tabName",
-            "cmd" -> "ALTER VIEW ... UNSET TBLPROPERTIES",
-            "hintStr" -> " Please use ALTER TABLE instead."),
+            "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$tabName`",
+            "operation" -> "ALTER VIEW ... UNSET TBLPROPERTIES"),
           context = ExpectedContext(fragment = tabName, start = 11, stop = 14)
         )
 
@@ -933,12 +909,10 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1013",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
           parameters = Map(
-            "nameParts" -> s"$SESSION_CATALOG_NAME.default.$oldViewName",
-            "viewStr" -> "view",
-            "cmd" -> "ALTER TABLE ... UNSET TBLPROPERTIES",
-            "hintStr" -> " Please use ALTER VIEW instead."),
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
+            "operation" -> "ALTER TABLE ... UNSET TBLPROPERTIES"),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -946,12 +920,10 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName SET LOCATION '/path/to/home'")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1013",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
-            "nameParts" -> s"$SESSION_CATALOG_NAME.default.$oldViewName",
-            "viewStr" -> "view",
-            "cmd" -> "ALTER TABLE ... SET LOCATION ...",
-            "hintStr" -> " Please use ALTER VIEW instead."),
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
+            "operation" -> "ALTER TABLE ... SET LOCATION ..."),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -959,12 +931,10 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName SET SERDE 'whatever'")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1013",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
           parameters = Map(
-            "nameParts" -> s"$SESSION_CATALOG_NAME.default.$oldViewName",
-            "viewStr" -> "view",
-            "cmd" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]",
-            "hintStr" -> " Please use ALTER VIEW instead."),
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
+            "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -972,12 +942,10 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName SET SERDEPROPERTIES ('x' = 'y')")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1013",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
           parameters = Map(
-            "nameParts" -> s"$SESSION_CATALOG_NAME.default.$oldViewName",
-            "viewStr" -> "view",
-            "cmd" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]",
-            "hintStr" -> " Please use ALTER VIEW instead."),
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
+            "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -985,12 +953,10 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1013",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
           parameters = Map(
-            "nameParts" -> s"$SESSION_CATALOG_NAME.default.$oldViewName",
-            "viewStr" -> "view",
-            "cmd" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]",
-            "hintStr" -> " Please use ALTER VIEW instead."),
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
+            "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -998,12 +964,10 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName RECOVER PARTITIONS")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1013",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
-            "nameParts" -> s"$SESSION_CATALOG_NAME.default.$oldViewName",
-            "viewStr" -> "view",
-            "cmd" -> "ALTER TABLE ... RECOVER PARTITIONS",
-            "hintStr" -> " Please use ALTER VIEW instead."),
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
+            "operation" -> "ALTER TABLE ... RECOVER PARTITIONS"),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -1011,12 +975,10 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName PARTITION (a='1') RENAME TO PARTITION (a='100')")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1013",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
-            "nameParts" -> s"$SESSION_CATALOG_NAME.default.$oldViewName",
-            "viewStr" -> "view",
-            "cmd" -> "ALTER TABLE ... RENAME TO PARTITION",
-            "hintStr" -> " Please use ALTER VIEW instead."),
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
+            "operation" -> "ALTER TABLE ... RENAME TO PARTITION"),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -1024,12 +986,10 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1013",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
-            "nameParts" -> s"$SESSION_CATALOG_NAME.default.$oldViewName",
-            "viewStr" -> "view",
-            "cmd" -> "ALTER TABLE ... ADD PARTITION ...",
-            "hintStr" -> " Please use ALTER VIEW instead."),
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
+            "operation" -> "ALTER TABLE ... ADD PARTITION ..."),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -1037,12 +997,10 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName DROP IF EXISTS PARTITION (a='2')")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1013",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
-            "nameParts" -> s"$SESSION_CATALOG_NAME.default.$oldViewName",
-            "viewStr" -> "view",
-            "cmd" -> "ALTER TABLE ... DROP PARTITION ...",
-            "hintStr" -> " Please use ALTER VIEW instead."),
+            "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
+            "operation" -> "ALTER TABLE ... DROP PARTITION ..."),
           context = ExpectedContext(fragment = oldViewName, start = 12, stop = 16)
         )
 
@@ -1130,7 +1088,7 @@ class HiveDDLSuite
       expectedSerdeProps.map { case (k, v) => s"'$k'='$v'" }.mkString(", ")
     val oldPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
     assert(oldPart.storage.serde != Some(expectedSerde), "bad test: serde was already set")
-    assert(oldPart.storage.properties.filterKeys(expectedSerdeProps.contains) !=
+    assert(oldPart.storage.properties.view.filterKeys(expectedSerdeProps.contains) !=
       expectedSerdeProps, "bad test: serde properties were already set")
     sql(s"""ALTER TABLE boxes PARTITION (width=4)
       |    SET SERDE '$expectedSerde'
@@ -1138,7 +1096,7 @@ class HiveDDLSuite
       |""".stripMargin)
     val newPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
     assert(newPart.storage.serde == Some(expectedSerde))
-    assert(newPart.storage.properties.filterKeys(expectedSerdeProps.contains).toMap ==
+    assert(newPart.storage.properties.view.filterKeys(expectedSerdeProps.contains).toMap ==
       expectedSerdeProps)
   }
 
@@ -1739,7 +1697,8 @@ class HiveDDLSuite
       "maxFileSize",
       "minFileSize"
     )
-    assert(targetTable.properties.filterKeys(!metastoreGeneratedProperties.contains(_)).isEmpty,
+    assert(
+      targetTable.properties.view.filterKeys(!metastoreGeneratedProperties.contains(_)).isEmpty,
       "the table properties of source tables should not be copied in the created table")
 
     provider match {
@@ -2750,7 +2709,9 @@ class HiveDDLSuite
     assert(compression === actualCompression)
   }
 
-  Seq(("orc", "ZLIB"), ("parquet", "GZIP")).foreach { case (fileFormat, compression) =>
+  Seq(
+    ("orc", "ZLIB"),
+    ("parquet", ParquetCompressionCodec.GZIP.name)).foreach { case (fileFormat, compression) =>
     test(s"SPARK-22158 convertMetastore should not ignore table property - $fileFormat") {
       withSQLConf(CONVERT_METASTORE_ORC.key -> "true", CONVERT_METASTORE_PARQUET.key -> "true") {
         withTable("t") {
@@ -2845,14 +2806,14 @@ class HiveDDLSuite
           assert(DDLUtils.isHiveTable(table))
           assert(table.storage.serde.get.contains("parquet"))
           val properties = table.properties
-          assert(properties.get("parquet.compression") == Some("GZIP"))
+          assert(properties.get("parquet.compression") == Some(ParquetCompressionCodec.GZIP.name))
           assert(spark.table("t").collect().isEmpty)
 
           sql("INSERT INTO t SELECT 1")
           checkAnswer(spark.table("t"), Row(1))
           val maybeFile = path.listFiles().find(_.getName.startsWith("part"))
 
-          assertCompression(maybeFile, "parquet", "GZIP")
+          assertCompression(maybeFile, "parquet", ParquetCompressionCodec.GZIP.name)
         }
       }
     }
@@ -2892,7 +2853,7 @@ class HiveDDLSuite
         .select("data_type")
       // check if the last access time doesn't have the default date of year
       // 1970 as its a wrong access time
-      assert((desc.first.toString.contains("UNKNOWN")))
+      assert((desc.first().toString.contains("UNKNOWN")))
     }
   }
 
@@ -3401,6 +3362,27 @@ class HiveDDLSuite
         parameters = Map(
           "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$tbl`",
           "operation" -> "DELETE")
+      )
+    }
+  }
+
+  test("SPARK-44911: Create the table with invalid column") {
+    val tbl = "t1"
+    withTable(tbl) {
+      val e = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE t1
+             |STORED AS parquet
+             |SELECT id, DATE'2018-01-01' + MAKE_DT_INTERVAL(0, id) FROM RANGE(0, 10)
+         """.stripMargin)
+      }
+      checkError(e,
+        errorClass = "INVALID_HIVE_COLUMN_NAME",
+        parameters = Map(
+          "invalidChars" -> "','",
+          "tableName" -> "`spark_catalog`.`default`.`t1`",
+          "columnName" -> "`DATE '2018-01-01' + make_dt_interval(0, id, 0, 0`.`000000)`")
       )
     }
   }

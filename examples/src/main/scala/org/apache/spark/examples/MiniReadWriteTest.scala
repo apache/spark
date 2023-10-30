@@ -81,6 +81,7 @@ object MiniReadWriteTest {
       .flatMap(_.split("\t"))
       .filter(_.nonEmpty)
       .groupBy(w => w)
+      .view
       .mapValues(_.size)
       .values
       .sum
@@ -96,7 +97,7 @@ object MiniReadWriteTest {
 
     println("Creating SparkSession")
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("Mini Read Write Test")
       .getOrCreate()
 

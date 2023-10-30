@@ -165,7 +165,10 @@ statement
     | CREATE (OR REPLACE)? TEMPORARY? FUNCTION (IF NOT EXISTS)?
         identifierReference AS className=stringLit
         (USING resource (COMMA resource)*)?                            #createFunction
-    | DROP TEMPORARY? FUNCTION (IF EXISTS)? identifierReference      #dropFunction
+    | DROP TEMPORARY? FUNCTION (IF EXISTS)? identifierReference        #dropFunction
+    | DECLARE (OR REPLACE)? VARIABLE?
+        identifierReference dataType? variableDefaultExpression?       #createVariable
+    | DROP TEMPORARY VARIABLE (IF EXISTS)? identifierReference         #dropVariable
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         statement                                                      #explain
     | SHOW TABLES ((FROM | IN) identifierReference)?
@@ -210,6 +213,9 @@ statement
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone                                           #setTimeZone
     | SET TIME ZONE .*?                                                #setTimeZone
+    | SET (VARIABLE | VAR) assignmentList                              #setVariable
+    | SET (VARIABLE | VAR) LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
+          LEFT_PAREN query RIGHT_PAREN                                 #setVariable
     | SET configKey EQ configValue                                     #setQuotedConfiguration
     | SET configKey (EQ .*?)?                                          #setConfiguration
     | SET .*? EQ configValue                                           #setQuotedConfiguration
@@ -795,8 +801,13 @@ functionTableSubqueryArgument
     ;
 
 tableArgumentPartitioning
-    : (PARTITION | DISTRIBUTE) BY expressionSeq
-      ((ORDER | SORT) BY sortItem (COMMA sortItem)*)?
+    : ((WITH SINGLE PARTITION)
+        | ((PARTITION | DISTRIBUTE) BY
+            (((LEFT_PAREN partition+=expression (COMMA partition+=expression)* RIGHT_PAREN))
+            | partition+=expression)))
+      ((ORDER | SORT) BY
+        (((LEFT_PAREN sortItem (COMMA sortItem)* RIGHT_PAREN)
+        | sortItem)))?
     ;
 
 functionTableNamedArgumentExpression
@@ -940,12 +951,13 @@ datetimeUnit
     ;
 
 primaryExpression
-    : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER | USER)                                   #currentLike
+    : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER | USER | SESSION_USER)             #currentLike
     | name=(TIMESTAMPADD | DATEADD | DATE_ADD) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA unitsAmount=valueExpression COMMA timestamp=valueExpression RIGHT_PAREN             #timestampadd
-    | name=(TIMESTAMPDIFF | DATEDIFF | DATE_DIFF) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA startTimestamp=valueExpression COMMA endTimestamp=valueExpression RIGHT_PAREN    #timestampdiff
+    | name=(TIMESTAMPDIFF | DATEDIFF | DATE_DIFF | TIMEDIFF) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA startTimestamp=valueExpression COMMA endTimestamp=valueExpression RIGHT_PAREN    #timestampdiff
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | name=(CAST | TRY_CAST) LEFT_PAREN expression AS dataType RIGHT_PAREN                     #cast
+    | primaryExpression DOUBLE_COLON dataType                                                  #castByColon
     | STRUCT LEFT_PAREN (argument+=namedExpression (COMMA argument+=namedExpression)*)? RIGHT_PAREN #struct
     | FIRST LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                                  #first
     | ANY_VALUE LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                              #any_value
@@ -956,7 +968,6 @@ primaryExpression
     | qualifiedName DOT ASTERISK                                                               #star
     | LEFT_PAREN namedExpression (COMMA namedExpression)+ RIGHT_PAREN                          #rowConstructor
     | LEFT_PAREN query RIGHT_PAREN                                                             #subqueryExpression
-    | IDENTIFIER_KW LEFT_PAREN expression RIGHT_PAREN                                          #identifierClause
     | functionName LEFT_PAREN (setQuantifier? argument+=functionArgument
        (COMMA argument+=functionArgument)*)? RIGHT_PAREN
        (FILTER LEFT_PAREN WHERE where=booleanExpression RIGHT_PAREN)?
@@ -1104,6 +1115,10 @@ defaultExpression
     : DEFAULT expression
     ;
 
+variableDefaultExpression
+    : (DEFAULT | EQ) expression
+    ;
+
 colTypeList
     : colType (COMMA colType)*
     ;
@@ -1181,6 +1196,7 @@ qualifiedNameList
 
 functionName
     : IDENTIFIER_KW LEFT_PAREN expression RIGHT_PAREN
+    | identFunc=IDENTIFIER_KW   // IDENTIFIER itself is also a valid function name.
     | qualifiedName
     | FILTER
     | LEFT
@@ -1330,6 +1346,7 @@ ansiNonReserved
     | DBPROPERTIES
     | DEC
     | DECIMAL
+    | DECLARE
     | DEFAULT
     | DEFINED
     | DELETE
@@ -1472,6 +1489,7 @@ ansiNonReserved
     | SETS
     | SHORT
     | SHOW
+    | SINGLE
     | SKEWED
     | SMALLINT
     | SORT
@@ -1494,6 +1512,7 @@ ansiNonReserved
     | TBLPROPERTIES
     | TEMPORARY
     | TERMINATED
+    | TIMEDIFF
     | TIMESTAMP
     | TIMESTAMP_LTZ
     | TIMESTAMP_NTZ
@@ -1519,6 +1538,8 @@ ansiNonReserved
     | USE
     | VALUES
     | VARCHAR
+    | VAR
+    | VARIABLE
     | VERSION
     | VIEW
     | VIEWS
@@ -1634,6 +1655,7 @@ nonReserved
     | DBPROPERTIES
     | DEC
     | DECIMAL
+    | DECLARE
     | DEFAULT
     | DEFINED
     | DELETE
@@ -1806,6 +1828,7 @@ nonReserved
     | SETS
     | SHORT
     | SHOW
+    | SINGLE
     | SKEWED
     | SMALLINT
     | SOME
@@ -1832,6 +1855,7 @@ nonReserved
     | TERMINATED
     | THEN
     | TIME
+    | TIMEDIFF
     | TIMESTAMP
     | TIMESTAMP_LTZ
     | TIMESTAMP_NTZ
@@ -1862,6 +1886,8 @@ nonReserved
     | USER
     | VALUES
     | VARCHAR
+    | VAR
+    | VARIABLE
     | VERSION
     | VIEW
     | VIEWS

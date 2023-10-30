@@ -19,12 +19,12 @@ package org.apache.spark.sql
 import java.sql.Timestamp
 import java.util.Arrays
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
-import org.apache.spark.sql.connect.client.util.QueryTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout}
+import org.apache.spark.sql.test.{QueryTest, SQLHelper}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.SparkSerDeUtils
 
 case class ClickEvent(id: String, timestamp: Timestamp)
 
@@ -179,7 +179,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
     assert(values == Arrays.asList[String]("0", "8,6,4,2,0", "1", "9,7,5,3,1"))
 
     // Star is not allowed as group sort column
-    val message = intercept[SparkException] {
+    val message = intercept[AnalysisException] {
       grouped
         .flatMapSortedGroups(col("*")) { (g, iter) =>
           Iterator(String.valueOf(g), iter.mkString(","))
@@ -630,6 +630,12 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
       1,
       30,
       3)
+  }
+
+  test("serialize as null") {
+    val kvgds = session.range(10).groupByKey(_ % 2)
+    val bytes = SparkSerDeUtils.serialize(kvgds)
+    assert(SparkSerDeUtils.deserialize[KeyValueGroupedDataset[Long, Long]](bytes) == null)
   }
 }
 

@@ -184,7 +184,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   def invalidEscapeStringError(invalidEscape: String, ctx: PredicateContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_ESC",
-      messageParameters = Map("invalidEscape" -> dataTypeToSQLValue(invalidEscape)),
+      messageParameters = Map("invalidEscape" -> toSQLValue(invalidEscape)),
       ctx)
   }
 
@@ -208,7 +208,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       errorClass = "INVALID_TYPED_LITERAL",
       messageParameters = Map(
         "valueType" -> toSQLType(valueType),
-        "value" -> dataTypeToSQLValue(value)
+        "value" -> toSQLValue(value)
       ),
       ctx)
   }

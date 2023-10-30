@@ -40,7 +40,7 @@ import org.apache.spark.util.{ShutdownHookManager, SystemClock, Utils}
  * A web server that renders SparkUIs of completed applications.
  *
  * For the standalone mode, MasterWebUI already achieves this functionality. Thus, the
- * main use case of the HistoryServer is in other deploy modes (e.g. Yarn or Mesos).
+ * main use case of the HistoryServer is in other deploy modes (e.g. Yarn).
  *
  * The logging directory structure is as follows: Within the given base directory, each
  * application's event logs are maintained in the application's own sub-directory. This

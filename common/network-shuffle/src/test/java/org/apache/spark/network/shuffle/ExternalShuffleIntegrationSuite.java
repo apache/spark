@@ -32,16 +32,15 @@ import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.server.OneForOneStreamManager;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 import org.apache.spark.network.TestUtils;
 import org.apache.spark.network.TransportContext;
@@ -57,11 +56,11 @@ public class ExternalShuffleIntegrationSuite {
   private static final String APP_ID = "app-id";
   private static final String SORT_MANAGER = "org.apache.spark.shuffle.sort.SortShuffleManager";
 
-  private static final int RDD_ID = 1;
-  private static final int SPLIT_INDEX_VALID_BLOCK = 0;
+  protected static final int RDD_ID = 1;
+  protected static final int SPLIT_INDEX_VALID_BLOCK = 0;
   private static final int SPLIT_INDEX_MISSING_FILE = 1;
-  private static final int SPLIT_INDEX_CORRUPT_LENGTH = 2;
-  private static final int SPLIT_INDEX_VALID_BLOCK_TO_RM = 3;
+  protected static final int SPLIT_INDEX_CORRUPT_LENGTH = 2;
+  protected static final int SPLIT_INDEX_VALID_BLOCK_TO_RM = 3;
   private static final int SPLIT_INDEX_MISSING_BLOCK_TO_RM = 4;
 
   // Executor 0 is sort-based
@@ -86,8 +85,20 @@ public class ExternalShuffleIntegrationSuite {
     new byte[54321],
   };
 
-  @BeforeClass
+  private static TransportConf createTransportConf(int maxRetries, boolean rddEnabled) {
+    HashMap<String, String> config = new HashMap<>();
+    config.put("spark.shuffle.io.maxRetries", String.valueOf(maxRetries));
+    config.put(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, String.valueOf(rddEnabled));
+    return new TransportConf("shuffle", new MapConfigProvider(config));
+  }
+
+  // This is split out so it can be invoked in a subclass with a different config
+  @BeforeAll
   public static void beforeAll() throws IOException {
+    doBeforeAllWithConfig(createTransportConf(0, true));
+  }
+
+  public static void doBeforeAllWithConfig(TransportConf transportConf) throws IOException {
     Random rand = new Random();
 
     for (byte[] block : exec0Blocks) {
@@ -105,10 +116,7 @@ public class ExternalShuffleIntegrationSuite {
     dataContext0.insertCachedRddData(RDD_ID, SPLIT_INDEX_VALID_BLOCK, exec0RddBlockValid);
     dataContext0.insertCachedRddData(RDD_ID, SPLIT_INDEX_VALID_BLOCK_TO_RM, exec0RddBlockToRemove);
 
-    HashMap<String, String> config = new HashMap<>();
-    config.put("spark.shuffle.io.maxRetries", "0");
-    config.put(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "true");
-    conf = new TransportConf("shuffle", new MapConfigProvider(config));
+    conf = transportConf;
     handler = new ExternalBlockHandler(
       new OneForOneStreamManager(),
       new ExternalShuffleBlockResolver(conf, null) {
@@ -116,12 +124,10 @@ public class ExternalShuffleIntegrationSuite {
         public ManagedBuffer getRddBlockData(String appId, String execId, int rddId, int splitIdx) {
           ManagedBuffer res;
           if (rddId == RDD_ID) {
-            switch (splitIdx) {
-              case SPLIT_INDEX_CORRUPT_LENGTH:
-                res = new FileSegmentManagedBuffer(conf, new File("missing.file"), 0, 12);
-                break;
-              default:
-                res = super.getRddBlockData(appId, execId, rddId, splitIdx);
+            if (splitIdx == SPLIT_INDEX_CORRUPT_LENGTH) {
+              res = new FileSegmentManagedBuffer(conf, new File("missing.file"), 0, 12);
+            } else {
+              res = super.getRddBlockData(appId, execId, rddId, splitIdx);
             }
           } else {
             res = super.getRddBlockData(appId, execId, rddId, splitIdx);
@@ -133,14 +139,14 @@ public class ExternalShuffleIntegrationSuite {
     server = transportContext.createServer();
   }
 
-  @AfterClass
+  @AfterAll
   public static void afterAll() {
     dataContext0.cleanup();
     server.close();
     transportContext.close();
   }
 
-  @After
+  @AfterEach
   public void afterEach() {
     handler.applicationRemoved(APP_ID, false /* cleanupLocalDirs */);
   }
@@ -321,8 +327,7 @@ public class ExternalShuffleIntegrationSuite {
 
   @Test
   public void testFetchNoServer() throws Exception {
-    TransportConf clientConf = new TransportConf("shuffle",
-      new MapConfigProvider(ImmutableMap.of("spark.shuffle.io.maxRetries", "0")));
+    TransportConf clientConf = createTransportConf(0, false);
     registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
     FetchResult execFetch = fetchBlocks("exec-0",
       new String[]{"shuffle_1_0_0", "shuffle_1_0_1"}, clientConf, 1 /* port */);

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.catalyst.{DeserializerBuildHelper, InternalRow, JavaTypeInference, ScalaReflection, SerializerBuildHelper}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.{Deserializer, Serializer}
@@ -56,6 +56,12 @@ object ExpressionEncoder {
       SerializerBuildHelper.createSerializer(enc),
       DeserializerBuildHelper.createDeserializer(enc),
       enc.clsTag)
+  }
+
+  def apply(schema: StructType): ExpressionEncoder[Row] = apply(schema, lenient = false)
+
+  def apply(schema: StructType, lenient: Boolean): ExpressionEncoder[Row] = {
+    apply(RowEncoder.encoderFor(schema, lenient))
   }
 
   // TODO: improve error message for java bean encoder.
@@ -164,7 +170,7 @@ object ExpressionEncoder {
    * Function that deserializes an [[InternalRow]] into an object of type `T`. This class is not
    * thread-safe.
    */
-  class Deserializer[T](private val expressions: Seq[Expression])
+  class Deserializer[T](val expressions: Seq[Expression])
     extends (InternalRow => T) with Serializable {
     @transient
     private[this] var constructProjection: Projection = _

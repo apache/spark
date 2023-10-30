@@ -53,10 +53,21 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
       val view = "view1"
       withView(view) {
         sql(s"CREATE VIEW $view as select * from $table")
-        val errMsg = intercept[AnalysisException] {
-          sql(s"SHOW PARTITIONS $view")
-        }.getMessage
-        assert(errMsg.contains("'SHOW PARTITIONS' expects a table"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"SHOW PARTITIONS $view")
+          },
+          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+          parameters = Map(
+            "viewName" -> s"`spark_catalog`.`default`.`view1`",
+            "operation" -> "SHOW PARTITIONS"
+          ),
+          context = ExpectedContext(
+            fragment = view,
+            start = 16,
+            stop = 20
+          )
+        )
       }
     }
   }
@@ -65,10 +76,21 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
     val viewName = "test_view"
     withTempView(viewName) {
       spark.range(10).createTempView(viewName)
-      val errMsg = intercept[AnalysisException] {
-        sql(s"SHOW PARTITIONS $viewName")
-      }.getMessage
-      assert(errMsg.contains("'SHOW PARTITIONS' expects a table"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SHOW PARTITIONS $viewName")
+        },
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        parameters = Map(
+          "viewName" -> "`test_view`",
+          "operation" -> "SHOW PARTITIONS"
+        ),
+        context = ExpectedContext(
+          fragment = viewName,
+          start = 16,
+          stop = 24
+        )
+      )
     }
   }
 
@@ -98,10 +120,21 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
       sql(s"""
         |CREATE TEMPORARY VIEW $viewName (c1 INT, c2 STRING)
         |$defaultUsing""".stripMargin)
-      val errMsg = intercept[AnalysisException] {
-        sql(s"SHOW PARTITIONS $viewName")
-      }.getMessage
-      assert(errMsg.contains("'SHOW PARTITIONS' expects a table"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SHOW PARTITIONS $viewName")
+        },
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        parameters = Map(
+          "viewName" -> "`test_view`",
+          "operation" -> "SHOW PARTITIONS"
+        ),
+        context = ExpectedContext(
+          fragment = viewName,
+          start = 16,
+          stop = 24
+        )
+      )
     }
   }
 

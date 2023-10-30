@@ -213,7 +213,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>multiLine</code></td>
     <td>false</td>
-    <td>Parse one record, which may span multiple lines, per file. CSV built-in functions ignore this option.</td>
+    <td>Allows a row to span multiple lines, by parsing line breaks within quoted values as part of the value itself. CSV built-in functions ignore this option.</td>
     <td>read</td>
   </tr>
   <tr>

@@ -106,9 +106,20 @@ abstract class JdbcDialect extends Serializable with Logging {
   def getJDBCType(dt: DataType): Option[JdbcType] = None
 
   /**
+   * Converts an instance of `java.sql.Timestamp` to a custom `java.sql.Timestamp` value.
+   * @param t represents a specific instant in time based on
+   *          the hybrid calendar which combines Julian and
+   *          Gregorian calendars.
+   * @return the timestamp value to convert to
+   * @throws IllegalArgumentException if t is null
+   */
+  @Since("3.5.0")
+  def convertJavaTimestampToTimestamp(t: Timestamp): Timestamp = t
+
+  /**
    * Convert java.sql.Timestamp to a LocalDateTime representing the same wall-clock time as the
    * value stored in a remote database.
-   * JDBC dialects should override this function to provide implementations that suite their
+   * JDBC dialects should override this function to provide implementations that suit their
    * JDBC drivers.
    * @param t Timestamp returned from JDBC driver getTimestamp method.
    * @return A LocalDateTime representing the same wall clock time as the timestamp in database.
@@ -166,10 +177,12 @@ abstract class JdbcDialect extends Serializable with Logging {
    * To allow certain options to append when create a new table, which can be
    * table_options or partition_options.
    * E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
-   * @param statement
-   * @param tableName
-   * @param strSchema
-   * @param options
+   *
+   * @param statement The Statement object used to execute SQL statements.
+   * @param tableName The name of the table to be created.
+   * @param strSchema The schema of the table to be created.
+   * @param options The JDBC options. It contains the create table option, which can be
+   *                table_options or partition_options.
    */
   def createTable(
       statement: Statement,
@@ -178,6 +191,24 @@ abstract class JdbcDialect extends Serializable with Logging {
       options: JdbcOptionsInWrite): Unit = {
     val createTableOptions = options.createTableOptions
     statement.executeUpdate(s"CREATE TABLE $tableName ($strSchema) $createTableOptions")
+  }
+
+  /**
+   * Returns an Insert SQL statement template for inserting a row into the target table via JDBC
+   * conn. Use "?" as placeholder for each value to be inserted.
+   * E.g. `INSERT INTO t ("name", "age", "gender") VALUES (?, ?, ?)`
+   *
+   * @param table The name of the table.
+   * @param fields The fields of the row that will be inserted.
+   * @return The SQL query to use for insert data into table.
+   */
+  @Since("4.0.0")
+  def insertIntoTable(
+      table: String,
+      fields: Array[StructField]): String = {
+    val placeholders = fields.map(_ => "?").mkString(",")
+    val columns = fields.map(x => quoteIdentifier(x.name)).mkString(",")
+    s"INSERT INTO $table ($columns) VALUES ($placeholders)"
   }
 
   /**
@@ -212,7 +243,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   @Since("2.3.0")
   def getTruncateQuery(table: String): String = {
-    getTruncateQuery(table, isCascadingTruncateTable)
+    getTruncateQuery(table, isCascadingTruncateTable())
   }
 
   /**
@@ -226,7 +257,7 @@ abstract class JdbcDialect extends Serializable with Logging {
   @Since("2.4.0")
   def getTruncateQuery(
     table: String,
-    cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+    cascade: Option[Boolean] = isCascadingTruncateTable()): String = {
       s"TRUNCATE TABLE $table"
   }
 
@@ -406,7 +437,7 @@ abstract class JdbcDialect extends Serializable with Logging {
     while (rs.next()) {
       schemaBuilder += Array(rs.getString(1))
     }
-    schemaBuilder.result
+    schemaBuilder.result()
   }
 
   /**
@@ -527,6 +558,17 @@ abstract class JdbcDialect extends Serializable with Logging {
     } else {
       s"DROP SCHEMA ${quoteIdentifier(schema)}"
     }
+  }
+
+  /**
+   * Build a SQL statement to drop the given table.
+   *
+   * @param table the table name
+   * @return The SQL statement to use for drop the table.
+   */
+  @Since("4.0.0")
+  def dropTable(table: String): String = {
+    s"DROP TABLE $table"
   }
 
   /**
@@ -691,6 +733,8 @@ object JdbcDialects {
   registerDialect(OracleDialect)
   registerDialect(TeradataDialect)
   registerDialect(H2Dialect)
+  registerDialect(SnowflakeDialect)
+  registerDialect(DatabricksDialect)
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
@@ -708,6 +752,6 @@ object JdbcDialects {
 /**
  * NOOP dialect object, always returning the neutral element.
  */
-object NoopDialect extends JdbcDialect {
+private[spark] object NoopDialect extends JdbcDialect {
   override def canHandle(url : String): Boolean = true
 }

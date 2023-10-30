@@ -16,22 +16,24 @@
  */
 package org.apache.spark.sql.connect.client
 
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, MethodDescriptor, Server, Status, StatusRuntimeException}
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.client.util.ConnectFunSuite
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.common.config.ConnectCommon
+import org.apache.spark.sql.test.ConnectFunSuite
 
 class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
@@ -85,6 +87,24 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     assert(response.getSessionId === "abc123")
   }
 
+  private def withEnvs(pairs: (String, String)*)(f: => Unit): Unit = {
+    val readonlyEnv = System.getenv()
+    val field = readonlyEnv.getClass.getDeclaredField("m")
+    field.setAccessible(true)
+    val modifiableEnv = field.get(readonlyEnv).asInstanceOf[java.util.Map[String, String]]
+    try {
+      for ((k, v) <- pairs) {
+        assert(!modifiableEnv.containsKey(k))
+        modifiableEnv.put(k, v)
+      }
+      f
+    } finally {
+      for ((k, _) <- pairs) {
+        modifiableEnv.remove(k)
+      }
+    }
+  }
+
   test("Test connection") {
     testClientConnection() { testPort => SparkConnectClient.builder().port(testPort).build() }
   }
@@ -108,6 +128,49 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     // Failed the ssl handshake as the dummy server does not have any server credentials installed.
     assertThrows[SparkException] {
       client.analyze(request)
+    }
+  }
+
+  test("SparkSession create with SPARK_REMOTE") {
+    startDummyServer(0)
+
+    withEnvs("SPARK_REMOTE" -> s"sc://localhost:${server.getPort}") {
+      val session = SparkSession.builder().create()
+      val df = session.range(10)
+      df.analyze // Trigger RPC
+      assert(df.plan === service.getAndClearLatestInputPlan())
+
+      val session2 = SparkSession.builder().create()
+      assert(session != session2)
+    }
+  }
+
+  test("SparkSession getOrCreate with SPARK_REMOTE") {
+    startDummyServer(0)
+
+    withEnvs("SPARK_REMOTE" -> s"sc://localhost:${server.getPort}") {
+      val session = SparkSession.builder().getOrCreate()
+
+      val df = session.range(10)
+      df.analyze // Trigger RPC
+      assert(df.plan === service.getAndClearLatestInputPlan())
+
+      val session2 = SparkSession.builder().getOrCreate()
+      assert(session === session2)
+    }
+  }
+
+  test("Builder.remote takes precedence over SPARK_REMOTE") {
+    startDummyServer(0)
+    val incorrectUrl = s"sc://localhost:${server.getPort + 1}"
+
+    withEnvs("SPARK_REMOTE" -> incorrectUrl) {
+      val session =
+        SparkSession.builder().remote(s"sc://localhost:${server.getPort}").getOrCreate()
+
+      val df = session.range(10)
+      df.analyze // Trigger RPC
+      assert(df.plan === service.getAndClearLatestInputPlan())
     }
   }
 
@@ -146,6 +209,31 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     }
   }
 
+  for ((name, constructor) <- GrpcExceptionConverter.errorFactory) {
+    test(s"error framework parameters - ${name}") {
+      val testParams = GrpcExceptionConverter.ErrorParams(
+        message = "test message",
+        cause = None,
+        errorClass = Some("test error class"),
+        messageParameters = Map("key" -> "value"),
+        queryContext = Array.empty)
+      val error = constructor(testParams)
+      if (!error.isInstanceOf[ParseException]) {
+        assert(error.getMessage == testParams.message)
+      } else {
+        assert(error.getMessage == s"\n${testParams.message}")
+      }
+      assert(error.getCause == null)
+      error match {
+        case sparkThrowable: SparkThrowable =>
+          assert(sparkThrowable.getErrorClass == testParams.errorClass.get)
+          assert(sparkThrowable.getMessageParameters.asScala == testParams.messageParameters)
+          assert(sparkThrowable.getQueryContext.isEmpty)
+        case _ =>
+      }
+    }
+  }
+
   private case class TestPackURI(
       connectionString: String,
       isCorrect: Boolean,
@@ -163,6 +251,9 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
       client => {
         assert(client.configuration.host == "localhost")
         assert(client.configuration.port == 1234)
+        assert(client.sessionId != null)
+        // Must be able to parse the UUID
+        assert(UUID.fromString(client.sessionId) != null)
       }),
     TestPackURI(
       "sc://localhost/;",
@@ -179,7 +270,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     TestPackURI(
       "sc://host:123/;user_agent=a945",
       isCorrect = true,
-      client => assert(client.userAgent == "a945")),
+      client => assert(client.userAgent.contains("a945"))),
     TestPackURI("scc://host:12", isCorrect = false),
     TestPackURI("http://host", isCorrect = false),
     TestPackURI("sc:/host:1234/path", isCorrect = false),
@@ -192,11 +283,23 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     TestPackURI("sc://host:123/;use_ssl=true", isCorrect = true),
     TestPackURI("sc://host:123/;token=mySecretToken", isCorrect = true),
     TestPackURI("sc://host:123/;token=", isCorrect = false),
+    TestPackURI("sc://host:123/;session_id=", isCorrect = false),
+    TestPackURI("sc://host:123/;session_id=abcdefgh", isCorrect = false),
+    TestPackURI(s"sc://host:123/;session_id=${UUID.randomUUID().toString}", isCorrect = true),
     TestPackURI("sc://host:123/;use_ssl=true;token=mySecretToken", isCorrect = true),
     TestPackURI("sc://host:123/;token=mySecretToken;use_ssl=true", isCorrect = true),
     TestPackURI("sc://host:123/;use_ssl=false;token=mySecretToken", isCorrect = false),
     TestPackURI("sc://host:123/;token=mySecretToken;use_ssl=false", isCorrect = false),
-    TestPackURI("sc://host:123/;param1=value1;param2=value2", isCorrect = true))
+    TestPackURI("sc://host:123/;param1=value1;param2=value2", isCorrect = true),
+    TestPackURI(
+      "sc://SPARK-45486",
+      isCorrect = true,
+      client => {
+        assert(client.userAgent.contains("spark/"))
+        assert(client.userAgent.contains("scala/"))
+        assert(client.userAgent.contains("jvm/"))
+        assert(client.userAgent.contains("os/"))
+      }))
 
   private def checkTestPack(testPack: TestPackURI): Unit = {
     val client = SparkConnectClient.builder().connectionString(testPack.connectionString).build()
@@ -213,15 +316,37 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     }
   }
 
-  private class DummyFn(val e: Throwable) {
+  private class DummyFn(val e: Throwable, numFails: Int = 3) {
     var counter = 0
     def fn(): Int = {
-      if (counter < 3) {
+      if (counter < numFails) {
         counter += 1
         throw e
       } else {
         42
       }
+    }
+  }
+
+  test("SPARK-44721: Retries run for a minimum period") {
+    // repeat test few times to avoid random flakes
+    for (_ <- 1 to 10) {
+      var totalSleepMs: Long = 0
+
+      def sleep(t: Long): Unit = {
+        totalSleepMs += t
+      }
+
+      val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE), numFails = 100)
+      val retryHandler = new GrpcRetryHandler(GrpcRetryHandler.RetryPolicy(), sleep)
+
+      assertThrows[StatusRuntimeException] {
+        retryHandler.retry {
+          dummyFn.fn()
+        }
+      }
+
+      assert(totalSleepMs >= 10 * 60 * 1000) // waited at least 10 minutes
     }
   }
 
@@ -292,12 +417,30 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     // Reply with a dummy response using the same client ID
     val requestSessionId = request.getSessionId
+    val operationId = if (request.hasOperationId) {
+      request.getOperationId
+    } else {
+      UUID.randomUUID().toString
+    }
     inputPlan = request.getPlan
     val response = ExecutePlanResponse
       .newBuilder()
       .setSessionId(requestSessionId)
+      .setOperationId(operationId)
       .build()
     responseObserver.onNext(response)
+    // Reattachable execute must end with ResultComplete
+    if (request.getRequestOptionsList.asScala.exists { option =>
+        option.hasReattachOptions && option.getReattachOptions.getReattachable == true
+      }) {
+      val resultComplete = ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(requestSessionId)
+        .setOperationId(operationId)
+        .setResultComplete(proto.ExecutePlanResponse.ResultComplete.newBuilder().build())
+        .build()
+      responseObserver.onNext(resultComplete)
+    }
     responseObserver.onCompleted()
   }
 
@@ -360,6 +503,39 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
       builder.putStatuses(name, status.setExists(exists).build())
     }
     responseObserver.onNext(builder.build())
+    responseObserver.onCompleted()
+  }
+
+  override def interrupt(
+      request: proto.InterruptRequest,
+      responseObserver: StreamObserver[proto.InterruptResponse]): Unit = {
+    val response = proto.InterruptResponse.newBuilder().setSessionId(request.getSessionId).build()
+    responseObserver.onNext(response)
+    responseObserver.onCompleted()
+  }
+
+  override def reattachExecute(
+      request: proto.ReattachExecuteRequest,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+    // Reply with a dummy response using the same client ID
+    val requestSessionId = request.getSessionId
+    val response = ExecutePlanResponse
+      .newBuilder()
+      .setSessionId(requestSessionId)
+      .build()
+    responseObserver.onNext(response)
+    responseObserver.onCompleted()
+  }
+
+  override def releaseExecute(
+      request: proto.ReleaseExecuteRequest,
+      responseObserver: StreamObserver[proto.ReleaseExecuteResponse]): Unit = {
+    val response = proto.ReleaseExecuteResponse
+      .newBuilder()
+      .setSessionId(request.getSessionId)
+      .setOperationId(request.getOperationId)
+      .build()
+    responseObserver.onNext(response)
     responseObserver.onCompleted()
   }
 }

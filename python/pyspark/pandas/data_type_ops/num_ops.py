@@ -42,7 +42,6 @@ from pyspark.pandas.data_type_ops.base import (
     _is_valid_for_logical_operator,
     _is_boolean_type,
 )
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef.typehints import extension_dtypes, pandas_on_spark_type
 from pyspark.sql import functions as F
 from pyspark.sql import Column as PySparkColumn
@@ -245,7 +244,7 @@ class IntegralOps(NumericOps):
     def mul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
         if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType):
-            return column_op(SF.repeat)(right, left)
+            return column_op(F.repeat)(right, left)
 
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Multiplication can not be applied to given types.")

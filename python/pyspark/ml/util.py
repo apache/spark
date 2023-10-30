@@ -20,7 +20,6 @@ import os
 import time
 import uuid
 import functools
-
 from typing import (
     Any,
     Callable,
@@ -34,7 +33,6 @@ from typing import (
     cast,
     TYPE_CHECKING,
 )
-
 
 from pyspark import SparkContext, since
 from pyspark.ml.common import inherit_doc
@@ -738,7 +736,6 @@ def try_remote_functions(f: FuncT) -> FuncT:
 
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
-
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.ml.connect import functions
 
@@ -747,16 +744,3 @@ def try_remote_functions(f: FuncT) -> FuncT:
             return f(*args, **kwargs)
 
     return cast(FuncT, wrapped)
-
-
-def _get_active_session(is_remote: bool) -> SparkSession:
-    if not is_remote:
-        spark = SparkSession.getActiveSession()
-    else:
-        import pyspark.sql.connect.session
-
-        spark = pyspark.sql.connect.session._active_spark_session  # type: ignore[assignment]
-
-    if spark is None:
-        raise RuntimeError("An active SparkSession is required for the distributor.")
-    return spark

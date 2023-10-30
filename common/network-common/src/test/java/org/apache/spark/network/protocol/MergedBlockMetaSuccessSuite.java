@@ -28,8 +28,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.roaringbitmap.RoaringBitmap;
 
 import static org.mockito.Mockito.*;
@@ -70,7 +70,7 @@ public class MergedBlockMetaSuccessSuite {
     when(context.alloc()).thenReturn(ByteBufAllocator.DEFAULT);
 
     MessageEncoder.INSTANCE.encode(context, expectedMeta, out);
-    Assert.assertEquals(1, out.size());
+    Assertions.assertEquals(1, out.size());
     MessageWithHeader msgWithHeader = (MessageWithHeader) out.remove(0);
 
     ByteArrayWritableChannel writableChannel =
@@ -81,20 +81,20 @@ public class MergedBlockMetaSuccessSuite {
     ByteBuf messageBuf = Unpooled.wrappedBuffer(writableChannel.getData());
     messageBuf.readLong(); // frame length
     MessageDecoder.INSTANCE.decode(mock(ChannelHandlerContext.class), messageBuf, out);
-    Assert.assertEquals(1, out.size());
+    Assertions.assertEquals(1, out.size());
     MergedBlockMetaSuccess decoded = (MergedBlockMetaSuccess) out.get(0);
-    Assert.assertEquals("merged block", expectedMeta.requestId, decoded.requestId);
-    Assert.assertEquals("num chunks", expectedMeta.getNumChunks(), decoded.getNumChunks());
+    Assertions.assertEquals(expectedMeta.requestId, decoded.requestId, "merged block");
+    Assertions.assertEquals(expectedMeta.getNumChunks(), decoded.getNumChunks(), "num chunks");
 
     ByteBuf responseBuf = Unpooled.wrappedBuffer(decoded.body().nioByteBuffer());
     RoaringBitmap[] responseBitmaps = new RoaringBitmap[expectedMeta.getNumChunks()];
     for (int i = 0; i < expectedMeta.getNumChunks(); i++) {
       responseBitmaps[i] = Encoders.Bitmaps.decode(responseBuf);
     }
-    Assert.assertEquals(
-      "num of roaring bitmaps", expectedMeta.getNumChunks(), responseBitmaps.length);
+    Assertions.assertEquals(
+      expectedMeta.getNumChunks(), responseBitmaps.length, "num of roaring bitmaps");
     for (int i = 0; i < expectedMeta.getNumChunks(); i++) {
-      Assert.assertEquals("chunk bitmap " + i, expectedChunks[i], responseBitmaps[i]);
+      Assertions.assertEquals(expectedChunks[i], responseBitmaps[i], "chunk bitmap " + i);
     }
     Files.delete(chunkMetaFile.toPath());
   }

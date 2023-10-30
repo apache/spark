@@ -20,7 +20,7 @@ package org.apache.spark.streaming.kafka010
 import java.{lang => jl, util => ju}
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
@@ -241,7 +241,7 @@ object ConsumerStrategies {
     new Subscribe[K, V](
       new ju.ArrayList(topics.asJavaCollection),
       new ju.HashMap[String, Object](kafkaParams.asJava),
-      new ju.HashMap[TopicPartition, jl.Long](offsets.mapValues(jl.Long.valueOf).toMap.asJava))
+      new ju.HashMap[TopicPartition, jl.Long](offsets.view.mapValues(jl.Long.valueOf).toMap.asJava))
   }
 
   /**
@@ -320,7 +320,7 @@ object ConsumerStrategies {
     new SubscribePattern[K, V](
       pattern,
       new ju.HashMap[String, Object](kafkaParams.asJava),
-      new ju.HashMap[TopicPartition, jl.Long](offsets.mapValues(jl.Long.valueOf).toMap.asJava))
+      new ju.HashMap[TopicPartition, jl.Long](offsets.view.mapValues(jl.Long.valueOf).toMap.asJava))
   }
 
   /**
@@ -404,7 +404,7 @@ object ConsumerStrategies {
     new Assign[K, V](
       new ju.ArrayList(topicPartitions.asJavaCollection),
       new ju.HashMap[String, Object](kafkaParams.asJava),
-      new ju.HashMap[TopicPartition, jl.Long](offsets.mapValues(jl.Long.valueOf).toMap.asJava))
+      new ju.HashMap[TopicPartition, jl.Long](offsets.view.mapValues(jl.Long.valueOf).toMap.asJava))
   }
 
   /**

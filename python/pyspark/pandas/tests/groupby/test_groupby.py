@@ -17,13 +17,12 @@
 
 import unittest
 import inspect
-from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.exceptions import PandasNotImplementedError, DataError
+from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.missing.groupby import (
     MissingPandasLikeDataFrameGroupBy,
     MissingPandasLikeSeriesGroupBy,
@@ -59,9 +58,6 @@ class GroupByTestsMixin:
             },
             index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
         )
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            # TODO(SPARK-43295): Make DataFrameGroupBy.sum support for string type columns
-            pdf = pdf[["a", "b", "c", "e"]]
         psdf = ps.from_pandas(pdf)
 
         for as_index in [True, False]:
@@ -180,9 +176,6 @@ class GroupByTestsMixin:
             index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
         )
         psdf = ps.from_pandas(pdf)
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            # TODO(SPARK-43295): Make DataFrameGroupBy.sum support for string type columns
-            pdf = pdf[[10, 20, 30]]
 
         for as_index in [True, False]:
             if as_index:
@@ -454,7 +447,6 @@ class GroupByTestsMixin:
 
     @staticmethod
     def test_is_multi_agg_with_relabel():
-
         assert is_multi_agg_with_relabel(a="max") is False
         assert is_multi_agg_with_relabel(a_min=("a", "max"), a_max=("a", "min")) is True
 
@@ -692,21 +684,13 @@ class GroupByTestsMixin:
             psdf.groupby("a").agg({"b": "nunique"}).sort_index(),
             pdf.groupby("a").agg({"b": "nunique"}).sort_index(),
         )
-        if LooseVersion(pd.__version__) < LooseVersion("1.1.0"):
-            expected = ps.DataFrame({"b": [2, 2]}, index=pd.Index([0, 1], name="a"))
-            self.assert_eq(psdf.groupby("a").nunique().sort_index(), expected)
-            self.assert_eq(
-                psdf.groupby("a").nunique(dropna=False).sort_index(),
-                expected,
-            )
-        else:
-            self.assert_eq(
-                psdf.groupby("a").nunique().sort_index(), pdf.groupby("a").nunique().sort_index()
-            )
-            self.assert_eq(
-                psdf.groupby("a").nunique(dropna=False).sort_index(),
-                pdf.groupby("a").nunique(dropna=False).sort_index(),
-            )
+        self.assert_eq(
+            psdf.groupby("a").nunique().sort_index(), pdf.groupby("a").nunique().sort_index()
+        )
+        self.assert_eq(
+            psdf.groupby("a").nunique(dropna=False).sort_index(),
+            pdf.groupby("a").nunique(dropna=False).sort_index(),
+        )
         self.assert_eq(
             psdf.groupby("a")["b"].nunique().sort_index(),
             pdf.groupby("a")["b"].nunique().sort_index(),
@@ -728,25 +712,14 @@ class GroupByTestsMixin:
         pdf.columns = columns
         psdf.columns = columns
 
-        if LooseVersion(pd.__version__) < LooseVersion("1.1.0"):
-            expected = ps.DataFrame({("y", "b"): [2, 2]}, index=pd.Index([0, 1], name=("x", "a")))
-            self.assert_eq(
-                psdf.groupby(("x", "a")).nunique().sort_index(),
-                expected,
-            )
-            self.assert_eq(
-                psdf.groupby(("x", "a")).nunique(dropna=False).sort_index(),
-                expected,
-            )
-        else:
-            self.assert_eq(
-                psdf.groupby(("x", "a")).nunique().sort_index(),
-                pdf.groupby(("x", "a")).nunique().sort_index(),
-            )
-            self.assert_eq(
-                psdf.groupby(("x", "a")).nunique(dropna=False).sort_index(),
-                pdf.groupby(("x", "a")).nunique(dropna=False).sort_index(),
-            )
+        self.assert_eq(
+            psdf.groupby(("x", "a")).nunique().sort_index(),
+            pdf.groupby(("x", "a")).nunique().sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby(("x", "a")).nunique(dropna=False).sort_index(),
+            pdf.groupby(("x", "a")).nunique(dropna=False).sort_index(),
+        )
 
     def test_unique(self):
         for pdf in [
@@ -769,10 +742,6 @@ class GroupByTestsMixin:
                 for act, exp in zip(actual, expect):
                     self.assertTrue(sorted(act) == sorted(exp))
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43444): Enable GroupBySlowTests.test_value_counts for pandas 2.0.0.",
-    )
     def test_value_counts(self):
         pdf = pd.DataFrame(
             {"A": [np.nan, 2, 2, 3, 3, 3], "B": [1, 1, 2, 3, 3, np.nan]}, columns=["A", "B"]
@@ -785,6 +754,7 @@ class GroupByTestsMixin:
         self.assert_eq(
             psdf.groupby("A")["B"].value_counts(dropna=False).sort_index(),
             pdf.groupby("A")["B"].value_counts(dropna=False).sort_index(),
+            almost=True,
         )
         self.assert_eq(
             psdf.groupby("A", dropna=False)["B"].value_counts(dropna=False).sort_index(),
@@ -804,6 +774,7 @@ class GroupByTestsMixin:
             pdf.groupby("A")["B"]
             .value_counts(sort=True, ascending=False, dropna=False)
             .sort_index(),
+            almost=True,
         )
         self.assert_eq(
             psdf.groupby("A")["B"]
@@ -812,6 +783,7 @@ class GroupByTestsMixin:
             pdf.groupby("A")["B"]
             .value_counts(sort=True, ascending=True, dropna=False)
             .sort_index(),
+            almost=True,
         )
         self.assert_eq(
             psdf.B.rename().groupby(psdf.A).value_counts().sort_index(),

@@ -21,9 +21,10 @@ import java.io.{File, IOException}
 import java.net.URI
 import java.util
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.apache.commons.io.FileUtils
@@ -48,7 +49,14 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
+  import FakeStateStoreProviderWithMaintenanceError._
   private var id: StateStoreId = null
+
+  private val exceptionHandler = new Thread.UncaughtExceptionHandler() {
+    override def uncaughtException(t: Thread, e: Throwable): Unit = {
+      errorOnMaintenance.set(true)
+    }
+  }
 
   override def init(
       stateStoreId: StateStoreId,
@@ -67,8 +75,13 @@ class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
   override def getStore(version: Long): StateStore = null
 
   override def doMaintenance(): Unit = {
+    Thread.currentThread.setUncaughtExceptionHandler(exceptionHandler)
     throw new RuntimeException("Intentional maintenance failure")
   }
+}
+
+private object FakeStateStoreProviderWithMaintenanceError {
+  val errorOnMaintenance = new AtomicBoolean(false)
 }
 
 @ExtendedSQLTest
@@ -120,7 +133,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   }
 
   test("failure after committing with MAX_BATCHES_TO_RETAIN_IN_MEMORY set to 1") {
-    tryWithProviderResource(newStoreProvider(opId = Random.nextInt, partition = 0,
+    tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
       numOfVersToRetainInMemory = 1)) { provider =>
 
       var currentVersion = 0
@@ -161,7 +174,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   }
 
   test("no cache data with MAX_BATCHES_TO_RETAIN_IN_MEMORY set to 0") {
-    tryWithProviderResource(newStoreProvider(opId = Random.nextInt, partition = 0,
+    tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
       numOfVersToRetainInMemory = 0)) { provider =>
 
       var currentVersion = 0
@@ -181,7 +194,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   }
 
   test("cleaning") {
-    tryWithProviderResource(newStoreProvider(opId = Random.nextInt, partition = 0,
+    tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
       minDeltasForSnapshot = 5)) { provider =>
 
       for (i <- 1 to 20) {
@@ -208,7 +221,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     conf.set("fs.defaultFS", "fake:///")
 
     tryWithProviderResource(
-      newStoreProvider(opId = Random.nextInt, partition = 0, hadoopConf = conf)) { provider =>
+      newStoreProvider(opId = Random.nextInt(), partition = 0, hadoopConf = conf)) { provider =>
 
       provider.getStore(0).commit()
       provider.getStore(0).commit()
@@ -221,7 +234,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   }
 
   test("corrupted file handling") {
-    tryWithProviderResource(newStoreProvider(opId = Random.nextInt, partition = 0,
+    tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
       minDeltasForSnapshot = 5)) { provider =>
 
       for (i <- 1 to 6) {
@@ -267,7 +280,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
         parameters = Map(
           "fileToRead" -> s"${provider.stateStoreId.storeCheckpointLocation()}/1.delta",
-          "clazz" -> s"${provider.toString}"
+          "clazz" -> s"${provider.toString()}"
         )
       )
     }
@@ -521,21 +534,6 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
-  testQuietly("SPARK-18342: commit fails when rename fails") {
-    import RenameReturnsFalseFileSystem._
-    val dir = scheme + "://" + newDir()
-    val conf = new Configuration()
-    conf.set(s"fs.$scheme.impl", classOf[RenameReturnsFalseFileSystem].getName)
-    tryWithProviderResource(newStoreProvider(
-      opId = Random.nextInt, partition = 0, dir = dir, hadoopConf = conf)) { provider =>
-
-      val store = provider.getStore(0)
-      put(store, "a", 0, 0)
-      val e = intercept[IllegalStateException](store.commit())
-      assert(e.getCause.getMessage.contains("Failed to rename"))
-    }
-  }
-
   test("SPARK-18416: do not create temp delta file until the store is updated") {
     val dir = newDir()
     val storeId = StateStoreProviderId(StateStoreId(dir, 0, 0), UUID.randomUUID)
@@ -662,7 +660,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       classOf[CreateAtomicTestManager].getName)
     val remoteDir = Utils.createTempDir().getAbsolutePath
 
-    tryWithProviderResource(newStoreProvider(opId = Random.nextInt, partition = 0,
+    tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
       dir = remoteDir, hadoopConf = hadoopConf)) { provider =>
 
       // Disable failure of output stream and generate versions
@@ -679,8 +677,9 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       // Fail commit for next version and verify that reloading resets the files
       CreateAtomicTestManager.shouldFailInCreateAtomic = true
       put(store, "11", 0, 11)
-      val e = intercept[IllegalStateException] { quietly { store.commit() } }
+      val e = intercept[SparkException] { quietly { store.commit() } }
       assert(e.getCause.isInstanceOf[IOException])
+      assert(e.getMessage.contains("Cannot perform commit"))
       CreateAtomicTestManager.shouldFailInCreateAtomic = false
 
       // Abort commit for next version and verify that reloading resets the files
@@ -784,6 +783,14 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
   override def newStoreProvider(storeId: StateStoreId): HDFSBackedStateStoreProvider = {
     newStoreProvider(storeId.operatorId, storeId.partitionId, dir = storeId.checkpointRootLocation)
+  }
+
+  def newStoreProvider(storeId: StateStoreId, conf: Configuration): HDFSBackedStateStoreProvider = {
+    newStoreProvider(
+      storeId.operatorId,
+      storeId.partitionId,
+      dir = storeId.checkpointRootLocation,
+      hadoopConf = conf)
   }
 
   override def newStoreProvider(
@@ -1036,14 +1043,14 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       put(store, "b", 0, 2)
 
       // Updates should work while iterating of filtered entries
-      val filtered = store.iterator.filter { tuple => keyRowToData(tuple.key) == ("a", 0) }
+      val filtered = store.iterator().filter { tuple => keyRowToData(tuple.key) == ("a", 0) }
       filtered.foreach { tuple =>
         store.put(tuple.key, dataToValueRow(valueRowToData(tuple.value) + 1))
       }
       assert(get(store, "a", 0) === Some(2))
 
       // Removes should work while iterating of filtered entries
-      val filtered2 = store.iterator.filter { tuple => keyRowToData(tuple.key) == ("b", 0) }
+      val filtered2 = store.iterator().filter { tuple => keyRowToData(tuple.key) == ("b", 0) }
       filtered2.foreach { tuple => store.remove(tuple.key) }
       assert(get(store, "b", 0) === None)
     }
@@ -1139,6 +1146,31 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
   }
 
+  testQuietly("SPARK-18342: commit fails when rename fails") {
+    import RenameReturnsFalseFileSystem._
+
+    val ROCKSDB_STATE_STORE = "RocksDBStateStore"
+    val dir = scheme + "://" + newDir()
+    val conf = new Configuration()
+    conf.set(s"fs.$scheme.impl", classOf[RenameReturnsFalseFileSystem].getName)
+
+    val storeId = StateStoreId(dir, operatorId = 0, partitionId = 0)
+    tryWithProviderResource(newStoreProvider(storeId, conf)) { provider =>
+      val store = provider.getStore(0)
+      put(store, "a", 0, 0)
+      val e = intercept[SparkException](quietly { store.commit() } )
+
+      assert(e.getErrorClass == "CANNOT_WRITE_STATE_STORE.CANNOT_COMMIT")
+      if (store.getClass.getName contains ROCKSDB_STATE_STORE) {
+        assert(e.getMessage contains "RocksDBStateStore[id=(op=0,part=0)")
+      } else {
+        assert(e.getMessage contains "HDFSStateStore[id=(op=0,part=0)")
+      }
+      assert(e.getMessage contains "Error writing state store files")
+      assert(e.getCause.getMessage.contains("Failed to rename"))
+    }
+  }
+
   // This test illustrates state store iterator behavior differences leading to SPARK-38320.
   testWithAllCodec("SPARK-38320 - state store iterator behavior differences") {
     val ROCKSDB_STATE_STORE = "RocksDBStateStore"
@@ -1220,7 +1252,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
         withCoordinatorRef(sc) { coordinatorRef =>
           val dir = newDir()
           val storeId = StateStoreProviderId(StateStoreId(dir, 0, 0), UUID.randomUUID)
-          val storeConf = getDefaultStoreConf
+          val storeConf = getDefaultStoreConf()
           val hadoopConf = new Configuration()
 
           // Verify that trying to get incorrect versions throw errors
@@ -1364,6 +1396,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     quietly {
       withSpark(new SparkContext(conf)) { sc =>
         withCoordinatorRef(sc) { _ =>
+          FakeStateStoreProviderWithMaintenanceError.errorOnMaintenance.set(false)
           val storeId = StateStoreProviderId(StateStoreId("firstDir", 0, 1), UUID.randomUUID)
           val storeConf = StateStoreConf(sqlConf)
 
@@ -1373,6 +1406,12 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
           eventually(timeout(30.seconds)) {
             assert(!StateStore.isMaintenanceRunning)
           }
+
+          // SPARK-45002: The maintenance task thread failure should not invoke the
+          // SparkUncaughtExceptionHandler which could lead to the executor process
+          // getting killed.
+          assert(!FakeStateStoreProviderWithMaintenanceError.errorOnMaintenance.get)
+
           StateStore.stop()
         }
       }
@@ -1409,6 +1448,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
   /** Return a new provider with the given id */
   def newStoreProvider(storeId: StateStoreId): ProviderClass
+
+  /** Return a new provider with the given id and configuration */
+  def newStoreProvider(storeId: StateStoreId, conf: Configuration): ProviderClass
 
   /** Return a new provider with minimum delta and version to retain in memory */
   def newStoreProvider(minDeltasForSnapshot: Int, numOfVersToRetainInMemory: Int): ProviderClass
@@ -1574,5 +1616,5 @@ class RenameReturnsFalseFileSystem extends RawLocalFileSystem {
 }
 
 object RenameReturnsFalseFileSystem {
-  val scheme = s"StateStoreSuite${math.abs(Random.nextInt)}fs"
+  val scheme = s"StateStoreSuite${math.abs(Random.nextInt())}fs"
 }
