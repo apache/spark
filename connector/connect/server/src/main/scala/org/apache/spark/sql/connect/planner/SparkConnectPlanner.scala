@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connect.planner
 
+import scala.collection.immutable
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -3183,9 +3184,9 @@ class SparkConnectPlanner(
       case StreamingQueryManagerCommand.CommandCase.ACTIVE =>
         val active_queries = session.streams.active
         respBuilder.getActiveBuilder.addAllActiveQueries(
-          active_queries
-            .map(query => buildStreamingQueryInstance(query))
-            .toIterable
+          immutable.ArraySeq
+            .unsafeWrapArray(active_queries
+              .map(query => buildStreamingQueryInstance(query)))
             .asJava)
 
       case StreamingQueryManagerCommand.CommandCase.GET_QUERY =>
@@ -3264,16 +3265,15 @@ class SparkConnectPlanner(
         .setGetResourcesCommandResult(
           proto.GetResourcesCommandResult
             .newBuilder()
-            .putAllResources(
-              session.sparkContext.resources.view
-                .mapValues(resource =>
-                  proto.ResourceInformation
-                    .newBuilder()
-                    .setName(resource.name)
-                    .addAllAddresses(resource.addresses.toIterable.asJava)
-                    .build())
-                .toMap
-                .asJava)
+            .putAllResources(session.sparkContext.resources.view
+              .mapValues(resource =>
+                proto.ResourceInformation
+                  .newBuilder()
+                  .setName(resource.name)
+                  .addAllAddresses(immutable.ArraySeq.unsafeWrapArray(resource.addresses).asJava)
+                  .build())
+              .toMap
+              .asJava)
             .build())
         .build())
   }
