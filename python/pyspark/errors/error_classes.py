@@ -354,7 +354,7 @@ ERROR_CLASSES_JSON = """
   },
   "JVM_ATTRIBUTE_NOT_SUPPORTED" : {
     "message" : [
-      "Attribute `<attr_name>` is not supported in Spark Connect as it depends on the JVM. If you need to use this attribute, do not use Spark Connect when creating your session."
+      "Attribute `<attr_name>` is not supported in Spark Connect as it depends on the JVM. If you need to use this attribute, do not use Spark Connect when creating your session. Visit https://spark.apache.org/docs/latest/sql-getting-started.html#starting-point-sparksession for creating regular Spark Session in detail."
     ]
   },
   "KEY_VALUE_PAIR_REQUIRED" : {

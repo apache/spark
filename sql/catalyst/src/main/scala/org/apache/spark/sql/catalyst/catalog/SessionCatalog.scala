@@ -968,7 +968,7 @@ class SessionCatalog(
       } else {
         _.toLowerCase(Locale.ROOT)
       }
-      val nameToCounts = viewColumnNames.groupBy(normalizeColName).mapValues(_.length)
+      val nameToCounts = viewColumnNames.groupBy(normalizeColName).view.mapValues(_.length)
       val nameToCurrentOrdinal = scala.collection.mutable.HashMap.empty[String, Int]
       val viewDDL = buildViewDDL(metadata, isTempView)
 

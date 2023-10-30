@@ -22,6 +22,7 @@ import java.util.List;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -81,16 +82,16 @@ public class ShuffleTransportContext extends TransportContext {
   }
 
   @Override
-  public TransportChannelHandler initializePipeline(SocketChannel channel) {
-    TransportChannelHandler ch = super.initializePipeline(channel);
+  public TransportChannelHandler initializePipeline(SocketChannel channel, boolean isClient) {
+    TransportChannelHandler ch = super.initializePipeline(channel, isClient);
     addHandlerToPipeline(channel, ch);
     return ch;
   }
 
   @Override
   public TransportChannelHandler initializePipeline(SocketChannel channel,
-      RpcHandler channelRpcHandler) {
-    TransportChannelHandler ch = super.initializePipeline(channel, channelRpcHandler);
+      RpcHandler channelRpcHandler, boolean isClient) {
+    TransportChannelHandler ch = super.initializePipeline(channel, channelRpcHandler, isClient);
     addHandlerToPipeline(channel, ch);
     return ch;
   }
@@ -112,6 +113,7 @@ public class ShuffleTransportContext extends TransportContext {
     return finalizeWorkers == null ? super.getDecoder() : SHUFFLE_DECODER;
   }
 
+  @ChannelHandler.Sharable
   static class ShuffleMessageDecoder extends MessageToMessageDecoder<ByteBuf> {
 
     private final MessageDecoder delegate;

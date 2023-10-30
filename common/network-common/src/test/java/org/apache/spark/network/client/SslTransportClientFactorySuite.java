@@ -15,20 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.yarn
+package org.apache.spark.network.client;
 
-import org.apache.spark.network.ssl.SslSampleConfigs
+import org.junit.jupiter.api.BeforeEach;
 
-class SslYarnShuffleServiceWithRocksDBBackendSuite
-  extends YarnShuffleServiceWithRocksDBBackendSuite {
+import org.apache.spark.network.ssl.SslSampleConfigs;
+import org.apache.spark.network.server.NoOpRpcHandler;
+import org.apache.spark.network.server.RpcHandler;
+import org.apache.spark.network.util.TransportConf;
+import org.apache.spark.network.TransportContext;
 
-  /**
-   * Override to add "spark.ssl.rpc.*" configuration parameters...
-   */
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    // Same as SSLTestUtils.updateWithSSLConfig(), which is not available to import here.
-    SslSampleConfigs.createDefaultConfigMapForRpcNamespace().entrySet().
-      forEach(entry => yarnConfig.set(entry.getKey, entry.getValue))
+public class SslTransportClientFactorySuite extends TransportClientFactorySuite {
+
+  @BeforeEach
+  public void setUp() {
+    conf = new TransportConf(
+      "shuffle", SslSampleConfigs.createDefaultConfigProviderForRpcNamespace());
+    RpcHandler rpcHandler = new NoOpRpcHandler();
+    context = new TransportContext(conf, rpcHandler);
+    server1 = context.createServer();
+    server2 = context.createServer();
   }
 }
