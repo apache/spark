@@ -46,12 +46,12 @@ case class DescribeNamespaceExec(
     }
 
     if (isExtended) {
-      val properties = metadata.asScala -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
+      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.foreach(metadata.remove(_))
       val propertiesStr =
-        if (properties.isEmpty) {
+        if (metadata.isEmpty) {
           ""
         } else {
-          conf.redactOptions(properties.toMap).toSeq.sortBy(_._1).mkString("(", ", ", ")")
+          conf.redactOptions(metadata.asScala.toMap).toSeq.sortBy(_._1).mkString("(", ", ", ")")
         }
       rows += toCatalystRow("Properties", propertiesStr)
     }

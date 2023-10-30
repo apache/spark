@@ -626,7 +626,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     val expectedEvent: SparkListenerEnvironmentUpdate = {
       val e = JsonProtocol.environmentUpdateFromJson(environmentUpdateJsonString)
       e.copy(environmentDetails =
-        e.environmentDetails + ("Metrics Properties" -> Seq.empty[(String, String)]))
+        e.environmentDetails ++ Map("Metrics Properties" -> Seq.empty[(String, String)]))
     }
     val oldEnvironmentUpdateJson = environmentUpdateJsonString
       .removeField("Metrics Properties")

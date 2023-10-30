@@ -53,7 +53,7 @@ private[spark] class YarnClientSchedulerBackend(
     sc.ui.foreach { ui => conf.set(DRIVER_APP_UI_ADDRESS, ui.webUrl) }
 
     val argsArrayBuf = new ArrayBuffer[String]()
-    argsArrayBuf += ("--arg", hostport)
+    argsArrayBuf += "--arg" += hostport
 
     logDebug("ClientArguments called with: " + argsArrayBuf.mkString(" "))
     val args = new ClientArguments(argsArrayBuf.toArray)

@@ -118,7 +118,7 @@ class TimeStampedHashMapSuite extends SparkFunSuite {
       assert(testMap2.iterator.toSeq.head === (("k1", "v1")))
 
       // +
-      val testMap3 = testMap2 + (("k0", "v0"))
+      val testMap3 = testMap2 ++ Map("k0" -> "v0")
       assert(testMap3.size === 2)
       assert(testMap3.get("k1").isDefined)
       assert(testMap3("k1") === "v1")
@@ -126,10 +126,10 @@ class TimeStampedHashMapSuite extends SparkFunSuite {
       assert(testMap3("k0") === "v0")
 
       // -
-      val testMap4 = testMap3 - "k0"
-      assert(testMap4.size === 1)
-      assert(testMap4.get("k1").isDefined)
-      assert(testMap4("k1") === "v1")
+      testMap3.remove("k0")
+      assert(testMap3.size === 1)
+      assert(testMap3.get("k1").isDefined)
+      assert(testMap3("k1") === "v1")
     }
   }
 
