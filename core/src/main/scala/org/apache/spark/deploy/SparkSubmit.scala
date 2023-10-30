@@ -727,7 +727,7 @@ private[spark] class SparkSubmit extends Logging {
       if (opt.value != null &&
           (deployMode & opt.deployMode) != 0 &&
           (clusterManager & opt.clusterManager) != 0) {
-        if (opt.clOption != null) { childArgs += (opt.clOption, opt.value) }
+        if (opt.clOption != null) { childArgs.addOne(opt.clOption).addOne(opt.value) }
         if (opt.confKey != null) {
           if (opt.mergeFn.isDefined && sparkConf.contains(opt.confKey)) {
             sparkConf.set(opt.confKey, opt.mergeFn.get.apply(sparkConf.get(opt.confKey), opt.value))
