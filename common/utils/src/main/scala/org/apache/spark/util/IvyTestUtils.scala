@@ -311,7 +311,7 @@ private[spark] object IvyTestUtils {
       }
       if (withR) {
         val rFiles = createRFiles(root, className, artifact.groupId)
-        allFiles.append(rFiles: _*)
+        allFiles.appendAll(rFiles)
       }
       val jarFile = packJar(jarPath, artifact, allFiles.toSeq, useIvyLayout, withR)
       assert(jarFile.exists(), "Problem creating Jar file")
