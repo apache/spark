@@ -321,17 +321,6 @@ private[sql] trait SQLTestUtilsBase
   }
 
   /**
-   * Drops global view `viewName` after calling `f`.
-   */
-  protected def withGlobalView(viewNames: String*)(f: => Unit): Unit = {
-    Utils.tryWithSafeFinally(f)(
-      viewNames.foreach { name =>
-        spark.sessionState.catalog.dropGlobalTempView(name)
-      }
-    )
-  }
-
-  /**
    * Drops cache `cacheName` after calling `f`.
    */
   protected def withCache(cacheNames: String*)(f: => Unit): Unit = {

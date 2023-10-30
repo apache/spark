@@ -49,8 +49,7 @@ case class ShowTablesExtendedExec(
     // TODO We need a new listTable overload that takes a pattern string.
     val tables = catalog.listTables(namespace.toArray)
     tables.map { tableIdent =>
-      if (Option(pattern).forall(StringUtils.filterPattern(
-        Seq(tableIdent.name()), _).nonEmpty)) {
+      if (StringUtils.filterPattern(Seq(tableIdent.name()), pattern).nonEmpty) {
         val table = catalog.loadTable(tableIdent)
         val information = getTableDetails(catalog.name, tableIdent, table)
         rows += toCatalystRow(tableIdent.namespace().quoted, tableIdent.name(), false,
@@ -58,23 +57,20 @@ case class ShowTablesExtendedExec(
         }
       }
 
-    // fetch views, includes: view, global temp view, local temp view
+    // fetch temp views, includes: global temp view, local temp view
     val sessionCatalog = session.sessionState.catalog
-    val (namespaceExists, db) = namespace match {
-      case Seq(db) =>
-        (sessionCatalog.databaseExists(db), Some(db))
-      case _ =>
-        (false, None)
+    val db = namespace match {
+      case Seq(db) => Some(db)
+      case _ => None
     }
-    if (namespaceExists) {
-      val views = sessionCatalog.listViews(db.get, pattern)
-      views.map { viewIdent =>
-        val tableName = viewIdent.table
-        val isTemp = sessionCatalog.isTempView(viewIdent)
-        val view = sessionCatalog.getTempViewOrPermanentTableMetadata(viewIdent)
-        val information = view.simpleString
-        rows += toCatalystRow(db.get, tableName, isTemp, s"$information\n")
-      }
+    val views = sessionCatalog.listTempViews(db.get, pattern)
+    views.map { viewIdent =>
+      val database = viewIdent.database.getOrElse("")
+      val tableName = viewIdent.table
+      val isTemp = sessionCatalog.isTempView(viewIdent)
+      val view = sessionCatalog.getTempViewOrPermanentTableMetadata(viewIdent)
+      val information = view.simpleString
+      rows += toCatalystRow(database, tableName, isTemp, s"$information\n")
     }
 
     rows.toSeq
@@ -87,10 +83,7 @@ case class ShowTablesExtendedExec(
     val results = new mutable.LinkedHashMap[String, String]()
 
     results.put("Catalog", catalogName)
-
-    if (!identifier.namespace().isEmpty) {
-      results.put("Namespace", identifier.namespace().quoted)
-    }
+    results.put("Namespace", identifier.namespace().quoted)
     results.put("Table", identifier.name())
     val tableType = if (table.properties().containsKey(TableCatalog.PROP_EXTERNAL)) {
       CatalogTableType.EXTERNAL

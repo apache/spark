@@ -178,31 +178,24 @@ class ShowTablesSuite extends v1.ShowTablesSuiteBase with CommandSuiteBase {
     }
   }
 
-  test("show table extended in view: permanent, temp global, temp local") {
+  test("show table extended in permanent view") {
     val namespace = "ns"
     val table = "tbl"
     withNamespaceAndTable(namespace, table, catalog) { t =>
       sql(s"CREATE TABLE $t (id int) $defaultUsing")
       val viewName = table + "_view"
-      val tmpLocalViewName = viewName + "_local_tmp"
-      val tmpGlobalViewName = viewName + "_global_tmp"
-      withView(viewName, tmpLocalViewName) {
-        sql(s"CREATE VIEW $viewName AS SELECT id FROM $t")
-        sql(s"CREATE TEMPORARY VIEW $tmpLocalViewName AS SELECT id FROM $t")
-
-        // permanent view + temp local view
-        val result1 = sql(s"SHOW TABLE EXTENDED LIKE '$viewName*'").sort("tableName")
-
-        assert(result1.schema.fieldNames ===
+      withView(viewName) {
+        sql(s"CREATE VIEW $catalog.$namespace.$viewName AS SELECT id FROM $t")
+        val result = sql(s"SHOW TABLE EXTENDED in $namespace LIKE '$viewName*'").sort("tableName")
+        assert(result.schema.fieldNames ===
           Seq("namespace", "tableName", "isTemporary", "information"))
-        val resultCollect1 = result1.collect()
-        assert(resultCollect1.length == 2)
-
-        assert(resultCollect1(0).length == 4)
-        assert(resultCollect1(0)(1) === viewName)
-        assert(resultCollect1(0)(2) === false)
-        val actualResult1_1 = exclude(resultCollect1(0)(3).toString)
-        val expectedResult1_1 =
+        val resultCollect = result.collect()
+        assert(resultCollect.length == 1)
+        assert(resultCollect(0).length == 4)
+        assert(resultCollect(0)(1) === viewName)
+        assert(resultCollect(0)(2) === false)
+        val actualResult = exclude(resultCollect(0)(3).toString)
+        val expectedResult =
           s"""Catalog: $catalog
              |Database: $namespace
              |Table: $viewName
@@ -218,60 +211,7 @@ class ShowTablesSuite extends v1.ShowTablesSuiteBase with CommandSuiteBase {
              |Storage Properties: [serialization.format=1]
              |Schema: root
              | |-- id: integer (nullable = true)""".stripMargin
-        assert(actualResult1_1 === expectedResult1_1)
-
-        assert(resultCollect1(1).length == 4)
-        assert(resultCollect1(1)(1) === tmpLocalViewName)
-        assert(resultCollect1(1)(2) === true)
-        val actualResult1_2 = exclude(resultCollect1(1)(3).toString)
-        val expectedResult1_2 =
-          s"""Table: $tmpLocalViewName
-             |Type: VIEW
-             |View Text: SELECT id FROM $catalog.$namespace.$table
-             |View Catalog and Namespace: $catalog.$namespace
-             |View Query Output Columns: [id]
-             |Schema: root
-             | |-- id: integer (nullable = true)""".stripMargin
-        assert(actualResult1_2 === expectedResult1_2)
-
-        withGlobalView(tmpGlobalViewName) {
-          sql(s"CREATE GLOBAL TEMPORARY VIEW $tmpGlobalViewName AS SELECT id FROM $t")
-
-           // permanent view + temp global view
-          val result2 = sql(s"SHOW TABLE EXTENDED in global_temp LIKE '$viewName*'").
-            sort("tableName")
-          val resultCollect2 = result2.collect()
-          assert(resultCollect2.length == 2)
-
-          assert(resultCollect2(0).length == 4)
-          assert(resultCollect2(0)(1) === tmpGlobalViewName)
-          assert(resultCollect2(0)(2) === true)
-          val actualResult2_1 = exclude(resultCollect2(0)(3).toString)
-          val expectedResult2_1 =
-            s"""Database: global_temp
-               |Table: $tmpGlobalViewName
-               |Type: VIEW
-               |View Text: SELECT id FROM $catalog.$namespace.$table
-               |View Catalog and Namespace: $catalog.$namespace
-               |View Query Output Columns: [id]
-               |Schema: root
-               | |-- id: integer (nullable = true)""".stripMargin
-          assert(actualResult2_1 === expectedResult2_1)
-
-          assert(resultCollect2(1).length == 4)
-          assert(resultCollect2(1)(1) === tmpLocalViewName)
-          assert(resultCollect2(1)(2) === true)
-          val actualResult2_2 = exclude(resultCollect2(1)(3).toString)
-          val expectedResult2_2 =
-            s"""Table: $tmpLocalViewName
-             |Type: VIEW
-             |View Text: SELECT id FROM $catalog.$namespace.$table
-             |View Catalog and Namespace: $catalog.$namespace
-             |View Query Output Columns: [id]
-             |Schema: root
-             | |-- id: integer (nullable = true)""".stripMargin
-          assert(actualResult2_2 === expectedResult2_2)
-        }
+        assert(actualResult === expectedResult)
       }
     }
   }

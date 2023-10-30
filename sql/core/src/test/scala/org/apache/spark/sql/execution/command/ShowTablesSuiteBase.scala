@@ -198,6 +198,79 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
+  test("show table extended in temp view, include: temp global, temp local") {
+    val namespace = "ns"
+    val table = "tbl"
+    withNamespaceAndTable(namespace, table, catalog) { t =>
+      sql(s"CREATE TABLE $t (id int) $defaultUsing")
+      val viewName = table + "_view"
+      val localTmpViewName = viewName + "_local_tmp"
+      val globalTmpViewName = viewName + "_global_tmp"
+      val globalNamespace = "global_temp"
+      withView(localTmpViewName, globalNamespace + "." + globalTmpViewName) {
+        sql(s"CREATE TEMPORARY VIEW $localTmpViewName AS SELECT id FROM $t")
+        sql(s"CREATE GLOBAL TEMPORARY VIEW $globalTmpViewName AS SELECT id FROM $t")
+
+        // temp local view
+        val localResult = sql(s"SHOW TABLE EXTENDED LIKE '$viewName*'").sort("tableName")
+        assert(localResult.schema.fieldNames ===
+          Seq("namespace", "tableName", "isTemporary", "information"))
+        val localResultCollect = localResult.collect()
+        assert(localResultCollect.length == 1)
+        assert(localResultCollect(0).length == 4)
+        assert(localResultCollect(0)(1) === localTmpViewName)
+        assert(localResultCollect(0)(2) === true)
+        val actualLocalResult = exclude(localResultCollect(0)(3).toString)
+        val expectedLocalResult =
+          s"""Table: $localTmpViewName
+             |Type: VIEW
+             |View Text: SELECT id FROM $catalog.$namespace.$table
+             |View Catalog and Namespace: spark_catalog.default
+             |View Query Output Columns: [id]
+             |Schema: root
+             | |-- id: integer (nullable = true)""".stripMargin
+        assert(actualLocalResult === expectedLocalResult)
+
+        // temp global view
+        val globalResult = sql(s"SHOW TABLE EXTENDED in global_temp LIKE '$viewName*'").
+          sort("tableName")
+        assert(globalResult.schema.fieldNames ===
+          Seq("namespace", "tableName", "isTemporary", "information"))
+        val globalResultCollect = globalResult.collect()
+        assert(globalResultCollect.length == 2)
+
+        assert(globalResultCollect(0).length == 4)
+        assert(globalResultCollect(0)(1) === globalTmpViewName)
+        assert(globalResultCollect(0)(2) === true)
+        val actualGlobalResult1 = exclude(globalResultCollect(0)(3).toString)
+        val expectedGlobalResult1 =
+          s"""Database: $globalNamespace
+             |Table: $globalTmpViewName
+             |Type: VIEW
+             |View Text: SELECT id FROM $catalog.$namespace.$table
+             |View Catalog and Namespace: spark_catalog.default
+             |View Query Output Columns: [id]
+             |Schema: root
+             | |-- id: integer (nullable = true)""".stripMargin
+        assert(actualGlobalResult1 === expectedGlobalResult1)
+
+        assert(globalResultCollect(1).length == 4)
+        assert(globalResultCollect(1)(1) === localTmpViewName)
+        assert(globalResultCollect(1)(2) === true)
+        val actualLocalResult2 = exclude(globalResultCollect(1)(3).toString)
+        val expectedLocalResult2 =
+          s"""Table: $localTmpViewName
+             |Type: VIEW
+             |View Text: SELECT id FROM $catalog.$namespace.$table
+             |View Catalog and Namespace: spark_catalog.default
+             |View Query Output Columns: [id]
+             |Schema: root
+             | |-- id: integer (nullable = true)""".stripMargin
+        assert(actualLocalResult2 === expectedLocalResult2)
+      }
+    }
+  }
+
   // Exclude some non-deterministic values for easy comparison of results,
   // such as `Created Time`, etc
   protected def exclude(text: String): String = {
