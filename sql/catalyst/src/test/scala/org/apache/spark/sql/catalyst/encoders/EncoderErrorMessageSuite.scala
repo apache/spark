@@ -54,7 +54,7 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
   test("nice error message for missing encoder") {
     checkError(
       exception = intercept[
-        SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable1]),
+        SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable1]()),
       errorClass = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
@@ -63,7 +63,7 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
 
     checkError(
       exception = intercept[
-        SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable2]),
+        SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable2]()),
       errorClass = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
@@ -72,7 +72,7 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
 
     checkError(
       exception = intercept[
-        SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable3]),
+        SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable3]()),
       errorClass = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
@@ -81,7 +81,7 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
 
     checkError(
       exception = intercept[
-        SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable4]),
+        SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable4]()),
       errorClass = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
@@ -90,7 +90,7 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
 
     checkError(
       exception = intercept[
-        SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable5]),
+        SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable5]()),
       errorClass = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",

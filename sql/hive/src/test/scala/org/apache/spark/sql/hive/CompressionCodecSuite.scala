@@ -29,7 +29,7 @@ import org.apache.parquet.hadoop.ParquetOutputFormat
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.execution.datasources.orc.OrcOptions
-import org.apache.spark.sql.execution.datasources.parquet.{ParquetOptions, ParquetTest}
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, ParquetOptions, ParquetTest}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -289,8 +289,14 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
 
   test("both table-level and session-level compression are set") {
     checkForTableWithCompressProp("parquet",
-      tableCompressCodecs = List("UNCOMPRESSED", "SNAPPY", "GZIP"),
-      sessionCompressCodecs = List("SNAPPY", "GZIP", "SNAPPY"))
+      tableCompressCodecs = List(
+        ParquetCompressionCodec.UNCOMPRESSED.name,
+        ParquetCompressionCodec.SNAPPY.name,
+        ParquetCompressionCodec.GZIP.name),
+      sessionCompressCodecs = List(
+        ParquetCompressionCodec.SNAPPY.name,
+        ParquetCompressionCodec.GZIP.name,
+        ParquetCompressionCodec.SNAPPY.name))
     checkForTableWithCompressProp("orc",
       tableCompressCodecs =
         List(CompressionKind.NONE.name, CompressionKind.SNAPPY.name, CompressionKind.ZLIB.name),
@@ -301,7 +307,10 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
   test("table-level compression is not set but session-level compressions is set ") {
     checkForTableWithCompressProp("parquet",
       tableCompressCodecs = List.empty,
-      sessionCompressCodecs = List("UNCOMPRESSED", "SNAPPY", "GZIP"))
+      sessionCompressCodecs = List(
+        ParquetCompressionCodec.UNCOMPRESSED.name,
+        ParquetCompressionCodec.SNAPPY.name,
+        ParquetCompressionCodec.GZIP.name))
     checkForTableWithCompressProp("orc",
       tableCompressCodecs = List.empty,
       sessionCompressCodecs =
@@ -339,7 +348,11 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
   }
 
   test("test table containing mixed compression codec") {
-    checkTableWriteWithCompressionCodecs("parquet", List("UNCOMPRESSED", "SNAPPY", "GZIP"))
+    checkTableWriteWithCompressionCodecs("parquet",
+      List(
+        ParquetCompressionCodec.UNCOMPRESSED.name,
+        ParquetCompressionCodec.SNAPPY.name,
+        ParquetCompressionCodec.GZIP.name))
     checkTableWriteWithCompressionCodecs(
       "orc",
       List(CompressionKind.NONE.name, CompressionKind.SNAPPY.name, CompressionKind.ZLIB.name))

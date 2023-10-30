@@ -749,7 +749,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    *
    * @since 3.5.0
    */
-  def getJobTags(): util.Set[String] = sc.getJobTags.asJava
+  def getJobTags(): util.Set[String] = sc.getJobTags().asJava
 
   /**
    * Clear the current thread's job tags.
@@ -782,7 +782,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * @note This does not necessarily mean the caching or computation was successful.
    */
   def getPersistentRDDs: JMap[java.lang.Integer, JavaRDD[_]] = {
-    sc.getPersistentRDDs.mapValues(s => JavaRDD.fromRDD(s)).toMap
+    sc.getPersistentRDDs.view.mapValues(s => JavaRDD.fromRDD(s)).toMap
       .asJava.asInstanceOf[JMap[java.lang.Integer, JavaRDD[_]]]
   }
 

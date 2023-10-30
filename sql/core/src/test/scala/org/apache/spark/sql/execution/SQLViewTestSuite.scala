@@ -629,7 +629,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         val meta = catalog.getTableRawMetadata(TableIdentifier("test_view", Some("default")))
         // simulate a view meta with incompatible schema change
         val newProp = meta.properties
-          .mapValues(_.replace("col_i", "col_j")).toMap
+          .view.mapValues(_.replace("col_i", "col_j")).toMap
         val newSchema = StructType(Seq(StructField("col_j", IntegerType)))
         catalog.alterTable(meta.copy(properties = newProp, schema = newSchema))
         val e = intercept[AnalysisException] {

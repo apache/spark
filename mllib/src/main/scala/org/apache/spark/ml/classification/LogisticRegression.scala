@@ -1036,7 +1036,7 @@ class LogisticRegression @Since("1.2.0") (
         solution(numFeatures) -= adapt
       }
     }
-    (solution, arrayBuilder.result)
+    (solution, arrayBuilder.result())
   }
 
   @Since("1.4.0")

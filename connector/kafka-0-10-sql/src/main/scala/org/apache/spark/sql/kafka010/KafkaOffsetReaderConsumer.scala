@@ -535,7 +535,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       }
       KafkaOffsetRange(tp, fromOffset, untilOffset, preferredLoc = None)
     }
-    rangeCalculator.getRanges(ranges, getSortedExecutorList)
+    rangeCalculator.getRanges(ranges, getSortedExecutorList())
   }
 
   private def partitionsAssignedToConsumer(

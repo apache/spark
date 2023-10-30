@@ -230,7 +230,7 @@ private[hive] class SparkExecuteStatementOperation(
         result.queryExecution.toString())
       iter = if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
         new IterableFetchIterator[Row](new Iterable[Row] {
-          override def iterator: Iterator[Row] = result.toLocalIterator.asScala
+          override def iterator: Iterator[Row] = result.toLocalIterator().asScala
         })
       } else {
         new ArrayFetchIterator[Row](result.collect())

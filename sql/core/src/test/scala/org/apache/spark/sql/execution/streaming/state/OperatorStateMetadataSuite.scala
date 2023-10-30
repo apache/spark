@@ -83,8 +83,8 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       val input1 = MemoryStream[Int]
       val input2 = MemoryStream[Int]
 
-      val df1 = input1.toDF.select($"value" as "key", ($"value" * 2) as "leftValue")
-      val df2 = input2.toDF.select($"value" as "key", ($"value" * 3) as "rightValue")
+      val df1 = input1.toDF().select($"value" as "key", ($"value" * 2) as "leftValue")
+      val df2 = input2.toDF().select($"value" as "key", ($"value" * 3) as "rightValue")
       val joined = df1.join(df2, "key")
 
       testStream(joined)(
