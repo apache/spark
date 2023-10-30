@@ -165,7 +165,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
       val thrown = intercept[UnsupportedOperationException] {
         df.write
           .format(BINARY_FILE)
-          .save(tmpDir + "/test_save")
+          .save(s"$tmpDir/test_save")
       }
       assert(thrown.getMessage.contains("Write is not supported for binary file data source"))
     }

@@ -49,9 +49,9 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
           val storeCheckpointDir = StateStoreId(
             dir.getAbsolutePath + "/state", 0, 0).storeCheckpointLocation()
           val storeCheckpointFile = if (isChangelogCheckpointingEnabled) {
-            storeCheckpointDir + "/1.changelog"
+            s"$storeCheckpointDir/1.changelog"
           } else {
-            storeCheckpointDir + "/1.zip"
+            s"$storeCheckpointDir/1.zip"
           }
           new File(storeCheckpointFile).exists()
         }

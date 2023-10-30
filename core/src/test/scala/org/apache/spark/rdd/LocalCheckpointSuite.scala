@@ -236,7 +236,7 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
       targetStorageLevel: StorageLevel): Unit = {
     require(targetStorageLevel !== StorageLevel.NONE)
     require(rdd.isLocallyCheckpointed)
-    val rdd1 = rdd.map { i => i + "1" }
+    val rdd1 = rdd.map { i => i.toString + "1" }
     val rdd2 = rdd1.map { i => i + "2" }
     val rdd3 = rdd2.map { i => i + "3" }
     val rddDependencies = rdd.dependencies

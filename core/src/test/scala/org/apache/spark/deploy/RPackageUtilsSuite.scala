@@ -104,7 +104,7 @@ class RPackageUtilsSuite
     val deps = Seq(dep1, dep2).mkString(",")
     IvyTestUtils.withRepository(main, Some(deps), None, withR = true) { repo =>
       val jars = Seq(main, dep1, dep2).map { c =>
-        getJarPath(c, new File(new URI(repo))) + "dummy"
+        getJarPath(c, new File(new URI(repo))).toString + "dummy"
       }.mkString(",")
       RPackageUtils.checkAndBuildRPackage(jars, new BufferPrintStream, verbose = true)
       val individualJars = jars.split(",")

@@ -421,7 +421,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
     execStateFile.listFiles().foreach{_.delete()}
 
-    val out = new DataOutputStream(new FileOutputStream(execStateFile + "/CURRENT"))
+    val out = new DataOutputStream(new FileOutputStream(s"$execStateFile/CURRENT"))
     out.writeInt(42)
     out.close()
 

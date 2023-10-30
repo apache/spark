@@ -277,7 +277,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   private[sql] def roundToInt(): Int =
     roundToNumeric[Int](IntegerType, Int.MaxValue, Int.MinValue) (_.toInt) (_.toInt)
 
-  private def toSqlValue: String = this + "BD"
+  private def toSqlValue: String = this.toString + "BD"
 
   private def roundToNumeric[T <: AnyVal](integralType: IntegralType, maxValue: Int, minValue: Int)
       (f1: Long => T) (f2: Double => T): T = {

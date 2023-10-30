@@ -820,7 +820,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     val redactedMap = SQLConf.get.redactOptions(map.toMap)
     // construct the redacted map as strings of the format "key=value"
     val keyValuePairs = redactedMap.toSeq.map { item =>
-      item._1 + "=" + item._2
+      s"${item._1}=${item._2}"
     }
     truncatedString(keyValuePairs, "[", ", ", "]", maxFields) :: Nil
   }
