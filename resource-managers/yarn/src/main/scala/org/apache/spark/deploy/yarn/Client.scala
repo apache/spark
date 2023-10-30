@@ -1490,7 +1490,7 @@ private[spark] object Client extends Logging {
    * Populate the classpath entry in the given environment map.
    *
    * User jars are generally not added to the JVM's system classpath; those are handled by the AM
-   * and executor backend. When the deprecated `spark.yarn.user.classpath.first` is used, user jars
+   * and executor backend. When the `spark.driver.userClassPathFirst` is used, user jars
    * are included in the system classpath, though. The extra class path and other uploaded files are
    * always made available through the system class path.
    *
@@ -1515,7 +1515,7 @@ private[spark] object Client extends Logging {
 
     addClasspathEntry(Environment.PWD.$$() + Path.SEPARATOR + LOCALIZED_CONF_DIR, env)
 
-    if (sparkConf.get(USER_CLASS_PATH_FIRST)) {
+    if (sparkConf.get(USER_CLASS_PATH_FIRST) || sparkConf.get(DRIVER_USER_CLASS_PATH_FIRST)) {
       // in order to properly add the app jar when user classpath is first
       // we have to do the mainJar separate in order to send the right thing
       // into addFileToClasspath

@@ -106,7 +106,7 @@ class ClientSuite extends SparkFunSuite
     val conf = new Configuration()
     val sparkConf = new SparkConf()
       .set(SPARK_JARS, Seq(SPARK))
-      .set(USER_CLASS_PATH_FIRST, true)
+      .set(DRIVER_USER_CLASS_PATH_FIRST, true)
       .set("spark.yarn.dist.jars", ADDED)
     val env = new MutableHashMap[String, String]()
     val args = new ClientArguments(Array("--jar", USER))
