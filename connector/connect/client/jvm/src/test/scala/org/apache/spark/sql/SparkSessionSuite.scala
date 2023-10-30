@@ -33,18 +33,26 @@ class SparkSessionSuite extends ConnectFunSuite {
   private val connectionString2: String = "sc://test.me:14099"
   private val connectionString3: String = "sc://doit:16845"
 
+  private def closeSession(session: SparkSession): Unit = {
+    // Hack: We don't want to call session.close() directly because this will try to call
+    // client.releaseSession, and the connection details are dummy.
+    // But this suite wants to test how the default and active session are affected by closing.
+    // So we call SparkSession.onSessionClose directly, which is normally called from session.close.
+    SparkSession.onSessionClose(session)
+  }
+
   test("default") {
     val session = SparkSession.builder().getOrCreate()
     assert(session.client.configuration.host == "localhost")
     assert(session.client.configuration.port == 15002)
-    session.close()
+    closeSession(session)
   }
 
   test("remote") {
     val session = SparkSession.builder().remote(connectionString2).getOrCreate()
     assert(session.client.configuration.host == "test.me")
     assert(session.client.configuration.port == 14099)
-    session.close()
+    closeSession(session)
   }
 
   test("getOrCreate") {
@@ -53,8 +61,8 @@ class SparkSessionSuite extends ConnectFunSuite {
     try {
       assert(session1 eq session2)
     } finally {
-      session1.close()
-      session2.close()
+      closeSession(session1)
+      closeSession(session2)
     }
   }
 
@@ -65,8 +73,8 @@ class SparkSessionSuite extends ConnectFunSuite {
       assert(session1 ne session2)
       assert(session1.client.configuration == session2.client.configuration)
     } finally {
-      session1.close()
-      session2.close()
+      closeSession(session1)
+      closeSession(session2)
     }
   }
 
@@ -77,8 +85,8 @@ class SparkSessionSuite extends ConnectFunSuite {
       assert(session1 ne session2)
       assert(session1.client.configuration == session2.client.configuration)
     } finally {
-      session1.close()
-      session2.close()
+      closeSession(session1)
+      closeSession(session2)
     }
   }
 
@@ -98,7 +106,7 @@ class SparkSessionSuite extends ConnectFunSuite {
     assertThrows[RuntimeException] {
       session.range(10).count()
     }
-    session.close()
+    closeSession(session)
   }
 
   test("Default/Active session") {
@@ -136,12 +144,12 @@ class SparkSessionSuite extends ConnectFunSuite {
     assert(SparkSession.getActiveSession.contains(session1))
 
     // Close session1
-    session1.close()
+    closeSession(session1)
     assert(SparkSession.getDefaultSession.contains(session2))
     assert(SparkSession.getActiveSession.isEmpty)
 
     // Close session2
-    session2.close()
+    closeSession(session2)
     assert(SparkSession.getDefaultSession.isEmpty)
     assert(SparkSession.getActiveSession.isEmpty)
   }
@@ -187,7 +195,7 @@ class SparkSessionSuite extends ConnectFunSuite {
 
         // Step 3 - close session 1, no more default session in both scripts
         phaser.arriveAndAwaitAdvance()
-        session1.close()
+        closeSession(session1)
 
         // Step 4 - no default session, same active session.
         phaser.arriveAndAwaitAdvance()
@@ -240,13 +248,13 @@ class SparkSessionSuite extends ConnectFunSuite {
 
         // Step 7 - close active session in script2
         phaser.arriveAndAwaitAdvance()
-        internalSession.close()
+        closeSession(internalSession)
         assert(SparkSession.getActiveSession.isEmpty)
       }
       assert(script1.get())
       assert(script2.get())
       assert(SparkSession.getActiveSession.contains(session2))
-      session2.close()
+      closeSession(session2)
       assert(SparkSession.getActiveSession.isEmpty)
     } finally {
       executor.shutdown()
@@ -254,13 +262,13 @@ class SparkSessionSuite extends ConnectFunSuite {
   }
 
   test("deprecated methods") {
-    SparkSession
+    val session = SparkSession
       .builder()
       .master("yayay")
       .appName("bob")
       .enableHiveSupport()
       .create()
-      .close()
+    closeSession(session)
   }
 
   test("serialize as null") {
