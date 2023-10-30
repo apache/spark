@@ -2984,10 +2984,8 @@
               <!--
                 SPARK-35496 Upgrade Scala to 2.13.7 and suppress:
                 1. `The outer reference in this type test cannot be checked at run time`
-                4. `fruitless type test: a value of TypeA cannot also be a TypeB`
               -->
               <arg>-Wconf:cat=unchecked&amp;msg=outer reference:s</arg>
-              <arg>-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s</arg>
               <!--
                 SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
               -->
