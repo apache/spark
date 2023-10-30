@@ -14,13 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Original repository: https://github.com/StardustDL/aexpy
-# Copyright 2022 StardustDL <stardustdl@163.com>
-#
 
 import code
 import logging
 import pathlib
+import sys
 
 import click
 
@@ -30,6 +28,23 @@ from aexpy.services import ServiceProvider
 
 from . import __version__, initializeLogging
 from .models import ApiDescription, ApiDifference, Distribution, Release, ReleasePair
+
+
+def envcheck():
+    pyver = sys.version_info
+    if pyver.major != 3:
+        return False
+    if pyver.minor < 10:
+        return False
+    if pyver.minor > 10:
+        return None
+    try:
+        import mypy.version as mypyver
+        if mypyver.__version__ != "0.982":
+            return False
+    except ImportError:
+        return False
+    return True
 
 
 def getUnknownDistribution():
@@ -98,6 +113,13 @@ def main(ctx=None, verbose: int = 0, interact: bool = False) -> None:
     }[verbose]
 
     initializeLogging(loggingLevel)
+
+    envresult = envcheck()
+    if envresult is not True:
+        print("We recommend to use Python 3.10 and Mypy 0.982", file=sys.stderr)
+    if envresult is False:
+        exit(-1)
+
 
 
 @main.command()

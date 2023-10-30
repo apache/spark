@@ -14,9 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Original repository: https://github.com/StardustDL/aexpy
-# Copyright 2022 StardustDL <stardustdl@163.com>
-#
 
 from ..models import ApiDescription, ApiDifference
 from ..producers import Producer

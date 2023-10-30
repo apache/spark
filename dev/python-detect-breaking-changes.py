@@ -16,9 +16,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Original repository: https://github.com/StardustDL/aexpy
-# Copyright 2022 StardustDL <stardustdl@163.com>
-#
 
 # Usage: compare current code base with a commit or branch
 # python dev/python-detect-breaking-changes.py a540995345bc935db3b8ccf5cb94cb7caabc4847 (branch name or commit id)
