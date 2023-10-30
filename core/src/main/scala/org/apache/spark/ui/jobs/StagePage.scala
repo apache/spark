@@ -50,10 +50,10 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
 
           legendPairs.zipWithIndex.map {
             case ((classAttr, name), index) =>
-              <rect x={5 + (index / 3) * 210 + "px"} y={10 + (index % 3) * 15 + "px"}
+              <rect x={s"${5 + (index / 3) * 210}px"} y={s"${10 + (index % 3) * 15}px"}
                 width="10px" height="10px" class={classAttr}></rect>
-                <text x={25 + (index / 3) * 210 + "px"}
-                  y={20 + (index % 3) * 15 + "px"}>{name}</text>
+                <text x={s"${25 + (index / 3) * 210}px"}
+                  y={s"${20 + (index % 3) * 15}px"}>{name}</text>
           }
         }
       </svg>

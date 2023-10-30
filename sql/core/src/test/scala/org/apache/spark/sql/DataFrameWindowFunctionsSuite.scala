@@ -1232,7 +1232,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     ).toDF("a", "b", "c")
 
     val w = Window.partitionBy("a").orderBy("b")
-    val selectExprs = Stream(
+    val selectExprs = LazyList(
       sum("c").over(w.rowsBetween(Window.unboundedPreceding, Window.currentRow)).as("sumc"),
       avg("c").over(w.rowsBetween(Window.unboundedPreceding, Window.currentRow)).as("avgc")
     )
