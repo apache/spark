@@ -3265,16 +3265,15 @@ class SparkConnectPlanner(
         .setGetResourcesCommandResult(
           proto.GetResourcesCommandResult
             .newBuilder()
-            .putAllResources(
-              session.sparkContext.resources.view
-                .mapValues(resource =>
-                  proto.ResourceInformation
-                    .newBuilder()
-                    .setName(resource.name)
-                    .addAllAddresses(immutable.ArraySeq.unsafeWrapArray(resource.addresses).asJava)
-                    .build())
-                .toMap
-                .asJava)
+            .putAllResources(session.sparkContext.resources.view
+              .mapValues(resource =>
+                proto.ResourceInformation
+                  .newBuilder()
+                  .setName(resource.name)
+                  .addAllAddresses(immutable.ArraySeq.unsafeWrapArray(resource.addresses).asJava)
+                  .build())
+              .toMap
+              .asJava)
             .build())
         .build())
   }
