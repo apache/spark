@@ -323,7 +323,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * @throws NumberFormatException If the value cannot be interpreted as bytes
    */
   def getSizeAsBytes(key: String, defaultValue: Long): Long = catchIllegalValue(key) {
-    Utils.byteStringAsBytes(get(key, defaultValue + "B"))
+    Utils.byteStringAsBytes(get(key, s"${defaultValue}B"))
   }
 
   /**

@@ -100,6 +100,9 @@ private[sql] class XmlOptions(
   val wildcardColName =
     parameters.getOrElse(WILDCARD_COL_NAME, XmlOptions.DEFAULT_WILDCARD_COL_NAME)
   val ignoreNamespace = getBool(IGNORE_NAMESPACE, false)
+  // setting indent to "" disables indentation in the generated XML.
+  // Each row will be written in a new line.
+  val indent = parameters.getOrElse(INDENT, DEFAULT_INDENT)
 
   /**
    * Infer columns with all valid date entries as date type (otherwise inferred as string or
@@ -198,6 +201,7 @@ private[sql] object XmlOptions extends DataSourceOptions {
   val DEFAULT_CHARSET: String = StandardCharsets.UTF_8.name
   val DEFAULT_NULL_VALUE: String = null
   val DEFAULT_WILDCARD_COL_NAME = "xs_any"
+  val DEFAULT_INDENT = "    "
   val ROW_TAG = newOption("rowTag")
   val ROOT_TAG = newOption("rootTag")
   val DECLARATION = newOption("declaration")
@@ -222,6 +226,7 @@ private[sql] object XmlOptions extends DataSourceOptions {
   val DATE_FORMAT = newOption("dateFormat")
   val TIMESTAMP_FORMAT = newOption("timestampFormat")
   val TIME_ZONE = newOption("timeZone")
+  val INDENT = newOption("indent")
   // Options with alternative
   val ENCODING = "encoding"
   val CHARSET = "charset"
