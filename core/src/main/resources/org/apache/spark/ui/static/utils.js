@@ -243,7 +243,7 @@ function detailsUINode(isMultiline, message) {
   }
 }
 
-const ERROR_CLASS_REGEX = /\[([A-Z][A-Z_.]+[A-Z])\]/;
+const ERROR_CLASS_REGEX = /\[([A-Z][A-Z_.]+[A-Z])]/;
 
 /* This function works exactly the same as UIUtils.errorSummary, it shall be
  * remained the same whichever changed */
@@ -251,7 +251,7 @@ function errorSummary(errorMessage) {
   let isMultiline = true;
   const maybeErrorClass = errorMessage.match(ERROR_CLASS_REGEX);
   let errorClassOrBrief;
-  if (maybeErrorClass) {
+  if (maybeErrorClass.length === 2) {
     errorClassOrBrief = maybeErrorClass[1];
   } else if (errorMessage.indexOf('\n') >= 0) {
     errorClassOrBrief = errorMessage.substring(0, errorMessage.indexOf('\n'));
