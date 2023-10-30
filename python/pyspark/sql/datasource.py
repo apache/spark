@@ -260,7 +260,7 @@ class DataSourceWriter(ABC):
     """
 
     @abstractmethod
-    def write(self, iterator: Iterator[Row]) -> Any:
+    def write(self, iterator: Iterator[Row]) -> "WriterCommitMessage":
         """
         Writes data into the data source.
 
@@ -279,11 +279,11 @@ class DataSourceWriter(ABC):
 
         Returns
         -------
-        commit message : any serializable object or None
+        WriterCommitMessage : a serializable commit message
         """
         ...
 
-    def commit(self, messages: List[Any]) -> None:
+    def commit(self, messages: List["WriterCommitMessage"]) -> None:
         """
         Commits this writing job with a list of commit messages.
 
@@ -294,12 +294,12 @@ class DataSourceWriter(ABC):
 
         Parameters
         ----------
-        messages : List[Any]
+        messages : List[WriterCommitMessage]
             A list of commit messages.
         """
         ...
 
-    def abort(self, messages: List[Any]) -> None:
+    def abort(self, messages: List["WriterCommitMessage"]) -> None:
         """
         Aborts this writing job due to task failures.
 
@@ -310,10 +310,20 @@ class DataSourceWriter(ABC):
 
         Parameters
         ----------
-        messages : List[Any]
+        messages : List[WriterCommitMessage]
             A list of commit messages.
         """
         ...
+
+
+@since(4.0)
+class WriterCommitMessage:
+    """
+    A commit message returned by the ``write`` method of ``DataSourceWriter`` and will be
+    sent back to the driver side as input parameter of ``commit`` or ``abort`` method.
+    """
+
+    ...
 
 
 @since(4.0)
