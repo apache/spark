@@ -694,13 +694,9 @@ class SparkSession:
     streams.__doc__ = PySparkSession.streams.__doc__
 
     def __getattr__(self, name: str) -> Any:
-        if name in ["_jsc", "_jconf", "_jvm", "_jsparkSession"]:
+        if name in ["_jsc", "_jconf", "_jvm", "_jsparkSession", "sparkContext", "newSession"]:
             raise PySparkAttributeError(
                 error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
-            )
-        elif name in ["newSession", "sparkContext"]:
-            raise PySparkNotImplementedError(
-                error_class="NOT_IMPLEMENTED", message_parameters={"feature": f"{name}()"}
             )
         return object.__getattribute__(self, name)
 

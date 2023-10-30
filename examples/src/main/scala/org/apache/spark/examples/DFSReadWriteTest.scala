@@ -89,6 +89,7 @@ object DFSReadWriteTest {
       .flatMap(_.split("\t"))
       .filter(_.nonEmpty)
       .groupBy(w => w)
+      .view
       .mapValues(_.size)
       .values
       .sum

@@ -7218,6 +7218,36 @@ object functions {
     withExpr(SchemaOfXml(xml.expr, options.asScala.toMap))
   }
 
+  // scalastyle:off line.size.limit
+
+  /**
+   * (Java-specific) Converts a column containing a `StructType` into a XML string with
+   * the specified schema. Throws an exception, in the case of an unsupported type.
+   *
+   * @param e       a column containing a struct.
+   * @param options options to control how the struct column is converted into a XML string.
+   *                It accepts the same options as the XML data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group xml_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def to_xml(e: Column, options: java.util.Map[String, String]): Column =
+    fnWithOptions("to_xml", options.asScala.iterator, e)
+
+  /**
+   * Converts a column containing a `StructType` into a XML string with the specified schema.
+   * Throws an exception, in the case of an unsupported type.
+   *
+   * @param e a column containing a struct.
+   * @group xml_funcs
+   * @since 4.0.0
+   */
+  def to_xml(e: Column): Column = to_xml(e, Map.empty[String, String].asJava)
+
   /**
    * A transform for timestamps and dates to partition data into years.
    *
