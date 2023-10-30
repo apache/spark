@@ -401,7 +401,7 @@ private[spark] object UIUtils extends Logging {
       }
     }
     val colWidth = 100.toDouble / headers.size
-    val colWidthAttr = if (fixedWidth) colWidth + "%" else ""
+    val colWidthAttr = if (fixedWidth) s"$colWidth%" else ""
 
     def getClass(index: Int): String = {
       if (index < headerClasses.size) {

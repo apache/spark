@@ -61,9 +61,9 @@ class LassoSuite extends SparkFunSuite with MLlibTestSparkContext {
     val weight0 = model.weights(0)
     val weight1 = model.weights(1)
     val weight2 = model.weights(2)
-    assert(weight0 >= 1.9 && weight0 <= 2.1, weight0 + " not in [1.9, 2.1]")
-    assert(weight1 >= -1.60 && weight1 <= -1.40, weight1 + " not in [-1.6, -1.4]")
-    assert(weight2 >= -1.0e-3 && weight2 <= 1.0e-3, weight2 + " not in [-0.001, 0.001]")
+    assert(weight0 >= 1.9 && weight0 <= 2.1, s"$weight0 not in [1.9, 2.1]")
+    assert(weight1 >= -1.60 && weight1 <= -1.40, s"$weight1 not in [-1.6, -1.4]")
+    assert(weight2 >= -1.0e-3 && weight2 <= 1.0e-3, s"$weight2 not in [-0.001, 0.001]")
 
     val validationData = LinearDataGenerator
       .generateLinearInput(A, Array[Double](B, C), nPoints, 17)
@@ -105,9 +105,9 @@ class LassoSuite extends SparkFunSuite with MLlibTestSparkContext {
     val weight0 = model.weights(0)
     val weight1 = model.weights(1)
     val weight2 = model.weights(2)
-    assert(weight0 >= 1.9 && weight0 <= 2.1, weight0 + " not in [1.9, 2.1]")
-    assert(weight1 >= -1.60 && weight1 <= -1.40, weight1 + " not in [-1.6, -1.4]")
-    assert(weight2 >= -1.0e-3 && weight2 <= 1.0e-3, weight2 + " not in [-0.001, 0.001]")
+    assert(weight0 >= 1.9 && weight0 <= 2.1, s"$weight0 not in [1.9, 2.1]")
+    assert(weight1 >= -1.60 && weight1 <= -1.40, s"$weight1 not in [-1.6, -1.4]")
+    assert(weight2 >= -1.0e-3 && weight2 <= 1.0e-3, s"$weight2 not in [-0.001, 0.001]")
 
     val validationData = LinearDataGenerator
       .generateLinearInput(A, Array[Double](B, C), nPoints, 17)

@@ -216,7 +216,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(duration("1 month -30 days", TimeUnit.DAYS, 31) === 1)
 
     val e = intercept[ArithmeticException] {
-      duration(Integer.MAX_VALUE + " month", TimeUnit.SECONDS, 31)
+      duration(s"${Integer.MAX_VALUE} month", TimeUnit.SECONDS, 31)
     }
     assert(e.getMessage.contains("overflow"))
   }
