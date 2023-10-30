@@ -2614,20 +2614,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         return self.fillna(method="bfill", limit=limit)
 
-    def backfill(self, limit: Optional[int] = None) -> FrameLike:
-        """
-        Alias for bfill.
-
-        .. deprecated:: 3.4.0
-        """
-        warnings.warn(
-            "The GroupBy.backfill method is deprecated "
-            "and will be removed in a future version. "
-            "Use GroupBy.bfill instead.",
-            FutureWarning,
-        )
-        return self.bfill(limit=limit)
-
     def ffill(self, limit: Optional[int] = None) -> FrameLike:
         """
         Synonym for `DataFrame.fillna()` with ``method=`ffill```.
@@ -2676,20 +2662,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         3  3.0  1.0  4
         """
         return self.fillna(method="ffill", limit=limit)
-
-    def pad(self, limit: Optional[int] = None) -> FrameLike:
-        """
-        Alias for ffill.
-
-        .. deprecated:: 3.4.0
-        """
-        warnings.warn(
-            "The GroupBy.pad method is deprecated "
-            "and will be removed in a future version. "
-            "Use GroupBy.ffill instead.",
-            FutureWarning,
-        )
-        return self.ffill(limit=limit)
 
     def _limit(self, n: int, asc: bool) -> FrameLike:
         """

@@ -990,9 +990,7 @@ class Frame(object, metaclass=ABCMeta):
         startcol: int = 0,
         engine: Optional[str] = None,
         merge_cells: bool = True,
-        encoding: Optional[str] = None,
         inf_rep: str = "inf",
-        verbose: bool = True,
         freeze_panes: Optional[Tuple[int, int]] = None,
     ) -> None:
         """
@@ -1043,20 +1041,9 @@ class Frame(object, metaclass=ABCMeta):
             ``io.excel.xlsm.writer``.
         merge_cells: bool, default True
             Write MultiIndex and Hierarchical Rows as merged cells.
-        encoding: str, optional
-            Encoding of the resulting excel file. Only necessary for xlwt,
-            other writers support unicode natively.
-
-            .. deprecated:: 3.4.0
-
         inf_rep: str, default 'inf'
             Representation for infinity (there is no native representation for
             infinity in Excel).
-        verbose: bool, default True
-            Display more information in the error logs.
-
-            .. deprecated:: 3.4.0
-
         freeze_panes: tuple of int (length 2), optional
             Specifies the one-based bottommost row and rightmost column that
             is to be frozen.
