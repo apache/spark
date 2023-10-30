@@ -116,12 +116,12 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
       }
 
       testCase match {
-        case _: PgSQLTest =>
+        case _: SQLQueryTestSuite#PgSQLTest =>
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
           statement.execute(s"SET ${SQLConf.LEGACY_INTERVAL_ENABLED.key} = true")
-        case _: AnsiTest =>
+        case _: SQLQueryTestSuite#AnsiTest =>
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
-        case _: TimestampNTZTest =>
+        case _: SQLQueryTestSuite#TimestampNTZTest =>
           statement.execute(s"SET ${SQLConf.TIMESTAMP_TYPE.key} = " +
             s"${TimestampTypes.TIMESTAMP_NTZ.toString}")
         case _ =>
