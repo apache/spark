@@ -693,7 +693,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("transform works on stream of children") {
-    val before = Coalesce(Stream(Literal(1), Literal(2)))
+    val before = Coalesce(LazyList(Literal(1), Literal(2)))
     // Note it is a bit tricky to exhibit the broken behavior. Basically we want to create the
     // situation in which the TreeNode.mapChildren function's change detection is not triggered. A
     // stream's first element is typically materialized, so in order to not trip the TreeNode change
@@ -702,14 +702,14 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
       case Literal(v: Int, IntegerType) if v != 1 =>
         Literal(v + 1, IntegerType)
     }
-    val expected = Coalesce(Stream(Literal(1), Literal(3)))
+    val expected = Coalesce(LazyList(Literal(1), Literal(3)))
     assert(result === expected)
   }
 
   test("withNewChildren on stream of children") {
-    val before = Coalesce(Stream(Literal(1), Literal(2)))
-    val result = before.withNewChildren(Stream(Literal(1), Literal(3)))
-    val expected = Coalesce(Stream(Literal(1), Literal(3)))
+    val before = Coalesce(LazyList(Literal(1), Literal(2)))
+    val result = before.withNewChildren(LazyList(Literal(1), Literal(3)))
+    val expected = Coalesce(LazyList(Literal(1), Literal(3)))
     assert(result === expected)
   }
 
@@ -949,9 +949,9 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  private def newErrorAfterStream(es: Expression*) = {
-    es.toStream.append(
-      throw new NoSuchElementException("Stream should not return more elements")
+  private def newErrorAfterLazyList(es: Expression*) = {
+    es.to(LazyList).lazyAppendedAll(
+      throw new NoSuchElementException("LazyList should not return more elements")
     )
   }
 
@@ -975,8 +975,8 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
     val transformed = e.multiTransformDown {
       case StringLiteral("a") => Seq(Literal(1), Literal(2), Literal(3))
-      case StringLiteral("b") => newErrorAfterStream(Literal(10))
-      case Add(StringLiteral("c"), StringLiteral("d"), _) => newErrorAfterStream(Literal(100))
+      case StringLiteral("b") => newErrorAfterLazyList(Literal(10))
+      case Add(StringLiteral("c"), StringLiteral("d"), _) => newErrorAfterLazyList(Literal(100))
     }
     val expected = for {
       a <- Seq(Literal(1), Literal(2), Literal(3))
@@ -990,7 +990,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     val transformed2 = e.multiTransformDown {
       case StringLiteral("a") => Seq(Literal(1), Literal(2), Literal(3))
       case StringLiteral("b") => Seq(Literal(10), Literal(20), Literal(30))
-      case Add(StringLiteral("c"), StringLiteral("d"), _) => newErrorAfterStream(Literal(100))
+      case Add(StringLiteral("c"), StringLiteral("d"), _) => newErrorAfterLazyList(Literal(100))
     }
     val expected2 = for {
       b <- Seq(Literal(10), Literal(20), Literal(30))
@@ -1055,7 +1055,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   test("multiTransformDown alternatives are generated only if needed") {
     val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
     val transformed = e.multiTransformDown {
-      case StringLiteral("a") => newErrorAfterStream()
+      case StringLiteral("a") => newErrorAfterLazyList()
       case StringLiteral("b") => Seq.empty
     }
     assert(transformed.isEmpty)
@@ -1075,10 +1075,10 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
         a_or_b.getOrElse(
           // Besides returning the alternatives for the first encounter, also set up a mechanism to
           // update the cache when the new alternatives are requested.
-          Stream(Literal(1), Literal(2)).map { x =>
+          LazyList(Literal(1), Literal(2)).map { x =>
             a_or_b = Some(Seq(x))
             x
-          }.append {
+          }.lazyAppendedAll {
             a_or_b = None
             Seq.empty
           })
@@ -1094,19 +1094,19 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     val transformed2 = e.multiTransformDown {
       case StringLiteral("a") | StringLiteral("b") =>
         a_or_b.getOrElse(
-          Stream(Literal(1), Literal(2)).map { x =>
+          LazyList(Literal(1), Literal(2)).map { x =>
             a_or_b = Some(Seq(x))
             x
-          }.append {
+          }.lazyAppendedAll {
             a_or_b = None
             Seq.empty
           })
       case StringLiteral("c") | StringLiteral("d") =>
         c_or_d.getOrElse(
-          Stream(Literal(10), Literal(20)).map { x =>
+          LazyList(Literal(10), Literal(20)).map { x =>
             c_or_d = Some(Seq(x))
             x
-          }.append {
+          }.lazyAppendedAll {
             c_or_d = None
             Seq.empty
           })

@@ -220,7 +220,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
       case Some(value) => Some(recursiveTransform(value))
       case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
-      case stream: Stream[_] => stream.map(recursiveTransform).force
+      case stream: LazyList[_] => stream.map(recursiveTransform).force
       case seq: Iterable[_] => seq.map(recursiveTransform)
       case other: AnyRef => other
       case null => null
