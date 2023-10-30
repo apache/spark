@@ -324,6 +324,56 @@ class DataFrameReader(OptionUtils):
 
     csv.__doc__ = PySparkDataFrameReader.csv.__doc__
 
+    def xml(
+        self,
+        path: PathOrPaths,
+        rowTag: Optional[str] = None,
+        schema: Optional[Union[StructType, str]] = None,
+        excludeAttribute: Optional[Union[bool, str]] = None,
+        attributePrefix: Optional[str] = None,
+        valueTag: Optional[str] = None,
+        ignoreSurroundingSpaces: Optional[Union[bool, str]] = None,
+        rowValidationXSDPath: Optional[str] = None,
+        ignoreNamespace: Optional[Union[bool, str]] = None,
+        wildcardColName: Optional[str] = None,
+        encoding: Optional[str] = None,
+        inferSchema: Optional[Union[bool, str]] = None,
+        nullValue: Optional[str] = None,
+        dateFormat: Optional[str] = None,
+        timestampFormat: Optional[str] = None,
+        mode: Optional[str] = None,
+        columnNameOfCorruptRecord: Optional[str] = None,
+        multiLine: Optional[Union[bool, str]] = None,
+        samplingRatio: Optional[Union[float, str]] = None,
+        locale: Optional[str] = None,
+    ) -> "DataFrame":
+        self._set_opts(
+            rowTag=rowTag,
+            schema=schema,
+            excludeAttribute=excludeAttribute,
+            attributePrefix=attributePrefix,
+            valueTag=valueTag,
+            ignoreSurroundingSpaces=ignoreSurroundingSpaces,
+            rowValidationXSDPath=rowValidationXSDPath,
+            ignoreNamespace=ignoreNamespace,
+            wildcardColName=wildcardColName,
+            encoding=encoding,
+            inferSchema=inferSchema,
+            nullValue=nullValue,
+            dateFormat=dateFormat,
+            timestampFormat=timestampFormat,
+            mode=mode,
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord,
+            multiLine=multiLine,
+            samplingRatio=samplingRatio,
+            locale=locale,
+        )
+        if isinstance(path, str):
+            path = [path]
+        return self.load(path=path, format="xml", schema=schema)
+
+    xml.__doc__ = PySparkDataFrameReader.xml.__doc__
+
     def orc(
         self,
         path: PathOrPaths,
@@ -598,7 +648,9 @@ class DataFrameWriter(OptionUtils):
         if format is not None:
             self.format(format)
         self._write.path = path
-        self._spark.client.execute_command(self._write.command(self._spark.client))
+        self._spark.client.execute_command(
+            self._write.command(self._spark.client), self._write.observations
+        )
 
     save.__doc__ = PySparkDataFrameWriter.save.__doc__
 
@@ -607,7 +659,9 @@ class DataFrameWriter(OptionUtils):
             self.mode("overwrite" if overwrite else "append")
         self._write.table_name = tableName
         self._write.table_save_method = "insert_into"
-        self._spark.client.execute_command(self._write.command(self._spark.client))
+        self._spark.client.execute_command(
+            self._write.command(self._spark.client), self._write.observations
+        )
 
     insertInto.__doc__ = PySparkDataFrameWriter.insertInto.__doc__
 
@@ -626,7 +680,9 @@ class DataFrameWriter(OptionUtils):
             self.format(format)
         self._write.table_name = name
         self._write.table_save_method = "save_as_table"
-        self._spark.client.execute_command(self._write.command(self._spark.client))
+        self._spark.client.execute_command(
+            self._write.command(self._spark.client), self._write.observations
+        )
 
     saveAsTable.__doc__ = PySparkDataFrameWriter.saveAsTable.__doc__
 
@@ -721,6 +777,40 @@ class DataFrameWriter(OptionUtils):
 
     csv.__doc__ = PySparkDataFrameWriter.csv.__doc__
 
+    def xml(
+        self,
+        path: str,
+        rowTag: Optional[str] = None,
+        mode: Optional[str] = None,
+        attributePrefix: Optional[str] = None,
+        valueTag: Optional[str] = None,
+        rootTag: Optional[str] = None,
+        declaration: Optional[bool] = None,
+        arrayElementName: Optional[str] = None,
+        nullValue: Optional[str] = None,
+        dateFormat: Optional[str] = None,
+        timestampFormat: Optional[str] = None,
+        compression: Optional[str] = None,
+        encoding: Optional[str] = None,
+    ) -> None:
+        self.mode(mode)
+        self._set_opts(
+            rowTag=rowTag,
+            attributePrefix=attributePrefix,
+            valueTag=valueTag,
+            rootTag=rootTag,
+            declaration=declaration,
+            arrayElementName=arrayElementName,
+            nullValue=nullValue,
+            dateFormat=dateFormat,
+            timestampFormat=timestampFormat,
+            compression=compression,
+            encoding=encoding,
+        )
+        self.format("xml").save(path)
+
+    xml.__doc__ = PySparkDataFrameWriter.xml.__doc__
+
     def orc(
         self,
         path: str,
@@ -792,38 +882,50 @@ class DataFrameWriterV2(OptionUtils):
 
     def create(self) -> None:
         self._write.mode = "create"
-        self._spark.client.execute_command(self._write.command(self._spark.client))
+        self._spark.client.execute_command(
+            self._write.command(self._spark.client), self._write.observations
+        )
 
     create.__doc__ = PySparkDataFrameWriterV2.create.__doc__
 
     def replace(self) -> None:
         self._write.mode = "replace"
-        self._spark.client.execute_command(self._write.command(self._spark.client))
+        self._spark.client.execute_command(
+            self._write.command(self._spark.client), self._write.observations
+        )
 
     replace.__doc__ = PySparkDataFrameWriterV2.replace.__doc__
 
     def createOrReplace(self) -> None:
         self._write.mode = "create_or_replace"
-        self._spark.client.execute_command(self._write.command(self._spark.client))
+        self._spark.client.execute_command(
+            self._write.command(self._spark.client), self._write.observations
+        )
 
     createOrReplace.__doc__ = PySparkDataFrameWriterV2.createOrReplace.__doc__
 
     def append(self) -> None:
         self._write.mode = "append"
-        self._spark.client.execute_command(self._write.command(self._spark.client))
+        self._spark.client.execute_command(
+            self._write.command(self._spark.client), self._write.observations
+        )
 
     append.__doc__ = PySparkDataFrameWriterV2.append.__doc__
 
     def overwrite(self, condition: "ColumnOrName") -> None:
         self._write.mode = "overwrite"
         self._write.overwrite_condition = condition
-        self._spark.client.execute_command(self._write.command(self._spark.client))
+        self._spark.client.execute_command(
+            self._write.command(self._spark.client), self._write.observations
+        )
 
     overwrite.__doc__ = PySparkDataFrameWriterV2.overwrite.__doc__
 
     def overwritePartitions(self) -> None:
         self._write.mode = "overwrite_partitions"
-        self._spark.client.execute_command(self._write.command(self._spark.client))
+        self._spark.client.execute_command(
+            self._write.command(self._spark.client), self._write.observations
+        )
 
     overwritePartitions.__doc__ = PySparkDataFrameWriterV2.overwritePartitions.__doc__
 

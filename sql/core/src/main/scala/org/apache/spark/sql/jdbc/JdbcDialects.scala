@@ -243,7 +243,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   @Since("2.3.0")
   def getTruncateQuery(table: String): String = {
-    getTruncateQuery(table, isCascadingTruncateTable)
+    getTruncateQuery(table, isCascadingTruncateTable())
   }
 
   /**
@@ -257,7 +257,7 @@ abstract class JdbcDialect extends Serializable with Logging {
   @Since("2.4.0")
   def getTruncateQuery(
     table: String,
-    cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+    cascade: Option[Boolean] = isCascadingTruncateTable()): String = {
       s"TRUNCATE TABLE $table"
   }
 
@@ -437,7 +437,7 @@ abstract class JdbcDialect extends Serializable with Logging {
     while (rs.next()) {
       schemaBuilder += Array(rs.getString(1))
     }
-    schemaBuilder.result
+    schemaBuilder.result()
   }
 
   /**

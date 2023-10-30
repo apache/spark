@@ -62,11 +62,11 @@ case class ProcessingTimeExecutor(
 
   override def execute(triggerHandler: () => Boolean): Unit = {
     while (true) {
-      val triggerTimeMs = clock.getTimeMillis
+      val triggerTimeMs = clock.getTimeMillis()
       val nextTriggerTimeMs = nextBatchTime(triggerTimeMs)
       val terminated = !triggerHandler()
       if (intervalMs > 0) {
-        val batchElapsedTimeMs = clock.getTimeMillis - triggerTimeMs
+        val batchElapsedTimeMs = clock.getTimeMillis() - triggerTimeMs
         if (batchElapsedTimeMs > intervalMs) {
           notifyBatchFallingBehind(batchElapsedTimeMs)
         }

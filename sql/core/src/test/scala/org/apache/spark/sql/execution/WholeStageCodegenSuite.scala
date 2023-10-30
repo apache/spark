@@ -743,7 +743,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
         p.isInstanceOf[WholeStageCodegenExec] &&
           p.asInstanceOf[WholeStageCodegenExec].codegenStageId == 0),
         "codegen stage IDs should be preserved through ReuseExchange")
-      checkAnswer(join, df.toDF)
+      checkAnswer(join, df.toDF())
     }
   }
 
@@ -825,7 +825,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     // Case1: LocalTableScanExec is the root of a query plan tree.
     // In this case, WholeStageCodegenExec should not be inserted
     // as the direct parent of LocalTableScanExec.
-    val df = Seq(1, 2, 3).toDF
+    val df = Seq(1, 2, 3).toDF()
     val rootOfExecutedPlan = df.queryExecution.executedPlan
 
     // Ensure WholeStageCodegenExec is not inserted and
@@ -836,7 +836,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     // Case2: The parent of a LocalTableScanExec supports WholeStageCodegen.
     // In this case, the LocalTableScanExec should be within a WholeStageCodegen domain
     // and no more InputAdapter is inserted as the direct parent of the LocalTableScanExec.
-    val aggregatedDF = Seq(1, 2, 3).toDF.groupBy("value").sum()
+    val aggregatedDF = Seq(1, 2, 3).toDF().groupBy("value").sum()
     val executedPlan = aggregatedDF.queryExecution.executedPlan
 
     // HashAggregateExec supports WholeStageCodegen and it's the parent of
@@ -863,7 +863,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           // Tet case with keys
           "SELECT k, AVG(v) FROM VALUES((1, 1)) t(k, v) GROUP BY k").foreach { query =>
           val e = intercept[IllegalStateException] {
-            sql(query).collect
+            sql(query).collect()
           }
           assert(e.getMessage.contains(expectedErrMsg))
         }
@@ -885,7 +885,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           "SELECT k, AVG(a + b), SUM(a + b + c) FROM VALUES((1, 1, 1, 1)) t(k, a, b, c) " +
             "GROUP BY k").foreach { query =>
           val e = intercept[IllegalStateException] {
-            sql(query).collect
+            sql(query).collect()
           }
           assert(e.getMessage.contains(expectedErrMsg))
         }

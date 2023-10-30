@@ -171,9 +171,9 @@ case class UserDefinedPythonTableFunction(
  *
  * - The number and order of arguments are the same as the UDTF inputs
  * - Each argument is an `AnalyzeArgument`, containing:
- *   - data_type: DataType
+ *   - dataType: DataType
  *   - value: Any: if the argument is foldable; otherwise None
- *   - is_table: bool: True if the argument is TABLE
+ *   - isTable: bool: True if the argument is TABLE
  *
  * and that return an `AnalyzeResult`.
  *
@@ -196,19 +196,23 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
 
     // Send arguments
     dataOut.writeInt(exprs.length)
-    exprs.zip(tableArgs).foreach { case (expr, is_table) =>
+    exprs.zip(tableArgs).foreach { case (expr, isTable) =>
       PythonWorkerUtils.writeUTF(expr.dataType.json, dataOut)
-      if (expr.foldable) {
+      val (key, value) = expr match {
+        case NamedArgumentExpression(k, v) => (Some(k), v)
+        case _ => (None, expr)
+      }
+      if (value.foldable) {
         dataOut.writeBoolean(true)
-        val obj = pickler.dumps(EvaluatePython.toJava(expr.eval(), expr.dataType))
+        val obj = pickler.dumps(EvaluatePython.toJava(value.eval(), value.dataType))
         PythonWorkerUtils.writeBytes(obj, dataOut)
       } else {
         dataOut.writeBoolean(false)
       }
-      dataOut.writeBoolean(is_table)
+      dataOut.writeBoolean(isTable)
       // If the expr is NamedArgumentExpression, send its name.
-      expr match {
-        case NamedArgumentExpression(key, _) =>
+      key match {
+        case Some(key) =>
           dataOut.writeBoolean(true)
           PythonWorkerUtils.writeUTF(key, dataOut)
         case _ =>

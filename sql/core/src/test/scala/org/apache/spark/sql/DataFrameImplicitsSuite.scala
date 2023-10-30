@@ -53,13 +53,13 @@ class DataFrameImplicitsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-19959: df[java.lang.Long].collect includes null throws NullPointerException") {
-    checkAnswer(sparkContext.parallelize(Seq[java.lang.Integer](0, null, 2), 1).toDF,
+    checkAnswer(sparkContext.parallelize(Seq[java.lang.Integer](0, null, 2), 1).toDF(),
       Seq(Row(0), Row(null), Row(2)))
-    checkAnswer(sparkContext.parallelize(Seq[java.lang.Long](0L, null, 2L), 1).toDF,
+    checkAnswer(sparkContext.parallelize(Seq[java.lang.Long](0L, null, 2L), 1).toDF(),
       Seq(Row(0L), Row(null), Row(2L)))
-    checkAnswer(sparkContext.parallelize(Seq[java.lang.Float](0.0F, null, 2.0F), 1).toDF,
+    checkAnswer(sparkContext.parallelize(Seq[java.lang.Float](0.0F, null, 2.0F), 1).toDF(),
       Seq(Row(0.0F), Row(null), Row(2.0F)))
-    checkAnswer(sparkContext.parallelize(Seq[java.lang.Double](0.0D, null, 2.0D), 1).toDF,
+    checkAnswer(sparkContext.parallelize(Seq[java.lang.Double](0.0D, null, 2.0D), 1).toDF(),
       Seq(Row(0.0D), Row(null), Row(2.0D)))
   }
 }

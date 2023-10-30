@@ -58,7 +58,7 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
       properties: util.Map[String, String]): Unit = {
     JdbcUtils.withConnection(jdbcOptions) { conn =>
-      JdbcUtils.classifyException(s"Failed to create index $indexName in $name",
+      JdbcUtils.classifyException(s"Failed to create index $indexName in ${name()}",
         JdbcDialects.get(jdbcOptions.url)) {
         JdbcUtils.createIndex(
           conn, indexName, ident, columns, columnsProperties, properties, jdbcOptions)
@@ -74,7 +74,7 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
 
   override def dropIndex(indexName: String): Unit = {
     JdbcUtils.withConnection(jdbcOptions) { conn =>
-      JdbcUtils.classifyException(s"Failed to drop index $indexName in $name",
+      JdbcUtils.classifyException(s"Failed to drop index $indexName in ${name()}",
         JdbcDialects.get(jdbcOptions.url)) {
         JdbcUtils.dropIndex(conn, indexName, ident, jdbcOptions)
       }

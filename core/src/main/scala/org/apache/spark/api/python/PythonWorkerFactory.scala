@@ -378,7 +378,7 @@ private[spark] class PythonWorkerFactory(
         daemon = null
         daemonPort = 0
       } else {
-        simpleWorkers.mapValues(_.destroy())
+        simpleWorkers.view.mapValues(_.destroy())
       }
     }
   }

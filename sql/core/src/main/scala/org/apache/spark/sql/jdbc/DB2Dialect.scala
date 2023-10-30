@@ -107,7 +107,7 @@ private object DB2Dialect extends JdbcDialect {
   // scalastyle:on line.size.limit
   override def getTruncateQuery(
       table: String,
-      cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+      cascade: Option[Boolean] = isCascadingTruncateTable()): String = {
     s"TRUNCATE TABLE $table IMMEDIATE"
   }
 
