@@ -2200,6 +2200,16 @@ def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Co
 to_json.__doc__ = pysparkfuncs.to_json.__doc__
 
 
+def to_xml(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+    if options is None:
+        return _invoke_function("to_xml", _to_col(col))
+    else:
+        return _invoke_function("to_xml", _to_col(col), _options_to_col(options))
+
+
+to_xml.__doc__ = pysparkfuncs.to_xml.__doc__
+
+
 def transform(
     col: "ColumnOrName",
     f: Union[Callable[[Column], Column], Callable[[Column, Column], Column]],
