@@ -19,7 +19,7 @@
 Python to Spark Type Conversions
 ================================
 
-.. TODO: Add additional information on conversions when Arrow is enabled..
+.. TODO: Add additional information on conversions when Arrow is enabled.
 .. TODO: Add in-depth explanation and table for type conversions (SPARK-44734).
 
 .. currentmodule:: pyspark.sql.types
@@ -64,6 +64,77 @@ are listed below:
     * - spark.sql.timestampType
       - If set to `TIMESTAMP_NTZ`, the default timestamp type is ``TimestampNTZType``. Otherwise, the default timestamp type is TimestampType.
       - ""
+
+All Conversions
+---------------
+.. list-table::
+    :header-rows: 1
+
+    * - Data type
+      - Value type in Python
+      - API to access or create a data type
+    * - **ByteType**
+      - int
+          .. note:: Numbers will be converted to 1-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -128 to 127.
+      - ByteType()
+    * - **ShortType**
+      - int
+          .. note:: Numbers will be converted to 2-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -32768 to 32767.
+      - ShortType()
+    * - **IntegerType**
+      - int
+      - IntegerType()
+    * - **LongType**
+      - int
+          .. note:: Numbers will be converted to 8-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -9223372036854775808 to 9223372036854775807. Otherwise, please convert data to decimal.Decimal and use DecimalType.
+      - LongType()
+    * - **FloatType**
+      - float
+          .. note:: Numbers will be converted to 4-byte single-precision floating point numbers at runtime.
+      - FloatType()
+    * - **DoubleType**
+      - float
+      - DoubleType()
+    * - **DecimalType**
+      - decimal.Decimal
+      - DecimalType()|
+    * - **StringType**
+      - string
+      - StringType()
+    * - **BinaryType**
+      - bytearray
+      - BinaryType()
+    * - **BooleanType**
+      - bool
+      - BooleanType()
+    * - **TimestampType**
+      - datetime.datetime
+      - TimestampType()
+    * - **TimestampNTZType**
+      - datetime.datetime
+      - TimestampNTZType()
+    * - **DateType**
+      - datetime.date
+      - DateType()
+    * - **DayTimeIntervalType**
+      - datetime.timedelta
+      - DayTimeIntervalType()
+    * - **ArrayType**
+      - list, tuple, or array
+      - ArrayType(*elementType*, [*containsNull*])
+          .. note:: The default value of *containsNull* is True.
+    * - **MapType**
+      - dict
+      - MapType(*keyType*, *valueType*, [*valueContainsNull]*)
+          .. note:: The default value of *valueContainsNull* is True.
+    * - **StructType**
+      - list or tuple
+      - StructType(*fields*)
+          .. note:: *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.
+    * - **StructField**
+      - The value type in Python of the data type of this field. For example, Int for a StructField with the data type IntegerType.
+      - StructField(*name*, *dataType*, [*nullable*])
+          .. note:: The default value of *nullable* is True.
 
 Conversions in Practice - UDFs
 ------------------------------
@@ -175,75 +246,3 @@ Nested data types will convert to ``StructType``, ``MapType``, and ``ArrayType``
   #  |    |-- Math: struct (nullable = true)
   #  |    |    |-- H1: double (nullable = true)
   #  |    |    |-- H2: double (nullable = true)
-
-All Conversions
----------------
-
-.. list-table::
-    :header-rows: 1
-
-    * - Data type
-      - Value type in Python
-      - API to access or create a data type
-    * - **ByteType**
-      - int
-          .. note:: Numbers will be converted to 1-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -128 to 127.
-      - ByteType()
-    * - **ShortType**
-      - int
-          .. note:: Numbers will be converted to 2-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -32768 to 32767.
-      - ShortType()
-    * - **IntegerType**
-      - int
-      - IntegerType()
-    * - **LongType**
-      - int
-          .. note:: Numbers will be converted to 8-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -9223372036854775808 to 9223372036854775807. Otherwise, please convert data to decimal.Decimal and use DecimalType.
-      - LongType()
-    * - **FloatType**
-      - float
-          .. note:: Numbers will be converted to 4-byte single-precision floating point numbers at runtime.
-      - FloatType()
-    * - **DoubleType**
-      - float
-      - DoubleType()
-    * - **DecimalType**
-      - decimal.Decimal
-      - DecimalType()|
-    * - **StringType**
-      - string
-      - StringType()
-    * - **BinaryType**
-      - bytearray
-      - BinaryType()
-    * - **BooleanType**
-      - bool
-      - BooleanType()
-    * - **TimestampType**
-      - datetime.datetime
-      - TimestampType()
-    * - **TimestampNTZType**
-      - datetime.datetime
-      - TimestampNTZType()
-    * - **DateType**
-      - datetime.date
-      - DateType()
-    * - **DayTimeIntervalType**
-      - datetime.timedelta
-      - DayTimeIntervalType()
-    * - **ArrayType**
-      - list, tuple, or array
-      - ArrayType(*elementType*, [*containsNull*])
-          .. note:: The default value of *containsNull* is True.
-    * - **MapType**
-      - dict
-      - MapType(*keyType*, *valueType*, [*valueContainsNull]*)
-          .. note:: The default value of *valueContainsNull* is True.
-    * - **StructType**
-      - list or tuple
-      - StructType(*fields*)
-          .. note:: *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.
-    * - **StructField**
-      - The value type in Python of the data type of this field. For example, Int for a StructField with the data type IntegerType.
-      - StructField(*name*, *dataType*, [*nullable*])
-          .. note:: The default value of *nullable* is True.
