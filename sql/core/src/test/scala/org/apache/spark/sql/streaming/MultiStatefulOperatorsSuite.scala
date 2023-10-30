@@ -878,6 +878,13 @@ class MultiStatefulOperatorsSuite
     testOutputWatermarkInJoin(join3, input1, -40L * 1000 - 1)
   }
 
+  test("SPARK-45637 Time window aggregation in separate streams followed by " +
+      "stream-stream join should return results") {
+    withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "1")) {
+
+    }
+  }
+
   private def assertNumStateRows(numTotalRows: Seq[Long]): AssertOnQuery = AssertOnQuery { q =>
     q.processAllAvailable()
     val progressWithData = q.recentProgress.lastOption.get
