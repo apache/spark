@@ -226,7 +226,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           .head
           .asInstanceOf[BroadcastHashJoinExec]
           .copy(bcVarPushNode = SELF_PUSH)
-        bhj.preserveLogicalJoinAsHashSelfPush(originalBuildLp)
+        bhj.preserveLogicalJoinAsHashSelfPush(Option(originalBuildLp))
 
         bhj :: Nil
       // If it is an equi-join, we first look at the join hints w.r.t. the following order:

@@ -62,7 +62,7 @@ object LogicalQueryStageStrategy extends Strategy {
         bcVarPushNode = bcVarPush)
 
       preserveBuildPlan.foreach { case (_, originalBuildLp) =>
-        newbhj.preserveLogicalJoinAsHashSelfPush(originalBuildLp)
+        newbhj.preserveLogicalJoinAsHashSelfPush(Option(originalBuildLp))
       }
       Seq(newbhj)
 
@@ -81,7 +81,7 @@ object LogicalQueryStageStrategy extends Strategy {
           isNullAwareAntiJoin = true,
         bcVarPushNode = bcVarPush)
       preserveBuildPlan.foreach { case (_, originalBuildLp) =>
-        newbhj.preserveLogicalJoinAsHashSelfPush(originalBuildLp)
+        newbhj.preserveLogicalJoinAsHashSelfPush(Option(originalBuildLp))
       }
       Seq(newbhj)
     case j @ Join(left, right, joinType, condition, _)

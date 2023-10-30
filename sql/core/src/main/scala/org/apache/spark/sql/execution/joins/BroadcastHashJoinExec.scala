@@ -300,9 +300,11 @@ case class BroadcastHashJoinExec(
       newRight: SparkPlan): BroadcastHashJoinExec =
     copy(left = newLeft, right = newRight)
 
-  def preserveLogicalJoinAsHashSelfPush(originalBuildLP: LogicalPlan): Unit =
-    this.logicalLink.foreach(
-      _.setTagValue(Join.PRESERVE_JOIN_WITH_SELF_PUSH_HASH, (this.buildSide, originalBuildLP)))
+  def preserveLogicalJoinAsHashSelfPush(originalBuildLPOpt: Option[LogicalPlan]): Unit =
+    this.logicalLink.foreach(joinLp => originalBuildLPOpt.foreach(
+      originalBuildLP => joinLp.setTagValue(Join.PRESERVE_JOIN_WITH_SELF_PUSH_HASH,
+        (this.buildSide, originalBuildLP)))
+      )
 
 }
 

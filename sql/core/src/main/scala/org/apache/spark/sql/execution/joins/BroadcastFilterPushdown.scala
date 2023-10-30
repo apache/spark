@@ -142,65 +142,68 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
           batchScanToJoinLegMapping,
           buildLegsBlockingPushFromAncestors)
         val groupingOnBasisOfBatchScanExec = temp.groupBy(_.targetBatchScanExec)
-        val logicalNode = buildPlan.logicalLink.get
-        buildLegPlanToOriginalBatchScans.put(
-          logicalNode,
-          BroadcastHashJoinUtil
-            .getAllBatchScansForSparkPlan(buildPlan))
+        val logicalNodeOpt = buildPlan.logicalLink
+        if (logicalNodeOpt.isDefined) {
+          val logicalNode = logicalNodeOpt.get
+          buildLegPlanToOriginalBatchScans.put(
+            logicalNode,
+            BroadcastHashJoinUtil
+              .getAllBatchScansForSparkPlan(buildPlan))
 
-        groupingOnBasisOfBatchScanExec.foreach { case (bsExec, list) =>
-          val keysToPush = list.filter {
-            case BroadcastVarPushDownData(baseStreamCol, _, _, _, _) =>
-              !batchScanToStreamingCol.containsKey(bsExec) ||
-              !batchScanToStreamingCol.get(bsExec).contains(baseStreamCol)
-          }
-          if (keysToPush.nonEmpty) {
-            val removeDpp = keysToPush.exists(_.requiresDPPRemoval)
-            pushingAnyFilter = true
-            if (removeDpp) {
-              batchScanToRemoveDpp.put(bsExec, bsExec)
+          groupingOnBasisOfBatchScanExec.foreach { case (bsExec, list) =>
+            val keysToPush = list.filter {
+              case BroadcastVarPushDownData(baseStreamCol, _, _, _, _) =>
+                !batchScanToStreamingCol.containsKey(bsExec) ||
+                  !batchScanToStreamingCol.get(bsExec).contains(baseStreamCol)
             }
-            keysToPush.foreach {
-              case BroadcastVarPushDownData(
-                    streamingColLeafIndex,
-                    _,
-                    joiningColDataType,
-                    joinIndex,
-                    _) =>
-                batchScanToJoinLegMapping.compute(
-                  bsExec,
-                  (_, prevVal) => {
-                    val mappings = if (prevVal eq null) {
-                      mutable.Map[LogicalPlan, Seq[JoiningKeyData]]()
-                    } else {
-                      prevVal
-                    }
-                    val joiningKeysDataOpt = mappings.get(logicalNode)
-                    val joiningKeysData = joiningKeysDataOpt.fold(
-                      Seq(
-                        JoiningKeyData(
+            if (keysToPush.nonEmpty) {
+              val removeDpp = keysToPush.exists(_.requiresDPPRemoval)
+              pushingAnyFilter = true
+              if (removeDpp) {
+                batchScanToRemoveDpp.put(bsExec, bsExec)
+              }
+              keysToPush.foreach {
+                case BroadcastVarPushDownData(
+                streamingColLeafIndex,
+                _,
+                joiningColDataType,
+                joinIndex,
+                _) =>
+                  batchScanToJoinLegMapping.compute(
+                    bsExec,
+                    (_, prevVal) => {
+                      val mappings = if (prevVal eq null) {
+                        mutable.Map[LogicalPlan, Seq[JoiningKeyData]]()
+                      } else {
+                        prevVal
+                      }
+                      val joiningKeysDataOpt = mappings.get(logicalNode)
+                      val joiningKeysData = joiningKeysDataOpt.fold(
+                        Seq(
+                          JoiningKeyData(
+                            canonicalizedStreamKeys(joinIndex),
+                            canonicalizedJoinKeys(joinIndex),
+                            streamingColLeafIndex,
+                            joiningColDataType,
+                            joinIndex)))(
+                        _ :+ JoiningKeyData(
                           canonicalizedStreamKeys(joinIndex),
                           canonicalizedJoinKeys(joinIndex),
                           streamingColLeafIndex,
                           joiningColDataType,
-                          joinIndex)))(
-                      _ :+ JoiningKeyData(
-                        canonicalizedStreamKeys(joinIndex),
-                        canonicalizedJoinKeys(joinIndex),
-                        streamingColLeafIndex,
-                        joiningColDataType,
-                        joinIndex))
-                    mappings += (logicalNode -> joiningKeysData)
-                    mappings
-                  })
-                batchScanToStreamingCol.compute(
-                  bsExec,
-                  (_, v) =>
-                    if (v eq null) {
-                      Seq(streamingColLeafIndex)
-                    } else {
-                      v :+ streamingColLeafIndex
+                          joinIndex))
+                      mappings += (logicalNode -> joiningKeysData)
+                      mappings
                     })
+                  batchScanToStreamingCol.compute(
+                    bsExec,
+                    (_, v) =>
+                      if (v eq null) {
+                        Seq(streamingColLeafIndex)
+                      } else {
+                        v :+ streamingColLeafIndex
+                      })
+              }
             }
           }
         }
@@ -208,7 +211,7 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
           val newBhj = bhj.copy(bcVarPushNode = SELF_PUSH)
           bhj.logicalLink.foreach(lp => {
             newBhj.setLogicalLink(lp)
-            newBhj.preserveLogicalJoinAsHashSelfPush(buildPlan.logicalLink.get)
+            newBhj.preserveLogicalJoinAsHashSelfPush(buildPlan.logicalLink)
           })
           newBhj
         } else {
@@ -318,7 +321,9 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
           case BuildLeft => bhj.copy(right = newStreamPlan, left = newBuildPlan)
         }
         bhj.logicalLink.foreach(newBhj.setLogicalLink)
-        newBhj.preserveLogicalJoinAsHashSelfPush(buildPlan.logicalLink.get)
+        if (bhj.bcVarPushNode == SELF_PUSH) {
+          newBhj.preserveLogicalJoinAsHashSelfPush(buildPlan.logicalLink)
+        }
         newBhj
       case _ =>
         if (sparkPlan.children.isEmpty) {
