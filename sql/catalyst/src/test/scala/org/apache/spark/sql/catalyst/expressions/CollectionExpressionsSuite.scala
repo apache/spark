@@ -32,12 +32,14 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingZoneIds, LA, UTC}
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
+import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.unsafe.types.UTF8String
 
-class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+class CollectionExpressionsSuite
+  extends SparkFunSuite with ExpressionEvalHelper with DataTypeErrorsBase {
 
   implicit def stringToUTF8Str(str: String): UTF8String = UTF8String.fromString(str)
 
@@ -84,6 +86,19 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       SQLConf.ANSI_ENABLED.key -> "true") {
       testSize(sizeOfNull = null)
     }
+  }
+
+  test("Unsupported data type for size()") {
+    val exception = intercept[org.apache.spark.SparkException] {
+      Size(Literal.create("str", StringType)).eval(EmptyRow)
+    }
+    checkError(
+      exception = exception,
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> ("The size function doesn't support the operand type " +
+          toSQLType(StringType))
+      ))
   }
 
   test("MapKeys/MapValues") {
@@ -600,10 +615,21 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Slice(a0, Literal(-3), Literal(2)), Seq(4, 5))
     checkEvaluation(Slice(a0, Literal(4), Literal(10)), Seq(4, 5, 6))
     checkEvaluation(Slice(a0, Literal(-1), Literal(2)), Seq(6))
-    checkExceptionInExpression[RuntimeException](Slice(a0, Literal(1), Literal(-1)),
-      "Unexpected value for length")
-    checkExceptionInExpression[RuntimeException](Slice(a0, Literal(0), Literal(1)),
-      "Unexpected value for start")
+    checkErrorInExpression[SparkRuntimeException](
+      expression = Slice(a0, Literal(1), Literal(-1)),
+      errorClass = "INVALID_PARAMETER_VALUE.LENGTH",
+      parameters = Map(
+        "parameter" -> toSQLId("length"),
+        "length" -> (-1).toString,
+        "functionName" -> toSQLId("slice")
+      ))
+    checkErrorInExpression[SparkRuntimeException](
+      expression = Slice(a0, Literal(0), Literal(1)),
+      errorClass = "INVALID_PARAMETER_VALUE.START",
+      parameters = Map(
+        "parameter" -> toSQLId("start"),
+        "functionName" -> toSQLId("slice")
+      ))
     checkEvaluation(Slice(a0, Literal(-20), Literal(1)), Seq.empty[Int])
     checkEvaluation(Slice(a1, Literal(-20), Literal(1)), Seq.empty[String])
     checkEvaluation(Slice(a0, Literal.create(null, IntegerType), Literal(2)), null)

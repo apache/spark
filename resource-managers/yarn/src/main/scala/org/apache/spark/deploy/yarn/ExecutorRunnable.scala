@@ -153,7 +153,7 @@ private[yarn] class ExecutorRunnable(
     val javaOpts = ListBuffer[String]()
 
     // Set the JVM memory
-    val executorMemoryString = executorMemory + "m"
+    val executorMemoryString = s"${executorMemory}m"
     javaOpts += "-Xmx" + executorMemoryString
 
     // Set extra Java options for the executor, if defined

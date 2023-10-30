@@ -84,7 +84,7 @@ class LogicalPlanSuite extends SparkFunSuite {
   test("transformExpressions works with a Stream") {
     val id1 = NamedExpression.newExprId
     val id2 = NamedExpression.newExprId
-    val plan = Project(Stream(
+    val plan = Project(LazyList(
       Alias(Literal(1), "a")(exprId = id1),
       Alias(Literal(2), "b")(exprId = id2)),
       OneRowRelation())
@@ -92,7 +92,7 @@ class LogicalPlanSuite extends SparkFunSuite {
       case Literal(v: Int, IntegerType) if v != 1 =>
         Literal(v + 1, IntegerType)
     }
-    val expected = Project(Stream(
+    val expected = Project(LazyList(
       Alias(Literal(1), "a")(exprId = id1),
       Alias(Literal(3), "b")(exprId = id2)),
       OneRowRelation())

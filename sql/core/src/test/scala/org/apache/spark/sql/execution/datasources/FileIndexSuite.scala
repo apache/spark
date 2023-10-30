@@ -503,7 +503,7 @@ class FileIndexSuite extends SharedSparkSession {
       val partitionDirectory = new File(dir, "a=foo")
       partitionDirectory.mkdir()
       for (i <- 1 to 8) {
-        val file = new File(partitionDirectory, i + ".txt")
+        val file = new File(partitionDirectory, s"$i.txt")
         stringToFile(file, "text")
       }
       val path = new Path(dir.getCanonicalPath)
