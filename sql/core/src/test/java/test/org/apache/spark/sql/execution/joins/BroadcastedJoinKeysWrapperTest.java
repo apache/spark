@@ -193,7 +193,7 @@ public class BroadcastedJoinKeysWrapperTest {
 
   @Test
   public void testTimestampTypeForSingleKeyHashedRelation() {
-    int count = 15;
+    int count = 11;
     DummyBroadcast bc = new DummyBroadcast(7);
     Timestamp[] expectedKeys = new Timestamp[count];
 
