@@ -2650,7 +2650,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
       }
     case ArrayType(elementType, _) =>
       input => {
-        val inputs = children.toStream.map(_.eval(input))
+        val inputs = children.to(LazyList).map(_.eval(input))
         if (inputs.contains(null)) {
           null
         } else {
