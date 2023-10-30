@@ -100,7 +100,7 @@ public class BroadcastedJoinKeysWrapperTest {
        RowFactory.create(
          i % 10, Integer.MAX_VALUE + (long) i % 15, "String" + (i % 20),
          java.sql.Date.valueOf(now.minusDays(i % 10).toLocalDate()),
-         Timestamp.valueOf(now.minusHours(i % 15))  ,
+         Timestamp.valueOf(now.minusHours(i % 11))  ,
          Double.valueOf(i % 75 + ".67367363615d"), Float.valueOf(i % 30 + ".67365f"),
            Byte.valueOf("" + (i % 127)),
          Short.valueOf(""+i % 50),
