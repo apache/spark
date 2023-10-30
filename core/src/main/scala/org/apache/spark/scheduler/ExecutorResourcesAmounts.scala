@@ -39,11 +39,10 @@ import org.apache.spark.resource.ResourceAmountUtils.RESOURCE_TOTAL_AMOUNT
 private[spark] class ExecutorResourcesAmounts(
     private val resources: Map[String, Map[String, Double]]) extends Serializable {
 
-  resources.foreach { case (_, addressMount) =>
-    addressMount.foreach { case (_, amount) => assert(amount <= 1.0)}}
-
-  // multiply the RESOURCE_TOTAL_AMOUNT to avoid using double directly.
-  // and convert the addressesAmounts to be mutable.HashMap
+  /**
+   * Multiply the RESOURCE_TOTAL_AMOUNT to avoid using double directly.
+   * and convert the addressesAmounts to be mutable.HashMap
+   */
   private val internalResources: Map[String, HashMap[String, Long]] = {
     resources.map { case (rName, addressAmounts) =>
       rName -> HashMap(addressAmounts.map { case (address, amount) =>
@@ -52,15 +51,20 @@ private[spark] class ExecutorResourcesAmounts(
     }
   }
 
-  // It maps from the resource name to its amount.
+  /**
+   * The total address count of each resource. Eg,
+   * Map("gpu" -> Map("0" -> 0.5, "1" -> 0.5, "2" -> 0.5),
+   *     "fpga" -> Map("a" -> 0.5, "b" -> 0.5))
+   * the resourceAmount will be Map("gpu" -> 3, "fpga" -> 2)
+   */
   lazy val resourceAmount: Map[String, Int] = internalResources.map { case (rName, addressMap) =>
     rName -> addressMap.size
   }
 
   /**
-   * for testing purpose. convert internal resources back to the "fraction" resources.
+   * For testing purpose. convert internal resources back to the "fraction" resources.
    */
-  def availableResources: Map[String, Map[String, Double]] = {
+  private[spark] def availableResources: Map[String, Map[String, Double]] = {
     internalResources.map { case (rName, addressMap) =>
       rName -> addressMap.map { case (address, amount) =>
         address -> amount.toDouble / RESOURCE_TOTAL_AMOUNT
@@ -94,7 +98,7 @@ private[spark] class ExecutorResourcesAmounts(
   }
 
   /**
-   * release the assigned resources to the resource pool
+   * Release the assigned resources to the resource pool
    * @param assignedResource resource to be released
    */
   def release(assignedResource: Map[String, Map[String, Double]]): Unit = {
