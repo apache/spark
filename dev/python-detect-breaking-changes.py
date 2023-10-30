@@ -44,6 +44,23 @@ CACHE_DIR = AEXPY_DIR / "cache"
 assert AEXPY_DIR.exists()
 
 
+def envcheck():
+    pyver = sys.version_info
+    if pyver.major != 3:
+        return False
+    if pyver.minor < 10:
+        return False
+    if pyver.minor > 10:
+        return None
+    try:
+        import mypy.version as mypyver
+        if mypyver.__version__ != "0.982":
+            return False
+    except ImportError:
+        return False
+    return True
+
+
 def prepare():
     if not CACHE_DIR.exists():
         os.mkdir(CACHE_DIR)
@@ -79,9 +96,14 @@ def checkout(branch: str = CURRENT_CODE, logFile: TextIOWrapper = None):
             shutil.rmtree(srcDir)
         runWithLog(logFile, ["git", "worktree", "prune"], cwd=ROOT_PATH)
         os.makedirs(srcDir)
-        runWithLog(
-            logFile, ["git", "worktree", "add", str(srcDir.resolve()), branch], cwd=ROOT_PATH
-        )
+        try:
+            runWithLog(logFile, ["git", "fetch", "origin", branch], cwd=ROOT_PATH)
+            runWithLog(
+                logFile, ["git", "worktree", "add", str(srcDir.resolve()), branch], cwd=ROOT_PATH
+            )
+        except Exception as ex:
+            print(f"Please ensure the commit id/branch exists and has been fetched into local git database: {branch}", file=sys.stderr)
+            raise ex
 
         yield srcDir
 
@@ -118,7 +140,7 @@ def diff(old: str, new: str = CURRENT_CODE):
             with checkout(old, log) as src1:
                 log.write(f"Extract API of {old}...\n")
                 extract1 = extract(old, src1, log)
-                with checkout(new) as src2:
+                with checkout(new, log) as src2:
                     log.write(f"Extract API of {new}...\n")
                     extract2 = extract(new, src2, log)
 
@@ -156,6 +178,12 @@ def diff(old: str, new: str = CURRENT_CODE):
 
 
 def main():
+    envresult = envcheck()
+    if envresult is not True:
+        print("We recommend to use Python 3.10 and Mypy 0.982", file=sys.stderr)
+    if envresult is False:
+        exit(-1)
+
     prepare()
 
     old = ""

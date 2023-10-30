@@ -30,23 +30,6 @@ from . import __version__, initializeLogging
 from .models import ApiDescription, ApiDifference, Distribution, Release, ReleasePair
 
 
-def envcheck():
-    pyver = sys.version_info
-    if pyver.major != 3:
-        return False
-    if pyver.minor < 10:
-        return False
-    if pyver.minor > 10:
-        return None
-    try:
-        import mypy.version as mypyver
-        if mypyver.__version__ != "0.982":
-            return False
-    except ImportError:
-        return False
-    return True
-
-
 def getUnknownDistribution():
     return Distribution(release=Release.fromId("unknown@unknown"))
 
@@ -113,13 +96,6 @@ def main(ctx=None, verbose: int = 0, interact: bool = False) -> None:
     }[verbose]
 
     initializeLogging(loggingLevel)
-
-    envresult = envcheck()
-    if envresult is not True:
-        print("We recommend to use Python 3.10 and Mypy 0.982", file=sys.stderr)
-    if envresult is False:
-        exit(-1)
-
 
 
 @main.command()
