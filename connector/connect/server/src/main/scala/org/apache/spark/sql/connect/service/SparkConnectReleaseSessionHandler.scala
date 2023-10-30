@@ -23,8 +23,8 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 
 class SparkConnectReleaseSessionHandler(
-  responseObserver: StreamObserver[proto.ReleaseSessionResponse])
-  extends Logging {
+    responseObserver: StreamObserver[proto.ReleaseSessionResponse])
+    extends Logging {
 
   def handle(v: proto.ReleaseSessionRequest): Unit = {
     val responseBuilder = proto.ReleaseSessionResponse.newBuilder()

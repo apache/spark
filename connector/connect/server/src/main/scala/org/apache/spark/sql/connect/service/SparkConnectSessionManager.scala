@@ -40,16 +40,15 @@ class SparkConnectSessionManager extends Logging {
       .newBuilder()
       .ticker(Ticker.systemTicker())
       .expireAfterAccess(
-        SparkEnv.get.conf.get(
-          CONNECT_SESSION_MANAGER_DEFAULT_SESSION_TIMEOUT), TimeUnit.MILLISECONDS)
+        SparkEnv.get.conf.get(CONNECT_SESSION_MANAGER_DEFAULT_SESSION_TIMEOUT),
+        TimeUnit.MILLISECONDS)
       .removalListener(new RemoveSessionListener)
       .build[SessionKey, SessionHolder]()
 
   private val closedSessionsCache =
     CacheBuilder
       .newBuilder()
-      .maximumSize(
-        SparkEnv.get.conf.get(CONNECT_SESSION_MANAGER_CLOSED_SESSIONS_TOMBSTONES_SIZE))
+      .maximumSize(SparkEnv.get.conf.get(CONNECT_SESSION_MANAGER_CLOSED_SESSIONS_TOMBSTONES_SIZE))
       .build[SessionKey, SessionHolderInfo]()
 
   /**
@@ -79,8 +78,7 @@ class SparkConnectSessionManager extends Logging {
           val holder = SessionHolder(key.userId, key.sessionId, newIsolatedSession())
           holder.eventManager.postStarted()
           holder
-        })
-      )
+        }))
     }
   }
 
@@ -106,8 +104,8 @@ class SparkConnectSessionManager extends Logging {
   }
 
   private def getSession(
-    key: SessionKey,
-    default: Option[Callable[SessionHolder]]): SessionHolder = {
+      key: SessionKey,
+      default: Option[Callable[SessionHolder]]): SessionHolder = {
     val session = default match {
       case Some(callable) => sessionStore.get(key, callable)
       case None => sessionStore.getIfPresent(key)
@@ -128,8 +126,7 @@ class SparkConnectSessionManager extends Logging {
   }
 
   private class RemoveSessionListener extends RemovalListener[SessionKey, SessionHolder] {
-    override def onRemoval(
-      notification: RemovalNotification[SessionKey, SessionHolder]): Unit = {
+    override def onRemoval(notification: RemovalNotification[SessionKey, SessionHolder]): Unit = {
       val sessionHolder = notification.getValue
       sessionsLock.synchronized {
         // First put into releasedSessionsCache, so that it cannot get accidentally recreated by

@@ -201,8 +201,8 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
    * Release reattachable execution - either part of buffered response, or finish and release all.
    */
   override def releaseSession(
-    request: proto.ReleaseSessionRequest,
-    responseObserver: StreamObserver[proto.ReleaseSessionResponse]): Unit = {
+      request: proto.ReleaseSessionRequest,
+      responseObserver: StreamObserver[proto.ReleaseSessionResponse]): Unit = {
     try {
       new SparkConnectReleaseSessionHandler(responseObserver).handle(request)
     } catch

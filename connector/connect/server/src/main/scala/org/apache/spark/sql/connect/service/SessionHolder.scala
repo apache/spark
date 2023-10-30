@@ -67,15 +67,6 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
   val eventManager: SessionEventsManager = SessionEventsManager(this, new SystemClock())
 
-  private[connect] def initializeSession(): Unit = {
-    updateAccessTime()
-    eventManager.postStarted()
-  }
-
-  private[connect] def updateAccessTime(): Unit = {
-    lastRpcAccessTime = Some(System.currentTimeMillis())
-  }
-
   // Mapping from relation ID (passed to client) to runtime dataframe. Used for callbacks like
   // foreachBatch() in Streaming. Lazy since most sessions don't need it.
   private lazy val dataFrameCache: ConcurrentMap[String, DataFrame] = new ConcurrentHashMap()
@@ -189,6 +180,20 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    */
   def classloader: ClassLoader = artifactManager.classloader
 
+  private[connect] def updateAccessTime(): Unit = {
+    lastRpcAccessTime = Some(System.currentTimeMillis())
+  }
+
+  /**
+   * Initialize the session.
+   *
+   * Called only by SparkConnectSessionManager.
+   */
+  private[connect] def initializeSession(): Unit = {
+    updateAccessTime()
+    eventManager.postStarted()
+  }
+
   /**
    * Expire this session and trigger state cleanup mechanisms.
    *
@@ -200,9 +205,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     // After isClosing=true, SessionHolder.addExecuteHolder() will not allow new executions for
     // this session. Because both SessionHolder.addExecuteHolder() and
     // SparkConnectExecutionManager.removeAllExecutionsForSession() are executed under
-    // executionsLock, this guarantees that removeAllExecutionsForSession triggered from
-    // sessionHolder.close() below will remove all executions and no new executions will be
-    // added while the session is being removed.
+    // executionsLock, this guarantees that removeAllExecutionsForSession triggered below will
+    // remove all executions and no new executions will be added in the meanwhile.
     isClosing = true
 
     // Note on the below notes about concurrency:
@@ -352,7 +356,7 @@ object SessionHolder {
 
 /** Basic information about SessionHolder. */
 case class SessionHolderInfo(
-  userId: String,
-  sessionId: String,
-  status: SessionStatus,
-  lastRpcAccesTime: Option[Long])
+    userId: String,
+    sessionId: String,
+    status: SessionStatus,
+    lastRpcAccesTime: Option[Long])

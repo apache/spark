@@ -960,7 +960,8 @@ service SparkConnectService {
 
   // Release a session.
   // All the executions in the session will be released. Any further requests for the session with
-  // that session_id for the given user_id will fail.
+  // that session_id for the given user_id will fail. If the session didn't exist or was already
+  // released, this is a noop.
   rpc ReleaseSession(ReleaseSessionRequest) returns (ReleaseSessionResponse) {}
 
   // FetchErrorDetails retrieves the matched exception with details based on a provided error id.

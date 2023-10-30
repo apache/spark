@@ -149,7 +149,8 @@ class SparkConnectServiceServicer(object):
     def ReleaseSession(self, request, context):
         """Release a session.
         All the executions in the session will be released. Any further requests for the session with
-        that session_id for the given user_id will fail.
+        that session_id for the given user_id will fail. If the session didn't exist or was already
+        released, this is a noop.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")

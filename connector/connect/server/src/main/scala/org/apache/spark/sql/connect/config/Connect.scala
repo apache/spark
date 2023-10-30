@@ -85,8 +85,9 @@ object Connect {
   val CONNECT_SESSION_MANAGER_CLOSED_SESSIONS_TOMBSTONES_SIZE =
     buildStaticConf("spark.connect.session.manager.closedSessionsTombstonesSize")
       .internal()
-      .doc("Maximum size of the cache of sessions after which sessions that did not receive any " +
-        "requests will be removed.")
+      .doc(
+        "Maximum size of the cache of sessions after which sessions that did not receive any " +
+          "requests will be removed.")
       .version("4.0.0")
       .intConf
       .createWithDefaultString("1000")

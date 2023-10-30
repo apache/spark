@@ -212,9 +212,8 @@ trait SparkConnectServerTest extends SharedSparkSession {
     }
   }
 
-  protected def withClient(
-      sessionId: String = defaultSessionId,
-      userId: String = defaultUserId)(f: SparkConnectClient => Unit): Unit = {
+  protected def withClient(sessionId: String = defaultSessionId, userId: String = defaultUserId)(
+      f: SparkConnectClient => Unit): Unit = {
     withClient(f, sessionId, userId)
   }
 

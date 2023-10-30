@@ -176,8 +176,8 @@ private[connect] object ErrorUtils extends Logging {
 
     lazy val stackTrace = Option(ExceptionUtils.getStackTrace(st))
     val withStackTrace =
-      if (sessionHolderOpt.exists(_.session.conf.get(
-          SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED) && stackTrace.nonEmpty)) {
+      if (sessionHolderOpt.exists(
+          _.session.conf.get(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED) && stackTrace.nonEmpty)) {
         val maxSize = SparkEnv.get.conf.get(Connect.CONNECT_JVM_STACK_TRACE_MAX_SIZE)
         errorInfo.putMetadata("stackTrace", StringUtils.abbreviate(stackTrace.get, maxSize))
       } else {
@@ -221,7 +221,8 @@ private[connect] object ErrorUtils extends Logging {
     // SessionHolder may not be present, e.g. if the session was already closed.
     // When SessionHolder is not present error details will not be available for FetchErrorDetails.
     val sessionHolderOpt =
-      SparkConnectService.sessionManager.getIsolatedSessionIfPresent(SessionKey(userId, sessionId))
+      SparkConnectService.sessionManager.getIsolatedSessionIfPresent(
+        SessionKey(userId, sessionId))
 
     val partial: PartialFunction[Throwable, (Throwable, Throwable)] = {
       case se: SparkException if isPythonExecutionException(se) =>

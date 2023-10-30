@@ -34,7 +34,6 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
 
   test("ReleaseSession releases all queries and does not allow more requests in the session") {
     withClient { client =>
-
       val query1 = client.execute(buildPlan(BIG_ENOUGH_QUERY))
       val query2 = client.execute(buildPlan(BIG_ENOUGH_QUERY))
       val query3 = client.execute(buildPlan("select 1"))
@@ -64,13 +63,15 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       val query1Error = intercept[SparkException] {
         while (query1.hasNext) query1.next()
       }
-      assert(query1Error.getMessage.contains("OPERATION_CANCELED") ||
-        query1Error.getMessage.contains("INVALID_HANDLE.OPERATION_ABANDONED"))
+      assert(
+        query1Error.getMessage.contains("OPERATION_CANCELED") ||
+          query1Error.getMessage.contains("INVALID_HANDLE.OPERATION_ABANDONED"))
       val query2Error = intercept[SparkException] {
         while (query2.hasNext) query2.next()
       }
-      assert(query2Error.getMessage.contains("OPERATION_CANCELED") ||
-        query2Error.getMessage.contains("INVALID_HANDLE.OPERATION_ABANDONED"))
+      assert(
+        query2Error.getMessage.contains("OPERATION_CANCELED") ||
+          query2Error.getMessage.contains("INVALID_HANDLE.OPERATION_ABANDONED"))
 
       // query3 has not been submitted before, so it should now fail with SESSION_CLOSED
       val query3Error = intercept[SparkException] {
@@ -87,7 +88,10 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
   }
 
   private def testReleaseSessionTwoSessions(
-      sessionIdA: String, userIdA: String, sessionIdB: String, userIdB: String): Unit = {
+      sessionIdA: String,
+      userIdA: String,
+      sessionIdB: String,
+      userIdB: String): Unit = {
     withClient(sessionId = sessionIdA, userId = userIdA) { clientA =>
       withClient(sessionId = sessionIdB, userId = userIdB) { clientB =>
         val queryA = clientA.execute(buildPlan(BIG_ENOUGH_QUERY))
@@ -108,8 +112,9 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
         val queryAError = intercept[SparkException] {
           while (queryA.hasNext) queryA.next()
         }
-        assert(queryAError.getMessage.contains("OPERATION_CANCELED") ||
-          queryAError.getMessage.contains("INVALID_HANDLE.OPERATION_ABANDONED"))
+        assert(
+          queryAError.getMessage.contains("OPERATION_CANCELED") ||
+            queryAError.getMessage.contains("INVALID_HANDLE.OPERATION_ABANDONED"))
 
         // B's query can run.
         while (queryB.hasNext) queryB.next()
