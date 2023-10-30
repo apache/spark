@@ -880,8 +880,72 @@ class MultiStatefulOperatorsSuite
 
   test("SPARK-45637 Time window aggregation in separate streams followed by " +
       "stream-stream join should return results") {
-    withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "1")) {
+    val impressions = MemoryStream[(Int, Timestamp)]
+    val clicks = MemoryStream[(Int, Timestamp)]
 
+    val impressionsWithWatermark = impressions.toDF()
+      .selectExpr("_1 as impressionAdId", "_2 as impressionTime")
+      .withWatermark("impressionTime", "10 seconds")
+
+    val clicksWithWatermark = clicks.toDF()
+      .selectExpr("_1 as clickAdId", "_2 as clickTime")
+      .withWatermark("clickTime", "10 seconds")
+
+    val clicksWindow = clicksWithWatermark.groupBy(
+      window($"clickTime", "1 minute")
+    ).count()
+
+    val impressionsWindow = impressionsWithWatermark.groupBy(
+      window($"impressionTime", "1 minute")
+    ).count()
+
+    val clicksAndImpressions = clicksWindow.join(impressionsWindow, "window", "inner")
+
+    withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "1")) {
+      testStream(clicksAndImpressions)(
+        MultiAddData(
+          (impressions, Seq(
+            (1, Timestamp.valueOf("2023-01-01 01:00:10")),
+            (2, Timestamp.valueOf("2023-01-01 01:00:30")),
+            (3, Timestamp.valueOf("2023-01-01 01:00:30")),
+            (4, Timestamp.valueOf("2023-01-01 01:00:30")),
+            (5, Timestamp.valueOf("2023-01-01 01:00:30")),
+            (6, Timestamp.valueOf("2023-01-01 01:00:30")),
+            (7, Timestamp.valueOf("2023-01-01 01:00:30")),
+            (8, Timestamp.valueOf("2023-01-01 01:00:30")),
+            (9, Timestamp.valueOf("2023-01-01 01:00:30")),
+            (10, Timestamp.valueOf("2023-01-01 01:00:30")),
+          )
+          ),
+          (clicks, Seq(
+            (1, Timestamp.valueOf("2023-01-01 01:00:20"))))
+        ),
+        AddData(impressions, (1, Timestamp.valueOf("2023-01-01 01:00:00"))),
+        AddData(clicks, (1, Timestamp.valueOf("2023-01-01 01:00:00"))),
+        CheckAnswer(),
+      )
+      /**
+       * spark.conf.set("spark.sql.shuffle.partitions", "1")
+       *
+       * impressions = (
+       * spark
+       * .readStream.format("rate").option("rowsPerSecond", "5").option("numPartitions", "1").load()
+       * .selectExpr("value AS adId", "timestamp AS impressionTime")
+       * )
+       *
+       * impressionsWithWatermark = impressions \
+       * .selectExpr("adId AS impressionAdId", "impressionTime") \
+       * .withWatermark("impressionTime", "10 seconds")
+       *
+       * clicks = (
+       * spark
+       * .readStream.format("rate").option("rowsPerSecond", "5").option("numPartitions", "1").load()
+       * .where((rand() * 100).cast("integer") < 10)  # 10 out of every 100 impressions result in a click
+       * .selectExpr("(value - 10) AS adId ", "timestamp AS clickTime")  # -10 so that a click with same id as impression is generated later (i.e. delayed data).
+       * .where("adId > 0")
+       * )
+       *
+       */
     }
   }
 
