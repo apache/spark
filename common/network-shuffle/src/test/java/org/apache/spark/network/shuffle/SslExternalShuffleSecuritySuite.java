@@ -15,20 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.yarn
+package org.apache.spark.network.shuffle;
 
-import org.apache.spark.network.ssl.SslSampleConfigs
+import com.google.common.collect.ImmutableMap;
 
-class SslYarnShuffleServiceWithRocksDBBackendSuite
-  extends YarnShuffleServiceWithRocksDBBackendSuite {
+import org.apache.spark.network.ssl.SslSampleConfigs;
+import org.apache.spark.network.util.TransportConf;
 
-  /**
-   * Override to add "spark.ssl.rpc.*" configuration parameters...
-   */
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    // Same as SSLTestUtils.updateWithSSLConfig(), which is not available to import here.
-    SslSampleConfigs.createDefaultConfigMapForRpcNamespace().entrySet().
-      forEach(entry => yarnConfig.set(entry.getKey, entry.getValue))
+public class SslExternalShuffleSecuritySuite extends ExternalShuffleSecuritySuite {
+
+  @Override
+  protected TransportConf createTransportConf(boolean encrypt) {
+    if (encrypt) {
+      return new TransportConf(
+        "shuffle",
+        SslSampleConfigs.createDefaultConfigProviderForRpcNamespaceWithAdditionalEntries(
+          ImmutableMap.of(
+          "spark.authenticate.enableSaslEncryption",
+          "true")
+        )
+      );
+    } else {
+      return new TransportConf(
+        "shuffle",
+        SslSampleConfigs.createDefaultConfigProviderForRpcNamespace()
+      );
+    }
   }
 }

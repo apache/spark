@@ -24,6 +24,6 @@ class AvroCodecSuite extends FileSourceCodecSuite {
 
   override def format: String = "avro"
   override val codecConfigName: String = SQLConf.AVRO_COMPRESSION_CODEC.key
-  override protected def availableCodecs = Seq("uncompressed", "deflate", "snappy",
-    "bzip2", "xz", "zstandard")
+  override protected def availableCodecs =
+    AvroCompressionCodec.values().map(_.lowerCaseName()).iterator.to(Seq)
 }

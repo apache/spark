@@ -178,6 +178,6 @@ object InputFormatInfo {
       }
     }
 
-    nodeToSplit.mapValues(_.toSet).toMap
+    nodeToSplit.view.mapValues(_.toSet).toMap
   }
 }
