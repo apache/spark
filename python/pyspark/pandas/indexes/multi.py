@@ -810,7 +810,21 @@ class MultiIndex(Index):
         sdf_self = self._psdf._internal.spark_frame.select(self._internal.index_spark_columns)
         sdf_other = other._psdf._internal.spark_frame.select(other._internal.index_spark_columns)
 
-        sdf_symdiff = sdf_self.union(sdf_other).subtract(sdf_self.intersect(sdf_other))
+        tmp_tag_column_name = verify_temp_column_name(sdf_self, "__multi_index_tag__")
+        tmp_max_column_name = verify_temp_column_name(sdf_self, "__multi_index_max_tag__")
+        tmp_min_column_name = verify_temp_column_name(sdf_self, "__multi_index_min_tag__")
+
+        sdf_symdiff = (
+            sdf_self.withColumn(tmp_tag_column_name, F.lit(0))
+            .union(sdf_other.withColumn(tmp_tag_column_name, F.lit(1)))
+            .groupBy(*self._internal.index_spark_column_names)
+            .agg(
+                F.min(tmp_tag_column_name).alias(tmp_min_column_name),
+                F.max(tmp_tag_column_name).alias(tmp_max_column_name),
+            )
+            .where(F.col(tmp_min_column_name) == F.col(tmp_max_column_name))
+            .drop(tmp_min_column_name, tmp_max_column_name)
+        )
 
         if sort:
             sdf_symdiff = sdf_symdiff.sort(*self._internal.index_spark_column_names)
