@@ -40,7 +40,7 @@ from typing import (
 
 from py4j.java_gateway import JavaObject
 
-from pyspark import SparkConf, SparkContext
+from pyspark import since, SparkConf, SparkContext
 from pyspark.rdd import RDD
 from pyspark.sql.column import _to_java_column
 from pyspark.sql.conf import RuntimeConfig
@@ -865,6 +865,7 @@ class SparkSession(SparkConversionMixin):
         return UDTFRegistration(self)
 
     @property
+    @since(4.0)
     def dataSource(self) -> "DataSourceRegistration":
         """Returns a :class:`DataSourceRegistration` for data source registration.
 

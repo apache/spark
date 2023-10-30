@@ -14,8 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import sys
-
 from abc import ABC, abstractmethod
 from typing import final, Any, Dict, Iterator, List, Optional, Tuple, Type, Union, TYPE_CHECKING
 
@@ -42,6 +40,8 @@ class DataSource(ABC):
 
     After implementing this interface, you can start to load your data source using
     ``spark.read.format(...).load()`` and save data using ``df.write.format(...).save()``.
+
+    .. versionadded:: 4.0.0
     """
 
     @final
@@ -139,6 +139,8 @@ class DataSourceReader(ABC):
     """
     A base class for data source readers. Data source readers are responsible for
     outputting data from a data source.
+
+    .. versionadded:: 4.0.0
     """
 
     def partitions(self) -> Iterator[Any]:
@@ -231,6 +233,13 @@ class DataSourceReader(ABC):
 
 
 class DataSourceRegistration:
+    """
+    Wrapper for data source registration. This instance can be accessed by
+    :attr:`spark.dataSource`.
+
+    .. versionadded:: 4.0.0
+    """
+
     def __init__(self, sparkSession: "SparkSession"):
         self.sparkSession = sparkSession
 
@@ -238,34 +247,21 @@ class DataSourceRegistration:
         self,
         dataSource: Type["DataSource"],
     ) -> None:
-        """Register a Python user-defined data source."""
+        """Register a Python user-defined data source.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        dataSource : type
+            The data source class to be registered. It should be a subclass of DataSource.
+        """
         from pyspark.sql.udf import _wrap_function
 
         name = dataSource.name()
         sc = self.sparkSession.sparkContext
+        # Serialize the data source class.
         wrapped = _wrap_function(sc, dataSource)
         assert sc._jvm is not None
         ds = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonDataSource(wrapped)
         self.sparkSession._jsparkSession.dataSource().registerPython(name, ds)
-
-
-def _test() -> None:
-    import doctest
-    from pyspark.sql import SparkSession
-    import pyspark.sql.udf
-
-    globs = pyspark.sql.datasource.__dict__.copy()
-    spark = SparkSession.builder.master("local[4]").appName("sql.datasource tests").getOrCreate()
-    globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.datasource,
-        globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
-    )
-    spark.stop()
-    if failure_count:
-        sys.exit(-1)
-
-
-if __name__ == "__main__":
-    _test()

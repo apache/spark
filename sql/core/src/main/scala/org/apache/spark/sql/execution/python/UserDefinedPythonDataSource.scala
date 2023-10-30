@@ -34,8 +34,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A user-defined Python data source. This is used by the Python API.
+ *
  * @param dataSourceCls The Python data source class.
- * @param schema The user-specified output schema of the data source.
  */
 case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
 
@@ -76,10 +76,16 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
   }
 }
 
+/**
+ * Used to store the result of creating a Python data source in the Python process.
+ */
 case class PythonDataSourceCreationResult(
     dataSource: Array[Byte],
     schema: StructType)
 
+/**
+ * A runner used to create a Python data source in a Python process and return the result.
+ */
 class UserDefinedPythonDataSourceRunner(
     dataSourceCls: PythonFunction,
     provider: String,

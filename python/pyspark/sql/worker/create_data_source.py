@@ -47,6 +47,20 @@ from pyspark.worker_util import (
 def main(infile: IO, outfile: IO) -> None:
     """
     Main method for creating a Python data source instance.
+
+    This process is invoked from the `UserDefinedPythonDataSourceRunner.runInPython` method
+    in JVM. This process is responsible for creating a `DataSource` object and send the
+    information needed back to the JVM.
+
+    The JVM sends the following information to this process:
+    - a `DataSource` class representing the data source to be created.
+    - a provider name in string.
+    - a list of paths in string.
+    - an optional user-specified schema in json string.
+    - a dictionary of options in string.
+
+    This process then creates a `DataSource` instance using the above information and
+    sends the pickled instance as well as the schema back to the JVM.
     """
     try:
         check_python_version(infile)
