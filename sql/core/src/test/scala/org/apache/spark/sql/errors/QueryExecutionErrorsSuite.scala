@@ -914,15 +914,13 @@ class QueryExecutionErrorsSuite
             }
           // Only check if errors exist to deflake. We couldn't guarantee that
           // the above 50 runs must hit this error.
-          exceptions.map { e =>
-            if (e.isDefined) {
-              checkError(
-                e.get,
-                errorClass = "CONCURRENT_QUERY",
-                sqlState = Some("0A000"),
-                parameters = e.get.getMessageParameters.asScala.toMap
-              )
-            }
+          exceptions.flatten.map { e =>
+            checkError(
+              e,
+              errorClass = "CONCURRENT_QUERY",
+              sqlState = Some("0A000"),
+              parameters = e.getMessageParameters.asScala.toMap
+            )
           }
           spark.streams.active.foreach(_.stop())
         }
