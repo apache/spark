@@ -62,6 +62,8 @@ public class BroadcastedJoinKeysWrapperTest {
 
   private final LocalDateTime now = LocalDateTime.now();
 
+  private final int uniqueTimeStampValues = 15;
+  private final Timestamp[] timeStampData = new Timestamp[uniqueTimeStampValues];
   private final StructType schema = new StructType(
     new StructField[]{
       new StructField("intCol", DataTypes.IntegerType, false, Metadata.empty()),
@@ -87,7 +89,9 @@ public class BroadcastedJoinKeysWrapperTest {
         .master("local[*]")
         .appName("testing")
         .getOrCreate();
-
+    for (int i = 0 ; i < uniqueTimeStampValues; ++i) {
+      timeStampData[i] = Timestamp.valueOf(now.minusHours(i));
+    }
     this.preparePlan();
   }
 
@@ -100,7 +104,7 @@ public class BroadcastedJoinKeysWrapperTest {
        RowFactory.create(
          i % 10, Integer.MAX_VALUE + (long) i % 15, "String" + (i % 20),
          java.sql.Date.valueOf(now.minusDays(i % 10).toLocalDate()),
-         Timestamp.valueOf(now.minusHours(i % 11))  ,
+         timeStampData[i % uniqueTimeStampValues]  ,
          Double.valueOf(i % 75 + ".67367363615d"), Float.valueOf(i % 30 + ".67365f"),
            Byte.valueOf("" + (i % 127)),
          Short.valueOf(""+i % 50),
@@ -193,15 +197,9 @@ public class BroadcastedJoinKeysWrapperTest {
 
   @Test
   public void testTimestampTypeForSingleKeyHashedRelation() {
-    int count = 11;
     DummyBroadcast bc = new DummyBroadcast(7);
-    Timestamp[] expectedKeys = new Timestamp[count];
-
-    for (int i = 0; i < count; ++i) {
-      expectedKeys[i] = Timestamp.valueOf(now.minusHours(i));
-    }
     this.testDataTypeForSingleKeyHashedRelation(DataTypes.TimestampType,
-        new HashSet<>(Arrays.asList(expectedKeys)), 1000, bc);
+        new HashSet<>(Arrays.asList(timeStampData)), 1000, bc);
   }
 
   @Test
