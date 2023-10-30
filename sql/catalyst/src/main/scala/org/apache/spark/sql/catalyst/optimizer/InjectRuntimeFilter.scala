@@ -26,47 +26,27 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types._
 
 /**
  * Insert a runtime filter on one side of the join (we call this side the application side) if
  * we can extract a runtime filter from the other side (creation side). A simple case is that
  * the creation side is a table scan with a selective filter.
- * The runtime filter is logically an IN subquery with the join keys (converted to a semi join),
- * but can be something different physically, such as a bloom filter.
+ * The runtime filter is logically an IN subquery with the join keys. Currently it's always
+ * bloom filter but we may add other physical implementations in the future.
  */
 object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
-
-  // Wraps `joinKey` with a hash function if its byte size is larger than an integer.
-  private def mayWrapWithHash(joinKey: Expression): Expression = {
-    if (joinKey.dataType.defaultSize > IntegerType.defaultSize) {
-      new Murmur3Hash(Seq(joinKey))
-    } else {
-      joinKey
-    }
-  }
 
   private def injectFilter(
       filterApplicationSideKey: Expression,
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSideKey: Expression,
       filterCreationSidePlan: LogicalPlan): LogicalPlan = {
-    require(conf.runtimeFilterBloomFilterEnabled || conf.runtimeFilterSemiJoinReductionEnabled)
-    if (conf.runtimeFilterBloomFilterEnabled) {
-      injectBloomFilter(
-        filterApplicationSideKey,
-        filterApplicationSidePlan,
-        filterCreationSideKey,
-        filterCreationSidePlan
-      )
-    } else {
-      injectInSubqueryFilter(
-        filterApplicationSideKey,
-        filterApplicationSidePlan,
-        filterCreationSideKey,
-        filterCreationSidePlan
-      )
-    }
+    injectBloomFilter(
+      filterApplicationSideKey,
+      filterApplicationSidePlan,
+      filterCreationSideKey,
+      filterCreationSidePlan
+    )
   }
 
   private def injectBloomFilter(
@@ -92,26 +72,6 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
     val filter = BloomFilterMightContain(bloomFilterSubquery,
       new XxHash64(Seq(filterApplicationSideKey)))
-    Filter(filter, filterApplicationSidePlan)
-  }
-
-  private def injectInSubqueryFilter(
-      filterApplicationSideKey: Expression,
-      filterApplicationSidePlan: LogicalPlan,
-      filterCreationSideKey: Expression,
-      filterCreationSidePlan: LogicalPlan): LogicalPlan = {
-    require(filterApplicationSideKey.dataType == filterCreationSideKey.dataType)
-    val actualFilterKeyExpr = mayWrapWithHash(filterCreationSideKey)
-    val alias = Alias(actualFilterKeyExpr, actualFilterKeyExpr.toString)()
-    val aggregate =
-      ColumnPruning(Aggregate(Seq(filterCreationSideKey), Seq(alias), filterCreationSidePlan))
-    if (!canBroadcastBySize(aggregate, conf)) {
-      // Skip the InSubquery filter if the size of `aggregate` is beyond broadcast join threshold,
-      // i.e., the semi-join will be a shuffled join, which is not worthwhile.
-      return filterApplicationSidePlan
-    }
-    val filter = InSubquery(Seq(mayWrapWithHash(filterApplicationSideKey)),
-      ListQuery(aggregate, numCols = aggregate.output.length))
     Filter(filter, filterApplicationSidePlan)
   }
 
@@ -270,18 +230,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     }
   }
 
-  def hasRuntimeFilter(left: LogicalPlan, right: LogicalPlan, leftKey: Expression,
-      rightKey: Expression): Boolean = {
-    if (conf.runtimeFilterBloomFilterEnabled) {
-      hasBloomFilter(left, right, leftKey, rightKey)
-    } else {
-      hasInSubquery(left, right, leftKey, rightKey)
-    }
-  }
-
   // This checks if there is already a DPP filter, as this rule is called just after DPP.
   @tailrec
-  def hasDynamicPruningSubquery(
+  private def hasDynamicPruningSubquery(
       left: LogicalPlan,
       right: LogicalPlan,
       leftKey: Expression,
@@ -296,7 +247,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     }
   }
 
-  def hasBloomFilter(
+  private def hasBloomFilter(
       left: LogicalPlan,
       right: LogicalPlan,
       leftKey: Expression,
@@ -316,19 +267,6 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     }
   }
 
-  def hasInSubquery(left: LogicalPlan, right: LogicalPlan, leftKey: Expression,
-      rightKey: Expression): Boolean = {
-    (left, right) match {
-      case (Filter(InSubquery(Seq(key),
-      ListQuery(Aggregate(Seq(Alias(_, _)), Seq(Alias(_, _)), _), _, _, _, _, _)), _), _) =>
-        key.fastEquals(leftKey) || key.fastEquals(new Murmur3Hash(Seq(leftKey)))
-      case (_, Filter(InSubquery(Seq(key),
-      ListQuery(Aggregate(Seq(Alias(_, _)), Seq(Alias(_, _)), _), _, _, _, _, _)), _)) =>
-        key.fastEquals(rightKey) || key.fastEquals(new Murmur3Hash(Seq(rightKey)))
-      case _ => false
-    }
-  }
-
   private def tryInjectRuntimeFilter(plan: LogicalPlan): LogicalPlan = {
     var filterCounter = 0
     val numFilterThreshold = conf.getConf(SQLConf.RUNTIME_FILTER_NUMBER_THRESHOLD)
@@ -339,11 +277,11 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         leftKeys.lazyZip(rightKeys).foreach((l, r) => {
           // Check if:
           // 1. There is already a DPP filter on the key
-          // 2. There is already a runtime filter (Bloom filter or IN subquery) on the key
+          // 2. There is already a bloom filter on the key
           // 3. The keys are simple cheap expressions
           if (filterCounter < numFilterThreshold &&
             !hasDynamicPruningSubquery(left, right, l, r) &&
-            !hasRuntimeFilter(newLeft, newRight, l, r) &&
+            !hasBloomFilter(newLeft, newRight, l, r) &&
             isSimpleExpression(l) && isSimpleExpression(r)) {
             val oldLeft = newLeft
             val oldRight = newRight
@@ -378,15 +316,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     case s: Subquery if s.correlated => plan
-    case _ if !conf.runtimeFilterSemiJoinReductionEnabled &&
-      !conf.runtimeFilterBloomFilterEnabled => plan
-    case _ =>
-      val newPlan = tryInjectRuntimeFilter(plan)
-      if (conf.runtimeFilterSemiJoinReductionEnabled && !plan.fastEquals(newPlan)) {
-        RewritePredicateSubquery(newPlan)
-      } else {
-        newPlan
-      }
+    case _ if !conf.runtimeFilterBloomFilterEnabled => plan
+    case _ => tryInjectRuntimeFilter(plan)
   }
 
 }
