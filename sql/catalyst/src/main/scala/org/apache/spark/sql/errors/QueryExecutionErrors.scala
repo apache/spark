@@ -33,8 +33,8 @@ import org.apache.spark._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedGenerator}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -2784,12 +2784,5 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "functionName" -> toSQLId(funcName),
         "upper" -> size.toString,
         "invalidValue" -> pos.toString))
-  }
-
-  def notExistPartitionError(
-      tableName: String,
-      partitionIdent: InternalRow,
-      partitionSchema: StructType): Throwable = {
-    new NoSuchPartitionException(tableName, partitionIdent, partitionSchema)
   }
 }

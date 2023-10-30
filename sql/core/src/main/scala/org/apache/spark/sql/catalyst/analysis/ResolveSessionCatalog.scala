@@ -245,7 +245,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         pattern,
         output) =>
       val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
-        assert(output.length == 4)
         output.head.withName("database") +: output.tail
       } else {
         output
@@ -257,7 +256,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         partitionSpec,
         output) if isSessionCatalog(catalog) =>
       val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
-        assert(output.length == 4)
         output.head.withName("database") +: output.tail
       } else {
         output

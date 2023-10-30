@@ -4061,7 +4061,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       ctx: ShowTableExtendedContext): LogicalPlan = withOrigin(ctx) {
     def createUnresolvedTable(
         nsCtx: IdentifierReferenceContext,
-        patternCtx: StringLitContext): LogicalPlan = {
+        patternCtx: StringLitContext): LogicalPlan = withOrigin(patternCtx) {
       val ns = Option(nsCtx).map(x => visitMultipartIdentifier(x.multipartIdentifier()))
       UnresolvedTable(ns.getOrElse(Seq.empty[String]) :+ string(visitStringLit(patternCtx)),
         "SHOW TABLE EXTENDED ... PARTITION ...")

@@ -889,14 +889,13 @@ object ShowTables {
 case class ShowTablesExtended(
     namespace: LogicalPlan,
     pattern: String,
-    override val output: Seq[Attribute] = ShowTablesExtended.getOutputAttrs)
-  extends UnaryCommand {
+    override val output: Seq[Attribute] = ShowTablesUtils.getOutputAttrs) extends UnaryCommand {
   override def child: LogicalPlan = namespace
   override protected def withNewChildInternal(newChild: LogicalPlan): ShowTablesExtended =
     copy(namespace = newChild)
 }
 
-object ShowTablesExtended {
+object ShowTablesUtils {
   def getOutputAttrs: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)(),
@@ -910,18 +909,10 @@ object ShowTablesExtended {
 case class ShowTablePartition(
     table: LogicalPlan,
     partitionSpec: PartitionSpec,
-    override val output: Seq[Attribute] = ShowTablePartition.getOutputAttrs)
+    override val output: Seq[Attribute] = ShowTablesUtils.getOutputAttrs)
   extends V2PartitionCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): ShowTablePartition =
     copy(table = newChild)
-}
-
-object ShowTablePartition {
-  def getOutputAttrs: Seq[Attribute] = Seq(
-    AttributeReference("namespace", StringType, nullable = false)(),
-    AttributeReference("tableName", StringType, nullable = false)(),
-    AttributeReference("isTemporary", BooleanType, nullable = false)(),
-    AttributeReference("information", StringType, nullable = false)())
 }
 
 /**

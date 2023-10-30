@@ -408,12 +408,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         ResolvedNamespace(catalog, ns),
         pattern,
         output) =>
-      ShowTablesExec(output, catalog.asTableCatalog, ns, Some(pattern),
-        isExtended = true, partitionSpec = None) :: Nil
+      ShowTablesExtendedExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
 
     case ShowTablePartition(r: ResolvedTable, part, output) =>
-      ShowTablesExec(output, r.catalog, r.identifier.namespace(), Some(r.identifier.name()),
-        isExtended = true, partitionSpec = Some(Seq(part).asResolvedPartitionSpecs.head)) :: Nil
+      ShowTablePartitionExec(output, r.catalog, r.identifier,
+        r.table.asPartitionable, Seq(part).asResolvedPartitionSpecs.head) :: Nil
 
     case SetCatalogAndNamespace(ResolvedNamespace(catalog, ns)) =>
       val catalogManager = session.sessionState.catalogManager

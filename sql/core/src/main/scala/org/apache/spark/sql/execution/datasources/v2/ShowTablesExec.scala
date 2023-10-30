@@ -17,22 +17,14 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.ResolvedPartitionSpec
-import org.apache.spark.sql.catalyst.catalog.CatalogTableType
-import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, StringUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, SupportsPartitionManagement, Table, TableCatalog}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits.TableHelper
-import org.apache.spark.sql.types.{StringType, StructType}
 
 /**
  * Physical plan node for showing tables.
@@ -41,36 +33,17 @@ case class ShowTablesExec(
     output: Seq[Attribute],
     catalog: TableCatalog,
     namespace: Seq[String],
-    pattern: Option[String],
-    isExtended: Boolean = false,
-    partitionSpec: Option[ResolvedPartitionSpec] = None) extends V2CommandExec with LeafExecNode {
+    pattern: Option[String]) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
 
-    if (partitionSpec.isEmpty) {
-      // Show the information of tables.
-      val identifiers = catalog.listTables(namespace.toArray)
-      identifiers.map { identifier =>
-        if (pattern.forall(StringUtils.filterPattern(Seq(identifier.name()), _).nonEmpty)) {
-          val isTemp = isTempView(identifier)
-          if (isExtended) {
-            val table = catalog.loadTable(identifier)
-              val information = extendedTable(catalog.name, identifier, table)
-              rows += toCatalystRow(identifier.namespace().quoted, identifier.name(), isTemp,
-                s"$information\n")
-          } else {
-            rows += toCatalystRow(identifier.namespace().quoted, identifier.name(), isTemp)
-          }
-        }
+    val tables = catalog.listTables(namespace.toArray)
+    tables.map { table =>
+      if (pattern.map(StringUtils.filterPattern(Seq(table.name()), _).nonEmpty).getOrElse(true)) {
+        rows += toCatalystRow(table.namespace().quoted, table.name(), isTempView(table))
       }
-    } else {
-      // Show the information of partitions.
-      val identifier = Identifier.of(namespace.toArray, pattern.get)
-      val table = catalog.loadTable(identifier)
-      val isTemp = isTempView(identifier)
-      val information = extendedPartition(identifier, table.asPartitionable, partitionSpec.get)
-      rows += toCatalystRow(namespace.quoted, identifier.name(), isTemp, s"$information\n")
     }
+
     rows.toSeq
   }
 
@@ -79,104 +52,5 @@ case class ShowTablesExec(
       case s: V2SessionCatalog => s.isTempView(ident)
       case _ => false
     }
-  }
-
-  private def extendedTable(
-      catalogName: String,
-      identifier: Identifier,
-      table: Table): String = {
-    val results = new mutable.LinkedHashMap[String, String]()
-
-    results.put("Catalog", catalogName)
-
-    if (!identifier.namespace().isEmpty) {
-      results.put("Namespace", identifier.namespace().quoted)
-    }
-    results.put("Table", identifier.name())
-    val tableType = if (table.properties().containsKey(TableCatalog.PROP_EXTERNAL)) {
-      CatalogTableType.EXTERNAL
-    } else {
-      CatalogTableType.MANAGED
-    }
-    results.put("Type", tableType.name)
-
-    CatalogV2Util.TABLE_RESERVED_PROPERTIES
-      .filterNot(_ == TableCatalog.PROP_EXTERNAL)
-      .foreach(propKey => {
-        if (table.properties.containsKey(propKey)) {
-          results.put(propKey.capitalize, table.properties.get(propKey))
-        }
-      })
-
-    val properties =
-      conf.redactOptions(table.properties.asScala.toMap).toList
-        .filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
-        .sortBy(_._1).map {
-        case (key, value) => key + "=" + value
-      }.mkString("[", ",", "]")
-    if (table.properties().isEmpty) {
-      results.put("Table Properties", properties.mkString("[", ", ", "]"))
-    }
-
-    // Partition Provider & Partition Columns
-    var partitionColumns = new StructType()
-    if (table.supportsPartitions && table.asPartitionable.partitionSchema().nonEmpty) {
-      partitionColumns = table.asPartitionable.partitionSchema()
-      results.put("Partition Provider", "Catalog")
-      results.put("Partition Columns", table.asPartitionable.partitionSchema().map(
-        field => quoteIdentifier(field.name)).mkString("[", ", ", "]"))
-    }
-
-    if (table.schema().nonEmpty) {
-      val dataColumns = table.schema().filterNot(partitionColumns.contains)
-      results.put("Schema", StructType(dataColumns ++ partitionColumns).treeString)
-    }
-
-    results.map { case (key, value) =>
-      if (value.isEmpty) key else s"$key: $value"
-    }.mkString("", "\n", "")
-  }
-
-  private def extendedPartition(
-      identifier: Identifier,
-      partitionTable: SupportsPartitionManagement,
-      resolvedPartitionSpec: ResolvedPartitionSpec): String = {
-    val results = new mutable.LinkedHashMap[String, String]()
-
-    // "Partition Values"
-    val partitionSchema = partitionTable.partitionSchema()
-    val (names, ident) = (resolvedPartitionSpec.names, resolvedPartitionSpec.ident)
-    val partitionIdentifiers = partitionTable.listPartitionIdentifiers(names.toArray, ident)
-    if (partitionIdentifiers.isEmpty) {
-      throw QueryExecutionErrors.notExistPartitionError(identifier.toString, ident, partitionSchema)
-    }
-    val row = partitionIdentifiers.head
-    val len = partitionSchema.length
-    val partitions = new Array[String](len)
-    val timeZoneId = conf.sessionLocalTimeZone
-    for (i <- 0 until len) {
-      val dataType = partitionSchema(i).dataType
-      val partValueUTF8String =
-        Cast(Literal(row.get(i, dataType), dataType), StringType, Some(timeZoneId)).eval()
-      val partValueStr = if (partValueUTF8String == null) "null" else partValueUTF8String.toString
-      partitions(i) = escapePathName(partitionSchema(i).name) + "=" + escapePathName(partValueStr)
-    }
-    val partitionValues = partitions.mkString("[", ", ", "]")
-    results.put("Partition Values", s"$partitionValues")
-
-    // "Partition Parameters"
-    val metadata = partitionTable.loadPartitionMetadata(ident)
-    if (!metadata.isEmpty) {
-      val metadataValues = metadata.asScala.map { case (key, value) =>
-        if (value.isEmpty) key else s"$key: $value"
-      }.mkString("{", ", ", "}")
-      results.put("Partition Parameters", metadataValues)
-    }
-
-    // TODO "Created Time", "Last Access", "Partition Statistics"
-
-    results.map { case (key, value) =>
-      if (value.isEmpty) key else s"$key: $value"
-    }.mkString("", "\n", "")
   }
 }
