@@ -181,7 +181,6 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
   }
 
   private def doSimulate(batchId: Long, plan: SparkPlan, originWatermark: Long): Unit = {
-    val statefulOperatorIdToNodeId = mutable.HashMap[Long, Int]()
     val nodeToOutputWatermark = mutable.HashMap[Int, Option[Long]]()
     val nextStatefulOperatorToWatermark = mutable.HashMap[Long, Option[Long]]()
 
@@ -200,7 +199,6 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
 
       case node: StateStoreWriter =>
         val stOpId = node.stateInfo.get.operatorId
-        statefulOperatorIdToNodeId.put(stOpId, node.id)
 
         val inputWatermarks = getInputWatermarks(node, nodeToOutputWatermark)
 
