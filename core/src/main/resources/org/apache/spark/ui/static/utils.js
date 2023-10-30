@@ -231,4 +231,42 @@ function createRESTEndPointForMiscellaneousProcess(appId) {
 function getBaseURI() {
   return document.baseURI || document.URL;
 }
+
+function detailsUINode(isMultiline, message) {
+  if (isMultiline) {
+    const span = '<span onclick="this.parentNode.querySelector(\'.stacktrace-details\').classList.toggle(\'collapsed\')" class="expand-details">+details</span>';
+    const pre = '<pre>' + message + '</pre>';
+    const div = '<div class="stacktrace-details collapsed">' + pre + '</div>';
+    return span + div;
+  } else {
+    return '';
+  }
+}
+
+const ERROR_CLASS_REGEX = /\[([A-Z][A-Z_.]+[A-Z])]/;
+
+/* This function works exactly the same as UIUtils.errorSummary, it shall be
+ * remained the same whichever changed */
+function errorSummary(errorMessage) {
+  let isMultiline = true;
+  const maybeErrorClass = errorMessage.match(ERROR_CLASS_REGEX);
+  let errorClassOrBrief;
+  if (maybeErrorClass.length === 2) {
+    errorClassOrBrief = maybeErrorClass[1];
+  } else if (errorMessage.indexOf('\n') >= 0) {
+    errorClassOrBrief = errorMessage.substring(0, errorMessage.indexOf('\n'));
+  } else if (errorMessage.indexOf(":") >= 0) {
+    errorClassOrBrief = errorMessage.substring(0, errorMessage.indexOf(":"));
+  } else {
+    isMultiline = false;
+    errorClassOrBrief = errorMessage;
+  }
+  return [errorClassOrBrief, isMultiline];
+}
+
+function errorMessageCell(errorMessage) {
+  const [summary, isMultiline] = errorSummary(errorMessage);
+  const details = detailsUINode(isMultiline, errorMessage);
+  return summary + details;
+}
 /* eslint-enable no-unused-vars */
