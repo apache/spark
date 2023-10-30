@@ -333,7 +333,8 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
 
   override val numPartitions: Int = partitions.length
 
-  override def stringArgs: Iterator[Any] = Iterator(from)
+  override def toString: String = from.toString
+  override def sql: String = from.sql
 }
 
 /**
@@ -738,7 +739,7 @@ case class HashShuffleSpec(
 
 case class CoalescedHashShuffleSpec(
     from: ShuffleSpec,
-    @transient partitions: Seq[CoalescedBoundary]) extends ShuffleSpec {
+    partitions: Seq[CoalescedBoundary]) extends ShuffleSpec {
 
   override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
     case SinglePartitionShuffleSpec =>

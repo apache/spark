@@ -63,8 +63,8 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
   }
 
   private def testHashShuffleSpecLike(
-    shuffleSpecName: String,
-    create: (HashPartitioning, ClusteredDistribution) => ShuffleSpec): Unit = {
+      shuffleSpecName: String,
+      create: (HashPartitioning, ClusteredDistribution) => ShuffleSpec): Unit = {
 
     test(s"compatibility: $shuffleSpecName on both sides") {
       checkCompatible(

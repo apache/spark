@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
@@ -79,7 +80,7 @@ case class AQEShuffleReadExec private(
             case CoalescedPartitionSpec(start, end, _) => CoalescedBoundary(start, end)
             // Can not happend due to isCoalescedRead
             case unexpected =>
-              throw new RuntimeException(s"Unexpected ShufflePartitionSpec: $unexpected")
+              throw SparkException.internalError(s"Unexpected ShufflePartitionSpec: $unexpected")
           }
           CurrentOrigin.withOrigin(h.origin)(CoalescedHashPartitioning(h, partitions))
         case r: RangePartitioning =>

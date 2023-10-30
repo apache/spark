@@ -147,8 +147,8 @@ class DistributionSuite extends SparkFunSuite {
   }
 
   private def testHashPartitioningLike(
-    partitioningName: String,
-    create: (Seq[Expression], Int) => Partitioning): Unit = {
+      partitioningName: String,
+      create: (Seq[Expression], Int) => Partitioning): Unit = {
 
     test(s"$partitioningName is the output partitioning") {
       // HashPartitioning can satisfy ClusteredDistribution iff its hash expressions are a subset of
