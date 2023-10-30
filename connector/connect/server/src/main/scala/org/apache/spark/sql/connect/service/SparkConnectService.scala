@@ -198,7 +198,7 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
   }
 
   /**
-   * Release reattachable execution - either part of buffered response, or finish and release all.
+   * Release session.
    */
   override def releaseSession(
       request: proto.ReleaseSessionRequest,
@@ -207,7 +207,7 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
       new SparkConnectReleaseSessionHandler(responseObserver).handle(request)
     } catch
       ErrorUtils.handleError(
-        "reattachSession",
+        "releaseSession",
         observer = responseObserver,
         userId = request.getUserContext.getUserId,
         sessionId = request.getSessionId)

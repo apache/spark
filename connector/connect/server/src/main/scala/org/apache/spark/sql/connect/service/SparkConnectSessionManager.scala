@@ -76,7 +76,7 @@ class SparkConnectSessionManager extends Logging {
               messageParameters = Map("handle" -> key.sessionId))
           }
           val holder = SessionHolder(key.userId, key.sessionId, newIsolatedSession())
-          holder.eventManager.postStarted()
+          holder.initializeSession()
           holder
         }))
     }
@@ -112,11 +112,11 @@ class SparkConnectSessionManager extends Logging {
     }
     // record access time before returning
     session match {
+      case null =>
+        null
       case s: SessionHolder =>
         s.updateAccessTime()
         s
-      case null =>
-        null
     }
   }
 
@@ -129,7 +129,7 @@ class SparkConnectSessionManager extends Logging {
     override def onRemoval(notification: RemovalNotification[SessionKey, SessionHolder]): Unit = {
       val sessionHolder = notification.getValue
       sessionsLock.synchronized {
-        // First put into releasedSessionsCache, so that it cannot get accidentally recreated by
+        // First put into closedSessionsCache, so that it cannot get accidentally recreated by
         // getOrCreateIsolatedSession.
         closedSessionsCache.put(sessionHolder.key, sessionHolder.getSessionHolderInfo)
       }
