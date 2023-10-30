@@ -508,11 +508,12 @@ The full breakdown of available SSL options can be found below. The `${ns}` plac
 replaced with one of the above namespaces.
 
 <table class="table table-striped">
-<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr></thead>
+<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Supported Namespaces</th></tr></thead>
   <tr>
     <td><code>${ns}.enabled</code></td>
     <td>false</td>
     <td>Enables SSL. When enabled, <code>${ns}.ssl.protocol</code> is required.</td>
+    <td>ui,standalone,historyServer,rpc</td>
   </tr>
   <tr>
     <td><code>${ns}.port</code></td>
@@ -525,9 +526,8 @@ replaced with one of the above namespaces.
 
       <br />When not set, the SSL port will be derived from the non-SSL port for the
       same service. A value of "0" will make the service bind to an ephemeral port.
-
-      <br />This setting is not applicable to the `rpc` namespace.
     </td>
+    <td>ui,standalone,historyServer</td>
   </tr>
   <tr>
     <td><code>${ns}.enabledAlgorithms</code></td>
@@ -542,6 +542,7 @@ replaced with one of the above namespaces.
 
       <br />Note: If not set, the default cipher suite for the JRE will be used.
     </td>
+    <td>ui,standalone,historyServer,rpc</td>
   </tr>
   <tr>
     <td><code>${ns}.keyPassword</code></td>
@@ -549,6 +550,7 @@ replaced with one of the above namespaces.
     <td>
       The password to the private key in the key store.
     </td>
+    <td>ui,standalone,historyServer,rpc</td>
   </tr>
   <tr>
     <td><code>${ns}.keyStore</code></td>
@@ -557,16 +559,19 @@ replaced with one of the above namespaces.
       Path to the key store file. The path can be absolute or relative to the directory in which the
       process is started.
     </td>
+    <td>ui,standalone,historyServer,rpc</td>
   </tr>
   <tr>
     <td><code>${ns}.keyStorePassword</code></td>
     <td>None</td>
     <td>Password to the key store.</td>
+    <td>ui,standalone,historyServer,rpc</td>
   </tr>
   <tr>
     <td><code>${ns}.keyStoreType</code></td>
     <td>JKS</td>
-    <td>The type of the key store. This setting is not applicable to the `rpc` namespace.</td>
+    <td>The type of the key store.</td>
+    <td>ui,standalone,historyServer</td>
   </tr>
   <tr>
     <td><code>${ns}.protocol</code></td>
@@ -579,14 +584,15 @@ replaced with one of the above namespaces.
       <a href="https://docs.oracle.com/en/java/javase/17/docs/specs/security/standard-names.html#additional-jsse-standard-names">this</a>
       page.
     </td>
+    <td>ui,standalone,historyServer,rpc</td>
   </tr>
   <tr>
     <td><code>${ns}.needClientAuth</code></td>
     <td>false</td>
     <td>
-      Whether to require client authentication. This setting is not applicable to the `rpc` 
-      namespace.
+      Whether to require client authentication.
     </td>
+    <td>ui,standalone,historyServer</td>
   </tr>
   <tr>
     <td><code>${ns}.trustStore</code></td>
@@ -595,25 +601,30 @@ replaced with one of the above namespaces.
       Path to the trust store file. The path can be absolute or relative to the directory in which
       the process is started.
     </td>
+    <td>ui,standalone,historyServer,rpc</td>
   </tr>
   <tr>
     <td><code>${ns}.trustStorePassword</code></td>
     <td>None</td>
     <td>Password for the trust store.</td>
+    <td>ui,standalone,historyServer,rpc</td>
   </tr>
   <tr>
     <td><code>${ns}.trustStoreType</code></td>
     <td>JKS</td>
-    <td>The type of the trust store. This setting is not applicable to the `rpc` namespace.</td>
+    <td>The type of the trust store.</td>
+    <td>ui,standalone,historyServer</td>
   </tr>
   <tr>
     <td><code>${ns}.openSSLEnabled</code></td>
     <td>false</td>
     <td>
       Whether to use OpenSSL for cryptographic operations instead of the JDK SSL provider.
-      This setting is only applicable to the `rpc` namespace, and also requires the `certChain`
-      and `privateKey` settings to be set.
+      This setting requires the `certChain` and `privateKey` settings to be set.
+      This takes precedence over the `keyStore` and `trustStore` settings if both are specified.
+      If the OpenSSL library is not available at runtime, we will fall back to the JDK provider.
     </td>
+    <td>rpc</td>
   </tr>
   <tr>
     <td><code>${ns}.privateKey</code></td>
@@ -621,9 +632,9 @@ replaced with one of the above namespaces.
     <td>
       Path to the private key file in PEM format. The path can be absolute or relative to the 
       directory in which the process is started. 
-      This setting is only applicable to the `rpc` namespace, and is required when using the 
-      OpenSSL implementation.
+      This setting is required when using the OpenSSL implementation.
     </td>
+    <td>rpc</td>
   </tr>
   <tr>
     <td><code>${ns}.certChain</code></td>
@@ -631,25 +642,27 @@ replaced with one of the above namespaces.
     <td>
       Path to the certificate chain file in PEM format. The path can be absolute or relative to the 
       directory in which the process is started. 
-      This setting is only applicable to the `rpc` namespace, and is required when using the 
-      OpenSSL implementation.
+      This setting is required when using the OpenSSL implementation.
     </td>
+    <td>rpc</td>
   </tr>
   <tr>
     <td><code>${ns}.trustStoreReloadingEnabled</code></td>
     <td>false</td>
     <td>
       Whether the trust store should be reloaded periodically.
-      This setting is only applicable to the `rpc` namespace.
+      This setting is mostly only useful in standalone deployments, not k8s or yarn deployments.
     </td>
+    <td>rpc</td>
   </tr>
   <tr>
     <td><code>${ns}.trustStoreReloadIntervalMs</code></td>
     <td>10000</td>
     <td>
       The interval at which the trust store should be reloaded (in milliseconds).
-      This setting is only applicable to the `rpc` namespace.
+      This setting is mostly only useful in standalone deployments, not k8s or yarn deployments.
     </td>
+    <td>rpc</td>
   </tr>
 </table>
 
