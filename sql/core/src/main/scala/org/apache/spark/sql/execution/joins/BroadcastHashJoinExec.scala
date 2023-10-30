@@ -158,14 +158,11 @@ case class BroadcastHashJoinExec(
   // Seq("a", "b", "c"), Seq("a", "b", "y"), Seq("a", "x", "c"), Seq("a", "x", "y").
   // The expanded expressions are returned as PartitioningCollection.
   private def expandOutputPartitioning(partitioning: HashPartitioning): PartitioningCollection = {
-    PartitioningCollection(
-      partitioning
-        .multiTransformDown {
-          case e: Expression if streamedKeyToBuildKeyMapping.contains(e.canonicalized) =>
-            e +: streamedKeyToBuildKeyMapping(e.canonicalized)
-        }
-        .asInstanceOf[Stream[HashPartitioning]]
-        .take(conf.broadcastHashJoinOutputPartitioningExpandLimit))
+    PartitioningCollection(partitioning.multiTransformDown {
+      case e: Expression if streamedKeyToBuildKeyMapping.contains(e.canonicalized) =>
+        e +: streamedKeyToBuildKeyMapping(e.canonicalized)
+    }.asInstanceOf[LazyList[HashPartitioning]]
+      .take(conf.broadcastHashJoinOutputPartitioningExpandLimit))
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

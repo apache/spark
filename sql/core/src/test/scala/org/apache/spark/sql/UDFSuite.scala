@@ -442,7 +442,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       Seq((1, "2"), (2, "4")).toDF("a", "b").write.format("json").saveAsTable("x")
       sql("insert into table x values(3, null)")
       sql("insert into table x values(null, '4')")
-      spark.udf.register("f", (a: Int, b: String) => a + b)
+      spark.udf.register("f", (a: Int, b: String) => s"$a$b")
       val df = spark.sql("SELECT f(a, b) FROM x")
       val plan = spark.sessionState.executePlan(df.logicalPlan).analyzed
       comparePlans(df.logicalPlan, plan)
@@ -527,7 +527,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       sparkContext.parallelize(Seq(Row(Map("a" -> new BigDecimal("2011000000000002456556"))))),
       StructType(Seq(StructField("col1", MapType(StringType, DecimalType(30, 0))))))
     val udf2 = org.apache.spark.sql.functions.udf((map: Map[String, BigDecimal]) => {
-      map.mapValues(value => if (value == null) null else value.toBigInteger.toString).toMap
+      map.view.mapValues(value => if (value == null) null else value.toBigInteger.toString).toMap
     })
     checkAnswer(df2.select(udf2($"col1")), Seq(Row(Map("a" -> "2011000000000002456556"))))
   }
