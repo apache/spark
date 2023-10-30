@@ -179,23 +179,20 @@ class BroadcastVarHashJoinUtilsSuite extends QueryTest with BroadcastVarPushdown
   }
 
   test("test project node aliasing still identifies  batchscan for broadcast variables") {
-    runWithDefaultConfig({
-      val lp = nonPartTable1
-        .where("c1_1".attr > 100)
-        .join(
-          nonPartTable2.select(
-            "c2_2".as("c22_2"),
-            "c2_1".as("c22_1"),
-            "c2_3".as("c22_3"),
-            "c2_4".as("c22_4"),
-            "c2_5".as("c22_5")),
-          Inner,
-          Option("c1_2".attr === "c22_2".attr))
+    runWithPushPredRuleOff({
+      val right = nonPartTable2
+      val left = nonPartTable1.where("c1_1".attr < 10).select(
+        "c1_1".attr.as("c11_1"),
+        "c1_2".attr.as("c11_2"),
+        "c1_3".attr.as("c11_3"),
+        "c1_4".attr.as("c11_4"),
+        "c1_5".attr.as("c11_5"))
+      val lp = left.join(right, Inner, Option("c11_1".attr === "c2_1".attr))
       val plan = lp.toDF().queryExecution.sparkPlan
       val expectedPushDownData = Seq(
         BroadcastVarPushDownData(
-          1,
-          getBatchScans(plan, nonPartTable2.schema).head,
+          0,
+          getBatchScans(plan, non_part_table2_schema).head,
           IntegerType,
           0))
       assertPushdownData(plan, expectedPushDownData)

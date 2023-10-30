@@ -18,15 +18,14 @@ package org.apache.spark.sql.execution.joins
 
 import org.scalactic.source.Position
 import org.scalatest.Tag
-
 import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow}
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, PropagateEmptyRelation, PruneFilters, PushDownPredicates}
 import org.apache.spark.sql.connector.catalog.{BufferedRows, InMemoryTable}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.{SQLTestUtils, SharedSparkSession}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -279,6 +278,17 @@ trait BroadcastVarPushdownUtils extends SharedSparkSession {
     withSQLConf(
       SQLConf.PUSH_BROADCASTED_JOIN_KEYS_AS_FILTER_TO_SCAN.key -> "true",
       SQLConf.PREFER_AS_BUILDSIDE_LEG_ALREADY_BROADCASTED.key -> "true",
+      SQLConf.PREFER_BROADCAST_VAR_PUSHDOWN_OVER_DPP.key -> "true") {
+      func
+    }
+  }
+
+  protected def runWithPushPredRuleOff[T](func: => T): T = {
+    withSQLConf(
+      SQLConf.PUSH_BROADCASTED_JOIN_KEYS_AS_FILTER_TO_SCAN.key -> "true",
+      SQLConf.PREFER_AS_BUILDSIDE_LEG_ALREADY_BROADCASTED.key -> "true",
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+        s"${PushDownPredicates.ruleName}, ${PropagateEmptyRelation.ruleName}, ${PruneFilters.ruleName}",
       SQLConf.PREFER_BROADCAST_VAR_PUSHDOWN_OVER_DPP.key -> "true") {
       func
     }

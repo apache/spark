@@ -464,7 +464,8 @@ abstract class InMemoryBaseTable(
         if (partitioning.length == 1 && partitionColNames.exists(_ == colName)) {
           f match {
             case In(attrName, valueArray)
-                if valueArray.length == 1 && valueArray(0).getClass.getName.indexOf(
+                if valueArray.length == 1 && valueArray(0) != null &&
+                  valueArray(0).getClass.getName.indexOf(
                   "BroadcastedJoinKeysWrapperImpl") != -1 =>
               // scalastyle:off classforname
               val broadcastVarClass = Class.forName(BROADCASTED_JOIN_KEYS_WRAPPER_CLASS)
@@ -481,7 +482,8 @@ abstract class InMemoryBaseTable(
                 matchingKeys.contains(key)
               })
 
-            case In(attrName, values) if attrName == colName =>
+            case In(attrName, values) if attrName == colName &&
+              values.headOption.fold(false)(_ != null) =>
               val matchingKeys = values.map(_.toString).toSet
               data = data.filter(partition => {
                 val key = partition.asInstanceOf[BufferedRows].keyString()
@@ -495,7 +497,8 @@ abstract class InMemoryBaseTable(
         } else {
           f match {
             case In(attrName, valueArray)
-                if valueArray.length == 1 && valueArray(0).getClass.getName.indexOf(
+                if valueArray.length == 1 && valueArray(0) != null &&
+                  valueArray(0).getClass.getName.indexOf(
                   "BroadcastedJoinKeysWrapperImpl") != -1 =>
               // scalastyle:off classforname
               val broadcastVarClass = Class.forName(BROADCASTED_JOIN_KEYS_WRAPPER_CLASS)
@@ -524,7 +527,7 @@ abstract class InMemoryBaseTable(
         }
         this.broadcastVarFilters = this.broadcastVarFilters ++ filters.filter {
           case In(_, values)
-              if values.length == 1 && values(0).getClass.getName.indexOf(
+              if values.length == 1 &&  values(0) != null && values(0).getClass.getName.indexOf(
                 "BroadcastedJoinKeysWrapperImpl") != -1 =>
             true
 
