@@ -19,17 +19,15 @@ package org.apache.spark.sql
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.datasources.DataSourceRegistry
+import org.apache.spark.sql.execution.datasources.DataSourceManager
 import org.apache.spark.sql.execution.python.UserDefinedPythonDataSource
 
 /**
  * Functions for registering user-defined data sources.
  * Use `SparkSession.dataSource` to access this.
- *
- * @since 4.0.0
  */
 @Evolving
-class DataSourceRegistration private[sql] (dataSourceRegistry: DataSourceRegistry)
+private[sql] class DataSourceRegistration private[sql] (dataSourceManager: DataSourceManager)
   extends Logging {
 
   protected[sql] def registerPython(
@@ -45,6 +43,6 @@ class DataSourceRegistration private[sql] (dataSourceRegistry: DataSourceRegistr
          | pythonExec: ${dataSource.dataSourceCls.pythonExec}
       """.stripMargin)
 
-    dataSourceRegistry.registerDataSource(name, dataSource.builder)
+    dataSourceManager.registerDataSource(name, dataSource.builder)
   }
 }

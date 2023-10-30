@@ -18,21 +18,17 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
-import javax.annotation.concurrent.GuardedBy
+import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.mutable
-
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
+class DataSourceManager {
 
-trait DataSourceRegistry {
-
-  type DataSourceBuilder = (
+  private type DataSourceBuilder = (
     SparkSession,  // Spark session
     String,  // provider name
     Seq[String],  // paths
@@ -40,38 +36,19 @@ trait DataSourceRegistry {
     CaseInsensitiveStringMap  // options
   ) => LogicalPlan
 
-  def registerDataSource(name: String, builder: DataSourceBuilder): Unit
-
-  def dataSourceExists(name: String): Boolean
-
-  /** Create a copy of this registry with identical data sources as this registry. */
-  override def clone(): DataSourceRegistry = throw new CloneNotSupportedException()
-}
-
-class SimpleDataSourceRegistry extends DataSourceRegistry with Logging {
-  @GuardedBy("this")
-  protected val dataSourceBuilders = new mutable.HashMap[String, DataSourceBuilder]
+  private val dataSourceBuilders = new ConcurrentHashMap[String, DataSourceBuilder]()
 
   private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
 
-  override def registerDataSource(name: String, builder: DataSourceBuilder): Unit = synchronized {
+  def registerDataSource(name: String, builder: DataSourceBuilder): Unit = {
     val normalizedName = normalize(name)
-    if (dataSourceBuilders.contains(normalizedName)) {
+    if (dataSourceBuilders.containsKey(normalizedName)) {
       throw QueryCompilationErrors.dataSourceAlreadyExists(name)
     }
     // TODO(SPARK-45639): check if the data source is a DSv1 or DSv2 using loadDataSource.
     dataSourceBuilders.put(normalizedName, builder)
   }
 
-  override def dataSourceExists(name: String): Boolean = synchronized {
-    dataSourceBuilders.contains(normalize(name))
-  }
-
-  override def clone(): SimpleDataSourceRegistry = {
-    val registry = new SimpleDataSourceRegistry
-    dataSourceBuilders.iterator.foreach { case (name, builder) =>
-      registry.registerDataSource(name, builder)
-    }
-    registry
-  }
+  def dataSourceExists(name: String): Boolean =
+    dataSourceBuilders.containsKey(normalize(name))
 }

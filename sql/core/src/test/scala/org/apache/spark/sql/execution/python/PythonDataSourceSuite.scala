@@ -38,6 +38,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
       |""".stripMargin
 
   test("simple data source") {
+    assume(shouldTestPythonUDFs)
     val dataSourceScript =
       s"""
         |from pyspark.sql.datasource import DataSource, DataSourceReader
@@ -63,6 +64,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("simple data source with string schema") {
+    assume(shouldTestPythonUDFs)
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader
@@ -81,6 +83,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("simple data source with StructType schema") {
+    assume(shouldTestPythonUDFs)
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader
@@ -103,6 +106,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("data source with invalid schema") {
+    assume(shouldTestPythonUDFs)
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader
@@ -123,6 +127,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("register data source") {
+    assume(shouldTestPythonUDFs)
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader
@@ -138,7 +143,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
 
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
-    assert(spark.sharedState.dataSourceRegistry.dataSourceExists(dataSourceName))
+    assert(spark.sharedState.dataSourceManager.dataSourceExists(dataSourceName))
 
     // Check error when registering a data source with the same name.
     val err = intercept[AnalysisException] {
@@ -151,6 +156,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("reader not implemented") {
+    assume(shouldTestPythonUDFs)
     val dataSourceScript =
        s"""
         |from pyspark.sql.datasource import DataSource, DataSourceReader
@@ -168,6 +174,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("error creating reader") {
+    assume(shouldTestPythonUDFs)
     val dataSourceScript =
       s"""
         |from pyspark.sql.datasource import DataSource
@@ -187,6 +194,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("data source assertion error") {
+    assume(shouldTestPythonUDFs)
     val dataSourceScript =
       s"""
         |class $dataSourceName:
