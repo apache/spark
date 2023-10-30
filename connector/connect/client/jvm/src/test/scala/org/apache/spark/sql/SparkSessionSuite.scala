@@ -34,7 +34,7 @@ class SparkSessionSuite extends ConnectFunSuite {
   private val connectionString3: String = "sc://doit:16845"
 
   private def closeSession(session: SparkSession): Unit = {
-    // Hack: We don't want to call session.close() directly because this will try to call
+    // We don't want to call session.close() directly because this will try to call
     // client.releaseSession, and the connection details are dummy.
     // But this suite wants to test how the default and active session are affected by closing.
     // So we call SparkSession.onSessionClose directly, which is normally called from session.close.

@@ -120,7 +120,9 @@ class PlanGenerationTestSuite
   }
 
   override protected def afterAll(): Unit = {
-    session.close()
+    // Don't call session.close() directly, because that would call client.releaseSession,
+    // and the connection details in this suite are dummy.
+    SparkSession.onSessionClose(session)
     if (cleanOrphanedGoldenFiles) {
       cleanOrphanedGoldenFile()
     }
