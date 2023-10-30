@@ -158,6 +158,7 @@ class SparkConnectSessionManager extends Logging {
    */
   private[connect] def invalidateAllSessions(): Unit = {
     sessionStore.invalidateAll()
+    closedSessionsCache.invalidateAll()
   }
 
   /**
