@@ -22,7 +22,7 @@ import org.apache.spark.annotation.Evolving;
 /**
  * The type of {@link QueryContext}.
  *
- * @since 3.5.0
+ * @since 4.0.0
  */
 @Evolving
 public enum QueryContextType {
