@@ -224,9 +224,10 @@ abstract class PartitioningAwareFileIndex(
       case Some(userDefinedBasePath) =>
         val fs = userDefinedBasePath.getFileSystem(hadoopConf)
         try {
-          if (!fs.getFileStatus(userDefinedBasePath).isDirectory)
+          if (!fs.getFileStatus(userDefinedBasePath).isDirectory) {
             throw new IllegalArgumentException(s"Option '${FileIndexOptions.BASE_PATH_PARAM}' " +
               s"must be a directory")
+          }
         } catch {
           case _: FileNotFoundException =>
             throw new IllegalArgumentException(s"Option '${FileIndexOptions.BASE_PATH_PARAM}' " +
