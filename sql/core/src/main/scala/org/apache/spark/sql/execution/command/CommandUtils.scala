@@ -231,7 +231,7 @@ object CommandUtils extends Logging {
       }
     } else {
       // Compute stats for the whole table
-      val (newTotalSize, _) = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
+      val (newTotalSize, newPartitions) = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
       val newRowCount =
         if (noScan) None else Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
 
@@ -240,6 +240,10 @@ object CommandUtils extends Logging {
       val newStats = CommandUtils.compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
       if (newStats.isDefined) {
         sessionState.catalog.alterTableStats(tableIdentWithDB, newStats)
+      }
+      // Also update partition stats
+      if (newPartitions.nonEmpty) {
+        sessionState.catalog.alterPartitions(tableIdentWithDB, newPartitions)
       }
     }
   }
