@@ -1312,7 +1312,7 @@ object IsUnknown {
   def apply(child: Expression): Predicate = {
     new IsNull(child) with ExpectsInputTypes {
       override def inputTypes: Seq[DataType] = Seq(BooleanType)
-      override def sql: String = s"(${child.sql} IS UNKNOWN)"
+      override def sql: String = s"(${this.child.sql} IS UNKNOWN)"
     }
   }
 }
@@ -1321,7 +1321,7 @@ object IsNotUnknown {
   def apply(child: Expression): Predicate = {
     new IsNotNull(child) with ExpectsInputTypes {
       override def inputTypes: Seq[DataType] = Seq(BooleanType)
-      override def sql: String = s"(${child.sql} IS NOT UNKNOWN)"
+      override def sql: String = s"(${this.child.sql} IS NOT UNKNOWN)"
     }
   }
 }
