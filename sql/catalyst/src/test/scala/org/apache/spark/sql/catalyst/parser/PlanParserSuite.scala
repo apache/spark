@@ -1678,23 +1678,27 @@ class PlanParserSuite extends AnalysisTest {
           List.empty, List.empty, None, None, false)))
 
     // verify with ROW FORMAT DELIMETED
+    val collectionItemsTerminated1 = '\u0002'
+    val mapKeysTerminated1 = '\u0003'
+    val collectionItemsTerminated2 = '\u0004'
+    val mapKeysTerminated2 = '\u0005'
     assertEqual(
-      """
-        |SELECT TRANSFORM(a, b, c)
-        |  ROW FORMAT DELIMITED
-        |  FIELDS TERMINATED BY '\t'
-        |  COLLECTION ITEMS TERMINATED BY '\u0002'
-        |  MAP KEYS TERMINATED BY '\u0003'
-        |  LINES TERMINATED BY '\n'
-        |  NULL DEFINED AS 'null'
-        |  USING 'cat' AS (a, b, c)
-        |  ROW FORMAT DELIMITED
-        |  FIELDS TERMINATED BY '\t'
-        |  COLLECTION ITEMS TERMINATED BY '\u0004'
-        |  MAP KEYS TERMINATED BY '\u0005'
-        |  LINES TERMINATED BY '\n'
-        |  NULL DEFINED AS 'NULL'
-        |FROM testData
+      s"""
+         |SELECT TRANSFORM(a, b, c)
+         |  ROW FORMAT DELIMITED
+         |  FIELDS TERMINATED BY '\t'
+         |  COLLECTION ITEMS TERMINATED BY $collectionItemsTerminated1
+         |  MAP KEYS TERMINATED BY $mapKeysTerminated1
+         |  LINES TERMINATED BY '\n'
+         |  NULL DEFINED AS 'null'
+         |  USING 'cat' AS (a, b, c)
+         |  ROW FORMAT DELIMITED
+         |  FIELDS TERMINATED BY '\t'
+         |  COLLECTION ITEMS TERMINATED BY $collectionItemsTerminated2
+         |  MAP KEYS TERMINATED BY $mapKeysTerminated2
+         |  LINES TERMINATED BY '\n'
+         |  NULL DEFINED AS 'NULL'
+         |FROM testData
       """.stripMargin,
       ScriptTransformation(
         "cat",

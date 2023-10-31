@@ -3014,6 +3014,7 @@
                 reduce the cost of migration in subsequent versions.
               -->
               <arg>-Wconf:cat=deprecation&amp;msg=it will become a keyword in Scala 3:e</arg>
+              <arg>-Wconf:cat=deprecation&msg=Unicode escapes in triple quoted strings are deprecated:e</arg>
             </args>
             <jvmArgs>
               <jvmArg>-Xss128m</jvmArg>
