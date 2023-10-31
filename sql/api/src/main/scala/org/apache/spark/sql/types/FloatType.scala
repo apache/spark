@@ -55,7 +55,6 @@ case object FloatType extends FloatType {
     def toDouble(x: Float): Double = x.toDouble
     // logic in Numeric base trait mishandles abs(-0.0f)
     override def abs(x: Float): Float = math.abs(x)
-    // Added from Scala 2.13; don't override to work in 2.12
     override def parseString(str: String): Option[Float] =
       Try(java.lang.Float.parseFloat(str)).toOption
   }
