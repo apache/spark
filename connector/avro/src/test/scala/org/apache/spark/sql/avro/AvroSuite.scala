@@ -38,6 +38,7 @@ import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkUp
 import org.apache.spark.TestUtils.assertExceptionMsg
 import org.apache.spark.sql._
 import org.apache.spark.sql.TestingUDT.IntervalData
+import org.apache.spark.sql.avro.AvroCompressionCodec._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
@@ -708,24 +709,18 @@ abstract class AvroSuite
       val zstandardDir = s"$dir/zstandard"
 
       val df = spark.read.format("avro").load(testAvro)
-      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key,
-        AvroCompressionCodec.UNCOMPRESSED.lowerCaseName())
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, UNCOMPRESSED.lowerCaseName())
       df.write.format("avro").save(uncompressDir)
-      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key,
-        AvroCompressionCodec.BZIP2.lowerCaseName())
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, BZIP2.lowerCaseName())
       df.write.format("avro").save(bzip2Dir)
-      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key,
-        AvroCompressionCodec.XZ.lowerCaseName())
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, XZ.lowerCaseName())
       df.write.format("avro").save(xzDir)
-      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key,
-        AvroCompressionCodec.DEFLATE.lowerCaseName())
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, DEFLATE.lowerCaseName())
       spark.conf.set(SQLConf.AVRO_DEFLATE_LEVEL.key, "9")
       df.write.format("avro").save(deflateDir)
-      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key,
-        AvroCompressionCodec.SNAPPY.lowerCaseName())
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, SNAPPY.lowerCaseName())
       df.write.format("avro").save(snappyDir)
-      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key,
-        AvroCompressionCodec.ZSTANDARD.lowerCaseName())
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, ZSTANDARD.lowerCaseName())
       df.write.format("avro").save(zstandardDir)
 
       val uncompressSize = FileUtils.sizeOfDirectory(new File(uncompressDir))
@@ -2266,14 +2261,11 @@ abstract class AvroSuite
         .listFiles()
         .filter(_.isFile)
         .filter(_.getName.endsWith("avro"))
-      files
-        .map { file =>
-          val reader = new DataFileReader(file, new GenericDatumReader[Any]())
-          val r = reader.getMetaString("avro.codec")
-          r
-        }
-        .map(v => if (v == "null") "uncompressed" else v)
-        .headOption
+      files.map { file =>
+        val reader = new DataFileReader(file, new GenericDatumReader[Any]())
+        val r = reader.getMetaString("avro.codec")
+        r
+      }.map(v => if (v == "null") UNCOMPRESSED.lowerCaseName() else v).headOption
     }
     def checkCodec(df: DataFrame, dir: String, codec: String): Unit = {
       val subdir = s"$dir/$codec"
@@ -2284,11 +2276,9 @@ abstract class AvroSuite
       val path = dir.toString
       val df = spark.read.format("avro").load(testAvro)
 
-      checkCodec(df, path, "uncompressed")
-      checkCodec(df, path, "deflate")
-      checkCodec(df, path, "snappy")
-      checkCodec(df, path, "bzip2")
-      checkCodec(df, path, "xz")
+      AvroCompressionCodec.values().foreach { codec =>
+        checkCodec(df, path, codec.lowerCaseName())
+      }
     }
   }
 

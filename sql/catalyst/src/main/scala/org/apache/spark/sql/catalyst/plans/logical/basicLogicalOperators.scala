@@ -2053,6 +2053,10 @@ case class CollectMetrics(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): CollectMetrics =
     copy(child = newChild)
+
+  override def doCanonicalize(): LogicalPlan = {
+    super.doCanonicalize().asInstanceOf[CollectMetrics].copy(dataframeId = 0L)
+  }
 }
 
 /**
