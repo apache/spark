@@ -29,7 +29,7 @@ import java.util.List;
 import java.util.Set;
 
 import org.junit.jupiter.api.Disabled;
-import org.scalatest.Ignore;
+
 import scala.reflect.ClassTag;
 
 import org.apache.spark.sql.catalyst.bcvar.ArrayWrapper;
