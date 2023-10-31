@@ -204,7 +204,7 @@
     <bouncycastle.version>1.60</bouncycastle.version>
     <tink.version>1.6.1</tink.version>
     <tomcat.version>9.0.68</tomcat.version>
-    <tomcat-embed-core.version>9.0.81</tomcat-embed-core.version>
+    <tomcat-embed-core.version>9.0.82</tomcat-embed-core.version>
     <netty.version>4.1.89.Final</netty.version>
     <netty-handler.version>4.1.94.Final</netty-handler.version>
     <!--
