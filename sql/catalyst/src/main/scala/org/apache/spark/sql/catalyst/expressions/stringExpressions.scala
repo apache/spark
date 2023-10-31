@@ -2573,7 +2573,7 @@ object Decode {
             default = search
           }
         }
-        CaseWhen(branches.seq.toSeq, default)
+        CaseWhen(branches.toSeq, default)
     }
   }
 }
