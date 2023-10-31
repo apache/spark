@@ -30,10 +30,10 @@ case class SQLQueryContext(
     originObjectName: Option[String]) extends QueryContext {
   override val contextType = QueryContextType.SQL
 
-  val objectType = originObjectType.getOrElse("")
-  val objectName = originObjectName.getOrElse("")
-  val startIndex = originStartIndex.getOrElse(-1)
-  val stopIndex = originStopIndex.getOrElse(-1)
+  override val objectType = originObjectType.getOrElse("")
+  override val objectName = originObjectName.getOrElse("")
+  override val startIndex = originStartIndex.getOrElse(-1)
+  override val stopIndex = originStopIndex.getOrElse(-1)
 
   /**
    * The SQL query context of current node. For example:
