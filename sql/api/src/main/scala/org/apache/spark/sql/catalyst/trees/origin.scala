@@ -34,7 +34,7 @@ case class Origin(
     stackTrace: Option[Array[StackTraceElement]] = None) {
 
   lazy val context: QueryContext = if (stackTrace.isDefined) {
-    DatasetQueryContext(stackTrace.get)
+    DataFrameQueryContext(stackTrace.get)
   } else {
     SQLQueryContext(
       line, startPosition, startIndex, stopIndex, sqlText, objectType, objectName)

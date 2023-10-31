@@ -134,7 +134,7 @@ case class SQLQueryContext(
   override def callSite: String = throw new UnsupportedOperationException
 }
 
-case class DatasetQueryContext(
+case class DataFrameQueryContext(
     override val fragment: String,
     override val callSite: String) extends QueryContext {
   override val contextType = QueryContextType.DataFrame
@@ -158,8 +158,8 @@ case class DatasetQueryContext(
   }
 }
 
-object DatasetQueryContext {
-  def apply(elements: Array[StackTraceElement]): DatasetQueryContext = {
+object DataFrameQueryContext {
+  def apply(elements: Array[StackTraceElement]): DataFrameQueryContext = {
     val methodName = elements(0).getMethodName
     val code = if (methodName.length > 1 && methodName(0) == '$') {
       methodName.substring(1)
@@ -168,6 +168,6 @@ object DatasetQueryContext {
     }
     val callSite = elements(1).toString
 
-    DatasetQueryContext(code, callSite)
+    DataFrameQueryContext(code, callSite)
   }
 }
