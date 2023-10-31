@@ -442,7 +442,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       Seq((1, "2"), (2, "4")).toDF("a", "b").write.format("json").saveAsTable("x")
       sql("insert into table x values(3, null)")
       sql("insert into table x values(null, '4')")
-      spark.udf.register("f", (a: Int, b: String) => a + b)
+      spark.udf.register("f", (a: Int, b: String) => s"$a$b")
       val df = spark.sql("SELECT f(a, b) FROM x")
       val plan = spark.sessionState.executePlan(df.logicalPlan).analyzed
       comparePlans(df.logicalPlan, plan)
