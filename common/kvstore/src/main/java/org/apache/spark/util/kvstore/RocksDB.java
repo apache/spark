@@ -363,6 +363,14 @@ public class RocksDB implements KVStore {
     return iteratorTracker;
   }
 
+  /**
+   * Remove iterator from iterator tracker. `RocksDBIterator` calls it to notify
+   * iterator is closed.
+   */
+  void notifyIteratorClosed(RocksDBIterator<?> it) {
+    iteratorTracker.removeIf(ref -> it.equals(ref.get()));
+  }
+
   /** Returns metadata about indices for the given type. */
   RocksDBTypeInfo getTypeInfo(Class<?> type) throws Exception {
     RocksDBTypeInfo ti = types.get(type);

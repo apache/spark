@@ -20,6 +20,7 @@ package org.apache.spark.util.kvstore;
 import java.io.IOException;
 import java.lang.ref.Cleaner;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -39,6 +40,7 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
   private final byte[] end;
   private final long max;
   private final Cleaner.Cleanable cleanable;
+  private final RocksDBIterator.ResourceCleaner resourceCleaner;
 
   private boolean checkedNext;
   private byte[] next;
@@ -53,7 +55,8 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     this.ti = db.getTypeInfo(type);
     this.index = ti.index(params.index);
     this.max = params.max;
-    this.cleanable = CLEANER.register(this, new RocksDBIterator.ResourceCleaner(it, db));
+    this.resourceCleaner = new RocksDBIterator.ResourceCleaner(it, db);
+    this.cleanable = CLEANER.register(this, resourceCleaner);
 
     Preconditions.checkArgument(!index.isChild() || params.parent != null,
       "Cannot iterate over child index %s without parent value.", params.index);
@@ -180,11 +183,18 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
 
   @Override
   public synchronized void close() throws IOException {
+    db.notifyIteratorClosed(this);
     if (!closed) {
-      cleanable.clean();
+      it.close();
       closed = true;
       next = null;
+      cancelResourceClean();
     }
+  }
+
+  private void cancelResourceClean() {
+    this.resourceCleaner.statusToFalse();
+    this.cleanable.clean();
   }
 
   @VisibleForTesting
@@ -270,20 +280,30 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     return a.length - b.length;
   }
 
-  private record ResourceCleaner(RocksIterator rocksIterator, RocksDB rocksDB) implements Runnable {
+  private static class ResourceCleaner implements Runnable {
+
+    private final RocksIterator rocksIterator;
+    private final RocksDB rocksDB;
+    private final AtomicBoolean status = new AtomicBoolean(true);
+
+    public ResourceCleaner(RocksIterator rocksIterator, RocksDB rocksDB) {
+      this.rocksIterator = rocksIterator;
+      this.rocksDB = rocksDB;
+    }
 
     @Override
     public void run() {
-      rocksDB.getIteratorTracker().removeIf(ref -> {
-        RocksDBIterator<?> rocksDBIterator = ref.get();
-        return rocksDBIterator != null && rocksIterator.equals(rocksDBIterator.it);
-      });
-      synchronized (rocksDB.getRocksDB()) {
-        org.rocksdb.RocksDB _db = rocksDB.getRocksDB().get();
-        if (_db != null) {
-          rocksIterator.close();
-        }
+      if (status.compareAndSet(true, false)) {
+        rocksDB.getIteratorTracker().removeIf(ref -> {
+          RocksDBIterator<?> rocksDBIterator = ref.get();
+          return rocksDBIterator != null && rocksIterator.equals(rocksDBIterator.it);
+        });
+        rocksIterator.close();
       }
+    }
+
+    void statusToFalse() {
+      status.set(false);
     }
   }
 }
