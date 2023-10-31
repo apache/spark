@@ -23,7 +23,7 @@ from threading import RLock
 import warnings
 import uuid
 from collections.abc import Generator
-from typing import Optional, Dict, Any, Iterator, Iterable, Tuple, Callable, cast, Type, ClassVar
+from typing import Optional, Any, Iterator, Iterable, Tuple, Callable, cast, Type, ClassVar
 from multiprocessing.pool import ThreadPool
 import os
 

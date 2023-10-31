@@ -200,7 +200,8 @@ class Retrying:
             wait_time = policy.next_attempt()
             if wait_time is not None:
                 logger.debug(
-                    f"Got error: {exception}. Will retry after {wait_time} ms (policy: {policy.name})"
+                    f"Got error: {exception}. "
+                    + f"Will retry after {wait_time} ms (policy: {policy.name})"
                 )
 
                 self._sleep(wait_time / 1000)
