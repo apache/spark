@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.FileNotFoundException
+
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
@@ -221,13 +223,14 @@ abstract class PartitioningAwareFileIndex(
     caseInsensitiveMap.get(FileIndexOptions.BASE_PATH_PARAM).map(new Path(_)) match {
       case Some(userDefinedBasePath) =>
         val fs = userDefinedBasePath.getFileSystem(hadoopConf)
-        if (!fs.exists(userDefinedBasePath)) {
-           throw new IllegalArgumentException(s"Option '${FileIndexOptions.BASE_PATH_PARAM}' " +
+        try {
+          if (!fs.getFileStatus(userDefinedBasePath).isDirectory)
+            throw new IllegalArgumentException(s"Option '${FileIndexOptions.BASE_PATH_PARAM}' " +
+              s"must be a directory")
+        } catch {
+          case _: FileNotFoundException =>
+            throw new IllegalArgumentException(s"Option '${FileIndexOptions.BASE_PATH_PARAM}' " +
              s"not found")
-        }
-        if (!fs.getFileStatus(userDefinedBasePath).isDirectory) {
-          throw new IllegalArgumentException(s"Option '${FileIndexOptions.BASE_PATH_PARAM}' " +
-            s"must be a directory")
         }
         val qualifiedBasePath = fs.makeQualified(userDefinedBasePath)
         val qualifiedBasePathStr = qualifiedBasePath.toString

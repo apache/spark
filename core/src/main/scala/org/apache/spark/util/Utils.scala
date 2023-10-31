@@ -747,9 +747,6 @@ private[spark] object Utils
       hadoopConf: Configuration,
       fileOverwrite: Boolean,
       filename: Option[String] = None): Unit = {
-    if (!fs.exists(path)) {
-      throw new FileNotFoundException(s"$path not found")
-    }
     if (!targetDir.exists() && !targetDir.mkdir()) {
       throw new IOException(s"Failed to create directory ${targetDir.getPath}")
     }
