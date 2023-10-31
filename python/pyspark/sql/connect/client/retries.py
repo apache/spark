@@ -111,14 +111,14 @@ class RetryPolicyState:
         wait_time = self._next_wait
 
         # Calculate future backoff
-        if self._policy.max_backoff is not None:
+        if self.policy.max_backoff is not None:
             self._next_wait = min(
-                float(self._policy.max_backoff), wait_time * self._policy.backoff_multiplier
+                float(self.policy.max_backoff), wait_time * self.policy.backoff_multiplier
             )
 
         # Jitter current backoff, after the future backoff was computed
-        if wait_time >= self._policy.min_jitter_threshold:
-            wait_time += random.uniform(0, self._policy.jitter)
+        if wait_time >= self.policy.min_jitter_threshold:
+            wait_time += random.uniform(0, self.policy.jitter)
 
         # Round to whole number of milliseconds
         return int(wait_time)
