@@ -124,7 +124,7 @@ private[sql] class AvroDeserializer(
     val incompatibleMsg = errorPrefix +
         s"schema is incompatible (avroType = $avroType, sqlType = ${catalystType.sql})"
 
-    val realDataType = SchemaConverters.toSqlType(avroType).dataType
+    val realDataType = SchemaConverters.toSqlType(avroType, useStableIdForUnionType).dataType
 
     (avroType.getType, catalystType) match {
       case (NULL, NullType) => (updater, ordinal, _) =>
