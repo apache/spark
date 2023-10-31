@@ -29,6 +29,7 @@ r"""
     `$ bin/spark-submit examples/src/main/python/streaming/stateful_network_wordcount.py \
         localhost 9999`
 """
+import re
 import sys
 from typing import Iterable, Optional
 
@@ -50,7 +51,7 @@ if __name__ == "__main__":
         return sum(new_values) + (last_sum or 0)
 
     lines = ssc.socketTextStream(sys.argv[1], int(sys.argv[2]))
-    running_counts = lines.flatMap(lambda line: line.split("\\s+"))\
+    running_counts = lines.flatMap(lambda line: re.split(r'\s+', line))\
                           .map(lambda word: (word, 1))\
                           .updateStateByKey(updateFunc, initialRDD=initialStateRDD)
 

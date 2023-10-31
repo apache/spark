@@ -44,7 +44,7 @@ port <- as.integer(args[[2]])
 lines <- read.stream("socket", host = hostname, port = port)
 
 # Split the lines into words
-words <- selectExpr(lines, "explode(split(value, ' ')) as word")
+words <- selectExpr(lines, "explode(strsplit(value, '\\s+')) as word")
 
 # Generate running word count
 wordCounts <- count(groupBy(words, "word"))

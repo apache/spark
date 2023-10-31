@@ -30,6 +30,7 @@ r"""
     localhost 9999`
 """
 
+import re
 import sys
 from typing import Tuple
 
@@ -55,7 +56,7 @@ if __name__ == "__main__":
 
     def line_to_tuple(line: str) -> Tuple[str, str]:
         try:
-            k, v = line.split("\\s+")
+            k, v = re.split(r'\s+', line)
             return k, v
         except ValueError:
             return "", ""
@@ -67,7 +68,7 @@ if __name__ == "__main__":
 
     lines = ssc.socketTextStream(sys.argv[1], int(sys.argv[2]))
 
-    word_counts = lines.flatMap(lambda line: line.split("\\s+")) \
+    word_counts = lines.flatMap(lambda line: re.split(r'\s+', line)) \
         .map(lambda word: (word, 1)) \
         .reduceByKey(lambda a, b: a + b)
 
