@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.benchmark
 
-import java.util.Locale
-
 import scala.util.Try
 
 import org.apache.spark.SparkConf
@@ -54,8 +52,7 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark with Logging {
     val conf = new SparkConf()
       .setMaster(System.getProperty("spark.sql.test.master", "local[1]"))
       .setAppName("test-sql-context")
-      .set("spark.sql.parquet.compression.codec",
-        ParquetCompressionCodec.SNAPPY.name().toLowerCase(Locale.ROOT))
+      .set("spark.sql.parquet.compression.codec", ParquetCompressionCodec.SNAPPY.lowerCaseName())
       .set("spark.sql.shuffle.partitions", System.getProperty("spark.sql.shuffle.partitions", "4"))
       .set("spark.driver.memory", "3g")
       .set("spark.executor.memory", "3g")

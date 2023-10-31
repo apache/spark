@@ -576,7 +576,7 @@ class SparkSession private[sql] (
   /**
    * Add a single artifact to the client session.
    *
-   * Currently only local files with extensions .jar and .class are supported.
+   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
    *
    * @since 3.4.0
    */
@@ -586,7 +586,7 @@ class SparkSession private[sql] (
   /**
    * Add one or more artifacts to the session.
    *
-   * Currently only local files with extensions .jar and .class are supported.
+   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
    *
    * @since 3.4.0
    */
