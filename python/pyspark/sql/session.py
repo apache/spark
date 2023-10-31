@@ -74,6 +74,7 @@ if TYPE_CHECKING:
     from pyspark.sql.streaming import StreamingQueryManager
     from pyspark.sql.udf import UDFRegistration
     from pyspark.sql.udtf import UDTFRegistration
+    from pyspark.sql.datasource import DataSourceRegistration
 
     # Running MyPy type checks will always require pandas and
     # other dependencies so importing here is fine.
@@ -862,6 +863,20 @@ class SparkSession(SparkConversionMixin):
         from pyspark.sql.udtf import UDTFRegistration
 
         return UDTFRegistration(self)
+
+    @property
+    def dataSource(self) -> "DataSourceRegistration":
+        """Returns a :class:`DataSourceRegistration` for data source registration.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`DataSourceRegistration`
+        """
+        from pyspark.sql.datasource import DataSourceRegistration
+
+        return DataSourceRegistration(self)
 
     def range(
         self,

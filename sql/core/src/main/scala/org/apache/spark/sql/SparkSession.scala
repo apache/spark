@@ -229,6 +229,11 @@ class SparkSession private(
   def udtf: UDTFRegistration = sessionState.udtfRegistration
 
   /**
+   * A collection of methods for registering user-defined data sources.
+   */
+  private[sql] def dataSource: DataSourceRegistration = sharedState.dataSourceRegistration
+
+  /**
    * Returns a `StreamingQueryManager` that allows managing all the
    * `StreamingQuery`s active on `this`.
    *
