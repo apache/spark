@@ -161,18 +161,22 @@ object StateDataSource {
       }.get
 
       if (batchId < 0) {
-        throw new IllegalArgumentException(s"'${PARAM_BATCH_ID} cannot be negative.")
+        throw new IllegalArgumentException(s"'${PARAM_BATCH_ID}' cannot be negative.")
       }
 
       val operatorId = Option(options.get(PARAM_OPERATOR_ID)).map(_.toInt)
         .orElse(Some(0)).get
 
       if (operatorId < 0) {
-        throw new IllegalArgumentException(s"'${PARAM_OPERATOR_ID} cannot be negative.")
+        throw new IllegalArgumentException(s"'${PARAM_OPERATOR_ID}' cannot be negative.")
       }
 
       val storeName = Option(options.get(PARAM_STORE_NAME))
         .getOrElse(StateStoreId.DEFAULT_STORE_NAME)
+
+      if (storeName.isEmpty) {
+        throw new IllegalArgumentException(s"'${PARAM_STORE_NAME}' cannot be an empty string.")
+      }
 
       val joinSide = try {
         Option(options.get(PARAM_JOIN_SIDE))

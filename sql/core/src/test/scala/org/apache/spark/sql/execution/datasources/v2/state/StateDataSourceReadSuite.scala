@@ -131,6 +131,16 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
     }
   }
 
+  test("ERROR: store name is empty") {
+    withTempDir { tempDir =>
+      intercept[IllegalArgumentException] {
+        spark.read.format("statestore")
+          .option(StateDataSource.PARAM_STORE_NAME, "")
+          .load(tempDir.getAbsolutePath)
+      }
+    }
+  }
+
   test("ERROR: invalid value for joinSide option") {
     withTempDir { tempDir =>
       intercept[IllegalArgumentException] {
@@ -157,15 +167,18 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
   }
 }
 
+/**
+ * Here we build a combination of test criteria for
+ * 1) number of shuffle partitions
+ * 2) state store provider
+ * 3) compression codec
+ * and run one of the test to verify that above configs work.
+ *
+ * We are building 3 x 2 x 4 = 24 different test criteria, and it's probably waste of time
+ * and resource to run all combinations for all times, hence we will randomly pick 5 tests
+ * per run.
+ */
 class StateDataSourceSQLConfigSuite extends StateDataSourceTestBase {
-  // Here we build a combination of test criteria for
-  // 1) number of shuffle partitions
-  // 2) state store provider
-  // 3) compression codec
-  // and run one of the test to verify that above configs work.
-  // We are building 3 x 2 x 4 = 24 different test criteria, and it's probably waste of time
-  // and resource to run all combinations for all times, hence we will randomly pick 5 tests
-  // per run.
 
   private val TEST_SHUFFLE_PARTITIONS = Seq(1, 3, 5)
   private val TEST_PROVIDERS = Seq(
@@ -271,6 +284,18 @@ class RocksDBStateDataSourceReadSuite extends StateDataSourceReadSuite {
     super.beforeAll()
     spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
       classOf[RocksDBStateStoreProvider].getName)
+    spark.conf.set("spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled",
+      "false")
+  }
+}
+
+class RocksDBWithChangelogCheckpointStateDataSourceReaderSuite extends StateDataSourceReadSuite {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
+      classOf[RocksDBStateStoreProvider].getName)
+    spark.conf.set("spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled",
+      "true")
   }
 }
 

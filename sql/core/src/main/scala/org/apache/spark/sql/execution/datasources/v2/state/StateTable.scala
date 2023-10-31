@@ -81,6 +81,10 @@ class StateTable(
   override def metadataColumns(): Array[MetadataColumn] = METADATA_COLUMNS.toArray
 }
 
+/**
+ * Companion object for StateTable class to place constants and nested objects.
+ * Currently storing capability of the table and the definition of metadata column(s).
+ */
 object StateTable {
   private val CAPABILITY = Set(TableCapability.BATCH_READ).asJava
 
