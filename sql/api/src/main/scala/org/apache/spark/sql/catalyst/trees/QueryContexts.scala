@@ -146,7 +146,7 @@ case class DataFrameQueryContext(
 
   override lazy val summary: String = {
     val builder = new StringBuilder
-    builder ++= "== Dataset ==\n"
+    builder ++= "== DataFrame ==\n"
     builder ++= "\""
 
     builder ++= fragment
