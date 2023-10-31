@@ -542,12 +542,12 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         logError("This may have been caused by a prior exception:", writer.exception.get)
         throw writer.exception.get
 
-      case eof: EOFException if faultHandlerEnabled && pid.isDefined &&
+      case e: IOException if faultHandlerEnabled && pid.isDefined &&
           JavaFiles.exists(BasePythonRunner.faultHandlerLogPath(pid.get)) =>
         val path = BasePythonRunner.faultHandlerLogPath(pid.get)
         val error = String.join("\n", JavaFiles.readAllLines(path)) + "\n"
         JavaFiles.deleteIfExists(path)
-        throw new SparkException(s"Python worker exited unexpectedly (crashed): $error", eof)
+        throw new SparkException(s"Python worker exited unexpectedly (crashed): $error", e)
 
       case eof: EOFException =>
         throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
