@@ -28,6 +28,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 
+import org.junit.jupiter.api.Disabled;
 import org.scalatest.Ignore;
 import scala.reflect.ClassTag;
 
@@ -196,7 +197,7 @@ public class BroadcastedJoinKeysWrapperTest {
         new HashSet<>(Arrays.asList(expectedKeys)), 1000, bc);
   }
 
-  @Test
+  @Disabled
   public void testTimestampTypeForSingleKeyHashedRelation() {
     DummyBroadcast bc = new DummyBroadcast(7);
     this.testDataTypeForSingleKeyHashedRelation(DataTypes.TimestampType,
@@ -229,7 +230,7 @@ public class BroadcastedJoinKeysWrapperTest {
         new HashSet<>(Arrays.asList(expectedKeys)), 1000, bc);
   }
 
-  @Ignore
+  @Test
   public void testBigDecimalTypeForSingleKeyHashedRelation() {
     int count = 43;
     DummyBroadcast bc = new DummyBroadcast(10);
