@@ -1015,12 +1015,12 @@ object SQLConf {
       "`parquet.compression` is specified in the table-specific options/properties, the " +
       "precedence would be `compression`, `parquet.compression`, " +
       "`spark.sql.parquet.compression.codec`. Acceptable values include: none, uncompressed, " +
-      "snappy, gzip, lzo, brotli, lz4, lz4raw, zstd.")
+      "snappy, gzip, lzo, brotli, lz4, lz4_raw, zstd.")
     .version("1.1.1")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(
-      Set("none", "uncompressed", "snappy", "gzip", "lzo", "brotli", "lz4", "lz4raw", "zstd"))
+      Set("none", "uncompressed", "snappy", "gzip", "lzo", "brotli", "lz4", "lz4_raw", "zstd"))
     .createWithDefault("snappy")
 
   val PARQUET_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.filterPushdown")
@@ -4473,6 +4473,20 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  val TIME_TRAVEL_TIMESTAMP_KEY =
+    buildConf("spark.sql.timeTravelTimestampKey")
+      .doc("The option name to specify the time travel timestamp when reading a table.")
+      .version("4.0.0")
+      .stringConf
+      .createWithDefault("timestampAsOf")
+
+  val TIME_TRAVEL_VERSION_KEY =
+    buildConf("spark.sql.timeTravelVersionKey")
+      .doc("The option name to specify the time travel table version when reading a table.")
+      .version("4.0.0")
+      .stringConf
+      .createWithDefault("versionAsOf")
 
   val LEGACY_PERCENTILE_DISC_CALCULATION = buildConf("spark.sql.legacy.percentileDiscCalculation")
     .internal()

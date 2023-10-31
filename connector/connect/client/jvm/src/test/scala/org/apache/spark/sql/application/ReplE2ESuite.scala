@@ -26,6 +26,8 @@ import org.apache.commons.io.output.ByteArrayOutputStream
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.test.{IntegrationTestUtils, RemoteSparkSession}
+import org.apache.spark.util.IvyTestUtils
+import org.apache.spark.util.MavenUtils.MavenCoordinate
 
 class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
 
@@ -192,6 +194,36 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
     val output = runCommandsInShell(input)
     assertContains("Array[Int] = Array(2, 2, 2, 2, 2)", output)
     // scalastyle:on classforname line.size.limit
+  }
+
+  test("External JAR") {
+    val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
+    IvyTestUtils.withRepository(main, None, None) { repo =>
+      val input =
+        s"""
+           |// this import will fail
+           |import my.great.lib.MyLib
+           |
+           |// making library available in the REPL to compile UDF
+           |import coursierapi.{Credentials, MavenRepository}
+           |interp.repositories() ++= Seq(MavenRepository.of("$repo"))
+           |import $$ivy.`my.great.lib:mylib:0.1`
+           |
+           |val func = udf((a: Int) => {
+           |  import my.great.lib.MyLib
+           |  MyLib.myFunc(a)
+           |})
+           |
+           |// add library to the Executor
+           |spark.addArtifact("ivy://my.great.lib:mylib:0.1?repos=$repo")
+           |
+           |spark.range(5).select(func(col("id"))).as[Int].collect()
+           |""".stripMargin
+      val output = runCommandsInShell(input)
+      // making sure the library was not available before installation
+      assertContains("not found: value my", getCleanString(errorStream))
+      assertContains("Array[Int] = Array(1, 2, 3, 4, 5)", output)
+    }
   }
 
   test("Java UDF") {
@@ -361,5 +393,148 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
         |""".stripMargin
     val output = runCommandsInShell(input)
     assertContains("noException: Boolean = true", output)
+  }
+
+  test("closure cleaner") {
+    val input =
+      """
+        |class NonSerializable(val id: Int = -1) { }
+        |
+        |{
+        |  val x = 100
+        |  val y = new NonSerializable
+        |}
+        |
+        |val t = 200
+        |
+        |{
+        |  def foo(): Int = { x }
+        |  def bar(): Int = { y.id }
+        |  val z = new NonSerializable
+        |}
+        |
+        |{
+        |  val myLambda = (a: Int) => a + t + foo()
+        |  val myUdf = udf(myLambda)
+        |}
+        |
+        |spark.range(0, 10).
+        |  withColumn("result", myUdf(col("id"))).
+        |  agg(sum("result")).
+        |  collect()(0)(0).asInstanceOf[Long]
+        |""".stripMargin
+    val output = runCommandsInShell(input)
+    assertContains(": Long = 3045", output)
+  }
+
+  test("closure cleaner with function") {
+    val input =
+      """
+        |class NonSerializable(val id: Int = -1) { }
+        |
+        |{
+        |  val x = 100
+        |  val y = new NonSerializable
+        |}
+        |
+        |{
+        |  def foo(): Int = { x }
+        |  def bar(): Int = { y.id }
+        |  val z = new NonSerializable
+        |}
+        |
+        |def example() = {
+        |  val myLambda = (a: Int) => a + foo()
+        |  val myUdf = udf(myLambda)
+        |  spark.range(0, 10).
+        |    withColumn("result", myUdf(col("id"))).
+        |    agg(sum("result")).
+        |    collect()(0)(0).asInstanceOf[Long]
+        |}
+        |
+        |example()
+        |""".stripMargin
+    val output = runCommandsInShell(input)
+    assertContains(": Long = 1045", output)
+  }
+
+  test("closure cleaner nested") {
+    val input =
+      """
+        |class NonSerializable(val id: Int = -1) { }
+        |
+        |{
+        |  val x = 100
+        |  val y = new NonSerializable
+        |}
+        |
+        |{
+        |  def foo(): Int = { x }
+        |  def bar(): Int = { y.id }
+        |  val z = new NonSerializable
+        |}
+        |
+        |val example = () => {
+        |  val nested = () => {
+        |    val myLambda = (a: Int) => a + foo()
+        |    val myUdf = udf(myLambda)
+        |    spark.range(0, 10).
+        |      withColumn("result", myUdf(col("id"))).
+        |      agg(sum("result")).
+        |      collect()(0)(0).asInstanceOf[Long]
+        |  }
+        |  nested()
+        |}
+        |example()
+        |""".stripMargin
+    val output = runCommandsInShell(input)
+    assertContains(": Long = 1045", output)
+  }
+
+  test("closure cleaner with enclosing lambdas") {
+    val input =
+      """
+        |class NonSerializable(val id: Int = -1) { }
+        |
+        |{
+        |  val x = 100
+        |  val y = new NonSerializable
+        |}
+        |
+        |val z = new NonSerializable
+        |
+        |spark.range(0, 10).
+        |// for this call UdfUtils will create a new lambda and this lambda becomes enclosing
+        |  map(i => i + x).
+        |  agg(sum("value")).
+        |  collect()(0)(0).asInstanceOf[Long]
+        |""".stripMargin
+    val output = runCommandsInShell(input)
+    assertContains(": Long = 1045", output)
+  }
+
+  test("closure cleaner cleans capturing class") {
+    val input =
+      """
+        |class NonSerializable(val id: Int = -1) { }
+        |
+        |{
+        |  val x = 100
+        |  val y = new NonSerializable
+        |}
+        |
+        |class Test extends Serializable {
+        |  // capturing class is cmd$Helper$Test
+        |  val myUdf = udf((i: Int) => i + x)
+        |  val z = new NonSerializable
+        |  val res = spark.range(0, 10).
+        |    withColumn("result", myUdf(col("id"))).
+        |    agg(sum("result")).
+        |    collect()(0)(0).asInstanceOf[Long]
+        |}
+        |(new Test()).res
+        |""".stripMargin
+    val output = runCommandsInShell(input)
+    assertContains(": Long = 1045", output)
   }
 }

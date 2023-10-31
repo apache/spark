@@ -1187,7 +1187,7 @@ private[spark] class Client(
       Thread.sleep(interval)
       val report: ApplicationReport =
         try {
-          getApplicationReport
+          getApplicationReport()
         } catch {
           case e: ApplicationNotFoundException =>
             logError(s"Application $appId not found.")
@@ -1353,7 +1353,7 @@ private[spark] class Client(
   def run(): Unit = {
     submitApplication()
     if (!launcherBackend.isConnected() && fireAndForget) {
-      val report = getApplicationReport
+      val report = getApplicationReport()
       val state = report.getYarnApplicationState
       logInfo(s"Application report for $appId (state: $state)")
       logInfo(formatReportDetails(report, getDriverLogsLink(report)))

@@ -65,10 +65,6 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.apache.xbean</groupId>
-      <artifactId>xbean-asm9-shaded</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client-api</artifactId>
       <version>${hadoop.version}</version>
@@ -350,16 +346,6 @@
       <groupId>org.apache.derby</groupId>
       <artifactId>derby</artifactId>
       <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.ivy</groupId>
-      <artifactId>ivy</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>oro</groupId>
-      <!-- oro is needed by ivy, but only listed as an optional dependency, so we include it. -->
-      <artifactId>oro</artifactId>
-      <version>${oro.version}</version>
     </dependency>
     <dependency>
       <groupId>org.seleniumhq.selenium</groupId>

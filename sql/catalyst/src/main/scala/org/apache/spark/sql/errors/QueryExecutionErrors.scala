@@ -1351,9 +1351,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def expressionEncodingError(e: Exception, expressions: Seq[Expression]): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2152",
+      errorClass = "EXPRESSION_ENCODING_FAILED",
       messageParameters = Map(
-        "e" -> e.toString(),
         "expressions" -> expressions.map(
           _.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")),
       cause = e)
@@ -1362,32 +1361,34 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def classHasUnexpectedSerializerError(
       clsName: String, objSerializer: Expression): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2153",
+      errorClass = "UNEXPECTED_SERIALIZER_FOR_CLASS",
       messageParameters = Map(
-        "clsName" -> clsName,
-        "objSerializer" -> objSerializer.toString()))
+        "className" -> clsName,
+        "expr" -> toSQLExpr(objSerializer)))
   }
 
   def unsupportedOperandTypeForSizeFunctionError(
-      dataType: DataType): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2156",
-      messageParameters = Map(
-        "dataType" -> dataType.getClass.getCanonicalName))
+      dataType: DataType): Throwable = {
+    SparkException.internalError(
+      s"The size function doesn't support the operand type ${toSQLType(dataType)}")
   }
 
   def unexpectedValueForStartInFunctionError(prettyName: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2157",
+      errorClass = "INVALID_PARAMETER_VALUE.START",
       messageParameters = Map(
-        "prettyName" -> prettyName))
+        "parameter" -> toSQLId("start"),
+        "functionName" -> toSQLId(prettyName)))
   }
 
-  def unexpectedValueForLengthInFunctionError(prettyName: String): SparkRuntimeException = {
+  def unexpectedValueForLengthInFunctionError(
+      prettyName: String, length: Int): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2158",
+      errorClass = "INVALID_PARAMETER_VALUE.LENGTH",
       messageParameters = Map(
-        "prettyName" -> prettyName))
+        "parameter" -> toSQLId("length"),
+        "length" -> length.toString,
+        "functionName" -> toSQLId(prettyName)))
   }
 
   def invalidIndexOfZeroError(context: SQLQueryContext): RuntimeException = {

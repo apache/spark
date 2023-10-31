@@ -287,11 +287,11 @@ class SparkConnectPlanner(
     if (!namedArguments.isEmpty) {
       NameParameterizedQuery(
         parsedPlan,
-        namedArguments.asScala.mapValues(transformExpression).toMap)
+        namedArguments.asScala.view.mapValues(transformExpression).toMap)
     } else if (!posArguments.isEmpty) {
       PosParameterizedQuery(parsedPlan, posArguments.asScala.map(transformExpression).toSeq)
     } else if (!args.isEmpty) {
-      NameParameterizedQuery(parsedPlan, args.asScala.mapValues(transformLiteral).toMap)
+      NameParameterizedQuery(parsedPlan, args.asScala.view.mapValues(transformLiteral).toMap)
     } else if (!posArgs.isEmpty) {
       PosParameterizedQuery(parsedPlan, posArgs.asScala.map(transformLiteral).toSeq)
     } else {
@@ -2514,11 +2514,11 @@ class SparkConnectPlanner(
     val namedArguments = getSqlCommand.getNamedArgumentsMap
     val posArgs = getSqlCommand.getPosArgsList
     val posArguments = getSqlCommand.getPosArgumentsList
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker
+    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val df = if (!namedArguments.isEmpty) {
       session.sql(
         getSqlCommand.getSql,
-        namedArguments.asScala.mapValues(e => Column(transformExpression(e))).toMap,
+        namedArguments.asScala.view.mapValues(e => Column(transformExpression(e))).toMap,
         tracker)
     } else if (!posArguments.isEmpty) {
       session.sql(
@@ -2526,7 +2526,10 @@ class SparkConnectPlanner(
         posArguments.asScala.map(e => Column(transformExpression(e))).toArray,
         tracker)
     } else if (!args.isEmpty) {
-      session.sql(getSqlCommand.getSql, args.asScala.mapValues(transformLiteral).toMap, tracker)
+      session.sql(
+        getSqlCommand.getSql,
+        args.asScala.view.mapValues(transformLiteral).toMap,
+        tracker)
     } else if (!posArgs.isEmpty) {
       session.sql(getSqlCommand.getSql, posArgs.asScala.map(transformLiteral).toArray, tracker)
     } else {
@@ -2724,7 +2727,7 @@ class SparkConnectPlanner(
       replace = createView.getReplace,
       viewType = viewType)
 
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker
+    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     Dataset.ofRows(session, plan, tracker).queryExecution.commandExecuted
     executeHolder.eventsManager.postFinished()
   }
@@ -2742,7 +2745,7 @@ class SparkConnectPlanner(
     // Transform the input plan into the logical plan.
     val plan = transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker
+    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val dataset = Dataset.ofRows(session, plan, tracker)
 
     val w = dataset.write
@@ -2814,7 +2817,7 @@ class SparkConnectPlanner(
     // Transform the input plan into the logical plan.
     val plan = transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker
+    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val dataset = Dataset.ofRows(session, plan, tracker)
 
     val w = dataset.writeTo(table = writeOperation.getTableName)
@@ -2873,7 +2876,7 @@ class SparkConnectPlanner(
       writeOp: WriteStreamOperationStart,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val plan = transformRelation(writeOp.getInput)
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker
+    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val dataset = Dataset.ofRows(session, plan, tracker)
     // Call manually as writeStream does not trigger ReadyForExecution
     tracker.setReadyForExecution()
@@ -2927,7 +2930,7 @@ class SparkConnectPlanner(
     }
 
     // This is filled when a foreach batch runner started for Python.
-    var foreachBatchRunnerCleaner: Option[StreamingForeachBatchHelper.RunnerCleaner] = None
+    var foreachBatchRunnerCleaner: Option[AutoCloseable] = None
 
     if (writeOp.hasForeachBatch) {
       val foreachBatchFn = writeOp.getForeachBatch.getFunctionCase match {
@@ -3082,7 +3085,7 @@ class SparkConnectPlanner(
           val exception_builder = StreamingQueryCommandResult.ExceptionResult
             .newBuilder()
           exception_builder
-            .setExceptionMessage(e.toString)
+            .setExceptionMessage(e.toString())
             .setErrorClass(e.getErrorClass)
 
           val stackTrace = Option(ExceptionUtils.getStackTrace(e))
@@ -3262,7 +3265,7 @@ class SparkConnectPlanner(
           proto.GetResourcesCommandResult
             .newBuilder()
             .putAllResources(
-              session.sparkContext.resources
+              session.sparkContext.resources.view
                 .mapValues(resource =>
                   proto.ResourceInformation
                     .newBuilder()

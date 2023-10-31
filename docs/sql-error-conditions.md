@@ -118,6 +118,12 @@ Unable to find batch `<batchMetadataFile>`.
 
 The method `<methodName>` can not be called on streaming Dataset/DataFrame.
 
+### CANNOT_ALTER_PARTITION_COLUMN
+
+[SQLSTATE: 428FR](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+ALTER TABLE (ALTER|CHANGE) COLUMN is not supported for partition columns, but found the partition column `<columnName>` in the table `<tableName>`.
+
 ### CANNOT_CAST_DATATYPE
 
 [SQLSTATE: 42846](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -573,6 +579,12 @@ For more details see [EXPECT_VIEW_NOT_TABLE](sql-error-conditions-expect-view-no
 [SQLSTATE: 42846](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Failed to decode a row to a value of the expressions: `<expressions>`.
+
+### EXPRESSION_ENCODING_FAILED
+
+[SQLSTATE: 42846](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to encode a value of the expressions: `<expressions>` to a row.
 
 ### EXPRESSION_TYPE_IS_NOT_ORDERABLE
 
@@ -1170,6 +1182,12 @@ The input schema `<inputSchema>` is not a valid schema string.
 
 For more details see [INVALID_SCHEMA](sql-error-conditions-invalid-schema-error-class.html)
 
+### INVALID_SCHEMA_OR_RELATION_NAME
+
+[SQLSTATE: 42602](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+`<name>` is not a valid name for tables/schemas. Valid names only contain alphabet characters, numbers and _.
+
 ### INVALID_SET_SYNTAX
 
 [SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1203,6 +1221,12 @@ For more details see [INVALID_SUBQUERY_EXPRESSION](sql-error-conditions-invalid-
 [SQLSTATE: 42K0F](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot create the persistent object `<objName>` of the type `<obj>` because it references to the temporary object `<tempObjName>` of the type `<tempObj>`. Please make the temporary object `<tempObjName>` persistent, or make the persistent object `<objName>` temporary.
+
+### INVALID_TIME_TRAVEL_SPEC
+
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot specify both version and timestamp when time travelling the table.
 
 ### [INVALID_TIME_TRAVEL_TIMESTAMP_EXPR](sql-error-conditions-invalid-time-travel-timestamp-expr-error-class.html)
 
@@ -1341,6 +1365,12 @@ For more details see [MISSING_ATTRIBUTES](sql-error-conditions-missing-attribute
 [SQLSTATE: 42803](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses.
+
+### MULTIPLE_TIME_TRAVEL_SPEC
+
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot specify time travel in both the time travel clause and options.
 
 ### MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION
 
@@ -1651,6 +1681,12 @@ Unable to locate Message `<messageName>` in Descriptor.
 
 Protobuf type not yet supported: `<protobufType>`.
 
+### PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON
+
+[SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
+
+Failed to plan Python data source `<type>` in Python: `<msg>`
+
 ### RECURSIVE_PROTOBUF_SCHEMA
 
 [SQLSTATE: 42K0G](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1940,6 +1976,12 @@ Parameter `<paramIndex>` of function `<functionName>` requires the `<requiredTyp
 [SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot invoke function `<functionName>` because it contains positional argument(s) following the named argument assigned to `<parameterName>`; please rearrange them so the positional arguments come first and then retry the query again.
+
+### UNEXPECTED_SERIALIZER_FOR_CLASS
+
+[SQLSTATE: 42846](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The class `<className>` has an unexpected expression serializer. Expects "STRUCT" or "IF" which returns "STRUCT" but found `<expr>`.
 
 ### UNKNOWN_PROTOBUF_MESSAGE_TYPE
 

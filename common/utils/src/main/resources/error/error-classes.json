@@ -104,6 +104,12 @@
     ],
     "sqlState" : "42KDE"
   },
+  "CANNOT_ALTER_PARTITION_COLUMN" : {
+    "message" : [
+      "ALTER TABLE (ALTER|CHANGE) COLUMN is not supported for partition columns, but found the partition column <columnName> in the table <tableName>."
+    ],
+    "sqlState" : "428FR"
+  },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [
       "Cannot cast <sourceType> to <targetType>."
@@ -982,6 +988,12 @@
   "EXPRESSION_DECODING_FAILED" : {
     "message" : [
       "Failed to decode a row to a value of the expressions: <expressions>."
+    ],
+    "sqlState" : "42846"
+  },
+  "EXPRESSION_ENCODING_FAILED" : {
+    "message" : [
+      "Failed to encode a value of the expressions: <expressions> to a row."
     ],
     "sqlState" : "42846"
   },
@@ -1962,6 +1974,11 @@
           "expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal <invalidValue>."
         ]
       },
+      "LENGTH" : {
+        "message" : [
+          "Expects `length` greater than or equal to 0, but got <length>."
+        ]
+      },
       "NULL" : {
         "message" : [
           "expects a non-NULL value."
@@ -1975,6 +1992,11 @@
       "REGEX_GROUP_INDEX" : {
         "message" : [
           "Expects group index between 0 and <groupCount>, but got <groupIndex>."
+        ]
+      },
+      "START" : {
+        "message" : [
+          "Expects a positive or a negative value for `start`, but got 0."
         ]
       },
       "ZERO_INDEX" : {
@@ -2038,6 +2060,12 @@
       }
     },
     "sqlState" : "42K07"
+  },
+  "INVALID_SCHEMA_OR_RELATION_NAME" : {
+    "message" : [
+      "<name> is not a valid name for tables/schemas. Valid names only contain alphabet characters, numbers and _."
+    ],
+    "sqlState" : "42602"
   },
   "INVALID_SET_SYNTAX" : {
     "message" : [
@@ -2174,6 +2202,12 @@
     ],
     "sqlState" : "42K0F"
   },
+  "INVALID_TIME_TRAVEL_SPEC" : {
+    "message" : [
+      "Cannot specify both version and timestamp when time travelling the table."
+    ],
+    "sqlState" : "42K0E"
+  },
   "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR" : {
     "message" : [
       "The time travel timestamp expression <expr> is invalid."
@@ -2187,6 +2221,11 @@
       "NON_DETERMINISTIC" : {
         "message" : [
           "Must be deterministic."
+        ]
+      },
+      "OPTION" : {
+        "message" : [
+          "Timestamp string in the options must be able to cast to TIMESTAMP type."
         ]
       },
       "UNEVALUABLE" : {
@@ -2367,6 +2406,12 @@
       "The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses."
     ],
     "sqlState" : "42803"
+  },
+  "MULTIPLE_TIME_TRAVEL_SPEC" : {
+    "message" : [
+      "Cannot specify time travel in both the time travel clause and options."
+    ],
+    "sqlState" : "42K0E"
   },
   "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION" : {
     "message" : [
@@ -2727,6 +2772,12 @@
     ],
     "sqlState" : "42K0G"
   },
+  "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON" : {
+    "message" : [
+      "Failed to plan Python data source <type> in Python: <msg>"
+    ],
+    "sqlState" : "38000"
+  },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
       "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 0 to 10. Going beyond 10 levels of recursion is not allowed."
@@ -3016,6 +3067,12 @@
       "Cannot invoke function <functionName> because it contains positional argument(s) following the named argument assigned to <parameterName>; please rearrange them so the positional arguments come first and then retry the query again."
     ],
     "sqlState" : "4274K"
+  },
+  "UNEXPECTED_SERIALIZER_FOR_CLASS" : {
+    "message" : [
+      "The class <className> has an unexpected expression serializer. Expects \"STRUCT\" or \"IF\" which returns \"STRUCT\" but found <expr>."
+    ],
+    "sqlState" : "42846"
   },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
@@ -3963,11 +4020,6 @@
       "<msg>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0061" : {
-    "message" : [
-      "<msg>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0062" : {
     "message" : [
       "<msg>."
@@ -4165,11 +4217,6 @@
       "ALTER COLUMN cannot find column <colName> in v1 table. Available: <fieldNames>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1055" : {
-    "message" : [
-      "The database name is not valid: <quoted>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1057" : {
     "message" : [
       "SHOW COLUMNS with conflicting databases: '<dbA>' != '<dbB>'."
@@ -4188,11 +4235,6 @@
   "_LEGACY_ERROR_TEMP_1060" : {
     "message" : [
       "<command> does not support nested column: <column>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1065" : {
-    "message" : [
-      "`<name>` is not a valid name for tables/databases. Valid names only contain alphabet characters, numbers and _."
     ]
   },
   "_LEGACY_ERROR_TEMP_1066" : {
@@ -5117,11 +5159,6 @@
       "<errorMessage>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_1334" : {
-    "message" : [
-      "Cannot specify both version and timestamp when time travelling the table."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1338" : {
     "message" : [
       "Sinks cannot request distribution and ordering in continuous execution mode."
@@ -5712,17 +5749,6 @@
       "Due to Scala's limited support of tuple, tuple with more than 22 elements are not supported."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2152" : {
-    "message" : [
-      "Error while encoding: <e>",
-      "<expressions>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2153" : {
-    "message" : [
-      "class <clsName> has unexpected serializer: <objSerializer>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2154" : {
     "message" : [
       "Failed to get outer pointer for <innerCls>."
@@ -5731,21 +5757,6 @@
   "_LEGACY_ERROR_TEMP_2155" : {
     "message" : [
       "<userClass> is not annotated with SQLUserDefinedType nor registered with UDTRegistration.}"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2156" : {
-    "message" : [
-      "The size function doesn't support the operand type <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2157" : {
-    "message" : [
-      "Unexpected value for start in function <prettyName>: SQL array indices start at 1."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2158" : {
-    "message" : [
-      "Unexpected value for length in function <prettyName>: length must be greater than or equal to 0."
     ]
   },
   "_LEGACY_ERROR_TEMP_2159" : {

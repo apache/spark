@@ -52,9 +52,9 @@ public interface Table {
    * Returns the schema of this table. If the table is not readable and doesn't have a schema, an
    * empty schema can be returned here.
    * <p>
-   * This is deprecated. Please override {@link #columns} instead.
+   * @deprecated This is deprecated. Please override {@link #columns} instead.
    */
-  @Deprecated
+  @Deprecated(since = "3.4.0")
   StructType schema();
 
   /**

@@ -108,7 +108,7 @@ class SortSuite extends SparkPlanTest with SharedSparkSession {
     )
     checkAnswer(
       input.toDF("a", "b", "c"),
-      (child: SparkPlan) => SortExec(Stream($"a".asc, $"b".asc, $"c".asc),
+      (child: SparkPlan) => SortExec(LazyList($"a".asc, $"b".asc, $"c".asc),
         global = true, child = child),
       input.sortBy(t => (t._1, t._2, t._3)).map(Row.fromTuple),
       sortAnswers = false)
@@ -127,7 +127,7 @@ class SortSuite extends SparkPlanTest with SharedSparkSession {
         StructType(StructField("a", DecimalType(20, 2)) :: Nil))
       checkAnswer(
         inputDf,
-        (child: SparkPlan) => SortExec('a.asc :: Nil, global = true, child = child),
+        (child: SparkPlan) => SortExec(Symbol("a").asc :: Nil, global = true, child = child),
         input.sorted.map(Row(_)),
         sortAnswers = false)
     }

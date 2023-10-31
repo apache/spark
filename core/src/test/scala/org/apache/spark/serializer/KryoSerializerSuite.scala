@@ -290,11 +290,11 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("kryo with parallelize for specialized tuples") {
-    assert(sc.parallelize(Seq((1, 11), (2, 22), (3, 33))).count === 3)
+    assert(sc.parallelize(Seq((1, 11), (2, 22), (3, 33))).count() === 3)
   }
 
   test("kryo with parallelize for primitive arrays") {
-    assert(sc.parallelize(Array(1, 2, 3)).count === 3)
+    assert(sc.parallelize(Array(1, 2, 3)).count() === 3)
   }
 
   test("kryo with collect for specialized tuples") {
@@ -425,11 +425,11 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
 
   test("getAutoReset") {
     val ser = new KryoSerializer(new SparkConf).newInstance().asInstanceOf[KryoSerializerInstance]
-    assert(ser.getAutoReset)
+    assert(ser.getAutoReset())
     val conf = new SparkConf().set(KRYO_USER_REGISTRATORS,
       Seq(classOf[RegistratorWithoutAutoReset].getName))
     val ser2 = new KryoSerializer(conf).newInstance().asInstanceOf[KryoSerializerInstance]
-    assert(!ser2.getAutoReset)
+    assert(!ser2.getAutoReset())
   }
 
   test("SPARK-25176 ClassCastException when writing a Map after previously " +

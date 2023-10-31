@@ -67,7 +67,7 @@ object SparkHdfsLR {
     showWarning()
 
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("SparkHdfsLR")
       .getOrCreate()
 

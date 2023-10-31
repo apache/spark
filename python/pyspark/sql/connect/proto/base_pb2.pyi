@@ -1349,6 +1349,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
 
         NAME_FIELD_NUMBER: builtins.int
         VALUES_FIELD_NUMBER: builtins.int
+        KEYS_FIELD_NUMBER: builtins.int
         name: builtins.str
         @property
         def values(
@@ -1356,6 +1357,10 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
             pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
         ]: ...
+        @property
+        def keys(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
         def __init__(
             self,
             *,
@@ -1364,9 +1369,13 @@ class ExecutePlanResponse(google.protobuf.message.Message):
                 pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
             ]
             | None = ...,
+            keys: collections.abc.Iterable[builtins.str] | None = ...,
         ) -> None: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["name", b"name", "values", b"values"]
+            self,
+            field_name: typing_extensions.Literal[
+                "keys", b"keys", "name", b"name", "values", b"values"
+            ],
         ) -> None: ...
 
     class ResultComplete(google.protobuf.message.Message):
@@ -2947,6 +2956,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         ERROR_CLASS_FIELD_NUMBER: builtins.int
         MESSAGE_PARAMETERS_FIELD_NUMBER: builtins.int
         QUERY_CONTEXTS_FIELD_NUMBER: builtins.int
+        SQL_STATE_FIELD_NUMBER: builtins.int
         error_class: builtins.str
         """Succinct, human-readable, unique, and consistent representation of the error category."""
         @property
@@ -2961,6 +2971,10 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             global___FetchErrorDetailsResponse.QueryContext
         ]:
             """The query context of a SparkThrowable."""
+        sql_state: builtins.str
+        """Portable error identifier across SQL engines
+        If null, error class or SQLSTATE is not set.
+        """
         def __init__(
             self,
             *,
@@ -2970,11 +2984,19 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
                 global___FetchErrorDetailsResponse.QueryContext
             ]
             | None = ...,
+            sql_state: builtins.str | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "_error_class", b"_error_class", "error_class", b"error_class"
+                "_error_class",
+                b"_error_class",
+                "_sql_state",
+                b"_sql_state",
+                "error_class",
+                b"error_class",
+                "sql_state",
+                b"sql_state",
             ],
         ) -> builtins.bool: ...
         def ClearField(
@@ -2982,17 +3004,26 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             field_name: typing_extensions.Literal[
                 "_error_class",
                 b"_error_class",
+                "_sql_state",
+                b"_sql_state",
                 "error_class",
                 b"error_class",
                 "message_parameters",
                 b"message_parameters",
                 "query_contexts",
                 b"query_contexts",
+                "sql_state",
+                b"sql_state",
             ],
         ) -> None: ...
+        @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_error_class", b"_error_class"]
         ) -> typing_extensions.Literal["error_class"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_sql_state", b"_sql_state"]
+        ) -> typing_extensions.Literal["sql_state"] | None: ...
 
     class Error(google.protobuf.message.Message):
         """Error defines the schema for the representing exception."""

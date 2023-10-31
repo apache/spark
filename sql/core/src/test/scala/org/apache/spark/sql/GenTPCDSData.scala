@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import java.util.concurrent.LinkedBlockingQueue
 
-import scala.collection.immutable.Stream
 import scala.sys.process._
 import scala.util.Try
 
@@ -46,7 +45,7 @@ object BlockingLineStream {
   private final class BlockingStreamed[T](
     val process: T => Unit,
     val done: Int => Unit,
-    val stream: () => Stream[T])
+    val stream: () => LazyList[T])
 
   // See scala.sys.process.Streamed
   private object BlockingStreamed {
@@ -57,11 +56,11 @@ object BlockingLineStream {
     def apply[T](nonzeroException: Boolean): BlockingStreamed[T] = {
       val q = new LinkedBlockingQueue[Either[Int, T]](maxQueueSize)
 
-      def next(): Stream[T] = q.take match {
-        case Left(0) => Stream.empty
+      def next(): LazyList[T] = q.take match {
+        case Left(0) => LazyList.empty
         case Left(code) =>
-          if (nonzeroException) scala.sys.error("Nonzero exit code: " + code) else Stream.empty
-        case Right(s) => Stream.cons(s, next())
+          if (nonzeroException) scala.sys.error("Nonzero exit code: " + code) else LazyList.empty
+        case Right(s) => LazyList.cons(s, next())
       }
 
       new BlockingStreamed((s: T) => q put Right(s), code => q put Left(code), () => next())
@@ -79,7 +78,7 @@ object BlockingLineStream {
     }
   }
 
-  def apply(command: Seq[String]): Stream[String] = {
+  def apply(command: Seq[String]): LazyList[String] = {
     val streamed = BlockingStreamed[String](true)
     val process = command.run(BasicIO(false, streamed.process, None))
     Spawn(streamed.done(process.exitValue()))
@@ -223,7 +222,7 @@ class TPCDSTables(spark: SparkSession, dsdgenDir: String, scaleFactor: Int)
           // in case data has more than maxRecordsPerFile, split into multiple writers to improve
           // datagen speed files will be truncated to maxRecordsPerFile value, so the final
           // result will be the same.
-          val numRows = data.count
+          val numRows = data.count()
           val maxRecordPerFile = spark.conf.get(SQLConf.MAX_RECORDS_PER_FILE)
 
           if (maxRecordPerFile > 0 && numRows > maxRecordPerFile) {
