@@ -14,9 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import math
+
 from pyspark.statcounter import StatCounter
 from pyspark.testing.utils import ReusedPySparkTestCase
-import math
 
 
 class StatCounterTests(ReusedPySparkTestCase):

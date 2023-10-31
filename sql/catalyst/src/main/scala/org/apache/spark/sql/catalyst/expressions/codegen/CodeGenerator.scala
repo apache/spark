@@ -502,7 +502,7 @@ class CodegenContext extends Logging {
       inlineToOuterClass: Boolean): NewFunctionSpec = {
     val (className, classInstance) = if (inlineToOuterClass) {
       outerClassName -> ""
-    } else if (currClassSize > GENERATED_CLASS_SIZE_THRESHOLD) {
+    } else if (currClassSize() > GENERATED_CLASS_SIZE_THRESHOLD) {
       val className = freshName("NestedClass")
       val classInstance = freshName("nestedClassInstance")
 
@@ -544,7 +544,7 @@ class CodegenContext extends Logging {
         s"private $className $classInstance = new $className();"
     }
 
-    val declareNestedClasses = classFunctions.filterKeys(_ != outerClassName).map {
+    val declareNestedClasses = classFunctions.view.filterKeys(_ != outerClassName).map {
       case (className, functions) =>
         s"""
            |private class $className {

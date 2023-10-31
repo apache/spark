@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.types.StructType
@@ -33,5 +34,21 @@ class CatalogSuite extends AnalysisTest {
       schema = new StructType().add("col1", "int").add("col2", "string"),
       provider = Some("parquet"))
     table.toLinkedHashMap
+  }
+
+  test("SPARK-45454: Set table owner to current_user") {
+    val testOwner = "test_table_owner"
+    try {
+      CURRENT_USER.set(testOwner)
+      val table = CatalogTable(
+        identifier = TableIdentifier("tbl", Some("db1")),
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat.empty,
+        schema = new StructType().add("col1", "int").add("col2", "string"),
+        provider = Some("parquet"))
+      assert(table.owner === testOwner)
+    } finally {
+      CURRENT_USER.remove()
+    }
   }
 }

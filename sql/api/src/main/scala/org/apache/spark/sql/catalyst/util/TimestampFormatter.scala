@@ -167,8 +167,9 @@ class Iso8601TimestampFormatter(
 
   override def parseOptional(s: String): Option[Long] = {
     try {
-      val parsed = formatter.parseUnresolved(s, new ParsePosition(0))
-      if (parsed != null) {
+      val parsePosition = new ParsePosition(0)
+      val parsed = formatter.parseUnresolved(s, parsePosition)
+      if (parsed != null && s.length == parsePosition.getIndex) {
         Some(extractMicros(parsed))
       } else {
         None
@@ -196,8 +197,9 @@ class Iso8601TimestampFormatter(
 
   override def parseWithoutTimeZoneOptional(s: String, allowTimeZone: Boolean): Option[Long] = {
     try {
-      val parsed = formatter.parseUnresolved(s, new ParsePosition(0))
-      if (parsed != null) {
+      val parsePosition = new ParsePosition(0)
+      val parsed = formatter.parseUnresolved(s, parsePosition)
+      if (parsed != null && s.length == parsePosition.getIndex) {
         Some(extractMicrosNTZ(s, parsed, allowTimeZone))
       } else {
         None
@@ -314,7 +316,7 @@ class DefaultTimestampFormatter(
  */
 class FractionTimestampFormatter(zoneId: ZoneId)
   extends Iso8601TimestampFormatter(
-    TimestampFormatter.defaultPattern,
+    TimestampFormatter.defaultPattern(),
     zoneId,
     TimestampFormatter.defaultLocale,
     LegacyDateFormats.FAST_DATE_FORMAT,
@@ -508,7 +510,7 @@ object TimestampFormatter {
       isParsing: Boolean,
       forTimestampNTZ: Boolean = false): TimestampFormatter = {
     val formatter = if (SqlApiConf.get.legacyTimeParserPolicy == LEGACY && !forTimestampNTZ) {
-      getLegacyFormatter(format.getOrElse(defaultPattern), zoneId, locale, legacyFormat)
+      getLegacyFormatter(format.getOrElse(defaultPattern()), zoneId, locale, legacyFormat)
     } else {
       format
         .map(new Iso8601TimestampFormatter(_, zoneId, locale, legacyFormat, isParsing))

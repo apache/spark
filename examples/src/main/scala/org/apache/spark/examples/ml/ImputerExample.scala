@@ -30,7 +30,7 @@ import org.apache.spark.sql.SparkSession
 object ImputerExample {
 
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder
+    val spark = SparkSession.builder()
       .appName("ImputerExample")
       .getOrCreate()
 

@@ -115,9 +115,9 @@ class MultinomialLogisticBlockAggregatorSuite extends SparkFunSuite with MLlibTe
     val numFeatures = instances.head.features.size
     val numClasses = instances.map(_.label).distinct.size
     val coefWithIntercept = Vectors.dense(
-      Array.fill(numClasses * (numFeatures + 1))(rng.nextDouble))
+      Array.fill(numClasses * (numFeatures + 1))(rng.nextDouble()))
     val coefWithoutIntercept = Vectors.dense(
-      Array.fill(numClasses * numFeatures)(rng.nextDouble))
+      Array.fill(numClasses * numFeatures)(rng.nextDouble()))
     val block = InstanceBlock.fromInstances(instances)
 
     val aggIntercept = getNewAggregator(instances, coefWithIntercept,

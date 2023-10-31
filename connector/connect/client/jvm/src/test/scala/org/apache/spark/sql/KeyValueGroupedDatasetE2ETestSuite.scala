@@ -198,7 +198,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
       .groupByKey(v => v / 2)
     val values = grouped
       .cogroup(otherGrouped) { (k, it, otherIt) =>
-        Seq(it.toSeq.size + otherIt.seq.size)
+        Seq(it.toSeq.size + otherIt.size)
       }
       .collectAsList()
 

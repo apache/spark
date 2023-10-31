@@ -46,6 +46,6 @@ package object trees extends Logging {
       case _ => false
     }
 
-    override def hashCode: Int = if (obj == null) 0 else obj.hashCode
+    override def hashCode: Int = if (obj == null) 0 else obj.hashCode()
   }
 }

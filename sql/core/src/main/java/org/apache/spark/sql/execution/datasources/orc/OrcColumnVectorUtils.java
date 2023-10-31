@@ -40,8 +40,7 @@ class OrcColumnVectorUtils {
       vector instanceof DecimalColumnVector ||
       vector instanceof TimestampColumnVector) {
       return new OrcAtomicColumnVector(type, vector);
-    } else if (vector instanceof StructColumnVector) {
-      StructColumnVector structVector = (StructColumnVector) vector;
+    } else if (vector instanceof StructColumnVector structVector) {
       OrcColumnVector[] fields = new OrcColumnVector[structVector.fields.length];
       int ordinal = 0;
       for (StructField f : ((StructType) type).fields()) {
@@ -49,13 +48,11 @@ class OrcColumnVectorUtils {
         ordinal++;
       }
       return new OrcStructColumnVector(type, vector, fields);
-    } else if (vector instanceof ListColumnVector) {
-      ListColumnVector listVector = (ListColumnVector) vector;
+    } else if (vector instanceof ListColumnVector listVector) {
       OrcColumnVector dataVector = toOrcColumnVector(
         ((ArrayType) type).elementType(), listVector.child);
       return new OrcArrayColumnVector(type, vector, dataVector);
-    } else if (vector instanceof MapColumnVector) {
-      MapColumnVector mapVector = (MapColumnVector) vector;
+    } else if (vector instanceof MapColumnVector mapVector) {
       MapType mapType = (MapType) type;
       OrcColumnVector keysVector = toOrcColumnVector(mapType.keyType(), mapVector.keys);
       OrcColumnVector valuesVector = toOrcColumnVector(mapType.valueType(), mapVector.values);

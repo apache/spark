@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.utils
 import java.util.UUID
 
 import scala.annotation.tailrec
+import scala.collection.immutable
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -90,21 +91,21 @@ private[connect] object ErrorUtils extends Logging {
 
       if (serverStackTraceEnabled) {
         builder.addAllStackTrace(
-          currentError.getStackTrace
-            .map { stackTraceElement =>
-              val stackTraceBuilder = FetchErrorDetailsResponse.StackTraceElement
-                .newBuilder()
-                .setDeclaringClass(stackTraceElement.getClassName)
-                .setMethodName(stackTraceElement.getMethodName)
-                .setLineNumber(stackTraceElement.getLineNumber)
+          immutable.ArraySeq
+            .unsafeWrapArray(currentError.getStackTrace
+              .map { stackTraceElement =>
+                val stackTraceBuilder = FetchErrorDetailsResponse.StackTraceElement
+                  .newBuilder()
+                  .setDeclaringClass(stackTraceElement.getClassName)
+                  .setMethodName(stackTraceElement.getMethodName)
+                  .setLineNumber(stackTraceElement.getLineNumber)
 
-              if (stackTraceElement.getFileName != null) {
-                stackTraceBuilder.setFileName(stackTraceElement.getFileName)
-              }
+                if (stackTraceElement.getFileName != null) {
+                  stackTraceBuilder.setFileName(stackTraceElement.getFileName)
+                }
 
-              stackTraceBuilder.build()
-            }
-            .toIterable
+                stackTraceBuilder.build()
+              })
             .asJava)
       }
 
@@ -114,6 +115,20 @@ private[connect] object ErrorUtils extends Logging {
             .newBuilder()
           if (sparkThrowable.getErrorClass != null) {
             sparkThrowableBuilder.setErrorClass(sparkThrowable.getErrorClass)
+          }
+          for (queryCtx <- sparkThrowable.getQueryContext) {
+            sparkThrowableBuilder.addQueryContexts(
+              FetchErrorDetailsResponse.QueryContext
+                .newBuilder()
+                .setObjectType(queryCtx.objectType())
+                .setObjectName(queryCtx.objectName())
+                .setStartIndex(queryCtx.startIndex())
+                .setStopIndex(queryCtx.stopIndex())
+                .setFragment(queryCtx.fragment())
+                .build())
+          }
+          if (sparkThrowable.getSqlState != null) {
+            sparkThrowableBuilder.setSqlState(sparkThrowable.getSqlState)
           }
           sparkThrowableBuilder.putAllMessageParameters(sparkThrowable.getMessageParameters)
           builder.setSparkThrowable(sparkThrowableBuilder.build())

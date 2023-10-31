@@ -36,7 +36,6 @@ Properties
 .. autosummary::
    :toctree: api/
 
-   Index.is_monotonic
    Index.is_monotonic_increasing
    Index.is_monotonic_decreasing
    Index.is_unique

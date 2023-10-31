@@ -387,7 +387,7 @@ private[spark] object JsonProtocol extends JsonUtils {
       includeAccumulables: Boolean): Unit = {
     g.writeStartObject()
     g.writeNumberField("Stage ID", stageInfo.stageId)
-    g.writeNumberField("Stage Attempt ID", stageInfo.attemptNumber)
+    g.writeNumberField("Stage Attempt ID", stageInfo.attemptNumber())
     g.writeStringField("Stage Name", stageInfo.name)
     g.writeNumberField ("Number of Tasks", stageInfo.numTasks)
     g.writeArrayFieldStart("RDD Info")

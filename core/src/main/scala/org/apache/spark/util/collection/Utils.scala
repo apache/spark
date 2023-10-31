@@ -56,7 +56,7 @@ private[spark] object Utils extends SparkCollectionUtils {
       override def compare(l: T, r: T): Int = ord.compare(l, r)
     }
     GuavaIterators.mergeSorted(
-      inputs.map(_.toIterator.asJava).asJava, ordering).asScala
+      inputs.map(_.iterator.asJava).asJava, ordering).asScala
   }
 
   /**

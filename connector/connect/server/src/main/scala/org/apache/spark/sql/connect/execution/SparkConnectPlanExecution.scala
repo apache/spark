@@ -56,8 +56,8 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       throw new IllegalStateException(
         s"Illegal operation type ${request.getPlan.getOpTypeCase} to be handled here.")
     }
-    val planner = new SparkConnectPlanner(sessionHolder)
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker
+    val planner = new SparkConnectPlanner(executeHolder)
+    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val dataframe =
       Dataset.ofRows(
         sessionHolder.session,
@@ -110,12 +110,13 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       errorOnDuplicatedFieldNames = false)
 
     var numSent = 0
-    def sendBatch(bytes: Array[Byte], count: Long): Unit = {
+    def sendBatch(bytes: Array[Byte], count: Long, startOffset: Long): Unit = {
       val response = proto.ExecutePlanResponse.newBuilder().setSessionId(sessionId)
       val batch = proto.ExecutePlanResponse.ArrowBatch
         .newBuilder()
         .setRowCount(count)
         .setData(ByteString.copyFrom(bytes))
+        .setStartOffset(startOffset)
         .build()
       response.setArrowBatch(batch)
       responseObserver.onNext(response.build())
@@ -125,8 +126,10 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     dataframe.queryExecution.executedPlan match {
       case LocalTableScanExec(_, rows) =>
         executePlan.eventsManager.postFinished(Some(rows.length))
+        var offset = 0L
         converter(rows.iterator).foreach { case (bytes, count) =>
-          sendBatch(bytes, count)
+          sendBatch(bytes, count, offset)
+          offset += count
         }
       case _ =>
         SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectArrow")) {
@@ -185,6 +188,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
             // tasks not related to scheduling. This is particularly important if there are
             // multiple users or clients running code at the same time.
             var currentPartitionId = 0
+            var currentOffset = 0L
             while (currentPartitionId < numPartitions) {
               val partition = signal.synchronized {
                 var part = partitions(currentPartitionId)
@@ -201,7 +205,8 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
               }
 
               partition.foreach { case (bytes, count) =>
-                sendBatch(bytes, count)
+                sendBatch(bytes, count, currentOffset)
+                currentOffset += count
               }
 
               currentPartitionId += 1
@@ -220,6 +225,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
           schema,
           timeZoneId,
           errorOnDuplicatedFieldNames = false),
+        0L,
         0L)
     }
   }
@@ -238,11 +244,14 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       dataframe: DataFrame): ExecutePlanResponse = {
     val observedMetrics = dataframe.queryExecution.observedMetrics.map { case (name, row) =>
       val cols = (0 until row.length).map(i => toLiteralProto(row(i)))
-      ExecutePlanResponse.ObservedMetrics
+      val metrics = ExecutePlanResponse.ObservedMetrics
         .newBuilder()
         .setName(name)
         .addAllValues(cols.asJava)
-        .build()
+      if (row.schema != null) {
+        metrics.addAllKeys(row.schema.fieldNames.toList.asJava)
+      }
+      metrics.build()
     }
     // Prepare a response with the observed metrics.
     ExecutePlanResponse

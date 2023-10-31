@@ -97,7 +97,7 @@ private[spark] object SparkCoreErrors {
 
   def checkpointRDDBlockIdNotFoundError(rddBlockId: RDDBlockId): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3007",
+      errorClass = "CHECKPOINT_RDD_BLOCK_ID_NOT_FOUND",
       messageParameters = Map("rddBlockId" -> s"$rddBlockId"),
       cause = null
     )

@@ -200,7 +200,7 @@ abstract class SparkFunSuite
 
   protected def logForFailedTest(): Unit = {
     LocalSparkCluster.get.foreach { localCluster =>
-      val workerLogfiles = localCluster.workerLogfiles
+      val workerLogfiles = localCluster.workerLogfiles()
       if (workerLogfiles.nonEmpty) {
         logInfo("\n\n===== EXTRA LOGS FOR THE FAILED TEST\n")
         workerLogfiles.foreach { logFile =>

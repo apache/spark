@@ -49,18 +49,21 @@ private[sql] class AvroDeserializer(
     rootCatalystType: DataType,
     positionalFieldMatch: Boolean,
     datetimeRebaseSpec: RebaseSpec,
-    filters: StructFilters) {
+    filters: StructFilters,
+    useStableIdForUnionType: Boolean) {
 
   def this(
       rootAvroType: Schema,
       rootCatalystType: DataType,
-      datetimeRebaseMode: String) = {
+      datetimeRebaseMode: String,
+      useStableIdForUnionType: Boolean) = {
     this(
       rootAvroType,
       rootCatalystType,
       positionalFieldMatch = false,
       RebaseSpec(LegacyBehaviorPolicy.withName(datetimeRebaseMode)),
-      new NoopFilters)
+      new NoopFilters,
+      useStableIdForUnionType)
   }
 
   private lazy val decimalConversions = new DecimalConversion()

@@ -324,29 +324,38 @@ abstract class OrcSuite
 
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
     val conf = spark.sessionState.conf
-    val option = new OrcOptions(Map(COMPRESS.getAttribute.toUpperCase(Locale.ROOT) -> "NONE"), conf)
-    assert(option.compressionCodec == "NONE")
+    val option = new OrcOptions(
+      Map(COMPRESS.getAttribute.toUpperCase(Locale.ROOT) -> OrcCompressionCodec.NONE.name()), conf)
+    assert(option.compressionCodec == OrcCompressionCodec.NONE.name())
   }
 
   test("SPARK-21839: Add SQL config for ORC compression") {
     val conf = spark.sessionState.conf
     // Test if the default of spark.sql.orc.compression.codec is snappy
-    assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == "SNAPPY")
+    assert(new OrcOptions(
+      Map.empty[String, String], conf).compressionCodec == OrcCompressionCodec.SNAPPY.name())
 
     // OrcOptions's parameters have a higher priority than SQL configuration.
     // `compression` -> `orc.compression` -> `spark.sql.orc.compression.codec`
     withSQLConf(SQLConf.ORC_COMPRESSION.key -> "uncompressed") {
-      assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == "NONE")
-      val map1 = Map(COMPRESS.getAttribute -> "zlib")
-      val map2 = Map(COMPRESS.getAttribute -> "zlib", "compression" -> "lzo")
-      assert(new OrcOptions(map1, conf).compressionCodec == "ZLIB")
-      assert(new OrcOptions(map2, conf).compressionCodec == "LZO")
+      assert(new OrcOptions(
+        Map.empty[String, String], conf).compressionCodec == OrcCompressionCodec.NONE.name())
+      val zlibCodec = OrcCompressionCodec.ZLIB.lowerCaseName()
+      val lzoCodec = OrcCompressionCodec.LZO.lowerCaseName()
+      val map1 = Map(COMPRESS.getAttribute -> zlibCodec)
+      val map2 = Map(COMPRESS.getAttribute -> zlibCodec, "compression" -> lzoCodec)
+      assert(new OrcOptions(map1, conf).compressionCodec ==  OrcCompressionCodec.ZLIB.name())
+      assert(new OrcOptions(map2, conf).compressionCodec == OrcCompressionCodec.LZO.name())
     }
 
     // Test all the valid options of spark.sql.orc.compression.codec
-    Seq("NONE", "UNCOMPRESSED", "SNAPPY", "ZLIB", "LZO", "ZSTD", "LZ4").foreach { c =>
+    OrcCompressionCodec.values().map(_.name()).foreach { c =>
       withSQLConf(SQLConf.ORC_COMPRESSION.key -> c) {
-        val expected = if (c == "UNCOMPRESSED") "NONE" else c
+        val expected = if (c == OrcCompressionCodec.UNCOMPRESSED.name()) {
+          OrcCompressionCodec.NONE.name()
+        } else {
+          c
+        }
         assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == expected)
       }
     }
@@ -366,7 +375,7 @@ abstract class OrcSuite
   test("SPARK-24322 Fix incorrect workaround for bug in java.sql.Timestamp") {
     withTempPath { path =>
       val ts = Timestamp.valueOf("1900-05-05 12:34:56.000789")
-      Seq(ts).toDF.write.orc(path.getCanonicalPath)
+      Seq(ts).toDF().write.orc(path.getCanonicalPath)
       checkAnswer(spark.read.orc(path.getCanonicalPath), Row(ts))
     }
   }

@@ -104,9 +104,9 @@ public class RpcIntegrationSuite {
     try {
       if (msg.startsWith("fail/")) {
         String[] parts = msg.split("/");
-        switch (parts[1]) {
-          case "exception-ondata":
-            return new StreamCallbackWithID() {
+        return switch (parts[1]) {
+          case "exception-ondata" ->
+            new StreamCallbackWithID() {
               @Override
               public void onData(String streamId, ByteBuffer buf) throws IOException {
                 throw new IOException("failed to read stream data!");
@@ -125,8 +125,8 @@ public class RpcIntegrationSuite {
                 return msg;
               }
             };
-          case "exception-oncomplete":
-            return new StreamCallbackWithID() {
+          case "exception-oncomplete" ->
+            new StreamCallbackWithID() {
               @Override
               public void onData(String streamId, ByteBuffer buf) throws IOException {
               }
@@ -145,11 +145,9 @@ public class RpcIntegrationSuite {
                 return msg;
               }
             };
-          case "null":
-            return null;
-          default:
-            throw new IllegalArgumentException("unexpected msg: " + msg);
-        }
+          case "null" -> null;
+          default -> throw new IllegalArgumentException("unexpected msg: " + msg);
+        };
       } else {
         VerifyingStreamCallback streamCallback = new VerifyingStreamCallback(msg);
         streamCallbacks.put(msg, streamCallback);

@@ -404,11 +404,14 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
       insert.query
     }
     val newQuery = try {
+      val byName = hasColumnList || insert.byName
+      TableOutputResolver.suitableForByNameCheck(byName, expected = expectedColumns,
+        queryOutput = query.output)
       TableOutputResolver.resolveOutputColumns(
         tblName,
         expectedColumns,
         query,
-        byName = hasColumnList || insert.byName,
+        byName,
         conf,
         supportColDefaultValue = true)
     } catch {

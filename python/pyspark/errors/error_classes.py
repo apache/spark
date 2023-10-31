@@ -354,7 +354,7 @@ ERROR_CLASSES_JSON = """
   },
   "JVM_ATTRIBUTE_NOT_SUPPORTED" : {
     "message" : [
-      "Attribute `<attr_name>` is not supported in Spark Connect as it depends on the JVM. If you need to use this attribute, do not use Spark Connect when creating your session."
+      "Attribute `<attr_name>` is not supported in Spark Connect as it depends on the JVM. If you need to use this attribute, do not use Spark Connect when creating your session. Visit https://spark.apache.org/docs/latest/sql-getting-started.html#starting-point-sparksession for creating regular Spark Session in detail."
     ]
   },
   "KEY_VALUE_PAIR_REQUIRED" : {
@@ -640,6 +640,21 @@ ERROR_CLASSES_JSON = """
   "PIPE_FUNCTION_EXITED" : {
     "message" : [
       "Pipe function `<func_name>` exited with error code <error_code>."
+    ]
+  },
+  "PYTHON_DATA_SOURCE_CREATE_ERROR" : {
+    "message" : [
+        "Unable to create the Python data source <type>: <error>."
+    ]
+  },
+  "PYTHON_DATA_SOURCE_METHOD_NOT_IMPLEMENTED" : {
+    "message" : [
+        "Unable to create the Python data source <type> because the '<method>' method hasn't been implemented."
+    ]
+  },
+  "PYTHON_DATA_SOURCE_TYPE_MISMATCH" : {
+    "message" : [
+      "Expected <expected>, but got <actual>."
     ]
   },
   "PYTHON_HASH_SEED_NOT_SET" : {

@@ -1202,17 +1202,42 @@ class ExecutePlanResponse(google.protobuf.message.Message):
 
         ROW_COUNT_FIELD_NUMBER: builtins.int
         DATA_FIELD_NUMBER: builtins.int
+        START_OFFSET_FIELD_NUMBER: builtins.int
         row_count: builtins.int
+        """Count rows in `data`. Must match the number of rows inside `data`."""
         data: builtins.bytes
+        """Serialized Arrow data."""
+        start_offset: builtins.int
+        """If set, row offset of the start of this ArrowBatch in execution results."""
         def __init__(
             self,
             *,
             row_count: builtins.int = ...,
             data: builtins.bytes = ...,
+            start_offset: builtins.int | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_start_offset", b"_start_offset", "start_offset", b"start_offset"
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["data", b"data", "row_count", b"row_count"]
+            self,
+            field_name: typing_extensions.Literal[
+                "_start_offset",
+                b"_start_offset",
+                "data",
+                b"data",
+                "row_count",
+                b"row_count",
+                "start_offset",
+                b"start_offset",
+            ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_start_offset", b"_start_offset"]
+        ) -> typing_extensions.Literal["start_offset"] | None: ...
 
     class Metrics(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1324,6 +1349,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
 
         NAME_FIELD_NUMBER: builtins.int
         VALUES_FIELD_NUMBER: builtins.int
+        KEYS_FIELD_NUMBER: builtins.int
         name: builtins.str
         @property
         def values(
@@ -1331,6 +1357,10 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
             pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
         ]: ...
+        @property
+        def keys(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
         def __init__(
             self,
             *,
@@ -1339,9 +1369,13 @@ class ExecutePlanResponse(google.protobuf.message.Message):
                 pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
             ]
             | None = ...,
+            keys: collections.abc.Iterable[builtins.str] | None = ...,
         ) -> None: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["name", b"name", "values", b"values"]
+            self,
+            field_name: typing_extensions.Literal[
+                "keys", b"keys", "name", b"name", "values", b"values"
+            ],
         ) -> None: ...
 
     class ResultComplete(google.protobuf.message.Message):
@@ -2844,6 +2878,59 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_file_name", b"_file_name"]
         ) -> typing_extensions.Literal["file_name"] | None: ...
 
+    class QueryContext(google.protobuf.message.Message):
+        """QueryContext defines the schema for the query context of a SparkThrowable.
+        It helps users understand where the error occurs while executing queries.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        OBJECT_TYPE_FIELD_NUMBER: builtins.int
+        OBJECT_NAME_FIELD_NUMBER: builtins.int
+        START_INDEX_FIELD_NUMBER: builtins.int
+        STOP_INDEX_FIELD_NUMBER: builtins.int
+        FRAGMENT_FIELD_NUMBER: builtins.int
+        object_type: builtins.str
+        """The object type of the query which throws the exception.
+        If the exception is directly from the main query, it should be an empty string.
+        Otherwise, it should be the exact object type in upper case. For example, a "VIEW".
+        """
+        object_name: builtins.str
+        """The object name of the query which throws the exception.
+        If the exception is directly from the main query, it should be an empty string.
+        Otherwise, it should be the object name. For example, a view name "V1".
+        """
+        start_index: builtins.int
+        """The starting index in the query text which throws the exception. The index starts from 0."""
+        stop_index: builtins.int
+        """The stopping index in the query which throws the exception. The index starts from 0."""
+        fragment: builtins.str
+        """The corresponding fragment of the query which throws the exception."""
+        def __init__(
+            self,
+            *,
+            object_type: builtins.str = ...,
+            object_name: builtins.str = ...,
+            start_index: builtins.int = ...,
+            stop_index: builtins.int = ...,
+            fragment: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "fragment",
+                b"fragment",
+                "object_name",
+                b"object_name",
+                "object_type",
+                b"object_type",
+                "start_index",
+                b"start_index",
+                "stop_index",
+                b"stop_index",
+            ],
+        ) -> None: ...
+
     class SparkThrowable(google.protobuf.message.Message):
         """SparkThrowable defines the schema for SparkThrowable exceptions."""
 
@@ -2868,23 +2955,48 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
 
         ERROR_CLASS_FIELD_NUMBER: builtins.int
         MESSAGE_PARAMETERS_FIELD_NUMBER: builtins.int
+        QUERY_CONTEXTS_FIELD_NUMBER: builtins.int
+        SQL_STATE_FIELD_NUMBER: builtins.int
         error_class: builtins.str
         """Succinct, human-readable, unique, and consistent representation of the error category."""
         @property
         def message_parameters(
             self,
         ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
-            """message parameters for the error framework."""
+            """The message parameters for the error framework."""
+        @property
+        def query_contexts(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___FetchErrorDetailsResponse.QueryContext
+        ]:
+            """The query context of a SparkThrowable."""
+        sql_state: builtins.str
+        """Portable error identifier across SQL engines
+        If null, error class or SQLSTATE is not set.
+        """
         def __init__(
             self,
             *,
             error_class: builtins.str | None = ...,
             message_parameters: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+            query_contexts: collections.abc.Iterable[
+                global___FetchErrorDetailsResponse.QueryContext
+            ]
+            | None = ...,
+            sql_state: builtins.str | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "_error_class", b"_error_class", "error_class", b"error_class"
+                "_error_class",
+                b"_error_class",
+                "_sql_state",
+                b"_sql_state",
+                "error_class",
+                b"error_class",
+                "sql_state",
+                b"sql_state",
             ],
         ) -> builtins.bool: ...
         def ClearField(
@@ -2892,15 +3004,26 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             field_name: typing_extensions.Literal[
                 "_error_class",
                 b"_error_class",
+                "_sql_state",
+                b"_sql_state",
                 "error_class",
                 b"error_class",
                 "message_parameters",
                 b"message_parameters",
+                "query_contexts",
+                b"query_contexts",
+                "sql_state",
+                b"sql_state",
             ],
         ) -> None: ...
+        @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_error_class", b"_error_class"]
         ) -> typing_extensions.Literal["error_class"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_sql_state", b"_sql_state"]
+        ) -> typing_extensions.Literal["sql_state"] | None: ...
 
     class Error(google.protobuf.message.Message):
         """Error defines the schema for the representing exception."""

@@ -31,8 +31,7 @@ public class IntKeyType {
 
   @Override
   public boolean equals(Object o) {
-    if (o instanceof IntKeyType) {
-      IntKeyType other = (IntKeyType) o;
+    if (o instanceof IntKeyType other) {
       return key == other.key && id.equals(other.id) && values.equals(other.values);
     }
     return false;

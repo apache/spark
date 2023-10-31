@@ -16,8 +16,6 @@
 #
 
 import unittest
-import glob
-import os
 
 import numpy as np
 import pandas as pd
@@ -218,7 +216,7 @@ class DataFrameSparkIOTestsMixin:
             expected = ps.DataFrame(pdf)
 
             # Write out partitioned by one column
-            expected.to_spark_io(tmp, format="json", mode="overwrite", partition_cols="i32")
+            expected.spark.to_spark_io(tmp, format="json", mode="overwrite", partition_cols="i32")
             # Reset column order, as once the data is written out, Spark rearranges partition
             # columns to appear first.
             actual = ps.read_spark_io(tmp, format="json")
@@ -230,7 +228,7 @@ class DataFrameSparkIOTestsMixin:
             )
 
             # Write out partitioned by two columns
-            expected.to_spark_io(
+            expected.spark.to_spark_io(
                 tmp, format="json", mode="overwrite", partition_cols=["i32", "bhello"]
             )
             # Reset column order, as once the data is written out, Spark rearranges partition

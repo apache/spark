@@ -67,7 +67,7 @@ object BlockReplicationUtils {
   private def getSampleIds(n: Int, m: Int, r: Random): List[Int] = {
     val indices = (n - m + 1 to n).foldLeft(mutable.LinkedHashSet.empty[Int]) {case (set, i) =>
       val t = r.nextInt(i) + 1
-      if (set.contains(t)) set + i else set + t
+      if (set.contains(t)) set.union(Set(i)) else set.union(Set(t))
     }
     indices.map(_ - 1).toList
   }

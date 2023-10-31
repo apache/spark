@@ -36,7 +36,7 @@ case class SQLQueryContext(
 
   /**
    * The SQL query context of current node. For example:
-   * == SQL of VIEW v1(line 1, position 25) ==
+   * == SQL of VIEW v1 (line 1, position 25) ==
    * SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
    *                          ^^^^^^^^^^^^^^^
    */
@@ -48,7 +48,7 @@ case class SQLQueryContext(
       val positionContext = if (line.isDefined && startPosition.isDefined) {
         // Note that the line number starts from 1, while the start position starts from 0.
         // Here we increase the start position by 1 for consistency.
-        s"(line ${line.get}, position ${startPosition.get + 1})"
+        s" (line ${line.get}, position ${startPosition.get + 1})"
       } else {
         ""
       }

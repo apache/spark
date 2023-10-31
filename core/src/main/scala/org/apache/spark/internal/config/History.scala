@@ -243,7 +243,7 @@ private[spark] object History {
   }
 
   val HYBRID_STORE_DISK_BACKEND = ConfigBuilder("spark.history.store.hybridStore.diskBackend")
-    .doc("Specifies a disk-based store used in hybrid store; LEVELDB or ROCKSDB.")
+    .doc("Specifies a disk-based store used in hybrid store; ROCKSDB or LEVELDB (deprecated).")
     .version("3.3.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))

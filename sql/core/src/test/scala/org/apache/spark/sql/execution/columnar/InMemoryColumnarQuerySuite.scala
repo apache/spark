@@ -167,9 +167,9 @@ class InMemoryColumnarQuerySuite extends QueryTest
 
   test("access only some column of the all of columns") {
     val df = spark.range(1, 100).map(i => (i, (i + 1).toFloat)).toDF("i", "f")
-    df.cache
-    df.count  // forced to build cache
-    assert(df.filter("f <= 10.0").count == 9)
+    df.cache()
+    df.count()  // forced to build cache
+    assert(df.filter("f <= 10.0").count() == 9)
   }
 
   test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
@@ -365,7 +365,7 @@ class InMemoryColumnarQuerySuite extends QueryTest
   }
 
    test("cached row count should be calculated") {
-    val data = spark.range(6).toDF
+    val data = spark.range(6).toDF()
     val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
     val cached = InMemoryRelation(new TestCachedBatchSerializer(true, 5),
       MEMORY_ONLY, plan, None, data.logicalPlan)
@@ -390,7 +390,7 @@ class InMemoryColumnarQuerySuite extends QueryTest
       }
       val rdd = sparkContext.makeRDD(Seq(Row.fromSeq(data)))
       val df = spark.createDataFrame(rdd, StructType(schemas))
-      val row = df.persist.take(1).apply(0)
+      val row = df.persist().take(1).apply(0)
       checkAnswer(df, row)
     }
   }
@@ -410,7 +410,7 @@ class InMemoryColumnarQuerySuite extends QueryTest
       )
       val rdd = sparkContext.makeRDD(Seq(Row.fromSeq(data)))
       val df = spark.createDataFrame(rdd, StructType(schemas))
-      val row = df.persist.take(1).apply(0)
+      val row = df.persist().take(1).apply(0)
       checkAnswer(df, row)
     }
   }
@@ -432,16 +432,16 @@ class InMemoryColumnarQuerySuite extends QueryTest
       )
       val rdd = sparkContext.makeRDD(Seq(Row.fromSeq(data)))
       val df = spark.createDataFrame(rdd, StructType(schemas))
-      val row = df.persist.take(1).apply(0)
+      val row = df.persist().take(1).apply(0)
       checkAnswer(df, row)
     }
   }
 
   test("InMemoryTableScanExec should return correct output ordering and partitioning") {
-    val df1 = Seq((0, 0), (1, 1)).toDF
-      .repartition(col("_1")).sortWithinPartitions(col("_1")).persist
-    val df2 = Seq((0, 0), (1, 1)).toDF
-      .repartition(col("_1")).sortWithinPartitions(col("_1")).persist
+    val df1 = Seq((0, 0), (1, 1)).toDF()
+      .repartition(col("_1")).sortWithinPartitions(col("_1")).persist()
+    val df2 = Seq((0, 0), (1, 1)).toDF()
+      .repartition(col("_1")).sortWithinPartitions(col("_1")).persist()
 
     // Because two cached dataframes have the same logical plan, this is a self-join actually.
     // So we force one of in-memory relation to alias its output. Then we can test if original and

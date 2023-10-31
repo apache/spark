@@ -917,6 +917,7 @@ private[deploy] class Master(
   private def decommissionWorkersOnHosts(hostnames: Seq[String]): Integer = {
     val hostnamesSet = hostnames.map(_.toLowerCase(Locale.ROOT)).toSet
     val workersToRemove = addressToWorker
+      .view
       .filterKeys(addr => hostnamesSet.contains(addr.host.toLowerCase(Locale.ROOT)))
       .values
 
@@ -1041,7 +1042,7 @@ private[deploy] class Master(
         completedApps.take(toRemove).foreach { a =>
           applicationMetricsSystem.removeSource(a.appSource)
         }
-        completedApps.trimStart(toRemove)
+        completedApps.dropInPlace(toRemove)
       }
       completedApps += app // Remember it in our history
       waitingApps -= app
@@ -1203,7 +1204,7 @@ private[deploy] class Master(
         drivers -= driver
         if (completedDrivers.size >= retainedDrivers) {
           val toRemove = math.max(retainedDrivers / 10, 1)
-          completedDrivers.trimStart(toRemove)
+          completedDrivers.dropInPlace(toRemove)
         }
         completedDrivers += driver
         persistenceEngine.removeDriver(driver)

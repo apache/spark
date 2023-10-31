@@ -355,7 +355,7 @@ case class StaticInvoke(
     if (scalarFunction.nonEmpty) {
       super.stringArgs
     } else {
-      super.stringArgs.take(8)
+      super.stringArgs.toSeq.dropRight(1).iterator
     }
   }
 }
@@ -811,7 +811,7 @@ case class UnresolvedMapObjects(
   override lazy val resolved = false
 
   override def dataType: DataType = customCollectionCls.map(ObjectType.apply).getOrElse {
-    throw QueryExecutionErrors.customCollectionClsNotResolvedError
+    throw QueryExecutionErrors.customCollectionClsNotResolvedError()
   }
 
   override protected def withNewChildInternal(newChild: Expression): UnresolvedMapObjects =
@@ -1041,7 +1041,7 @@ case class MapObjects private(
         val it = ctx.freshName("it")
         (
           s"${genInputData.value}.size()",
-          s"scala.collection.Iterator $it = ${genInputData.value}.toIterator();",
+          s"scala.collection.Iterator $it = ${genInputData.value}.iterator();",
           s"$it.next()"
         )
       case ObjectType(cls) if cls.isArray =>
@@ -1067,7 +1067,7 @@ case class MapObjects private(
         val it = ctx.freshName("it")
         (
           s"$seq == null ? $array.length : $seq.size()",
-          s"scala.collection.Iterator $it = $seq == null ? null : $seq.toIterator();",
+          s"scala.collection.Iterator $it = $seq == null ? null : $seq.iterator();",
           s"$it == null ? $array[$loopIndex] : $it.next()"
         )
     }
@@ -1461,7 +1461,7 @@ case class ExternalMapToCatalyst private(
             keys(i) = if (key != null) {
               keyConverter.eval(rowWrapper(key))
             } else {
-              throw QueryExecutionErrors.nullAsMapKeyNotAllowedError
+              throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
             }
             values(i) = if (value != null) {
               valueConverter.eval(rowWrapper(value))
@@ -1483,7 +1483,7 @@ case class ExternalMapToCatalyst private(
             keys(i) = if (key != null) {
               keyConverter.eval(rowWrapper(key))
             } else {
-              throw QueryExecutionErrors.nullAsMapKeyNotAllowedError
+              throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
             }
             values(i) = if (value != null) {
               valueConverter.eval(rowWrapper(value))
@@ -1898,7 +1898,7 @@ case class GetExternalRowField(
   override def eval(input: InternalRow): Any = {
     val inputRow = child.eval(input).asInstanceOf[Row]
     if (inputRow == null) {
-      throw QueryExecutionErrors.inputExternalRowCannotBeNullError
+      throw QueryExecutionErrors.inputExternalRowCannotBeNullError()
     }
     if (inputRow.isNullAt(index)) {
       throw QueryExecutionErrors.fieldCannotBeNullError(index, fieldName)

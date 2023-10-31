@@ -17,6 +17,7 @@
 import unittest
 
 import pandas as pd
+
 from pyspark import pandas as ps
 from pyspark.pandas.tests.test_numpy_compat import NumPyCompatTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase

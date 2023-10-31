@@ -22,7 +22,7 @@ import java.io.{File, FileOutputStream, InputStream, IOException}
 import scala.collection.Map
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SecurityManager
+import org.apache.spark.{SecurityManager, SSLOptions}
 import org.apache.spark.deploy.Command
 import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.WorkerCommandBuilder
@@ -87,9 +87,11 @@ object CommandUtils extends Logging {
     }
 
     // set auth secret to env variable if needed
-    if (securityMgr.isAuthenticationEnabled) {
-      newEnvironment += (SecurityManager.ENV_AUTH_SECRET -> securityMgr.getSecretKey)
+    if (securityMgr.isAuthenticationEnabled()) {
+      newEnvironment += (SecurityManager.ENV_AUTH_SECRET -> securityMgr.getSecretKey())
     }
+    // set SSL env variables if needed
+    newEnvironment ++= securityMgr.getEnvironmentForSslRpcPasswords
 
     Command(
       command.mainClass,
@@ -97,8 +99,13 @@ object CommandUtils extends Logging {
       newEnvironment,
       command.classPathEntries ++ classPath,
       Seq.empty, // library path already captured in environment variable
-      // filter out auth secret from java options
-      command.javaOpts.filterNot(_.startsWith("-D" + SecurityManager.SPARK_AUTH_SECRET_CONF)))
+      // filter out secrets from java options
+      command.javaOpts.filterNot(opts =>
+        opts.startsWith("-D" + SecurityManager.SPARK_AUTH_SECRET_CONF) ||
+        SSLOptions.SPARK_RPC_SSL_PASSWORD_FIELDS.exists(
+          field => opts.startsWith("-D" + field)
+        )
+      ))
   }
 
   /** Spawn a thread that will redirect a given stream to a file */

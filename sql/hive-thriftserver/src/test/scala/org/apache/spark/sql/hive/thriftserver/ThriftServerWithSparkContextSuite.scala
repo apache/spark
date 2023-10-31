@@ -24,6 +24,7 @@ import org.apache.hive.service.cli.{GetInfoType, HiveSQLException, OperationHand
 
 import org.apache.spark.{ErrorMessageFormat, TaskKilled}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.internal.SQLConf
 
 trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
@@ -162,8 +163,8 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       val e1 = intercept[HiveSQLException](exec(sql))
       // scalastyle:off line.size.limit
       assert(e1.getMessage ===
-        """Error running query: [DIVIDE_BY_ZERO] org.apache.spark.SparkArithmeticException: [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-          |== SQL(line 1, position 8) ==
+        """Error running query: [DIVIDE_BY_ZERO] org.apache.spark.SparkArithmeticException: [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error. SQLSTATE: 22012
+          |== SQL (line 1, position 8) ==
           |select 1 / 0
           |       ^^^^^
           |""".stripMargin)
@@ -252,6 +253,21 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       assert(rs1.getString(1) === "default")
       assert(rs1.getType === ResultSet.TYPE_FORWARD_ONLY)
       assertThrows[SQLException](rs1.beforeFirst())
+    }
+  }
+
+  test("SPARK-45454: Set table owner to current_user") {
+    val testOwner = "test_table_owner"
+    val tableName = "t"
+    withTable(tableName) {
+      withCLIServiceClient(testOwner) { client =>
+        val sessionHandle = client.openSession(testOwner, "")
+        val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+        val exec: String => OperationHandle = client.executeStatement(sessionHandle, _, confOverlay)
+        exec(s"CREATE TABLE $tableName(id int) using parquet")
+        val owner = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName)).owner
+        assert(owner === testOwner)
+      }
     }
   }
 }

@@ -53,6 +53,7 @@ Feature
     MaxAbsScalerModel
     StandardScaler
     StandardScalerModel
+    ArrayAssembler
 
 
 Classification

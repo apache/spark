@@ -29,7 +29,6 @@ from typing import (
 )
 
 import numpy as np
-
 import pandas as pd
 from pandas.tseries.frequencies import to_offset
 
@@ -40,7 +39,6 @@ from pyspark.sql.types import (
     TimestampNTZType,
     DataType,
 )
-
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import FrameLike
 from pyspark.pandas.frame import DataFrame

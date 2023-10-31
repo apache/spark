@@ -292,5 +292,5 @@ private[spark] class TaskContextImpl(
 
   private[spark] override def fetchFailed: Option[FetchFailedException] = _fetchFailedException
 
-  private[spark] override def getLocalProperties(): Properties = localProperties
+  private[spark] override def getLocalProperties: Properties = localProperties
 }

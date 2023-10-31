@@ -62,6 +62,8 @@ The following escape sequences are recognized in regular string literals (withou
 - `\_` -> `\_`;
 - `\<other char>` -> `<other char>`, skip the slash and leave the character as is.
 
+The unescaping rules above can be turned off by setting the SQL config `spark.sql.parser.escapedStringLiterals` to `true`.
+
 #### Examples
 
 ```sql

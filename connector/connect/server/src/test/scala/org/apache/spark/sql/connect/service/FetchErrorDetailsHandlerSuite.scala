@@ -20,11 +20,13 @@ import java.util.UUID
 
 import scala.concurrent.Promise
 import scala.concurrent.duration._
+import scala.util.Try
 
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.FetchErrorDetailsResponse
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connect.ResourceHelper
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.utils.ErrorUtils
@@ -49,7 +51,7 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
       userId: String,
       sessionId: String,
       errorId: String): FetchErrorDetailsResponse = {
-    val promise = Promise[FetchErrorDetailsResponse]
+    val promise = Promise[FetchErrorDetailsResponse]()
     val handler =
       new SparkConnectFetchErrorDetailsHandler(new FetchErrorDetailsResponseObserver(promise))
     val context = proto.UserContext
@@ -187,5 +189,24 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
 
     assert(response.getErrors(0).getStackTraceCount > 0)
     assert(!response.getErrors(0).getStackTrace(0).hasFileName)
+  }
+
+  test("error framework parameters are set") {
+    val testError = Try(spark.sql("select x")).failed.get.asInstanceOf[AnalysisException]
+    val errorId = UUID.randomUUID().toString()
+
+    SparkConnectService
+      .getOrCreateIsolatedSession(userId, sessionId)
+      .errorIdToError
+      .put(errorId, testError)
+
+    val response = fetchErrorDetails(userId, sessionId, errorId)
+    assert(response.hasRootErrorIdx)
+    assert(response.getRootErrorIdx == 0)
+
+    val sparkThrowableProto = response.getErrors(0).getSparkThrowable
+    assert(sparkThrowableProto.getErrorClass == testError.errorClass.get)
+    assert(sparkThrowableProto.getMessageParametersMap == testError.getMessageParameters)
+    assert(sparkThrowableProto.getSqlState == testError.getSqlState)
   }
 }
