@@ -232,8 +232,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
             "from pyspark.serializers import CloudPickleSerializer; " +
               s"f = open('$path', 'wb');" +
               s"exec(open('$codePath', 'r').read());" +
-              s"ds = $dataSourceName(options=dict());" +
-              "f.write(CloudPickleSerializer().dumps(ds))"),
+              s"dataSourceCls = $dataSourceName;" +
+              "f.write(CloudPickleSerializer().dumps(dataSourceCls))"),
           None,
           "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
         binaryPythonDataSource = Files.readAllBytes(path.toPath)
@@ -425,19 +425,16 @@ object IntegratedUDFTestUtils extends SQLHelper {
 
   def createUserDefinedPythonDataSource(
       name: String,
-      pythonScript: String,
-      schema: StructType): UserDefinedPythonDataSource = {
+      pythonScript: String): UserDefinedPythonDataSource = {
     UserDefinedPythonDataSource(
-      dataSource = SimplePythonFunction(
+      dataSourceCls = SimplePythonFunction(
         command = createPythonDataSource(name, pythonScript),
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
         pythonExec = pythonExec,
         pythonVer = pythonVer,
         broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
-        accumulator = null),
-      schema = schema
-    )
+        accumulator = null))
   }
 
   def createUserDefinedPythonTableFunction(

@@ -33,7 +33,7 @@ object ArtifactUtils {
     // and `normalizedPath` = "/base/file.txt".
     val normalizedPath = concatenatedPath.normalize()
     // Verify that the prefix of the `normalizedPath` starts with `basePath/`.
-    require(normalizedPath != basePath && normalizedPath.startsWith(basePath + "/"))
+    require(normalizedPath != basePath && normalizedPath.startsWith(s"$basePath/"))
     normalizedPath
   }
 

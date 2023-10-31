@@ -831,14 +831,9 @@ abstract class AvroSuite
       val namespace = "org.apache.spark.avro"
       val parameters = Map("recordName" -> name, "recordNamespace" -> namespace)
 
-      val avroDir = tempDir + "/namedAvro"
-      spark.read
-        .format("avro")
-        .load(testAvro)
-        .write
-        .options(parameters)
-        .format("avro")
-        .save(avroDir)
+      val avroDir = s"$tempDir/namedAvro"
+      spark.read.format("avro").load(testAvro)
+        .write.options(parameters).format("avro").save(avroDir)
       checkReloadMatchesSaved(testAvro, avroDir)
 
       // Look at raw file and make sure has namespace info
@@ -1042,7 +1037,7 @@ abstract class AvroSuite
           Row("Munich", 8, new Timestamp(42), Decimal(3.14), arrayOfByte)))
       val cityDataFrame = spark.createDataFrame(cityRDD, testSchema)
 
-      val avroDir = tempDir + "/avro"
+      val avroDir = s"$tempDir/avro"
       cityDataFrame.write.format("avro").save(avroDir)
       assert(spark.read.format("avro").load(avroDir).collect().length == 3)
 
@@ -1075,7 +1070,7 @@ abstract class AvroSuite
         Seq(StructField("_1", DateType, false), StructField("_2", TimestampType, false)))
       val writeDs = Seq((currentDate, currentTime)).toDS()
 
-      val avroDir = tempDir + "/avro"
+      val avroDir = s"$tempDir/avro"
       writeDs.write.format("avro").save(avroDir)
       assert(spark.read.format("avro").load(avroDir).collect().length == 1)
 
@@ -1104,7 +1099,7 @@ abstract class AvroSuite
           StructField("_2", TimestampType, nullable = true)))
       val writeDs = Seq((nullDate, nullTime)).toDS()
 
-      val avroDir = tempDir + "/avro"
+      val avroDir = s"$tempDir/avro"
       writeDs.write.format("avro").save(avroDir)
       val readValues =
         spark.read.schema(schema).format("avro").load(avroDir).as[(Date, Timestamp)].collect()

@@ -1866,7 +1866,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     withTempPath { dir =>
       val count = 10
       val tableName = "spark_25207"
-      val tableDir = dir.getAbsoluteFile + "/table"
+      val tableDir = s"${dir.getAbsoluteFile}/table"
       withTable(tableName) {
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
           spark.range(count).selectExpr("id as A", "id as B", "id as b")

@@ -2231,16 +2231,18 @@ case class Levenshtein(
     val resultCode = s"${ev.value} = ${leftGen.value}.levenshteinDistance(" +
       s"${rightGen.value}, ${thresholdGen.value});"
     if (nullable) {
-      val nullSafeEval = leftGen.code + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
-        rightGen.code + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
-          thresholdGen.code + ctx.nullSafeExec(thresholdExpr.nullable, thresholdGen.isNull) {
-            s"""
-              ${ev.isNull} = false;
-              $resultCode
-             """
+      val nullSafeEval =
+        leftGen.code.toString + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
+          rightGen.code.toString + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
+            thresholdGen.code.toString +
+              ctx.nullSafeExec(thresholdExpr.nullable, thresholdGen.isNull) {
+                s"""
+                  ${ev.isNull} = false;
+                  $resultCode
+                 """
+              }
           }
         }
-      }
       ev.copy(code = code"""
         boolean ${ev.isNull} = true;
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -2259,14 +2261,15 @@ case class Levenshtein(
     val rightGen = children(1).genCode(ctx)
     val resultCode = s"${ev.value} = ${leftGen.value}.levenshteinDistance(${rightGen.value});"
     if (nullable) {
-      val nullSafeEval = leftGen.code + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
-        rightGen.code + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
-          s"""
-            ${ev.isNull} = false;
-            $resultCode
-           """
+      val nullSafeEval =
+        leftGen.code.toString + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
+          rightGen.code.toString + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
+            s"""
+              ${ev.isNull} = false;
+              $resultCode
+             """
+          }
         }
-      }
       ev.copy(code = code"""
         boolean ${ev.isNull} = true;
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -2573,7 +2576,7 @@ object Decode {
             default = search
           }
         }
-        CaseWhen(branches.seq.toSeq, default)
+        CaseWhen(branches.toSeq, default)
     }
   }
 }

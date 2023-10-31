@@ -359,36 +359,31 @@ class SQLQueryTestSuite
         testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }
-    } else {
-      testCase match {
-        case udfTestCase: UDFTest
-            if udfTestCase.udf.isInstanceOf[TestPythonUDF] && !shouldTestPythonUDFs =>
-          ignore(
-            s"${testCase.name} is skipped because " +
-              s"[$pythonExec] and/or pyspark were not available.") {
-            /* Do nothing */
-          }
-        case udfTestCase: UDFTest
-            if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && !shouldTestPandasUDFs =>
-          ignore(
-            s"${testCase.name} is skipped because pyspark," +
-              s"pandas and/or pyarrow were not available in [$pythonExec].") {
-            /* Do nothing */
-          }
-        case udfTestCase: UDFTest
-            if udfTestCase.udf.isInstanceOf[TestGroupedAggPandasUDF] &&
-              !shouldTestPandasUDFs =>
-          ignore(
-            s"${testCase.name} is skipped because pyspark," +
-              s"pandas and/or pyarrow were not available in [$pythonExec].") {
-            /* Do nothing */
-          }
-        case _ =>
-          // Create a test case to run this case.
-          test(testCase.name) {
-            runSqlTestCase(testCase, listTestCases)
-          }
-      }
+    } else testCase match {
+      case udfTestCase: SQLQueryTestSuite#UDFTest
+          if udfTestCase.udf.isInstanceOf[TestPythonUDF] && !shouldTestPythonUDFs =>
+        ignore(s"${testCase.name} is skipped because " +
+          s"[$pythonExec] and/or pyspark were not available.") {
+          /* Do nothing */
+        }
+      case udfTestCase: SQLQueryTestSuite#UDFTest
+          if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && !shouldTestPandasUDFs =>
+        ignore(s"${testCase.name} is skipped because pyspark," +
+          s"pandas and/or pyarrow were not available in [$pythonExec].") {
+          /* Do nothing */
+        }
+      case udfTestCase: SQLQueryTestSuite#UDFTest
+          if udfTestCase.udf.isInstanceOf[TestGroupedAggPandasUDF] &&
+            !shouldTestPandasUDFs =>
+        ignore(s"${testCase.name} is skipped because pyspark," +
+          s"pandas and/or pyarrow were not available in [$pythonExec].") {
+          /* Do nothing */
+        }
+      case _ =>
+        // Create a test case to run this case.
+        test(testCase.name) {
+          runSqlTestCase(testCase, listTestCases)
+        }
     }
   }
 
@@ -553,15 +548,15 @@ class SQLQueryTestSuite
     val localSparkSession = spark.newSession()
 
     testCase match {
-      case udfTestCase: UDFTest =>
+      case udfTestCase: SQLQueryTestSuite#UDFTest =>
         registerTestUDF(udfTestCase.udf, localSparkSession)
-      case udtfTestCase: UDTFSetTest =>
+      case udtfTestCase: SQLQueryTestSuite#UDTFSetTest =>
         registerTestUDTFs(udtfTestCase.udtfSet, localSparkSession)
       case _ =>
     }
 
     testCase match {
-      case _: PgSQLTest =>
+      case _: SQLQueryTestSuite#PgSQLTest =>
         // booleq/boolne used by boolean.sql
         localSparkSession.udf.register("booleq", (b1: Boolean, b2: Boolean) => b1 == b2)
         localSparkSession.udf.register("boolne", (b1: Boolean, b2: Boolean) => b1 != b2)
@@ -569,11 +564,10 @@ class SQLQueryTestSuite
         localSparkSession.udf.register("vol", (s: String) => s)
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
         localSparkSession.conf.set(SQLConf.LEGACY_INTERVAL_ENABLED.key, true)
-      case _: AnsiTest =>
+      case _: SQLQueryTestSuite#AnsiTest =>
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
-      case _: TimestampNTZTest =>
-        localSparkSession.conf.set(
-          SQLConf.TIMESTAMP_TYPE.key,
+      case _: SQLQueryTestSuite#TimestampNTZTest =>
+        localSparkSession.conf.set(SQLConf.TIMESTAMP_TYPE.key,
           TimestampTypes.TIMESTAMP_NTZ.toString)
       case _ =>
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, false)
@@ -632,19 +626,19 @@ class SQLQueryTestSuite
     // See also SPARK-29127. It is difficult to see the version information in the failed test
     // cases so the version information related to Python was also added.
     val clue = testCase match {
-      case udfTestCase: UDFTest
+      case udfTestCase: SQLQueryTestSuite#UDFTest
           if udfTestCase.udf.isInstanceOf[TestPythonUDF] && shouldTestPythonUDFs =>
         s"${testCase.name}${System.lineSeparator()}Python: $pythonVer${System.lineSeparator()}"
-      case udfTestCase: UDFTest
+      case udfTestCase: SQLQueryTestSuite#UDFTest
           if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && shouldTestPandasUDFs =>
         s"${testCase.name}${System.lineSeparator()}" +
           s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
-      case udfTestCase: UDFTest
+      case udfTestCase: SQLQueryTestSuite#UDFTest
           if udfTestCase.udf.isInstanceOf[TestGroupedAggPandasUDF] &&
             shouldTestPandasUDFs =>
         s"${testCase.name}${System.lineSeparator()}" +
           s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
-      case udtfTestCase: UDTFSetTest
+      case udtfTestCase: SQLQueryTestSuite#UDTFSetTest
           if udtfTestCase.udtfSet.udtfs.forall(_.isInstanceOf[TestPythonUDTF]) &&
             shouldTestPythonUDFs =>
         s"${testCase.name}${System.lineSeparator()}Python: $pythonVer${System.lineSeparator()}"

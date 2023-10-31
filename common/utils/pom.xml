@@ -56,6 +56,20 @@
       <artifactId>commons-text</artifactId>
     </dependency>
     <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.ivy</groupId>
+      <artifactId>ivy</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>oro</groupId>
+      <!-- oro is needed by ivy, but only listed as an optional dependency, so we include it. -->
+      <artifactId>oro</artifactId>
+      <version>${oro.version}</version>
+    </dependency>
+    <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
     </dependency>

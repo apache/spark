@@ -20,25 +20,133 @@ package org.apache.spark.sql.execution.python
 import java.io.{DataInputStream, DataOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.Pickler
 
-import org.apache.spark.api.python.{PythonFunction, PythonWorkerUtils, SpecialLengths}
+import org.apache.spark.api.python.{PythonFunction, PythonWorkerUtils, SimplePythonFunction, SpecialLengths}
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.plans.logical.PythonDataSource
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, PythonDataSource}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A user-defined Python data source. This is used by the Python API.
+ *
+ * @param dataSourceCls The Python data source class.
  */
-case class UserDefinedPythonDataSource(
-    dataSource: PythonFunction,
-    schema: StructType) {
-  def apply(session: SparkSession): DataFrame = {
-    val source = PythonDataSource(dataSource, schema, output = toAttributes(schema))
-    Dataset.ofRows(session, source)
+case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
+
+  def builder(
+      sparkSession: SparkSession,
+      provider: String,
+      paths: Seq[String],
+      userSpecifiedSchema: Option[StructType],
+      options: CaseInsensitiveStringMap): LogicalPlan = {
+
+    val runner = new UserDefinedPythonDataSourceRunner(
+      dataSourceCls, provider, paths, userSpecifiedSchema, options)
+
+    val result = runner.runInPython()
+    val pickledDataSourceInstance = result.dataSource
+
+    val dataSource = SimplePythonFunction(
+      command = pickledDataSourceInstance,
+      envVars = dataSourceCls.envVars,
+      pythonIncludes = dataSourceCls.pythonIncludes,
+      pythonExec = dataSourceCls.pythonExec,
+      pythonVer = dataSourceCls.pythonVer,
+      broadcastVars = dataSourceCls.broadcastVars,
+      accumulator = dataSourceCls.accumulator)
+    val schema = result.schema
+
+    PythonDataSource(dataSource, schema, output = toAttributes(schema))
+  }
+
+  def apply(
+      sparkSession: SparkSession,
+      provider: String,
+      paths: Seq[String] = Seq.empty,
+      userSpecifiedSchema: Option[StructType] = None,
+      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty): DataFrame = {
+    val plan = builder(sparkSession, provider, paths, userSpecifiedSchema, options)
+    Dataset.ofRows(sparkSession, plan)
+  }
+}
+
+/**
+ * Used to store the result of creating a Python data source in the Python process.
+ */
+case class PythonDataSourceCreationResult(
+    dataSource: Array[Byte],
+    schema: StructType)
+
+/**
+ * A runner used to create a Python data source in a Python process and return the result.
+ */
+class UserDefinedPythonDataSourceRunner(
+    dataSourceCls: PythonFunction,
+    provider: String,
+    paths: Seq[String],
+    userSpecifiedSchema: Option[StructType],
+    options: CaseInsensitiveStringMap)
+  extends PythonPlannerRunner[PythonDataSourceCreationResult](dataSourceCls) {
+
+  override val workerModule = "pyspark.sql.worker.create_data_source"
+
+  override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
+    // Send python data source
+    PythonWorkerUtils.writePythonFunction(dataSourceCls, dataOut)
+
+    // Send the provider name
+    PythonWorkerUtils.writeUTF(provider, dataOut)
+
+    // Send the paths
+    dataOut.writeInt(paths.length)
+    paths.foreach(PythonWorkerUtils.writeUTF(_, dataOut))
+
+    // Send the user-specified schema, if provided
+    dataOut.writeBoolean(userSpecifiedSchema.isDefined)
+    userSpecifiedSchema.map(_.json).foreach(PythonWorkerUtils.writeUTF(_, dataOut))
+
+    // Send the options
+    dataOut.writeInt(options.size)
+    options.entrySet.asScala.foreach { e =>
+      PythonWorkerUtils.writeUTF(e.getKey, dataOut)
+      PythonWorkerUtils.writeUTF(e.getValue, dataOut)
+    }
+  }
+
+  override protected def receiveFromPython(
+      dataIn: DataInputStream): PythonDataSourceCreationResult = {
+    // Receive the pickled data source or an exception raised in Python worker.
+    val length = dataIn.readInt()
+    if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryCompilationErrors.failToPlanDataSourceError(
+        action = "create", tpe = "instance", msg = msg)
+    }
+
+    // Receive the pickled data source.
+    val pickledDataSourceInstance: Array[Byte] = PythonWorkerUtils.readBytes(length, dataIn)
+
+    // Receive the schema.
+    val isDDLString = dataIn.readInt()
+    val schemaStr = PythonWorkerUtils.readUTF(dataIn)
+    val schema = if (isDDLString == 1) {
+      DataType.fromDDL(schemaStr)
+    } else {
+      DataType.fromJson(schemaStr)
+    }
+    if (!schema.isInstanceOf[StructType]) {
+      throw QueryCompilationErrors.schemaIsNotStructTypeError(schemaStr, schema)
+    }
+
+    PythonDataSourceCreationResult(
+      dataSource = pickledDataSourceInstance,
+      schema = schema.asInstanceOf[StructType])
   }
 }
 
@@ -66,7 +174,8 @@ class UserDefinedPythonDataSourceReadRunner(
     val length = dataIn.readInt()
     if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryCompilationErrors.failToPlanDataSourceError("read", msg)
+      throw QueryCompilationErrors.failToPlanDataSourceError(
+        action = "plan", tpe = "read", msg = msg)
     }
 
     // Receive the pickled 'read' function.
