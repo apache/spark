@@ -1581,7 +1581,7 @@ class BaseUDTFTestsMixin:
 
         with self.assertRaisesRegex(
             AnalysisException,
-            "static 'analyze' method expects a result of type pyspark.sql.udtf.AnalyzeResult, "
+            "'analyze' method expects a result of type pyspark.sql.udtf.AnalyzeResult, "
             "but instead this method returned a value of type: "
             "<class 'pyspark.sql.types.StringType'>",
         ):
