@@ -582,7 +582,7 @@ class SparkThrowableSuite extends SparkFunSuite {
         |}""".stripMargin)
 
     class TestQueryContext2 extends QueryContext {
-      override val contextType = QueryContextType.Dataset
+      override val contextType = QueryContextType.DataFrame
       override def objectName: String = throw new UnsupportedOperationException
       override def objectType: String = throw new UnsupportedOperationException
       override def startIndex: Int = throw new UnsupportedOperationException

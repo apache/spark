@@ -123,7 +123,7 @@ private[spark] object SparkThrowableHelper {
                   val stopIndex = c.stopIndex() + 1
                   if (stopIndex > 0) g.writeNumberField("stopIndex", stopIndex)
                   g.writeStringField("fragment", c.fragment())
-                case QueryContextType.Dataset =>
+                case QueryContextType.DataFrame =>
                   g.writeStringField("fragment", c.fragment())
                   g.writeStringField("callSite", c.callSite())
               }

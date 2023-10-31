@@ -377,7 +377,7 @@ abstract class SparkFunSuite
           "Invalid stopIndex of a query context. Actual:" + actual.toString)
         assert(actual.fragment() === expected.fragment,
           "Invalid fragment of a query context. Actual:" + actual.toString)
-      } else if (actual.contextType() == QueryContextType.Dataset) {
+      } else if (actual.contextType() == QueryContextType.DataFrame) {
         assert(actual.fragment() === expected.fragment,
           "Invalid code fragment of a query context. Actual:" + actual.toString)
         assert(actual.callSite().matches(expected.callSitePattern),
@@ -487,7 +487,7 @@ abstract class SparkFunSuite
     }
 
     def apply(fragment: String, callSitePattern: String): ExpectedContext = {
-      new ExpectedContext(QueryContextType.Dataset, "", "", -1, -1, fragment, callSitePattern)
+      new ExpectedContext(QueryContextType.DataFrame, "", "", -1, -1, fragment, callSitePattern)
     }
   }
 

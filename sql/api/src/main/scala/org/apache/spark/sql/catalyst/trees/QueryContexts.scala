@@ -137,7 +137,7 @@ case class SQLQueryContext(
 case class DatasetQueryContext(
     override val fragment: String,
     override val callSite: String) extends QueryContext {
-  override val contextType = QueryContextType.Dataset
+  override val contextType = QueryContextType.DataFrame
 
   override def objectType: String = throw new UnsupportedOperationException
   override def objectName: String = throw new UnsupportedOperationException

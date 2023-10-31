@@ -27,5 +27,5 @@ import org.apache.spark.annotation.Evolving;
 @Evolving
 public enum QueryContextType {
     SQL,
-    Dataset
+    DataFrame
 }

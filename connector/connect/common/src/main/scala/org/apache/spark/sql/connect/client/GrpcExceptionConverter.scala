@@ -325,7 +325,7 @@ private[client] object GrpcExceptionConverter {
       new QueryContext {
         override def contextType(): QueryContextType = queryCtx.getContextType match {
           case FetchErrorDetailsResponse.QueryContext.ContextType.DATASET =>
-            QueryContextType.Dataset
+            QueryContextType.DataFrame
           case _ => QueryContextType.SQL
         }
         override def objectType(): String = queryCtx.getObjectType
