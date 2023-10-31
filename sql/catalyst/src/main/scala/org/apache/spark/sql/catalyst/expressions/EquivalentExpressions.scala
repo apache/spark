@@ -191,7 +191,7 @@ class EquivalentExpressions(
     val skip = useCount == 0 || expr.isInstanceOf[LeafExpression]
 
     if (!skip && !updateExprInMap(expr, map, useCount)) {
-      val uc = useCount.signum
+      val uc = useCount.sign
       childrenToRecurse(expr).foreach(updateExprTree(_, map, uc))
       commonChildrenToRecurse(expr).filter(_.nonEmpty).foreach(updateCommonExprs(_, map, uc))
     }
