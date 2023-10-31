@@ -247,16 +247,6 @@ object SparkBuild extends PomBuild {
         "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.streaming.kafka010.KafkaRDDSuite:s",
         // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
         "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
-        // SPARK-35496 Upgrade Scala to 2.13.7 and suppress:
-        // 1. `The outer reference in this type test cannot be checked at run time`
-        // 2. `the type test for pattern TypeA cannot be checked at runtime because it
-        //    has type parameters eliminated by erasure`
-        // 3. `abstract type TypeA in type pattern Seq[TypeA] (the underlying of
-        //    Seq[TypeA]) is unchecked since it is eliminated by erasure`
-        // 4. `fruitless type test: a value of TypeA cannot also be a TypeB`
-        "-Wconf:cat=unchecked&msg=outer reference:s",
-        "-Wconf:cat=unchecked&msg=eliminated by erasure:s",
-        "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s",
         // SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
         "-Wconf:msg=Implicit definition should have explicit type:s",
         // SPARK-45331 Upgrade Scala to 2.13.12 and suppress "In Scala 2, symbols inherited
