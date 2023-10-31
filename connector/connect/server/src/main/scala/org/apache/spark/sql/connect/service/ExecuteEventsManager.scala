@@ -275,6 +275,7 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
             is not Started for event $eventStatus
             """)
         }
+      case _ => // do nothing
     }
     _status = eventStatus
   }
