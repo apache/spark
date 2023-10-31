@@ -22,9 +22,8 @@ import java.{lang => jl, util => ju}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
+import org.apache.spark.sql.catalyst.expressions.aggregate.{BloomFilterAggregate, CountMinSketchAgg}
 import org.apache.spark.sql.execution.stat._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
@@ -483,7 +482,9 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 2.0.0
    */
   def countMinSketch(col: Column, depth: Int, width: Int, seed: Int): CountMinSketch = {
-    countMinSketch(col, CountMinSketch.create(depth, width, seed))
+    val eps = 2.0 / width
+    val confidence = 1 - 1 / Math.pow(2, depth)
+    countMinSketch(col, eps, confidence, seed)
   }
 
   /**
@@ -497,35 +498,16 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 2.0.0
    */
   def countMinSketch(col: Column, eps: Double, confidence: Double, seed: Int): CountMinSketch = {
-    countMinSketch(col, CountMinSketch.create(eps, confidence, seed))
-  }
-
-  private def countMinSketch(col: Column, zero: CountMinSketch): CountMinSketch = {
-    val singleCol = df.select(col)
-    val colType = singleCol.schema.head.dataType
-
-    val updater: (CountMinSketch, InternalRow) => Unit = colType match {
-      // For string type, we can get bytes of our `UTF8String` directly, and call the `addBinary`
-      // instead of `addString` to avoid unnecessary conversion.
-      case StringType => (sketch, row) => sketch.addBinary(row.getUTF8String(0).getBytes)
-      case ByteType => (sketch, row) => sketch.addLong(row.getByte(0))
-      case ShortType => (sketch, row) => sketch.addLong(row.getShort(0))
-      case IntegerType => (sketch, row) => sketch.addLong(row.getInt(0))
-      case LongType => (sketch, row) => sketch.addLong(row.getLong(0))
-      case _ =>
-        throw new IllegalArgumentException(
-          s"Count-min Sketch only supports string type and integral types, " +
-            s"and does not support type $colType."
-        )
-    }
-
-    singleCol.queryExecution.toRdd.aggregate(zero)(
-      (sketch: CountMinSketch, row: InternalRow) => {
-        updater(sketch, row)
-        sketch
-      },
-      (sketch1, sketch2) => sketch1.mergeInPlace(sketch2)
+    val countMinSketchAgg = new CountMinSketchAgg(
+      col.expr,
+      Literal(eps, DoubleType),
+      Literal(confidence, DoubleType),
+      Literal(seed, IntegerType)
     )
+    val bytes = df.select(
+      Column(countMinSketchAgg.toAggregateExpression(false))
+    ).head().getAs[Array[Byte]](0)
+    countMinSketchAgg.deserialize(bytes)
   }
 
   /**

@@ -1287,6 +1287,31 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     assert(result.select("decoded").head().get(0) === Row(null, null))
   }
 
+  test("from_xml to to_xml round trip") {
+    val xmlData = Seq(
+      "<person><age>100</age><name>Alice</name></person>",
+      "<person><age>100</age><name>Alice</name></person>",
+      "<person><age>100</age><name>Alice</name></person>")
+    val df = xmlData.toDF("xmlString")
+    val xmlSchema = schema_of_xml(xmlData.head)
+
+    val df2 = df.withColumn("parsed",
+      from_xml(df.col("xmlString"), xmlSchema))
+    val df3 = df2.select(to_xml($"parsed", Map("rowTag" -> "person").asJava))
+    val xmlResult = df3.collect().map(_.getString(0).replaceAll("\\s+", ""))
+    assert(xmlData.sortBy(_.toString) === xmlResult.sortBy(_.toString))
+  }
+
+  test("to_xml to from_xml round trip") {
+    val df = spark.read.option("rowTag", "ROW").xml(getTestResourcePath(resDir + "cars.xml"))
+    val df1 = df.select(to_xml(struct("*")).as("xmlString"))
+    val schema = schema_of_xml(df1.select("xmlString").head().getString(0))
+    val df2 = df1.select(from_xml($"xmlString", schema).as("fromXML"))
+    val df3 = df2.select(col("fromXML.*"))
+    assert(df3.collect().length === 3)
+    checkAnswer(df3, df)
+  }
+
   test("decimals with scale greater than precision") {
     val spark = this.spark;
     import spark.implicits._

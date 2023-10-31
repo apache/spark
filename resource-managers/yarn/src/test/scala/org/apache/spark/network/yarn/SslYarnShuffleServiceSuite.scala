@@ -28,7 +28,7 @@ class SslYarnShuffleServiceWithRocksDBBackendSuite
   override def beforeEach(): Unit = {
     super.beforeEach()
     // Same as SSLTestUtils.updateWithSSLConfig(), which is not available to import here.
-    SslSampleConfigs.createDefaultConfigMap().entrySet().
+    SslSampleConfigs.createDefaultConfigMapForRpcNamespace().entrySet().
       forEach(entry => yarnConfig.set(entry.getKey, entry.getValue))
   }
 }

@@ -1222,6 +1222,12 @@ For more details see [INVALID_SUBQUERY_EXPRESSION](sql-error-conditions-invalid-
 
 Cannot create the persistent object `<objName>` of the type `<obj>` because it references to the temporary object `<tempObjName>` of the type `<tempObj>`. Please make the temporary object `<tempObjName>` persistent, or make the persistent object `<objName>` temporary.
 
+### INVALID_TIME_TRAVEL_SPEC
+
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot specify both version and timestamp when time travelling the table.
+
 ### [INVALID_TIME_TRAVEL_TIMESTAMP_EXPR](sql-error-conditions-invalid-time-travel-timestamp-expr-error-class.html)
 
 [SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1359,6 +1365,12 @@ For more details see [MISSING_ATTRIBUTES](sql-error-conditions-missing-attribute
 [SQLSTATE: 42803](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses.
+
+### MULTIPLE_TIME_TRAVEL_SPEC
+
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot specify time travel in both the time travel clause and options.
 
 ### MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION
 

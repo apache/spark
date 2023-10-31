@@ -38,13 +38,13 @@ import org.apache.spark.TestUtils
 import org.apache.spark.TestUtils.JavaSourceFromString
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.SparkSubmit._
-import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 import org.apache.spark.deploy.history.EventLogFileReader
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
-import org.apache.spark.util.{CommandLineUtils, DependencyUtils, ResetSystemProperties, Utils}
+import org.apache.spark.util.{CommandLineUtils, DependencyUtils, IvyTestUtils, ResetSystemProperties, Utils}
+import org.apache.spark.util.MavenUtils.MavenCoordinate
 
 trait TestPrematureExit {
   suite: SparkFunSuite =>

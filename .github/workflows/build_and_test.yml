@@ -982,6 +982,7 @@ jobs:
         distribution: zulu
         java-version: ${{ inputs.java }}
     - name: Run tests
+      env: ${{ fromJSON(inputs.envs) }}
       run: |
         ./dev/run-tests --parallelism 1 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
     - name: Upload test results to report

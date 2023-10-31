@@ -507,7 +507,7 @@ class RocksDB(
       "put" -> DB_WRITE,
       "compaction" -> COMPACTION_TIME
     ).toMap
-    val nativeOpsLatencyMicros = nativeOpsHistograms.mapValues { typ =>
+    val nativeOpsLatencyMicros = nativeOpsHistograms.view.mapValues { typ =>
       RocksDBNativeHistogram(nativeStats.getHistogramData(typ))
     }
     val nativeOpsMetricTickers = Seq(
@@ -530,7 +530,7 @@ class RocksDB(
       /** Number of bytes written during flush */
       "totalBytesWrittenByFlush" -> FLUSH_WRITE_BYTES
     ).toMap
-    val nativeOpsMetrics = nativeOpsMetricTickers.mapValues { typ =>
+    val nativeOpsMetrics = nativeOpsMetricTickers.view.mapValues { typ =>
       nativeStats.getTickerCount(typ)
     }
 

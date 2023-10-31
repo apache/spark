@@ -21,6 +21,7 @@ import java.net.URI
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
+import scala.collection.immutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 
@@ -39,7 +40,6 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder
 import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
-import org.apache.spark.sql.connect.client.util.Cleaner
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{CatalogImpl, SqlApiConf}
 import org.apache.spark.sql.streaming.DataStreamReader
@@ -66,7 +66,6 @@ import org.apache.spark.sql.types.StructType
  */
 class SparkSession private[sql] (
     private[sql] val client: SparkConnectClient,
-    private val cleaner: Cleaner,
     private val planIdGenerator: AtomicLong)
     extends Serializable
     with Closeable
@@ -249,7 +248,7 @@ class SparkSession private[sql] (
         proto.SqlCommand
           .newBuilder()
           .setSql(sqlText)
-          .addAllPosArguments(args.map(lit(_).expr).toIterable.asJava)))
+          .addAllPosArguments(immutable.ArraySeq.unsafeWrapArray(args.map(lit(_).expr)).asJava)))
     val plan = proto.Plan.newBuilder().setCommand(cmd)
     // .toBuffer forces that the iterator is consumed and closed
     val responseSeq = client.execute(plan.build()).toBuffer.toSeq
@@ -308,7 +307,7 @@ class SparkSession private[sql] (
           proto.SqlCommand
             .newBuilder()
             .setSql(sqlText)
-            .putAllNamedArguments(args.asScala.mapValues(lit(_).expr).toMap.asJava)))
+            .putAllNamedArguments(args.asScala.view.mapValues(lit(_).expr).toMap.asJava)))
       val plan = proto.Plan.newBuilder().setCommand(cmd)
       // .toBuffer forces that the iterator is consumed and closed
       val responseSeq = client.execute(plan.build()).toBuffer.toSeq
@@ -536,7 +535,6 @@ class SparkSession private[sql] (
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = client.execute(plan)
     val result = new SparkResult(value, allocator, encoder, timeZoneId)
-    cleaner.register(result)
     result
   }
 
@@ -579,7 +577,7 @@ class SparkSession private[sql] (
   /**
    * Add a single artifact to the client session.
    *
-   * Currently only local files with extensions .jar and .class are supported.
+   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
    *
    * @since 3.4.0
    */
@@ -589,7 +587,7 @@ class SparkSession private[sql] (
   /**
    * Add one or more artifacts to the session.
    *
-   * Currently only local files with extensions .jar and .class are supported.
+   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
    *
    * @since 3.4.0
    */
@@ -774,7 +772,7 @@ object SparkSession extends Logging {
    * Create a new [[SparkSession]] based on the connect client [[Configuration]].
    */
   private[sql] def create(configuration: Configuration): SparkSession = {
-    new SparkSession(configuration.toSparkConnectClient, cleaner, planIdGenerator)
+    new SparkSession(configuration.toSparkConnectClient, planIdGenerator)
   }
 
   /**
@@ -794,12 +792,6 @@ object SparkSession extends Logging {
    * @since 3.4.0
    */
   def builder(): Builder = new Builder()
-
-  private[sql] lazy val cleaner = {
-    val cleaner = new Cleaner
-    cleaner.start()
-    cleaner
-  }
 
   class Builder() extends Logging {
     // Initialize the connection string of the Spark Connect client builder from SPARK_REMOTE
@@ -911,7 +903,7 @@ object SparkSession extends Logging {
 
     private def tryCreateSessionFromClient(): Option[SparkSession] = {
       if (client != null) {
-        Option(new SparkSession(client, cleaner, planIdGenerator))
+        Option(new SparkSession(client, planIdGenerator))
       } else {
         None
       }

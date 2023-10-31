@@ -343,7 +343,7 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
       val columnNames = crosstab.schema.fieldNames
       assert(columnNames(0) === "a_b")
       // reduce by key
-      val expected = data.map(t => (t, 1)).groupBy(_._1).mapValues(_.length)
+      val expected = data.map(t => (t, 1)).groupBy(_._1).view.mapValues(_.length)
       val rows = crosstab.collect()
       rows.foreach { row =>
         val i = row.getString(0).toInt
@@ -508,7 +508,7 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
     assert(sketch4.relativeError() === 0.001 +- 1e04)
     assert(sketch4.confidence() === 0.99 +- 5e-3)
 
-    intercept[IllegalArgumentException] {
+    intercept[AnalysisException] {
       df.select($"id" cast DoubleType as "id")
         .stat
         .countMinSketch($"id", depth = 10, width = 20, seed = 42)

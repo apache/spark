@@ -73,10 +73,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
         sHolder.builder, normalizedFiltersWithoutSubquery)
       val pushedFiltersStr = if (pushedFilters.isLeft) {
-        pushedFilters.left.get.mkString(", ")
+        pushedFilters.swap
+          .getOrElse(throw new NoSuchElementException("The left node doesn't have pushedFilters"))
+          .mkString(", ")
       } else {
-        sHolder.pushedPredicates = pushedFilters.right.get
-        pushedFilters.right.get.mkString(", ")
+        sHolder.pushedPredicates = pushedFilters
+          .getOrElse(throw new NoSuchElementException("The right node doesn't have pushedFilters"))
+        sHolder.pushedPredicates.mkString(", ")
       }
 
       val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery

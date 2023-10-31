@@ -101,7 +101,7 @@ object Analytics {
 
         if (!outFname.isEmpty) {
           println(s"Saving pageranks of pages to $outFname")
-          pr.map { case (id, r) => id + "\t" + r }.saveAsTextFile(outFname)
+          pr.map { case (id, r) => s"$id\t$r" }.saveAsTextFile(outFname)
         }
 
         sc.stop()

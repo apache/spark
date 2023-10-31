@@ -31,8 +31,8 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.api.r.RUtils
-import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
-import org.apache.spark.util.{ResetSystemProperties, Utils}
+import org.apache.spark.util.{IvyTestUtils, ResetSystemProperties, Utils}
+import org.apache.spark.util.MavenUtils.MavenCoordinate
 
 class RPackageUtilsSuite
   extends SparkFunSuite
