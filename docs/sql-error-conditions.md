@@ -431,6 +431,12 @@ For more details see [DATATYPE_MISMATCH](sql-error-conditions-datatype-mismatch-
 
 DataType `<type>` requires a length parameter, for example `<type>`(10). Please specify the length.
 
+### DATA_SOURCE_ALREADY_EXISTS
+
+[SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Data source '`<provider>`' already exists in the registry. Please use a different name for the new data source.
+
 ### DATA_SOURCE_NOT_FOUND
 
 [SQLSTATE: 42K02](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1685,7 +1691,7 @@ Protobuf type not yet supported: `<protobufType>`.
 
 [SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
 
-Failed to plan Python data source `<type>` in Python: `<msg>`
+Failed to `<action>` Python data source `<type>` in Python: `<msg>`
 
 ### RECURSIVE_PROTOBUF_SCHEMA
 
