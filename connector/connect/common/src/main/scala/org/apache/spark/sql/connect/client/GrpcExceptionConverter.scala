@@ -324,7 +324,7 @@ private[client] object GrpcExceptionConverter {
     val queryContext = error.getSparkThrowable.getQueryContextsList.asScala.map { queryCtx =>
       new QueryContext {
         override def contextType(): QueryContextType = queryCtx.getContextType match {
-          case FetchErrorDetailsResponse.QueryContext.ContextType.DATASET =>
+          case FetchErrorDetailsResponse.QueryContext.ContextType.DATAFRAME =>
             QueryContextType.DataFrame
           case _ => QueryContextType.SQL
         }

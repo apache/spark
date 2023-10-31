@@ -826,7 +826,7 @@ message FetchErrorDetailsResponse {
     // The type of this query context.
     enum ContextType {
       SQL = 0;
-      DATASET = 1;
+      DATAFRAME = 1;
     }
     ContextType context_type = 10;
 
