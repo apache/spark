@@ -20,7 +20,6 @@ package org.apache.spark.sql.connect.utils
 import java.util.UUID
 
 import scala.annotation.tailrec
-import scala.collection.immutable
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -43,6 +42,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.{ExecuteEventsManager, SessionHolder, SparkConnectService}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.ArrayImplicits._
 
 private[connect] object ErrorUtils extends Logging {
 
@@ -91,21 +91,21 @@ private[connect] object ErrorUtils extends Logging {
 
       if (serverStackTraceEnabled) {
         builder.addAllStackTrace(
-          immutable.ArraySeq
-            .unsafeWrapArray(currentError.getStackTrace
-              .map { stackTraceElement =>
-                val stackTraceBuilder = FetchErrorDetailsResponse.StackTraceElement
-                  .newBuilder()
-                  .setDeclaringClass(stackTraceElement.getClassName)
-                  .setMethodName(stackTraceElement.getMethodName)
-                  .setLineNumber(stackTraceElement.getLineNumber)
+          currentError.getStackTrace
+            .map { stackTraceElement =>
+              val stackTraceBuilder = FetchErrorDetailsResponse.StackTraceElement
+                .newBuilder()
+                .setDeclaringClass(stackTraceElement.getClassName)
+                .setMethodName(stackTraceElement.getMethodName)
+                .setLineNumber(stackTraceElement.getLineNumber)
 
-                if (stackTraceElement.getFileName != null) {
-                  stackTraceBuilder.setFileName(stackTraceElement.getFileName)
-                }
+              if (stackTraceElement.getFileName != null) {
+                stackTraceBuilder.setFileName(stackTraceElement.getFileName)
+              }
 
-                stackTraceBuilder.build()
-              })
+              stackTraceBuilder.build()
+            }
+            .toImmutableArraySeq
             .asJava)
       }
 
