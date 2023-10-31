@@ -264,11 +264,17 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
         is not within statuses $validStatuses for event $eventStatus
         """)
     }
-    if (sessionHolder.eventManager.status != SessionStatus.Started) {
-      throw new IllegalStateException(s"""
-        sessionId: $sessionId with status $sessionStatus
-        is not Started for event $eventStatus
-        """)
+    eventStatus match {
+      case ExecuteStatus.Pending
+           | ExecuteStatus.Started
+           | ExecuteStatus.Analyzed
+           | ExecuteStatus.ReadyForExecution =>
+        if (sessionHolder.eventManager.status != SessionStatus.Started) {
+          throw new IllegalStateException(s"""
+            sessionId: $sessionId with status $sessionStatus
+            is not Started for event $eventStatus
+            """)
+        }
     }
     _status = eventStatus
   }
