@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.benchmark
 
 import java.io.File
-import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 import scala.util.Random
@@ -101,17 +100,19 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     spark.read.json(dir).createOrReplaceTempView("jsonTable")
   }
 
-  val parquetCodec = ParquetCompressionCodec.SNAPPY.name().toLowerCase(Locale.ROOT)
-
   private def saveAsParquetV1Table(df: DataFrameWriter[Row], dir: String): Unit = {
-    df.mode("overwrite").option("compression", parquetCodec).parquet(dir)
+    df.mode("overwrite")
+      .option("compression", ParquetCompressionCodec.SNAPPY.lowerCaseName())
+      .parquet(dir)
     spark.read.parquet(dir).createOrReplaceTempView("parquetV1Table")
   }
 
   private def saveAsParquetV2Table(df: DataFrameWriter[Row], dir: String): Unit = {
     withSQLConf(ParquetOutputFormat.WRITER_VERSION ->
       ParquetProperties.WriterVersion.PARQUET_2_0.toString) {
-      df.mode("overwrite").option("compression", parquetCodec).parquet(dir)
+      df.mode("overwrite")
+        .option("compression", ParquetCompressionCodec.SNAPPY.lowerCaseName())
+        .parquet(dir)
       spark.read.parquet(dir).createOrReplaceTempView("parquetV2Table")
     }
   }

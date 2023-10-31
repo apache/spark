@@ -18,6 +18,7 @@ package org.apache.spark.sql.connect.client
 
 import java.time.DateTimeException
 
+import scala.collection.immutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
@@ -374,7 +375,7 @@ private[client] object GrpcExceptionConverter {
         FetchErrorDetailsResponse.Error
           .newBuilder()
           .setMessage(message)
-          .addAllErrorTypeHierarchy(classes.toIterable.asJava)
+          .addAllErrorTypeHierarchy(immutable.ArraySeq.unsafeWrapArray(classes).asJava)
           .build()))
   }
 }

@@ -708,6 +708,9 @@ private[spark] object UIUtils extends Logging {
 
   private final val ERROR_CLASS_REGEX = """\[(?<errorClass>[A-Z][A-Z_.]+[A-Z])]""".r
 
+  /**
+   * This function works exactly the same as utils.errorSummary(javascript), it shall be
+   * remained the same whichever changed */
   def errorSummary(errorMessage: String): (String, Boolean) = {
     var isMultiline = true
     val maybeErrorClass =

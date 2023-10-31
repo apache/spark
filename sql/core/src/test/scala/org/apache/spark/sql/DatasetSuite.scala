@@ -2651,6 +2651,19 @@ class DatasetSuite extends QueryTest
     assert(ds.count() == 2)
   }
 
+  test("SPARK-45592: Coaleasced shuffle read is not compatible with hash partitioning") {
+    val ee = spark.range(0, 1000000, 1, 5).map(l => (l, l)).toDF()
+      .persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
+    ee.count()
+
+    val minNbrs1 = ee
+      .groupBy("_1").agg(min(col("_2")).as("min_number"))
+      .persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
+
+    val join = ee.join(minNbrs1, "_1")
+    assert(join.count() == 1000000)
+  }
+
   test("SPARK-45022: exact DatasetQueryContext call site") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       val df = Seq(1).toDS()
