@@ -15,16 +15,18 @@
 # limitations under the License.
 #
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterator, Tuple, Union, TYPE_CHECKING
+from typing import final, Any, Dict, Iterator, List, Optional, Tuple, Type, Union, TYPE_CHECKING
 
+from pyspark import since
 from pyspark.sql import Row
 from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType
+    from pyspark.sql.session import SparkSession
 
 
-__all__ = ["DataSource", "DataSourceReader"]
+__all__ = ["DataSource", "DataSourceReader", "DataSourceRegistration"]
 
 
 class DataSource(ABC):
@@ -41,23 +43,35 @@ class DataSource(ABC):
     ``spark.read.format(...).load()`` and save data using ``df.write.format(...).save()``.
     """
 
-    def __init__(self, options: Dict[str, "OptionalPrimitiveType"]):
+    @final
+    def __init__(
+        self,
+        paths: List[str],
+        userSpecifiedSchema: Optional[StructType],
+        options: Dict[str, "OptionalPrimitiveType"],
+    ) -> None:
         """
-        Initializes the data source with user-provided options.
+        Initializes the data source with user-provided information.
 
         Parameters
         ----------
+        paths : list
+            A list of paths to the data source.
+        userSpecifiedSchema : StructType, optional
+            The user-specified schema of the data source.
         options : dict
             A dictionary representing the options for this data source.
 
         Notes
         -----
-        This method should not contain any non-serializable objects.
+        This method should not be overridden.
         """
+        self.paths = paths
+        self.userSpecifiedSchema = userSpecifiedSchema
         self.options = options
 
-    @property
-    def name(self) -> str:
+    @classmethod
+    def name(cls) -> str:
         """
         Returns a string represents the format name of this data source.
 
@@ -66,20 +80,21 @@ class DataSource(ABC):
 
         Examples
         --------
-        >>> def name(self):
+        >>> def name(cls):
         ...     return "my_data_source"
         """
-        return self.__class__.__name__
+        return cls.__name__
 
     def schema(self) -> Union[StructType, str]:
         """
         Returns the schema of the data source.
 
-        It can reference the ``options`` field to infer the data source's schema when
-        users do not explicitly specify it. This method is invoked once when calling
-        ``spark.read.format(...).load()`` to get the schema for a data source read
-        operation. If this method is not implemented, and a user does not provide a
-        schema when reading the data source, an exception will be thrown.
+        It can refer any field initialized in the ``__init__`` method to infer the
+        data source's schema when users do not explicitly specify it. This method is
+        invoked once when calling ``spark.read.format(...).load()`` to get the schema
+        for a data source read operation. If this method is not implemented, and a
+        user does not provide a schema when reading the data source, an exception will
+        be thrown.
 
         Returns
         -------
@@ -212,3 +227,35 @@ class DataSourceReader(ABC):
         ...     yield Row(partition=partition, value=1)
         """
         ...
+
+
+@since(4.0)
+class DataSourceRegistration:
+    """
+    Wrapper for data source registration. This instance can be accessed by
+    :attr:`spark.dataSource`.
+    """
+
+    def __init__(self, sparkSession: "SparkSession"):
+        self.sparkSession = sparkSession
+
+    def register(
+        self,
+        dataSource: Type["DataSource"],
+    ) -> None:
+        """Register a Python user-defined data source.
+
+        Parameters
+        ----------
+        dataSource : type
+            The data source class to be registered. It should be a subclass of DataSource.
+        """
+        from pyspark.sql.udf import _wrap_function
+
+        name = dataSource.name()
+        sc = self.sparkSession.sparkContext
+        # Serialize the data source class.
+        wrapped = _wrap_function(sc, dataSource)
+        assert sc._jvm is not None
+        ds = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonDataSource(wrapped)
+        self.sparkSession._jsparkSession.dataSource().registerPython(name, ds)
