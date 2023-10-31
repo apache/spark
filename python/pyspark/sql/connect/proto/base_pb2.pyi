@@ -2897,13 +2897,13 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         ):  # noqa: F821
             DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
             SQL: FetchErrorDetailsResponse.QueryContext._ContextType.ValueType  # 0
-            DATASET: FetchErrorDetailsResponse.QueryContext._ContextType.ValueType  # 1
+            DATAFRAME: FetchErrorDetailsResponse.QueryContext._ContextType.ValueType  # 1
 
         class ContextType(_ContextType, metaclass=_ContextTypeEnumTypeWrapper):
             """The type of this query context."""
 
         SQL: FetchErrorDetailsResponse.QueryContext.ContextType.ValueType  # 0
-        DATASET: FetchErrorDetailsResponse.QueryContext.ContextType.ValueType  # 1
+        DATAFRAME: FetchErrorDetailsResponse.QueryContext.ContextType.ValueType  # 1
 
         CONTEXT_TYPE_FIELD_NUMBER: builtins.int
         OBJECT_TYPE_FIELD_NUMBER: builtins.int
