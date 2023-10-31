@@ -155,7 +155,7 @@ class AttemptManager:
 class Retrying:
     """
     This class is a point of entry into the retry logic.
-    The class accepts a list of retry policies and applies them in this order:
+    The class accepts a list of retry policies and applies them in given order.
     The first policy accepting an exception will be used.
     """
 
