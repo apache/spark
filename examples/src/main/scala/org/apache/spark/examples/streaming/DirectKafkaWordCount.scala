@@ -71,7 +71,7 @@ object DirectKafkaWordCount {
 
     // Get the lines, split them into words, count the words and print
     val lines = messages.map(_.value)
-    val words = lines.flatMap(_.split(" "))
+    val words = lines.flatMap(_.split("\\s+"))
     val wordCounts = words.map(x => (x, 1L)).reduceByKey(_ + _)
     wordCounts.print()
 

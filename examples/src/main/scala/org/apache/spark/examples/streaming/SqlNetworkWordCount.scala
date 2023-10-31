@@ -55,7 +55,7 @@ object SqlNetworkWordCount {
     // Note that no duplication in storage level only for running locally.
     // Replication necessary in distributed scenario for fault tolerance.
     val lines = ssc.socketTextStream(args(0), args(1).toInt, StorageLevel.MEMORY_AND_DISK_SER)
-    val words = lines.flatMap(_.split(" "))
+    val words = lines.flatMap(_.split("\\s+"))
 
     // Convert RDDs of the words DStream to DataFrame and run SQL query
     words.foreachRDD { (rdd: RDD[String], time: Time) =>

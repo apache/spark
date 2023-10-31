@@ -58,7 +58,7 @@ object StructuredNetworkWordCount {
       .load()
 
     // Split the lines into words
-    val words = lines.as[String].flatMap(_.split(" "))
+    val words = lines.as[String].flatMap(_.split("\\s+"))
 
     // Generate running word count
     val wordCounts = words.groupBy("value").count()

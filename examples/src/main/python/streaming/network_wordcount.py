@@ -38,7 +38,7 @@ if __name__ == "__main__":
     ssc = StreamingContext(sc, 1)
 
     lines = ssc.socketTextStream(sys.argv[1], int(sys.argv[2]))
-    counts = lines.flatMap(lambda line: line.split(" "))\
+    counts = lines.flatMap(lambda line: line.split("\\s+"))\
                   .map(lambda word: (word, 1))\
                   .reduceByKey(lambda a, b: a + b)
     counts.pprint()

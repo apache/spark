@@ -82,7 +82,7 @@ object StructuredNetworkWordCountWindowed {
 
     // Split the lines into words, retaining timestamps
     val words = lines.as[(String, Timestamp)].flatMap(line =>
-      line._1.split(" ").map(word => (word, line._2))
+      line._1.split("\\s+").map(word => (word, line._2))
     ).toDF("word", "timestamp")
 
     // Group the data by window and word and compute the count of each group

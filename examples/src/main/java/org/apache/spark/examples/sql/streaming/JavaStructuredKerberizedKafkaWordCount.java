@@ -115,7 +115,7 @@ public final class JavaStructuredKerberizedKafkaWordCount {
 
     // Generate running word count
     Dataset<Row> wordCounts = lines.flatMap(
-      (FlatMapFunction<String, String>) x -> Arrays.asList(x.split(" ")).iterator(),
+      (FlatMapFunction<String, String>) x -> Arrays.asList(x.split("\\s+")).iterator(),
       Encoders.STRING()).groupBy("value").count();
 
     // Start running the query that prints the running counts to the console

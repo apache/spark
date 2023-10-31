@@ -77,7 +77,7 @@ object StructuredKafkaWordCount {
       .as[String]
 
     // Generate running word count
-    val wordCounts = lines.flatMap(_.split(" ")).groupBy("value").count()
+    val wordCounts = lines.flatMap(_.split("\\s+")).groupBy("value").count()
 
     // Start running the query that prints the running counts to the console
     val query = wordCounts.writeStream

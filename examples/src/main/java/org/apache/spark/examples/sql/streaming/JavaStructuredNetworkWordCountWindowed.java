@@ -86,7 +86,7 @@ public final class JavaStructuredNetworkWordCountWindowed {
       .as(Encoders.tuple(Encoders.STRING(), Encoders.TIMESTAMP()))
       .flatMap((FlatMapFunction<Tuple2<String, Timestamp>, Tuple2<String, Timestamp>>) t -> {
           List<Tuple2<String, Timestamp>> result = new ArrayList<>();
-          for (String word : t._1.split(" ")) {
+          for (String word : t._1.split("\\s+")) {
             result.add(new Tuple2<>(word, t._2));
           }
           return result.iterator();

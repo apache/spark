@@ -61,7 +61,7 @@ public final class JavaStructuredNetworkWordCount {
 
     // Split the lines into words
     Dataset<String> words = lines.as(Encoders.STRING()).flatMap(
-        (FlatMapFunction<String, String>) x -> Arrays.asList(x.split(" ")).iterator(),
+        (FlatMapFunction<String, String>) x -> Arrays.asList(x.split("\\s+")).iterator(),
         Encoders.STRING());
 
     // Generate running word count
