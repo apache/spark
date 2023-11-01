@@ -48,6 +48,8 @@ abstract class QueryStageExec extends LeafExecNode {
    */
   val id: Int
 
+  val reuseSource: Option[Int]
+
   /**
    * The sub-tree of the query plan that belongs to this query stage.
    */
@@ -64,8 +66,6 @@ abstract class QueryStageExec extends LeafExecNode {
   }
 
   protected def doMaterialize(): Future[Any]
-
-  val reuseSource: Option[Int]
 
   /**
    * Returns the runtime statistics after stage materialization.
@@ -122,8 +122,7 @@ abstract class QueryStageExec extends LeafExecNode {
       maxFields: Int,
       printNodeId: Boolean,
       indent: Int = 0): Unit = {
-    super.generateTreeString(
-      depth,
+    super.generateTreeString(depth,
       lastChildren,
       append,
       verbose,
@@ -134,15 +133,7 @@ abstract class QueryStageExec extends LeafExecNode {
       indent)
     lastChildren.add(true)
     plan.generateTreeString(
-      depth + 1,
-      lastChildren,
-      append,
-      verbose,
-      "",
-      false,
-      maxFields,
-      printNodeId,
-      indent)
+      depth + 1, lastChildren, append, verbose, "", false, maxFields, printNodeId, indent)
     lastChildren.remove(lastChildren.size() - 1)
   }
 
@@ -154,10 +145,10 @@ abstract class QueryStageExec extends LeafExecNode {
 
 /**
  * There are 2 kinds of exchange query stages:
- *   1. Shuffle query stage. This stage materializes its output to shuffle files, and Spark
- *      launches another job to execute the further operators. 2. Broadcast query stage. This
- *      stage materializes its output to an array in driver JVM. Spark broadcasts the array before
- *      executing the further operators.
+ *   1. Shuffle query stage. This stage materializes its output to shuffle files, and Spark launches
+ *      another job to execute the further operators.
+ *   2. Broadcast query stage. This stage materializes its output to an array in driver JVM. Spark
+ *      broadcasts the array before executing the further operators.
  */
 abstract class ExchangeQueryStageExec extends QueryStageExec {
 
@@ -179,19 +170,15 @@ abstract class ExchangeQueryStageExec extends QueryStageExec {
 /**
  * A shuffle query stage whose child is a [[ShuffleExchangeLike]] or [[ReusedExchangeExec]].
  *
- * @param id
- *   the query stage id.
- * @param plan
- *   the underlying plan.
- * @param _canonicalized
- *   the canonicalized plan before applying query stage optimizer rules.
+ * @param id the query stage id.
+ * @param plan the underlying plan.
+ * @param _canonicalized the canonicalized plan before applying query stage optimizer rules.
  */
 case class ShuffleQueryStageExec(
     override val id: Int,
     override val plan: SparkPlan,
     override val _canonicalized: SparkPlan,
-    override val reuseSource: Option[Int] = None)
-    extends ExchangeQueryStageExec {
+    override val reuseSource: Option[Int] = None) extends ExchangeQueryStageExec {
 
   @transient val shuffle = plan match {
     case s: ShuffleExchangeLike => s
@@ -207,13 +194,11 @@ case class ShuffleQueryStageExec(
   override protected def doMaterialize(): Future[Any] = shuffleFuture
 
   override def newReuseInstance(
-      newStageId: Int,
-      newOutput: Seq[Attribute]): ExchangeQueryStageExec = {
+      newStageId: Int, newOutput: Seq[Attribute]): ExchangeQueryStageExec = {
     val reuse = ShuffleQueryStageExec(
       newStageId,
       ReusedExchangeExec(newOutput, shuffle),
-      _canonicalized,
-      Option(this.id))
+      _canonicalized, Option(this.id))
     reuse._resultOption = this._resultOption
     reuse
   }
@@ -225,8 +210,8 @@ case class ShuffleQueryStageExec(
   }
 
   /**
-   * Returns the Option[MapOutputStatistics]. If the shuffle map stage has no partition, this
-   * method returns None, as there is no map statistics.
+   * Returns the Option[MapOutputStatistics]. If the shuffle map stage has no partition,
+   * this method returns None, as there is no map statistics.
    */
   def mapStats: Option[MapOutputStatistics] = {
     assert(resultOption.get().isDefined, s"${getClass.getSimpleName} should already be ready")
@@ -240,20 +225,16 @@ case class ShuffleQueryStageExec(
 /**
  * A broadcast query stage whose child is a [[BroadcastExchangeLike]] or [[ReusedExchangeExec]].
  *
- * @param id
- *   the query stage id.
- * @param plan
- *   the underlying plan.
- * @param _canonicalized
- *   the canonicalized plan before applying query stage optimizer rules.
+ * @param id the query stage id.
+ * @param plan the underlying plan.
+ * @param _canonicalized the canonicalized plan before applying query stage optimizer rules.
  */
 case class BroadcastQueryStageExec(
     override val id: Int,
     override val plan: SparkPlan,
     override val _canonicalized: SparkPlan,
     override val reuseSource: Option[Int] = None,
-    override val hasStreamSidePushdownDependent: Boolean = false)
-    extends ExchangeQueryStageExec {
+    override val hasStreamSidePushdownDependent: Boolean = false) extends ExchangeQueryStageExec {
 
   @transient val broadcast = plan match {
     case b: BroadcastExchangeLike => b
@@ -267,8 +248,7 @@ case class BroadcastQueryStageExec(
   }
 
   override def newReuseInstance(
-      newStageId: Int,
-      newOutput: Seq[Attribute]): ExchangeQueryStageExec = {
+      newStageId: Int, newOutput: Seq[Attribute]): ExchangeQueryStageExec = {
     val reuse = BroadcastQueryStageExec(
       newStageId,
       ReusedExchangeExec(newOutput, broadcast),
@@ -292,13 +272,12 @@ case class BroadcastQueryStageExec(
 /**
  * A table cache query stage whose child is a [[InMemoryTableScanExec]].
  *
- * @param id
- *   the query stage id.
- * @param plan
- *   the underlying plan.
+ * @param id the query stage id.
+ * @param plan the underlying plan.
  */
-case class TableCacheQueryStageExec(override val id: Int, override val plan: SparkPlan)
-    extends QueryStageExec {
+case class TableCacheQueryStageExec(
+    override val id: Int,
+    override val plan: SparkPlan) extends QueryStageExec {
   val reuseSource: Option[Int] = None
   @transient val inMemoryTableScan = plan match {
     case i: InMemoryTableScanExec => i
@@ -317,7 +296,8 @@ case class TableCacheQueryStageExec(override val id: Int, override val plan: Spa
         (_: Iterator[CachedBatch]) => (),
         (0 until rdd.getNumPartitions).toSeq,
         (_: Int, _: Unit) => (),
-        ())
+        ()
+      )
     }
   }
 
