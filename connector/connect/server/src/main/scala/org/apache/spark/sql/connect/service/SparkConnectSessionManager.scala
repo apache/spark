@@ -76,9 +76,15 @@ class SparkConnectSessionManager extends Logging {
       key,
       Some(() => {
         logDebug(s"Session not found: $key")
-        throw new SparkSQLException(
-          errorClass = "INVALID_HANDLE.SESSION_NOT_FOUND",
-          messageParameters = Map("handle" -> key.sessionId))
+        if (closedSessionsCache.getIfPresent(key) != null) {
+          throw new SparkSQLException(
+            errorClass = "INVALID_HANDLE.SESSION_CLOSED",
+            messageParameters = Map("handle" -> key.sessionId))
+        } else {
+          throw new SparkSQLException(
+            errorClass = "INVALID_HANDLE.SESSION_NOT_FOUND",
+            messageParameters = Map("handle" -> key.sessionId))
+        }
       }))
   }
 
