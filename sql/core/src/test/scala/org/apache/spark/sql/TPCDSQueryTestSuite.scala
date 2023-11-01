@@ -75,21 +75,15 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
       Files.exists(Paths.get(s"${tpcdsDataPath.get}/$tableName"))
     }
     if (nonExistentTables.nonEmpty) {
-      fail(
-        s"Non-existent TPCDS table paths found in ${tpcdsDataPath.get}: " +
-          nonExistentTables.mkString(", "))
+      fail(s"Non-existent TPCDS table paths found in ${tpcdsDataPath.get}: " +
+        nonExistentTables.mkString(", "))
     }
   }
 
   protected val baseResourcePath = {
     // use the same way as `SQLQueryTestSuite` to get the resource path
-    getWorkspaceFilePath(
-      "sql",
-      "core",
-      "src",
-      "test",
-      "resources",
-      "tpcds-query-results").toFile.getAbsolutePath
+    getWorkspaceFilePath("sql", "core", "src", "test", "resources", "tpcds-query-results")
+      .toFile.getAbsolutePath
   }
 
   override def createTable(
@@ -97,7 +91,8 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
       tableName: String,
       format: String = "parquet",
       options: Seq[String] = Nil): Unit = {
-    spark.sql(s"""
+    spark.sql(
+      s"""
          |CREATE TABLE `$tableName` (${tableColumns(tableName)})
          |USING $format
          |LOCATION '${tpcdsDataPath.get}/$tableName'
@@ -105,8 +100,11 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
        """.stripMargin)
   }
 
-  private def runQuery(query: String, goldenFile: File, conf: Map[String, String]): Unit = {
-    val shouldSortResults = sortMergeJoinConf != conf // Sort for other joins
+  private def runQuery(
+      query: String,
+      goldenFile: File,
+      conf: Map[String, String]): Unit = {
+    val shouldSortResults = sortMergeJoinConf != conf  // Sort for other joins
     withSQLConf(conf.toSeq: _*) {
       try {
         val (schema, output) = handleExceptions(getNormalizedQueryExecutionResult(spark, query))
@@ -134,8 +132,7 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
           val segments = goldenOutput.split("-- !query.*\n")
 
           // query has 3 segments, plus the header
-          assert(
-            segments.size == 3,
+          assert(segments.size == 3,
             s"Expected 3 blocks in result file but got ${segments.size}. " +
               "Try regenerate the result files.")
 
@@ -146,12 +143,8 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
           schema
         }
         if (shouldSortResults) {
-          val expectSorted = expectedOutput
-            .split("\n")
-            .sorted
-            .map(_.trim)
-            .mkString("\n")
-            .replaceAll("\\s+$", "")
+          val expectSorted = expectedOutput.split("\n").sorted.map(_.trim)
+            .mkString("\n").replaceAll("\\s+$", "")
           val outputSorted = output.sorted.map(_.trim).mkString("\n").replaceAll("\\s+$", "")
           assertResult(expectSorted, s"Result did not match\n$queryString") {
             outputSorted
@@ -163,8 +156,8 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
         }
       } catch {
         case e: Throwable =>
-          val configs = conf.map { case (k, v) =>
-            s"$k=$v"
+          val configs = conf.map {
+            case (k, v) => s"$k=$v"
           }
           throw new Exception(s"${e.getMessage}\nError using configs:\n${configs.mkString("\n")}")
       }
@@ -181,8 +174,8 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
     SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
     "spark.sql.join.forceApplyShuffledHashJoin" -> "true")
 
-  val allJoinConfCombinations =
-    Seq(sortMergeJoinConf, broadcastHashJoinConf, shuffledHashJoinConf)
+  val allJoinConfCombinations = Seq(
+    sortMergeJoinConf, broadcastHashJoinConf, shuffledHashJoinConf)
 
   val joinConfs: Seq[Map[String, String]] = if (regenerateGoldenFiles) {
     require(
@@ -190,44 +183,38 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
       "'SPARK_TPCDS_JOIN_CONF' cannot be set together with 'SPARK_GENERATE_GOLDEN_FILES'")
     Seq(sortMergeJoinConf)
   } else {
-    sys.env
-      .get("SPARK_TPCDS_JOIN_CONF")
-      .map { s =>
-        val p = new java.util.Properties()
-        p.load(new java.io.StringReader(s))
-        Seq(p.asScala.toMap)
-      }
-      .getOrElse(allJoinConfCombinations)
+    sys.env.get("SPARK_TPCDS_JOIN_CONF").map { s =>
+      val p = new java.util.Properties()
+      p.load(new java.io.StringReader(s))
+      Seq(p.asScala.toMap)
+    }.getOrElse(allJoinConfCombinations)
   }
 
   assert(joinConfs.nonEmpty)
-  joinConfs.foreach(conf =>
-    require(
-      allJoinConfCombinations.contains(conf),
-      s"Join configurations [$conf] should be one of $allJoinConfCombinations"))
+  joinConfs.foreach(conf => require(
+    allJoinConfCombinations.contains(conf),
+    s"Join configurations [$conf] should be one of $allJoinConfCombinations"))
 
   if (tpcdsDataPath.nonEmpty) {
     tpcdsQueries.foreach { name =>
-      val queryString = resourceToString(
-        s"tpcds/$name.sql",
+      val queryString = resourceToString(s"tpcds/$name.sql",
         classLoader = Thread.currentThread().getContextClassLoader)
       test(name) {
         val goldenFile = new File(s"$baseResourcePath/v1_4", s"$name.sql.out")
         joinConfs.foreach { conf =>
-          System.gc() // Workaround for GitHub Actions memory limitation, see also SPARK-37368
+          System.gc()  // Workaround for GitHub Actions memory limitation, see also SPARK-37368
           runQuery(queryString, goldenFile, conf)
         }
       }
     }
 
     tpcdsQueriesV2_7_0.foreach { name =>
-      val queryString = resourceToString(
-        s"tpcds-v2.7.0/$name.sql",
+      val queryString = resourceToString(s"tpcds-v2.7.0/$name.sql",
         classLoader = Thread.currentThread().getContextClassLoader)
       test(s"$name-v2.7") {
         val goldenFile = new File(s"$baseResourcePath/v2_7", s"$name.sql.out")
         joinConfs.foreach { conf =>
-          System.gc() // SPARK-37368
+          System.gc()  // SPARK-37368
           runQuery(queryString, goldenFile, conf)
         }
       }
