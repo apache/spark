@@ -497,9 +497,10 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   def * (that: Decimal): Decimal =
     Decimal(toJavaBigDecimal.multiply(that.toJavaBigDecimal, MATH_CONTEXT))
 
+
   def / (that: Decimal): Decimal =
     if (that.isZero) null else Decimal(toJavaBigDecimal.divide(that.toJavaBigDecimal,
-      DecimalType.MAX_SCALE, MATH_CONTEXT.getRoundingMode))
+      DecimalType.MAX_SCALE + 1, MATH_CONTEXT.getRoundingMode))
 
   def % (that: Decimal): Decimal =
     if (that.isZero) null
@@ -547,7 +548,7 @@ object Decimal {
 
   val POW_10 = Array.tabulate[Long](MAX_LONG_DIGITS + 1)(i => math.pow(10, i).toLong)
 
-  private val MATH_CONTEXT = new MathContext(DecimalType.MAX_PRECISION, RoundingMode.HALF_UP)
+  private val MATH_CONTEXT = new MathContext(DecimalType.MAX_PRECISION + 1, RoundingMode.DOWN)
 
   private[sql] val ZERO = Decimal(0)
   private[sql] val ONE = Decimal(1)

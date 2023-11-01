@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.math.RoundingMode
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
 import java.time.temporal.ChronoUnit
@@ -221,6 +222,61 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       withOrigin(o) {
         val expr = Multiply(maxValue, maxValue, EvalMode.ANSI)
         checkExceptionInExpression[ArithmeticException](expr, EmptyRow, query)
+      }
+    }
+  }
+
+  test("SPARK-XXXXX: Decimal multiply, divide, modulo squot") {
+    // Some known cases
+    checkEvaluation(
+      Multiply(
+        Literal(Decimal(BigDecimal("-14120025096157587712113961295153.858047"), 38, 6)),
+        Literal(Decimal(BigDecimal("-0.4652"), 4, 4))
+      ),
+      Decimal(BigDecimal("6568635674732509803675414794505.574763"))
+    )
+    checkEvaluation(
+      Multiply(
+        Literal(Decimal(BigDecimal("-240810500742726"), 15, 0)),
+        Literal(Decimal(BigDecimal("-5677.6988688550027099967697071"), 29, 25))
+      ),
+      Decimal(BigDecimal("1367249507675382200.164877854336665327"))
+    )
+
+    // Random tests
+    val rand = scala.util.Random
+    def makeNum(p: Int, s: Int): String = {
+      val int1 = rand.nextLong()
+      val int2 = rand.nextLong().abs
+      val frac1 = rand.nextLong().abs
+      val frac2 = rand.nextLong().abs
+      s"$int1$int2".take(p - s + (int1 >>> 63).toInt) + "." + s"$frac1$frac2".take(s)
+    }
+
+    (0 until 100).foreach { _ =>
+      val p1 = rand.nextInt(38) + 1 // 1 <= p1 <= 38
+      val s1 = rand.nextInt(p1 + 1) // 0 <= s1 <= p1
+      val p2 = rand.nextInt(38) + 1
+      val s2 = rand.nextInt(p2 + 1)
+
+      val n1 = makeNum(p1, s1)
+      val n2 = makeNum(p2, s2)
+
+      val mulActual = Multiply(
+        Literal(Decimal(BigDecimal(n1), p1, s1)),
+        Literal(Decimal(BigDecimal(n2), p2, s2))
+      )
+      val mulExact = new java.math.BigDecimal(n1).multiply(new java.math.BigDecimal(n2))
+
+      Seq(true, false).foreach { allowPrecLoss =>
+        withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> allowPrecLoss.toString) {
+
+          val mulType = Multiply(null, null).resultDecimalType(p1, s1, p2, s2)
+          val mulResult = Decimal(mulExact.setScale(mulType.scale, RoundingMode.HALF_UP))
+          val mulExpected =
+            if (mulResult.precision > DecimalType.MAX_PRECISION) null else mulResult
+          checkEvaluation(mulActual, mulExpected)
+        }
       }
     }
   }
