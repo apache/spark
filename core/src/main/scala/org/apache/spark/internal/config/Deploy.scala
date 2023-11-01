@@ -82,4 +82,9 @@ private[spark] object Deploy {
     .checkValue(_ > 0, "The maximum number of running drivers should be positive.")
     .createWithDefault(Int.MaxValue)
 
+  val DRIVER_ID_PATTERN = ConfigBuilder("spark.deploy.driverIdPattern")
+    .doc("The pattern for driver ID generation.")
+    .version("4.0.0")
+    .stringConf
+    .createWithDefault("driver-%s-%04d")
 }

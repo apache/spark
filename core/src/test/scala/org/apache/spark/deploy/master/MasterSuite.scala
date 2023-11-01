@@ -802,6 +802,7 @@ class MasterSuite extends SparkFunSuite
   private val _waitingDrivers =
     PrivateMethod[mutable.ArrayBuffer[DriverInfo]](Symbol("waitingDrivers"))
   private val _state = PrivateMethod[RecoveryState.Value](Symbol("state"))
+  private val _newDriverId = PrivateMethod[String](Symbol("newDriverId"))
 
   private val workerInfo = makeWorkerInfo(4096, 10)
   private val workerInfos = Array(workerInfo, workerInfo, workerInfo)
@@ -1235,6 +1236,13 @@ class MasterSuite extends SparkFunSuite
 
   private def getState(master: Master): RecoveryState.Value = {
     master.invokePrivate(_state())
+  }
+
+  test("SPARK-45753: Support driver id pattern") {
+    val master = makeMaster(new SparkConf().set(DRIVER_ID_PATTERN, "my-driver-%2$05d"))
+    val submitDate = new Date()
+    assert(master.invokePrivate(_newDriverId(submitDate)) === "my-driver-00000")
+    assert(master.invokePrivate(_newDriverId(submitDate)) === "my-driver-00001")
   }
 }
 
