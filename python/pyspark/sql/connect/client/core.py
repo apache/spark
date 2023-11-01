@@ -696,12 +696,12 @@ class SparkConnectClient(object):
         return self
 
     def register_retry_policy(self, policy: RetryPolicy):
-        if policy.name in self._retry_policies:
+        if policy.name in self._known_retry_policies:
             raise ValueError("Already known policy")
-        self._retry_policies[policy.name] = policy
+        self._known_retry_policies[policy.name] = policy
 
     def set_retry_policies(self, policies: List[str]):
-        self._retry_policies = [self._retry_policies[name] for name in policies]
+        self._retry_policies = [self._known_retry_policies[name] for name in policies]
 
     def register_udf(
         self,
