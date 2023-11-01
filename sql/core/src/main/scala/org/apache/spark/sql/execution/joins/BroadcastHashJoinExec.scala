@@ -23,20 +23,20 @@ import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, _}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
-import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, HashPartitioning, Partitioning, PartitioningCollection, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.{DataType, NullType}
 
 /**
- * Performs an inner hash join of two child relations. When the output RDD of this operator is
+ * Performs an inner hash join of two child relations.  When the output RDD of this operator is
  * being constructed, a Spark job is asynchronously started to calculate the values for the
- * broadcast relation. This data is then placed in a Spark broadcast variable. The streamed
+ * broadcast relation.  This data is then placed in a Spark broadcast variable.  The streamed
  * relation is not shuffled.
  */
 case class BroadcastHashJoinExec(
@@ -49,7 +49,7 @@ case class BroadcastHashJoinExec(
     right: SparkPlan,
     isNullAwareAntiJoin: Boolean = false,
     bcVarPushNode: BCVarPushNodeType = PASS_THROUGH)
-    extends HashJoin {
+  extends HashJoin {
 
   if (isNullAwareAntiJoin) {
     require(leftKeys.length == 1, "leftKeys length should be 1")
@@ -59,20 +59,8 @@ case class BroadcastHashJoinExec(
     require(condition.isEmpty, "null aware anti join optimize condition should be empty.")
   }
 
-  override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
-
-  override def requiredChildDistribution: Seq[Distribution] = {
-    val mode = HashedRelationBroadcastMode(buildBoundKeys, isNullAwareAntiJoin)
-    buildSide match {
-      case BuildLeft =>
-        BroadcastDistribution(mode) :: UnspecifiedDistribution :: Nil
-      case BuildRight =>
-        UnspecifiedDistribution :: BroadcastDistribution(mode) :: Nil
-    }
-  }
-
-  @volatile @transient private var broadcastVar: Option[Broadcast[HashedRelation]] = None
+  @volatile
+  @transient private var broadcastVar: Option[Broadcast[HashedRelation]] = None
 
   private[execution] def getBroadcastID: Option[Long] = this.broadcastVar.map(_.id)
 
@@ -116,6 +104,19 @@ case class BroadcastHashJoinExec(
     this.streamedPlan.prepare()
   }
 
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+
+  override def requiredChildDistribution: Seq[Distribution] = {
+    val mode = HashedRelationBroadcastMode(buildBoundKeys, isNullAwareAntiJoin)
+    buildSide match {
+      case BuildLeft =>
+        BroadcastDistribution(mode) :: UnspecifiedDistribution :: Nil
+      case BuildRight =>
+        UnspecifiedDistribution :: BroadcastDistribution(mode) :: Nil
+    }
+  }
+
   override lazy val outputPartitioning: Partitioning = {
     joinType match {
       case _: InnerLike if conf.broadcastHashJoinOutputPartitioningExpandLimit > 0 =>
@@ -131,12 +132,13 @@ case class BroadcastHashJoinExec(
   // An one-to-many mapping from a streamed key to build keys.
   private lazy val streamedKeyToBuildKeyMapping = {
     val mapping = mutable.Map.empty[Expression, Seq[Expression]]
-    streamedKeys.zip(buildKeys).foreach { case (streamedKey, buildKey) =>
-      val key = streamedKey.canonicalized
-      mapping.get(key) match {
-        case Some(v) => mapping.put(key, v :+ buildKey)
-        case None => mapping.put(key, Seq(buildKey))
-      }
+    streamedKeys.zip(buildKeys).foreach {
+      case (streamedKey, buildKey) =>
+        val key = streamedKey.canonicalized
+        mapping.get(key) match {
+          case Some(v) => mapping.put(key, v :+ buildKey)
+          case None => mapping.put(key, Seq(buildKey))
+        }
     }
     mapping.toMap
   }
@@ -180,20 +182,18 @@ case class BroadcastHashJoinExec(
           Iterator.empty
         } else {
           val keyGenerator = streamSideKeyGenerator()
-          streamedIter
-            .filter { row =>
-              val lookupKey: UnsafeRow = keyGenerator(row)
-              if (lookupKey.anyNull()) {
-                false
-              } else {
-                // Anti Join: Drop the row on the streamed side if it is a match on the build
-                hashed.get(lookupKey) == null
-              }
+          streamedIter.filter { row =>
+            val lookupKey: UnsafeRow = keyGenerator(row)
+            if (lookupKey.anyNull()) {
+              false
+            } else {
+              // Anti Join: Drop the row on the streamed side if it is a match on the build
+              hashed.get(lookupKey) == null
             }
-            .map { row =>
-              numOutputRows += 1
-              row
-            }
+          }.map { row =>
+            numOutputRows += 1
+            row
+          }
         }
       }
     } else {
@@ -215,7 +215,7 @@ case class BroadcastHashJoinExec(
       // if the build side has duplicated keys. Note that here we wait for the broadcast to be
       // finished, which is a no-op because it's already finished when we wait it in `doProduce`.
       this.initBroadcastVar()
-      !this.broadcastVar.get.value.keyIsUnique
+      !buildPlan.executeBroadcast[HashedRelation]().value.keyIsUnique
 
     // Other joins types(semi, anti, existence) can at most produce one result row for one input
     // row from the streamed side.
@@ -239,27 +239,24 @@ case class BroadcastHashJoinExec(
     val clsName = broadcastRelation.value.getClass.getName
 
     // Inline mutable state since not many join operations in a task
-    val relationTerm = ctx.addMutableState(
-      clsName,
-      "relation",
+    val relationTerm = ctx.addMutableState(clsName, "relation",
       v => s"""
          | $v = (($clsName) $broadcast.value()).asReadOnlyCopy();
          | incPeakExecutionMemory($v.estimatedSize());
-       """.stripMargin,
-      forceInline = true)
+       """.stripMargin, forceInline = true)
     (broadcastRelation, relationTerm)
   }
 
   protected override def prepareRelation(ctx: CodegenContext): HashedRelationInfo = {
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
-    HashedRelationInfo(
-      relationTerm,
+    HashedRelationInfo(relationTerm,
       broadcastRelation.value.keyIsUnique,
       broadcastRelation.value == EmptyHashedRelation)
   }
 
   /**
-   * Generates the code for anti join. Handles NULL-aware anti join (NAAJ) separately here.
+   * Generates the code for anti join.
+   * Handles NULL-aware anti join (NAAJ) separately here.
    */
   protected override def codegenAnti(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     if (isNullAwareAntiJoin) {
@@ -293,16 +290,14 @@ case class BroadcastHashJoinExec(
   }
 
   override protected def withNewChildrenInternal(
-      newLeft: SparkPlan,
-      newRight: SparkPlan): BroadcastHashJoinExec =
+      newLeft: SparkPlan, newRight: SparkPlan): BroadcastHashJoinExec =
     copy(left = newLeft, right = newRight)
 
   def preserveLogicalJoinAsHashSelfPush(originalBuildLPOpt: Option[LogicalPlan]): Unit =
     this.logicalLink.foreach(joinLp => originalBuildLPOpt.foreach(
       originalBuildLP => joinLp.setTagValue(Join.PRESERVE_JOIN_WITH_SELF_PUSH_HASH,
         (this.buildSide, originalBuildLP)))
-      )
-
+    )
 }
 
 trait BCVarPushNodeType extends LeafExpression with Unevaluable {
