@@ -60,7 +60,7 @@ class SparkConnectSessionManager extends Logging {
       getSession(
         key,
         Some(() => {
-          validateSessionCreate()
+          validateSessionCreate(key)
           val holder = SessionHolder(key.userId, key.sessionId, newIsolatedSession())
           holder.initializeSession()
           holder
