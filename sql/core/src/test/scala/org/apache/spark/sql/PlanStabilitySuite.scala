@@ -19,12 +19,8 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.nio.charset.StandardCharsets
-
 import scala.collection.mutable
-import scala.util.Try
-
 import org.apache.commons.io.FileUtils
-
 import org.apache.spark.sql.catalyst.expressions.AttributeSet
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution._
@@ -33,15 +29,21 @@ import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec, Va
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.ExtendedSQLTest
 
+import scala.util.Try
+
 // scalastyle:off line.size.limit
 /**
- * Check that TPC-DS SparkPlans don't change. If there are plan differences, the error message
- * looks like this: Plans did not match: last approved simplified plan:
- * /path/to/tpcds-plan-stability/approved-plans-xxx/q1/simplified.txt last approved explain plan:
- * /path/to/tpcds-plan-stability/approved-plans-xxx/q1/explain.txt [last approved simplified plan]
+ * Check that TPC-DS SparkPlans don't change.
+ * If there are plan differences, the error message looks like this:
+ *   Plans did not match:
+ *   last approved simplified plan: /path/to/tpcds-plan-stability/approved-plans-xxx/q1/simplified.txt
+ *   last approved explain plan: /path/to/tpcds-plan-stability/approved-plans-xxx/q1/explain.txt
+ *   [last approved simplified plan]
  *
- * actual simplified plan: /path/to/tmp/q1.actual.simplified.txt actual explain plan:
- * /path/to/tmp/q1.actual.explain.txt [actual simplified plan]
+ *   actual simplified plan: /path/to/tmp/q1.actual.simplified.txt
+ *   actual explain plan: /path/to/tmp/q1.actual.explain.txt
+ *   [actual simplified plan]
+ *
  *
  * To run the entire test suite:
  * {{{
@@ -81,7 +83,10 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
 
   def goldenFilePath: String
 
-  private val approvedAnsiPlans: Seq[String] = Seq("q83", "q83.sf100")
+  private val approvedAnsiPlans: Seq[String] = Seq(
+    "q83",
+    "q83.sf100"
+  )
 
   private def getDirForTest(name: String): File = {
     val goldenFileName = if (SQLConf.get.ansiEnabled && approvedAnsiPlans.contains(name)) {
@@ -105,22 +110,19 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
   }
 
   /**
-   * Serialize and save this SparkPlan. The resulting file is used by [[checkWithApproved]] to
-   * check stability.
+   * Serialize and save this SparkPlan.
+   * The resulting file is used by [[checkWithApproved]] to check stability.
    *
-   * @param plan
-   *   the SparkPlan
-   * @param name
-   *   the name of the query
-   * @param explain
-   *   the full explain output; this is saved to help debug later as the simplified plan is not
-   *   too useful for debugging
+   * @param plan    the SparkPlan
+   * @param name    the name of the query
+   * @param explain the full explain output; this is saved to help debug later as the simplified
+   *                plan is not too useful for debugging
    */
   private def generateGoldenFile(plan: SparkPlan, name: String, explain: String): Unit = {
     val dir = getDirForTest(name)
     val simplified = getSimplifiedPlan(plan)
-    val foundMatch =
-      dir.exists() && Try { isApproved(dir, simplified, explain, name) }.getOrElse(false)
+    val foundMatch = dir.exists() &&
+      Try { isApproved(dir, simplified, explain, name) }.getOrElse(false)
 
     if (!foundMatch) {
       val file = new File(dir, getAppropriateFileName(name, "simplified.txt"))
@@ -130,7 +132,6 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
       FileUtils.deleteQuietly(fileOriginalPlan)
       dir.mkdirs()
       // assert(dir.mkdirs())
-      FileUtils.writeStringToFile(file, simplified, StandardCharsets.UTF_8)
       FileUtils.writeStringToFile(fileOriginalPlan, explain, StandardCharsets.UTF_8)
       logDebug(s"APPROVED: $file $fileOriginalPlan")
     }
@@ -149,19 +150,18 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
       // show diff with last approved
       val approvedSimplifiedFile = new File(dir, getAppropriateFileName(name, "simplified.txt"))
       val approvedExplainFile = new File(dir, getAppropriateFileName(name, "explain.txt"))
-
-      val actualSimplifiedFile =
-        new File(tempDir, getAppropriateFileName(name, s"$name.actual.simplified.txt"))
-      val actualExplainFile =
-        new File(tempDir, getAppropriateFileName(name, s"$name.actual.explain.txt"))
-
-      val approvedSimplified =
-        FileUtils.readFileToString(approvedSimplifiedFile, StandardCharsets.UTF_8)
+      val actualSimplifiedFile = new File(tempDir,
+        getAppropriateFileName(name, s"$name.actual.simplified.txt"))
+      val actualExplainFile = new File(tempDir,
+        getAppropriateFileName(name, s"$name.actual.explain.txt"))
+      val approvedSimplified = FileUtils.readFileToString(approvedSimplifiedFile,
+        StandardCharsets.UTF_8)
       // write out for debugging
       FileUtils.writeStringToFile(actualSimplifiedFile, actualSimplified, StandardCharsets.UTF_8)
       FileUtils.writeStringToFile(actualExplainFile, explain, StandardCharsets.UTF_8)
 
-      fail(s"""
+      fail(
+        s"""
           |Plans did not match:
           |last approved simplified plan: ${approvedSimplifiedFile.getAbsolutePath}
           |last approved explain plan: ${approvedExplainFile.getAbsolutePath}
@@ -188,8 +188,7 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
     val subqueriesMap = new mutable.HashMap[Int, Int]()
 
     def getId(plan: SparkPlan): Int = plan match {
-      case exchange: Exchange =>
-        exchangeIdMap.getOrElseUpdate(exchange.id, exchangeIdMap.size + 1)
+      case exchange: Exchange => exchangeIdMap.getOrElseUpdate(exchange.id, exchangeIdMap.size + 1)
       case ReusedExchangeExec(_, exchange) =>
         exchangeIdMap.getOrElseUpdate(exchange.id, exchangeIdMap.size + 1)
       case subquery: SubqueryExec =>
@@ -210,8 +209,11 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
     }
 
     /**
-     * Generate a simplified plan as a string Example output: TakeOrderedAndProject
-     * [c_customer_id] WholeStageCodegen Project [c_customer_id]
+     * Generate a simplified plan as a string
+     * Example output:
+     * TakeOrderedAndProject [c_customer_id]
+     *   WholeStageCodegen
+     *     Project [c_customer_id]
      */
     def simplifyNode(node: SparkPlan, depth: Int): String = {
       val padding = "  " * depth
@@ -236,42 +238,34 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
 
   private def normalizeIds(plan: String): String = {
     val map = new mutable.HashMap[String, String]()
-    normalizeRegex
-      .findAllMatchIn(plan)
-      .map(_.toString)
+    normalizeRegex.findAllMatchIn(plan).map(_.toString)
       .foreach(map.getOrElseUpdate(_, (map.size + 1).toString))
-    val exprIdNormalized =
-      normalizeRegex.replaceAllIn(plan, regexMatch => s"#${map(regexMatch.toString)}")
+    val exprIdNormalized = normalizeRegex.replaceAllIn(
+      plan, regexMatch => s"#${map(regexMatch.toString)}")
 
     // Normalize the plan id in Exchange nodes. See `Exchange.stringArgs`.
     val planIdMap = new mutable.HashMap[String, String]()
-    planIdRegex
-      .findAllMatchIn(exprIdNormalized)
-      .map(_.toString)
+    planIdRegex.findAllMatchIn(exprIdNormalized).map(_.toString)
       .foreach(planIdMap.getOrElseUpdate(_, (planIdMap.size + 1).toString))
     planIdRegex.replaceAllIn(
-      exprIdNormalized,
-      regexMatch => s"plan_id=${planIdMap(regexMatch.toString)}")
+      exprIdNormalized, regexMatch => s"plan_id=${planIdMap(regexMatch.toString)}")
   }
 
   private def normalizeLocation(plan: String): String = {
-    plan.replaceAll(
-      s"Location.*$clsName/",
+    plan.replaceAll(s"Location.*$clsName/",
       "Location [not included in comparison]/{warehouse_dir}/")
   }
 
   /**
-   * Test a TPC-DS query. Depending on the settings this test will either check if the plan
-   * matches a golden file or it will create a new golden file.
+   * Test a TPC-DS query. Depending on the settings this test will either check if the plan matches
+   * a golden file or it will create a new golden file.
    */
   protected def testQuery(tpcdsGroup: String, query: String, suffix: String = ""): Unit = {
-    val queryString = resourceToString(
-      s"$tpcdsGroup/$query.sql",
+    val queryString = resourceToString(s"$tpcdsGroup/$query.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
     // Disable char/varchar read-side handling for better performance.
-    withSQLConf(
-      SQLConf.READ_SIDE_CHAR_PADDING.key -> "false",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+    withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
       val qe = sql(queryString).queryExecution
       val plan = qe.executedPlan
       val explain = normalizeLocation(normalizeIds(qe.explainString(FormattedMode)))
@@ -368,12 +362,7 @@ class TPCDSModifiedPlanStabilityWithStatsSuite extends PlanStabilitySuite with T
 @ExtendedSQLTest
 class TPCHPlanStabilitySuite extends PlanStabilitySuite with TPCHBase {
   override def goldenFilePath: String = getWorkspaceFilePath(
-    "sql",
-    "core",
-    "src",
-    "test",
-    "resources",
-    "tpch-plan-stability").toFile.getAbsolutePath
+    "sql", "core", "src", "test", "resources", "tpch-plan-stability").toFile.getAbsolutePath
 
   tpchQueries.foreach { q =>
     test(s"check simplified (tpch/$q)") {

@@ -45,10 +45,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class FileBasedDataSourceSuite
-    extends QueryTest
-    with SharedSparkSession
-    with AdaptiveSparkPlanHelper {
+class FileBasedDataSourceSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   override def beforeAll(): Unit = {
@@ -115,8 +114,7 @@ class FileBasedDataSourceSuite
       withTempPath { outputPath =>
         val df = spark.emptyDataFrame.select(lit(1).as("i"))
         df.write.format(format).save(outputPath.toString)
-        val partFiles = outputPath
-          .listFiles()
+        val partFiles = outputPath.listFiles()
           .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
         assert(partFiles.length === 1)
 
@@ -136,23 +134,25 @@ class FileBasedDataSourceSuite
             spark.emptyDataFrame.write.format(format).save(outputPath.toString)
           },
           errorClass = "_LEGACY_ERROR_TEMP_1142",
-          parameters = Map.empty)
+          parameters = Map.empty
+        )
       }
 
       // Nested empty schema
       withTempPath { outputPath =>
-        val schema = StructType(
-          Seq(
-            StructField("a", IntegerType),
-            StructField("b", StructType(Nil)),
-            StructField("c", IntegerType)))
+        val schema = StructType(Seq(
+          StructField("a", IntegerType),
+          StructField("b", StructType(Nil)),
+          StructField("c", IntegerType)
+        ))
         val df = spark.createDataFrame(sparkContext.emptyRDD[Row], schema)
         checkError(
           exception = intercept[AnalysisException] {
             df.write.format(format).save(outputPath.toString)
           },
           errorClass = "_LEGACY_ERROR_TEMP_1142",
-          parameters = Map.empty)
+          parameters = Map.empty
+        )
       }
     }
   }
@@ -160,9 +160,8 @@ class FileBasedDataSourceSuite
   val emptySchemaSupportedDataSources = Seq("orc", "csv", "json")
   emptySchemaSupportedDataSources.foreach { format =>
     val emptySchemaValidationConf = SQLConf.ALLOW_EMPTY_SCHEMAS_FOR_WRITES.key
-    test(
-      "SPARK-38651 allow writing empty schema files " +
-        s"using $format when ${emptySchemaValidationConf} is enabled") {
+    test("SPARK-38651 allow writing empty schema files " +
+      s"using $format when ${emptySchemaValidationConf} is enabled") {
       withSQLConf(emptySchemaValidationConf -> "true") {
         withTempPath { outputPath =>
           spark.emptyDataFrame.write.format(format).save(outputPath.toString)
@@ -184,9 +183,8 @@ class FileBasedDataSourceSuite
 
   // Separate test case for formats that support multiLine as an option.
   Seq("json", "csv").foreach { format =>
-    test(
-      "SPARK-23148 read files containing special characters " +
-        s"using $format with multiline enabled") {
+    test("SPARK-23148 read files containing special characters " +
+      s"using $format with multiline enabled") {
       withTempDir { dir =>
         val tmpFile = s"$dir/$nameWithSpecialChars"
         spark.createDataset(Seq("a", "b")).write.format(format).save(tmpFile)
@@ -215,14 +213,11 @@ class FileBasedDataSourceSuite
             fs.listStatus(p).filter(_.isFile).map(_.getPath)
           }
 
-          val df = spark.read
-            .options(options)
-            .format(format)
-            .load(
-              new Path(basePath, "first").toString,
-              new Path(basePath, "second").toString,
-              new Path(basePath, "third").toString,
-              new Path(basePath, "fourth").toString)
+          val df = spark.read.options(options).format(format).load(
+            new Path(basePath, "first").toString,
+            new Path(basePath, "second").toString,
+            new Path(basePath, "third").toString,
+            new Path(basePath, "fourth").toString)
 
           // Make sure all data files are deleted and can't be opened.
           files.foreach(f => fs.delete(f, false))
@@ -246,8 +241,7 @@ class FileBasedDataSourceSuite
           ("false", Map("ignoreMissingFiles" -> "false"), "true"))
         sources <- Seq("", format)
       } {
-        withSQLConf(
-          SQLConf.USE_V1_SOURCE_LIST.key -> sources,
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> sources,
           SQLConf.IGNORE_MISSING_FILES.key -> sqlConf) {
           if (ignore.toBoolean) {
             testIgnoreMissingFiles(options)
@@ -261,7 +255,8 @@ class FileBasedDataSourceSuite
                 testIgnoreMissingFiles(options)
               }.getCause.asInstanceOf[SparkFileNotFoundException],
               errorClass = errorClass,
-              parameters = Map("message" -> ".*does not exist"))
+              parameters = Map("message" -> ".*does not exist")
+            )
           }
         }
       }
@@ -292,24 +287,33 @@ class FileBasedDataSourceSuite
           Seq(1).toDF().write.text(textDir)
         },
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-        parameters =
-          Map("columnName" -> "`value`", "columnType" -> "\"INT\"", "format" -> "Text"))
+        parameters = Map(
+          "columnName" -> "`value`",
+          "columnType" -> "\"INT\"",
+          "format" -> "Text")
+      )
 
       checkError(
         exception = intercept[AnalysisException] {
           Seq(1.2).toDF().write.text(textDir)
         },
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-        parameters =
-          Map("columnName" -> "`value`", "columnType" -> "\"DOUBLE\"", "format" -> "Text"))
+        parameters = Map(
+          "columnName" -> "`value`",
+          "columnType" -> "\"DOUBLE\"",
+          "format" -> "Text")
+      )
 
       checkError(
         exception = intercept[AnalysisException] {
           Seq(true).toDF().write.text(textDir)
         },
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-        parameters =
-          Map("columnName" -> "`value`", "columnType" -> "\"BOOLEAN\"", "format" -> "Text"))
+        parameters = Map(
+          "columnName" -> "`value`",
+          "columnType" -> "\"BOOLEAN\"",
+          "format" -> "Text")
+      )
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -319,7 +323,8 @@ class FileBasedDataSourceSuite
         parameters = Map(
           "columnName" -> "`struct(a)`",
           "columnType" -> "\"STRUCT<a: INT>\"",
-          "format" -> "Text"))
+          "format" -> "Text")
+      )
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -329,21 +334,20 @@ class FileBasedDataSourceSuite
         parameters = Map(
           "columnName" -> "`cars`",
           "columnType" -> "\"MAP<STRING, INT>\"",
-          "format" -> "Text"))
+          "format" -> "Text")
+      )
 
       checkError(
         exception = intercept[AnalysisException] {
-          Seq((Array("Tesla", "Chevy", "Ford")))
-            .toDF("brands")
-            .write
-            .mode("overwrite")
-            .text(textDir)
+          Seq((Array("Tesla", "Chevy", "Ford"))).toDF("brands")
+            .write.mode("overwrite").text(textDir)
         },
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`brands`",
           "columnType" -> "\"ARRAY<STRING>\"",
-          "format" -> "Text"))
+          "format" -> "Text")
+      )
 
       // read path
       Seq("aaa").toDF().write.mode("overwrite").text(textDir)
@@ -353,7 +357,11 @@ class FileBasedDataSourceSuite
           spark.read.schema(schema).text(textDir).collect()
         },
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-        parameters = Map("columnName" -> "`a`", "columnType" -> "\"INT\"", "format" -> "Text"))
+        parameters = Map(
+          "columnName" -> "`a`",
+          "columnType" -> "\"INT\"",
+          "format" -> "Text")
+      )
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -361,7 +369,11 @@ class FileBasedDataSourceSuite
           spark.read.schema(schema).text(textDir).collect()
         },
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-        parameters = Map("columnName" -> "`a`", "columnType" -> "\"DOUBLE\"", "format" -> "Text"))
+        parameters = Map(
+          "columnName" -> "`a`",
+          "columnType" -> "\"DOUBLE\"",
+          "format" -> "Text")
+      )
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -369,8 +381,11 @@ class FileBasedDataSourceSuite
           spark.read.schema(schema).text(textDir).collect()
         },
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-        parameters =
-          Map("columnName" -> "`a`", "columnType" -> "\"BOOLEAN\"", "format" -> "Text"))
+        parameters = Map(
+          "columnName" -> "`a`",
+          "columnType" -> "\"BOOLEAN\"",
+          "format" -> "Text")
+      )
     }
   }
 
@@ -390,7 +405,8 @@ class FileBasedDataSourceSuite
         parameters = Map(
           "columnName" -> "`struct(a, b)`",
           "columnType" -> "\"STRUCT<a: INT, b: STRING>\"",
-          "format" -> "CSV"))
+          "format" -> "CSV")
+      )
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -399,8 +415,11 @@ class FileBasedDataSourceSuite
           spark.read.schema(schema).csv(csvDir).collect()
         },
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-        parameters =
-          Map("columnName" -> "`a`", "columnType" -> "\"STRUCT<b: INT>\"", "format" -> "CSV"))
+        parameters = Map(
+          "columnName" -> "`a`",
+          "columnType" -> "\"STRUCT<b: INT>\"",
+          "format" -> "CSV")
+      )
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -410,7 +429,8 @@ class FileBasedDataSourceSuite
         parameters = Map(
           "columnName" -> "`cars`",
           "columnType" -> "\"MAP<STRING, INT>\"",
-          "format" -> "CSV"))
+          "format" -> "CSV")
+      )
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -419,20 +439,23 @@ class FileBasedDataSourceSuite
           spark.read.schema(schema).csv(csvDir).collect()
         },
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-        parameters =
-          Map("columnName" -> "`a`", "columnType" -> "\"MAP<INT, INT>\"", "format" -> "CSV"))
+        parameters = Map(
+          "columnName" -> "`a`",
+          "columnType" -> "\"MAP<INT, INT>\"",
+          "format" -> "CSV")
+      )
 
       checkError(
         exception = intercept[AnalysisException] {
-          Seq((1, Array("Tesla", "Chevy", "Ford")))
-            .toDF("id", "brands")
-            .write
-            .mode("overwrite")
-            .csv(csvDir)
+          Seq((1, Array("Tesla", "Chevy", "Ford"))).toDF("id", "brands")
+            .write.mode("overwrite").csv(csvDir)
         },
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-        parameters =
-          Map("columnName" -> "`brands`", "columnType" -> "\"ARRAY<STRING>\"", "format" -> "CSV"))
+        parameters = Map(
+          "columnName" -> "`brands`",
+          "columnType" -> "\"ARRAY<STRING>\"",
+          "format" -> "CSV")
+      )
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -441,22 +464,23 @@ class FileBasedDataSourceSuite
           spark.read.schema(schema).csv(csvDir).collect()
         },
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-        parameters =
-          Map("columnName" -> "`a`", "columnType" -> "\"ARRAY<INT>\"", "format" -> "CSV"))
+        parameters = Map(
+          "columnName" -> "`a`",
+          "columnType" -> "\"ARRAY<INT>\"",
+          "format" -> "CSV")
+      )
 
       checkError(
         exception = intercept[AnalysisException] {
-          Seq((1, new TestUDT.MyDenseVector(Array(0.25, 2.25, 4.25))))
-            .toDF("id", "vectors")
-            .write
-            .mode("overwrite")
-            .csv(csvDir)
+          Seq((1, new TestUDT.MyDenseVector(Array(0.25, 2.25, 4.25)))).toDF("id", "vectors")
+            .write.mode("overwrite").csv(csvDir)
         },
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`vectors`",
           "columnType" -> "\"ARRAY<DOUBLE>\"",
-          "format" -> "CSV"))
+          "format" -> "CSV")
+      )
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -465,13 +489,15 @@ class FileBasedDataSourceSuite
           spark.read.schema(schema).csv(csvDir).collect()
         },
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-        parameters =
-          Map("columnName" -> "`a`", "columnType" -> "\"ARRAY<DOUBLE>\"", "format" -> "CSV"))
+        parameters = Map(
+          "columnName" -> "`a`",
+          "columnType" -> "\"ARRAY<DOUBLE>\"",
+          "format" -> "CSV")
+      )
     }
   }
 
-  test(
-    "SPARK-24204 error handling for unsupported Interval data types - csv, json, parquet, orc") {
+  test("SPARK-24204 error handling for unsupported Interval data types - csv, json, parquet, orc") {
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath
       // TODO: test file source V2 after write path is fixed.
@@ -491,7 +517,8 @@ class FileBasedDataSourceSuite
                 sql("select interval 1 days").write.format(format).mode("overwrite").save(tempDir)
               },
               errorClass = "_LEGACY_ERROR_TEMP_1136",
-              parameters = Map.empty)
+              parameters = Map.empty
+            )
           }
 
           // read path
@@ -510,7 +537,9 @@ class FileBasedDataSourceSuite
               parameters = Map(
                 "columnName" -> "`a`",
                 "columnType" -> "\"INTERVAL\"",
-                "format" -> formatParameter))
+                "format" -> formatParameter
+              )
+            )
             checkError(
               exception = intercept[AnalysisException] {
                 val schema = StructType(StructField("a", new IntervalUDT(), true) :: Nil)
@@ -521,7 +550,9 @@ class FileBasedDataSourceSuite
               parameters = Map(
                 "columnName" -> "`a`",
                 "columnType" -> "\"INTERVAL\"",
-                "format" -> formatParameter))
+                "format" -> formatParameter
+              )
+            )
           }
         }
       }
@@ -556,7 +587,9 @@ class FileBasedDataSourceSuite
               parameters = Map(
                 "columnName" -> "`NULL`",
                 "columnType" -> "\"VOID\"",
-                "format" -> formatParameter))
+                "format" -> formatParameter
+              )
+            )
 
             checkError(
               exception = intercept[AnalysisException] {
@@ -567,7 +600,9 @@ class FileBasedDataSourceSuite
               parameters = Map(
                 "columnName" -> "`testType()`",
                 "columnType" -> "\"VOID\"",
-                "format" -> formatParameter))
+                "format" -> formatParameter
+              )
+            )
 
             // read path
             checkError(
@@ -580,7 +615,9 @@ class FileBasedDataSourceSuite
               parameters = Map(
                 "columnName" -> "`a`",
                 "columnType" -> "\"VOID\"",
-                "format" -> formatParameter))
+                "format" -> formatParameter
+              )
+            )
 
             checkError(
               exception = intercept[AnalysisException] {
@@ -592,7 +629,9 @@ class FileBasedDataSourceSuite
               parameters = Map(
                 "columnName" -> "`a`",
                 "columnType" -> "\"VOID\"",
-                "format" -> formatParameter))
+                "format" -> formatParameter
+              )
+            )
           }
         }
       }
@@ -623,13 +662,15 @@ class FileBasedDataSourceSuite
                 sql(s"select b from $tableName").collect()
               }.getCause.asInstanceOf[SparkRuntimeException],
               errorClass = "_LEGACY_ERROR_TEMP_2093",
-              parameters = Map("requiredFieldName" -> "b", "matchedOrcFields" -> "[b, B]"))
+              parameters = Map("requiredFieldName" -> "b", "matchedOrcFields" -> "[b, B]")
+            )
             checkError(
               exception = intercept[SparkException] {
                 sql(s"select B from $tableName").collect()
               }.getCause.asInstanceOf[SparkRuntimeException],
               errorClass = "_LEGACY_ERROR_TEMP_2093",
-              parameters = Map("requiredFieldName" -> "b", "matchedOrcFields" -> "[b, B]"))
+              parameters = Map("requiredFieldName" -> "b", "matchedOrcFields" -> "[b, B]")
+            )
           }
 
           withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
@@ -777,8 +818,8 @@ class FileBasedDataSourceSuite
       Files.write(
         path.toPath,
         s"content of ${path.toString}".getBytes,
-        StandardOpenOption.CREATE,
-        StandardOpenOption.WRITE)
+        StandardOpenOption.CREATE, StandardOpenOption.WRITE
+      )
       val fsPath = new Path(path.getAbsoluteFile.toURI).toString
       expectedFileList.append(fsPath)
     }
@@ -801,26 +842,19 @@ class FileBasedDataSourceSuite
       createDir(path, "root", 0)
 
       val dataPath = new File(path, "dirroot-0").getAbsolutePath
-      val fileList = spark.read
-        .format("binaryFile")
+      val fileList = spark.read.format("binaryFile")
         .option("recursiveFileLookup", true)
         .load(dataPath)
-        .select("path")
-        .collect()
-        .map(_.getString(0))
+        .select("path").collect().map(_.getString(0))
 
       assert(fileList.toSet === expectedFileList.toSet)
 
-      withClue(
-        "SPARK-32368: 'recursiveFileLookup' and 'pathGlobFilter' can be case insensitive") {
-        val fileList2 = spark.read
-          .format("binaryFile")
+      withClue("SPARK-32368: 'recursiveFileLookup' and 'pathGlobFilter' can be case insensitive") {
+        val fileList2 = spark.read.format("binaryFile")
           .option("RecuRsivefileLookup", true)
           .option("PaThglobFilter", "*.bin")
           .load(dataPath)
-          .select("path")
-          .collect()
-          .map(_.getString(0))
+          .select("path").collect().map(_.getString(0))
 
         assert(fileList2.toSet === expectedFileList.filter(_.endsWith(".bin")).toSet)
       }
@@ -828,23 +862,20 @@ class FileBasedDataSourceSuite
   }
 
   test("Option recursiveFileLookup: disable partition inferring") {
-    val dataPath = Thread
-      .currentThread()
-      .getContextClassLoader
-      .getResource("test-data/text-partitioned")
-      .toString
+    val dataPath = Thread.currentThread().getContextClassLoader
+      .getResource("test-data/text-partitioned").toString
 
-    val df = spark.read
-      .format("binaryFile")
+    val df = spark.read.format("binaryFile")
       .option("recursiveFileLookup", true)
       .load(dataPath)
 
     assert(!df.columns.contains("year"), "Expect partition inferring disabled")
     val fileList = df.select("path").collect().map(_.getString(0))
 
-    val expectedFileList =
-      Array(dataPath + "/year=2014/data.txt", dataPath + "/year=2015/data.txt").map(path =>
-        new Path(path).toString)
+    val expectedFileList = Array(
+      dataPath + "/year=2014/data.txt",
+      dataPath + "/year=2015/data.txt"
+    ).map(path => new Path(path).toString)
 
     assert(fileList.toSet === expectedFileList.toSet)
   }
@@ -853,15 +884,10 @@ class FileBasedDataSourceSuite
     Seq("parquet", "orc", "json").foreach { format =>
       withTempPath { path =>
         val tablePath = new File(s"${path.getCanonicalPath}/cOl3=c/cOl1=a/cOl5=e")
-        Seq((1, 2, 3, 4, 5))
-          .toDF("cOl1", "cOl2", "cOl3", "cOl4", "cOl5")
-          .write
-          .format(format)
-          .save(tablePath.getCanonicalPath)
+        Seq((1, 2, 3, 4, 5)).toDF("cOl1", "cOl2", "cOl3", "cOl4", "cOl5")
+          .write.format(format).save(tablePath.getCanonicalPath)
 
-        val df = spark.read
-          .format(format)
-          .load(path.getCanonicalPath)
+        val df = spark.read.format(format).load(path.getCanonicalPath)
           .select("CoL1", "Col2", "CoL5", "CoL3")
         checkAnswer(df, Row("a", 2, "e", "c"))
       }
@@ -874,13 +900,10 @@ class FileBasedDataSourceSuite
         withTempPath { path =>
           val tablePath = new File(s"${path.getCanonicalPath}/c3=c/c1=a/c5=e")
 
-          val inputDF =
-            sql("SELECT 1 c1, 2 c2, 3 c3, named_struct('c4_1', 2, 'c4_2', 3) c4, 5 c5")
+          val inputDF = sql("SELECT 1 c1, 2 c2, 3 c3, named_struct('c4_1', 2, 'c4_2', 3) c4, 5 c5")
           inputDF.write.format(format).save(tablePath.getCanonicalPath)
 
-          val resultDF = spark.read
-            .format(format)
-            .load(path.getCanonicalPath)
+          val resultDF = spark.read.format(format).load(path.getCanonicalPath)
             .select("c1", "c4.c4_1", "c5", "c3")
           checkAnswer(resultDF, Row("a", 2, "e", "c"))
         }
@@ -895,8 +918,7 @@ class FileBasedDataSourceSuite
           dir.delete()
           spark.range(1000).write.orc(dir.toString)
           val df = spark.read.orc(dir.toString)
-          assert(
-            df.queryExecution.optimizedPlan.stats.sizeInBytes === BigInt(getLocalDirSize(dir)))
+          assert(df.queryExecution.optimizedPlan.stats.sizeInBytes === BigInt(getLocalDirSize(dir)))
         }
       }
     }
@@ -904,8 +926,7 @@ class FileBasedDataSourceSuite
 
   test("SPARK-22790,SPARK-27668: spark.sql.sources.compressionFactor takes effect") {
     Seq(1.0, 0.5).foreach { compressionFactor =>
-      withSQLConf(
-        SQLConf.FILE_COMPRESSION_FACTOR.key -> compressionFactor.toString,
+      withSQLConf(SQLConf.FILE_COMPRESSION_FACTOR.key -> compressionFactor.toString,
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "457") {
         withTempPath { workDir =>
           // the file size is 504 bytes
@@ -945,14 +966,8 @@ class FileBasedDataSourceSuite
   test("SPARK-36568: FileScan statistics estimation takes read schema into account") {
     withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       withTempDir { dir =>
-        spark
-          .range(1000)
-          .map(x => (x / 100, x, x))
-          .toDF("k", "v1", "v2")
-          .write
-          .partitionBy("k")
-          .mode(SaveMode.Overwrite)
-          .orc(dir.toString)
+        spark.range(1000).map(x => (x / 100, x, x)).toDF("k", "v1", "v2").
+          write.partitionBy("k").mode(SaveMode.Overwrite).orc(dir.toString)
         val dfAll = spark.read.orc(dir.toString)
         val dfK = dfAll.select("k")
         val dfV1 = dfAll.select("v1")
@@ -981,14 +996,15 @@ class FileBasedDataSourceSuite
             .partitionBy("p1", "p2")
             .option("header", true)
             .save(dir.getCanonicalPath)
-          val df = spark.read
+          val df = spark
+            .read
             .format(format)
             .option("header", true)
             .load(dir.getCanonicalPath)
             .where("p1 = 1 and p2 = 2 and value != \"a\"")
 
-          val filterCondition = df.queryExecution.optimizedPlan.collectFirst { case f: Filter =>
-            f.condition
+          val filterCondition = df.queryExecution.optimizedPlan.collectFirst {
+            case f: Filter => f.condition
           }
           assert(filterCondition.isDefined)
           // The partitions filters should be pushed down and no need to be reevaluated.
@@ -1006,7 +1022,7 @@ class FileBasedDataSourceSuite
           assert(fileScan.get.planInputPartitions().forall { partition =>
             partition.asInstanceOf[FilePartition].files.forall { file =>
               file.urlEncodedPath.contains("p1=1") &&
-              file.urlEncodedPath.contains("p2=2")
+                file.urlEncodedPath.contains("p2=2")
             }
           })
           checkAnswer(df, Row("b", 1, 2))
@@ -1026,14 +1042,15 @@ class FileBasedDataSourceSuite
             .partitionBy("p1", "p2")
             .option("header", true)
             .save(dir.getCanonicalPath)
-          val df = spark.read
+          val df = spark
+            .read
             .format(format)
             .option("header", true)
             .load(dir.getCanonicalPath)
             .where("value = 'a'")
 
-          val filterCondition = df.queryExecution.optimizedPlan.collectFirst { case f: Filter =>
-            f.condition
+          val filterCondition = df.queryExecution.optimizedPlan.collectFirst {
+            case f: Filter => f.condition
           }
           assert(filterCondition.isDefined)
 
@@ -1116,10 +1133,7 @@ class FileBasedDataSourceSuite
     Seq("orc", "parquet").foreach { format =>
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
         withTempPath { dir =>
-          spark
-            .range(100)
-            .map(i => (i.toShort, i.toString))
-            .toDF("id", "s")
+          spark.range(100).map(i => (i.toShort, i.toString)).toDF("id", "s")
             .write
             .format(format)
             .save(dir.getCanonicalPath)
@@ -1128,22 +1142,15 @@ class FileBasedDataSourceSuite
           // cases when value == MAX
           var v = Short.MaxValue
           checkPushedFilters(format, df.where($"id" > v.toInt), Array(), noScan = true)
-          checkPushedFilters(
-            format,
-            df.where($"id" >= v.toInt),
+          checkPushedFilters(format, df.where($"id" >= v.toInt),
             Array(sources.IsNotNull("id"), sources.EqualTo("id", v)))
-          checkPushedFilters(
-            format,
-            df.where($"id" === v.toInt),
+          checkPushedFilters(format, df.where($"id" === v.toInt),
             Array(sources.IsNotNull("id"), sources.EqualTo("id", v)))
-          checkPushedFilters(
-            format,
-            df.where($"id" <=> v.toInt),
+          checkPushedFilters(format, df.where($"id" <=> v.toInt),
             Array(sources.EqualNullSafe("id", v)))
-          checkPushedFilters(format, df.where($"id" <= v.toInt), Array(sources.IsNotNull("id")))
-          checkPushedFilters(
-            format,
-            df.where($"id" < v.toInt),
+          checkPushedFilters(format, df.where($"id" <= v.toInt),
+            Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where($"id" < v.toInt),
             Array(sources.IsNotNull("id"), sources.Not(sources.EqualTo("id", v))))
 
           // cases when value > MAX
@@ -1157,44 +1164,33 @@ class FileBasedDataSourceSuite
 
           // cases when value = MIN
           v = Short.MinValue
-          checkPushedFilters(
-            format,
-            df.where(lit(v.toInt) < $"id"),
+          checkPushedFilters(format, df.where(lit(v.toInt) < $"id"),
             Array(sources.IsNotNull("id"), sources.Not(sources.EqualTo("id", v))))
-          checkPushedFilters(
-            format,
-            df.where(lit(v.toInt) <= $"id"),
+          checkPushedFilters(format, df.where(lit(v.toInt) <= $"id"),
             Array(sources.IsNotNull("id")))
-          checkPushedFilters(
-            format,
-            df.where(lit(v.toInt) === $"id"),
-            Array(sources.IsNotNull("id"), sources.EqualTo("id", v)))
-          checkPushedFilters(
-            format,
-            df.where(lit(v.toInt) <=> $"id"),
+          checkPushedFilters(format, df.where(lit(v.toInt) === $"id"),
+            Array(sources.IsNotNull("id"),
+            sources.EqualTo("id", v)))
+          checkPushedFilters(format, df.where(lit(v.toInt) <=> $"id"),
             Array(sources.EqualNullSafe("id", v)))
-          checkPushedFilters(
-            format,
-            df.where(lit(v.toInt) >= $"id"),
+          checkPushedFilters(format, df.where(lit(v.toInt) >= $"id"),
             Array(sources.IsNotNull("id"), sources.EqualTo("id", v)))
           checkPushedFilters(format, df.where(lit(v.toInt) > $"id"), Array(), noScan = true)
 
           // cases when value < MIN
           v1 = negativeInt
-          checkPushedFilters(format, df.where(lit(v1) < $"id"), Array(sources.IsNotNull("id")))
-          checkPushedFilters(format, df.where(lit(v1) <= $"id"), Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where(lit(v1) < $"id"),
+            Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where(lit(v1) <= $"id"),
+            Array(sources.IsNotNull("id")))
           checkPushedFilters(format, df.where(lit(v1) === $"id"), Array(), noScan = true)
           checkPushedFilters(format, df.where(lit(v1) >= $"id"), Array(), noScan = true)
           checkPushedFilters(format, df.where(lit(v1) > $"id"), Array(), noScan = true)
 
           // cases when value is within range (MIN, MAX)
-          checkPushedFilters(
-            format,
-            df.where($"id" > 30),
-            Array(sources.IsNotNull("id"), sources.GreaterThan("id", 30)))
-          checkPushedFilters(
-            format,
-            df.where(lit(100) >= $"id"),
+          checkPushedFilters(format, df.where($"id" > 30), Array(sources.IsNotNull("id"),
+            sources.GreaterThan("id", 30)))
+          checkPushedFilters(format, df.where(lit(100) >= $"id"),
             Array(sources.IsNotNull("id"), sources.LessThanOrEqual("id", 100)))
         }
       }
@@ -1227,9 +1223,7 @@ class FileBasedDataSourceSuite
     withTempPath { path =>
       val pathStr = path.getCanonicalPath
       Seq("a / b,a`b", "v1,v2").toDF().coalesce(1).write.text(pathStr)
-      val df = spark.read
-        .option("header", true)
-        .csv(pathStr)
+      val df = spark.read.option("header", true).csv(pathStr)
         .where($"a / b".isNotNull and $"`a``b`".isNotNull)
       checkAnswer(df, Row("v1", "v2"))
     }
