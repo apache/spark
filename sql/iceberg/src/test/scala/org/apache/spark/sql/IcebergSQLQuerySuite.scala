@@ -20,7 +20,5 @@ package org.apache.spark.sql
 import org.apache.spark.tags.ExtendedSQLTest
 
 @ExtendedSQLTest
-class IcebergSQLQuerySuite
-    extends SQLQuerySuite
-    with IcebergSharedSparkSession
-    with IcebergSQLTestData
+class IcebergSQLQuerySuite  extends SQLQuerySuite  with IcebergSharedSparkSession
+  with IcebergSQLTestData

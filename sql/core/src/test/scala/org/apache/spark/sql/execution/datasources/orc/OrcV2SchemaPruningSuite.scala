@@ -35,7 +35,8 @@ class OrcV2SchemaPruningSuite extends SchemaPruningSuite with AdaptiveSparkPlanH
     SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key
 
   override protected def sparkConf: SparkConf =
-    super.sparkConf
+    super
+      .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   override def checkScanSchemata(df: DataFrame, expectedSchemaCatalogStrings: String*): Unit = {
@@ -43,8 +44,7 @@ class OrcV2SchemaPruningSuite extends SchemaPruningSuite with AdaptiveSparkPlanH
       collect(df.queryExecution.executedPlan) {
         case BatchScanExec(_, scan: OrcScan, _, _, _, _, _) => scan.readDataSchema
       }
-    assert(
-      fileSourceScanSchemata.size === expectedSchemaCatalogStrings.size,
+    assert(fileSourceScanSchemata.size === expectedSchemaCatalogStrings.size,
       s"Found ${fileSourceScanSchemata.size} file sources in dataframe, " +
         s"but expected $expectedSchemaCatalogStrings")
     fileSourceScanSchemata.zip(expectedSchemaCatalogStrings).foreach {

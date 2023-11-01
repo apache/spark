@@ -28,13 +28,7 @@ class TPCDSIcebergModifiedPlanStabilitySuite
   val queriesAffectedByBroadcastVarPush = Set("q59")
 
   protected override lazy val baseResourcePath = {
-    getWorkspaceFilePath(
-      "sql",
-      "core",
-      "src",
-      "test",
-      "resources",
-      "iceberg",
+    getWorkspaceFilePath("sql", "core", "src", "test", "resources", "iceberg",
       "tpcds-plan-stability").toFile
   }
 
@@ -57,13 +51,7 @@ class TPCDSIcebergV1_4_PlanStabilitySuite
   override def excludedTpcdsQueries: Set[String] = super.excludedTpcdsQueries ++
     Set("q14a", "q14b", "q38", "q87")
   override lazy val baseResourcePath = {
-    getWorkspaceFilePath(
-      "sql",
-      "core",
-      "src",
-      "test",
-      "resources",
-      "iceberg",
+    getWorkspaceFilePath("sql", "core", "src", "test", "resources", "iceberg",
       "tpcds-plan-stability").toFile
   }
 
@@ -89,13 +77,7 @@ class TPCDSIcebergV2_7_PlanStabilitySuite
     extends TPCDSV2_7_PlanStabilitySuite
     with TPCDSIcebergBase {
   override lazy val baseResourcePath = {
-    getWorkspaceFilePath(
-      "sql",
-      "core",
-      "src",
-      "test",
-      "resources",
-      "iceberg",
+    getWorkspaceFilePath("sql", "core", "src", "test", "resources", "iceberg",
       "tpcds-plan-stability").toFile
   }
 
@@ -120,14 +102,8 @@ class TPCDSIcebergV2_7_PlanStabilitySuite
 
 @ExtendedSQLTest
 class TPCHIcebergPlanStabilitySuite extends TPCHPlanStabilitySuite with TPCHIcebergBase {
-  override def goldenFilePath: String = getWorkspaceFilePath(
-    "sql",
-    "core",
-    "src",
-    "test",
-    "resources",
-    "iceberg",
-    "tpch-plan-stability").toFile.getAbsolutePath
+  override def goldenFilePath: String = getWorkspaceFilePath("sql", "core", "src", "test",
+    "resources", "iceberg", "tpch-plan-stability").toFile.getAbsolutePath
 
   override def excludedTpchQueries: Set[String] =
     if (conf.pushBroadcastedJoinKeysASFilterToScan) {

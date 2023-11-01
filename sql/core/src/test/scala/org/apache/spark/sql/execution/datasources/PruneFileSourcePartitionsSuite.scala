@@ -65,7 +65,8 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
         options = Map.empty)(sparkSession = spark)
 
       val logicalRelation = LogicalRelation(relation, tableMeta)
-      val query = Project(Seq($"id", $"p"), Filter($"p" === 1, logicalRelation)).analyze
+      val query = Project(Seq($"id", $"p"),
+        Filter($"p" === 1, logicalRelation)).analyze
 
       val optimized = Optimize.execute(query)
       assert(optimized.missingInput.isEmpty)
@@ -80,14 +81,14 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
       assert(tableStats.isDefined && tableStats.get.sizeInBytes > 0, "tableStats is lost")
 
       val df = sql("SELECT * FROM tbl WHERE p = 1")
-      val sizes1 = df.queryExecution.analyzed.collect { case relation: LogicalRelation =>
-        relation.catalogTable.get.stats.get.sizeInBytes
+      val sizes1 = df.queryExecution.analyzed.collect {
+        case relation: LogicalRelation => relation.catalogTable.get.stats.get.sizeInBytes
       }
       assert(sizes1.size === 1, s"Size wrong for:\n ${df.queryExecution}")
       assert(sizes1(0) == tableStats.get.sizeInBytes)
 
-      val relations = df.queryExecution.optimizedPlan.collect { case relation: LogicalRelation =>
-        relation
+      val relations = df.queryExecution.optimizedPlan.collect {
+        case relation: LogicalRelation => relation
       }
       assert(relations.size === 1, s"Size wrong for:\n ${df.queryExecution}")
       val size2 = relations(0).stats.sizeInBytes
@@ -111,20 +112,12 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
     // Force datasource v2 for parquet
     withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
       withTempPath { dir =>
-        spark
-          .range(10)
-          .coalesce(1)
-          .selectExpr("id", "id % 3 as p")
-          .write
-          .partitionBy("p")
-          .parquet(dir.getCanonicalPath)
+        spark.range(10).coalesce(1).selectExpr("id", "id % 3 as p")
+            .write.partitionBy("p").parquet(dir.getCanonicalPath)
         withTempView("tmp") {
           spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
           assertPrunedPartitions("SELECT COUNT(*) FROM tmp WHERE p = 0", 1, "(tmp.p = 0)")
-          assertPrunedPartitions(
-            "SELECT input_file_name() FROM tmp WHERE p = 0",
-            1,
-            "(tmp.p = 0)")
+          assertPrunedPartitions("SELECT input_file_name() FROM tmp WHERE p = 0", 1, "(tmp.p = 0)")
         }
       }
     }
@@ -134,21 +127,19 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
     // Force datasource v2 for parquet
     withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
       withTempPath { dir =>
-        spark
-          .range(10)
-          .coalesce(1)
-          .selectExpr("id", "id % 3 as p")
-          .write
-          .partitionBy("p")
-          .parquet(dir.getCanonicalPath)
+        spark.range(10).coalesce(1).selectExpr("id", "id % 3 as p")
+          .write.partitionBy("p").parquet(dir.getCanonicalPath)
         withTempView("tmp") {
           spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
-          assertPrunedPartitions(
-            "SELECT * FROM tmp WHERE (p = 0 AND id > 0) OR (p = 1 AND id = 2)",
+          assertPrunedPartitions("SELECT * FROM tmp WHERE (p = 0 AND id > 0) OR (p = 1 AND id = 2)",
             2,
             "((tmp.p = 0) || (tmp.p = 1))")
-          assertPrunedPartitions("SELECT * FROM tmp WHERE p = 0 AND id > 0", 1, "(tmp.p = 0)")
-          assertPrunedPartitions("SELECT * FROM tmp WHERE p = 0", 1, "(tmp.p = 0)")
+          assertPrunedPartitions("SELECT * FROM tmp WHERE p = 0 AND id > 0",
+            1,
+            "(tmp.p = 0)")
+          assertPrunedPartitions("SELECT * FROM tmp WHERE p = 0",
+            1,
+            "(tmp.p = 0)")
         }
       }
     }
@@ -158,19 +149,13 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
     // Force datasource v2 for parquet
     withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
       withTempPath { dir =>
-        spark
-          .range(10)
-          .coalesce(1)
-          .selectExpr("id", "id % 3 as p")
-          .write
-          .partitionBy("p")
-          .parquet(dir.getCanonicalPath)
+        spark.range(10).coalesce(1).selectExpr("id", "id % 3 as p")
+          .write.partitionBy("p").parquet(dir.getCanonicalPath)
         withTempView("tmp") {
           spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp")
           assertPrunedPartitions("SELECT * FROM tmp WHERE rand() > 0.5", 3, "")
           assertPrunedPartitions("SELECT * FROM tmp WHERE p > rand()", 3, "")
-          assertPrunedPartitions(
-            "SELECT * FROM tmp WHERE p = 0 AND rand() > 0.5",
+          assertPrunedPartitions("SELECT * FROM tmp WHERE p = 0 AND rand() > 0.5",
             1,
             "(tmp.p = 0)")
         }
@@ -185,7 +170,7 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
   override def getScanExecPartitionSize(plan: SparkPlan): Long = {
     plan.collectFirst {
       case p: FileSourceScanExec => p.selectedPartitions.length
-      case BatchScanExec(_, scan: FileScan, _, _, _, _, _) =>
+      case BatchScanExec(_, scan: FileScan, _, _, _, _) =>
         scan.fileIndex.listFiles(scan.partitionFilters, scan.dataFilters).length
     }.get
   }

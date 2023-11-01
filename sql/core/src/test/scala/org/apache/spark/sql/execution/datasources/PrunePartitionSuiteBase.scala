@@ -31,48 +31,46 @@ abstract class PrunePartitionSuiteBase extends StatisticsCollectionTestBase {
     withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       withTempView("temp") {
         withTable("t") {
-          sql(s"""
+          sql(
+            s"""
                |CREATE TABLE t(i INT, p STRING)
                |USING $format
                |PARTITIONED BY (p)""".stripMargin)
 
-          spark
-            .range(0, 1000, 1)
-            .selectExpr("id as col")
+          spark.range(0, 1000, 1).selectExpr("id as col")
             .createOrReplaceTempView("temp")
 
           for (part <- Seq(1, 2, 3, 4)) {
-            sql(s"""
+            sql(
+              s"""
                  |INSERT OVERWRITE TABLE t PARTITION (p='$part')
                  |SELECT col FROM temp""".stripMargin)
           }
 
           assertPrunedPartitions(
-            "SELECT * FROM t WHERE p = '1' OR (p = '2' AND i = 1)",
-            2,
+            "SELECT * FROM t WHERE p = '1' OR (p = '2' AND i = 1)", 2,
             "((p = '1') || (p = '2'))")
           assertPrunedPartitions(
-            "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (i = 1 OR p = '2')",
-            4,
+            "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (i = 1 OR p = '2')", 4,
             "")
           assertPrunedPartitions(
-            "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '3' AND i = 3 )",
-            2,
+            "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '3' AND i = 3 )", 2,
             "((p = '1') || (p = '3'))")
           assertPrunedPartitions(
-            "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '2' OR p = '3')",
-            3,
+            "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '2' OR p = '3')", 3,
             "((p = '1') || ((p = '2') || (p = '3')))")
-          assertPrunedPartitions("SELECT * FROM t", 4, "")
-          assertPrunedPartitions("SELECT * FROM t WHERE p = '1' AND i = 2", 1, "(p = '1')")
+          assertPrunedPartitions(
+            "SELECT * FROM t", 4,
+            "")
+          assertPrunedPartitions(
+            "SELECT * FROM t WHERE p = '1' AND i = 2", 1,
+            "(p = '1')")
           assertPrunedPartitions(
             """
               |SELECT i, COUNT(1) FROM (
               |SELECT * FROM t WHERE  p = '1' OR (p = '2' AND i = 1)
               |) tmp GROUP BY i
-            """.stripMargin,
-            2,
-            "((p = '1') || (p = '2'))")
+            """.stripMargin, 2, "((p = '1') || (p = '2'))")
         }
       }
     }
@@ -97,11 +95,10 @@ abstract class PrunePartitionSuiteBase extends StatisticsCollectionTestBase {
     assert(getScanExecPartitionSize(plan) == expectedPartitionCount)
 
     val collectFn: PartialFunction[SparkPlan, Seq[Expression]] =
-      collectPartitionFiltersFn() orElse { case BatchScanExec(_, scan: FileScan, _, _, _, _, _) =>
-        scan.partitionFilters
+      collectPartitionFiltersFn() orElse {
+        case BatchScanExec(_, scan: FileScan, _, _, _, _, _) => scan.partitionFilters
       }
-    val pushedDownPartitionFilters = plan
-      .collectFirst(collectFn)
+    val pushedDownPartitionFilters = plan.collectFirst(collectFn)
       .map(exps => exps.filterNot(e => e.isInstanceOf[IsNotNull]))
     val pushedFilters = pushedDownPartitionFilters.map(filters => {
       filters.foldLeft("")((currentStr, exp) => {
