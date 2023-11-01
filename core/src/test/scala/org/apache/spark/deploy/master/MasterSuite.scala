@@ -1244,6 +1244,13 @@ class MasterSuite extends SparkFunSuite
     assert(master.invokePrivate(_newDriverId(submitDate)) === "my-driver-00000")
     assert(master.invokePrivate(_newDriverId(submitDate)) === "my-driver-00001")
   }
+
+  test("SPARK-45753: Prevent invalid driver id patterns") {
+    val m = intercept[IllegalArgumentException] {
+      makeMaster(new SparkConf().set(DRIVER_ID_PATTERN, "my driver"))
+    }.getMessage
+    assert(m.contains("Whitespace is not allowed"))
+  }
 }
 
 private class FakeRecoveryModeFactory(conf: SparkConf, ser: serializer.Serializer)
