@@ -654,7 +654,9 @@ class SparkSession:
         # multi-tenancy - the remote client side cannot just stop the server and stop
         # other remote clients being used from other users.
         with SparkSession._lock:
-            self.client.release_session()
+            # Only allows the dummy sessions within tests.
+            if self.client._cached_stub is not None and "SPARK_TESTING" not in os.environ:
+                self.client.release_session()
             self.client.close()
             if self is SparkSession._default_session:
                 SparkSession._default_session = None

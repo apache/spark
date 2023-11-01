@@ -19,7 +19,7 @@ __all__ = [
     "SparkConnectClient",
 ]
 
-from pyspark.loose_version import LooseVersion
+
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -61,6 +61,7 @@ import grpc
 from google.protobuf import text_format
 from google.rpc import error_details_pb2
 
+from pyspark.loose_version import LooseVersion
 from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql.connect.client.artifact import ArtifactManager
@@ -668,12 +669,18 @@ class SparkConnectClient(object):
 
         self._channel = self._builder.toChannel()
         self._closed = False
-        self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
+        self._cached_stub = None
         self._artifact_manager = ArtifactManager(
             self._user_id, self._session_id, self._channel, self._builder.metadata()
         )
         self._use_reattachable_execute = use_reattachable_execute
         # Configure logging for the SparkConnect client.
+
+    @property
+    def _stub(self) -> grpc_lib.SparkConnectServiceStub:
+        if self._cached_stub is None:
+            self._cached_stub = grpc_lib.SparkConnectServiceStub(self._channel)
+        return self._cached_stub
 
     def _retrying(self) -> "Retrying":
         return Retrying(

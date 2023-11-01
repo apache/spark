@@ -41,7 +41,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
     def test_user_agent_passthrough(self):
         client = SparkConnectClient("sc://foo/;user_agent=bar", use_reattachable_execute=False)
         mock = MockService(client._session_id)
-        client._stub = mock
+        client._cached_stub = mock
 
         command = proto.Command()
         client.execute_command(command)
@@ -52,7 +52,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
     def test_user_agent_default(self):
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
         mock = MockService(client._session_id)
-        client._stub = mock
+        client._cached_stub = mock
 
         command = proto.Command()
         client.execute_command(command)
@@ -85,7 +85,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
     def test_interrupt_all(self):
         client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
         mock = MockService(client._session_id)
-        client._stub = mock
+        client._cached_stub = mock
 
         client.interrupt_all()
         self.assertIsNotNone(mock.req, "Interrupt API was not called when expected")
