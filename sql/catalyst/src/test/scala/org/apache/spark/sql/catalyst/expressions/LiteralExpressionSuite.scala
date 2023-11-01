@@ -27,10 +27,10 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLType
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -328,7 +328,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       val timestamp = LocalDateTime.of(2019, 3, 21, 0, 2, 3, 456000000)
         .atZone(ZoneOffset.UTC)
         .toInstant
-      val expected = "TIMESTAMP '2019-03-21 01:02:03.456'"
+      val expected = "TIMESTAMP '2019-03-21 01:02:03.456GMT+01:00'"
       val literalStr = Literal.create(timestamp).sql
       assert(literalStr === expected)
     }
@@ -476,5 +476,300 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       Literal.create(UTF8String.fromString("Spark SQL"), ObjectType(classOf[UTF8String])),
       UTF8String.fromString("Spark SQL"))
+  }
+
+  private def serializationRoundTripInfo(
+      before: Literal,
+      serializedValue: String,
+      serializedDataType: String,
+      after: Literal): String = {
+    s"""- Initial Literal: $before with type ${before.dataType}
+       |- String after serialization: $serializedValue with type $serializedDataType
+       |- Deserialized Literal: $after with type ${after.dataType}
+       |""".stripMargin
+  }
+
+  test(".sql and fromSQL round trip: basic Literals") {
+    Seq(
+      // null
+      Literal.create(null, BooleanType),
+      Literal.create(null, ByteType),
+      Literal.create(null, ShortType),
+      Literal.create(null, IntegerType),
+      Literal.create(null, LongType),
+      Literal.create(null, FloatType),
+      Literal.create(null, StringType),
+      Literal.create(null, BinaryType),
+      Literal.create(null, DecimalType.USER_DEFAULT),
+      Literal.create(null, DecimalType(20, 2)),
+      Literal.create(null, DateType),
+      Literal.create(null, TimestampType),
+      Literal.create(null, CalendarIntervalType),
+      Literal.create(null, YearMonthIntervalType()),
+      Literal.create(null, DayTimeIntervalType(1, 2)),
+      Literal.create(null, ArrayType(ByteType, true)),
+      Literal.create(null, MapType(StringType, IntegerType)),
+      Literal.create(null, StructType(Seq.empty)),
+
+      // boolean
+      Literal(true),
+      Literal(false),
+
+      // int, long, short, byte
+      Literal(0),
+      Literal(1.toLong),
+      Literal(0.toShort),
+      Literal(1.toByte),
+      Literal(Int.MinValue),
+      Literal(Int.MinValue.toShort),
+      Literal(Int.MaxValue),
+      Literal(Int.MaxValue.toByte),
+      Literal(Short.MinValue),
+      Literal(Byte.MaxValue),
+      Literal(Long.MinValue),
+      Literal(Long.MaxValue),
+
+      // float
+      Literal(0.0.toFloat),
+      Literal(-0.0.toFloat),
+      Literal(Float.PositiveInfinity),
+      Literal(Float.NegativeInfinity),
+      Literal(Float.MinPositiveValue),
+      Literal(Float.MaxValue),
+      Literal(Float.MinValue),
+      Literal(Float.NaN),
+
+      // double
+      Literal(0.0),
+      Literal(-0.0),
+      Literal(Double.NegativeInfinity),
+      Literal(Double.PositiveInfinity),
+      Literal(Double.MinValue),
+      Literal(Double.MaxValue),
+      Literal(Double.NaN),
+      Literal(Double.MinPositiveValue),
+
+      // Decimal -> without type it's problematic?
+      Literal(Decimal(-0.0001)),
+      Literal(Decimal(0.0)),
+      Literal(Decimal(0.001)),
+      Literal(Decimal(1.1111)),
+      Literal(Decimal(5.toLong, 10, 3)),
+      Literal(BigDecimal((-0.0001).toString)),
+      Literal(new java.math.BigDecimal(0.0.toString)),
+
+      // binary
+      Literal.create(new Array[Byte](0), BinaryType),
+      Literal.create(new Array[Byte](2), BinaryType),
+
+      // string
+      Literal(""),
+      Literal("a"),
+      Literal("\u0000"),
+      Literal("a b"),
+
+      // DayTimeInterval (Duration)
+      Literal(Duration.ofNanos(0)),
+      Literal(Duration.ofSeconds(-1)),
+      Literal(Duration.ofMinutes(62)),
+      Literal.create(Duration.ofMinutes(62), DayTimeIntervalType(2, 3)),
+      Literal(Duration.ofHours(10)),
+      Literal.create(Duration.ofDays(12345600), DayTimeIntervalType(0, 1)),
+
+      // YearMonthInterval (Period)
+      Literal(Period.ofYears(0)),
+      Literal.create(Period.ofYears(1), YearMonthIntervalType(0, 0)),
+      Literal.create(Period.ofYears(1), YearMonthIntervalType(1, 1)),
+      Literal(Period.of(-1, 11, 0)),
+      Literal(Period.ofMonths(Int.MinValue)),
+
+
+
+      // array
+      Literal(Array(1, 2, 3)),
+      Literal.create(Array(1.0, 2.0), ArrayType(DoubleType, false)),
+      Literal.create(Array(1.0, 2.0), ArrayType(DoubleType, true)),
+      Literal.create(Array(1.0, 2.0, null), ArrayType(DoubleType, true)),
+      Literal(Array("a")),
+
+      // array of struct
+      Literal(
+        new GenericArrayData(
+          Array(
+            InternalRow(UTF8String.fromString("a"), 1),
+            InternalRow(UTF8String.fromString("b"), 2)
+          )
+        ),
+        ArrayType(
+          StructType(Seq(StructField("col1", StringType), StructField("col2", IntegerType))),
+          containsNull = false
+        )
+      ),
+
+      // struct
+      Literal.create((1, 3.0, "abc")),
+      Literal(
+        InternalRow(true, 1.toLong),
+        StructType(
+          Seq(
+            StructField("col1", BooleanType, nullable = false).withComment("some-comment"),
+            StructField("col2", LongType)
+          )
+        )
+      ),
+
+      // struct contains array
+      Literal(
+        InternalRow(1.0, new GenericArrayData(Array(true, false, null))),
+        StructType(
+          Seq(
+            StructField("col1", DoubleType),
+            StructField("col2", ArrayType(BooleanType, containsNull = true))
+          )
+        )
+      ),
+
+      // map
+      Literal(
+        new ArrayBasedMapData(
+          new GenericArrayData(Array(UTF8String.fromString("a"), UTF8String.fromString("b"))),
+          new GenericArrayData(Array(1.toShort, 222.toShort))),
+        MapType(StringType, ShortType, valueContainsNull = false)
+      ),
+
+      // map contains array
+      Literal(
+        new ArrayBasedMapData(
+          new GenericArrayData(Array(UTF8String.fromString("a"), UTF8String.fromString("b"))),
+          new GenericArrayData(Array(
+            new GenericArrayData(Array(1, 2)), new GenericArrayData(Array(3))
+          ))
+        ),
+        MapType(StringType, ArrayType(IntegerType, containsNull = true))
+      )
+
+      // TODO(anchovyu): enable this test when map value comparison problem is fixed
+      // mixture of complex data type
+      // [map(
+      //   alex -> [(12345, home), (67890, work)],
+      //   bob -> [(null, home)]
+      // )]
+      //      , Literal(
+      //        new GenericArrayData(Array(
+      //          new ArrayBasedMapData(
+      //            new GenericArrayData(Array(
+      //              UTF8String.fromString("alex"),
+      //              UTF8String.fromString("bob"))
+      //            ),
+      //            new GenericArrayData(Array(
+      //              new GenericArrayData(Array(
+      //                InternalRow(12345, UTF8String.fromString("home")),
+      //                InternalRow(67890, UTF8String.fromString("work")))
+      //              ),
+      //              new GenericArrayData(Array(InternalRow(null, UTF8String.fromString("home"))))
+      //            ))
+      //          )
+      //        )),
+      //        ArrayType(
+      //          MapType(
+      //            StringType,
+      //            ArrayType(
+      //              StructType(Seq(
+      //                StructField("phone", IntegerType).withComment("phone number"),
+      //                StructField("tags", StringType)
+      //              ))
+      //            )
+      //          )
+      //        )
+      //      )
+    ).foreach { lit =>
+      val serialized = lit.sql
+      val dataTypeJson = lit.dataType.json
+      val deserialized = Literal.fromSQL(serialized, dataTypeJson)
+      assert(
+        deserialized.equals(lit),
+        serializationRoundTripInfo(lit, serialized, dataTypeJson, deserialized)
+      )
+    }
+  }
+
+  test(".sql and fromSQL round trip: time related Literals") {
+    Seq(
+      // date
+      Literal(LocalDate.of(1, 1, 1)),
+      Literal(LocalDate.of(2100, 5, 17)),
+
+      // timestamp
+      Literal(Instant.parse("2023-01-01T00:00:00Z")),
+      Literal(Instant.ofEpochMilli(0)),
+      Literal.create(
+        LocalDateTime
+          .of(2019, 3, 21, 0, 2, 3, 456000000)
+          .atZone(ZoneOffset.UTC)
+          .toInstant
+      ),
+
+      // timestampNTZ
+      Literal(LocalDateTime.of(2023, 10, 23, 0, 0, 0, 456000000))
+    ).foreach { lit =>
+      // serialize and deserialize in the same timezone: default
+      val timeZone1 = SQLConf.get.sessionLocalTimeZone
+      val serialized1 = lit.sql
+      val dataTypeJson1 = lit.dataType.json
+      val deserialized1 = Literal.fromSQL(serialized1, dataTypeJson1)
+      assert(
+        deserialized1.equals(lit),
+        s"""
+           |Serialized and deserialized both in timezone $timeZone1,
+           |current timezone to print this prompt is ${SQLConf.get.sessionLocalTimeZone}.
+           |${serializationRoundTripInfo(lit, serialized1, dataTypeJson1, deserialized1)}
+           |""".stripMargin
+      )
+
+      // serialize and deserialize in the same timezone: set by conf
+      val timeZone2 = "GMT+1:00"
+      withTimeZones(sessionTimeZone = timeZone2, systemTimeZone = "GMT-8:00") {
+        val serialized2 = lit.sql
+        val dataTypeJson2 = lit.dataType.json
+        val deserialized2 = Literal.fromSQL(serialized2, dataTypeJson2)
+        assert(
+          deserialized2.equals(lit),
+          s"""
+             |Serialized and deserialized both in timezone $timeZone2,
+             |current timezone to print this prompt is ${SQLConf.get.sessionLocalTimeZone}.
+             |${serializationRoundTripInfo(lit, serialized2, dataTypeJson2, deserialized2)}
+             |""".stripMargin
+        )
+      }
+
+      // serialize and deserialize in different timezones
+      val serializedTimeZone = SQLConf.get.sessionLocalTimeZone
+      val deserializedTimeZone = "GMT+1:00"
+      val serialized3 = lit.sql
+      val dataTypeJson3 = lit.dataType.json
+      var deserialized3 = Literal(1)
+      withTimeZones(sessionTimeZone = deserializedTimeZone, systemTimeZone = "GMT-8:00") {
+        deserialized3 = Literal.fromSQL(serialized3, dataTypeJson3)
+      }
+      assert(deserialized3.equals(lit),
+        s"""
+           |Serialized in timezone $serializedTimeZone,
+           |deserialized in timezone $deserializedTimeZone,
+           |current timezone to print this prompt is ${SQLConf.get.sessionLocalTimeZone}.
+           |${serializationRoundTripInfo(lit, serialized3, dataTypeJson3, deserialized3)}
+           |""".stripMargin
+      )
+    }
+  }
+
+  test(".sql and fromSQL round trip: CalendarInterval Literals") {
+    val lit = Literal(new CalendarInterval(1, 2, 3))
+    val serialized = lit.sql
+    val dataTypeJson = lit.dataType.json
+    val deserialized = Literal.fromSQL(serialized, dataTypeJson)
+    assert(
+      deserialized.equals(lit),
+      serializationRoundTripInfo(lit, serialized, dataTypeJson, deserialized)
+    )
   }
 }

@@ -790,6 +790,23 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     }
   }
 
+  def invalidLiteralValueSQLStringForDeserialization(
+      subErrorClass: String,
+      sqlString: String,
+      dataType: DataType,
+      cause: Option[Exception],
+      deserializedExpr: Option[Expression] = None): Throwable = {
+    new AnalysisException(
+      errorClass = s"INVALID_LITERAL_VALUE_SQL_STRING_FOR_DESERIALIZATION.$subErrorClass",
+      messageParameters = Map(
+        "sqlStr" -> sqlString,
+        "dataType" -> toSQLType(dataType),
+        "expr" -> deserializedExpr.map(toSQLExpr).getOrElse("")
+      ),
+      cause = cause
+    )
+  }
+
   def alterV2TableSetLocationWithPartitionNotSupportedError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1045",

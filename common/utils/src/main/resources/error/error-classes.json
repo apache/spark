@@ -1866,6 +1866,29 @@
     },
     "sqlState" : "42K0E"
   },
+  "INVALID_LITERAL_VALUE_SQL_STRING_FOR_DESERIALIZATION" : {
+    "message" : [
+      "The given Literal value SQL string <sqlStr> (dataType: <dataType>) is invalid and can't be deserialized."
+    ],
+    "subClass" : {
+      "ANALYSIS_FAILURE" : {
+        "message" : [
+          "It cannot be analyzed successfully."
+        ]
+      },
+      "NOT_EXPECTED_LITERAL_TYPE" : {
+        "message" : [
+          "The deserialized expression <expr> is not an Literal with data type <dataType>."
+        ]
+      },
+      "PARSE_FAILURE" : {
+        "message" : [
+          "It cannot be parsed successfully."
+        ]
+      }
+    },
+    "sqlState" : "42894"
+  },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."

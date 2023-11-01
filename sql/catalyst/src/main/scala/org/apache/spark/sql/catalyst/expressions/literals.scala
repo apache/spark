@@ -41,7 +41,11 @@ import org.apache.commons.codec.binary.{Hex => ApacheHex}
 import org.json4s.JsonAST._
 
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
+import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LITERAL, NULL_LITERAL, TRUE_OR_FALSE_LITERAL}
 import org.apache.spark.sql.catalyst.types._
@@ -246,6 +250,67 @@ object Literal {
     require(doValidate(value, dataType),
       s"Literal must have a corresponding value to ${dataType.catalogString}, " +
       s"but class ${Utils.getSimpleName(value.getClass)} found.")
+  }
+
+  /**
+   * Parse and analyze the .sql string of a Literal, construct the Literal given the data type json.
+   * Example usage:
+   *   val serializedValue = lit.sql
+   *   val dataTypeJson = lit.dataType.json
+   *   val deserializedLit: Literal = Literal.fromSQL(serializedValue, dataTypeJson)
+   *
+   * @param valueSqlStr the .sql string of the Literal
+   * @param dataTypeJson the json format data type of the Literal
+   * @throws AnalysisException INVALID_LITERAL_VALUE_SQL_STRING_FOR_DESERIALIZATION
+   */
+  private[sql] def fromSQL(valueSqlStr: String, dataTypeJson: String): Literal = {
+    def parseAndAnalyze(valueSqlStr: String, dataType: DataType): Expression = {
+      lazy val parser = new CatalystSqlParser()
+      val parsed: Expression = try {
+        parser.parseExpression(valueSqlStr)
+      } catch {
+        case e: Exception =>
+          throw QueryCompilationErrors.invalidLiteralValueSQLStringForDeserialization(
+            "PARSE_FAILURE", valueSqlStr, dataType, Some(e))
+      }
+
+      val analyzer: Analyzer = ResolveDefaultColumns.DefaultColumnAnalyzer
+      val analyzedPlan = try {
+        val analyzed = analyzer.execute(
+          Project(
+            Seq(Alias(Cast(parsed, dataType, evalMode = EvalMode.ANSI), "alias")()),
+            OneRowRelation()
+          )
+        )
+        analyzer.checkAnalysis(analyzed)
+        // if data type is un-castable it fails here
+        ConstantFolding(analyzed)
+      } catch {
+        case e: Exception =>
+          throw QueryCompilationErrors.invalidLiteralValueSQLStringForDeserialization(
+            "ANALYSIS_FAILURE", valueSqlStr, dataType, Some(e))
+      }
+      analyzedPlan.collectFirst { case Project(Seq(a: Alias), OneRowRelation()) => a.child }.get
+    }
+
+    val dataType = DataType.fromJson(dataTypeJson)
+    val analyzedExpr = if (dataType.sameType(CalendarIntervalType)) {
+      val conf = SQLConf.get.clone()
+      // override the conf to enable parsing calendar interval types
+      conf.settings.put(SQLConf.LEGACY_INTERVAL_ENABLED.key, "true")
+      SQLConf.withExistingConf(conf) {
+        parseAndAnalyze(valueSqlStr, dataType)
+      }
+    } else {
+      parseAndAnalyze(valueSqlStr, dataType)
+    }
+
+    analyzedExpr match {
+      case l: Literal if l.dataType.equals(dataType) => l
+      case _ =>
+        throw QueryCompilationErrors.invalidLiteralValueSQLStringForDeserialization(
+          "NOT_EXPECTED_LITERAL_TYPE", valueSqlStr, dataType, None, Some(analyzedExpr))
+    }
   }
 }
 
@@ -503,7 +568,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case (v: Int, DateType) =>
       s"DATE '$toString'"
     case (v: Long, TimestampType) =>
-      s"TIMESTAMP '$toString'"
+      s"TIMESTAMP '$toString${SQLConf.get.sessionLocalTimeZone}'"
     case (v: Long, TimestampNTZType) =>
       s"TIMESTAMP_NTZ '$toString'"
     case (i: CalendarInterval, CalendarIntervalType) =>

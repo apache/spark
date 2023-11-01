@@ -20,6 +20,7 @@ package org.apache.spark.sql.errors
 import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
@@ -711,6 +712,33 @@ class QueryCompilationErrorsSuite
         "actualNum" -> "1",
         "docroot" -> SPARK_DOC_ROOT),
       context = ExpectedContext("", "", 7, 13, "CAST(1)")
+    )
+  }
+
+  test("INVALID_LITERAL_VALUE_SQL_STRING_FOR_DESERIALIZATION") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        Literal.fromSQL("some random things", StringType.json)
+      },
+      errorClass = "INVALID_LITERAL_VALUE_SQL_STRING_FOR_DESERIALIZATION.PARSE_FAILURE",
+     parameters = Map("sqlStr" -> "some random things", "dataType" -> "\"STRING\"", "expr" -> ""),
+      sqlState = "42894"
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        Literal.fromSQL("some_func('abc')", StringType.json)
+      },
+      errorClass = "INVALID_LITERAL_VALUE_SQL_STRING_FOR_DESERIALIZATION.ANALYSIS_FAILURE",
+      parameters = Map("sqlStr" -> "some_func('abc')", "dataType" -> "\"STRING\"", "expr" -> ""),
+      sqlState = "42894"
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        Literal.fromSQL("'abc'", IntegerType.json)
+      },
+      errorClass = "INVALID_LITERAL_VALUE_SQL_STRING_FOR_DESERIALIZATION.ANALYSIS_FAILURE",
+      parameters = Map("sqlStr" -> "'abc'", "dataType" -> "\"INT\"", "expr" -> ""),
+      sqlState = "42894"
     )
   }
 
