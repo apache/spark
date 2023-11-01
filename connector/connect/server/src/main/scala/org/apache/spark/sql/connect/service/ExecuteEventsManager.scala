@@ -265,10 +265,8 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
         """)
     }
     eventStatus match {
-      case ExecuteStatus.Pending
-           | ExecuteStatus.Started
-           | ExecuteStatus.Analyzed
-           | ExecuteStatus.ReadyForExecution =>
+      case ExecuteStatus.Pending | ExecuteStatus.Started | ExecuteStatus.Analyzed |
+          ExecuteStatus.ReadyForExecution =>
         if (sessionHolder.eventManager.status != SessionStatus.Started) {
           throw new IllegalStateException(s"""
             sessionId: $sessionId with status $sessionStatus
