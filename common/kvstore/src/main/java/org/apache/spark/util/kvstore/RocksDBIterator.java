@@ -185,10 +185,13 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
   public synchronized void close() throws IOException {
     db.notifyIteratorClosed(this);
     if (!closed) {
-      it.close();
-      closed = true;
-      next = null;
-      cancelResourceClean();
+      try {
+        it.close();
+        closed = true;
+        next = null;
+      } finally {
+        cancelResourceClean();
+      }
     }
   }
 
@@ -198,8 +201,8 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
   }
 
   @VisibleForTesting
-  RocksIterator internalIterator() {
-    return it;
+  ResourceCleaner getResourceCleaner() {
+    return resourceCleaner;
   }
 
   private byte[] loadNext() {
@@ -280,7 +283,7 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     return a.length - b.length;
   }
 
-  private static class ResourceCleaner implements Runnable {
+  static class ResourceCleaner implements Runnable {
 
     private final RocksIterator rocksIterator;
     private final RocksDB rocksDB;
@@ -294,9 +297,11 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     @Override
     public void run() {
       if (status.compareAndSet(true, false)) {
-        rocksDB.getIteratorTracker().removeIf(ref -> {
+        rocksDB.getIteratorTracker().forEach(ref -> {
           RocksDBIterator<?> rocksDBIterator = ref.get();
-          return rocksDBIterator != null && rocksIterator.equals(rocksDBIterator.it);
+          if (rocksDBIterator != null && rocksIterator.equals(rocksDBIterator.it)) {
+            rocksDB.notifyIteratorClosed(rocksDBIterator);
+          }
         });
         rocksIterator.close();
       }
@@ -304,6 +309,11 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
 
     void statusToFalse() {
       status.set(false);
+    }
+
+    @VisibleForTesting
+    AtomicBoolean getStatus() {
+      return status;
     }
   }
 }

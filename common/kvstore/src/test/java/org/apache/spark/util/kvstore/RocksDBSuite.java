@@ -398,9 +398,8 @@ public class RocksDBSuite {
       Reference<RocksDBIterator<?>> reference =
         getRocksDBIteratorRef(rocksDBIterator, dbForCleanerTest);
       assertNotNull(reference);
-      RocksIterator it = rocksDBIterator.internalIterator();
-      // it has not been closed yet, isOwningHandle should be true.
-      assertTrue(it.isOwningHandle());
+      RocksDBIterator.ResourceCleaner resourceCleaner = rocksDBIterator.getResourceCleaner();
+      assertTrue(resourceCleaner.getStatus().get());
       // Manually set rocksDBIterator to null, to be GC.
       rocksDBIterator = null;
       // 100 times gc, the rocksDBIterator should be GCed.
@@ -414,7 +413,7 @@ public class RocksDBSuite {
       assertTrue(reference.refersTo(null));
       // Verify that the Cleaner will be executed after a period of time,
       // and it.isOwningHandle() will become false.
-      assertTimeout(java.time.Duration.ofSeconds(5), () -> assertFalse(it.isOwningHandle()));
+      assertFalse(resourceCleaner.getStatus().get());
     } finally {
       dbForCleanerTest.close();
       FileUtils.deleteQuietly(dbPathForCleanerTest);
