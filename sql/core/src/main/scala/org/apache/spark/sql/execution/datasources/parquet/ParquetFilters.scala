@@ -110,6 +110,7 @@ class ParquetFilters(
       primitiveFields
         .groupBy(_._1.toLowerCase(Locale.ROOT))
         .filter(_._2.size == 1)
+        .view
         .mapValues(_.head._2)
       CaseInsensitiveMap(dedupPrimitiveFields.toMap)
     }

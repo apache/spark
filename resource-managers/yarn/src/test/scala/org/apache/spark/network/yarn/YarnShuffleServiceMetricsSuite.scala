@@ -77,7 +77,7 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
       assert(counterNames === Seq(s"${testname}_count"))
       val rates = Seq("rate1", "rate5", "rate15", "rateMean")
       val percentiles =
-        "1stPercentile" +: Seq(5, 25, 50, 75, 95, 98, 99, 999).map(_ + "thPercentile")
+        "1stPercentile" +: Seq(5, 25, 50, 75, 95, 98, 99, 999).map(i => s"${i}thPercentile")
       val (expectLong, expectDouble) =
         if (testname.matches("blockTransfer(Message)?Rate(Bytes)?$")) {
           // blockTransfer(Message)?Rate(Bytes)? metrics are Meter so just have rate information

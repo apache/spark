@@ -452,7 +452,7 @@ abstract class InMemoryBaseTable(
             val matchingKeys = values.map { value =>
               if (value != null) value.toString else null
             }.toSet
-            data = data.filter(partition => {
+            this.data = this.data.filter(partition => {
               val rows = partition.asInstanceOf[BufferedRows]
               rows.key match {
                 // null partitions are represented as Seq(null)

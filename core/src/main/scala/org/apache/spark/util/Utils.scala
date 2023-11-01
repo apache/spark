@@ -95,6 +95,7 @@ private[spark] object CallSite {
 private[spark] object Utils
   extends Logging
   with SparkClassUtils
+  with SparkEnvUtils
   with SparkErrorUtils
   with SparkFileUtils
   with SparkSerDeUtils
@@ -838,7 +839,7 @@ private[spark] object Utils
    * uses a local random number generator, avoiding inter-thread contention.
    */
   def randomize[T: ClassTag](seq: IterableOnce[T]): Seq[T] = {
-    randomizeInPlace(seq.toArray)
+    randomizeInPlace(seq.iterator.toArray)
   }
 
   /**
@@ -1789,15 +1790,6 @@ private[spark] object Utils
    * Pattern for matching a Windows drive, which contains only a single alphabet character.
    */
   val windowsDrive = "([a-zA-Z])".r
-
-  /**
-   * Indicates whether Spark is currently running unit tests.
-   */
-  def isTesting: Boolean = {
-    // Scala's `sys.env` creates a ton of garbage by constructing Scala immutable maps, so
-    // we directly use the Java APIs instead.
-    System.getenv("SPARK_TESTING") != null || System.getProperty(IS_TESTING.key) != null
-  }
 
   /**
    * Terminates a process waiting for at most the specified duration.

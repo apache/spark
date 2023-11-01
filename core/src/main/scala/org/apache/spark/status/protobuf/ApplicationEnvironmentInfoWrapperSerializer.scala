@@ -130,9 +130,10 @@ private[protobuf] class ApplicationEnvironmentInfoWrapperSerializer
     new ResourceProfileInfo(
       id = info.getId,
       executorResources =
-        info.getExecutorResourcesMap.asScala.mapValues(deserializeExecutorResourceRequest).toMap,
+        info.getExecutorResourcesMap.asScala.view.mapValues(deserializeExecutorResourceRequest)
+          .toMap,
       taskResources =
-        info.getTaskResourcesMap.asScala.mapValues(deserializeTaskResourceRequest).toMap)
+        info.getTaskResourcesMap.asScala.view.mapValues(deserializeTaskResourceRequest).toMap)
   }
 
   private def deserializeExecutorResourceRequest(info: StoreTypes.ExecutorResourceRequest):

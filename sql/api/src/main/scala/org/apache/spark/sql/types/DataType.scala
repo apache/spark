@@ -258,6 +258,11 @@ object DataType {
     ("nullable", JBool(nullable)),
     ("type", dataType: JValue)) =>
       StructField(name, parseDataType(dataType), nullable)
+    // Support reading schema when 'nullable' is missing.
+    case JSortedObject(
+    ("name", JString(name)),
+    ("type", dataType: JValue)) =>
+      StructField(name, parseDataType(dataType))
     case other =>
       throw new IllegalArgumentException(
         s"Failed to convert the JSON string '${compact(render(other))}' to a field.")

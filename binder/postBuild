@@ -20,6 +20,11 @@
 # This file is used for Binder integration to install PySpark available in
 # Jupyter notebook.
 
+# SPARK-45706: Should fail fast. Otherwise, the Binder image is successfully
+# built, and it cannot be rebuilt.
+set -o pipefail
+set -e
+
 VERSION=$(python -c "exec(open('python/pyspark/version.py').read()); print(__version__)")
 TAG=$(git describe --tags --exact-match 2>/dev/null)
 

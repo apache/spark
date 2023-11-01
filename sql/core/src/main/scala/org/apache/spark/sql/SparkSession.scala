@@ -229,6 +229,11 @@ class SparkSession private(
   def udtf: UDTFRegistration = sessionState.udtfRegistration
 
   /**
+   * A collection of methods for registering user-defined data sources.
+   */
+  private[sql] def dataSource: DataSourceRegistration = sharedState.dataSourceRegistration
+
+  /**
    * Returns a `StreamingQueryManager` that allows managing all the
    * `StreamingQuery`s active on `this`.
    *
@@ -683,7 +688,7 @@ class SparkSession private(
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
         if (args.nonEmpty) {
-          NameParameterizedQuery(parsedPlan, args.mapValues(lit(_).expr).toMap)
+          NameParameterizedQuery(parsedPlan, args.view.mapValues(lit(_).expr).toMap)
         } else {
           parsedPlan
         }

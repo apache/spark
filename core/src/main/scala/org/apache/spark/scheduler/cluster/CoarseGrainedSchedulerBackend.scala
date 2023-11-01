@@ -319,7 +319,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case StopDriver =>
         context.reply(true)
-        stop()
+        this.stop()
 
       case UpdateExecutorsLogLevel(logLevel) =>
         currentLogLevel = Some(logLevel)
@@ -736,7 +736,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   def getExecutorsWithRegistrationTs(): Map[String, Long] = synchronized {
-    executorDataMap.mapValues(v => v.registrationTs).toMap
+    executorDataMap.view.mapValues(v => v.registrationTs).toMap
   }
 
   override def isExecutorActive(id: String): Boolean = synchronized {
