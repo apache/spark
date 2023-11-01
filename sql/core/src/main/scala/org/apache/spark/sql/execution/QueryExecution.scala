@@ -47,7 +47,7 @@ import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.Utils
 
 /**
- * The primary workflow for executing relational queries using Spark. Designed to allow easy
+ * The primary workflow for executing relational queries using Spark.  Designed to allow easy
  * access to the intermediate phases of query execution for developers.
  *
  * While this is not a public class, we should avoid changing the function names for the sake of
@@ -57,8 +57,7 @@ class QueryExecution(
     val sparkSession: SparkSession,
     val logical: LogicalPlan,
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
-    val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL)
-    extends Logging {
+    val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
 
@@ -118,7 +117,11 @@ class QueryExecution(
       val result = SQLExecution.withNewExecutionId(qe, Some(commandExecutionName(c))) {
         qe.executedPlan.executeCollect()
       }
-      CommandResult(qe.analyzed.output, qe.commandExecuted, qe.executedPlan, result)
+      CommandResult(
+        qe.analyzed.output,
+        qe.commandExecuted,
+        qe.executedPlan,
+        result)
     case other => other
   }
 
@@ -202,30 +205,28 @@ class QueryExecution(
   def assertExecutedPlanPrepared(): Unit = executedPlan
 
   /**
-   * Internal version of the RDD. Avoids copies and has no schema. Note for callers: Spark may
-   * apply various optimization including reusing object: this means the row is valid only for the
-   * iteration it is retrieved. You should avoid storing row and accessing after iteration.
-   * (Calling `collect()` is one of known bad usage.) If you want to store these rows into
-   * collection, please apply some converter or copy row which produces new object per iteration.
-   * Given QueryExecution is not a public class, end users are discouraged to use this: please use
-   * `Dataset.rdd` instead where conversion will be applied.
+   * Internal version of the RDD. Avoids copies and has no schema.
+   * Note for callers: Spark may apply various optimization including reusing object: this means
+   * the row is valid only for the iteration it is retrieved. You should avoid storing row and
+   * accessing after iteration. (Calling `collect()` is one of known bad usage.)
+   * If you want to store these rows into collection, please apply some converter or copy row
+   * which produces new object per iteration.
+   * Given QueryExecution is not a public class, end users are discouraged to use this: please
+   * use `Dataset.rdd` instead where conversion will be applied.
    */
-  lazy val toRdd: RDD[InternalRow] =
-    new SQLExecutionRDD(executedPlan.execute(), sparkSession.sessionState.conf)
+  lazy val toRdd: RDD[InternalRow] = new SQLExecutionRDD(
+    executedPlan.execute(), sparkSession.sessionState.conf)
 
   /** Get the metrics observed during the execution of the query plan. */
   def observedMetrics: Map[String, Row] = CollectMetricsExec.collect(executedPlan)
 
   protected def preparations: Seq[Rule[SparkPlan]] = {
-    QueryExecution.preparations(
-      sparkSession,
-      Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))),
-      false)
+    QueryExecution.preparations(sparkSession,
+      Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))), false)
   }
 
   protected def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
-    QueryExecution.withInternalError(
-      s"The Spark SQL phase $phase failed with an internal error.") {
+    QueryExecution.withInternalError(s"The Spark SQL phase $phase failed with an internal error.") {
       tracker.measurePhase(phase)(block)
     }
   }
@@ -238,7 +239,10 @@ class QueryExecution(
     }
   }
 
-  private def simpleString(formatted: Boolean, maxFields: Int, append: String => Unit): Unit = {
+  private def simpleString(
+      formatted: Boolean,
+      maxFields: Int,
+      append: String => Unit): Unit = {
     append("== Physical Plan ==\n")
     if (formatted) {
       try {
@@ -248,12 +252,8 @@ class QueryExecution(
         case e: IllegalArgumentException => append(e.toString)
       }
     } else {
-      QueryPlan.append(
-        executedPlan,
-        append,
-        verbose = false,
-        addSuffix = false,
-        maxFields = maxFields)
+      QueryPlan.append(executedPlan,
+        append, verbose = false, addSuffix = false, maxFields = maxFields)
     }
     append("\n")
   }
@@ -271,17 +271,9 @@ class QueryExecution(
       // This is used only by explaining `Dataset/DataFrame` created by `spark.readStream`, so the
       // output mode does not matter since there is no `Sink`.
       new IncrementalExecution(
-        sparkSession,
-        logical,
-        OutputMode.Append(),
-        "<unknown>",
-        UUID.randomUUID,
-        UUID.randomUUID,
-        0,
-        None,
-        OffsetSeqMetadata(0, 0),
-        WatermarkPropagator.noop(),
-        false)
+        sparkSession, logical, OutputMode.Append(), "<unknown>",
+        UUID.randomUUID, UUID.randomUUID, 0, None, OffsetSeqMetadata(0, 0),
+        WatermarkPropagator.noop(), false)
     } else {
       this
     }
@@ -313,9 +305,8 @@ class QueryExecution(
       if (analyzed.output.nonEmpty) {
         append(
           truncatedString(
-            analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"),
-            ", ",
-            maxFields))
+            analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields)
+        )
         append("\n")
       }
       QueryPlan.append(analyzed, append, verbose, addSuffix, maxFields)
@@ -354,8 +345,8 @@ class QueryExecution(
       // This will trigger to compute stats for all the nodes in the plan, including subqueries,
       // if the stats doesn't exist in the statsCache and update the statsCache corresponding
       // to the node.
-      optimizedPlan.collectWithSubqueries { case plan =>
-        plan.stats
+      optimizedPlan.collectWithSubqueries {
+        case plan => plan.stats
       }
     } catch {
       case e: AnalysisException => append(e.toString + "\n")
@@ -378,7 +369,7 @@ class QueryExecution(
   /** A special namespace for commands that can be used to debug query execution. */
   // scalastyle:off
   object debug {
-    // scalastyle:on
+  // scalastyle:on
 
     /**
      * Prints to stdout all the generated code found in this plan (i.e. the output of each
@@ -393,8 +384,7 @@ class QueryExecution(
     /**
      * Get WholeStageCodegenExec subtrees and the codegen in a query plan
      *
-     * @return
-     *   Sequence of WholeStageCodegen subtrees and corresponding codegen
+     * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
      */
     def codegenToSeq(): Seq[(String, String, ByteCodeStats)] = {
       org.apache.spark.sql.execution.debug.codegenStringSeq(executedPlan)
@@ -403,12 +393,10 @@ class QueryExecution(
     /**
      * Dumps debug information about query execution into the specified file.
      *
-     * @param path
-     *   path of the file the debug info is written to.
-     * @param maxFields
-     *   maximum number of fields converted to string representation.
-     * @param explainMode
-     *   the explain mode to be used to generate the string representation of the plan.
+     * @param path path of the file the debug info is written to.
+     * @param maxFields maximum number of fields converted to string representation.
+     * @param explainMode the explain mode to be used to generate the string
+     *                    representation of the plan.
      */
     def toFile(
         path: String,
@@ -433,13 +421,13 @@ class QueryExecution(
 }
 
 /**
- * SPARK-35378: Commands should be executed eagerly so that something like `sql("INSERT ...")` can
- * trigger the table insertion immediately without a `.collect()`. To avoid end-less recursion we
- * should use `NON_ROOT` when recursively executing commands. Note that we can't execute a query
- * plan with leaf command nodes, because many commands return `GenericInternalRow` and can't be
- * put in a query plan directly, otherwise the query engine may cast `GenericInternalRow` to
- * `UnsafeRow` and fail. When running EXPLAIN, or commands inside other command, we should use
- * `SKIP` to not eagerly trigger the command execution.
+ * SPARK-35378: Commands should be executed eagerly so that something like `sql("INSERT ...")`
+ * can trigger the table insertion immediately without a `.collect()`. To avoid end-less recursion
+ * we should use `NON_ROOT` when recursively executing commands. Note that we can't execute
+ * a query plan with leaf command nodes, because many commands return `GenericInternalRow`
+ * and can't be put in a query plan directly, otherwise the query engine may cast
+ * `GenericInternalRow` to `UnsafeRow` and fail. When running EXPLAIN, or commands inside other
+ * command, we should use `SKIP` to not eagerly trigger the command execution.
  */
 object CommandExecutionMode extends Enumeration {
   val SKIP, NON_ROOT, ALL = Value
@@ -452,9 +440,9 @@ object QueryExecution {
 
   /**
    * Construct a sequence of rules that are used to prepare a planned [[SparkPlan]] for execution.
-   * These rules will make sure subqueries are planned, make sure the data partitioning and
-   * ordering are correct, insert whole stage code gen, and try to reduce the work done by reusing
-   * exchanges and subqueries.
+   * These rules will make sure subqueries are planned, make sure the data partitioning and ordering
+   * are correct, insert whole stage code gen, and try to reduce the work done by reusing exchanges
+   * and subqueries.
    */
   private[execution] def preparations(
       sparkSession: SparkSession,
@@ -463,31 +451,30 @@ object QueryExecution {
     // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
     adaptiveExecutionRule.toSeq ++
-      Seq(
-        CoalesceBucketsInJoin,
-        BroadcastFilterPushdown,
-        PlanDynamicPruningFilters(sparkSession),
-        PlanSubqueries(sparkSession),
-        RemoveRedundantProjects,
-        EnsureRequirements(),
-        // `ReplaceHashWithSortAgg` needs to be added after `EnsureRequirements` to guarantee the
-        // sort order of each node is checked to be valid.
-        ReplaceHashWithSortAgg,
-        // `RemoveRedundantSorts` and `RemoveRedundantWindowGroupLimits` needs to be added after
-        // `EnsureRequirements` to guarantee the same number of partitions when instantiating
-        // PartitioningCollection.
-        RemoveRedundantSorts,
-        RemoveRedundantWindowGroupLimits,
-        DisableUnnecessaryBucketedScan,
-        ApplyColumnarRulesAndInsertTransitions(
-          sparkSession.sessionState.columnarRules,
-          outputsColumnar = false),
-        CollapseCodegenStages()) ++
+    Seq(
+      CoalesceBucketsInJoin,
+      BroadcastFilterPushdown,
+      PlanDynamicPruningFilters(sparkSession),
+      PlanSubqueries(sparkSession),
+      RemoveRedundantProjects,
+      EnsureRequirements(),
+      // `ReplaceHashWithSortAgg` needs to be added after `EnsureRequirements` to guarantee the
+      // sort order of each node is checked to be valid.
+      ReplaceHashWithSortAgg,
+      // `RemoveRedundantSorts` and `RemoveRedundantWindowGroupLimits` needs to be added after
+      // `EnsureRequirements` to guarantee the same number of partitions when instantiating
+      // PartitioningCollection.
+      RemoveRedundantSorts,
+      RemoveRedundantWindowGroupLimits,
+      DisableUnnecessaryBucketedScan,
+      ApplyColumnarRulesAndInsertTransitions(
+        sparkSession.sessionState.columnarRules, outputsColumnar = false),
+      CollapseCodegenStages()) ++
       (if (subquery) {
-         Nil
-       } else {
-         Seq(ReuseExchangeAndSubquery)
-       })
+        Nil
+      } else {
+        Seq(ReuseExchangeAndSubquery)
+      })
   }
 
   /**
@@ -538,8 +525,8 @@ object QueryExecution {
   }
 
   /**
-   * Prepare the [[SparkPlan]] for execution using exists adaptive execution context. This method
-   * is only called by [[PlanAdaptiveDynamicPruningFilters]].
+   * Prepare the [[SparkPlan]] for execution using exists adaptive execution context.
+   * This method is only called by [[PlanAdaptiveDynamicPruningFilters]].
    */
   def prepareExecutedPlan(
       session: SparkSession,
