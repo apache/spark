@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command
 import org.apache.spark.util.Utils
 
@@ -49,127 +49,18 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
     }
   }
 
-  test("show table extended in non-partitioned table") {
-    val namespace = "ns1"
-    val table = "tbl"
-    withNamespaceAndTable(namespace, table, catalog) { tbl =>
-      sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing")
-      val e = intercept[AnalysisException] {
-        sql(s"SHOW TABLE EXTENDED IN $catalog.$namespace LIKE '$table' PARTITION(id = 1)")
-      }
-      checkError(
-        exception = e,
-        errorClass = "_LEGACY_ERROR_TEMP_1231",
-        parameters = Map("key" -> "id", "tblName" -> s"`$catalog`.`$namespace`.`$table`")
-      )
-    }
+  override protected def extendedPartInNonPartedTableError(
+      catalog: String,
+      namespace: String,
+      table: String): (String, Map[String, String]) = {
+    ("_LEGACY_ERROR_TEMP_1231",
+      Map("key" -> "id", "tblName" -> s"`$catalog`.`$namespace`.`$table`"))
   }
 
-  test("show table extended in multi partition key - " +
-    "the command's partition parameters are complete") {
-    val namespace = "ns1"
-    val table = "tbl"
-    withNamespaceAndTable(namespace, table, catalog) { tbl =>
-      sql(s"CREATE TABLE $tbl (id1 bigint, id2 bigint, data string) " +
-        s"$defaultUsing PARTITIONED BY (id1, id2)")
-      sql(s"ALTER TABLE $tbl ADD PARTITION (id1 = 1, id2 = 2)")
+  protected override def namespaceKey: String = "Namespace"
 
-      val result = sql(s"SHOW TABLE EXTENDED FROM $catalog.$namespace " +
-        s"LIKE '$table' PARTITION(id1 = 1, id2 = 2)")
-      assert(result.schema.fieldNames ===
-        Seq("namespace", "tableName", "isTemporary", "information"))
-      val resultCollect = result.collect()
-      assert(resultCollect(0).length == 4)
-      assert(resultCollect(0)(0) === namespace)
-      assert(resultCollect(0)(1) === table)
-      assert(resultCollect(0)(2) === false)
-      val actualResult = exclude(resultCollect(0)(3).toString)
-      val expectedResult = "Partition Values: [id1=1, id2=2]"
-      assert(actualResult === expectedResult)
-    }
-  }
-
-  test("show table extended in multi tables") {
-    val namespace = "ns1"
-    val table = "tbl"
-    withNamespaceAndTable(namespace, table, catalog) { _ =>
-      sql(s"CREATE TABLE $catalog.$namespace.$table (id bigint, data string) " +
-        s"$defaultUsing PARTITIONED BY (id)")
-      val table1 = "tbl1"
-      val table2 = "tbl2"
-      withTable(table1, table2) {
-        sql(s"CREATE TABLE $catalog.$namespace.$table1 (id1 bigint, data1 string) " +
-          s"$defaultUsing PARTITIONED BY (id1)")
-        sql(s"CREATE TABLE $catalog.$namespace.$table2 (id2 bigint, data2 string) " +
-          s"$defaultUsing PARTITIONED BY (id2)")
-
-        val result = sql(s"SHOW TABLE EXTENDED FROM $catalog.$namespace LIKE '$table*'")
-          .sort("tableName")
-        assert(result.schema.fieldNames ===
-          Seq("namespace", "tableName", "isTemporary", "information"))
-        val resultCollect = result.collect()
-        assert(resultCollect.length == 3)
-
-        assert(resultCollect(0).length == 4)
-        assert(resultCollect(0)(1) === table)
-        assert(resultCollect(0)(2) === false)
-        val actualResult_0_3 = exclude(resultCollect(0)(3).toString)
-
-        // exclude "Created Time", "Last Access", "Created By", "Location"
-        val expectedResult_0_3 =
-          s"""Catalog: $catalog
-             |Namespace: $namespace
-             |Table: $table
-             |Type: MANAGED
-             |Provider: _
-             |Owner: ${Utils.getCurrentUserName()}
-             |Partition Provider: Catalog
-             |Partition Columns: [`id`]
-             |Schema: root
-             | |-- data: string (nullable = true)
-             | |-- id: long (nullable = true)""".stripMargin
-        assert(actualResult_0_3 === expectedResult_0_3)
-
-        assert(resultCollect(1).length == 4)
-        assert(resultCollect(1)(1) === table1)
-        assert(resultCollect(1)(2) === false)
-        val actualResult_1_3 = exclude(resultCollect(1)(3).toString)
-
-        // exclude "Created Time", "Last Access", "Created By", "Location"
-        val expectedResult_1_3 =
-          s"""Catalog: $catalog
-             |Namespace: $namespace
-             |Table: $table1
-             |Type: MANAGED
-             |Provider: _
-             |Owner: ${Utils.getCurrentUserName()}
-             |Partition Provider: Catalog
-             |Partition Columns: [`id1`]
-             |Schema: root
-             | |-- data1: string (nullable = true)
-             | |-- id1: long (nullable = true)""".stripMargin
-        assert(actualResult_1_3 === expectedResult_1_3)
-
-        assert(resultCollect(2).length == 4)
-        assert(resultCollect(2)(1) === table2)
-        assert(resultCollect(2)(2) === false)
-        val actualResult_2_3 = exclude(resultCollect(2)(3).toString)
-
-        // exclude "Created Time", "Last Access", "Created By", "Location"
-        val expectedResult_2_3 =
-          s"""Catalog: $catalog
-             |Namespace: $namespace
-             |Table: $table2
-             |Type: MANAGED
-             |Provider: _
-             |Owner: ${Utils.getCurrentUserName()}
-             |Partition Provider: Catalog
-             |Partition Columns: [`id2`]
-             |Schema: root
-             | |-- data2: string (nullable = true)
-             | |-- id2: long (nullable = true)""".stripMargin
-        assert(actualResult_2_3 === expectedResult_2_3)
-      }
-    }
-  }
+  protected override def extendedTableExpectedResultDiff: String =
+    s"""Type: MANAGED
+       |Provider: _
+       |Owner: ${Utils.getCurrentUserName()}""".stripMargin
 }

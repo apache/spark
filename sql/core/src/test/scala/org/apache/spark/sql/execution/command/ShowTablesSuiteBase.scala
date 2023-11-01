@@ -40,6 +40,38 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
     checkAnswer(df, expected)
   }
 
+  // the error class & error parameters of
+  // `SHOW TABLE EXTENDED ... PARTITION ... in non-partitioned table`
+  protected def extendedPartInNonPartedTableError(
+      catalog: String,
+      namespace: String,
+      table: String): (String, Map[String, String])
+
+  protected def extendedPartExpectedResult: String =
+    "Partition Values: [id1=1, id2=2]"
+
+  protected def namespaceKey: String = "Database"
+
+  protected def extendedTableExpectedResultDiff: String
+
+  private def extendedTableExpectedResult(
+      catalog: String,
+      namespaceName: String,
+      namespace: String,
+      table: String,
+      partColName: String,
+      dataColName: String): String = {
+    s"""Catalog: $catalog
+       |$namespaceName: $namespace
+       |Table: $table
+       |$extendedTableExpectedResultDiff
+       |Partition Provider: Catalog
+       |Partition Columns: [`$partColName`]
+       |Schema: root
+       | |-- $dataColName: string (nullable = true)
+       | |-- $partColName: long (nullable = true)""".stripMargin
+  }
+
   test("show an existing table") {
     withNamespaceAndTable("ns", "table") { t =>
       sql(s"CREATE TABLE $t (name STRING, id INT) $defaultUsing")
@@ -175,6 +207,42 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
+  test("show table extended in non-partitioned table") {
+    val namespace = "ns1"
+    val table = "tbl"
+    withNamespaceAndTable(namespace, table, catalog) { tbl =>
+      sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing")
+      val e = intercept[AnalysisException] {
+        sql(s"SHOW TABLE EXTENDED IN $catalog.$namespace LIKE '$table' PARTITION(id = 1)")
+      }
+      val (errorClass, parameters) = extendedPartInNonPartedTableError(catalog, namespace, table)
+      checkError(exception = e, errorClass = errorClass, parameters = parameters)
+    }
+  }
+
+  test("show table extended in multi partition key - " +
+    "the command's partition parameters are complete") {
+    val namespace = "ns1"
+    val table = "tbl"
+    withNamespaceAndTable(namespace, table, catalog) { tbl =>
+      sql(s"CREATE TABLE $tbl (id1 bigint, id2 bigint, data string) " +
+        s"$defaultUsing PARTITIONED BY (id1, id2)")
+      sql(s"ALTER TABLE $tbl ADD PARTITION (id1 = 1, id2 = 2)")
+
+      val result = sql(s"SHOW TABLE EXTENDED FROM $catalog.$namespace " +
+        s"LIKE '$table' PARTITION(id1 = 1, id2 = 2)")
+      assert(result.schema.fieldNames ===
+        Seq("namespace", "tableName", "isTemporary", "information"))
+      val resultCollect = result.collect()
+      assert(resultCollect(0).length == 4)
+      assert(resultCollect(0)(0) === namespace)
+      assert(resultCollect(0)(1) === table)
+      assert(resultCollect(0)(2) === false)
+      val actualResult = replace(resultCollect(0)(3).toString)
+      assert(actualResult === extendedPartExpectedResult)
+    }
+  }
+
   test("show table extended in multi partition key - " +
     "the command's partition parameters are incomplete") {
     val namespace = "ns1"
@@ -195,6 +263,57 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
           "partitionColumnNames" -> "id1, id2",
           "tableName" -> s"`$catalog`.`$namespace`.`$table`")
       )
+    }
+  }
+
+  test("show table extended in multi tables") {
+    val namespace = "ns1"
+    val table = "tbl"
+    withNamespaceAndTable(namespace, table, catalog) { _ =>
+      sql(s"CREATE TABLE $catalog.$namespace.$table (id bigint, data string) " +
+        s"$defaultUsing PARTITIONED BY (id)")
+      val table1 = "tbl1"
+      val table2 = "tbl2"
+      withTable(table1, table2) {
+        sql(s"CREATE TABLE $catalog.$namespace.$table1 (id1 bigint, data1 string) " +
+          s"$defaultUsing PARTITIONED BY (id1)")
+        sql(s"CREATE TABLE $catalog.$namespace.$table2 (id2 bigint, data2 string) " +
+          s"$defaultUsing PARTITIONED BY (id2)")
+
+        val result = sql(s"SHOW TABLE EXTENDED FROM $catalog.$namespace LIKE '$table*'")
+          .sort("tableName")
+        assert(result.schema.fieldNames ===
+          Seq("namespace", "tableName", "isTemporary", "information"))
+        val resultCollect = result.collect()
+        assert(resultCollect.length == 3)
+
+        assert(resultCollect(0).length == 4)
+        assert(resultCollect(0)(1) === table)
+        assert(resultCollect(0)(2) === false)
+        // replace "Created Time", "Last Access", "Created By", "Location"
+        val actualResult_0_3 = replace(resultCollect(0)(3).toString)
+        val expectedResult_0_3 = extendedTableExpectedResult(
+          catalog, namespaceKey, namespace, table, "id", "data")
+        assert(actualResult_0_3 === expectedResult_0_3)
+
+        assert(resultCollect(1).length == 4)
+        assert(resultCollect(1)(1) === table1)
+        assert(resultCollect(1)(2) === false)
+        val actualResult_1_3 = replace(resultCollect(1)(3).toString)
+        // replace "Table Properties"
+        val expectedResult_1_3 = extendedTableExpectedResult(
+          catalog, namespaceKey, namespace, table1, "id1", "data1")
+        assert(actualResult_1_3 === expectedResult_1_3)
+
+        assert(resultCollect(2).length == 4)
+        assert(resultCollect(2)(1) === table2)
+        assert(resultCollect(2)(2) === false)
+        val actualResult_2_3 = replace(resultCollect(2)(3).toString)
+        // replace "Table Properties"
+        val expectedResult_2_3 = extendedTableExpectedResult(
+          catalog, namespaceKey, namespace, table2, "id2", "data2")
+        assert(actualResult_2_3 === expectedResult_2_3)
+      }
     }
   }
 
@@ -220,9 +339,12 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         assert(localResultCollect(0).length == 4)
         assert(localResultCollect(0)(1) === localTmpViewName)
         assert(localResultCollect(0)(2) === true)
-        val actualLocalResult = exclude(localResultCollect(0)(3).toString)
+        val actualLocalResult = replace(localResultCollect(0)(3).toString)
         val expectedLocalResult =
           s"""Table: $localTmpViewName
+             |Created Time: <created time>
+             |Last Access: <last access>
+             |Created By: <created by>
              |Type: VIEW
              |View Text: SELECT id FROM $catalog.$namespace.$table
              |View Catalog and Namespace: spark_catalog.default
@@ -242,10 +364,13 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         assert(globalResultCollect(0).length == 4)
         assert(globalResultCollect(0)(1) === globalTmpViewName)
         assert(globalResultCollect(0)(2) === true)
-        val actualGlobalResult1 = exclude(globalResultCollect(0)(3).toString)
+        val actualGlobalResult1 = replace(globalResultCollect(0)(3).toString)
         val expectedGlobalResult1 =
           s"""Database: $globalNamespace
              |Table: $globalTmpViewName
+             |Created Time: <created time>
+             |Last Access: <last access>
+             |Created By: <created by>
              |Type: VIEW
              |View Text: SELECT id FROM $catalog.$namespace.$table
              |View Catalog and Namespace: spark_catalog.default
@@ -257,9 +382,12 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         assert(globalResultCollect(1).length == 4)
         assert(globalResultCollect(1)(1) === localTmpViewName)
         assert(globalResultCollect(1)(2) === true)
-        val actualLocalResult2 = exclude(globalResultCollect(1)(3).toString)
+        val actualLocalResult2 = replace(globalResultCollect(1)(3).toString)
         val expectedLocalResult2 =
           s"""Table: $localTmpViewName
+             |Created Time: <created time>
+             |Last Access: <last access>
+             |Created By: <created by>
              |Type: VIEW
              |View Text: SELECT id FROM $catalog.$namespace.$table
              |View Catalog and Namespace: spark_catalog.default
@@ -271,15 +399,17 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
-  // Exclude some non-deterministic values for easy comparison of results,
-  // such as `Created Time`, etc
-  protected def exclude(text: String): String = {
-    text.split("\n").filter(line =>
-      !line.startsWith("Created Time:") &&
-        !line.startsWith("Last Access:") &&
-        !line.startsWith("Created By:") &&
-        !line.startsWith("Location:") &&
-        !line.startsWith("Table Properties:") &&
-        !line.startsWith("Partition Parameters:")).mkString("\n")
+  // Replace some non-deterministic values with deterministic value
+  // for easy comparison of results, such as `Created Time`, etc
+  protected def replace(text: String): String = {
+    text.split("\n").map {
+      case s"Created Time:$_" => "Created Time: <created time>"
+      case s"Last Access:$_" => "Last Access: <last access>"
+      case s"Created By:$_" => "Created By: <created by>"
+      case s"Location:$_" => "Location: <location>"
+      case s"Table Properties:$_" => "Table Properties: <table properties>"
+      case s"Partition Parameters:$_" => "Partition Parameters: <partition parameters>"
+      case other => other
+    }.mkString("\n")
   }
 }
