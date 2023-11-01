@@ -1926,7 +1926,7 @@ class HiveDDLSuite
         checkAnswer(spark.table("t"), Row(1))
         // Check if this is compressed as ZLIB.
         val maybeOrcFile = path.listFiles().find(_.getName.startsWith("part"))
-        assertCompression(maybeOrcFile, "orc", "ZLIB")
+        assertCompression(maybeOrcFile, "orc", OrcCompressionCodec.ZLIB.name())
 
         sql("CREATE TABLE t2 USING HIVE AS SELECT 1 AS c1, 'a' AS c2")
         val table2 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t2"))

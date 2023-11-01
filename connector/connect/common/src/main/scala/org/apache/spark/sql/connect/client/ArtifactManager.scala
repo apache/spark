@@ -115,7 +115,7 @@ class ArtifactManager(
   def addArtifacts(uris: Seq[URI]): Unit = addArtifacts(uris.flatMap(parseArtifacts))
 
   private[client] def isCachedArtifact(hash: String): Boolean = {
-    val artifactName = CACHE_PREFIX + "/" + hash
+    val artifactName = s"$CACHE_PREFIX/$hash"
     val request = proto.ArtifactStatusesRequest
       .newBuilder()
       .setUserContext(clientConfig.userContext)

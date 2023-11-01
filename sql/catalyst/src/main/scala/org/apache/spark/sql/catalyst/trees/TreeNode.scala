@@ -820,7 +820,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     val redactedMap = SQLConf.get.redactOptions(map.toMap)
     // construct the redacted map as strings of the format "key=value"
     val keyValuePairs = redactedMap.toSeq.map { item =>
-      item._1 + "=" + item._2
+      s"${item._1}=${item._2}"
     }
     truncatedString(keyValuePairs, "[", ", ", "]", maxFields) :: Nil
   }
@@ -1090,7 +1090,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       // this child in all children.
       case (name, value: TreeNode[_]) if containsChild(value) =>
         name -> JInt(children.indexOf(value))
-      case (name, value: Seq[BaseType]) if value.forall(containsChild) =>
+      case (name, value: Seq[BaseType @unchecked]) if value.forall(containsChild) =>
         name -> JArray(
           value.map(v => JInt(children.indexOf(v.asInstanceOf[TreeNode[_]]))).toList
         )
