@@ -319,7 +319,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case StopDriver =>
         context.reply(true)
-        stop()
+        this.stop()
 
       case UpdateExecutorsLogLevel(logLevel) =>
         currentLogLevel = Some(logLevel)
