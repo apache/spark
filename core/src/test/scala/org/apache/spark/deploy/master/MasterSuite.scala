@@ -803,6 +803,7 @@ class MasterSuite extends SparkFunSuite
     PrivateMethod[mutable.ArrayBuffer[DriverInfo]](Symbol("waitingDrivers"))
   private val _state = PrivateMethod[RecoveryState.Value](Symbol("state"))
   private val _newDriverId = PrivateMethod[String](Symbol("newDriverId"))
+  private val _newApplicationId = PrivateMethod[String](Symbol("newApplicationId"))
 
   private val workerInfo = makeWorkerInfo(4096, 10)
   private val workerInfos = Array(workerInfo, workerInfo, workerInfo)
@@ -1248,6 +1249,20 @@ class MasterSuite extends SparkFunSuite
   test("SPARK-45753: Prevent invalid driver id patterns") {
     val m = intercept[IllegalArgumentException] {
       makeMaster(new SparkConf().set(DRIVER_ID_PATTERN, "my driver"))
+    }.getMessage
+    assert(m.contains("Whitespace is not allowed"))
+  }
+
+  test("SPARK-45754: Support app id pattern") {
+    val master = makeMaster(new SparkConf().set(APP_ID_PATTERN, "my-app-%2$05d"))
+    val submitDate = new Date()
+    assert(master.invokePrivate(_newApplicationId(submitDate)) === "my-app-00000")
+    assert(master.invokePrivate(_newApplicationId(submitDate)) === "my-app-00001")
+  }
+
+  test("SPARK-45754: Prevent invalid app id patterns") {
+    val m = intercept[IllegalArgumentException] {
+      makeMaster(new SparkConf().set(APP_ID_PATTERN, "my app"))
     }.getMessage
     assert(m.contains("Whitespace is not allowed"))
   }

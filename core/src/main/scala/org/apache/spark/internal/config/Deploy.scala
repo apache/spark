@@ -90,4 +90,13 @@ private[spark] object Deploy {
     .stringConf
     .checkValue(!_.format("20231101000000", 0).exists(_.isWhitespace), "Whitespace is not allowed.")
     .createWithDefault("driver-%s-%04d")
+
+  val APP_ID_PATTERN = ConfigBuilder("spark.deploy.appIdPattern")
+    .doc("The pattern for app ID generation based on Java `String.format` method.. " +
+      "The default value is `app-%s-%04d` which represents the existing app id string, " +
+      "e.g., `app-20231031224509-0008`. Plesae be careful to generate unique IDs.")
+    .version("4.0.0")
+    .stringConf
+    .checkValue(!_.format("20231101000000", 0).exists(_.isWhitespace), "Whitespace is not allowed.")
+    .createWithDefault("app-%s-%04d")
 }
