@@ -25,9 +25,11 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Column, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, CatalogTableType}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, CatalogTableType, ExternalCatalogUtils}
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -37,6 +39,7 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, InMemoryFileIndex}
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.Utils
 
 /**
  * For the purpose of calculating total directory sizes, use this filter to
@@ -76,7 +79,9 @@ object CommandUtils extends Logging {
 
   def calculateTotalSize(
       spark: SparkSession,
-      catalogTable: CatalogTable): (BigInt, Seq[CatalogTablePartition]) = {
+      catalogTable: CatalogTable,
+      partitionRowCount: Option[Map[TablePartitionSpec, BigInt]] = None):
+  (BigInt, Seq[CatalogTablePartition]) = {
     val sessionState = spark.sessionState
     val startTime = System.nanoTime()
     val (totalSize, newPartitions) = if (catalogTable.partitionColumnNames.isEmpty) {
@@ -89,7 +94,8 @@ object CommandUtils extends Logging {
       val paths = partitions.map(_.storage.locationUri)
       val sizes = calculateMultipleLocationSizes(spark, catalogTable.identifier, paths)
       val newPartitions = partitions.zipWithIndex.flatMap { case (p, idx) =>
-        val newStats = CommandUtils.compareAndGetNewStats(p.stats, sizes(idx), None)
+        val newRowCount = partitionRowCount.flatMap(_.get(p.spec))
+        val newStats = CommandUtils.compareAndGetNewStats(p.stats, sizes(idx), newRowCount)
         newStats.map(_ => p.copy(stats = newStats))
       }
       (sizes.sum, newPartitions)
@@ -231,7 +237,15 @@ object CommandUtils extends Logging {
       }
     } else {
       // Compute stats for the whole table
-      val (newTotalSize, newPartitions) = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
+      val rowCounts: Map[TablePartitionSpec, BigInt] =
+        if (noScan) {
+          Map.empty
+        } else {
+          calculateRowCountsPerPartition(sparkSession, tableMeta, None)
+        }
+      val (newTotalSize, newPartitions) = CommandUtils.calculateTotalSize(
+        sparkSession, tableMeta, Some(rowCounts))
+
       val newRowCount =
         if (noScan) None else Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
 
@@ -443,5 +457,37 @@ object CommandUtils extends Logging {
     } catch {
       case NonFatal(e) => logWarning(s"Exception when attempting to uncache $name", e)
     }
+  }
+
+  def calculateRowCountsPerPartition(
+      sparkSession: SparkSession,
+      tableMeta: CatalogTable,
+      partitionValueSpec: Option[TablePartitionSpec]): Map[TablePartitionSpec, BigInt] = {
+    val filter = if (partitionValueSpec.isDefined) {
+      val filters = partitionValueSpec.get.map {
+        case (columnName, value) => EqualTo(UnresolvedAttribute(columnName), Literal(value))
+      }
+      filters.reduce(And)
+    } else {
+      Literal.TrueLiteral
+    }
+
+    val tableDf = sparkSession.table(tableMeta.identifier)
+    val partitionColumns = tableMeta.partitionColumnNames.map(Column(_))
+
+    val df = tableDf.filter(Column(filter)).groupBy(partitionColumns: _*).count()
+
+    df.collect().map { r =>
+      val partitionColumnValues = partitionColumns.indices.map { i =>
+        if (r.isNullAt(i)) {
+          ExternalCatalogUtils.DEFAULT_PARTITION_NAME
+        } else {
+          r.get(i).toString
+        }
+      }
+      val spec = Utils.toMap(tableMeta.partitionColumnNames, partitionColumnValues)
+      val count = BigInt(r.getLong(partitionColumns.size))
+      (spec, count)
+    }.toMap
   }
 }

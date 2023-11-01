@@ -417,9 +417,9 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         partitionDates.foreach { ds =>
           val partStats = queryStats(ds)
           assert(partStats.nonEmpty)
-          // The scan option doesn't update partition row count, only size in bytes.
+          // The scan option should update partition row count
           assert(partStats.get.sizeInBytes == 4411)
-          assert(partStats.get.rowCount.isEmpty)
+          assert(partStats.get.rowCount.get == 25)
         }
       }
     }

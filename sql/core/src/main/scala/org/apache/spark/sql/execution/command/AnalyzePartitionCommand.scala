@@ -17,15 +17,12 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{Column, Row, SparkSession}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, ExternalCatalogUtils}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, Literal}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.util.PartitioningUtils
-import org.apache.spark.util.collection.Utils
 
 /**
  * Analyzes a given set of partitions to generate per-partition statistics, which will be used in
@@ -101,7 +98,7 @@ case class AnalyzePartitionCommand(
       if (noscan) {
         Map.empty
       } else {
-        calculateRowCountsPerPartition(sparkSession, tableMeta, partitionValueSpec)
+        CommandUtils.calculateRowCountsPerPartition(sparkSession, tableMeta, partitionValueSpec)
       }
 
     // Update the metastore if newly computed statistics are different from those
@@ -122,35 +119,5 @@ case class AnalyzePartitionCommand(
     Seq.empty[Row]
   }
 
-  private def calculateRowCountsPerPartition(
-      sparkSession: SparkSession,
-      tableMeta: CatalogTable,
-      partitionValueSpec: Option[TablePartitionSpec]): Map[TablePartitionSpec, BigInt] = {
-    val filter = if (partitionValueSpec.isDefined) {
-      val filters = partitionValueSpec.get.map {
-        case (columnName, value) => EqualTo(UnresolvedAttribute(columnName), Literal(value))
-      }
-      filters.reduce(And)
-    } else {
-      Literal.TrueLiteral
-    }
 
-    val tableDf = sparkSession.table(tableMeta.identifier)
-    val partitionColumns = tableMeta.partitionColumnNames.map(Column(_))
-
-    val df = tableDf.filter(Column(filter)).groupBy(partitionColumns: _*).count()
-
-    df.collect().map { r =>
-      val partitionColumnValues = partitionColumns.indices.map { i =>
-        if (r.isNullAt(i)) {
-          ExternalCatalogUtils.DEFAULT_PARTITION_NAME
-        } else {
-          r.get(i).toString
-        }
-      }
-      val spec = Utils.toMap(tableMeta.partitionColumnNames, partitionColumnValues)
-      val count = BigInt(r.getLong(partitionColumns.size))
-      (spec, count)
-    }.toMap
-  }
 }
