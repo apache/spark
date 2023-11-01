@@ -26,10 +26,11 @@ import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_COL, REPARTITION_
 import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
 
 /**
- * This rule runs in the AQE optimizer and optimizes more cases compared to
- * [[PropagateEmptyRelationBase]]:
- *   1. Join is single column NULL-aware anti join (NAAJ) Broadcasted [[HashedRelation]] is
- *      [[HashedRelationWithAllNullKeys]]. Eliminate join to an empty [[LocalRelation]].
+ * This rule runs in the AQE optimizer and optimizes more cases
+ * compared to [[PropagateEmptyRelationBase]]:
+ * 1. Join is single column NULL-aware anti join (NAAJ)
+ *    Broadcasted [[HashedRelation]] is [[HashedRelationWithAllNullKeys]]. Eliminate join to an
+ *    empty [[LocalRelation]].
  */
 object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
   override protected def isEmpty(plan: LogicalPlan): Boolean =
@@ -51,9 +52,8 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
     case LogicalQueryStage(_, stage: QueryStageExec) if stage.isMaterialized =>
       stage.getRuntimeStatistics.rowCount
 
-    case LogicalQueryStage(_, agg: BaseAggregateExec)
-        if agg.groupingExpressions.nonEmpty &&
-          agg.child.isInstanceOf[QueryStageExec] =>
+    case LogicalQueryStage(_, agg: BaseAggregateExec) if agg.groupingExpressions.nonEmpty &&
+      agg.child.isInstanceOf[QueryStageExec] =>
       val stage = agg.child.asInstanceOf[QueryStageExec]
       if (stage.isMaterialized) {
         stage.getRuntimeStatistics.rowCount
@@ -70,17 +70,15 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
     case _ => false
   }
 
-  private def eliminateSingleColumnNullAwareAntiJoin
-      : PartialFunction[LogicalPlan, LogicalPlan] = {
+  private def eliminateSingleColumnNullAwareAntiJoin: PartialFunction[LogicalPlan, LogicalPlan] = {
     case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) if isRelationWithAllNullKeys(j.right) =>
       empty(j)
   }
 
   override protected def userSpecifiedRepartition(p: LogicalPlan): Boolean = p match {
     case LogicalQueryStage(_, ShuffleQueryStageExec(_, shuffle: ShuffleExchangeLike, _, _))
-        if shuffle.shuffleOrigin == REPARTITION_BY_COL ||
-          shuffle.shuffleOrigin == REPARTITION_BY_NUM =>
-      true
+      if shuffle.shuffleOrigin == REPARTITION_BY_COL ||
+        shuffle.shuffleOrigin == REPARTITION_BY_NUM => true
     case _ => false
   }
 
