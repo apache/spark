@@ -277,7 +277,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   private[sql] def roundToInt(): Int =
     roundToNumeric[Int](IntegerType, Int.MaxValue, Int.MinValue) (_.toInt) (_.toInt)
 
-  private def toSqlValue: String = this + "BD"
+  private def toSqlValue: String = this.toString + "BD"
 
   private def roundToNumeric[T <: AnyVal](integralType: IntegralType, maxValue: Int, minValue: Int)
       (f1: Long => T) (f2: Double => T): T = {
@@ -681,9 +681,7 @@ object Decimal {
     override def toLong(x: Decimal): Long = x.toLong
     override def fromInt(x: Int): Decimal = new Decimal().set(x)
     override def compare(x: Decimal, y: Decimal): Int = x.compare(y)
-    // Added from Scala 2.13; don't override to work in 2.12
-    // TODO revisit once Scala 2.12 support is dropped
-    def parseString(str: String): Option[Decimal] = Try(Decimal(str)).toOption
+    override def parseString(str: String): Option[Decimal] = Try(Decimal(str)).toOption
   }
 
   /** A [[scala.math.Fractional]] evidence parameter for Decimals. */

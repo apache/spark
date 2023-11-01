@@ -95,13 +95,13 @@ private[spark] object ClosureCleaner extends Logging {
       if (cr != null) {
         val set = Set.empty[Class[_]]
         cr.accept(new InnerClosureFinder(set), 0)
-        for (cls <- set -- seen) {
+        for (cls <- set.diff(seen)) {
           seen += cls
           stack.push(cls)
         }
       }
     }
-    (seen - obj.getClass).toList
+    seen.diff(Set(obj.getClass)).toList
   }
 
   /** Initializes the accessed fields for outer classes and their super classes. */
