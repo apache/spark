@@ -49,27 +49,31 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
   import testImplicits._
 
   private def getBatch(query: DataFrame): AdvancedBatch = {
-    query.queryExecution.executedPlan.collect { case d: BatchScanExec =>
-      d.batch.asInstanceOf[AdvancedBatch]
+    query.queryExecution.executedPlan.collect {
+      case d: BatchScanExec =>
+        d.batch.asInstanceOf[AdvancedBatch]
     }.head
   }
 
   private def getBatchWithV2Filter(query: DataFrame): AdvancedBatchWithV2Filter = {
-    query.queryExecution.executedPlan.collect { case d: BatchScanExec =>
-      d.batch.asInstanceOf[AdvancedBatchWithV2Filter]
+    query.queryExecution.executedPlan.collect {
+      case d: BatchScanExec =>
+        d.batch.asInstanceOf[AdvancedBatchWithV2Filter]
     }.head
   }
 
   private def getJavaBatch(query: DataFrame): JavaAdvancedDataSourceV2.AdvancedBatch = {
-    query.queryExecution.executedPlan.collect { case d: BatchScanExec =>
-      d.batch.asInstanceOf[JavaAdvancedDataSourceV2.AdvancedBatch]
+    query.queryExecution.executedPlan.collect {
+      case d: BatchScanExec =>
+        d.batch.asInstanceOf[JavaAdvancedDataSourceV2.AdvancedBatch]
     }.head
   }
 
   private def getJavaBatchWithV2Filter(
       query: DataFrame): JavaAdvancedDataSourceV2WithV2Filter.AdvancedBatchWithV2Filter = {
-    query.queryExecution.executedPlan.collect { case d: BatchScanExec =>
-      d.batch.asInstanceOf[JavaAdvancedDataSourceV2WithV2Filter.AdvancedBatchWithV2Filter]
+    query.queryExecution.executedPlan.collect {
+      case d: BatchScanExec =>
+        d.batch.asInstanceOf[JavaAdvancedDataSourceV2WithV2Filter.AdvancedBatchWithV2Filter]
     }.head
   }
 
@@ -152,61 +156,61 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
   test("advanced implementation with V2 Filter") {
     Seq(classOf[AdvancedDataSourceV2WithV2Filter], classOf[JavaAdvancedDataSourceV2WithV2Filter])
       .foreach { cls =>
-        withClue(cls.getName) {
-          val df = spark.read.format(cls.getName).load()
-          checkAnswer(df, (0 until 10).map(i => Row(i, -i)))
+      withClue(cls.getName) {
+        val df = spark.read.format(cls.getName).load()
+        checkAnswer(df, (0 until 10).map(i => Row(i, -i)))
 
-          val q1 = df.select($"j")
-          checkAnswer(q1, (0 until 10).map(i => Row(-i)))
-          if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
-            val batch = getBatchWithV2Filter(q1)
-            assert(batch.predicates.isEmpty)
-            assert(batch.requiredSchema.fieldNames === Seq("j"))
-          } else {
-            val batch = getJavaBatchWithV2Filter(q1)
-            assert(batch.predicates.isEmpty)
-            assert(batch.requiredSchema.fieldNames === Seq("j"))
-          }
+        val q1 = df.select($"j")
+        checkAnswer(q1, (0 until 10).map(i => Row(-i)))
+        if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
+          val batch = getBatchWithV2Filter(q1)
+          assert(batch.predicates.isEmpty)
+          assert(batch.requiredSchema.fieldNames === Seq("j"))
+        } else {
+          val batch = getJavaBatchWithV2Filter(q1)
+          assert(batch.predicates.isEmpty)
+          assert(batch.requiredSchema.fieldNames === Seq("j"))
+        }
 
-          val q2 = df.filter($"i" > 3)
-          checkAnswer(q2, (4 until 10).map(i => Row(i, -i)))
-          if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
-            val batch = getBatchWithV2Filter(q2)
-            assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
-            assert(batch.requiredSchema.fieldNames === Seq("i", "j"))
-          } else {
-            val batch = getJavaBatchWithV2Filter(q2)
-            assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
-            assert(batch.requiredSchema.fieldNames === Seq("i", "j"))
-          }
+        val q2 = df.filter($"i" > 3)
+        checkAnswer(q2, (4 until 10).map(i => Row(i, -i)))
+        if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
+          val batch = getBatchWithV2Filter(q2)
+          assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
+          assert(batch.requiredSchema.fieldNames === Seq("i", "j"))
+        } else {
+          val batch = getJavaBatchWithV2Filter(q2)
+          assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
+          assert(batch.requiredSchema.fieldNames === Seq("i", "j"))
+        }
 
-          val q3 = df.select($"i").filter($"i" > 6)
-          checkAnswer(q3, (7 until 10).map(i => Row(i)))
-          if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
-            val batch = getBatchWithV2Filter(q3)
-            assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
-            assert(batch.requiredSchema.fieldNames === Seq("i"))
-          } else {
-            val batch = getJavaBatchWithV2Filter(q3)
-            assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
-            assert(batch.requiredSchema.fieldNames === Seq("i"))
-          }
+        val q3 = df.select($"i").filter($"i" > 6)
+        checkAnswer(q3, (7 until 10).map(i => Row(i)))
+        if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
+          val batch = getBatchWithV2Filter(q3)
+          assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
+          assert(batch.requiredSchema.fieldNames === Seq("i"))
+        } else {
+          val batch = getJavaBatchWithV2Filter(q3)
+          assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
+          assert(batch.requiredSchema.fieldNames === Seq("i"))
+        }
 
-          val q4 = df.select($"j").filter($"j" < -10)
-          checkAnswer(q4, Nil)
-          if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
-            val batch = getBatchWithV2Filter(q4)
-            // $"j" < 10 is not supported by the testing data source.
-            assert(batch.predicates.isEmpty)
-            assert(batch.requiredSchema.fieldNames === Seq("j"))
-          } else {
-            val batch = getJavaBatchWithV2Filter(q4)
-            // $"j" < 10 is not supported by the testing data source.
-            assert(batch.predicates.isEmpty)
-            assert(batch.requiredSchema.fieldNames === Seq("j"))
-          }
+        val q4 = df.select($"j").filter($"j" < -10)
+        checkAnswer(q4, Nil)
+        if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
+          val batch = getBatchWithV2Filter(q4)
+          // $"j" < 10 is not supported by the testing data source.
+          assert(batch.predicates.isEmpty)
+          assert(batch.requiredSchema.fieldNames === Seq("j"))
+        } else {
+          val batch = getJavaBatchWithV2Filter(q4)
+          // $"j" < 10 is not supported by the testing data source.
+          assert(batch.predicates.isEmpty)
+          assert(batch.requiredSchema.fieldNames === Seq("j"))
         }
       }
+    }
   }
 
   test("columnar batch scan implementation") {
@@ -235,59 +239,51 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
-  test(
-    "SPARK-33369: Skip schema inference in DataframeWriter.save() if table provider " +
-      "supports external metadata") {
+  test("SPARK-33369: Skip schema inference in DataframeWriter.save() if table provider " +
+    "supports external metadata") {
     withTempDir { dir =>
       val cls = classOf[SupportsExternalMetadataWritableDataSource].getName
-      spark
-        .range(10)
-        .select($"id" as Symbol("i"), -$"id" as Symbol("j"))
-        .write
-        .format(cls)
-        .option("path", dir.getCanonicalPath)
-        .mode("append")
-        .save()
+      spark.range(10).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+        .write.format(cls).option("path", dir.getCanonicalPath).mode("append").save()
       val schema = new StructType().add("i", "long").add("j", "long")
-      checkAnswer(
-        spark.read.format(cls).option("path", dir.getCanonicalPath).schema(schema).load(),
-        spark.range(10).select($"id", -$"id"))
+        checkAnswer(
+          spark.read.format(cls).option("path", dir.getCanonicalPath).schema(schema).load(),
+          spark.range(10).select($"id", -$"id"))
     }
   }
 
   test("partitioning reporting") {
     import org.apache.spark.sql.functions.{count, sum}
     withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
-      Seq(classOf[PartitionAwareDataSource], classOf[JavaPartitionAwareDataSource]).foreach {
-        cls =>
-          withClue(cls.getName) {
-            val df = spark.read.format(cls.getName).load()
-            checkAnswer(df, Seq(Row(1, 4), Row(1, 4), Row(3, 6), Row(2, 6), Row(4, 2), Row(4, 2)))
+      Seq(classOf[PartitionAwareDataSource], classOf[JavaPartitionAwareDataSource]).foreach { cls =>
+        withClue(cls.getName) {
+          val df = spark.read.format(cls.getName).load()
+          checkAnswer(df, Seq(Row(1, 4), Row(1, 4), Row(3, 6), Row(2, 6), Row(4, 2), Row(4, 2)))
 
-            val groupByColI = df.groupBy($"i").agg(sum($"j"))
-            checkAnswer(groupByColI, Seq(Row(1, 8), Row(2, 6), Row(3, 6), Row(4, 4)))
-            assert(collectFirst(groupByColI.queryExecution.executedPlan) {
-              case e: ShuffleExchangeExec => e
-            }.isEmpty)
+          val groupByColI = df.groupBy($"i").agg(sum($"j"))
+          checkAnswer(groupByColI, Seq(Row(1, 8), Row(2, 6), Row(3, 6), Row(4, 4)))
+          assert(collectFirst(groupByColI.queryExecution.executedPlan) {
+            case e: ShuffleExchangeExec => e
+          }.isEmpty)
 
-            val groupByColIJ = df.groupBy($"i", $"j").agg(count("*"))
-            checkAnswer(groupByColIJ, Seq(Row(1, 4, 2), Row(2, 6, 1), Row(3, 6, 1), Row(4, 2, 2)))
-            assert(collectFirst(groupByColIJ.queryExecution.executedPlan) {
-              case e: ShuffleExchangeExec => e
-            }.isEmpty)
+          val groupByColIJ = df.groupBy($"i", $"j").agg(count("*"))
+          checkAnswer(groupByColIJ, Seq(Row(1, 4, 2), Row(2, 6, 1), Row(3, 6, 1), Row(4, 2, 2)))
+          assert(collectFirst(groupByColIJ.queryExecution.executedPlan) {
+            case e: ShuffleExchangeExec => e
+          }.isEmpty)
 
-            val groupByColJ = df.groupBy($"j").agg(sum($"i"))
-            checkAnswer(groupByColJ, Seq(Row(2, 8), Row(4, 2), Row(6, 5)))
-            assert(collectFirst(groupByColJ.queryExecution.executedPlan) {
-              case e: ShuffleExchangeExec => e
-            }.isDefined)
+          val groupByColJ = df.groupBy($"j").agg(sum($"i"))
+          checkAnswer(groupByColJ, Seq(Row(2, 8), Row(4, 2), Row(6, 5)))
+          assert(collectFirst(groupByColJ.queryExecution.executedPlan) {
+            case e: ShuffleExchangeExec => e
+          }.isDefined)
 
-            val groupByIPlusJ = df.groupBy($"i" + $"j").agg(count("*"))
-            checkAnswer(groupByIPlusJ, Seq(Row(5, 2), Row(6, 2), Row(8, 1), Row(9, 1)))
-            assert(collectFirst(groupByIPlusJ.queryExecution.executedPlan) {
-              case e: ShuffleExchangeExec => e
-            }.isDefined)
-          }
+          val groupByIPlusJ = df.groupBy($"i" + $"j").agg(count("*"))
+          checkAnswer(groupByIPlusJ, Seq(Row(5, 2), Row(6, 2), Row(8, 1), Row(9, 1)))
+          assert(collectFirst(groupByIPlusJ.queryExecution.executedPlan) {
+            case e: ShuffleExchangeExec => e
+          }.isDefined)
+        }
       }
     }
   }
@@ -296,7 +292,8 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
       Seq(
         classOf[OrderAndPartitionAwareDataSource],
-        classOf[JavaOrderAndPartitionAwareDataSource]).foreach { cls =>
+        classOf[JavaOrderAndPartitionAwareDataSource]
+      ).foreach { cls =>
         withClue(cls.getName) {
           // we test report ordering (together with report partitioning) with these transformations:
           // - groupBy("i").flatMapGroups:
@@ -320,7 +317,8 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
             // partitioned by j and in-partition sorted by i, we expect shuffling AND sorting
             (Some("j"), Some("i"), (true, true), (true, true)),
             // partitioned by j and in-partition sorted by i,j, we expect shuffling and sorting
-            (Some("j"), Some("i,j"), (true, true), (true, true))).foreach { testParams =>
+            (Some("j"), Some("i,j"), (true, true), (true, true))
+          ).foreach { testParams =>
             val (partitionKeys, orderKeys, groupByExpects, windowFuncExpects) = testParams
 
             withClue(f"${partitionKeys.orNull} ${orderKeys.orNull}") {
@@ -329,43 +327,35 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
                 .option("orderKeys", orderKeys.orNull)
                 .format(cls.getName)
                 .load()
-              checkAnswer(
-                df,
-                Seq(Row(1, 4), Row(1, 5), Row(3, 5), Row(2, 6), Row(4, 1), Row(4, 2)))
+              checkAnswer(df, Seq(Row(1, 4), Row(1, 5), Row(3, 5), Row(2, 6), Row(4, 1), Row(4, 2)))
 
               // groupBy(i).flatMapGroups
               {
-                val groupBy = df
-                  .groupBy($"i")
-                  .as[Int, (Int, Int)]
+                val groupBy = df.groupBy($"i").as[Int, (Int, Int)]
                   .flatMapGroups { (i: Int, it: Iterator[(Int, Int)]) =>
-                    Iterator.single((i, it.length))
-                  }
-                checkAnswer(groupBy.toDF(), Seq(Row(1, 2), Row(2, 1), Row(3, 1), Row(4, 2)))
+                    Iterator.single((i, it.length)) }
+                checkAnswer(
+                  groupBy.toDF(),
+                  Seq(Row(1, 2), Row(2, 1), Row(3, 1), Row(4, 2))
+                )
 
                 val (shuffleExpected, sortExpected) = groupByExpects
                 assert(collectFirst(groupBy.queryExecution.executedPlan) {
                   case e: ShuffleExchangeExec => e
                 }.isDefined === shuffleExpected)
-                assert(collectFirst(groupBy.queryExecution.executedPlan) { case e: SortExec =>
-                  e
+                assert(collectFirst(groupBy.queryExecution.executedPlan) {
+                  case e: SortExec => e
                 }.isDefined === sortExpected)
               }
 
               // aggregation function over window partitioned by i and ordered by j
               {
-                val windowPartByColIOrderByColJ = df.withColumn(
-                  "no",
-                  row_number() over Window.partitionBy(Symbol("i")).orderBy(Symbol("j")))
-                checkAnswer(
-                  windowPartByColIOrderByColJ,
-                  Seq(
-                    Row(1, 4, 1),
-                    Row(1, 5, 2),
-                    Row(2, 6, 1),
-                    Row(3, 5, 1),
-                    Row(4, 1, 1),
-                    Row(4, 2, 2)))
+                val windowPartByColIOrderByColJ = df.withColumn("no",
+                  row_number() over Window.partitionBy(Symbol("i")).orderBy(Symbol("j"))
+                )
+                checkAnswer(windowPartByColIOrderByColJ, Seq(
+                  Row(1, 4, 1), Row(1, 5, 2), Row(2, 6, 1), Row(3, 5, 1), Row(4, 1, 1), Row(4, 2, 2)
+                ))
 
                 val (shuffleExpected, sortExpected) = windowFuncExpects
                 assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
@@ -382,7 +372,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
-  test("statistics report data source") {
+  test ("statistics report data source") {
     Seq(classOf[ReportStatisticsDataSource], classOf[JavaReportStatisticsDataSource]).foreach {
       cls =>
         withClue(cls.getName) {
@@ -392,36 +382,29 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
           }.head
 
           val statics = logical.computeStats()
-          assert(
-            statics.rowCount.isDefined && statics.rowCount.get === 10,
+          assert(statics.rowCount.isDefined && statics.rowCount.get === 10,
             "Row count statics should be reported by data source")
-          assert(
-            statics.sizeInBytes === 80,
+          assert(statics.sizeInBytes === 80,
             "Size in bytes statics should be reported by data source")
         }
     }
   }
 
   test("SPARK-23574: no shuffle exchange with single partition") {
-    val df =
-      spark.read.format(classOf[SimpleSinglePartitionSource].getName).load().agg(count("*"))
+    val df = spark.read.format(classOf[SimpleSinglePartitionSource].getName).load().agg(count("*"))
     assert(df.queryExecution.executedPlan.collect { case e: Exchange => e }.isEmpty)
   }
 
   test("SPARK-44505: should not call planInputPartitions() on explain") {
-    val df = spark.read
-      .format(classOf[ScanDefinedColumnarSupport].getName)
-      .option("columnar", "PARTITION_DEFINED")
-      .load()
+    val df = spark.read.format(classOf[ScanDefinedColumnarSupport].getName)
+      .option("columnar", "PARTITION_DEFINED").load()
     // Default mode will throw an exception on explain.
     var ex = intercept[IllegalArgumentException](df.explain())
     assert(ex.getMessage == "planInputPartitions must not be called")
 
     Seq("SUPPORTED", "UNSUPPORTED").foreach { o =>
-      val dfScan = spark.read
-        .format(classOf[ScanDefinedColumnarSupport].getName)
-        .option("columnar", o)
-        .load()
+      val dfScan = spark.read.format(classOf[ScanDefinedColumnarSupport].getName)
+        .option("columnar", o).load()
       dfScan.explain()
       //  Will fail during regular execution.
       ex = intercept[IllegalArgumentException](dfScan.count())
@@ -435,79 +418,58 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         val path = file.getCanonicalPath
         assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
 
-        spark
-          .range(10)
-          .select($"id" as Symbol("i"), -$"id" as Symbol("j"))
-          .write
-          .format(cls.getName)
-          .option("path", path)
-          .mode("append")
-          .save()
+        spark.range(10).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+          .write.format(cls.getName)
+          .option("path", path).mode("append").save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(10).select($"id", -$"id"))
 
         // default save mode is ErrorIfExists
         intercept[AnalysisException] {
-          spark
-            .range(10)
-            .select($"id" as Symbol("i"), -$"id" as Symbol("j"))
-            .write
-            .format(cls.getName)
-            .option("path", path)
-            .save()
+          spark.range(10).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+            .write.format(cls.getName)
+            .option("path", path).save()
         }
-        spark
-          .range(10)
-          .select($"id" as Symbol("i"), -$"id" as Symbol("j"))
-          .write
-          .mode("append")
-          .format(cls.getName)
-          .option("path", path)
-          .save()
+        spark.range(10).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+          .write.mode("append").format(cls.getName)
+          .option("path", path).save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(10).union(spark.range(10)).select($"id", -Symbol("id")))
 
-        spark
-          .range(5)
-          .select($"id" as Symbol("i"), -$"id" as Symbol("j"))
-          .write
-          .format(cls.getName)
-          .option("path", path)
-          .mode("overwrite")
-          .save()
+        spark.range(5).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+          .write.format(cls.getName)
+          .option("path", path).mode("overwrite").save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(5).select($"id", -$"id"))
 
         checkError(
           exception = intercept[AnalysisException] {
-            spark
-              .range(5)
-              .select($"id" as Symbol("i"), -$"id" as Symbol("j"))
-              .write
-              .format(cls.getName)
-              .option("path", path)
-              .mode("ignore")
-              .save()
+            spark.range(5).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+              .write.format(cls.getName)
+              .option("path", path).mode("ignore").save()
           },
           errorClass = "_LEGACY_ERROR_TEMP_1308",
-          parameters = Map("source" -> cls.getName, "createMode" -> "Ignore"))
+          parameters = Map(
+            "source" -> cls.getName,
+            "createMode" -> "Ignore"
+          )
+        )
 
         checkError(
           exception = intercept[AnalysisException] {
-            spark
-              .range(5)
-              .select($"id" as Symbol("i"), -$"id" as Symbol("j"))
-              .write
-              .format(cls.getName)
-              .option("path", path)
-              .mode("error")
-              .save()
+            spark.range(5).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+              .write.format(cls.getName)
+              .option("path", path).mode("error").save()
           },
           errorClass = "_LEGACY_ERROR_TEMP_1308",
-          parameters = Map("source" -> cls.getName, "createMode" -> "ErrorIfExists"))
+          parameters = Map(
+            "source" -> cls.getName,
+            "createMode" -> "ErrorIfExists"
+          )
+        )
       }
     }
   }
@@ -519,20 +481,15 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
 
         val numPartition = 6
-        spark
-          .range(0, 10, 1, numPartition)
+        spark.range(0, 10, 1, numPartition)
           .select($"id" as Symbol("i"), -$"id" as Symbol("j"))
-          .write
-          .format(cls.getName)
-          .mode("append")
-          .option("path", path)
-          .save()
+          .write.format(cls.getName)
+          .mode("append").option("path", path).save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(10).select($"id", -$"id"))
 
-        assert(
-          SimpleCounter.getCounter == numPartition,
+        assert(SimpleCounter.getCounter == numPartition,
           "method onDataWriterCommit should be called as many as the number of partitions")
       }
     }
@@ -573,16 +530,14 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
 
   test("SPARK-23315: get output from canonicalized data source v2 related plans") {
     def checkCanonicalizedOutput(
-        df: DataFrame,
-        logicalNumOutput: Int,
-        physicalNumOutput: Int): Unit = {
-      val logical = df.queryExecution.logical.collect { case d: DataSourceV2Relation =>
-        d
+        df: DataFrame, logicalNumOutput: Int, physicalNumOutput: Int): Unit = {
+      val logical = df.queryExecution.logical.collect {
+        case d: DataSourceV2Relation => d
       }.head
       assert(logical.canonicalized.output.length == logicalNumOutput)
 
-      val physical = df.queryExecution.executedPlan.collect { case d: BatchScanExec =>
-        d
+      val physical = df.queryExecution.executedPlan.collect {
+        case d: BatchScanExec => d
       }.head
       assert(physical.canonicalized.output.length == physicalNumOutput)
     }
@@ -596,12 +551,12 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     val prefix = "spark.datasource.userDefinedDataSource."
     val optionName = "optionA"
     withSQLConf(prefix + optionName -> "true") {
-      val df = spark.read
+      val df = spark
+        .read
         .option(optionName, false)
-        .format(classOf[DataSourceV2WithSessionConfig].getName)
-        .load()
-      val options = df.queryExecution.logical.collectFirst { case d: DataSourceV2Relation =>
-        d.options
+        .format(classOf[DataSourceV2WithSessionConfig].getName).load()
+      val options = df.queryExecution.logical.collectFirst {
+        case d: DataSourceV2Relation => d.options
       }.get
       assert(options.get(optionName) === "false")
     }
@@ -629,8 +584,8 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       val t2 = spark.read.format(classOf[SimpleDataSourceV2].getName).load()
       Seq(2, 3).toDF("a").createTempView("t1")
       val df = t2.where("i < (select max(a) from t1)").select($"i")
-      val subqueries = stripAQEPlan(df.queryExecution.executedPlan).collect { case p =>
-        p.subqueries
+      val subqueries = stripAQEPlan(df.queryExecution.executedPlan).collect {
+        case p => p.subqueries
       }.flatten
       assert(subqueries.length == 1)
       checkAnswer(df, (0 until 3).map(i => Row(i)))
@@ -639,8 +594,8 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
 
   test("SPARK-32609: DataSourceV2 with different pushedfilters should be different") {
     def getScanExec(query: DataFrame): BatchScanExec = {
-      query.queryExecution.executedPlan.collect { case d: BatchScanExec =>
-        d
+      query.queryExecution.executedPlan.collect {
+        case d: BatchScanExec => d
       }.head
     }
 
@@ -672,11 +627,13 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         sql(s"CREATE or REPLACE TEMPORARY VIEW s1 USING ${cls.getName}")
         checkAnswer(sql("select * from s1"), (0 until 10).map(i => Row(i, -i)))
         checkAnswer(sql("select j from s1"), (0 until 10).map(i => Row(-i)))
-        checkAnswer(sql("select * from s1 where i > 5"), (6 until 10).map(i => Row(i, -i)))
+        checkAnswer(sql("select * from s1 where i > 5"),
+          (6 until 10).map(i => Row(i, -i)))
       }
     }
   }
 }
+
 
 case class RangeInputPartition(start: Int, end: Int) extends InputPartition
 
@@ -698,7 +655,7 @@ object SimpleReaderFactory extends PartitionReaderFactory {
   }
 }
 
-abstract class SimpleBatchTable extends Table with SupportsRead {
+abstract class SimpleBatchTable extends Table with SupportsRead  {
 
   override def schema(): StructType = TestingV2Source.schema
 
@@ -707,7 +664,8 @@ abstract class SimpleBatchTable extends Table with SupportsRead {
   override def capabilities(): java.util.Set[TableCapability] = java.util.EnumSet.of(BATCH_READ)
 }
 
-abstract class SimpleScanBuilder extends ScanBuilder with Batch with Scan {
+abstract class SimpleScanBuilder extends ScanBuilder
+  with Batch with Scan {
 
   override def build(): Scan = this
 
@@ -759,7 +717,7 @@ class ScanDefinedColumnarSupport extends TestingV2Source {
       throw new IllegalArgumentException("planInputPartitions must not be called")
     }
 
-    override def columnarSupportMode(): ColumnarSupportMode = st
+    override def columnarSupportMode() : ColumnarSupportMode = st
 
   }
 
@@ -770,6 +728,7 @@ class ScanDefinedColumnarSupport extends TestingV2Source {
   }
 
 }
+
 
 // This class is used by pyspark tests. If this class is modified/moved, make sure pyspark
 // tests still pass.
@@ -797,11 +756,8 @@ class AdvancedDataSourceV2 extends TestingV2Source {
   }
 }
 
-class AdvancedScanBuilder
-    extends ScanBuilder
-    with Scan
-    with SupportsPushDownFilters
-    with SupportsPushDownRequiredColumns {
+class AdvancedScanBuilder extends ScanBuilder
+  with Scan with SupportsPushDownFilters with SupportsPushDownRequiredColumns {
 
   var requiredSchema = TestingV2Source.schema
   var filters = Array.empty[Filter]
@@ -831,8 +787,8 @@ class AdvancedScanBuilder
 class AdvancedBatch(val filters: Array[Filter], val requiredSchema: StructType) extends Batch {
 
   override def planInputPartitions(): Array[InputPartition] = {
-    val lowerBound = filters.collectFirst { case GreaterThan("i", v: Int) =>
-      v
+    val lowerBound = filters.collectFirst {
+      case GreaterThan("i", v: Int) => v
     }
 
     val res = scala.collection.mutable.ArrayBuffer.empty[InputPartition]
@@ -864,11 +820,8 @@ class AdvancedDataSourceV2WithV2Filter extends TestingV2Source {
   }
 }
 
-class AdvancedScanBuilderWithV2Filter
-    extends ScanBuilder
-    with Scan
-    with SupportsPushDownV2Filters
-    with SupportsPushDownRequiredColumns {
+class AdvancedScanBuilderWithV2Filter extends ScanBuilder
+  with Scan with SupportsPushDownV2Filters with SupportsPushDownRequiredColumns {
 
   var requiredSchema = TestingV2Source.schema
   var predicates = Array.empty[Predicate]
@@ -895,8 +848,9 @@ class AdvancedScanBuilderWithV2Filter
   override def toBatch: Batch = new AdvancedBatchWithV2Filter(predicates, requiredSchema)
 }
 
-class AdvancedBatchWithV2Filter(val predicates: Array[Predicate], val requiredSchema: StructType)
-    extends Batch {
+class AdvancedBatchWithV2Filter(
+    val predicates: Array[Predicate],
+    val requiredSchema: StructType) extends Batch {
 
   override def planInputPartitions(): Array[InputPartition] = {
     val lowerBound = predicates.collectFirst {
@@ -950,6 +904,7 @@ class AdvancedReaderFactory(requiredSchema: StructType) extends PartitionReaderF
     }
   }
 }
+
 
 class SchemaRequiredDataSource extends TableProvider {
 
@@ -1047,7 +1002,8 @@ object ColumnarReaderFactory extends PartitionReaderFactory {
 
 class PartitionAwareDataSource extends TestingV2Source {
 
-  class MyScanBuilder extends SimpleScanBuilder with SupportsReportPartitioning {
+  class MyScanBuilder extends SimpleScanBuilder
+    with SupportsReportPartitioning {
 
     override def planInputPartitions(): Array[InputPartition] = {
       // Note that we don't have same value of column `i` across partitions.
@@ -1073,10 +1029,11 @@ class PartitionAwareDataSource extends TestingV2Source {
 
 class OrderAndPartitionAwareDataSource extends PartitionAwareDataSource {
 
-  class MyScanBuilder(val partitionKeys: Option[Seq[String]], val orderKeys: Seq[String])
-      extends SimpleScanBuilder
-      with SupportsReportPartitioning
-      with SupportsReportOrdering {
+  class MyScanBuilder(
+      val partitionKeys: Option[Seq[String]],
+      val orderKeys: Seq[String])
+    extends SimpleScanBuilder
+    with SupportsReportPartitioning with SupportsReportOrdering {
 
     override def planInputPartitions(): Array[InputPartition] = {
       // data are partitioned by column `i` or `j`, so we can report any partitioning
@@ -1092,25 +1049,31 @@ class OrderAndPartitionAwareDataSource extends PartitionAwareDataSource {
     }
 
     override def outputPartitioning(): Partitioning = {
-      partitionKeys
-        .map(keys => new KeyGroupedPartitioning(keys.map(FieldReference(_)).toArray, 2))
-        .getOrElse(new UnknownPartitioning(2))
+      partitionKeys.map(keys =>
+        new KeyGroupedPartitioning(keys.map(FieldReference(_)).toArray, 2)
+      ).getOrElse(
+        new UnknownPartitioning(2)
+      )
     }
 
-    override def outputOrdering(): Array[SortOrder] = orderKeys.map(new MySortOrder(_)).toArray
+    override def outputOrdering(): Array[SortOrder] = orderKeys.map(
+      new MySortOrder(_)
+    ).toArray
   }
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
       new MyScanBuilder(
-        Option(options.get("partitionKeys")).map(_.split(",").toSeq),
-        Option(options.get("orderKeys")).map(_.split(",").toSeq).getOrElse(Seq.empty))
+        Option(options.get("partitionKeys")).map(_.split(",")),
+        Option(options.get("orderKeys")).map(_.split(",").toSeq).getOrElse(Seq.empty)
+      )
     }
   }
 
   class MySortOrder(columnName: String) extends SortOrder {
     override def expression(): Expression = new MyIdentityTransform(
-      new MyNamedReference(columnName))
+      new MyNamedReference(columnName)
+    )
     override def direction(): SortDirection = SortDirection.ASCENDING
     override def nullOrdering(): NullOrdering = NullOrdering.NULLS_FIRST
   }
@@ -1126,9 +1089,9 @@ class OrderAndPartitionAwareDataSource extends PartitionAwareDataSource {
   }
 }
 
-case class SpecificInputPartition(i: Array[Int], j: Array[Int])
-    extends InputPartition
-    with HasPartitionKey {
+case class SpecificInputPartition(
+    i: Array[Int],
+    j: Array[Int]) extends InputPartition with HasPartitionKey {
   override def partitionKey(): InternalRow = PartitionInternalRow(Seq(i(0)).toArray)
 }
 
@@ -1175,7 +1138,8 @@ class SupportsExternalMetadataWritableDataSource extends SimpleWritableDataSourc
 
 class ReportStatisticsDataSource extends SimpleWritableDataSource {
 
-  class MyScanBuilder extends SimpleScanBuilder with SupportsReportStatistics {
+  class MyScanBuilder extends SimpleScanBuilder
+    with SupportsReportStatistics {
     override def estimateStatistics(): Statistics = {
       new Statistics {
         override def sizeInBytes(): OptionalLong = OptionalLong.of(80)
