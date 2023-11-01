@@ -18,6 +18,7 @@ package org.apache.spark.sql.connect.client
 
 import java.time.DateTimeException
 
+import scala.collection.immutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
@@ -27,7 +28,7 @@ import io.grpc.protobuf.StatusProto
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods
 
-import org.apache.spark.{QueryContext, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{QueryContext, QueryContextType, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.connect.proto.{FetchErrorDetailsRequest, FetchErrorDetailsResponse, UserContext}
 import org.apache.spark.connect.proto.SparkConnectServiceGrpc.SparkConnectServiceBlockingStub
 import org.apache.spark.internal.Logging
@@ -323,15 +324,18 @@ private[client] object GrpcExceptionConverter {
 
     val queryContext = error.getSparkThrowable.getQueryContextsList.asScala.map { queryCtx =>
       new QueryContext {
+        override def contextType(): QueryContextType = queryCtx.getContextType match {
+          case FetchErrorDetailsResponse.QueryContext.ContextType.DATAFRAME =>
+            QueryContextType.DataFrame
+          case _ => QueryContextType.SQL
+        }
         override def objectType(): String = queryCtx.getObjectType
-
         override def objectName(): String = queryCtx.getObjectName
-
         override def startIndex(): Int = queryCtx.getStartIndex
-
         override def stopIndex(): Int = queryCtx.getStopIndex
-
         override def fragment(): String = queryCtx.getFragment
+        override def callSite(): String = queryCtx.getCallSite
+        override def summary(): String = queryCtx.getSummary
       }
     }.toArray
 
@@ -371,7 +375,7 @@ private[client] object GrpcExceptionConverter {
         FetchErrorDetailsResponse.Error
           .newBuilder()
           .setMessage(message)
-          .addAllErrorTypeHierarchy(classes.toIterable.asJava)
+          .addAllErrorTypeHierarchy(immutable.ArraySeq.unsafeWrapArray(classes).asJava)
           .build()))
   }
 }

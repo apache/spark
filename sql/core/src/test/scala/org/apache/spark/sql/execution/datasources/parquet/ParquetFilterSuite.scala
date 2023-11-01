@@ -1556,7 +1556,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   private def checkStringFilterPushdown(
       stringPredicate: String => Expression,
       sourceFilter: (String, String) => sources.Filter): Unit = {
-    withParquetDataFrame((1 to 4).map(i => Tuple1(i + "str" + i))) { implicit df =>
+    withParquetDataFrame((1 to 4).map(i => Tuple1(s"${i}str$i"))) { implicit df =>
       checkFilterPredicate(
         stringPredicate("").asInstanceOf[Predicate],
         classOf[UserDefinedByInstance[_, _]],
@@ -1866,7 +1866,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     withTempPath { dir =>
       val count = 10
       val tableName = "spark_25207"
-      val tableDir = dir.getAbsoluteFile + "/table"
+      val tableDir = s"${dir.getAbsoluteFile}/table"
       withTable(tableName) {
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
           spark.range(count).selectExpr("id as A", "id as B", "id as b")

@@ -812,6 +812,12 @@
     ],
     "sqlState" : "42K01"
   },
+  "DATA_SOURCE_ALREADY_EXISTS" : {
+    "message" : [
+      "Data source '<provider>' already exists in the registry. Please use a different name for the new data source."
+    ],
+    "sqlState" : "42710"
+  },
   "DATA_SOURCE_NOT_FOUND" : {
     "message" : [
       "Failed to find the data source: <provider>. Please find packages at `https://spark.apache.org/third-party-projects.html`."
@@ -2774,7 +2780,7 @@
   },
   "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON" : {
     "message" : [
-      "Failed to plan Python data source <type> in Python: <msg>"
+      "Failed to <action> Python data source <type> in Python: <msg>"
     ],
     "sqlState" : "38000"
   },

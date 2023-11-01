@@ -98,7 +98,7 @@ object MFDataGenerator {
       trainData.map(x => (x._1, x._2, x._3 + rand.nextGaussian() * sigma))
     }
 
-    trainData.map(x => x._1 + "," + x._2 + "," + x._3).saveAsTextFile(outputPath)
+    trainData.map(x => s"${x._1},${x._2},${x._3}").saveAsTextFile(outputPath)
 
     // optionally generate testing data
     if (test) {
@@ -107,7 +107,7 @@ object MFDataGenerator {
       val testOrdered = testOmega.sortWith(_ < _).toArray
       val testData: RDD[(Int, Int, Double)] = sc.parallelize(testOrdered)
         .map(x => (x % m, x / m, fullData.values(x)))
-      testData.map(x => x._1 + "," + x._2 + "," + x._3).saveAsTextFile(outputPath)
+      testData.map(x => s"${x._1},${x._2},${x._3}").saveAsTextFile(outputPath)
     }
 
     sc.stop()

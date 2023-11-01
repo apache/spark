@@ -23,12 +23,11 @@ import java.util.Locale
 import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.ql.io.orc.CompressionKind
 import org.apache.orc.OrcConf.COMPRESS
 import org.apache.parquet.hadoop.ParquetOutputFormat
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.execution.datasources.orc.OrcOptions
+import org.apache.spark.sql.execution.datasources.orc.{OrcCompressionCodec, OrcOptions}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, ParquetOptions, ParquetTest}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -299,9 +298,15 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
         ParquetCompressionCodec.SNAPPY.name))
     checkForTableWithCompressProp("orc",
       tableCompressCodecs =
-        List(CompressionKind.NONE.name, CompressionKind.SNAPPY.name, CompressionKind.ZLIB.name),
+        List(
+          OrcCompressionCodec.NONE.name,
+          OrcCompressionCodec.SNAPPY.name,
+          OrcCompressionCodec.ZLIB.name),
       sessionCompressCodecs =
-        List(CompressionKind.SNAPPY.name, CompressionKind.ZLIB.name, CompressionKind.SNAPPY.name))
+        List(
+          OrcCompressionCodec.SNAPPY.name,
+          OrcCompressionCodec.ZLIB.name,
+          OrcCompressionCodec.SNAPPY.name))
   }
 
   test("table-level compression is not set but session-level compressions is set ") {
@@ -314,7 +319,10 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
     checkForTableWithCompressProp("orc",
       tableCompressCodecs = List.empty,
       sessionCompressCodecs =
-        List(CompressionKind.NONE.name, CompressionKind.SNAPPY.name, CompressionKind.ZLIB.name))
+        List(
+          OrcCompressionCodec.NONE.name,
+          OrcCompressionCodec.SNAPPY.name,
+          OrcCompressionCodec.ZLIB.name))
   }
 
   def checkTableWriteWithCompressionCodecs(format: String, compressCodecs: List[String]): Unit = {
@@ -355,6 +363,9 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
         ParquetCompressionCodec.GZIP.name))
     checkTableWriteWithCompressionCodecs(
       "orc",
-      List(CompressionKind.NONE.name, CompressionKind.SNAPPY.name, CompressionKind.ZLIB.name))
+      List(
+        OrcCompressionCodec.NONE.name,
+        OrcCompressionCodec.SNAPPY.name,
+        OrcCompressionCodec.ZLIB.name))
   }
 }

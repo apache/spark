@@ -146,7 +146,9 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "name" -> "`num`",
         "referenceNames" -> "[`table1`.`num`, `table2`.`num`]"
-      )
+      ),
+      context =
+        ExpectedContext(fragment = "freqItems", callSitePattern = getCurrentClassCallSitePattern)
     )
     checkError(
       exception = intercept[AnalysisException] {
@@ -156,7 +158,9 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "name" -> "`num`",
         "referenceNames" -> "[`table1`.`num`, `table2`.`num`]"
-      )
+      ),
+      context = ExpectedContext(
+        fragment = "approxQuantile", callSitePattern = getCurrentClassCallSitePattern)
     )
     checkError(
       exception = intercept[AnalysisException] {
@@ -508,7 +512,7 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
     assert(sketch4.relativeError() === 0.001 +- 1e04)
     assert(sketch4.confidence() === 0.99 +- 5e-3)
 
-    intercept[IllegalArgumentException] {
+    intercept[AnalysisException] {
       df.select($"id" cast DoubleType as "id")
         .stat
         .countMinSketch($"id", depth = 10, width = 20, seed = 42)

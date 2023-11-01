@@ -16,13 +16,15 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
+import java.io.CharArrayWriter
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, ExprUtils, NullIntolerant, TimeZoneAwareExpression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.{ArrayData, FailFastMode, FailureSafeParser, GenericArrayData, PermissiveMode}
-import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, ValidatorUtil, XmlInferSchema, XmlOptions}
+import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, ValidatorUtil, XmlInferSchema, XmlOptions}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -225,5 +227,91 @@ case class SchemaOfXml(
   override def prettyName: String = "schema_of_xml"
 
   override protected def withNewChildInternal(newChild: Expression): SchemaOfXml =
+    copy(child = newChild)
+}
+
+/**
+ * Converts a [[StructType]] to a XML output string.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr[, options]) - Returns a XML string with a given struct value",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
+       <ROW>
+           <a>1</a>
+           <b>2</b>
+       </ROW>
+      > SELECT _FUNC_(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy'));
+       <ROW>
+           <time>26/08/2015</time>
+       </ROW>
+  """,
+  since = "4.0.0",
+  group = "xml_funcs")
+// scalastyle:on line.size.limit
+case class StructsToXml(
+    options: Map[String, String],
+    child: Expression,
+    timeZoneId: Option[String] = None)
+  extends UnaryExpression
+  with TimeZoneAwareExpression
+  with CodegenFallback
+  with ExpectsInputTypes
+  with NullIntolerant {
+  override def nullable: Boolean = true
+
+  def this(options: Map[String, String], child: Expression) = this(options, child, None)
+
+  // Used in `FunctionRegistry`
+  def this(child: Expression) = this(Map.empty, child, None)
+
+  def this(child: Expression, options: Expression) =
+    this(
+      options = ExprUtils.convertToMapData(options),
+      child = child,
+      timeZoneId = None)
+
+  @transient
+  lazy val writer = new CharArrayWriter()
+
+  @transient
+  lazy val inputSchema: StructType = child.dataType match {
+    case st: StructType => st
+    case other =>
+      throw new IllegalArgumentException(s"Unsupported input type ${other.catalogString}")
+  }
+
+  @transient
+  lazy val gen = new StaxXmlGenerator(
+    inputSchema, writer, new XmlOptions(options, timeZoneId.get), false)
+
+  // This converts rows to the XML output according to the given schema.
+  @transient
+  lazy val converter: Any => UTF8String = {
+    def getAndReset(): UTF8String = {
+      gen.flush()
+      val xmlString = writer.toString
+      writer.reset()
+      UTF8String.fromString(xmlString)
+    }
+    (row: Any) =>
+      gen.write(row.asInstanceOf[InternalRow])
+      getAndReset()
+  }
+
+  override def dataType: DataType = StringType
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def nullSafeEval(value: Any): Any = converter(value)
+
+  override def inputTypes: Seq[AbstractDataType] = StructType :: Nil
+
+  override def prettyName: String = "to_xml"
+
+  override protected def withNewChildInternal(newChild: Expression): StructsToXml =
     copy(child = newChild)
 }

@@ -26,13 +26,15 @@ class BasePythonDataSourceTestsMixin:
             ...
 
         options = dict(a=1, b=2)
-        ds = MyDataSource(options)
+        ds = MyDataSource(paths=[], userSpecifiedSchema=None, options=options)
         self.assertEqual(ds.options, options)
-        self.assertEqual(ds.name, "MyDataSource")
+        self.assertEqual(ds.name(), "MyDataSource")
         with self.assertRaises(NotImplementedError):
             ds.schema()
         with self.assertRaises(NotImplementedError):
             ds.reader(None)
+        with self.assertRaises(NotImplementedError):
+            ds.writer(None, None)
 
     def test_basic_data_source_reader_class(self):
         class MyDataSourceReader(DataSourceReader):
@@ -42,6 +44,18 @@ class BasePythonDataSourceTestsMixin:
         reader = MyDataSourceReader()
         self.assertEqual(list(reader.partitions()), [None])
         self.assertEqual(list(reader.read(None)), [(None,)])
+
+    def test_register_data_source(self):
+        class MyDataSource(DataSource):
+            ...
+
+        self.spark.dataSource.register(MyDataSource)
+
+        self.assertTrue(
+            self.spark._jsparkSession.sharedState()
+            .dataSourceRegistry()
+            .dataSourceExists("MyDataSource")
+        )
 
 
 class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):

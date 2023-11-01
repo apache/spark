@@ -19,14 +19,14 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
-import org.apache.spark.SparkException
+import org.apache.spark.{QueryContext, SparkException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, CurrentOrigin, LeafLike, QuaternaryLike, SQLQueryContext, TernaryLike, TreeNode, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, CurrentOrigin, LeafLike, QuaternaryLike, TernaryLike, TreeNode, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -613,11 +613,11 @@ abstract class UnaryExpression extends Expression with UnaryLike[Expression] {
  * to executors. It will also be kept after rule transforms.
  */
 trait SupportQueryContext extends Expression with Serializable {
-  protected var queryContext: Option[SQLQueryContext] = initQueryContext()
+  protected var queryContext: Option[QueryContext] = initQueryContext()
 
-  def initQueryContext(): Option[SQLQueryContext]
+  def initQueryContext(): Option[QueryContext]
 
-  def getContextOrNull(): SQLQueryContext = queryContext.orNull
+  def getContextOrNull(): QueryContext = queryContext.orNull
 
   def getContextOrNullCode(ctx: CodegenContext, withErrorContext: Boolean = true): String = {
     if (withErrorContext && queryContext.isDefined) {
@@ -717,8 +717,8 @@ abstract class BinaryExpression extends Expression with BinaryLike[Expression] {
 
     if (nullable) {
       val nullSafeEval =
-        leftGen.code + ctx.nullSafeExec(left.nullable, leftGen.isNull) {
-          rightGen.code + ctx.nullSafeExec(right.nullable, rightGen.isNull) {
+        leftGen.code.toString + ctx.nullSafeExec(left.nullable, leftGen.isNull) {
+          rightGen.code.toString + ctx.nullSafeExec(right.nullable, rightGen.isNull) {
             s"""
               ${ev.isNull} = false; // resultCode could change nullability.
               $resultCode
@@ -869,9 +869,9 @@ abstract class TernaryExpression extends Expression with TernaryLike[Expression]
 
     if (nullable) {
       val nullSafeEval =
-        leftGen.code + ctx.nullSafeExec(children(0).nullable, leftGen.isNull) {
-          midGen.code + ctx.nullSafeExec(children(1).nullable, midGen.isNull) {
-            rightGen.code + ctx.nullSafeExec(children(2).nullable, rightGen.isNull) {
+        leftGen.code.toString + ctx.nullSafeExec(children(0).nullable, leftGen.isNull) {
+          midGen.code.toString + ctx.nullSafeExec(children(1).nullable, midGen.isNull) {
+            rightGen.code.toString + ctx.nullSafeExec(children(2).nullable, rightGen.isNull) {
               s"""
                 ${ev.isNull} = false; // resultCode could change nullability.
                 $resultCode
@@ -971,10 +971,10 @@ abstract class QuaternaryExpression extends Expression with QuaternaryLike[Expre
 
     if (nullable) {
       val nullSafeEval =
-        firstGen.code + ctx.nullSafeExec(children(0).nullable, firstGen.isNull) {
-          secondGen.code + ctx.nullSafeExec(children(1).nullable, secondGen.isNull) {
-            thridGen.code + ctx.nullSafeExec(children(2).nullable, thridGen.isNull) {
-              fourthGen.code + ctx.nullSafeExec(children(3).nullable, fourthGen.isNull) {
+        firstGen.code.toString + ctx.nullSafeExec(children(0).nullable, firstGen.isNull) {
+          secondGen.code.toString + ctx.nullSafeExec(children(1).nullable, secondGen.isNull) {
+            thridGen.code.toString + ctx.nullSafeExec(children(2).nullable, thridGen.isNull) {
+              fourthGen.code.toString + ctx.nullSafeExec(children(3).nullable, fourthGen.isNull) {
                 s"""
                   ${ev.isNull} = false; // resultCode could change nullability.
                   $resultCode
@@ -1093,11 +1093,11 @@ abstract class QuinaryExpression extends Expression {
 
     if (nullable) {
       val nullSafeEval =
-        firstGen.code + ctx.nullSafeExec(children(0).nullable, firstGen.isNull) {
-          secondGen.code + ctx.nullSafeExec(children(1).nullable, secondGen.isNull) {
-            thirdGen.code + ctx.nullSafeExec(children(2).nullable, thirdGen.isNull) {
-              fourthGen.code + ctx.nullSafeExec(children(3).nullable, fourthGen.isNull) {
-                fifthGen.code + ctx.nullSafeExec(children(4).nullable, fifthGen.isNull) {
+        firstGen.code.toString + ctx.nullSafeExec(children(0).nullable, firstGen.isNull) {
+          secondGen.code.toString + ctx.nullSafeExec(children(1).nullable, secondGen.isNull) {
+            thirdGen.code.toString + ctx.nullSafeExec(children(2).nullable, thirdGen.isNull) {
+              fourthGen.code.toString + ctx.nullSafeExec(children(3).nullable, fourthGen.isNull) {
+                fifthGen.code.toString + ctx.nullSafeExec(children(4).nullable, fifthGen.isNull) {
                   s"""
                       ${ev.isNull} = false; // resultCode could change nullability.
                       $resultCode
@@ -1237,19 +1237,19 @@ abstract class SeptenaryExpression extends Expression {
 
     if (nullable) {
       val nullSafeEval =
-        firstGen.code + ctx.nullSafeExec(children(0).nullable, firstGen.isNull) {
-          secondGen.code + ctx.nullSafeExec(children(1).nullable, secondGen.isNull) {
-            thirdGen.code + ctx.nullSafeExec(children(2).nullable, thirdGen.isNull) {
-              fourthGen.code + ctx.nullSafeExec(children(3).nullable, fourthGen.isNull) {
-                fifthGen.code + ctx.nullSafeExec(children(4).nullable, fifthGen.isNull) {
-                  sixthGen.code + ctx.nullSafeExec(children(5).nullable, sixthGen.isNull) {
+        firstGen.code.toString + ctx.nullSafeExec(children(0).nullable, firstGen.isNull) {
+          secondGen.code.toString + ctx.nullSafeExec(children(1).nullable, secondGen.isNull) {
+            thirdGen.code.toString + ctx.nullSafeExec(children(2).nullable, thirdGen.isNull) {
+              fourthGen.code.toString + ctx.nullSafeExec(children(3).nullable, fourthGen.isNull) {
+                fifthGen.code.toString + ctx.nullSafeExec(children(4).nullable, fifthGen.isNull) {
+                  sixthGen.code.toString + ctx.nullSafeExec(children(5).nullable, sixthGen.isNull) {
                     val nullSafeResultCode =
                       s"""
                       ${ev.isNull} = false; // resultCode could change nullability.
                       $resultCode
                       """
                     seventhGen.map { gen =>
-                      gen.code + ctx.nullSafeExec(children(6).nullable, gen.isNull) {
+                      gen.code.toString + ctx.nullSafeExec(children(6).nullable, gen.isNull) {
                         nullSafeResultCode
                       }
                     }.getOrElse(nullSafeResultCode)

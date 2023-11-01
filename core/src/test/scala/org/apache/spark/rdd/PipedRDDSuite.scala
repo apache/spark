@@ -124,7 +124,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
       (f: String => Unit) => {
         bl.value.foreach(f); f("\u0001")
       },
-      (i: Int, f: String => Unit) => f(i + "_"))
+      (i: Int, f: String => Unit) => f(s"${i}_"))
 
     val c = piped.collect()
 
