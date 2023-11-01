@@ -19,8 +19,12 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.nio.charset.StandardCharsets
+
 import scala.collection.mutable
+import scala.util.Try
+
 import org.apache.commons.io.FileUtils
+
 import org.apache.spark.sql.catalyst.expressions.AttributeSet
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution._
@@ -29,7 +33,6 @@ import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec, Va
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.ExtendedSQLTest
 
-import scala.util.Try
 
 // scalastyle:off line.size.limit
 /**
