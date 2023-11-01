@@ -60,21 +60,7 @@ class SparkConnectSessionManager extends Logging {
       getSession(
         key,
         Some(() => {
-          // Validate that sessionId is formatted like UUID before creating session.
-          try {
-            UUID.fromString(key.sessionId).toString
-          } catch {
-            case _: IllegalArgumentException =>
-              throw new SparkSQLException(
-                errorClass = "INVALID_HANDLE.FORMAT",
-                messageParameters = Map("handle" -> key.sessionId))
-          }
-          // Validate that session with that key has not been already closed.
-          if (closedSessionsCache.getIfPresent(key) != null) {
-            throw new SparkSQLException(
-              errorClass = "INVALID_HANDLE.SESSION_CLOSED",
-              messageParameters = Map("handle" -> key.sessionId))
-          }
+          validateSessionCreate()
           val holder = SessionHolder(key.userId, key.sessionId, newIsolatedSession())
           holder.initializeSession()
           holder
@@ -148,6 +134,24 @@ class SparkConnectSessionManager extends Logging {
 
   private def newIsolatedSession(): SparkSession = {
     SparkSession.active.newSession()
+  }
+
+  private def validateSessionCreate(key: SessionKey): Unit = {
+    // Validate that sessionId is formatted like UUID before creating session.
+    try {
+      UUID.fromString(key.sessionId).toString
+    } catch {
+      case _: IllegalArgumentException =>
+        throw new SparkSQLException(
+          errorClass = "INVALID_HANDLE.FORMAT",
+          messageParameters = Map("handle" -> key.sessionId))
+    }
+    // Validate that session with that key has not been already closed.
+    if (closedSessionsCache.getIfPresent(key) != null) {
+      throw new SparkSQLException(
+        errorClass = "INVALID_HANDLE.SESSION_CLOSED",
+        messageParameters = Map("handle" -> key.sessionId))
+    }
   }
 
   /**
