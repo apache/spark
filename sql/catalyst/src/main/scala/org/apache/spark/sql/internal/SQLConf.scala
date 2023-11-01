@@ -915,6 +915,43 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PREFER_BROADCAST_VAR_PUSHDOWN_OVER_DPP =
+    buildConf("spark.sql.execution.broadcastHashJoin.preferBroadcastVarPushDownOverDPP")
+      .internal()
+      .doc("For BroadcastHashJoin prefer the leg whose plan has already been broadcasted once," +
+        " for BuildSide. This has a bug in code so it is defaulted to false")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val PREFER_AS_BUILDSIDE_LEG_ALREADY_BROADCASTED =
+    buildConf("spark.sql.execution.broadcastHashJoin.preferAsBuildSideLegAlreadyBroadcasted")
+      .internal()
+      .doc("For BroadcastHashJoin prefer the leg whose plan has already been broadcasted once," +
+        " for BuildSide")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val PUSH_BROADCASTED_JOIN_KEYS_AS_FILTER_TO_SCAN =
+    buildConf("spark.sql.execution.broadcastHashJoin.pushKeysAsFilterToScan")
+      .internal()
+      .doc("Pushes the join keys from build side of broascasted relation as In clause," +
+        " to the scan of stream side")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val PREFER_REUSE_EXCHANGE_OVER_BROADCAST_VAR_PUSHDOWN =
+    buildConf("spark.sql.execution.broadcastHashJoin.preferReuseExchangeOverBroadcastVarPushdown")
+      .internal()
+      .doc("The build side legs under BroadcastExchangeExec may be reusable unless broadcast var " +
+        "push down make them non identical preventing reuse of exchange operator. default is" +
+        " false ")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PROPAGATE_DISTINCT_KEYS_ENABLED =
     buildConf("spark.sql.optimizer.propagateDistinctKeys.enabled")
       .internal()
@@ -5340,43 +5377,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def coalesceBucketsInJoinMaxBucketRatio: Int =
     getConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO)
-
-  val PREFER_BROADCAST_VAR_PUSHDOWN_OVER_DPP =
-    buildConf("spark.sql.execution.broadcastHashJoin.preferBroadcastVarPushDownOverDPP")
-      .internal()
-      .doc("For BroadcastHashJoin prefer the leg whose plan has already been broadcasted once," +
-        " for BuildSide. This has a bug in code so it is defaulted to false")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(false)
-
-  val PREFER_AS_BUILDSIDE_LEG_ALREADY_BROADCASTED =
-    buildConf("spark.sql.execution.broadcastHashJoin.preferAsBuildSideLegAlreadyBroadcasted")
-      .internal()
-      .doc("For BroadcastHashJoin prefer the leg whose plan has already been broadcasted once," +
-        " for BuildSide")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(true)
-
-  val PUSH_BROADCASTED_JOIN_KEYS_AS_FILTER_TO_SCAN =
-    buildConf("spark.sql.execution.broadcastHashJoin.pushKeysAsFilterToScan")
-      .internal()
-      .doc("Pushes the join keys from build side of broascasted relation as In clause," +
-        " to the scan of stream side")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(true)
-
-  val PREFER_REUSE_EXCHANGE_OVER_BROADCAST_VAR_PUSHDOWN =
-    buildConf("spark.sql.execution.broadcastHashJoin.preferReuseExchangeOverBroadcastVarPushdown")
-      .internal()
-      .doc("The build side legs under BroadcastExchangeExec may be reusable unless broadcast var " +
-        "push down make them non identical preventing reuse of exchange operator. default is" +
-        " false ")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(false)
 
   def preferAsBuildSideLegAlreadyBroadcasted: Boolean =
     getConf(PREFER_AS_BUILDSIDE_LEG_ALREADY_BROADCASTED)

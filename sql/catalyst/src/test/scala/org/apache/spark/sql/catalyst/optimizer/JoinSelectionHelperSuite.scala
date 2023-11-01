@@ -194,8 +194,8 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       val smallerLeg = right
       val biggerLeg = left
       val biggerLegOuter = SubqueryAlias("outerLeg", biggerLeg)
-      val join1 = SubqueryAlias("j1", Join(smallerLeg, biggerLeg, Inner, Some('a === 'd),
-        JoinHint.NONE))
+      val join1 = SubqueryAlias("j1", Join(smallerLeg, biggerLeg, Inner,
+        Some("a".attr === "d".attr), JoinHint.NONE))
       val broadCastExchangePlans = mutable.Set[LogicalPlan]()
       val broadcastSideOuterJoin = getBroadcastBuildSide(
         biggerLegOuter,

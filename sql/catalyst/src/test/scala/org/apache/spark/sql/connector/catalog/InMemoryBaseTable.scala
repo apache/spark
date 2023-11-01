@@ -471,7 +471,7 @@ abstract class InMemoryBaseTable(
                 .asInstanceOf[java.util.Set[Any]]
                 .asScala
                 .map(_.toString)
-              data = data.filter(partition => {
+              this.data = this.data.filter(partition => {
                 val key = partition.asInstanceOf[BufferedRows].keyString()
                 matchingKeys.contains(key)
               })
@@ -504,7 +504,7 @@ abstract class InMemoryBaseTable(
               // scalastyle:on classforname
               val getKeysMthd = broadcastVarClass.getMethod("getKeysAsSet")
               val keys = getKeysMthd.invoke(valueArray(0)).asInstanceOf[java.util.Set[Any]]
-              data = data.map(partition => {
+              this.data = this.data.map(partition => {
                 val oldPart = partition.asInstanceOf[BufferedRows]
                 val newPartition = new BufferedRows(oldPart.key)
                 oldPart.rows
