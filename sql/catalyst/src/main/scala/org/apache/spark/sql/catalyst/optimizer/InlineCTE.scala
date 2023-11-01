@@ -120,6 +120,27 @@ case class InlineCTE(alwaysInline: Boolean = false) extends Rule[LogicalPlan] {
           }
         }
     }
+    // If a CTE ref count is 0, the other CTE that is referenced by it should also have
+    // a ref count.
+    val visited: mutable.Map[Long, Boolean] = mutable.Map.empty.withDefaultValue(false)
+    cteMap.foreach { case(cteId, _) =>
+      val (_, refCount, _) = cteMap(cteId)
+      if (refCount == 0 && !visited(cteId) ) {
+        reconcileCTERefCount(cteMap, visited, cteId)
+      }
+    }
+  }
+
+  def reconcileCTERefCount(
+      cteMap: mutable.Map[Long, (CTERelationDef, Int, mutable.Map[Long, Int])],
+      visited: mutable.Map[Long, Boolean],
+      cteId: Long): Unit = {
+    val (cteDef, refCount, refMap) = cteMap(cteId)
+    cteMap(cteId) = (cteDef, 0, refMap)
+    refMap.foreach { case(id, _) =>
+      reconcileCTERefCount(cteMap, visited, id)
+    }
+    visited(cteId) = true
   }
 
   /**
