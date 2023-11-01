@@ -33,9 +33,9 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
 import org.apache.spark.util.AccumulatorContext.internOption
 
 /**
- * A metric used in a SQL query plan. This is implemented as an [[AccumulatorV2]]. Updates on the
- * executor side are automatically propagated and shown in the SQL UI through metrics. Updates on
- * the driver side must be explicitly posted using [[SQLMetrics.postDriverMetricUpdates()]].
+ * A metric used in a SQL query plan. This is implemented as an [[AccumulatorV2]]. Updates on
+ * the executor side are automatically propagated and shown in the SQL UI through metrics. Updates
+ * on the driver side must be explicitly posted using [[SQLMetrics.postDriverMetricUpdates()]].
  */
 class SQLMetric(val metricType: String, initValue: Long = 0L) extends AccumulatorV2[Long, Long] {
   // This is a workaround for SPARK-11013.
@@ -59,10 +59,8 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
         if (_value < 0) _value = 0
         _value += o.value
       }
-    case _ =>
-      throw QueryExecutionErrors.cannotMergeClassWithOtherClassError(
-        this.getClass.getName,
-        other.getClass.getName)
+    case _ => throw QueryExecutionErrors.cannotMergeClassWithOtherClassError(
+      this.getClass.getName, other.getClass.getName)
   }
 
   override def isZero: Boolean = _value == _zeroValue
@@ -93,13 +91,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
-    AccumulableInfo(
-      id,
-      name,
-      internOption(update),
-      internOption(value),
-      true,
-      true,
+    AccumulableInfo(id, name, internOption(update), internOption(value), true, true,
       SQLMetrics.cachedSQLAccumIdentifier)
   }
 }
@@ -116,14 +108,12 @@ object SQLMetrics {
   val cachedSQLAccumIdentifier = Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER)
 
   private val metricsCache: LoadingCache[String, Option[String]] =
-    CacheBuilder
-      .newBuilder()
-      .maximumSize(10000)
-      .build(new CacheLoader[String, Option[String]] {
-        override def load(name: String): Option[String] = {
-          Option(name)
-        }
-      })
+    CacheBuilder.newBuilder().maximumSize(10000)
+    .build(new CacheLoader[String, Option[String]] {
+      override def load(name: String): Option[String] = {
+        Option(name)
+      }
+    })
 
   /**
    * Converts a double value to long value by multiplying a base integer, so we can store it in
@@ -131,8 +121,7 @@ object SQLMetrics {
    * it back to a double value up to the decimal places bound by the base integer.
    */
   private[sql] def setDoubleForAverageMetrics(metric: SQLMetric, v: Double): Unit = {
-    assert(
-      metric.metricType == AVERAGE_METRIC,
+    assert(metric.metricType == AVERAGE_METRIC,
       s"Can't set a double to a metric of metrics type: ${metric.metricType}")
     metric.set((v * baseForAvgMetric).toLong)
   }
@@ -148,16 +137,13 @@ object SQLMetrics {
    */
   def createV2CustomMetric(sc: SparkContext, customMetric: CustomMetric): SQLMetric = {
     val acc = new SQLMetric(CustomMetrics.buildV2CustomMetricTypeName(customMetric))
-    acc.register(
-      sc,
-      name = metricsCache.get(customMetric.description()),
-      countFailedValues = false)
+    acc.register(sc, name = metricsCache.get(customMetric.description()), countFailedValues = false)
     acc
   }
 
   /**
-   * Create a metric to report the size information (including total, min, med, max) like data
-   * size, spill size, etc.
+   * Create a metric to report the size information (including total, min, med, max) like data size,
+   * spill size, etc.
    */
   def createSizeMetric(sc: SparkContext, name: String, initValue: Long = -1): SQLMetric = {
     // The final result of this metric in physical operator UI may look like:
@@ -185,10 +171,10 @@ object SQLMetrics {
   }
 
   /**
-   * Create a metric to report the average information (including min, med, max) like avg hash
-   * probe. As average metrics are double values, this kind of metrics should be only set with
-   * `SQLMetric.set` method instead of other methods like `SQLMetric.add`. The initial values
-   * (zeros) of this metrics will be excluded after.
+   * Create a metric to report the average information (including min, med, max) like
+   * avg hash probe. As average metrics are double values, this kind of metrics should be
+   * only set with `SQLMetric.set` method instead of other methods like `SQLMetric.add`.
+   * The initial values (zeros) of this metrics will be excluded after.
    */
   def createAverageMetric(sc: SparkContext, name: String): SQLMetric = {
     // The final result of this metric in physical operator UI may looks like:
@@ -211,9 +197,9 @@ object SQLMetrics {
   private val METRICS_NAME_SUFFIX = "(min, med, max (stageId: taskId))"
 
   /**
-   * A function that defines how we aggregate the final accumulator results among all tasks, and
-   * represent it in string for a SQL physical operator.
-   */
+   * A function that defines how we aggregate the final accumulator results among all tasks,
+   * and represent it in string for a SQL physical operator.
+    */
   def stringValue(metricsType: String, values: Array[Long], maxMetrics: Array[Long]): String = {
     // taskInfo = "(driver)" OR (stage ${stageId}.${attemptId}: task $taskId)
     val taskInfo = if (maxMetrics.isEmpty) {
@@ -245,8 +231,8 @@ object SQLMetrics {
         Utils.bytesToString
       } else if (metricsType == TIMING_METRIC) {
         Utils.msDurationToString
-      } else if (metricsType == NS_TIMING_METRIC) { duration =>
-        Utils.msDurationToString(duration.nanos.toMillis)
+      } else if (metricsType == NS_TIMING_METRIC) {
+        duration => Utils.msDurationToString(duration.nanos.toMillis)
       } else {
         throw new IllegalStateException(s"unexpected metrics type: $metricsType")
       }
@@ -275,18 +261,17 @@ object SQLMetrics {
       executionId: String,
       accumUpdates: Seq[(Long, Long)]): Unit = {
     if (executionId != null) {
-      sc.listenerBus.post(SparkListenerDriverAccumUpdates(executionId.toLong, accumUpdates))
+      sc.listenerBus.post(
+        SparkListenerDriverAccumUpdates(executionId.toLong, accumUpdates))
     }
   }
 
   /**
-   * Updates metrics based on the driver side value. This is useful for certain metrics that are
-   * only updated on the driver, e.g. subquery execution time, or number of files.
+   * Updates metrics based on the driver side value. This is useful for certain metrics that
+   * are only updated on the driver, e.g. subquery execution time, or number of files.
    */
   def postDriverMetricUpdates(
-      sc: SparkContext,
-      executionId: String,
-      metrics: Seq[SQLMetric]): Unit = {
+      sc: SparkContext, executionId: String, metrics: Seq[SQLMetric]): Unit = {
     // There are some cases we don't care about the metrics and call `SparkPlan.doExecute`
     // directly without setting an execution id. We should be tolerant to it.
     if (executionId != null) {
