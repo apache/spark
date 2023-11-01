@@ -669,19 +669,12 @@ class SparkConnectClient(object):
 
         self._channel = self._builder.toChannel()
         self._closed = False
-        self._cached_stub: Optional[grpc_lib.SparkConnectServiceStub] = None
+        self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
         self._artifact_manager = ArtifactManager(
             self._user_id, self._session_id, self._channel, self._builder.metadata()
         )
         self._use_reattachable_execute = use_reattachable_execute
         # Configure logging for the SparkConnect client.
-
-    @property
-    def _stub(self) -> grpc_lib.SparkConnectServiceStub:
-        if self._cached_stub is None:
-            self._cached_stub = grpc_lib.SparkConnectServiceStub(self._channel)
-        assert self._cached_stub is not None
-        return self._cached_stub
 
     def _retrying(self) -> "Retrying":
         return Retrying(

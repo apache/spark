@@ -254,6 +254,9 @@ class SparkSession:
         self._client = SparkConnectClient(connection=connection, user_id=userId)
         self._session_id = self._client._session_id
 
+        # Set to false to prevent client.release_session on close() (testing only)
+        self.release_session_on_close = True
+
     @classmethod
     def _set_default_and_active_session(cls, session: "SparkSession") -> None:
         """
@@ -654,8 +657,7 @@ class SparkSession:
         # multi-tenancy - the remote client side cannot just stop the server and stop
         # other remote clients being used from other users.
         with SparkSession._lock:
-            # Only allows the dummy sessions within tests.
-            if self.client._cached_stub is not None and "SPARK_TESTING" not in os.environ:
+            if self.release_session_on_close:
                 self.client.release_session()
             self.client.close()
             if self is SparkSession._default_session:

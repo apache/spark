@@ -665,7 +665,9 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   override def close(): Unit = {
-    client.releaseSession()
+    if (releaseSessionOnClose) {
+      client.releaseSession()
+    }
     client.shutdown()
     allocator.close()
     SparkSession.onSessionClose(this)
@@ -736,6 +738,11 @@ class SparkSession private[sql] (
    * We null out the instance for now.
    */
   private def writeReplace(): Any = null
+
+  /**
+   * Set to false to prevent client.releaseSession on close() (testing only)
+   */
+  private[sql] var releaseSessionOnClose = true
 }
 
 // The minimal builder needed to create a spark session.
