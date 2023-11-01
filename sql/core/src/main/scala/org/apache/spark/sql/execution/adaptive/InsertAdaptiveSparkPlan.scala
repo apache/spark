@@ -40,8 +40,8 @@ import org.apache.spark.sql.internal.SQLConf
  *
  * Note that this rule is stateful and thus should not be reused across query executions.
  */
-case class InsertAdaptiveSparkPlan(adaptiveExecutionContext: AdaptiveExecutionContext)
-    extends Rule[SparkPlan] {
+case class InsertAdaptiveSparkPlan(
+    adaptiveExecutionContext: AdaptiveExecutionContext) extends Rule[SparkPlan] {
 
   override def apply(plan: SparkPlan): SparkPlan = applyInternal(plan, false)
 
@@ -58,10 +58,8 @@ case class InsertAdaptiveSparkPlan(adaptiveExecutionContext: AdaptiveExecutionCo
         try {
           // Plan sub-queries recursively and pass in the shared stage cache for exchange reuse.
           // Fall back to non-AQE mode if AQE is not supported in any of the sub-queries.
-          // we apply BroadcastFilterPushdown here bcoz we want to avoid dpp rule for BHJ when
-          // we are using broadcast filter push down for partition pruning
           val planToUse =
-            AdaptiveSparkPlanExec.applyPhysicalRules(plan, Seq(BroadcastFilterPushdown))
+          AdaptiveSparkPlanExec.applyPhysicalRules(plan, Seq(BroadcastFilterPushdown))
           val subqueryMap = buildSubqueryMap(planToUse)
           val planSubqueriesRule = PlanAdaptiveSubqueries(subqueryMap)
           val preprocessingRules = Seq(planSubqueriesRule)
@@ -71,15 +69,13 @@ case class InsertAdaptiveSparkPlan(adaptiveExecutionContext: AdaptiveExecutionCo
           AdaptiveSparkPlanExec(newPlan, adaptiveExecutionContext, preprocessingRules, isSubquery)
         } catch {
           case SubqueryAdaptiveNotSupportedException(subquery) =>
-            logWarning(
-              s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is enabled " +
-                s"but is not supported for sub-query: $subquery.")
+            logWarning(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is enabled " +
+              s"but is not supported for sub-query: $subquery.")
             plan
         }
       } else {
-        logDebug(
-          s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is enabled " +
-            s"but is not supported for query: $plan.")
+        logDebug(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is enabled " +
+          s"but is not supported for query: $plan.")
         plan
       }
 
@@ -108,23 +104,20 @@ case class InsertAdaptiveSparkPlan(adaptiveExecutionContext: AdaptiveExecutionCo
         // plan is already AQEed, the current plan must be AQEed as well so that the UI can get plan
         // update correctly.
         case i: InMemoryTableScanExec
-            if i.relation.cachedPlan.isInstanceOf[AdaptiveSparkPlanExec] =>
-          true
+            if i.relation.cachedPlan.isInstanceOf[AdaptiveSparkPlanExec] => true
         case _: InMemoryTableScanExec
-            if conf.getConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING) =>
-          true
-        case p =>
-          p.expressions.exists(_.exists {
-            case _: SubqueryExpression => true
-            case _ => false
-          })
+            if conf.getConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING) => true
+        case p => p.expressions.exists(_.exists {
+          case _: SubqueryExpression => true
+          case _ => false
+        })
       }
     }
   }
 
   private def supportAdaptive(plan: SparkPlan): Boolean = {
     sanityCheck(plan) &&
-    !plan.logicalLink.exists(_.isStreaming) &&
+      !plan.logicalLink.exists(_.isStreaming) &&
     plan.children.forall(supportAdaptive)
   }
 
@@ -132,29 +125,27 @@ case class InsertAdaptiveSparkPlan(adaptiveExecutionContext: AdaptiveExecutionCo
     plan.logicalLink.isDefined
 
   /**
-   * Returns an expression-id-to-execution-plan map for all the sub-queries. For each sub-query,
-   * generate the adaptive execution plan for each sub-query by applying this rule. The returned
-   * subquery map holds executed plan, then the [[PlanAdaptiveSubqueries]] can take them and
-   * create a new subquery.
+   * Returns an expression-id-to-execution-plan map for all the sub-queries.
+   * For each sub-query, generate the adaptive execution plan for each sub-query by applying this
+   * rule.
+   * The returned subquery map holds executed plan, then the [[PlanAdaptiveSubqueries]] can take
+   * them and create a new subquery.
    */
   private def buildSubqueryMap(plan: SparkPlan): Map[Long, SparkPlan] = {
     val subqueryMap = mutable.HashMap.empty[Long, SparkPlan]
     if (!plan.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY, DYNAMIC_PRUNING_SUBQUERY)) {
       return subqueryMap.toMap
     }
-    plan.foreach(
-      _.expressions
-        .filter(_.containsPattern(PLAN_EXPRESSION))
-        .foreach(_.foreach {
-          case e @ (_: expressions.ScalarSubquery | _: ListQuery | _: DynamicPruningSubquery) =>
-            val subquery = e.asInstanceOf[SubqueryExpression]
-            if (!subqueryMap.contains(subquery.exprId.id)) {
-              val executedPlan = compileSubquery(subquery.plan)
-              verifyAdaptivePlan(executedPlan, subquery.plan)
-              subqueryMap.put(subquery.exprId.id, executedPlan)
-            }
-          case _ =>
-        }))
+    plan.foreach(_.expressions.filter(_.containsPattern(PLAN_EXPRESSION)).foreach(_.foreach {
+      case e @ (_: expressions.ScalarSubquery | _: ListQuery | _: DynamicPruningSubquery) =>
+        val subquery = e.asInstanceOf[SubqueryExpression]
+        if (!subqueryMap.contains(subquery.exprId.id)) {
+          val executedPlan = compileSubquery(subquery.plan)
+          verifyAdaptivePlan(executedPlan, subquery.plan)
+          subqueryMap.put(subquery.exprId.id, executedPlan)
+        }
+      case _ =>
+    }))
 
     subqueryMap.toMap
   }
@@ -163,11 +154,8 @@ case class InsertAdaptiveSparkPlan(adaptiveExecutionContext: AdaptiveExecutionCo
     // Apply the same instance of this rule to sub-queries so that sub-queries all share the
     // same `stageCache` for Exchange reuse.
     this.applyInternal(
-      QueryExecution.createSparkPlan(
-        adaptiveExecutionContext.session,
-        adaptiveExecutionContext.session.sessionState.planner,
-        plan.clone()),
-      true)
+      QueryExecution.createSparkPlan(adaptiveExecutionContext.session,
+        adaptiveExecutionContext.session.sessionState.planner, plan.clone()), true)
   }
 
   private def verifyAdaptivePlan(plan: SparkPlan, logicalPlan: LogicalPlan): Unit = {
