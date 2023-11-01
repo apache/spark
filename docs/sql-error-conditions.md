@@ -1112,6 +1112,12 @@ The limit like expression `<expr>` is invalid.
 
 For more details see [INVALID_LIMIT_LIKE_EXPRESSION](sql-error-conditions-invalid-limit-like-expression-error-class.html)
 
+### INVALID_LITERAL_VALUE_SQL_STRING_FOR_DESERIALIZATION
+
+SQLSTATE: 42894
+
+The given Literal value SQL string `<sqlStr>` (dataType: `<dataType>`) is invalid and can't be deserialized.
+
 ### INVALID_NON_DETERMINISTIC_EXPRESSIONS
 
 [SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
