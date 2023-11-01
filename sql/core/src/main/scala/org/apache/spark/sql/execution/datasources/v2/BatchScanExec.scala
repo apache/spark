@@ -42,10 +42,9 @@ case class BatchScanExec(
     @transient table: Table,
     spjParams: StoragePartitionJoinParams = StoragePartitionJoinParams(),
     @transient proxyForPushedBroadcastVar: Option[Seq[ProxyBroadcastVarAndStageIdentifier]] =
-      None)
-    extends DataSourceV2ScanExecBase {
-  @transient lazy val batch: Batch = if (scan == null) null else scan.toBatch
+        None) extends DataSourceV2ScanExecBase {
 
+  @transient lazy val batch: Batch = if (scan == null) null else scan.toBatch
   @transient @volatile private var filteredPartitions: Seq[Seq[InputPartition]] = _
   @transient @volatile private var inputRDDCached: RDD[InternalRow] = _
 
@@ -80,6 +79,7 @@ case class BatchScanExec(
       runtimeFilters,
       this.proxyForPushedBroadcastVar)
   }
+
   @transient override lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions()
 
   private def initFilteredPartitions(): Unit = {
@@ -162,9 +162,7 @@ case class BatchScanExec(
           case Some(projectionPositions) => projectionPositions.map(i => k.expressions(i))
           case _ => k.expressions
         }
-        k.copy(
-          expressions = expressions,
-          numPartitions = newPartValues.length,
+        k.copy(expressions = expressions, numPartitions = newPartValues.length,
           partitionValues = newPartValues)
       case p => p
     }
@@ -354,6 +352,7 @@ case class BatchScanExec(
 object BatchScanExec {
   val PRESERVE_BATCH_EXEC_TO_USE = TreeNodeTag[BatchScanExec]("preserve_batch_scan_exec")
 }
+
 case class StoragePartitionJoinParams(
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     joinKeyPositions: Option[Seq[Int]] = None,

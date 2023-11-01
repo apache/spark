@@ -30,10 +30,10 @@ import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins._
 
 /**
- * This planner rule aims at rewriting dynamic pruning predicates in order to reuse the results of
- * broadcast. For joins that are not planned as broadcast hash joins we keep the fallback
- * mechanism with subquery duplicate.
- */
+ * This planner rule aims at rewriting dynamic pruning predicates in order to reuse the
+ * results of broadcast. For joins that are not planned as broadcast hash joins we keep
+ * the fallback mechanism with subquery duplicate.
+*/
 case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[SparkPlan] {
 
   /**
@@ -51,17 +51,9 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[Sp
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
       case DynamicPruningSubquery(
-            value,
-            buildPlan,
-            buildKeys,
-            broadcastKeyIndex,
-            onlyInBroadcast,
-            exprId,
-            _) =>
+          value, buildPlan, buildKeys, broadcastKeyIndex, onlyInBroadcast, exprId, _) =>
         val sparkPlan = QueryExecution.createSparkPlan(
-          sparkSession,
-          sparkSession.sessionState.planner,
-          buildPlan)
+          sparkSession, sparkSession.sessionState.planner, buildPlan)
         // Using `sparkPlan` is a little hacky as it is based on the assumption that this rule is
         // the first to be applied (apart from `InsertAdaptiveSparkPlan`).
         val canReuseExchange = conf.exchangeReuseEnabled && buildKeys.nonEmpty &&
@@ -90,9 +82,8 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[Sp
           // we need to apply an aggregate on the buildPlan in order to be column pruned
           val alias = Alias(buildKeys(broadcastKeyIndex), buildKeys(broadcastKeyIndex).toString)()
           val aggregate = Aggregate(Seq(alias), Seq(alias), buildPlan)
-          DynamicPruningExpression(
-            expressions
-              .InSubquery(Seq(value), ListQuery(aggregate, numCols = aggregate.output.length)))
+          DynamicPruningExpression(expressions.InSubquery(
+            Seq(value), ListQuery(aggregate, numCols = aggregate.output.length)))
         }
     }
   }
