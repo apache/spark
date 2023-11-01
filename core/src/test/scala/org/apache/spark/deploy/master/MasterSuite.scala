@@ -1253,11 +1253,18 @@ class MasterSuite extends SparkFunSuite
     assert(m.contains("Whitespace is not allowed"))
   }
 
-  test("SPARK-45754: app id pattern") {
+  test("SPARK-45754: Support app id pattern") {
     val master = makeMaster(new SparkConf().set(APP_ID_PATTERN, "my-app-%2$05d"))
     val submitDate = new Date()
     assert(master.invokePrivate(_newApplicationId(submitDate)) === "my-app-00000")
     assert(master.invokePrivate(_newApplicationId(submitDate)) === "my-app-00001")
+  }
+
+  test("SPARK-45754: Prevent invalid app id patterns") {
+    val m = intercept[IllegalArgumentException] {
+      makeMaster(new SparkConf().set(APP_ID_PATTERN, "my app"))
+    }.getMessage
+    assert(m.contains("Whitespace is not allowed"))
   }
 }
 
