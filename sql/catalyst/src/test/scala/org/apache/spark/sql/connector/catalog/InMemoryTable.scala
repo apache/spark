@@ -40,18 +40,9 @@ class InMemoryTable(
     advisoryPartitionSize: Option[Long] = None,
     isDistributionStrictlyRequired: Boolean = true,
     override val numRowsPerSplit: Int = Int.MaxValue)
-    extends InMemoryBaseTable(
-      name,
-      schema,
-      partitioning,
-      properties,
-      distribution,
-      ordering,
-      numPartitions,
-      advisoryPartitionSize,
-      isDistributionStrictlyRequired,
-      numRowsPerSplit)
-    with SupportsDelete {
+  extends InMemoryBaseTable(name, schema, partitioning, properties, distribution,
+    ordering, numPartitions, advisoryPartitionSize, isDistributionStrictlyRequired,
+    numRowsPerSplit) with SupportsDelete {
 
   override def canDeleteWhere(filters: Array[Filter]): Boolean = {
     InMemoryTable.supportsFilters(filters)
@@ -66,26 +57,26 @@ class InMemoryTable(
     withData(data, schema)
   }
 
-  override def withData(data: Array[BufferedRows], writeSchema: StructType): InMemoryTable =
-    dataMap.synchronized {
-      data.foreach(_.rows.foreach { row =>
-        val key = getKey(row, writeSchema)
-        dataMap += dataMap
-          .get(key)
-          .map { splits =>
-            val newSplits = if (splits.last.rows.size >= numRowsPerSplit) {
-              splits :+ new BufferedRows(key)
-            } else {
-              splits
-            }
-            newSplits.last.withRow(row)
-            key -> newSplits
+  override def withData(
+      data: Array[BufferedRows],
+      writeSchema: StructType): InMemoryTable = dataMap.synchronized {
+    data.foreach(_.rows.foreach { row =>
+      val key = getKey(row, writeSchema)
+      dataMap += dataMap.get(key)
+        .map { splits =>
+          val newSplits = if (splits.last.rows.size >= numRowsPerSplit) {
+            splits :+ new BufferedRows(key)
+          } else {
+            splits
           }
-          .getOrElse(key -> Seq(new BufferedRows(key).withRow(row)))
-        addPartitionKey(key)
-      })
-      this
-    }
+          newSplits.last.withRow(row)
+          key -> newSplits
+        }
+        .getOrElse(key -> Seq(new BufferedRows(key).withRow(row)))
+      addPartitionKey(key)
+    })
+    this
+  }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     InMemoryBaseTable.maybeSimulateFailedTableWrite(new CaseInsensitiveStringMap(properties))
@@ -94,9 +85,8 @@ class InMemoryTable(
     new InMemoryWriterBuilderWithOverWrite()
   }
 
-  private class InMemoryWriterBuilderWithOverWrite()
-      extends InMemoryWriterBuilder
-      with SupportsOverwrite {
+  private class InMemoryWriterBuilderWithOverWrite() extends InMemoryWriterBuilder
+    with SupportsOverwrite {
 
     override def truncate(): WriteBuilder = {
       if (writer != Append) {
@@ -125,8 +115,8 @@ class InMemoryTable(
   private class Overwrite(filters: Array[Filter]) extends TestBatchWrite {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
-      val deleteKeys =
-        InMemoryTable.filtersToKeys(dataMap.keys, partCols.map(_.toSeq.quoted), filters)
+      val deleteKeys = InMemoryTable.filtersToKeys(
+        dataMap.keys, partCols.map(_.toSeq.quoted), filters)
       dataMap --= deleteKeys
       withData(messages.map(_.asInstanceOf[BufferedRows]))
     }
@@ -134,10 +124,8 @@ class InMemoryTable(
 }
 
 object InMemoryTable {
-
   val BROADCASTED_JOIN_KEYS_WRAPPER_CLASS =
     "org.apache.spark.sql.catalyst.bcvar.BroadcastedJoinKeysWrapper"
-
   val ARRAY_WRAPPER_CLASS = "org.apache.spark.sql.catalyst.bcvar.ArrayWrapper"
 
   def filtersToKeys(
