@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.trees
 
-import org.apache.spark.QueryContext
+import org.apache.spark.{QueryContext, QueryContextType}
 
 /** The class represents error context of a SQL query. */
 case class SQLQueryContext(
@@ -28,6 +28,7 @@ case class SQLQueryContext(
     sqlText: Option[String],
     originObjectType: Option[String],
     originObjectName: Option[String]) extends QueryContext {
+  override val contextType = QueryContextType.SQL
 
   override val objectType = originObjectType.getOrElse("")
   override val objectName = originObjectName.getOrElse("")
@@ -40,7 +41,7 @@ case class SQLQueryContext(
    * SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
    *                          ^^^^^^^^^^^^^^^
    */
-  lazy val summary: String = {
+  override lazy val summary: String = {
     // If the query context is missing or incorrect, simply return an empty string.
     if (!isValid) {
       ""
@@ -116,7 +117,7 @@ case class SQLQueryContext(
   }
 
   /** Gets the textual fragment of a SQL query. */
-  override lazy val fragment: String = {
+  lazy val fragment: String = {
     if (!isValid) {
       ""
     } else {
@@ -128,6 +129,45 @@ case class SQLQueryContext(
     sqlText.isDefined && originStartIndex.isDefined && originStopIndex.isDefined &&
       originStartIndex.get >= 0 && originStopIndex.get < sqlText.get.length &&
       originStartIndex.get <= originStopIndex.get
+  }
 
+  override def callSite: String = throw new UnsupportedOperationException
+}
+
+case class DataFrameQueryContext(
+    override val fragment: String,
+    override val callSite: String) extends QueryContext {
+  override val contextType = QueryContextType.DataFrame
+
+  override def objectType: String = throw new UnsupportedOperationException
+  override def objectName: String = throw new UnsupportedOperationException
+  override def startIndex: Int = throw new UnsupportedOperationException
+  override def stopIndex: Int = throw new UnsupportedOperationException
+
+  override lazy val summary: String = {
+    val builder = new StringBuilder
+    builder ++= "== DataFrame ==\n"
+    builder ++= "\""
+
+    builder ++= fragment
+    builder ++= "\""
+    builder ++= " was called from "
+    builder ++= callSite
+    builder += '\n'
+    builder.result()
+  }
+}
+
+object DataFrameQueryContext {
+  def apply(elements: Array[StackTraceElement]): DataFrameQueryContext = {
+    val methodName = elements(0).getMethodName
+    val code = if (methodName.length > 1 && methodName(0) == '$') {
+      methodName.substring(1)
+    } else {
+      methodName
+    }
+    val callSite = elements(1).toString
+
+    DataFrameQueryContext(code, callSite)
   }
 }

@@ -21,13 +21,13 @@ import java.time.{ZoneId, ZoneOffset}
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
-import org.apache.spark.SparkArithmeticException
+import org.apache.spark.{QueryContext, SparkArithmeticException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, TreeNodeTag}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.{PhysicalFractionalType, PhysicalIntegralType, PhysicalNumericType}
 import org.apache.spark.sql.catalyst.util._
@@ -527,7 +527,7 @@ case class Cast(
     }
   }
 
-  override def initQueryContext(): Option[SQLQueryContext] = if (ansiEnabled) {
+  override def initQueryContext(): Option[QueryContext] = if (ansiEnabled) {
     Some(origin.context)
   } else {
     None
@@ -945,7 +945,7 @@ case class Cast(
   private[this] def toPrecision(
       value: Decimal,
       decimalType: DecimalType,
-      context: SQLQueryContext): Decimal =
+      context: QueryContext): Decimal =
     value.toPrecision(
       decimalType.precision, decimalType.scale, Decimal.ROUND_HALF_UP, !ansiEnabled, context)
 

@@ -373,7 +373,8 @@ class DatasetUnpivotSuite extends QueryTest
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`1`",
-        "proposal" -> "`id`, `int1`, `str1`, `long1`, `str2`"))
+        "proposal" -> "`id`, `int1`, `str1`, `long1`, `str2`"),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
 
     // unpivoting where value column does not exist
     val e2 = intercept[AnalysisException] {
@@ -389,7 +390,8 @@ class DatasetUnpivotSuite extends QueryTest
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`does`",
-        "proposal" -> "`id`, `int1`, `long1`, `str1`, `str2`"))
+        "proposal" -> "`id`, `int1`, `long1`, `str1`, `str2`"),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
 
     // unpivoting without values where potential value columns are of incompatible types
     val e3 = intercept[AnalysisException] {
@@ -506,7 +508,8 @@ class DatasetUnpivotSuite extends QueryTest
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`an`.`id`",
-        "proposal" -> "`an.id`, `int1`, `long1`, `str.one`, `str.two`"))
+        "proposal" -> "`an.id`, `int1`, `long1`, `str.one`, `str.two`"),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("unpivot with struct fields") {

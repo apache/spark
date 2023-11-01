@@ -2885,11 +2885,35 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+        class _ContextType:
+            ValueType = typing.NewType("ValueType", builtins.int)
+            V: typing_extensions.TypeAlias = ValueType
+
+        class _ContextTypeEnumTypeWrapper(
+            google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+                FetchErrorDetailsResponse.QueryContext._ContextType.ValueType
+            ],
+            builtins.type,
+        ):  # noqa: F821
+            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+            SQL: FetchErrorDetailsResponse.QueryContext._ContextType.ValueType  # 0
+            DATAFRAME: FetchErrorDetailsResponse.QueryContext._ContextType.ValueType  # 1
+
+        class ContextType(_ContextType, metaclass=_ContextTypeEnumTypeWrapper):
+            """The type of this query context."""
+
+        SQL: FetchErrorDetailsResponse.QueryContext.ContextType.ValueType  # 0
+        DATAFRAME: FetchErrorDetailsResponse.QueryContext.ContextType.ValueType  # 1
+
+        CONTEXT_TYPE_FIELD_NUMBER: builtins.int
         OBJECT_TYPE_FIELD_NUMBER: builtins.int
         OBJECT_NAME_FIELD_NUMBER: builtins.int
         START_INDEX_FIELD_NUMBER: builtins.int
         STOP_INDEX_FIELD_NUMBER: builtins.int
         FRAGMENT_FIELD_NUMBER: builtins.int
+        CALLSITE_FIELD_NUMBER: builtins.int
+        SUMMARY_FIELD_NUMBER: builtins.int
+        context_type: global___FetchErrorDetailsResponse.QueryContext.ContextType.ValueType
         object_type: builtins.str
         """The object type of the query which throws the exception.
         If the exception is directly from the main query, it should be an empty string.
@@ -2906,18 +2930,29 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         """The stopping index in the query which throws the exception. The index starts from 0."""
         fragment: builtins.str
         """The corresponding fragment of the query which throws the exception."""
+        callSite: builtins.str
+        """The user code (call site of the API) that caused throwing the exception."""
+        summary: builtins.str
+        """Summary of the exception cause."""
         def __init__(
             self,
             *,
+            context_type: global___FetchErrorDetailsResponse.QueryContext.ContextType.ValueType = ...,
             object_type: builtins.str = ...,
             object_name: builtins.str = ...,
             start_index: builtins.int = ...,
             stop_index: builtins.int = ...,
             fragment: builtins.str = ...,
+            callSite: builtins.str = ...,
+            summary: builtins.str = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "callSite",
+                b"callSite",
+                "context_type",
+                b"context_type",
                 "fragment",
                 b"fragment",
                 "object_name",
@@ -2928,6 +2963,8 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
                 b"start_index",
                 "stop_index",
                 b"stop_index",
+                "summary",
+                b"summary",
             ],
         ) -> None: ...
 
