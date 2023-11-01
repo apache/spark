@@ -146,10 +146,6 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
     val sessionId = UUID.randomUUID.toString()
     val userId = "Y"
     withClient(sessionId = sessionId, userId = userId) { client =>
-      // do nothing, session is never created, ReleaseSession is a noop.
-      client.releaseSession()
-    }
-    withClient(sessionId = sessionId, userId = userId) { client =>
       // this will create the session, and then ReleaseSession at the end of withClient.
       val query = client.execute(buildPlan("SELECT 1"))
       query.hasNext // trigger execution

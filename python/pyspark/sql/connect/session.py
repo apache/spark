@@ -648,16 +648,15 @@ class SparkSession:
     clearTags.__doc__ = PySparkSession.clearTags.__doc__
 
     def stop(self) -> None:
-        # Stopping the session will only close the connection to the current session (and
-        # the life cycle of the session is maintained by the server),
-        # whereas the regular PySpark session immediately terminates the Spark Context
-        # itself, meaning that stopping all Spark sessions.
+        # Whereas the regular PySpark session immediately terminates the Spark Context
+        # itself, meaning that stopping all Spark sessions, this will only stop this one session
+        # on the server.
         # It is controversial to follow the existing the regular Spark session's behavior
         # specifically in Spark Connect the Spark Connect server is designed for
         # multi-tenancy - the remote client side cannot just stop the server and stop
         # other remote clients being used from other users.
         with SparkSession._lock:
-            if self.release_session_on_close:
+            if not self.is_stopped and self.release_session_on_close:
                 self.client.release_session()
             self.client.close()
             if self is SparkSession._default_session:
