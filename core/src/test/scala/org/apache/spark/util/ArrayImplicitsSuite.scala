@@ -19,11 +19,10 @@ package org.apache.spark.util
 
 import scala.collection.immutable
 
-import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.ArrayImplicits._
 
-class ArrayImplicitsSuite extends AnyFunSuite { // scalastyle:ignore funsuite
+class ArrayImplicitsSuite extends SparkFunSuite {
 
   test("Int Array") {
     val data = Array(1, 2, 3)
