@@ -17,8 +17,6 @@
 
 package org.apache.spark.internal.config
 
-import java.util.Date
-
 private[spark] object Deploy {
   val RECOVERY_MODE = ConfigBuilder("spark.deploy.recoveryMode")
     .version("0.8.1")
@@ -99,6 +97,6 @@ private[spark] object Deploy {
       "e.g., `app-20231031224509-0008`. Plesae be careful to generate unique IDs.")
     .version("4.0.0")
     .stringConf
-    .checkValue(!_.format(new Date(), 0).exists(_.isWhitespace), "Whitespace is not allowed.")
+    .checkValue(!_.format("20231101000000", 0).exists(_.isWhitespace), "Whitespace is not allowed.")
     .createWithDefault("app-%s-%04d")
 }
