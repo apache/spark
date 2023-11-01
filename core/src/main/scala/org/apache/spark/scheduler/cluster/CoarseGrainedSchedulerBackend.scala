@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
-import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ScheduledExecutorService, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import javax.annotation.concurrent.GuardedBy
 
@@ -293,10 +293,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             }
           }
 
+          // stages is thread safe
+          import scala.jdk.CollectionConverters._
           val data = new ExecutorData(executorRef, executorAddress, hostname,
             0, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes,
             resourcesInfo, resourceProfileId, registrationTs = System.currentTimeMillis(),
-            requestTs = reqTs)
+            requestTs = reqTs, ConcurrentHashMap.newKeySet[Int]().asScala)
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
@@ -440,6 +442,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           }
         }
         else {
+          val stageId = task.stageId
           val executorData = executorDataMap(task.executorId)
           // Do resources allocation here. The allocated resources will get released after the task
           // finishes.
@@ -447,6 +450,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           task.resources.foreach { case (rName, rInfo) =>
             assert(executorData.resourcesInfo.contains(rName))
             executorData.resourcesInfo(rName).acquire(rInfo.addresses)
+          }
+
+          // Multiple entries are allowed here.
+          // but in fact, they are not very common
+          if (!executorData.stages.contains(stageId)) {
+            val binary = scheduler.getBinary(stageId)
+            val ser = SparkEnv.get.closureSerializer.newInstance()
+            executorData.executorEndpoint.send(
+              LaunchBinary(stageId, new SerializableBuffer(ser.serialize(binary)))
+            )
+            logInfo(s"send stage $stageId binary to new executor ${task.executorId}")
+            executorData.stages.add(stageId)
           }
 
           logDebug(s"Launching task ${task.taskId} on executor id: ${task.executorId} hostname: " +

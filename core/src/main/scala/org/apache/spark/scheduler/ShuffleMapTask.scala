@@ -22,7 +22,6 @@ import java.nio.ByteBuffer
 import java.util.Properties
 
 import org.apache.spark._
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.rdd.RDD
 
@@ -54,7 +53,6 @@ import org.apache.spark.rdd.RDD
 private[spark] class ShuffleMapTask(
     stageId: Int,
     stageAttemptId: Int,
-    taskBinary: Broadcast[Array[Byte]],
     partition: Partition,
     numPartitions: Int,
     @transient private var locs: Seq[TaskLocation],
@@ -71,7 +69,7 @@ private[spark] class ShuffleMapTask(
 
   /** A constructor used only in test suites. This does not require passing in an RDD. */
   def this(partitionId: Int) = {
-    this(0, 0, null, new Partition { override def index: Int = 0 }, 1, null, null, new Properties,
+    this(0, 0, new Partition { override def index: Int = 0 }, 1, null, null, new Properties,
       null)
   }
 
@@ -88,7 +86,7 @@ private[spark] class ShuffleMapTask(
     } else 0L
     val ser = SparkEnv.get.closureSerializer.newInstance()
     val rddAndDep = ser.deserialize[(RDD[_], ShuffleDependency[_, _, _])](
-      ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
+      ByteBuffer.wrap(getTaskBinary), Thread.currentThread.getContextClassLoader)
     _executorDeserializeTimeNs = System.nanoTime() - deserializeStartTimeNs
     _executorDeserializeCpuTime = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
       threadMXBean.getCurrentThreadCpuTime - deserializeStartCpuTime

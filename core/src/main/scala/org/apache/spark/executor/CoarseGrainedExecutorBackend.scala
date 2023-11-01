@@ -185,6 +185,13 @@ private[spark] class CoarseGrainedExecutorBackend(
     case UpdateExecutorLogLevel(newLogLevel) =>
       Utils.setLogLevelIfNeeded(newLogLevel)
 
+    case LaunchBinary(stageId, data) =>
+      if (executor == null) {
+        exitExecutor(1, "Received LaunchBinary command but executor was null")
+      } else {
+        executor.launchBinary(stageId, data)
+      }
+
     case LaunchTask(data) =>
       if (executor == null) {
         exitExecutor(1, "Received LaunchTask command but executor was null")

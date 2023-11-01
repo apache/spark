@@ -18,9 +18,11 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
+import java.util.concurrent.Future
 import java.util.Properties
 
 import org.apache.spark._
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config.APP_CALLER_CONTEXT
 import org.apache.spark.internal.plugin.PluginContainer
@@ -167,6 +169,27 @@ private[spark] abstract class Task[T](
 
   def setTaskMemoryManager(taskMemoryManager: TaskMemoryManager): Unit = {
     this.taskMemoryManager = taskMemoryManager
+  }
+
+  private var taskBinaryFuture: Future[Array[Byte]] = null
+  private var taskBinaryBC: Broadcast[Array[Byte]] = null
+
+  def setTaskBinaryFuture(taskBinaryFuture: Future[Array[Byte]]): Unit = {
+    this.taskBinaryFuture = taskBinaryFuture
+  }
+
+  def setTaskBinaryBC(taskBinaryBC: Broadcast[Array[Byte]]): Unit = {
+    this.taskBinaryBC = taskBinaryBC
+  }
+
+  def getTaskBinary: Array[Byte] = {
+    if (taskBinaryFuture != null) {
+      taskBinaryFuture.get()
+    } else if (taskBinaryBC != null) {
+      taskBinaryBC.value
+    } else {
+      null
+    }
   }
 
   def runTask(context: TaskContext): T

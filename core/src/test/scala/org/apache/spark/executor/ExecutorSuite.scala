@@ -618,7 +618,6 @@ class ExecutorSuite extends SparkFunSuite
     val task = new ResultTask(
       stageId = stageId,
       stageAttemptId = 0,
-      taskBinary = taskBinary,
       partition = rdd.partitions(0),
       numPartitions = 1,
       locs = Seq(),
@@ -627,6 +626,7 @@ class ExecutorSuite extends SparkFunSuite
       localProperties = new Properties(),
       serializedTaskMetrics = serializedTaskMetrics
     )
+    task.setTaskBinaryBC(taskBinary)
     val serTask = serializer.serialize(task)
     createFakeTaskDescription(serTask)
   }

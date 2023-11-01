@@ -23,7 +23,6 @@ import java.nio.ByteBuffer
 import java.util.Properties
 
 import org.apache.spark._
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 
 /**
@@ -55,7 +54,6 @@ import org.apache.spark.rdd.RDD
 private[spark] class ResultTask[T, U](
     stageId: Int,
     stageAttemptId: Int,
-    taskBinary: Broadcast[Array[Byte]],
     partition: Partition,
     numPartitions: Int,
     locs: Seq[TaskLocation],
@@ -84,7 +82,7 @@ private[spark] class ResultTask[T, U](
     } else 0L
     val ser = SparkEnv.get.closureSerializer.newInstance()
     val (rdd, func) = ser.deserialize[(RDD[T], (TaskContext, Iterator[T]) => U)](
-      ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
+      ByteBuffer.wrap(getTaskBinary), Thread.currentThread.getContextClassLoader)
     _executorDeserializeTimeNs = System.nanoTime() - deserializeStartTimeNs
     _executorDeserializeCpuTime = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
       threadMXBean.getCurrentThreadCpuTime - deserializeStartCpuTime

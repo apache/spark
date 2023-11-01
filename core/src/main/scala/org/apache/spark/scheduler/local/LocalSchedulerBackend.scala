@@ -93,6 +93,8 @@ private[spark] class LocalEndpoint(
     val offers = IndexedSeq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores,
       Some(rpcEnv.address.hostPort)))
     for (task <- scheduler.resourceOffers(offers, true).flatten) {
+      val stageId = task.stageId
+      executor.launchBinary(stageId, scheduler.getBinary(stageId))
       freeCores -= scheduler.CPUS_PER_TASK
       executor.launchTask(executorBackend, task)
     }

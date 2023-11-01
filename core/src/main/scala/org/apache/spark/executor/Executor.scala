@@ -40,6 +40,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.slf4j.MDC
 
 import org.apache.spark._
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -93,6 +94,13 @@ private[spark] class Executor(
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 
   private[executor] val conf = env.conf
+
+  // The pool is for launch task binary async
+  private[executor] val binaryThreadPool = Executors.newCachedThreadPool()
+
+  // The map store stage binary future. key is stageId.
+  // value is result of load binary from broadcast async.
+  private[executor] val binaryMap = new mutable.HashMap[Int, Future[Array[Byte]]]()
 
   // SPARK-40235: updateDependencies() uses a ReentrantLock instead of the `synchronized` keyword
   // so that tasks can exit quickly if they are interrupted while waiting on another task to
@@ -351,6 +359,40 @@ private[spark] class Executor(
   private[executor] def createTaskRunner(context: ExecutorBackend,
     taskDescription: TaskDescription) = new TaskRunner(context, taskDescription, plugins)
 
+  def launchBinary(stageId: Int, data: SerializableBuffer): Unit = {
+    synchronized{
+      if (binaryMap.contains(stageId)) return
+      val future = binaryThreadPool.submit[Array[Byte]](
+        () => {
+          logInfo(s"start launch stage $stageId binary")
+          val ser = env.closureSerializer.newInstance()
+          val binaryBC = ser.deserialize[Broadcast[Array[Byte]]](data.value.slice())
+          val binary = binaryBC.value
+          logInfo(s"finish launch stage $stageId binary len=${binary.length}")
+          binary
+        }
+      )
+
+      binaryMap.put(stageId, future)
+    }
+  }
+
+  def launchBinary(stageId: Int, binaryBC: Broadcast[Array[Byte]]): Unit = {
+    synchronized{
+      if (binaryMap.contains(stageId)) return
+      val future = binaryThreadPool.submit[Array[Byte]](
+        () => {
+          logInfo(s"start launch stage $stageId binary")
+          val binary = binaryBC.value
+          logInfo(s"finish launch stage $stageId binary len=${binary.length}")
+          binary
+        }
+      )
+
+      binaryMap.put(stageId, future)
+    }
+  }
+
   def launchTask(context: ExecutorBackend, taskDescription: TaskDescription): Unit = {
     val taskId = taskDescription.taskId
     val tr = createTaskRunner(context, taskDescription)
@@ -456,6 +498,7 @@ private[spark] class Executor(
       private val plugins: Option[PluginContainer])
     extends Runnable {
 
+    val stageId = taskDescription.stageId
     val taskId = taskDescription.taskId
     val taskName = taskDescription.name
     val threadName = s"Executor task launch worker for $taskName"
@@ -580,6 +623,9 @@ private[spark] class Executor(
           taskDescription.serializedTask, Thread.currentThread.getContextClassLoader)
         task.localProperties = taskDescription.properties
         task.setTaskMemoryManager(taskMemoryManager)
+        if (binaryMap.contains(stageId)) {
+          task.setTaskBinaryFuture(binaryMap(stageId))
+        }
 
         // If this task has been killed before we deserialized it, let's quit now. Otherwise,
         // continue executing the task.

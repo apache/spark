@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler.cluster
 
+import scala.collection.mutable
+
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
 import org.apache.spark.scheduler.ExecutorResourceInfo
 
@@ -32,6 +34,7 @@ import org.apache.spark.scheduler.ExecutorResourceInfo
  * @param resourceProfileId The id of the ResourceProfile being used by this executor
  * @param registrationTs The registration timestamp of this executor
  * @param requestTs What time this executor was most likely requested at
+ * @param stages Store the existing binary stageId list of this executor
  */
 private[cluster] class ExecutorData(
     val executorEndpoint: RpcEndpointRef,
@@ -44,6 +47,7 @@ private[cluster] class ExecutorData(
     override val resourcesInfo: Map[String, ExecutorResourceInfo],
     override val resourceProfileId: Int,
     val registrationTs: Long,
-    val requestTs: Option[Long]
+    val requestTs: Option[Long],
+    val stages: mutable.Set[Int]
 ) extends ExecutorInfo(executorHost, totalCores, logUrlMap, attributes,
   resourcesInfo, resourceProfileId, Some(registrationTs), requestTs)

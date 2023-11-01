@@ -70,9 +70,10 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
     val taskBinary = sc.broadcast(JavaUtils.bufferToArray(closureSerializer.serialize((rdd, func))))
     val task = new ResultTask[String, String](
-      0, 0, taskBinary, rdd.partitions(0), 1, Seq.empty, 0,
+      0, 0, rdd.partitions(0), 1, Seq.empty, 0,
       JobArtifactSet.getActiveOrDefault(sc), new Properties,
       closureSerializer.serialize(TaskMetrics.registered).array())
+    task.setTaskBinaryBC(taskBinary)
     intercept[RuntimeException] {
       task.run(0, 0, null, 1, null, Option.empty)
     }
@@ -93,9 +94,10 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
     val taskBinary = sc.broadcast(JavaUtils.bufferToArray(closureSerializer.serialize((rdd, func))))
     val task = new ResultTask[String, String](
-      0, 0, taskBinary, rdd.partitions(0), 1, Seq.empty, 0,
+      0, 0, rdd.partitions(0), 1, Seq.empty, 0,
       JobArtifactSet.getActiveOrDefault(sc), new Properties,
       closureSerializer.serialize(TaskMetrics.registered).array())
+    task.setTaskBinaryBC(taskBinary)
     intercept[RuntimeException] {
       task.run(0, 0, null, 1, null, Option.empty)
     }

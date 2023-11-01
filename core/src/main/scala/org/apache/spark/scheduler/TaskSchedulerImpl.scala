@@ -29,6 +29,7 @@ import scala.util.Random
 import com.google.common.cache.CacheBuilder
 
 import org.apache.spark._
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
@@ -132,6 +133,9 @@ private[spark] class TaskSchedulerImpl(
   private[scheduler] val taskIdToTaskSetManager = new ConcurrentHashMap[Long, TaskSetManager]
   // Protected by `this`
   val taskIdToExecutorId = new HashMap[Long, String]
+
+  // Protected by `this`
+  private[scheduler] val binaryMap = new mutable.HashMap[Int, Broadcast[Array[Byte]]]
 
   @volatile private var hasReceivedTask = false
   @volatile private var hasLaunchedTask = false
@@ -248,11 +252,12 @@ private[spark] class TaskSchedulerImpl(
 
   override def submitTasks(taskSet: TaskSet): Unit = {
     val tasks = taskSet.tasks
+    val stage = taskSet.stageId
+
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks "
       + "resource profile " + taskSet.resourceProfileId)
     this.synchronized {
       val manager = createTaskSetManager(taskSet, maxTaskFailures)
-      val stage = taskSet.stageId
       val stageTaskSets =
         taskSetsByStageIdAndAttempt.getOrElseUpdate(stage, new HashMap[Int, TaskSetManager])
 
@@ -286,6 +291,12 @@ private[spark] class TaskSchedulerImpl(
       }
       hasReceivedTask = true
     }
+
+    if (!binaryMap.contains(stage) && taskSet.taskBinary != null) {
+      binaryMap.put(stage, taskSet.taskBinary)
+      logInfo(s"Store stage $stage binary broadcast")
+    }
+
     backend.reviveOffers()
   }
 
@@ -766,6 +777,13 @@ private[spark] class TaskSchedulerImpl(
       hasLaunchedTask = true
     }
     return tasks.map(_.toSeq)
+  }
+
+  def getBinary(stageId: Int): Broadcast[Array[Byte]] = {
+    if (binaryMap.contains(stageId)) {
+      binaryMap(stageId)
+    } else throw SparkCoreErrors.sparkError(
+      s"stage $stageId binary is not prepare")
   }
 
   private def updateUnschedulableTaskSetTimeoutAndStartAbortTimer(
