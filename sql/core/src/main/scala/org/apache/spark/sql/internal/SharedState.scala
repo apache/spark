@@ -29,6 +29,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FsUrlStreamHandlerFactory, Path}
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.annotation.Unstable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataSourceRegistration
 import org.apache.spark.sql.catalyst.catalog._
@@ -110,11 +111,13 @@ private[sql] class SharedState(
   /**
    * A data source manager shared by all sessions.
    */
+  @Unstable
   lazy val dataSourceManager = new DataSourceManager()
 
   /**
    * A collection of method used for registering user-defined data sources.
    */
+  @Unstable
   lazy val dataSourceRegistration = new DataSourceRegistration(dataSourceManager)
 
   /**
