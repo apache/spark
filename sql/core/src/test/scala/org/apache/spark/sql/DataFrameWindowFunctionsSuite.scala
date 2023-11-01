@@ -412,7 +412,10 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`invalid`",
-        "proposal" -> "`value`, `key`"))
+        "proposal" -> "`value`, `key`"),
+      context = ExpectedContext(
+        fragment = "count",
+        callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("numerical aggregate functions on string column") {
