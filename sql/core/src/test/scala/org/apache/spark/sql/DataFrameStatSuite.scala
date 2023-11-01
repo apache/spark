@@ -146,7 +146,9 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "name" -> "`num`",
         "referenceNames" -> "[`table1`.`num`, `table2`.`num`]"
-      )
+      ),
+      context =
+        ExpectedContext(fragment = "freqItems", callSitePattern = getCurrentClassCallSitePattern)
     )
     checkError(
       exception = intercept[AnalysisException] {
@@ -156,7 +158,9 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "name" -> "`num`",
         "referenceNames" -> "[`table1`.`num`, `table2`.`num`]"
-      )
+      ),
+      context = ExpectedContext(
+        fragment = "approxQuantile", callSitePattern = getCurrentClassCallSitePattern)
     )
     checkError(
       exception = intercept[AnalysisException] {

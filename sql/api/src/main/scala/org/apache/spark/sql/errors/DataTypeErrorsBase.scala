@@ -19,7 +19,6 @@ package org.apache.spark.sql.errors
 import java.util.Locale
 
 import org.apache.spark.QueryContext
-import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.{AttributeNameParser, QuotingUtils}
 import org.apache.spark.sql.types.{AbstractDataType, DataType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
@@ -89,11 +88,11 @@ private[sql] trait DataTypeErrorsBase {
     "\"" + elem + "\""
   }
 
-  def getSummary(sqlContext: SQLQueryContext): String = {
+  def getSummary(sqlContext: QueryContext): String = {
     if (sqlContext == null) "" else sqlContext.summary
   }
 
-  def getQueryContext(sqlContext: SQLQueryContext): Array[QueryContext] = {
-    if (sqlContext == null) Array.empty else Array(sqlContext.asInstanceOf[QueryContext])
+  def getQueryContext(context: QueryContext): Array[QueryContext] = {
+    if (context == null) Array.empty else Array(context)
   }
 }

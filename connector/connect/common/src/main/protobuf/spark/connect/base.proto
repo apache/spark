@@ -823,6 +823,13 @@ message FetchErrorDetailsResponse {
   // QueryContext defines the schema for the query context of a SparkThrowable.
   // It helps users understand where the error occurs while executing queries.
   message QueryContext {
+    // The type of this query context.
+    enum ContextType {
+      SQL = 0;
+      DATAFRAME = 1;
+    }
+    ContextType context_type = 10;
+
     // The object type of the query which throws the exception.
     // If the exception is directly from the main query, it should be an empty string.
     // Otherwise, it should be the exact object type in upper case. For example, a "VIEW".
@@ -841,6 +848,12 @@ message FetchErrorDetailsResponse {
 
     // The corresponding fragment of the query which throws the exception.
     string fragment = 5;
+
+    // The user code (call site of the API) that caused throwing the exception.
+    string callSite = 6;
+
+    // Summary of the exception cause.
+    string summary = 7;
   }
 
   // SparkThrowable defines the schema for SparkThrowable exceptions.
