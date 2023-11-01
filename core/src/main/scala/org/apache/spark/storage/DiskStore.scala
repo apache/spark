@@ -216,6 +216,21 @@ private class DiskBlockData(
     }
   }
 
+  override def toByteBuffer(offset: Long, length: Int): ByteBuffer = {
+    Utils.tryWithResource(open()) { channel =>
+      if (blockSize < minMemoryMapBytes) {
+        // For small files, directly read rather than memory map.
+        val buf = ByteBuffer.allocate(length)
+        channel.position(offset)
+        JavaUtils.readFully(channel, buf)
+        buf.flip()
+        buf
+      } else {
+        channel.map(MapMode.READ_ONLY, offset, length)
+      }
+    }
+  }
+
   override def size: Long = blockSize
 
   override def dispose(): Unit = {}
@@ -270,14 +285,35 @@ private[spark] class EncryptedBlockData(
     }
   }
 
+  override def toByteBuffer(offset: Long, length: Int): ByteBuffer = {
+    val in = openInputStream()
+    var bytes = new Array[Byte](length)
+    in.skip(offset)
+    in.read(bytes, 0, length)
+    ByteBuffer.wrap(bytes)
+  }
+
   override def size: Long = blockSize
 
   override def dispose(): Unit = { }
 
   private def open(): ReadableByteChannel = {
-    val channel = new FileInputStream(file).getChannel()
+    val inputStream = new FileInputStream(file)
+    val channel = inputStream.getChannel()
     try {
       CryptoStreamUtils.createReadableChannel(channel, conf, key)
+    } catch {
+      case e: Exception =>
+        Closeables.close(channel, true)
+        throw e
+    }
+  }
+
+  private def openInputStream(): InputStream = {
+    val inputStream = new FileInputStream(file)
+    val channel = inputStream.getChannel()
+    try {
+      CryptoStreamUtils.createCryptoInputStream(inputStream, conf, key)
     } catch {
       case e: Exception =>
         Closeables.close(channel, true)

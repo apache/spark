@@ -24,7 +24,9 @@ import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
+import org.apache.spark.network.client.RpcResponseCallback
 import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockStoreClient, DownloadFileManager}
+import org.apache.spark.network.shuffle.protocol.FetchBlockSegment
 import org.apache.spark.storage.{BlockId, EncryptedManagedBuffer, StorageLevel}
 import org.apache.spark.util.ThreadUtils
 
@@ -100,6 +102,35 @@ abstract class BlockTransferService extends BlockStoreClient {
           }
         }
       }, tempFileManager)
+    ThreadUtils.awaitResult(result.future, Duration.Inf)
+  }
+
+  def fetchBlockSegmentSyn(
+    hostname: String,
+    port: Int,
+    blockId: String,
+    offset: Long,
+    length: Int
+  ): ByteBuffer = {
+    val result = Promise[ByteBuffer]()
+    val client = clientFactory.createClient(hostname, port)
+    val callback = new RpcResponseCallback {
+      override def onSuccess(response: ByteBuffer): Unit = {
+        if (logger.isTraceEnabled) {
+          logger.trace(s"Successfully fetch block segment $blockId")
+        }
+        val bytes = new Array[Byte](response.limit()) ;
+        response.get(bytes)
+        result.success(ByteBuffer.wrap(bytes))
+      }
+
+      override def onFailure(e: Throwable): Unit = {
+        logger.error(s"Error while fetch block segment $blockId", e)
+        result.failure(e)
+      }
+    }
+    client.sendRpc(new FetchBlockSegment(blockId, offset, length).toByteBuffer,
+      callback)
     ThreadUtils.awaitResult(result.future, Duration.Inf)
   }
 

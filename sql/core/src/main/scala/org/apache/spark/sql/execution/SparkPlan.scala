@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
@@ -341,6 +342,15 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
   }
 
+  private def getByteBufferRdd(
+    n: Int = -1, takeFromEnd: Boolean = false): RDD[(Long, ByteBuffer)] = {
+    val maxCollectSize = session.sessionState.conf.maxCollectSize
+    execute().mapPartitionsInternal { iter =>
+      new SizeLimitingByteBufferUnsafeRowsConverter(maxCollectSize).
+        encodeUnsafeRows(n, iter, takeFromEnd)
+    }
+  }
+
 
 
   /**
@@ -365,6 +375,16 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     val decoder = new SizeLimitingByteArrayUnsafeRowsConverter(maxCollectSize)
     val rows = countsAndBytes.iterator
       .flatMap(countAndBytes => decoder.decodeUnsafeRows(schema.length, countAndBytes._2))
+    (total, rows)
+  }
+
+  private[spark] def executeCollectIteratorViaByteBuffer(): (Long, Iterator[InternalRow]) = {
+    val byteBuffersAndCount = getByteBufferRdd().collectAsIteratorForByteBuffer()
+    val total = byteBuffersAndCount._2
+    val maxCollectSize = session.sessionState.conf.maxCollectSize
+    val decoder = new SizeLimitingByteBufferUnsafeRowsConverter(maxCollectSize)
+    val rows = byteBuffersAndCount._1
+      .flatMap(byteBuffers => decoder.decodeUnsafeRows(schema.length, byteBuffers))
     (total, rows)
   }
 

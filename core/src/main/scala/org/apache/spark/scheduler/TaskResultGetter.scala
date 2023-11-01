@@ -74,10 +74,10 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               // "TaskSetManager.handleSuccessfulTask", it does not need to deserialize the value.
               directResult.value(taskResultSerializer.get())
               (directResult, serializedData.limit())
-            case IndirectTaskResult(blockId, size) =>
-              if (!taskSetManager.canFetchMoreResults(size)) {
+            case indirectResult: IndirectTaskResult[_] =>
+              if (!taskSetManager.canFetchMoreResults(indirectResult.size)) {
                 // dropped by executor if size is larger than maxResultSize
-                sparkEnv.blockManager.master.removeBlock(blockId)
+                sparkEnv.blockManager.master.removeBlock(indirectResult.blockId)
                 // kill the task so that it will not become zombie task
                 scheduler.handleFailedTask(taskSetManager, tid, TaskState.KILLED, TaskKilled(
                   "Tasks result size has exceeded maxResultSize"))
@@ -85,27 +85,41 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               }
               logDebug(s"Fetching indirect task result for ${taskSetManager.taskName(tid)}")
               scheduler.handleTaskGettingResult(taskSetManager, tid)
-              val serializedTaskResult = sparkEnv.blockManager.getRemoteBytes(blockId)
-              if (serializedTaskResult.isEmpty) {
-                /* We won't be able to get the task result if the machine that ran the task failed
+              if (indirectResult.isValueIterator) {
+                val queryExecutionId = taskSetManager.taskSet.properties.getProperty(
+                  "spark.sql.execution.id", null)
+                if(queryExecutionId!=null) {
+                   sparkEnv.registerBlockForQueryResult(queryExecutionId, indirectResult.blockId)
+                }
+                (indirectResult, indirectResult.size)
+              } else {
+                var serializedTaskResult = sparkEnv.blockManager.getRemoteBytes(
+                  indirectResult.blockId)
+                if (serializedTaskResult.isEmpty) {
+                  /* We won't be able to get the task result if the machine that ran the task failed
                  * between when the task ended and when we tried to fetch the result, or if the
                  * block manager had to flush the result. */
-                scheduler.handleFailedTask(
-                  taskSetManager, tid, TaskState.FINISHED, TaskResultLost)
-                return
+                  scheduler.handleFailedTask(
+                    taskSetManager, tid, TaskState.FINISHED, TaskResultLost)
+                  return
+                }
+                var serializedTaskByteBuffer = serializedTaskResult.get.toByteBuffer
+                // set big object to null for reduce memory
+                serializedTaskResult = null
+                val deserializedResult = serializer.get().deserialize[DirectTaskResult[_]](
+                  serializedTaskByteBuffer)
+                serializedTaskByteBuffer = null
+                // force deserialization of referenced value
+                deserializedResult.value(taskResultSerializer.get())
+                sparkEnv.blockManager.master.removeBlock(indirectResult.blockId)
+                (deserializedResult, indirectResult.size)
               }
-              val deserializedResult = serializer.get().deserialize[DirectTaskResult[_]](
-                serializedTaskResult.get.toByteBuffer)
-              // force deserialization of referenced value
-              deserializedResult.value(taskResultSerializer.get())
-              sparkEnv.blockManager.master.removeBlock(blockId)
-              (deserializedResult, size)
           }
 
           // Set the task result size in the accumulator updates received from the executors.
           // We need to do this here on the driver because if we did this on the executors then
           // we would have to serialize the result again after updating the size.
-          result.accumUpdates = result.accumUpdates.map { a =>
+          result.setAccumUpdates(result.getAccumUpdates().map { a =>
             if (a.name == Some(InternalAccumulator.RESULT_SIZE)) {
               val acc = a.asInstanceOf[LongAccumulator]
               assert(acc.sum == 0L, "task result size should not have been set on the executors")
@@ -115,6 +129,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               a
             }
           }
+          )
 
           scheduler.handleSuccessfulTask(taskSetManager, tid, result)
         } catch {

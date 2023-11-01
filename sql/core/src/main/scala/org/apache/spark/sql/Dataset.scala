@@ -3170,8 +3170,21 @@ class Dataset[T] private[sql](
   def toIterator(): (java.util.Iterator[T], Int) = {
     withAction("toIterator", queryExecution) { plan =>
       val fromRow = resolvedEnc.createDeserializer()
-      val results = plan.executeCollect()
-      (results.toIterator.map(fromRow).asJava, results.length)
+      val results = plan.executeCollectIterator()
+      (results._2.map(fromRow).asJava, results._1.toInt)
+    }
+  }
+
+  /**
+   * collect all partitions to local with one job,
+   * each partition is a iterator, and return an iterator of rows
+   * @return row iterator
+   */
+  def collectToIterator(): (java.util.Iterator[T], Int) = {
+    withAction("collectToIterator", queryExecution) { plan =>
+      val fromRow = resolvedEnc.createDeserializer()
+      val results = plan.executeCollectIteratorViaByteBuffer()
+      (results._2.map(fromRow).asJava, results._1.toInt)
     }
   }
 

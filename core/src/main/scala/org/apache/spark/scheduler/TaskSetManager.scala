@@ -793,7 +793,7 @@ private[spark] class TaskSetManager(
   /**
    * Marks a task as successful and notifies the DAGScheduler that the task has ended.
    */
-  def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]): Unit = {
+  def handleSuccessfulTask(tid: Long, result: TaskResult[_]): Unit = {
     val info = taskInfos(tid)
     // SPARK-37300: when the task was already finished state, just ignore it,
     // so that there won't cause successful and tasksSuccessful wrong result.
@@ -806,7 +806,7 @@ private[spark] class TaskSetManager(
       // Undo the effect on calculatedTasks and totalResultSize made earlier when
       // checking if can fetch more results
       calculatedTasks -= 1
-      val resultSizeAcc = result.accumUpdates.find(a =>
+      val resultSizeAcc = result.getAccumUpdates.find(a =>
         a.name == Some(InternalAccumulator.RESULT_SIZE))
       if (resultSizeAcc.isDefined) {
         totalResultSize -= resultSizeAcc.get.asInstanceOf[LongAccumulator].value
@@ -858,8 +858,8 @@ private[spark] class TaskSetManager(
     // "result.value()" in "TaskResultGetter.enqueueSuccessfulTask" before reaching here.
     // Note: "result.value()" only deserializes the value when it's called at the first time, so
     // here "result.value()" just returns the value and won't block other threads.
-    sched.dagScheduler.taskEnded(tasks(index), Success, result.value(), result.accumUpdates,
-      result.metricPeaks, info)
+    sched.dagScheduler.taskEnded(tasks(index), Success, result.value(), result.getAccumUpdates(),
+      result.getMetricPeaks(), info)
     maybeFinishTaskSet()
   }
 

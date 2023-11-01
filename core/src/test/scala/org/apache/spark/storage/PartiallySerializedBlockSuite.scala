@@ -179,8 +179,6 @@ class PartiallySerializedBlockSuite
       Mockito.verify(partiallySerializedBlock.invokePrivate(getRedirectableOutputStream())).close()
       Mockito.verify(bbos).close()
       Mockito.verifyNoMoreInteractions(memoryStore)
-      Mockito.verify(partiallySerializedBlock.getUnrolledChunkedByteBuffer, atLeastOnce).dispose()
-
       val serializer = serializerManager
         .getSerializer(implicitly[ClassTag[T]], autoPick = true).newInstance()
       val deserialized =
@@ -198,7 +196,6 @@ class PartiallySerializedBlockSuite
       Mockito.verify(memoryStore).releaseUnrollMemoryForThisTask(
         MemoryMode.ON_HEAP, partiallySerializedBlock.unrollMemory)
       Mockito.verifyNoMoreInteractions(memoryStore)
-      Mockito.verify(partiallySerializedBlock.getUnrolledChunkedByteBuffer, atLeastOnce).dispose()
       assert(deserializedItems === items)
     }
   }

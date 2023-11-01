@@ -58,12 +58,12 @@ private class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: Task
       // Only remove the result once, since we'd like to test the case where the task eventually
       // succeeds.
       serializer.get().deserialize[TaskResult[_]](serializedData) match {
-        case IndirectTaskResult(blockId, _) =>
-          sparkEnv.blockManager.master.removeBlock(blockId)
+        case indirectTaskResult: IndirectTaskResult[_] =>
+          sparkEnv.blockManager.master.removeBlock(indirectTaskResult.blockId)
           // removeBlock is asynchronous. Need to wait it's removed successfully
           try {
             eventually(timeout(3.seconds), interval(200.milliseconds)) {
-              assert(!sparkEnv.blockManager.master.contains(blockId))
+              assert(!sparkEnv.blockManager.master.contains(indirectTaskResult.blockId))
             }
             removeBlockSuccessfully = true
           } catch {
@@ -151,7 +151,8 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
       // always returns false
       override def canFetchMoreResults(size: Long): Boolean = false
     }
-    val indirectTaskResult = IndirectTaskResult(TaskResultBlockId(0), 0)
+    val indirectTaskResult = IndirectTaskResult(TaskResultBlockId(0),
+      0, Nil, Array())
     val directTaskResult = new DirectTaskResult(ByteBuffer.allocate(0), Nil, Array())
     val ser = sc.env.closureSerializer.newInstance()
     val serializedIndirect = ser.serialize(indirectTaskResult)

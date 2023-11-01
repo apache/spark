@@ -85,6 +85,32 @@ class SparkEnv (
 
   private[spark] var executorBackend: Option[ExecutorBackend] = None
 
+  private[spark] val queryResultBlockMap: mutable.Map[String, mutable.Set[BlockId]] =
+    mutable.Map.empty
+
+  private[spark] def registerBlockForQueryResult(
+    queryExecutionId: String,
+    blockId: BlockId): Unit = {
+    logInfo(s"register block ${blockId} for queryExecutionId ${queryExecutionId}")
+    if (queryResultBlockMap.get(queryExecutionId) == None) {
+      queryResultBlockMap(queryExecutionId) = mutable.Set.apply(blockId)
+    } else {
+      queryResultBlockMap.get(queryExecutionId).get += blockId
+    }
+  }
+
+  private[spark] def deleteAllBlockForQueryResult(queryExecutionId: String): Unit = {
+    if (queryResultBlockMap.get(queryExecutionId) == None) {
+      return
+    }
+    queryResultBlockMap
+      .get(queryExecutionId)
+      .get
+      .foreach(blockId => {
+        logInfo(s"remove block ${blockId} for queryExecutionId ${queryExecutionId}")
+        blockManager.master.removeBlock(blockId)
+      })
+  }
   private[spark] def stop(): Unit = {
 
     if (!isStopped) {

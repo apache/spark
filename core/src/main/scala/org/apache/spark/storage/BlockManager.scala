@@ -64,6 +64,7 @@ import org.apache.spark.unsafe.Platform
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
 
+
 /* Class for returning a fetched block and associated metrics. */
 private[spark] class BlockResult(
     val data: Iterator[Any],
@@ -89,6 +90,8 @@ private[spark] trait BlockData {
 
   def toByteBuffer(): ByteBuffer
 
+  def toByteBuffer(offset: Long, length: Int): ByteBuffer
+
   def size: Long
 
   def dispose(): Unit
@@ -108,6 +111,14 @@ private[spark] class ByteBufferBlockData(
   }
 
   override def toByteBuffer(): ByteBuffer = buffer.toByteBuffer
+
+  override def toByteBuffer(offset: Long, length: Int): ByteBuffer = {
+    val inputStream = buffer.toInputStream()
+    var bytes = new Array[Byte](length)
+    inputStream.skip(offset)
+    inputStream.read(bytes)
+    ByteBuffer.wrap(bytes)
+  }
 
   override def size: Long = buffer.size
 
@@ -1235,6 +1246,90 @@ private[spark] class BlockManager(
         ChunkedByteBuffer.fromManagedBuffer(data)
       }
     })
+  }
+
+
+  /**
+   * Fetch the block segment from remote block managers as a byteBuffer.
+   */
+  private def fetchRemoteBlockBuffer(
+    blockId: BlockId,
+    locationsAndStatus: BlockManagerMessages.BlockLocationsAndStatus,
+    offset: Long,
+    length: Int
+  ): ByteBuffer = {
+
+    var runningFailureCount = 0
+    var totalFailureCount = 0
+    val locations = sortLocations(locationsAndStatus.locations)
+    val maxFetchFailures = locations.size
+    var locationIterator = locations.iterator
+    while (locationIterator.hasNext) {
+      val loc = locationIterator.next()
+      logDebug(s"Getting remote block segment $blockId from $loc")
+      val data = try {
+        val buf = blockTransferService.fetchBlockSegmentSyn(
+          loc.host,
+          loc.port,
+          blockId.toString,
+          offset,
+          length)
+        buf
+      } catch {
+        case NonFatal(e) =>
+          runningFailureCount += 1
+          totalFailureCount += 1
+          if (totalFailureCount >= maxFetchFailures) {
+            throw new IllegalStateException(
+              s"Failed to fetch block after $totalFailureCount fetch failures. " +
+                s"Most recent failure cause:",
+              e)
+          }
+
+          logWarning(
+            s"Failed to fetch remote block $blockId " +
+              s"from $loc (failed attempt $runningFailureCount)",
+            e)
+
+          if (runningFailureCount >= maxFailuresBeforeLocationRefresh) {
+            locationIterator = sortLocations(master.getLocations(blockId)).iterator
+            logDebug(
+              s"Refreshed locations from the driver " +
+                s"after ${runningFailureCount} fetch failures.")
+            runningFailureCount = 0
+          }
+          null
+      }
+      if (data != null) {
+        return data
+      }
+      logDebug(s"The value of block $blockId is null")
+    }
+    throw new IllegalStateException(s"get Block $blockId segment failed")
+  }
+
+  def getRemoteBlockAsIterator(blockId: BlockId, batchSize: Int): Iterator[ByteBuffer] = {
+    val locationsAndStatusOption = master.getLocationsAndStatus(blockId, blockManagerId.host)
+    if (locationsAndStatusOption.isEmpty) {
+      logDebug(s"Block $blockId is unknown by block manager master")
+      throw new IllegalStateException(s"Block $blockId is unknown by block manager master")
+    }
+    val locationsAndStatus = locationsAndStatusOption.get
+    val blockSize = locationsAndStatus.status.diskSize.max(locationsAndStatus.status.memSize)
+    new Iterator[ByteBuffer] {
+      private var offset: Long = 0;
+      override def hasNext: Boolean = offset < blockSize
+      override def next(): ByteBuffer = {
+        val length = math.min(blockSize - offset, batchSize).intValue();
+        val byteBuffer = fetchRemoteBlockBuffer(blockId, locationsAndStatus, offset, length)
+        offset = offset + length
+        if (!hasNext) {
+          master.removeBlock(blockId)
+          logInfo(s"Block $blockId is deleted when Iterator done")
+        }
+        byteBuffer
+      }
+    }
   }
 
   /**
