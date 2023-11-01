@@ -86,7 +86,7 @@ the source code and be captured by revision control (currently git). This way th
 includes the version of the documentation that is relevant regardless of which version or release
 you have checked out or downloaded.
 
-In this directory you will find text files formatted using Markdown, with an ".md" suffix. You can
+In this directory you will find text files formatted using Markdown, with a ".md" suffix. You can
 read those text files directly if you want. Start with `index.md`.
 
 Execute `SKIP_API=1 bundle exec jekyll build` from the `docs/` directory to compile the site. Compiling the site with
