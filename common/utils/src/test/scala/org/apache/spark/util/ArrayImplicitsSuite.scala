@@ -25,7 +25,7 @@ import org.apache.spark.util.ArrayImplicits._
 
 class ArrayImplicitsSuite extends AnyFunSuite { // scalastyle:ignore funsuite
 
-  test("Normal Int Array") {
+  test("Int Array") {
     val data = Array(1, 2, 3)
     val arraySeq = data.toImmutableArraySeq
     assert(arraySeq.getClass === classOf[immutable.ArraySeq.ofInt])
@@ -33,7 +33,7 @@ class ArrayImplicitsSuite extends AnyFunSuite { // scalastyle:ignore funsuite
     assert(arraySeq.unsafeArray.sameElements(data))
   }
 
-  test("Normal TestClass Array") {
+  test("TestClass Array") {
     val data = Array(TestClass(1), TestClass(2), TestClass(3))
     val arraySeq = data.toImmutableArraySeq
     assert(arraySeq.getClass === classOf[immutable.ArraySeq.ofRef[TestClass]])
