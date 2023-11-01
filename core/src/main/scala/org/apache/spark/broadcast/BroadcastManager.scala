@@ -18,15 +18,18 @@
 package org.apache.spark.broadcast
 
 import java.util.Collections
+import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.atomic.AtomicLong
+
 import scala.reflect.ClassTag
+
 import org.apache.commons.collections4.map.AbstractReferenceMap.ReferenceStrength
 import org.apache.commons.collections4.map.ReferenceMap
+
 import org.apache.spark.SparkConf
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.internal.Logging
 
-import java.util.concurrent.CopyOnWriteArraySet
 
 private[spark] class BroadcastManager(
     val isDriver: Boolean, conf: SparkConf) extends Logging {
