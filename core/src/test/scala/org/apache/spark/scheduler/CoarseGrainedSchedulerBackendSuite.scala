@@ -256,8 +256,8 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     val taskResources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
     val taskCpus = 1
-    val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
-      "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
+    val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 1, 0,
+      "1", "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
       taskCpus, taskResources, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
@@ -363,8 +363,8 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     val taskResources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
     val taskCpus = 1
-    val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
-      "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
+    val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 1, 0,
+      "1", "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
       taskCpus, taskResources, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
@@ -456,8 +456,8 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     assert(ResourceProfile.getTaskCpusOrDefaultForProfile(defaultRp, conf) == 1)
     // Task cpus can be different from default resource profile when TaskResourceProfile is used.
     val taskCpus = 2
-    val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
-      "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
+    val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 1, 0,
+      "1", "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
       taskCpus, Map.empty, bytebuffer)))
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
 

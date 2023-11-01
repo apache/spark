@@ -633,6 +633,7 @@ class ExecutorSuite extends SparkFunSuite
 
   private def createFakeTaskDescription(serializedTask: ByteBuffer): TaskDescription = {
     new TaskDescription(
+      stageId = 0,
       taskId = 0,
       attemptNumber = 0,
       executorId = "",

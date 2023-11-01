@@ -1639,7 +1639,7 @@ private[spark] class DAGScheduler(
 
       taskScheduler.submitTasks(new TaskSet(
         tasks.toArray, stage.id, stage.latestInfo.attemptNumber(), jobId, properties,
-        stage.resourceProfileId, shuffleId))
+        stage.resourceProfileId, shuffleId, taskBinary))
     } else {
       // Because we posted SparkListenerStageSubmitted earlier, we should mark
       // the stage as completed here in case there are no tasks to run

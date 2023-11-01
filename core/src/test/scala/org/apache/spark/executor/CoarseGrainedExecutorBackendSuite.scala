@@ -309,9 +309,9 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val taskId = 1000000L
       // We don't really verify the data, just pass it around.
       val data = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
-      val taskDescription = new TaskDescription(taskId, 2, "1", "TASK 1000000", 19,
-        1, JobArtifactSet.emptyJobArtifactSet, new Properties, 1,
-        Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), data)
+      val taskDescription = new TaskDescription(1, taskId, 2, "1",
+        "TASK 1000000", 19, 1, JobArtifactSet.emptyJobArtifactSet,
+        new Properties, 1, Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), data)
       val serializedTaskDescription = TaskDescription.encode(taskDescription)
       backend.rpcEnv.setupEndpoint("Executor 1", backend)
       backend.executor = mock[Executor](CALLS_REAL_METHODS)
@@ -425,8 +425,8 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
       // Fake tasks with different taskIds.
       val taskDescriptions = (1 to numTasks).map {
-        taskId => new TaskDescription(taskId, 2, "1", s"TASK $taskId", 19,
-          1, JobArtifactSet.emptyJobArtifactSet, new Properties, 1,
+        taskId => new TaskDescription(1, taskId, 2, "1", s"TASK $taskId",
+          19, 1, JobArtifactSet.emptyJobArtifactSet, new Properties, 1,
           Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), data)
       }
       assert(taskDescriptions.length == numTasks)
@@ -514,8 +514,8 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
       // Fake tasks with different taskIds.
       val taskDescriptions = (1 to numTasks).map {
-        taskId => new TaskDescription(taskId, 2, "1", s"TASK $taskId", 19,
-          1, JobArtifactSet.emptyJobArtifactSet, new Properties, 1,
+        taskId => new TaskDescription(1, taskId, 2, "1", s"TASK $taskId",
+          19, 1, JobArtifactSet.emptyJobArtifactSet, new Properties, 1,
           Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), data)
       }
       assert(taskDescriptions.length == numTasks)

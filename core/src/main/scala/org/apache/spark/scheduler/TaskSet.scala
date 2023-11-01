@@ -19,6 +19,8 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
+import org.apache.spark.broadcast.Broadcast
+
 /**
  * A set of tasks submitted together to the low-level TaskScheduler, usually representing
  * missing partitions of a particular stage.
@@ -30,7 +32,8 @@ private[spark] class TaskSet(
     val priority: Int,
     val properties: Properties,
     val resourceProfileId: Int,
-    val shuffleId: Option[Int]) {
+    val shuffleId: Option[Int],
+    var taskBinary: Broadcast[Array[Byte]] = null) {
   val id: String = s"$stageId.$stageAttemptId"
 
   override def toString: String = "TaskSet " + id

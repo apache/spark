@@ -48,6 +48,7 @@ import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Uti
  *         (which can introduce significant overhead when the maps are small).
  */
 private[spark] class TaskDescription(
+    val stageId: Int,
     val taskId: Long,
     val attemptNumber: Int,
     val executorId: String,
@@ -89,6 +90,7 @@ private[spark] object TaskDescription {
     val bytesOut = new ByteBufferOutputStream(4096)
     val dataOut = new DataOutputStream(bytesOut)
 
+    dataOut.writeInt(taskDescription.stageId)
     dataOut.writeLong(taskDescription.taskId)
     dataOut.writeInt(taskDescription.attemptNumber)
     dataOut.writeUTF(taskDescription.executorId)
@@ -194,6 +196,7 @@ private[spark] object TaskDescription {
 
   def decode(byteBuffer: ByteBuffer): TaskDescription = {
     val dataIn = new DataInputStream(new ByteBufferInputStream(byteBuffer))
+    val stageId = dataIn.readInt()
     val taskId = dataIn.readLong()
     val attemptNumber = dataIn.readInt()
     val executorId = dataIn.readUTF()
@@ -224,7 +227,7 @@ private[spark] object TaskDescription {
     // Create a sub-buffer for the serialized task into its own buffer (to be deserialized later).
     val serializedTask = byteBuffer.slice()
 
-    new TaskDescription(taskId, attemptNumber, executorId, name, index, partitionId, artifacts,
-      properties, cpus, resources, serializedTask)
+    new TaskDescription(stageId, taskId, attemptNumber, executorId, name, index, partitionId,
+      artifacts, properties, cpus, resources, serializedTask)
   }
 }

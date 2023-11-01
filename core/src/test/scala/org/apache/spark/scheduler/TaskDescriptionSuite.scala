@@ -73,6 +73,7 @@ class TaskDescriptionSuite extends SparkFunSuite {
     )
 
     val originalTaskDescription = new TaskDescription(
+      stageId = 1,
       taskId = 1520589,
       attemptNumber = 2,
       executorId = "testExecutor",
