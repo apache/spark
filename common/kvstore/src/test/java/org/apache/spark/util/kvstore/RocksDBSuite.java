@@ -412,7 +412,7 @@ public class RocksDBSuite {
       // check rocksDBIterator should be GCed
       assertTrue(reference.refersTo(null));
       // Verify that the Cleaner will be executed after a period of time,
-      // and it.isOwningHandle() will become false.
+      // and status will become false.
       assertFalse(resourceCleaner.getStatus().get());
     } finally {
       dbForCleanerTest.close();
