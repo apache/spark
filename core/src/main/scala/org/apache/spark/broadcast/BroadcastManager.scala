@@ -18,19 +18,18 @@
 package org.apache.spark.broadcast
 
 import java.util.Collections
-import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.atomic.AtomicLong
-
 import scala.reflect.ClassTag
-
 import org.apache.commons.collections4.map.AbstractReferenceMap.ReferenceStrength
 import org.apache.commons.collections4.map.ReferenceMap
-
 import org.apache.spark.SparkConf
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.internal.Logging
 
-private[spark] class BroadcastManager(val isDriver: Boolean, conf: SparkConf) extends Logging {
+import java.util.concurrent.CopyOnWriteArraySet
+
+private[spark] class BroadcastManager(
+    val isDriver: Boolean, conf: SparkConf) extends Logging {
   private val broadcastLifeCycleListeners = new CopyOnWriteArraySet[BroadcastLifeCycleListener]()
   private var initialized = false
   private var broadcastFactory: BroadcastFactory = null
@@ -59,7 +58,8 @@ private[spark] class BroadcastManager(val isDriver: Boolean, conf: SparkConf) ex
   private[broadcast] val cachedValues =
     Collections.synchronizedMap(
       new ReferenceMap(ReferenceStrength.HARD, ReferenceStrength.WEAK)
-        .asInstanceOf[java.util.Map[Any, Any]])
+        .asInstanceOf[java.util.Map[Any, Any]]
+    )
 
   def newBroadcast[T: ClassTag](
       value_ : T,

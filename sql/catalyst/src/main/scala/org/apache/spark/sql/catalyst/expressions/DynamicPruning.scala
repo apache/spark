@@ -31,19 +31,14 @@ trait DynamicPruning extends Predicate
  * join with a filter from the other side of the join. It is inserted in cases where partition
  * pruning can be applied.
  *
- * @param pruningKey
- *   the filtering key of the plan to be pruned.
- * @param buildQuery
- *   the build side of the join.
- * @param buildKeys
- *   the join keys corresponding to the build side of the join
- * @param onlyInBroadcast
- *   when set to false it indicates that the pruning filter is likely to be beneficial and so it
- *   should be executed even if it cannot reuse the results of the broadcast through
- *   ReuseExchange; otherwise, it will use the filter only if it can reuse the results of the
- *   broadcast through ReuseExchange
- * @param broadcastKeyIndex
- *   the index of the filtering key collected from the broadcast
+ * @param pruningKey the filtering key of the plan to be pruned.
+ * @param buildQuery the build side of the join.
+ * @param buildKeys the join keys corresponding to the build side of the join
+ * @param onlyInBroadcast when set to false it indicates that the pruning filter is likely to be
+ *  beneficial and so it should be executed even if it cannot reuse the results of the
+ *  broadcast through ReuseExchange; otherwise, it will use the filter only if it
+ *  can reuse the results of the broadcast through ReuseExchange
+ * @param broadcastKeyIndex the index of the filtering key collected from the broadcast
  */
 case class DynamicPruningSubquery(
     pruningKey: Expression,
@@ -53,10 +48,10 @@ case class DynamicPruningSubquery(
     onlyInBroadcast: Boolean,
     exprId: ExprId = NamedExpression.newExprId,
     hint: Option[HintInfo] = None)
-    extends SubqueryExpression(buildQuery, Seq(pruningKey), exprId, Seq.empty, hint)
-    with DynamicPruning
-    with Unevaluable
-    with UnaryLike[Expression] {
+  extends SubqueryExpression(buildQuery, Seq(pruningKey), exprId, Seq.empty, hint)
+  with DynamicPruning
+  with Unevaluable
+  with UnaryLike[Expression] {
 
   override def child: Expression = pruningKey
 
@@ -70,13 +65,13 @@ case class DynamicPruningSubquery(
 
   override lazy val resolved: Boolean = {
     pruningKey.resolved &&
-    buildQuery.resolved &&
-    buildKeys.nonEmpty &&
-    buildKeys.forall(_.resolved) &&
-    broadcastKeyIndex >= 0 &&
-    broadcastKeyIndex < buildKeys.size &&
-    buildKeys.forall(_.references.subsetOf(buildQuery.outputSet)) &&
-    pruningKey.dataType == buildKeys(broadcastKeyIndex).dataType
+      buildQuery.resolved &&
+      buildKeys.nonEmpty &&
+      buildKeys.forall(_.resolved) &&
+      broadcastKeyIndex >= 0 &&
+      broadcastKeyIndex < buildKeys.size &&
+      buildKeys.forall(_.references.subsetOf(buildQuery.outputSet)) &&
+      pruningKey.dataType == buildKeys(broadcastKeyIndex).dataType
   }
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(DYNAMIC_PRUNING_SUBQUERY)
@@ -84,10 +79,11 @@ case class DynamicPruningSubquery(
   override def toString: String = s"dynamicpruning#${exprId.id} $conditionString"
 
   override lazy val canonicalized: DynamicPruning = {
+    val buildOutput = buildQuery.output
     copy(
       pruningKey = pruningKey.canonicalized,
       buildQuery = buildQuery.canonicalized,
-      buildKeys = buildKeys.map(QueryPlan.normalizeExpressions(_, buildQuery.output)),
+      buildKeys = buildKeys.map(QueryPlan.normalizeExpressions(_, buildOutput)),
       exprId = ExprId(0))
   }
 
@@ -96,15 +92,14 @@ case class DynamicPruningSubquery(
 }
 
 /**
- * Marker for a planned [[DynamicPruning]] expression. The expression is created during planning,
- * and it defers to its child for evaluation.
+ * Marker for a planned [[DynamicPruning]] expression.
+ * The expression is created during planning, and it defers to its child for evaluation.
  *
- * @param child
- *   underlying predicate.
+ * @param child underlying predicate.
  */
 case class DynamicPruningExpression(child: Expression)
-    extends UnaryExpression
-    with DynamicPruning {
+  extends UnaryExpression
+  with DynamicPruning {
   override def eval(input: InternalRow): Any = child.eval(input)
   final override val nodePatterns: Seq[TreePattern] = Seq(DYNAMIC_PRUNING_EXPRESSION)
 

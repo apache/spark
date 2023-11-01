@@ -37,12 +37,15 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.v2.avro.AvroScan
 
-class AvroRowReaderSuite extends QueryTest with SharedSparkSession {
+class AvroRowReaderSuite
+  extends QueryTest
+  with SharedSparkSession {
 
   import testImplicits._
 
   override protected def sparkConf: SparkConf =
-    super.sparkConf
+    super
+      .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "") // need this for BatchScanExec
 
   test("SPARK-33314: hasNextRow and nextRow properly handle consecutive calls") {

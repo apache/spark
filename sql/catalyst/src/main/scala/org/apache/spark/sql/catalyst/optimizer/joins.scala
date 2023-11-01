@@ -32,6 +32,8 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
+
+
 /**
  * Reorder the joins and push all the conditions into join, so that the bottom ones have at least
  * one condition.
@@ -41,16 +43,13 @@ import org.apache.spark.util.Utils
  * If star schema detection is enabled, reorder the star join plans based on heuristics.
  */
 object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
-
   /**
    * Join a list of plans together and push down the conditions into them.
    *
    * The joined plan are picked from left to right, prefer those has at least one join condition.
    *
-   * @param input
-   *   a list of LogicalPlans to inner join and the type of inner join.
-   * @param conditions
-   *   a list of condition for join.
+   * @param input a list of LogicalPlans to inner join and the type of inner join.
+   * @param conditions a list of condition for join.
    */
   @tailrec
   final def createOrderedJoin(
@@ -64,8 +63,8 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
         case (Inner, Inner) => Inner
         case (_, _) => Cross
       }
-      val join =
-        Join(left, right, innerJoinType, joinConditions.reduceLeftOption(And), JoinHint.NONE)
+      val join = Join(left, right, innerJoinType,
+        joinConditions.reduceLeftOption(And), JoinHint.NONE)
       if (others.nonEmpty) {
         Filter(others.reduceLeft(And), join)
       } else {
@@ -86,51 +85,51 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
       val (right, innerJoinType) = conditionalJoin.getOrElse(rest.head)
 
       val joinedRefs = left.outputSet ++ right.outputSet
-      val (joinConditions, others) =
-        conditions.partition(e => e.references.subsetOf(joinedRefs) && canEvaluateWithinJoin(e))
-      val joined =
-        Join(left, right, innerJoinType, joinConditions.reduceLeftOption(And), JoinHint.NONE)
+      val (joinConditions, others) = conditions.partition(
+        e => e.references.subsetOf(joinedRefs) && canEvaluateWithinJoin(e))
+      val joined = Join(left, right, innerJoinType,
+        joinConditions.reduceLeftOption(And), JoinHint.NONE)
 
       // should not have reference to same logical plan
       createOrderedJoin(Seq((joined, Inner)) ++ rest.filterNot(_._1 eq right), others)
     }
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan =
-    plan.transformWithPruning(_.containsPattern(INNER_LIKE_JOIN), ruleId) {
-      case p @ ExtractFiltersAndInnerJoins(input, conditions)
-          if input.size > 2 && conditions.nonEmpty =>
-        val reordered = if (conf.starSchemaDetection && !conf.cboEnabled) {
-          val starJoinPlan = StarSchemaDetection.reorderStarJoins(input, conditions)
-          if (starJoinPlan.nonEmpty) {
-            val rest = input.filterNot(starJoinPlan.contains(_))
-            createOrderedJoin(starJoinPlan ++ rest, conditions)
-          } else {
-            createOrderedJoin(input, conditions)
-          }
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(INNER_LIKE_JOIN), ruleId) {
+    case p @ ExtractFiltersAndInnerJoins(input, conditions)
+        if input.size > 2 && conditions.nonEmpty =>
+      val reordered = if (conf.starSchemaDetection && !conf.cboEnabled) {
+        val starJoinPlan = StarSchemaDetection.reorderStarJoins(input, conditions)
+        if (starJoinPlan.nonEmpty) {
+          val rest = input.filterNot(starJoinPlan.contains(_))
+          createOrderedJoin(starJoinPlan ++ rest, conditions)
         } else {
           createOrderedJoin(input, conditions)
         }
+      } else {
+        createOrderedJoin(input, conditions)
+      }
 
-        if (p.sameOutput(reordered)) {
-          reordered
-        } else {
-          // Reordering the joins have changed the order of the columns.
-          // Inject a projection to make sure we restore to the expected ordering.
-          Project(p.output, reordered)
-        }
-    }
+      if (p.sameOutput(reordered)) {
+        reordered
+      } else {
+        // Reordering the joins have changed the order of the columns.
+        // Inject a projection to make sure we restore to the expected ordering.
+        Project(p.output, reordered)
+      }
+  }
 }
 
 /**
- *   1. Elimination of outer joins, if the predicates can restrict the result sets so that all
- *      null-supplying rows are eliminated
+ * 1. Elimination of outer joins, if the predicates can restrict the result sets so that
+ * all null-supplying rows are eliminated
  *
- *   - full outer -> inner if both sides have such predicates
- *   - left outer -> inner if the right side has such predicates
- *   - right outer -> inner if the left side has such predicates
- *   - full outer -> left outer if only the left side has such predicates
- *   - full outer -> right outer if only the right side has such predicates
+ * - full outer -> inner if both sides have such predicates
+ * - left outer -> inner if the right side has such predicates
+ * - right outer -> inner if the left side has such predicates
+ * - full outer -> left outer if only the left side has such predicates
+ * - full outer -> right outer if only the right side has such predicates
  *
  * 2. Removes outer join if aggregate is from streamed side and duplicate agnostic
  *
@@ -199,45 +198,43 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def allDuplicateAgnostic(a: Aggregate): Boolean = {
-    a.groupOnly || a.aggregateExpressions
-      .flatMap { e =>
-        e.collect { case ae: AggregateExpression =>
-          ae
-        }
+    a.groupOnly || a.aggregateExpressions.flatMap { e =>
+      e.collect {
+        case ae: AggregateExpression => ae
       }
-      .forall(ae => ae.isDistinct || EliminateDistinct.isDuplicateAgnostic(ae.aggregateFunction))
+    }.forall(ae => ae.isDistinct || EliminateDistinct.isDuplicateAgnostic(ae.aggregateFunction))
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan =
-    plan.transformWithPruning(_.containsPattern(OUTER_JOIN), ruleId) {
-      case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _, _)) =>
-        val newJoinType = buildNewJoinType(f, j)
-        if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(OUTER_JOIN), ruleId) {
+    case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _, _)) =>
+      val newJoinType = buildNewJoinType(f, j)
+      if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
 
-      case a @ Aggregate(_, _, Join(left, _, LeftOuter, _, _))
-          if a.references.subsetOf(left.outputSet) && allDuplicateAgnostic(a) =>
-        a.copy(child = left)
-      case a @ Aggregate(_, _, Join(_, right, RightOuter, _, _))
-          if a.references.subsetOf(right.outputSet) && allDuplicateAgnostic(a) =>
-        a.copy(child = right)
-      case a @ Aggregate(_, _, p @ Project(projectList, Join(left, _, LeftOuter, _, _)))
-          if projectList.forall(_.deterministic) && p.references.subsetOf(left.outputSet) &&
-            allDuplicateAgnostic(a) =>
-        a.copy(child = p.copy(child = left))
-      case a @ Aggregate(_, _, p @ Project(projectList, Join(_, right, RightOuter, _, _)))
-          if projectList.forall(_.deterministic) && p.references.subsetOf(right.outputSet) &&
-            allDuplicateAgnostic(a) =>
-        a.copy(child = p.copy(child = right))
+    case a @ Aggregate(_, _, Join(left, _, LeftOuter, _, _))
+        if a.references.subsetOf(left.outputSet) && allDuplicateAgnostic(a) =>
+      a.copy(child = left)
+    case a @ Aggregate(_, _, Join(_, right, RightOuter, _, _))
+        if a.references.subsetOf(right.outputSet) && allDuplicateAgnostic(a) =>
+      a.copy(child = right)
+    case a @ Aggregate(_, _, p @ Project(projectList, Join(left, _, LeftOuter, _, _)))
+        if projectList.forall(_.deterministic) && p.references.subsetOf(left.outputSet) &&
+          allDuplicateAgnostic(a) =>
+      a.copy(child = p.copy(child = left))
+    case a @ Aggregate(_, _, p @ Project(projectList, Join(_, right, RightOuter, _, _)))
+        if projectList.forall(_.deterministic) && p.references.subsetOf(right.outputSet) &&
+          allDuplicateAgnostic(a) =>
+      a.copy(child = p.copy(child = right))
 
-      case p @ Project(_, ExtractEquiJoinKeys(LeftOuter, _, rightKeys, _, _, left, right, _))
-          if right.distinctKeys.exists(_.subsetOf(ExpressionSet(rightKeys))) &&
-            p.references.subsetOf(left.outputSet) =>
-        p.copy(child = left)
-      case p @ Project(_, ExtractEquiJoinKeys(RightOuter, leftKeys, _, _, _, left, right, _))
-          if left.distinctKeys.exists(_.subsetOf(ExpressionSet(leftKeys))) &&
-            p.references.subsetOf(right.outputSet) =>
-        p.copy(child = right)
-    }
+    case p @ Project(_, ExtractEquiJoinKeys(LeftOuter, _, rightKeys, _, _, left, right, _))
+        if right.distinctKeys.exists(_.subsetOf(ExpressionSet(rightKeys))) &&
+          p.references.subsetOf(left.outputSet) =>
+      p.copy(child = left)
+    case p @ Project(_, ExtractEquiJoinKeys(RightOuter, leftKeys, _, _, _, left, right, _))
+        if left.distinctKeys.exists(_.subsetOf(ExpressionSet(leftKeys))) &&
+          p.references.subsetOf(right.outputSet) =>
+      p.copy(child = right)
+  }
 }
 
 /**
@@ -253,36 +250,34 @@ object ExtractPythonUDFFromJoinCondition extends Rule[LogicalPlan] with Predicat
     }
   }
 
-  override def apply(plan: LogicalPlan): LogicalPlan =
-    plan.transformUpWithPruning(_.containsAllPatterns(PYTHON_UDF, JOIN)) {
-      case j @ Join(_, _, joinType, Some(cond), _) if hasUnevaluablePythonUDF(cond, j) =>
-        if (!joinType.isInstanceOf[InnerLike]) {
-          // The current strategy supports only InnerLike join because for other types,
-          // it breaks SQL semantic if we run the join condition as a filter after join. If we pass
-          // the plan here, it'll still get a an invalid PythonUDF RuntimeException with message
-          // `requires attributes from more than one child`, we throw firstly here for better
-          // readable information.
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
+    _.containsAllPatterns(PYTHON_UDF, JOIN)) {
+    case j @ Join(_, _, joinType, Some(cond), _) if hasUnevaluablePythonUDF(cond, j) =>
+      if (!joinType.isInstanceOf[InnerLike]) {
+        // The current strategy supports only InnerLike join because for other types,
+        // it breaks SQL semantic if we run the join condition as a filter after join. If we pass
+        // the plan here, it'll still get a an invalid PythonUDF RuntimeException with message
+        // `requires attributes from more than one child`, we throw firstly here for better
+        // readable information.
+        throw QueryCompilationErrors.usePythonUDFInJoinConditionUnsupportedError(joinType)
+      }
+      // If condition expression contains python udf, it will be moved out from
+      // the new join conditions.
+      val (udf, rest) = splitConjunctivePredicates(cond).partition(hasUnevaluablePythonUDF(_, j))
+      val newCondition = if (rest.isEmpty) {
+        logWarning(s"The join condition:$cond of the join plan contains PythonUDF only," +
+          s" it will be moved out and the join plan will be turned to cross join.")
+        None
+      } else {
+        Some(rest.reduceLeft(And))
+      }
+      val newJoin = j.copy(condition = newCondition)
+      joinType match {
+        case _: InnerLike => Filter(udf.reduceLeft(And), newJoin)
+        case _ =>
           throw QueryCompilationErrors.usePythonUDFInJoinConditionUnsupportedError(joinType)
-        }
-        // If condition expression contains python udf, it will be moved out from
-        // the new join conditions.
-        val (udf, rest) =
-          splitConjunctivePredicates(cond).partition(hasUnevaluablePythonUDF(_, j))
-        val newCondition = if (rest.isEmpty) {
-          logWarning(
-            s"The join condition:$cond of the join plan contains PythonUDF only," +
-              s" it will be moved out and the join plan will be turned to cross join.")
-          None
-        } else {
-          Some(rest.reduceLeft(And))
-        }
-        val newJoin = j.copy(condition = newCondition)
-        joinType match {
-          case _: InnerLike => Filter(udf.reduceLeft(And), newJoin)
-          case _ =>
-            throw QueryCompilationErrors.usePythonUDFInJoinConditionUnsupportedError(joinType)
-        }
-    }
+      }
+  }
 }
 
 sealed abstract class BuildSide
@@ -300,8 +295,8 @@ trait JoinSelectionHelper {
       hint: JoinHint,
       hintOnly: Boolean,
       conf: SQLConf,
-      broadcastedCanonicalizedSubplans: mutable.Set[LogicalPlan] = mutable.Set.empty)
-      : Option[BuildSide] = {
+      broadcastedCanonicalizedSubplans: mutable.Set[LogicalPlan] = mutable.Set.empty):
+  Option[BuildSide] = {
     val buildLeft = if (hintOnly) {
       hintToBroadcastLeft(hint)
     } else {
@@ -317,7 +312,8 @@ trait JoinSelectionHelper {
       canBuildBroadcastRight(joinType) && buildRight,
       left,
       right,
-      broadcastedCanonicalizedSubplans)
+      broadcastedCanonicalizedSubplans
+    )
   }
 
   def getShuffleHashJoinBuildSide(
@@ -331,24 +327,25 @@ trait JoinSelectionHelper {
       hintToShuffleHashJoinLeft(hint)
     } else {
       hintToPreferShuffleHashJoinLeft(hint) ||
-      (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(left, conf) &&
-        muchSmaller(left, right, conf)) ||
-      forceApplyShuffledHashJoin(conf)
+        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(left, conf) &&
+          muchSmaller(left, right, conf)) ||
+        forceApplyShuffledHashJoin(conf)
     }
     val buildRight = if (hintOnly) {
       hintToShuffleHashJoinRight(hint)
     } else {
       hintToPreferShuffleHashJoinRight(hint) ||
-      (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(right, conf) &&
-        muchSmaller(right, left, conf)) ||
-      forceApplyShuffledHashJoin(conf)
+        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(right, conf) &&
+          muchSmaller(right, left, conf)) ||
+        forceApplyShuffledHashJoin(conf)
     }
     getBuildSide(
       canBuildShuffledHashJoinLeft(joinType) && buildLeft,
       canBuildShuffledHashJoinRight(joinType) && buildRight,
       left,
       right,
-      mutable.Set.empty)
+      mutable.Set.empty
+    )
   }
 
   def getBroadcastNestedLoopJoinBuildSide(hint: JoinHint): Option[BuildSide] = {
@@ -364,7 +361,8 @@ trait JoinSelectionHelper {
   def getSmallerSide(
       left: LogicalPlan,
       right: LogicalPlan,
-      broadcastedCanonicalizedSubplans: mutable.Set[LogicalPlan]): BuildSide = {
+      broadcastedCanonicalizedSubplans: mutable.Set[LogicalPlan]):
+  BuildSide = {
     val containsLeft = broadcastedCanonicalizedSubplans.contains(left.canonicalized)
     val containsRight = broadcastedCanonicalizedSubplans.contains(right.canonicalized)
     if ((containsLeft && containsRight) || !(containsLeft || containsRight)) {
@@ -385,8 +383,7 @@ trait JoinSelectionHelper {
    */
   def canBroadcastBySize(plan: LogicalPlan, conf: SQLConf): Boolean = {
     val autoBroadcastJoinThreshold = if (plan.stats.isRuntime) {
-      conf
-        .getConf(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD)
+      conf.getConf(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD)
         .getOrElse(conf.autoBroadcastJoinThreshold)
     } else {
       conf.autoBroadcastJoinThreshold
@@ -417,28 +414,17 @@ trait JoinSelectionHelper {
 
   def canBuildShuffledHashJoinRight(joinType: JoinType): Boolean = {
     joinType match {
-      case _: InnerLike | LeftOuter | FullOuter | RightOuter | LeftSemi | LeftAnti |
-          _: ExistenceJoin =>
-        true
+      case _: InnerLike | LeftOuter | FullOuter | RightOuter |
+           LeftSemi | LeftAnti | _: ExistenceJoin => true
       case _ => false
     }
   }
 
   def canPlanAsBroadcastHashJoin(join: Join, conf: SQLConf): Boolean = {
-    getBroadcastBuildSide(
-      join.left,
-      join.right,
-      join.joinType,
-      join.hint,
-      hintOnly = true,
-      conf).isDefined ||
-    getBroadcastBuildSide(
-      join.left,
-      join.right,
-      join.joinType,
-      join.hint,
-      hintOnly = false,
-      conf).isDefined
+    getBroadcastBuildSide(join.left, join.right, join.joinType,
+      join.hint, hintOnly = true, conf).isDefined ||
+      getBroadcastBuildSide(join.left, join.right, join.joinType,
+        join.hint, hintOnly = false, conf).isDefined
   }
 
   def canPruneLeft(joinType: JoinType): Boolean = joinType match {
@@ -501,12 +487,12 @@ trait JoinSelectionHelper {
 
   def hintToSortMergeJoin(hint: JoinHint): Boolean = {
     hint.leftHint.exists(_.strategy.contains(SHUFFLE_MERGE)) ||
-    hint.rightHint.exists(_.strategy.contains(SHUFFLE_MERGE))
+      hint.rightHint.exists(_.strategy.contains(SHUFFLE_MERGE))
   }
 
   def hintToShuffleReplicateNL(hint: JoinHint): Boolean = {
     hint.leftHint.exists(_.strategy.contains(SHUFFLE_REPLICATE_NL)) ||
-    hint.rightHint.exists(_.strategy.contains(SHUFFLE_REPLICATE_NL))
+      hint.rightHint.exists(_.strategy.contains(SHUFFLE_REPLICATE_NL))
   }
 
   def hintToNotBroadcastAndReplicate(hint: JoinHint): Boolean = {
@@ -551,8 +537,8 @@ trait JoinSelectionHelper {
   }
 
   /**
-   * Returns true if the data size of plan a multiplied by SHUFFLE_HASH_JOIN_FACTOR is smaller
-   * than plan b.
+   * Returns true if the data size of plan a multiplied by SHUFFLE_HASH_JOIN_FACTOR
+   * is smaller than plan b.
    *
    * The cost to build hash map is higher than sorting, we should only build hash map on a table
    * that is much smaller than other one. Since we does not have the statistic for number of rows,
@@ -563,11 +549,12 @@ trait JoinSelectionHelper {
   }
 
   /**
-   * Returns whether a shuffled hash join should be force applied. The config key is hard-coded
-   * because it's testing only and should not be exposed.
+   * Returns whether a shuffled hash join should be force applied.
+   * The config key is hard-coded because it's testing only and should not be exposed.
    */
   private def forceApplyShuffledHashJoin(conf: SQLConf): Boolean = {
     Utils.isTesting &&
-    conf.getConfString("spark.sql.join.forceApplyShuffledHashJoin", "false") == "true"
+      conf.getConfString("spark.sql.join.forceApplyShuffledHashJoin", "false") == "true"
   }
 }
+

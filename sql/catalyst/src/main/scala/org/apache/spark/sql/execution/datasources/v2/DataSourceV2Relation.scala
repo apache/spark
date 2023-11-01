@@ -18,15 +18,14 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import com.google.common.base.Objects
-
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, truncatedString}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability}
-import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
+import org.apache.spark.sql.connector.read.{Scan, SupportsReportStatistics, SupportsRuntimeV2Filtering, Statistics => V2Statistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
@@ -34,18 +33,13 @@ import org.apache.spark.util.Utils
 /**
  * A logical plan representing a data source v2 table.
  *
- * @param table
- *   The table that this relation represents.
- * @param output
- *   the output attributes of this relation.
- * @param catalog
- *   catalogPlugin for the table. None if no catalog is specified.
- * @param identifier
- *   the identifier for the table. None if no identifier is defined.
- * @param options
- *   The options for this table operation. It's used to create fresh
- *   [[org.apache.spark.sql.connector.read.ScanBuilder]] and
- *   [[org.apache.spark.sql.connector.write.WriteBuilder]].
+ * @param table   The table that this relation represents.
+ * @param output the output attributes of this relation.
+ * @param catalog catalogPlugin for the table. None if no catalog is specified.
+ * @param identifier the identifier for the table. None if no identifier is defined.
+ * @param options The options for this table operation. It's used to create fresh
+ *                [[org.apache.spark.sql.connector.read.ScanBuilder]] and
+ *                [[org.apache.spark.sql.connector.write.WriteBuilder]].
  */
 case class DataSourceV2Relation(
     table: Table,
@@ -53,22 +47,18 @@ case class DataSourceV2Relation(
     catalog: Option[CatalogPlugin],
     identifier: Option[Identifier],
     options: CaseInsensitiveStringMap)
-    extends LeafNode
-    with MultiInstanceRelation
-    with NamedRelation
-    with ExposesMetadataColumns {
+  extends LeafNode with MultiInstanceRelation with NamedRelation with ExposesMetadataColumns {
 
   import DataSourceV2Implicits._
 
-  lazy val funCatalog: Option[FunctionCatalog] = catalog.collect { case c: FunctionCatalog =>
-    c
+  lazy val funCatalog: Option[FunctionCatalog] = catalog.collect {
+    case c: FunctionCatalog => c
   }
 
   override lazy val metadataOutput: Seq[AttributeReference] = table match {
     case hasMeta: SupportsMetadataColumns =>
       metadataOutputWithOutConflicts(
-        hasMeta.metadataColumns.toAttributes,
-        hasMeta.canRenameConflictingMetadataColumns)
+        hasMeta.metadataColumns.toAttributes, hasMeta.canRenameConflictingMetadataColumns)
     case _ =>
       Nil
   }
@@ -125,38 +115,30 @@ case class DataSourceV2Relation(
  * plan. This ensures that the stats that are used by the optimizer account for the filters and
  * projection that will be pushed down.
  *
- * @param relation
- *   a [[DataSourceV2Relation]]
- * @param scan
- *   a DSv2 [[Scan]]
- * @param output
- *   the output attributes of this relation
- * @param keyGroupedPartitioning
- *   if set, the partitioning expressions that are used to split the rows in the scan across
- *   different partitions
- * @param ordering
- *   if set, the ordering provided by the scan
+ * @param relation a [[DataSourceV2Relation]]
+ * @param scan a DSv2 [[Scan]]
+ * @param output the output attributes of this relation
+ * @param keyGroupedPartitioning if set, the partitioning expressions that are used to split the
+ *                               rows in the scan across different partitions
+ * @param ordering if set, the ordering provided by the scan
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
     scan: Scan,
     output: Seq[AttributeReference],
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
-    ordering: Option[Seq[SortOrder]] = None)
-    extends LeafNode
-    with NamedRelation {
-
-  override def name: String = relation.table.name()
-
-  override def simpleString(maxFields: Int): String = {
-    s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
-  }
+    ordering: Option[Seq[SortOrder]] = None) extends LeafNode with NamedRelation {
 
   // because in case of proxy broadcast var push, the build leg plan in a cached stage
   // would already have materialized the stage so the runtime vars may have been pushed to
   // the Scan instance. While the lookup physical plan will have a buildleg whose leaf relation's
   // scan is not materialied , so that runtime vars are not pushed yet. So to consider equality
   // of scans here , we have to ignore runtime filters.
+  // It is Ok to ignore run time filters because since we are in LogicalPlan phase, the runtime
+  // filters would not have been pushed to scan level.
+  // And for broadcast var change, when this equality comes into picture in build Leg Plan in
+  // proxybroadcast, the runtime filters check would not actually matter as that will be
+  // taken care by the BatchScanExecs.
 
   override def equals(other: Any): Boolean = other match {
     case dsvsr: DataSourceV2ScanRelation =>
@@ -184,12 +166,23 @@ case class DataSourceV2ScanRelation(
 
       case _ => this.scan.hashCode()
     }
-    Objects.hashCode(
-      Integer.valueOf(batchHashCode),
-      this.relation,
-      this.output,
-      this.ordering,
-      this.keyGroupedPartitioning)
+    Objects.hashCode(Integer.valueOf(batchHashCode), this.relation, this.output,
+      this.keyGroupedPartitioning, this.ordering)
+  }
+
+  override def doCanonicalize(): DataSourceV2ScanRelation =
+    this.copy(
+      output = output.map(QueryPlan.normalizeExpressions(_, output)),
+      keyGroupedPartitioning = keyGroupedPartitioning.map(
+        _.map(QueryPlan.normalizeExpressions(_, output))),
+      relation = relation.canonicalized.asInstanceOf[DataSourceV2Relation],
+      ordering = ordering.map(_.map(QueryPlan.normalizeExpressions(_, output)))
+    )
+
+  override def name: String = relation.table.name()
+
+  override def simpleString(maxFields: Int): String = {
+    s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
   }
 
   override def computeStats(): Statistics = {
@@ -201,23 +194,14 @@ case class DataSourceV2ScanRelation(
         Statistics(sizeInBytes = conf.defaultSizeInBytes)
     }
   }
-
-  override def doCanonicalize(): DataSourceV2ScanRelation =
-    this.copy(
-      output = output.map(QueryPlan.normalizeExpressions(_, output)),
-      keyGroupedPartitioning =
-        keyGroupedPartitioning.map(_.map(QueryPlan.normalizeExpressions(_, output))),
-      ordering = ordering.map(_.map(QueryPlan.normalizeExpressions(_, output))),
-      relation = relation.canonicalized.asInstanceOf[DataSourceV2Relation])
 }
 
 /**
  * A specialization of [[DataSourceV2Relation]] with the streaming bit set to true.
  *
- * Note that, this plan has a mutable reader, so Spark won't apply operator push-down for this
- * plan, to avoid making the plan mutable. We should consolidate this plan and
- * [[DataSourceV2Relation]] after we figure out how to apply operator push-down for streaming data
- * sources.
+ * Note that, this plan has a mutable reader, so Spark won't apply operator push-down for this plan,
+ * to avoid making the plan mutable. We should consolidate this plan and [[DataSourceV2Relation]]
+ * after we figure out how to apply operator push-down for streaming data sources.
  */
 case class StreamingDataSourceV2Relation(
     output: Seq[Attribute],
@@ -227,8 +211,7 @@ case class StreamingDataSourceV2Relation(
     identifier: Option[Identifier],
     startOffset: Option[Offset] = None,
     endOffset: Option[Offset] = None)
-    extends LeafNode
-    with MultiInstanceRelation {
+  extends LeafNode with MultiInstanceRelation {
 
   override def isStreaming: Boolean = true
 
@@ -307,10 +290,8 @@ object DataSourceV2Relation {
         val histogram = if (colStat.histogram().isPresent) {
           val v2Histogram = colStat.histogram().get()
           val bins = v2Histogram.bins()
-          Some(
-            Histogram(
-              v2Histogram.height(),
-              bins.map(bin => HistogramBin(bin.lo, bin.hi, bin.ndv))))
+          Some(Histogram(v2Histogram.height(),
+            bins.map(bin => HistogramBin(bin.lo, bin.hi, bin.ndv))))
         } else {
           None
         }
