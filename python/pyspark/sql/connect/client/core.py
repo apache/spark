@@ -19,7 +19,7 @@ __all__ = [
     "SparkConnectClient",
 ]
 
-from pyspark.loose_version import LooseVersion
+
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -61,6 +61,7 @@ import grpc
 from google.protobuf import text_format
 from google.rpc import error_details_pb2
 
+from pyspark.loose_version import LooseVersion
 from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql.connect.client.artifact import ArtifactManager
@@ -1467,6 +1468,26 @@ class SparkConnectClient(object):
                             f"{resp.session_id} != {self._session_id}"
                         )
                     return list(resp.interrupted_ids)
+            raise SparkConnectException("Invalid state during retry exception handling.")
+        except Exception as error:
+            self._handle_error(error)
+
+    def release_session(self) -> None:
+        req = pb2.ReleaseSessionRequest()
+        req.session_id = self._session_id
+        req.client_type = self._builder.userAgent
+        if self._user_id:
+            req.user_context.user_id = self._user_id
+        try:
+            for attempt in self._retrying():
+                with attempt:
+                    resp = self._stub.ReleaseSession(req, metadata=self._builder.metadata())
+                    if resp.session_id != self._session_id:
+                        raise SparkConnectException(
+                            "Received incorrect session identifier for request:"
+                            f"{resp.session_id} != {self._session_id}"
+                        )
+                    return
             raise SparkConnectException("Invalid state during retry exception handling.")
         except Exception as error:
             self._handle_error(error)

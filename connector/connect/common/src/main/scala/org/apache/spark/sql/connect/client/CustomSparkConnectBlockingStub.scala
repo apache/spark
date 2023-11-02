@@ -96,6 +96,17 @@ private[connect] class CustomSparkConnectBlockingStub(
     }
   }
 
+  def releaseSession(request: ReleaseSessionRequest): ReleaseSessionResponse = {
+    grpcExceptionConverter.convert(
+      request.getSessionId,
+      request.getUserContext,
+      request.getClientType) {
+      retryHandler.retry {
+        stub.releaseSession(request)
+      }
+    }
+  }
+
   def artifactStatus(request: ArtifactStatusesRequest): ArtifactStatusesResponse = {
     grpcExceptionConverter.convert(
       request.getSessionId,
