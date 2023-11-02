@@ -66,7 +66,7 @@ abstract class EventLogFileWritersSuite extends SparkFunSuite with LocalSparkCon
     conf.set(EVENT_LOG_DIR, testDir.toString)
 
     // default config
-    buildWriterAndVerify(conf, classOf[SingleEventLogFileWriter])
+    buildWriterAndVerify(conf, classOf[RollingEventLogFilesWriter])
 
     conf.set(EVENT_LOG_ENABLE_ROLLING, true)
     buildWriterAndVerify(conf, classOf[RollingEventLogFilesWriter])
