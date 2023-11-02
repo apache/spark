@@ -63,7 +63,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         }
 
         var exprsToAdd = commonExprs.toSeq
-        val newChildren = p.children.map { child =>
+        val newChildren = newPlan.children.map { child =>
           val (newExprs, others) = exprsToAdd.partition(_.references.subsetOf(child.outputSet))
           exprsToAdd = others
           if (newExprs.nonEmpty) {
@@ -74,7 +74,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         }
 
         if (exprsToAdd.nonEmpty) {
-          // If we cannot rewrite the common expressions, force to inline them so that the query
+          // When we cannot rewrite the common expressions, force to inline them so that the query
           // can still run. This can happen if the join condition contains `With` and the common
           // expression references columns from both join sides.
           // TODO: things can go wrong if the common expression is nondeterministic. We don't fix
