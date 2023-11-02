@@ -30,15 +30,21 @@ case class Origin(
     stopIndex: Option[Int] = None,
     sqlText: Option[String] = None,
     objectType: Option[String] = None,
-    objectName: Option[String] = None) {
+    objectName: Option[String] = None,
+    stackTrace: Option[Array[StackTraceElement]] = None) {
 
-  lazy val context: SQLQueryContext = SQLQueryContext(
-    line, startPosition, startIndex, stopIndex, sqlText, objectType, objectName)
-
-  def getQueryContext: Array[QueryContext] = if (context.isValid) {
-    Array(context)
+  lazy val context: QueryContext = if (stackTrace.isDefined) {
+    DataFrameQueryContext(stackTrace.get)
   } else {
-    Array.empty
+    SQLQueryContext(
+      line, startPosition, startIndex, stopIndex, sqlText, objectType, objectName)
+  }
+
+  def getQueryContext: Array[QueryContext] = {
+    Some(context).filter {
+      case s: SQLQueryContext => s.isValid
+      case _ => true
+    }.toArray
   }
 }
 

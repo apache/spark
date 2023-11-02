@@ -311,7 +311,7 @@ private[parquet] class ParquetRowConverter(
       case LongType if isUnsignedIntTypeMatched(32) =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit =
-            updater.setLong(Integer.toUnsignedLong(value))
+            this.updater.setLong(Integer.toUnsignedLong(value))
         }
       case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType |
         _: AnsiIntervalType =>
@@ -320,13 +320,13 @@ private[parquet] class ParquetRowConverter(
       case ByteType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit =
-            updater.setByte(value.asInstanceOf[PhysicalByteType#InternalType])
+            this.updater.setByte(value.asInstanceOf[PhysicalByteType#InternalType])
         }
 
       case ShortType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit =
-            updater.setShort(value.asInstanceOf[PhysicalShortType#InternalType])
+            this.updater.setShort(value.asInstanceOf[PhysicalShortType#InternalType])
         }
 
       // For INT32 backed decimals
@@ -346,7 +346,7 @@ private[parquet] class ParquetRowConverter(
       case _: DecimalType if isUnsignedIntTypeMatched(64) =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
-            updater.set(Decimal(java.lang.Long.toUnsignedString(value)))
+            this.updater.set(Decimal(java.lang.Long.toUnsignedString(value)))
           }
         }
 
@@ -391,7 +391,7 @@ private[parquet] class ParquetRowConverter(
              .asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.MICROS =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
-            updater.setLong(timestampRebaseFunc(value))
+            this.updater.setLong(timestampRebaseFunc(value))
           }
         }
 
@@ -404,7 +404,7 @@ private[parquet] class ParquetRowConverter(
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
             val micros = DateTimeUtils.millisToMicros(value)
-            updater.setLong(timestampRebaseFunc(micros))
+            this.updater.setLong(timestampRebaseFunc(micros))
           }
         }
 
@@ -417,7 +417,7 @@ private[parquet] class ParquetRowConverter(
             val gregorianMicros = int96RebaseFunc(julianMicros)
             val adjTime = convertTz.map(DateTimeUtils.convertTz(gregorianMicros, _, ZoneOffset.UTC))
               .getOrElse(gregorianMicros)
-            updater.setLong(adjTime)
+            this.updater.setLong(adjTime)
           }
         }
 
@@ -434,14 +434,14 @@ private[parquet] class ParquetRowConverter(
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
             val micros = DateTimeUtils.millisToMicros(value)
-            updater.setLong(micros)
+            this.updater.setLong(micros)
           }
         }
 
       case DateType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit = {
-            updater.set(dateRebaseFunc(value))
+            this.updater.set(dateRebaseFunc(value))
           }
         }
 

@@ -347,6 +347,10 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
   }
 
   test("long sleeping query") {
+    // register udf directly on the server, we're not testing client UDFs here...
+    val serverSession =
+      SparkConnectService.getOrCreateIsolatedSession(defaultUserId, defaultSessionId).session
+    serverSession.udf.register("sleep", ((ms: Int) => { Thread.sleep(ms); ms }))
     // query will be sleeping and not returning results, while having multiple reattach
     withSparkEnvConfs(
       (Connect.CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION.key, "1s")) {

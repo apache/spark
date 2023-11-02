@@ -3437,6 +3437,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         # Gets currently active session.
         same = PySparkSession.builder.remote("sc://other.remote.host:114/").getOrCreate()
         self.assertEquals(other, same)
+        same.release_session_on_close = False  # avoid sending release to dummy connection
         same.stop()
 
         # Make sure the environment is clean.
