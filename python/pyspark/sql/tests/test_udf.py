@@ -22,6 +22,8 @@ import tempfile
 import unittest
 import datetime
 
+from py4j.protocol import Py4JJavaError
+
 from pyspark import SparkContext, SQLContext
 from pyspark.sql import SparkSession, Column, Row
 from pyspark.sql.functions import col, udf, assert_true, lit, rand
@@ -1019,6 +1021,15 @@ class BaseUDFTestsMixin(object):
 
         with self.assertRaisesRegex(PythonException, "StopIteration"):
             self.spark.range(10).select(test_udf(col("id"))).show()
+
+    def test_python_udf_segfault(self):
+        with self.sql_conf({"spark.sql.execution.pyspark.udf.faulthandler.enabled": True}):
+            try:
+                import ctypes
+
+                self.spark.range(1).select(udf(lambda x: ctypes.string_at(0))("id")).collect()
+            except Py4JJavaError as e:
+                self.assertRegex(str(e), "Segmentation fault")
 
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
