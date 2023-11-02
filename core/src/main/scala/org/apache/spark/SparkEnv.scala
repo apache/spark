@@ -69,7 +69,8 @@ class SparkEnv (
     val outputCommitCoordinator: OutputCommitCoordinator,
     val conf: SparkConf) extends Logging {
 
-  // We set the ShuffleManager in SparkContext and Executor
+  // We initialize the ShuffleManager later, in SparkContext and Executor, to allow
+  // user jars to define custom ShuffleManagers.
   var shuffleManager: ShuffleManager = _
 
   @volatile private[spark] var isStopped = false
@@ -417,6 +418,10 @@ object SparkEnv extends Logging {
         advertiseAddress, blockManagerPort, numUsableCores, blockManagerMaster.driverEndpoint)
 
     // NB: blockManager is not valid until initialize() is called later.
+    //     SPARK-45762 introduces a change where the ShuffleManager is initialized later
+    //     in the SparkContext and Executor, to allow for custom ShuffleManagers defined
+    //     in user jars. After initialize(), the `BlockManager`'s shuffleManager reference
+    //     isn't set yet. It is only available after `BlockManager.setShuffleManager` is invoked.
     val blockManager = new BlockManager(
       executorId,
       rpcEnv,

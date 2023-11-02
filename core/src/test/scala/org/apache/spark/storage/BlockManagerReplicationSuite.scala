@@ -106,7 +106,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
         new LiveListenerBus(conf), None, blockManagerInfo, mapOutputTracker,
-        sc.env.shuffleManager.shuffleBlockResolver.getBlocksForShuffle, true)),
+        sc.env.shuffleManager.shuffleBlockResolver.getBlocksForShuffle, isDriver = true)),
       rpcEnv.setupEndpoint("blockmanagerHeartbeat",
       new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true)
     allStores.clear()
