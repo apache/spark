@@ -53,6 +53,9 @@ private[deploy] class Master(
   private val forwardMessageThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("master-forward-message-thread")
 
+  private val driverIdPattern = conf.get(DRIVER_ID_PATTERN)
+  private val appIdPattern = conf.get(APP_ID_PATTERN)
+
   // For application IDs
   private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
 
@@ -1150,7 +1153,7 @@ private[deploy] class Master(
 
   /** Generate a new app ID given an app's submission date */
   private def newApplicationId(submitDate: Date): String = {
-    val appId = "app-%s-%04d".format(createDateFormat.format(submitDate), nextAppNumber)
+    val appId = appIdPattern.format(createDateFormat.format(submitDate), nextAppNumber)
     nextAppNumber += 1
     appId
   }
@@ -1175,7 +1178,7 @@ private[deploy] class Master(
   }
 
   private def newDriverId(submitDate: Date): String = {
-    val appId = "driver-%s-%04d".format(createDateFormat.format(submitDate), nextDriverNumber)
+    val appId = driverIdPattern.format(createDateFormat.format(submitDate), nextDriverNumber)
     nextDriverNumber += 1
     appId
   }

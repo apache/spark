@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connect.planner
 
-import scala.collection.immutable
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -80,6 +79,7 @@ import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQ
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.CacheId
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 final case class InvalidCommandInput(
@@ -3184,9 +3184,9 @@ class SparkConnectPlanner(
       case StreamingQueryManagerCommand.CommandCase.ACTIVE =>
         val active_queries = session.streams.active
         respBuilder.getActiveBuilder.addAllActiveQueries(
-          immutable.ArraySeq
-            .unsafeWrapArray(active_queries
-              .map(query => buildStreamingQueryInstance(query)))
+          active_queries
+            .map(query => buildStreamingQueryInstance(query))
+            .toImmutableArraySeq
             .asJava)
 
       case StreamingQueryManagerCommand.CommandCase.GET_QUERY =>
@@ -3265,15 +3265,16 @@ class SparkConnectPlanner(
         .setGetResourcesCommandResult(
           proto.GetResourcesCommandResult
             .newBuilder()
-            .putAllResources(session.sparkContext.resources.view
-              .mapValues(resource =>
-                proto.ResourceInformation
-                  .newBuilder()
-                  .setName(resource.name)
-                  .addAllAddresses(immutable.ArraySeq.unsafeWrapArray(resource.addresses).asJava)
-                  .build())
-              .toMap
-              .asJava)
+            .putAllResources(
+              session.sparkContext.resources.view
+                .mapValues(resource =>
+                  proto.ResourceInformation
+                    .newBuilder()
+                    .setName(resource.name)
+                    .addAllAddresses(resource.addresses.toImmutableArraySeq.asJava)
+                    .build())
+                .toMap
+                .asJava)
             .build())
         .build())
   }

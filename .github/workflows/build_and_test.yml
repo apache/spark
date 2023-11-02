@@ -1063,7 +1063,7 @@ jobs:
           export PVC_TESTS_VM_PATH=$PVC_TMP_DIR
           minikube mount ${PVC_TESTS_HOST_PATH}:${PVC_TESTS_VM_PATH} --gid=0 --uid=185 &
           kubectl create clusterrolebinding serviceaccounts-cluster-admin --clusterrole=cluster-admin --group=system:serviceaccounts || true
-          kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.8.0/installer/volcano-development.yaml || true
+          kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.8.1/installer/volcano-development.yaml || true
           eval $(minikube docker-env)
           build/sbt -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.driverRequestCores=0.5 -Dspark.kubernetes.test.executorRequestCores=0.2 -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
       - name: Upload Spark on K8S integration tests log files

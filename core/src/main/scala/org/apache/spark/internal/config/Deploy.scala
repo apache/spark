@@ -82,4 +82,21 @@ private[spark] object Deploy {
     .checkValue(_ > 0, "The maximum number of running drivers should be positive.")
     .createWithDefault(Int.MaxValue)
 
+  val DRIVER_ID_PATTERN = ConfigBuilder("spark.deploy.driverIdPattern")
+    .doc("The pattern for driver ID generation based on Java `String.format` method. " +
+      "The default value is `driver-%s-%04d` which represents the existing driver id string " +
+      ", e.g., `driver-20231031224459-0019`. Please be careful to generate unique IDs")
+    .version("4.0.0")
+    .stringConf
+    .checkValue(!_.format("20231101000000", 0).exists(_.isWhitespace), "Whitespace is not allowed.")
+    .createWithDefault("driver-%s-%04d")
+
+  val APP_ID_PATTERN = ConfigBuilder("spark.deploy.appIdPattern")
+    .doc("The pattern for app ID generation based on Java `String.format` method.. " +
+      "The default value is `app-%s-%04d` which represents the existing app id string, " +
+      "e.g., `app-20231031224509-0008`. Plesae be careful to generate unique IDs.")
+    .version("4.0.0")
+    .stringConf
+    .checkValue(!_.format("20231101000000", 0).exists(_.isWhitespace), "Whitespace is not allowed.")
+    .createWithDefault("app-%s-%04d")
 }
