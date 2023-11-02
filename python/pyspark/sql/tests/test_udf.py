@@ -1028,7 +1028,7 @@ class BaseUDFTestsMixin(object):
                 import ctypes
 
                 self.spark.range(1).select(udf(lambda x: ctypes.string_at(0))("id")).collect()
-            except Py4JJavaError as e:
+            except Exception as e:
                 self.assertRegex(str(e), "Segmentation fault")
 
 
