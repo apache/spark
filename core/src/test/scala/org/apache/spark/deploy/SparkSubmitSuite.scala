@@ -1487,7 +1487,7 @@ class SparkSubmitSuite
     val argsSuccess = (argsBase ++ Seq("--jars", jarUrl.toString)) :+ unusedJar.toString
     // check process success exit code
     assertResult(0)(
-      runSparkSubmit(argsSuccess, expectFailure = true))
+      runSparkSubmit(argsSuccess, expectFailure = false))
   }
 
   private def testRemoteResources(
