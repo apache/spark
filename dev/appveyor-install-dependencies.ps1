@@ -27,6 +27,7 @@ Function InstallR {
 
   $urlPath = ""
   $latestVer = $(ConvertFrom-JSON $(Invoke-WebRequest https://rversions.r-pkg.org/r-release-win).Content).version
+  $latestVer = "4.3.2"
   If ($rVer -ne $latestVer) {
     $urlPath = ("old/" + $rVer + "/")
   }
