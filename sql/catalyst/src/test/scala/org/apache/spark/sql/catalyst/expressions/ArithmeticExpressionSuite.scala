@@ -226,7 +226,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
-  test("SPARK-XXXXX: Decimal multiply, divide, modulo squot") {
+  test("SPARK-XXXXX: Decimal multiply, divide, remainder, quot") {
     // Some known cases
     checkEvaluation(
       Multiply(
@@ -241,6 +241,20 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
         Literal(Decimal(BigDecimal("-5677.6988688550027099967697071"), 29, 25))
       ),
       Decimal(BigDecimal("1367249507675382200.164877854336665327"))
+    )
+    checkEvaluation(
+      Divide(
+        Literal(Decimal(BigDecimal("-0.172787979"), 9, 9)),
+        Literal(Decimal(BigDecimal("533704665545018957788294905796.5"), 31, 1))
+      ),
+      Decimal(BigDecimal("-3.237520E-31"))
+    )
+    checkEvaluation(
+      Divide(
+        Literal(Decimal(BigDecimal("-0.574302343618"), 12, 12)),
+        Literal(Decimal(BigDecimal("-795826820326278835912868.106"), 27, 3))
+      ),
+      Decimal(BigDecimal("7.21642358550E-25"))
     )
 
     // Random tests
@@ -272,7 +286,21 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
         Literal(Decimal(BigDecimal(n1), p1, s1)),
         Literal(Decimal(BigDecimal(n2), p2, s2))
       )
-      val divExact = new java.math.BigDecimal(n1).divide(new java.math.BigDecimal(n2))
+      val divExact = new java.math.BigDecimal(n1)
+        .divide(new java.math.BigDecimal(n2), 100, RoundingMode.DOWN)
+
+      val remActual = Remainder(
+        Literal(Decimal(BigDecimal(n1), p1, s1)),
+        Literal(Decimal(BigDecimal(n2), p2, s2))
+      )
+      val remExact = new java.math.BigDecimal(n1).remainder(new java.math.BigDecimal(n2))
+
+      val quotActual = IntegralDivide(
+        Literal(Decimal(BigDecimal(n1), p1, s1)),
+        Literal(Decimal(BigDecimal(n2), p2, s2))
+      )
+      val quotExact =
+        new java.math.BigDecimal(n1).divideToIntegralValue(new java.math.BigDecimal(n2))
 
       Seq(true, false).foreach { allowPrecLoss =>
         withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> allowPrecLoss.toString) {
@@ -287,6 +315,18 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
           val divExpected =
             if (divResult.precision > DecimalType.MAX_PRECISION) null else divResult
           checkEvaluation(divActual, divExpected)
+
+          val remType = Remainder(null, null).resultDecimalType(p1, s1, p2, s2)
+          val remResult = Decimal(remExact.setScale(remType.scale, RoundingMode.HALF_UP))
+          val remExpected =
+            if (remResult.precision > DecimalType.MAX_PRECISION) null else remResult
+          checkEvaluation(remActual, remExpected)
+
+          val quotType = IntegralDivide(null, null).resultDecimalType(p1, s1, p2, s2)
+          val quotResult = Decimal(quotExact.setScale(quotType.scale, RoundingMode.HALF_UP))
+          val quotExpected =
+            if (quotResult.precision > DecimalType.MAX_PRECISION) null else quotResult
+          checkEvaluation(quotActual, quotExpected.toLong)
         }
       }
     }
