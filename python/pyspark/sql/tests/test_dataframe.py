@@ -716,7 +716,6 @@ class DataFrameTestsMixin:
                 r"\n",
                 r"== Physical Plan ==\n",
                 r"\*\(1\) Scan ExistingRDD[_1#[\d]+,_2#[\d]+L]\n",
-                r"\n",
             ]
         )
         self.assertTrue(re.match(expected, actual))

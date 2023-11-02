@@ -2892,7 +2892,6 @@ class DataFrameSuite extends QueryTest
       |\\n
       |== Physical Plan ==\\n
       |\*\(1\) Scan ExistingRDD\[_1#[\d]+,_2#[\d]+L\]\\n
-      |\\n
       |""".stripMargin.replaceAll("\n", "").r
     assert(expected.matches(actual))
   }
