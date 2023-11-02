@@ -43,8 +43,6 @@ class FloatType private() extends FractionalType {
 @Stable
 case object FloatType extends FloatType {
 
-  // Traits below copied from Scala 2.12; not present in 2.13
-  // TODO: SPARK-30011 revisit once Scala 2.12 support is dropped
   trait FloatIsConflicted extends Numeric[Float] {
     def plus(x: Float, y: Float): Float = x + y
     def minus(x: Float, y: Float): Float = x - y
@@ -57,8 +55,7 @@ case object FloatType extends FloatType {
     def toDouble(x: Float): Double = x.toDouble
     // logic in Numeric base trait mishandles abs(-0.0f)
     override def abs(x: Float): Float = math.abs(x)
-    // Added from Scala 2.13; don't override to work in 2.12
-    def parseString(str: String): Option[Float] =
+    override def parseString(str: String): Option[Float] =
       Try(java.lang.Float.parseFloat(str)).toOption
   }
 

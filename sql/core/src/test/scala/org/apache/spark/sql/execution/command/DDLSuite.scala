@@ -2184,12 +2184,12 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
 
   test("Refresh table before drop database cascade") {
     withTempDir { tempDir =>
-      val file1 = new File(tempDir + "/first.csv")
+      val file1 = new File(s"$tempDir/first.csv")
       Utils.tryWithResource(new PrintWriter(file1)) { writer =>
         writer.write("first")
       }
 
-      val file2 = new File(tempDir + "/second.csv")
+      val file2 = new File(s"$tempDir/second.csv")
       Utils.tryWithResource(new PrintWriter(file2)) { writer =>
         writer.write("second")
       }
@@ -2431,8 +2431,6 @@ object FakeLocalFsFileSystem {
 // it has only one ACL status for all paths.
 class FakeLocalFsFileSystem extends RawLocalFileSystem {
   import FakeLocalFsFileSystem._
-
-  override def getScheme(): String = "fakelocalfs"
 
   override def delete(f: Path, recursive: Boolean): Boolean = {
     aclStatus = new AclStatus.Builder().build()

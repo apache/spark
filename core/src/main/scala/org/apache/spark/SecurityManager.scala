@@ -293,6 +293,12 @@ private[spark] class SecurityManager(
   def isSslRpcEnabled(): Boolean = sslRpcEnabled
 
   /**
+   * Returns the SSLOptions object for the RPC namespace
+   * @return the SSLOptions object for the RPC namespace
+   */
+  def getRpcSSLOptions(): SSLOptions = rpcSSLOptions
+
+  /**
    * Gets the user used for authenticating SASL connections.
    * For now use a single hardcoded user.
    * @return the SASL user as a String

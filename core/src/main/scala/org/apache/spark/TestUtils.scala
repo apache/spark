@@ -18,23 +18,21 @@
 package org.apache.spark
 
 import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
-import java.net.{HttpURLConnection, InetSocketAddress, URI, URL}
+import java.net.{HttpURLConnection, InetSocketAddress, URL}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files => JavaFiles, Paths}
 import java.nio.file.attribute.PosixFilePermission.{OWNER_EXECUTE, OWNER_READ, OWNER_WRITE}
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
-import java.util.{Arrays, EnumSet, Locale}
+import java.util.{EnumSet, Locale}
 import java.util.concurrent.{TimeoutException, TimeUnit}
 import java.util.jar.{JarEntry, JarOutputStream, Manifest}
 import java.util.regex.Pattern
 import javax.net.ssl._
-import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
-import scala.jdk.CollectionConverters._
 import scala.reflect.{classTag, ClassTag}
 import scala.sys.process.{Process, ProcessLogger}
 import scala.util.Try
@@ -55,7 +53,7 @@ import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkTestUtils, Utils}
 
 /**
  * Utilities for tests. Included in main codebase since it's used by multiple
@@ -64,7 +62,7 @@ import org.apache.spark.util.Utils
  * TODO: See if we can move this to the test codebase by specifying
  * test dependencies between projects.
  */
-private[spark] object TestUtils {
+private[spark] object TestUtils extends SparkTestUtils {
 
   /**
    * Create a jar that defines classes with the given names.
@@ -142,73 +140,6 @@ private[spark] object TestUtils {
     jarFileStream.close()
 
     jarFile.toURI.toURL
-  }
-
-  // Adapted from the JavaCompiler.java doc examples
-  private val SOURCE = JavaFileObject.Kind.SOURCE
-  private def createURI(name: String) = {
-    URI.create(s"string:///${name.replace(".", "/")}${SOURCE.extension}")
-  }
-
-  private[spark] class JavaSourceFromString(val name: String, val code: String)
-    extends SimpleJavaFileObject(createURI(name), SOURCE) {
-    override def getCharContent(ignoreEncodingErrors: Boolean): String = code
-  }
-
-  /** Creates a compiled class with the source file. Class file will be placed in destDir. */
-  def createCompiledClass(
-      className: String,
-      destDir: File,
-      sourceFile: JavaSourceFromString,
-      classpathUrls: Seq[URL]): File = {
-    val compiler = ToolProvider.getSystemJavaCompiler
-
-    // Calling this outputs a class file in pwd. It's easier to just rename the files than
-    // build a custom FileManager that controls the output location.
-    val options = if (classpathUrls.nonEmpty) {
-      Seq("-classpath", classpathUrls.map { _.getFile }.mkString(File.pathSeparator))
-    } else {
-      Seq.empty
-    }
-    compiler.getTask(null, null, null, options.asJava, null, Arrays.asList(sourceFile)).call()
-
-    val fileName = className + ".class"
-    val result = new File(fileName)
-    assert(result.exists(), "Compiled file not found: " + result.getAbsolutePath())
-    val out = new File(destDir, fileName)
-
-    // renameTo cannot handle in and out files in different filesystems
-    // use google's Files.move instead
-    Files.move(result, out)
-
-    assert(out.exists(), "Destination file not moved: " + out.getAbsolutePath())
-    out
-  }
-
-  /** Creates a compiled class with the given name. Class file will be placed in destDir. */
-  def createCompiledClass(
-      className: String,
-      destDir: File,
-      toStringValue: String = "",
-      baseClass: String = null,
-      classpathUrls: Seq[URL] = Seq.empty,
-      implementsClasses: Seq[String] = Seq.empty,
-      extraCodeBody: String = "",
-      packageName: Option[String] = None): File = {
-    val extendsText = Option(baseClass).map { c => s" extends ${c}" }.getOrElse("")
-    val implementsText =
-      "implements " + (implementsClasses :+ "java.io.Serializable").mkString(", ")
-    val packageText = packageName.map(p => s"package $p;\n").getOrElse("")
-    val sourceFile = new JavaSourceFromString(className,
-      s"""
-         |$packageText
-         |public class $className $extendsText $implementsText {
-         |  @Override public String toString() { return "$toStringValue"; }
-         |
-         |  $extraCodeBody
-         |}
-        """.stripMargin)
-    createCompiledClass(className, destDir, sourceFile, classpathUrls)
   }
 
   /**

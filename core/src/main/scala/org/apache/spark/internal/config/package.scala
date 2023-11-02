@@ -30,7 +30,7 @@ import org.apache.spark.scheduler.{EventLoggingListener, SchedulingMode}
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
 import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy}
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{MavenUtils, Utils}
 import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillReader.MAX_BUFFER_SIZE_BYTES
 
 package object config {
@@ -2452,7 +2452,7 @@ package object config {
       .createOptional
 
   private[spark] val JAR_IVY_SETTING_PATH =
-    ConfigBuilder("spark.jars.ivySettings")
+    ConfigBuilder(MavenUtils.JAR_IVY_SETTING_PATH_KEY)
       .doc("Path to an Ivy settings file to customize resolution of jars specified " +
         "using spark.jars.packages instead of the built-in defaults, such as maven central. " +
         "Additional repositories given by the command-line option --repositories " +

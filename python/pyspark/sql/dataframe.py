@@ -1603,7 +1603,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         self.rdd.foreachPartition(f)  # type: ignore[arg-type]
 
     def cache(self) -> "DataFrame":
-        """Persists the :class:`DataFrame` with the default storage level (`MEMORY_AND_DISK`).
+        """Persists the :class:`DataFrame` with the default storage level (`MEMORY_AND_DISK_DESER`).
 
         .. versionadded:: 1.3.0
 
@@ -1612,7 +1612,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Notes
         -----
-        The default storage level has changed to `MEMORY_AND_DISK` to match Scala in 2.0.
+        The default storage level has changed to `MEMORY_AND_DISK_DESER` to match Scala in 3.0.
 
         Returns
         -------

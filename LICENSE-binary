@@ -413,7 +413,8 @@ core/src/main/java/org/apache/spark/util/collection/TimSort.java
 core/src/main/resources/org/apache/spark/ui/static/bootstrap*
 core/src/main/resources/org/apache/spark/ui/static/vis*
 docs/js/vendor/bootstrap.js
-
+core/src/main/resources/org/apache/spark/ui/static/d3-flamegraph.min.js
+core/src/main/resources/org/apache/spark/ui/static/d3-flamegraph.css
 
 ------------------------------------------------------------------------------------
 This product bundles various third-party components under other open source licenses.

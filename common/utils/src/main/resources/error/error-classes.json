@@ -812,6 +812,12 @@
     ],
     "sqlState" : "42K01"
   },
+  "DATA_SOURCE_ALREADY_EXISTS" : {
+    "message" : [
+      "Data source '<provider>' already exists in the registry. Please use a different name for the new data source."
+    ],
+    "sqlState" : "42710"
+  },
   "DATA_SOURCE_NOT_FOUND" : {
     "message" : [
       "Failed to find the data source: <provider>. Please find packages at `https://spark.apache.org/third-party-projects.html`."
@@ -1731,6 +1737,11 @@
           "Session already exists."
         ]
       },
+      "SESSION_CLOSED" : {
+        "message" : [
+          "Session was closed."
+        ]
+      },
       "SESSION_NOT_FOUND" : {
         "message" : [
           "Session not found."
@@ -1974,6 +1985,11 @@
           "expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal <invalidValue>."
         ]
       },
+      "LENGTH" : {
+        "message" : [
+          "Expects `length` greater than or equal to 0, but got <length>."
+        ]
+      },
       "NULL" : {
         "message" : [
           "expects a non-NULL value."
@@ -1987,6 +2003,11 @@
       "REGEX_GROUP_INDEX" : {
         "message" : [
           "Expects group index between 0 and <groupCount>, but got <groupIndex>."
+        ]
+      },
+      "START" : {
+        "message" : [
+          "Expects a positive or a negative value for `start`, but got 0."
         ]
       },
       "ZERO_INDEX" : {
@@ -2192,6 +2213,12 @@
     ],
     "sqlState" : "42K0F"
   },
+  "INVALID_TIME_TRAVEL_SPEC" : {
+    "message" : [
+      "Cannot specify both version and timestamp when time travelling the table."
+    ],
+    "sqlState" : "42K0E"
+  },
   "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR" : {
     "message" : [
       "The time travel timestamp expression <expr> is invalid."
@@ -2205,6 +2232,11 @@
       "NON_DETERMINISTIC" : {
         "message" : [
           "Must be deterministic."
+        ]
+      },
+      "OPTION" : {
+        "message" : [
+          "Timestamp string in the options must be able to cast to TIMESTAMP type."
         ]
       },
       "UNEVALUABLE" : {
@@ -2385,6 +2417,12 @@
       "The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses."
     ],
     "sqlState" : "42803"
+  },
+  "MULTIPLE_TIME_TRAVEL_SPEC" : {
+    "message" : [
+      "Cannot specify time travel in both the time travel clause and options."
+    ],
+    "sqlState" : "42K0E"
   },
   "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION" : {
     "message" : [
@@ -2744,6 +2782,12 @@
       "Protobuf type not yet supported: <protobufType>."
     ],
     "sqlState" : "42K0G"
+  },
+  "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON" : {
+    "message" : [
+      "Failed to <action> Python data source <type> in Python: <msg>"
+    ],
+    "sqlState" : "38000"
   },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
@@ -5126,11 +5170,6 @@
       "<errorMessage>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_1334" : {
-    "message" : [
-      "Cannot specify both version and timestamp when time travelling the table."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1338" : {
     "message" : [
       "Sinks cannot request distribution and ordering in continuous execution mode."
@@ -5729,21 +5768,6 @@
   "_LEGACY_ERROR_TEMP_2155" : {
     "message" : [
       "<userClass> is not annotated with SQLUserDefinedType nor registered with UDTRegistration.}"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2156" : {
-    "message" : [
-      "The size function doesn't support the operand type <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2157" : {
-    "message" : [
-      "Unexpected value for start in function <prettyName>: SQL array indices start at 1."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2158" : {
-    "message" : [
-      "Unexpected value for length in function <prettyName>: length must be greater than or equal to 0."
     ]
   },
   "_LEGACY_ERROR_TEMP_2159" : {

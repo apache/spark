@@ -369,14 +369,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED =
-    buildConf("spark.sql.optimizer.runtimeFilter.semiJoinReduction.enabled")
-      .doc("When true and if one side of a shuffle join has a selective predicate, we attempt " +
-        "to insert a semi join in the other side to reduce the amount of shuffle data.")
-      .version("3.3.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val RUNTIME_FILTER_NUMBER_THRESHOLD =
     buildConf("spark.sql.optimizer.runtimeFilter.number.threshold")
       .doc("The total number of injected runtime filters (non-DPP) for a single " +
@@ -4474,6 +4466,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val TIME_TRAVEL_TIMESTAMP_KEY =
+    buildConf("spark.sql.timeTravelTimestampKey")
+      .doc("The option name to specify the time travel timestamp when reading a table.")
+      .version("4.0.0")
+      .stringConf
+      .createWithDefault("timestampAsOf")
+
+  val TIME_TRAVEL_VERSION_KEY =
+    buildConf("spark.sql.timeTravelVersionKey")
+      .doc("The option name to specify the time travel table version when reading a table.")
+      .version("4.0.0")
+      .stringConf
+      .createWithDefault("versionAsOf")
+
   val LEGACY_PERCENTILE_DISC_CALCULATION = buildConf("spark.sql.legacy.percentileDiscCalculation")
     .internal()
     .doc("If true, the old bogus percentile_disc calculation is used. The old calculation " +
@@ -4625,7 +4631,9 @@ object SQLConf {
           "returns null when getting a map value with a non-existing key. See SPARK-40066 " +
           "for more details."),
       RemovedConfig("spark.sql.hive.verifyPartitionPath", "4.0.0", "false",
-        s"This config was replaced by '${IGNORE_MISSING_FILES.key}'.")
+        s"This config was replaced by '${IGNORE_MISSING_FILES.key}'."),
+      RemovedConfig("spark.sql.optimizer.runtimeFilter.semiJoinReduction.enabled", "false", "4.0",
+        "This optimizer config is useless as runtime filter cannot be an IN subquery now.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -4677,9 +4685,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def dynamicPartitionPruningReuseBroadcastOnly: Boolean =
     getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY)
-
-  def runtimeFilterSemiJoinReductionEnabled: Boolean =
-    getConf(RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED)
 
   def runtimeFilterBloomFilterEnabled: Boolean =
     getConf(RUNTIME_BLOOM_FILTER_ENABLED)

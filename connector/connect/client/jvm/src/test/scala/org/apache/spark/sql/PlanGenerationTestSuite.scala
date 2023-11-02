@@ -112,8 +112,7 @@ class PlanGenerationTestSuite
   override protected def beforeAll(): Unit = {
     super.beforeAll()
     val client = SparkConnectClient(InProcessChannelBuilder.forName("/dev/null").build())
-    session =
-      new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
+    session = new SparkSession(client, planIdGenerator = new AtomicLong)
   }
 
   override protected def beforeEach(): Unit = {
@@ -121,7 +120,9 @@ class PlanGenerationTestSuite
   }
 
   override protected def afterAll(): Unit = {
-    session.close()
+    // Don't call client.releaseSession on close(), because the connection details are dummy.
+    session.releaseSessionOnClose = false
+    session.stop()
     if (cleanOrphanedGoldenFiles) {
       cleanOrphanedGoldenFile()
     }

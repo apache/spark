@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
 
-import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, CreateNamedStruct, GetStructField, If, IsNull, LessThanOrEqual, Literal}
@@ -159,7 +158,7 @@ abstract class V2ANSIWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
       inputPlan: LogicalPlan,
       expectedErrorClass: String,
       expectedMessageParameters: Map[String, String],
-      queryContext: Array[QueryContext] = Array.empty,
+      queryContext: Array[ExpectedContext] = Array.empty,
       caseSensitive: Boolean = true): Unit = {
     withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.ANSI.toString) {
       super.assertAnalysisErrorClass(
@@ -196,7 +195,7 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
       inputPlan: LogicalPlan,
       expectedErrorClass: String,
       expectedMessageParameters: Map[String, String],
-      queryContext: Array[QueryContext] = Array.empty,
+      queryContext: Array[ExpectedContext] = Array.empty,
       caseSensitive: Boolean = true): Unit = {
     withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.STRICT.toString) {
       super.assertAnalysisErrorClass(

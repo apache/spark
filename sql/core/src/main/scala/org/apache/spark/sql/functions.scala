@@ -93,11 +93,13 @@ import org.apache.spark.util.Utils
 object functions {
 // scalastyle:on
 
-  private def withExpr(expr: Expression): Column = Column(expr)
+  private def withExpr(expr: => Expression): Column = withOrigin {
+    Column(expr)
+  }
 
   private def withAggregateFunction(
-    func: AggregateFunction,
-    isDistinct: Boolean = false): Column = {
+    func: => AggregateFunction,
+    isDistinct: Boolean = false): Column = withOrigin {
     Column(func.toAggregateExpression(isDistinct))
   }
 
@@ -127,16 +129,18 @@ object functions {
    * @group normal_funcs
    * @since 1.3.0
    */
-  def lit(literal: Any): Column = literal match {
-    case c: Column => c
-    case s: Symbol => new ColumnName(s.name)
-    case _ =>
-      // This is different from `typedlit`. `typedlit` calls `Literal.create` to use
-      // `ScalaReflection` to get the type of `literal`. However, since we use `Any` in this method,
-      // `typedLit[Any](literal)` will always fail and fallback to `Literal.apply`. Hence, we can
-      // just manually call `Literal.apply` to skip the expensive `ScalaReflection` code. This is
-      // significantly better when there are many threads calling `lit` concurrently.
+  def lit(literal: Any): Column = withOrigin {
+    literal match {
+      case c: Column => c
+      case s: Symbol => new ColumnName(s.name)
+      case _ =>
+        // This is different from `typedlit`. `typedlit` calls `Literal.create` to use
+        // `ScalaReflection` to get the type of `literal`. However, since we use `Any` in this
+        // method, `typedLit[Any](literal)` will always fail and fallback to `Literal.apply`. Hence,
+        // we can just manually call `Literal.apply` to skip the expensive `ScalaReflection` code.
+        // This is significantly better when there are many threads calling `lit` concurrently.
       Column(Literal(literal))
+    }
   }
 
   /**
@@ -147,7 +151,9 @@ object functions {
    * @group normal_funcs
    * @since 2.2.0
    */
-  def typedLit[T : TypeTag](literal: T): Column = typedlit(literal)
+  def typedLit[T : TypeTag](literal: T): Column = withOrigin {
+    typedlit(literal)
+  }
 
   /**
    * Creates a [[Column]] of literal value.
@@ -164,10 +170,12 @@ object functions {
    * @group normal_funcs
    * @since 3.2.0
    */
-  def typedlit[T : TypeTag](literal: T): Column = literal match {
-    case c: Column => c
-    case s: Symbol => new ColumnName(s.name)
-    case _ => Column(Literal.create(literal))
+  def typedlit[T : TypeTag](literal: T): Column = withOrigin {
+    literal match {
+      case c: Column => c
+      case s: Symbol => new ColumnName(s.name)
+      case _ => Column(Literal.create(literal))
+    }
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -5965,25 +5973,31 @@ object functions {
   def array_except(col1: Column, col2: Column): Column =
     Column.fn("array_except", col1, col2)
 
-  private def createLambda(f: Column => Column) = Column {
-    val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
-    val function = f(Column(x)).expr
-    LambdaFunction(function, Seq(x))
+  private def createLambda(f: Column => Column) = withOrigin {
+    Column {
+      val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
+      val function = f(Column(x)).expr
+      LambdaFunction(function, Seq(x))
+    }
   }
 
-  private def createLambda(f: (Column, Column) => Column) = Column {
-    val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
-    val y = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("y")))
-    val function = f(Column(x), Column(y)).expr
-    LambdaFunction(function, Seq(x, y))
+  private def createLambda(f: (Column, Column) => Column) = withOrigin {
+    Column {
+      val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
+      val y = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("y")))
+      val function = f(Column(x), Column(y)).expr
+      LambdaFunction(function, Seq(x, y))
+    }
   }
 
-  private def createLambda(f: (Column, Column, Column) => Column) = Column {
-    val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
-    val y = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("y")))
-    val z = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("z")))
-    val function = f(Column(x), Column(y), Column(z)).expr
-    LambdaFunction(function, Seq(x, y, z))
+  private def createLambda(f: (Column, Column, Column) => Column) = withOrigin {
+    Column {
+      val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
+      val y = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("y")))
+      val z = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("z")))
+      val function = f(Column(x), Column(y), Column(z)).expr
+      LambdaFunction(function, Seq(x, y, z))
+    }
   }
 
   /**
@@ -7217,6 +7231,36 @@ object functions {
   def schema_of_xml(xml: Column, options: java.util.Map[String, String]): Column = {
     withExpr(SchemaOfXml(xml.expr, options.asScala.toMap))
   }
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * (Java-specific) Converts a column containing a `StructType` into a XML string with
+   * the specified schema. Throws an exception, in the case of an unsupported type.
+   *
+   * @param e       a column containing a struct.
+   * @param options options to control how the struct column is converted into a XML string.
+   *                It accepts the same options as the XML data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group xml_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def to_xml(e: Column, options: java.util.Map[String, String]): Column =
+    fnWithOptions("to_xml", options.asScala.iterator, e)
+
+  /**
+   * Converts a column containing a `StructType` into a XML string with the specified schema.
+   * Throws an exception, in the case of an unsupported type.
+   *
+   * @param e a column containing a struct.
+   * @group xml_funcs
+   * @since 4.0.0
+   */
+  def to_xml(e: Column): Column = to_xml(e, Map.empty[String, String].asJava)
 
   /**
    * A transform for timestamps and dates to partition data into years.

@@ -1083,7 +1083,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     // window w1 as (partition by p_mfgr order by p_name
     //               range between 2 preceding and 2 following),
     //        w2 as w1
-    val windowMapView = baseWindowMap.mapValues {
+    val windowMapView = baseWindowMap.view.mapValues {
       case WindowSpecReference(name) =>
         baseWindowMap.get(name) match {
           case Some(spec: WindowSpecDefinition) =>
@@ -1835,7 +1835,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
     // Reverse the contexts to have them in the same sequence as in the SQL statement & turn them
     // into expressions.
-    val expressions = contexts.reverseMap(expression)
+    val expressions = contexts.reverseIterator.map(expression).to(ArrayBuffer)
 
     // Create a balanced tree.
     def reduceToExpressionTree(low: Int, high: Int): Expression = high - low match {

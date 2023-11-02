@@ -177,6 +177,7 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.SparkSessionExtensionsProvider"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UDTFRegistration"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UDFRegistration$"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataSourceRegistration"),
 
       // DataFrame Reader & Writer
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.json"), // rdd
@@ -227,6 +228,7 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.listenerManager"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.experimental"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.udtf"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.dataSource"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataFrame"),
       ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.SparkSession.baseRelationToDataFrame"),
@@ -323,6 +325,14 @@ object CheckConnectJvmClientCompatibility {
           "org.apache.spark.sql.expressions.ScalarUserDefinedFunction"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.expressions.ScalarUserDefinedFunction$"),
+
+      // New private API added in the client
+      ProblemFilters
+        .exclude[MissingClassProblem](
+          "org.apache.spark.sql.expressions.SparkConnectClosureCleaner"),
+      ProblemFilters
+        .exclude[MissingClassProblem](
+          "org.apache.spark.sql.expressions.SparkConnectClosureCleaner$"),
 
       // Dataset
       ProblemFilters.exclude[DirectMissingMethodProblem](

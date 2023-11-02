@@ -1639,13 +1639,11 @@ class DataFrame:
     sampleBy.__doc__ = PySparkDataFrame.sampleBy.__doc__
 
     def __getattr__(self, name: str) -> "Column":
-        if name in ["_jseq", "_jdf", "_jmap", "_jcols"]:
+        if name in ["_jseq", "_jdf", "_jmap", "_jcols", "rdd", "toJSON"]:
             raise PySparkAttributeError(
                 error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
             )
         elif name in [
-            "rdd",
-            "toJSON",
             "checkpoint",
             "localCheckpoint",
         ]:

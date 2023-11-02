@@ -247,25 +247,14 @@ object SparkBuild extends PomBuild {
         "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.streaming.kafka010.KafkaRDDSuite:s",
         // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
         "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
-        // SPARK-35496 Upgrade Scala to 2.13.7 and suppress:
-        // 1. `The outer reference in this type test cannot be checked at run time`
-        // 2. `the type test for pattern TypeA cannot be checked at runtime because it
-        //    has type parameters eliminated by erasure`
-        // 3. `abstract type TypeA in type pattern Seq[TypeA] (the underlying of
-        //    Seq[TypeA]) is unchecked since it is eliminated by erasure`
-        // 4. `fruitless type test: a value of TypeA cannot also be a TypeB`
-        "-Wconf:cat=unchecked&msg=outer reference:s",
-        "-Wconf:cat=unchecked&msg=eliminated by erasure:s",
-        "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s",
         // SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
         "-Wconf:msg=Implicit definition should have explicit type:s",
-        // SPARK-45331 Upgrade Scala to 2.13.12 and suppress "In Scala 2, symbols inherited
-        // from a superclass shadow symbols defined in an outer scope. Such references are
-        // ambiguous in Scala 3. To continue using the inherited symbol, write `this.stop`.
-        // Or use `-Wconf:msg=legacy-binding:s` to silence this warning. [quickfixable]"
-        "-Wconf:msg=legacy-binding:s",
         // SPARK-45627 Symbol literals are deprecated in Scala 2.13 and it's a compile error in Scala 3.
-        "-Wconf:cat=deprecation&msg=symbol literal is deprecated:e"
+        "-Wconf:cat=deprecation&msg=symbol literal is deprecated:e",
+        // SPARK-45627 `enum`, `export` and `given` will become keywords in Scala 3,
+        // so they are prohibited from being used as variable names in Scala 2.13 to
+        // reduce the cost of migration in subsequent versions.
+        "-Wconf:cat=deprecation&msg=it will become a keyword in Scala 3:e"
       )
     }
   )

@@ -44,6 +44,15 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages$SparkAppConfig$"),
     // [SPARK-45427][CORE] Add RPC SSL settings to SSLOptions and SparkTransportConf
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.network.netty.SparkTransportConf.fromSparkConf"),
+    // [SPARK-45136][CONNECT] Enhance ClosureCleaner with Ammonite support
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.MethodIdentifier$"),
+    // [SPARK-45022][SQL] Provide context for dataset API errors
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.QueryContext.contextType"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.QueryContext.code"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.QueryContext.callSite"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.QueryContext.summary"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI$default$3"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI"),
     // [SPARK-45762][CORE] Support shuffle managers defined in user jars by changing startup order
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkEnv.this")
   )
