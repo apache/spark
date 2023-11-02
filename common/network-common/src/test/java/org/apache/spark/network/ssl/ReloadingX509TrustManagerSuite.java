@@ -162,7 +162,7 @@ public class ReloadingX509TrustManagerSuite {
       assertEquals(0, tm.reloadCount);
 
       // Wait so that the file modification time is different
-      Thread.sleep((tm.getReloadInterval() + 200));
+      Thread.sleep((tm.getReloadInterval() + 1000));
 
       // Add another cert
       Map<String, X509Certificate> certs = new HashMap<String, X509Certificate>();
