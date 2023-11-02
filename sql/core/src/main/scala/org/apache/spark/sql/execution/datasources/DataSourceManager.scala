@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
-import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -31,7 +30,6 @@ import org.apache.spark.sql.types.StructType
  * A manager for user-defined data sources. It is used to register and lookup data sources by
  * their short names or fully qualified names.
  */
-@Unstable
 class DataSourceManager {
 
   private type DataSourceBuilder = (
