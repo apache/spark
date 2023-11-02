@@ -1123,8 +1123,6 @@ def read_excel(
             thousands=thousands,
             comment=comment,
             skipfooter=skipfooter,
-            convert_float=convert_float,
-            mangle_dupe_cols=mangle_dupe_cols,
             **kwds,
         )
 
