@@ -183,12 +183,21 @@ private[spark] abstract class Task[T](
   }
 
   def getTaskBinary: Array[Byte] = {
-    if (taskBinaryFuture != null) {
+    val binary = if (taskBinaryFuture != null) {
       taskBinaryFuture.get()
     } else if (taskBinaryBC != null) {
       taskBinaryBC.value
     } else {
       null
+    }
+
+    if (binary == null) {
+      null
+    } else {
+      val len = binary.length
+      val newBinary = new Array[Byte](len)
+      System.arraycopy(binary, 0, newBinary, 0, len)
+      newBinary
     }
   }
 
