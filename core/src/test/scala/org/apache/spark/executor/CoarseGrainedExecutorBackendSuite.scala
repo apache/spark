@@ -39,6 +39,7 @@ import org.apache.spark.TestUtils._
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.internal.config.PLUGINS
 import org.apache.spark.resource._
+import org.apache.spark.resource.ResourceAmountUtils.RESOURCE_TOTAL_AMOUNT
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.RpcEnv
@@ -307,7 +308,9 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       assert(backend.taskResources.isEmpty)
 
       val taskId = 1000000L
-      val resourcesAmounts = Map(GPU -> Map("0" -> 0.15, "1" -> 0.76))
+      val resourcesAmounts = Map(GPU -> Map(
+        "0" -> (0.15*RESOURCE_TOTAL_AMOUNT).toLong,
+        "1" -> (0.76*RESOURCE_TOTAL_AMOUNT).toLong))
       // We don't really verify the data, just pass it around.
       val data = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
       val taskDescription = new TaskDescription(taskId, 2, "1", "TASK 1000000", 19,
@@ -428,7 +431,9 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val tasksKilled = new TrieMap[Long, Boolean]()
       val tasksExecuted = new TrieMap[Long, Boolean]()
 
-      val resourcesAmounts = Map(GPU -> Map("0" -> 0.15, "1" -> 0.76))
+      val resourcesAmounts = Map(GPU -> Map(
+        "0" -> (0.15 * RESOURCE_TOTAL_AMOUNT).toLong,
+        "1" -> (0.76 * RESOURCE_TOTAL_AMOUNT).toLong))
 
       // Fake tasks with different taskIds.
       val taskDescriptions = (1 to numTasks).map {
@@ -519,7 +524,9 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val tasksKilled = new TrieMap[Long, Boolean]()
       val tasksExecuted = new TrieMap[Long, Boolean]()
 
-      val resourcesAmounts = Map(GPU -> Map("0" -> 0.15, "1" -> 0.76))
+      val resourcesAmounts = Map(GPU -> Map(
+        "0" -> (0.15*RESOURCE_TOTAL_AMOUNT).toLong,
+        "1" -> (0.76*RESOURCE_TOTAL_AMOUNT).toLong))
 
       // Fake tasks with different taskIds.
       val taskDescriptions = (1 to numTasks).map {

@@ -18,12 +18,27 @@
 package org.apache.spark.scheduler
 
 import scala.collection.mutable.ArrayBuffer
+import scala.language.implicitConversions
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.resource.{ResourceProfileBuilder, TaskResourceRequests}
+import org.apache.spark.resource.ResourceAmountUtils.RESOURCE_TOTAL_AMOUNT
 import org.apache.spark.resource.ResourceUtils.GPU
 
 class ExecutorResourcesAmountsSuite extends SparkFunSuite {
+
+  implicit def convertMapLongToMapDouble(resources: Map[String, Long]): Map[String, Double] = {
+    resources.map { case (k, v) => k -> v.toDouble / RESOURCE_TOTAL_AMOUNT }
+  }
+
+  implicit def convertMapDoubleToLong(resources: Map[String, Double]): Map[String, Long] = {
+    resources.map { case (k, v) => k -> (v * RESOURCE_TOTAL_AMOUNT).toLong }
+  }
+
+  implicit def convertResMapDoubleToMapLong(resources: Map[String, Map[String, Double]]):
+      Map[String, Map[String, Long]] = {
+    resources.map { case (k, v) => k -> convertMapDoubleToLong(v) }
+  }
 
   def compareMaps(lhs: Map[String, Double], rhs: Map[String, Double],
                   eps: Double = 0.00000001): Boolean = {
@@ -82,9 +97,9 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
     // executors info shouldn't be changed.
     executorsInfo.foreach { case (rName, rInfo) =>
       if (rName == "gpu") {
-        rInfo.acquire(Map("2" -> 0.4, "6" -> 0.6))
+        rInfo.acquire(convertMapDoubleToLong(Map("2" -> 0.4, "6" -> 0.6)))
       } else {
-        rInfo.acquire(Map("aa" -> 0.2, "bb" -> 0.7))
+        rInfo.acquire(convertMapDoubleToLong(Map("aa" -> 0.2, "bb" -> 0.7)))
       }
     }
 
@@ -203,11 +218,11 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
     val availableExecResAmounts = new ExecutorResourcesAmounts(totalRes)
 
     val e = intercept[SparkException] {
-      availableExecResAmounts.release(Map("gpu" -> Map("2" -> 0.7)))
+      availableExecResAmounts.release(Map("gpu" -> convertMapDoubleToLong(Map("2" -> 0.7))))
     }
     assert(e.getMessage.contains("after releasing gpu address 2 should be <= 1.0"))
 
-    availableExecResAmounts.release(Map("gpu" -> Map("2" -> 0.6)))
+    availableExecResAmounts.release(Map("gpu" -> convertMapDoubleToLong(Map("2" -> 0.6))))
     assert(compareMaps(availableExecResAmounts.availableResources("gpu"), Map("2" -> 1.0)))
   }
 
@@ -216,11 +231,11 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
     val availableExecResAmounts = new ExecutorResourcesAmounts(totalRes)
 
     val e = intercept[SparkException] {
-      availableExecResAmounts.acquire(Map("gpu" -> Map("2" -> 0.6)))
+      availableExecResAmounts.acquire(Map("gpu" -> convertMapDoubleToLong(Map("2" -> 0.6))))
     }
     assert(e.getMessage.contains("after acquiring gpu address 2 should be >= 0"))
 
-    availableExecResAmounts.acquire(Map("gpu" -> Map("2" -> 0.4)))
+    availableExecResAmounts.acquire(Map("gpu" -> convertMapDoubleToLong(Map("2" -> 0.4))))
     assert(compareMaps(availableExecResAmounts.availableResources("gpu"), Map("2" -> 0.0)))
   }
 
@@ -234,7 +249,8 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
       val availableExecResAmounts = ExecutorResourcesAmounts(Map(GPU -> info))
       for (_ <- 0 until slots) {
         addresses.foreach(addr =>
-          availableExecResAmounts.acquire(Map(GPU -> Map(addr -> taskAmount))))
+          availableExecResAmounts.acquire(
+            Map(GPU -> convertMapDoubleToLong(Map(addr -> taskAmount)))))
       }
 
       assert(availableExecResAmounts.availableResources.size === 1)
@@ -245,7 +261,8 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
 
       addresses.foreach { addr =>
         assertThrows[SparkException] {
-          availableExecResAmounts.acquire(Map(GPU -> Map(addr -> taskAmount)))
+          availableExecResAmounts.acquire(
+            Map(GPU -> convertMapDoubleToLong(Map(addr -> taskAmount))))
         }
       }
     }
@@ -278,7 +295,8 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
       assert(resourceAmounts.keys.toSeq === Seq("gpu"))
       assert(resourceAmounts("gpu").size === 1)
       assert(resourceAmounts("gpu").keys.toSeq === Seq("2"))
-      assert(resourceAmounts("gpu")(resource("gpu").addresses(0)) === gpuTaskAmount)
+      assert(resourceAmounts("gpu")(resource("gpu").addresses(0)).toDouble/RESOURCE_TOTAL_AMOUNT ===
+        gpuTaskAmount)
     }
 
     // assign will not update the real value.
@@ -355,11 +373,13 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
 
       assert(resourceAmounts("gpu").size === 1)
       assert(resourceAmounts("gpu").keys.toSeq === Seq("2"))
-      assert(resourceAmounts("gpu")(resource("gpu").addresses(0)) === gpuTaskAmount)
+      assert(resourceAmounts("gpu")(resource("gpu").addresses(0)).toDouble/RESOURCE_TOTAL_AMOUNT
+        === gpuTaskAmount)
 
       assert(resourceAmounts("fpga").size === 1)
       assert(resourceAmounts("fpga").keys.toSeq === Seq("aa"))
-      assert(resourceAmounts("fpga")(resource("fpga").addresses(0)) === fpgaTaskAmount)
+      assert(resourceAmounts("fpga")(resource("fpga").addresses(0)).toDouble/RESOURCE_TOTAL_AMOUNT
+        === fpgaTaskAmount)
     }
 
     // assign will not update the real value.
@@ -414,7 +434,8 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
       assert(!assigned.isEmpty)
       assigned.foreach { case (resource, resourceAmounts) =>
         assert(resource("gpu").addresses.sorted === expectedAssignedAddress.sorted)
-        assert(resourceAmounts("gpu").values.toArray.sorted === expectedAssignedAmount.sorted)
+        assert(resourceAmounts("gpu").values.toArray.sorted.map(_.toDouble/RESOURCE_TOTAL_AMOUNT)
+          === expectedAssignedAmount.sorted)
 
         availableExecResAmounts.acquire(resourceAmounts)
 
@@ -513,13 +534,13 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
 
     // Acquire an address from a resource that doesn't exist
     val e = intercept[SparkException] {
-      availableExecResAmounts.acquire(Map("fpga" -> Map("1" -> 1.0)))
+      availableExecResAmounts.acquire(Map("fpga" -> convertMapDoubleToLong(Map("1" -> 1.0))))
     }
     assert(e.getMessage.contains("Try to acquire an address from fpga that doesn't exist"))
 
     // Acquire an address that is not available
     val e1 = intercept[SparkException] {
-      availableExecResAmounts.acquire(Map("gpu" -> Map("6" -> 1.0)))
+      availableExecResAmounts.acquire(Map("gpu" -> convertMapDoubleToLong(Map("6" -> 1.0))))
     }
     assert(e1.getMessage.contains("Try to acquire an address that doesn't exist"))
   }
@@ -531,13 +552,13 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
 
     // Acquire an address from a resource that doesn't exist
     val e = intercept[SparkException] {
-      availableExecResAmounts.release(Map("fpga" -> Map("1" -> 0.1)))
+      availableExecResAmounts.release(Map("fpga" -> convertMapDoubleToLong(Map("1" -> 0.1))))
     }
     assert(e.getMessage.contains("Try to release an address from fpga that doesn't exist"))
 
     // Acquire an address that is not available
     val e1 = intercept[SparkException] {
-      availableExecResAmounts.release(Map("gpu" -> Map("6" -> 0.1)))
+      availableExecResAmounts.release(Map("gpu" -> convertMapDoubleToLong(Map("6" -> 0.1))))
     }
     assert(e1.getMessage.contains("Try to release an address that is not assigned"))
   }

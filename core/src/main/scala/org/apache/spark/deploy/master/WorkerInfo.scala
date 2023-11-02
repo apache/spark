@@ -20,6 +20,7 @@ package org.apache.spark.deploy.master
 import scala.collection.mutable
 
 import org.apache.spark.resource.{ResourceAllocator, ResourceInformation, ResourceRequirement}
+import org.apache.spark.resource.ResourceAmountUtils.RESOURCE_TOTAL_AMOUNT
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
@@ -35,13 +36,12 @@ private[spark] case class WorkerResourceInfo(name: String, addresses: Seq[String
    * @return ResourceInformation
    */
   def acquire(amount: Int): ResourceInformation = {
-
     // Any available address from availableAddrs must be a whole resource
     // since worker needs to do full resources to the executors.
     val addresses = availableAddrs.take(amount)
     assert(addresses.length == amount)
 
-    acquire(addresses.map(addr => addr -> 1.0).toMap)
+    acquire(addresses.map(addr => addr -> RESOURCE_TOTAL_AMOUNT).toMap)
     new ResourceInformation(resourceName, addresses.toArray)
   }
 }
@@ -171,7 +171,7 @@ private[spark] class WorkerInfo(
    */
   def recoverResources(expected: Map[String, ResourceInformation]): Unit = {
     expected.foreach { case (rName, rInfo) =>
-      resources(rName).acquire(rInfo.addresses.map(addr => addr -> 1.0).toMap)
+      resources(rName).acquire(rInfo.addresses.map(addr => addr -> RESOURCE_TOTAL_AMOUNT).toMap)
     }
   }
 
@@ -181,7 +181,7 @@ private[spark] class WorkerInfo(
    */
   private def releaseResources(allocated: Map[String, ResourceInformation]): Unit = {
     allocated.foreach { case (rName, rInfo) =>
-      resources(rName).release(rInfo.addresses.map(addrs => addrs -> 1.0).toMap)
+      resources(rName).release(rInfo.addresses.map(addrs => addrs -> RESOURCE_TOTAL_AMOUNT).toMap)
     }
   }
 }

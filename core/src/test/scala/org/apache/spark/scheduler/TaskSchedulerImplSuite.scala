@@ -36,6 +36,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.internal.config
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceProfile, TaskResourceRequests}
+import org.apache.spark.resource.ResourceAmountUtils.RESOURCE_TOTAL_AMOUNT
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.status.api.v1.ThreadStackTrace
@@ -152,7 +153,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
   ExecutorResourcesAmounts = {
     // convert the old resources to ExecutorResourcesAmounts
     new ExecutorResourcesAmounts(resources.map { case (rName, addresses) =>
-      rName -> addresses.map(address => address -> 1.0).toMap
+      rName -> addresses.map(address => address -> RESOURCE_TOTAL_AMOUNT).toMap
     })
   }
 
@@ -2294,6 +2295,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     taskScheduler.handleFailedTask(tsm, tid, state, reason)
   }
 
+  private implicit def convertMapDoubleToLong(resources: Map[String, Double]): Map[String, Long] = {
+    resources.map { case (k, v) => k -> (v * RESOURCE_TOTAL_AMOUNT).toLong }
+  }
+
   Seq(0.51, 0.6, 0.7, 0.8, 0.9, 1.0).foreach { gpuTaskAmount =>
     test(s"SPARK-45527 default rp with task.gpu.amount=${gpuTaskAmount} can " +
       s"restrict each task takes 1 gpu exclusively in the same executor") {
@@ -2310,7 +2315,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       val taskSet = FakeTask.createTaskSet(100)
 
       val resources = new ExecutorResourcesAmounts(
-        Map(GPU -> Map("0" -> 1.0, "1" -> 1.0, "2" -> 1.0, "3" -> 1.0)))
+        Map(GPU -> convertMapDoubleToLong(Map("0" -> 1.0, "1" -> 1.0, "2" -> 1.0, "3" -> 1.0))))
 
       val workerOffers =
         IndexedSeq(new WorkerOffer("executor0", "host0", executorCpus, None, resources))
@@ -2346,13 +2351,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       val workerOffers =
         IndexedSeq(
           new WorkerOffer("executor0", "host0", executorCpus, None,
-            new ExecutorResourcesAmounts(Map(GPU -> Map("0" -> 1.0)))),
+            new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("0" -> 1.0))))),
           new WorkerOffer("executor1", "host1", executorCpus, None,
-            new ExecutorResourcesAmounts(Map(GPU -> Map("7" -> 1.0)))),
+            new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("7" -> 1.0))))),
           new WorkerOffer("executor2", "host2", executorCpus, None,
-            new ExecutorResourcesAmounts(Map(GPU -> Map("9" -> 1.0)))),
+            new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("9" -> 1.0))))),
           new WorkerOffer("executor3", "host3", executorCpus, None,
-            new ExecutorResourcesAmounts(Map(GPU -> Map("20" -> 1.0)))))
+            new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("20" -> 1.0))))))
 
       taskScheduler.submitTasks(taskSet)
       // Launch tasks on executor that satisfies resource requirements.
@@ -2406,7 +2411,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       IndexedSeq(
         // cpu won't be a problem
         WorkerOffer("executor0", "host0", 1000, None, new ExecutorResourcesAmounts(
-          Map(GPU -> Map("0" -> 1.0, "1" -> 1.0, "2" -> 1.0, "3" -> 1.0))))
+          Map(GPU -> convertMapDoubleToLong(Map("0" -> 1.0, "1" -> 1.0, "2" -> 1.0, "3" -> 1.0)))))
       )
 
     taskScheduler.submitTasks(lowerTaskSet)
@@ -2421,10 +2426,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       assert(tDesc.resources.get(GPU).get.addresses.length == 1)
       if (index < 4) { // the first 4 tasks will grab 0.7 gpu
         assert(tDesc.resources.get(GPU).get.addresses(0) == index.toString)
-        assert(tDesc.resourcesAmounts.get(GPU).get(index.toString) == 0.7)
+        assert(tDesc.resourcesAmounts.get(GPU).get(index.toString).toDouble/RESOURCE_TOTAL_AMOUNT
+          == 0.7)
       } else {
         assert(tDesc.resources.get(GPU).get.addresses(0) == (index - 4).toString)
-        assert(tDesc.resourcesAmounts.get(GPU).get((index - 4).toString) == 0.3)
+        assert(
+          tDesc.resourcesAmounts.get(GPU).get((index - 4).toString).toDouble/RESOURCE_TOTAL_AMOUNT
+          == 0.3)
       }
       index += 1
     }
@@ -2459,13 +2467,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       IndexedSeq(
         // cpu won't be a problem
         WorkerOffer("executor0", "host0", 1000, None, new ExecutorResourcesAmounts(
-          Map(GPU -> Map("0" -> 1.0)))),
+          Map(GPU -> convertMapDoubleToLong(Map("0" -> 1.0))))),
         WorkerOffer("executor1", "host1", 1000, None, new ExecutorResourcesAmounts(
-          Map(GPU -> Map("1" -> 1.0)))),
+          Map(GPU -> convertMapDoubleToLong(Map("1" -> 1.0))))),
         WorkerOffer("executor2", "host2", 1000, None, new ExecutorResourcesAmounts(
-          Map(GPU -> Map("2" -> 1.0)))),
+          Map(GPU -> convertMapDoubleToLong(Map("2" -> 1.0))))),
         WorkerOffer("executor3", "host3", 1000, None, new ExecutorResourcesAmounts(
-          Map(GPU -> Map("3" -> 1.0))))
+          Map(GPU -> convertMapDoubleToLong(Map("3" -> 1.0)))))
       )
 
     taskScheduler.submitTasks(lowerTaskSet)
@@ -2489,11 +2497,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       if (index % 2 == 0) {
         higherAssignedExecutorsGpus.append(
           (tDesc.executorId, tDesc.resources.get(GPU).get.addresses(0)))
-        assert(tDesc.resourcesAmounts.get(GPU).get(address) == 0.7)
+        assert(tDesc.resourcesAmounts.get(GPU).get(address).toDouble/RESOURCE_TOTAL_AMOUNT == 0.7)
       } else {
         lowerAssignedExecutorsGpus.append(
           (tDesc.executorId, tDesc.resources.get(GPU).get.addresses(0)))
-        assert(tDesc.resourcesAmounts.get(GPU).get(address) == 0.3)
+        assert(tDesc.resourcesAmounts.get(GPU).get(address).toDouble/RESOURCE_TOTAL_AMOUNT == 0.3)
       }
       index += 1
     }
@@ -2535,7 +2543,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       IndexedSeq(
         // cpu won't be a problem
         WorkerOffer("executor0", "host0", 1000, None, new ExecutorResourcesAmounts(
-          Map(GPU -> Map("0" -> 1.0, "1" -> 1.0, "2" -> 1.0, "3" -> 1.0))))
+          Map(GPU -> convertMapDoubleToLong(Map("0" -> 1.0, "1" -> 1.0, "2" -> 1.0, "3" -> 1.0)))))
       )
 
     taskScheduler.submitTasks(lowerTaskSet)
@@ -2549,7 +2557,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       assert(tDesc.resources.contains(GPU))
       assert(tDesc.resources.get(GPU).get.addresses.length == 1)
       assert(tDesc.resources.get(GPU).get.addresses(0) == index.toString)
-      assert(tDesc.resourcesAmounts.get(GPU).get(index.toString) == 0.7)
+      assert(tDesc.resourcesAmounts.get(GPU).get(index.toString).toDouble/RESOURCE_TOTAL_AMOUNT
+        == 0.7)
       index += 1
     }
   }

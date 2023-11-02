@@ -59,8 +59,9 @@ private[spark] class TaskDescription(
     val cpus: Int,
     val resources: immutable.Map[String, ResourceInformation],
     // resourcesAmounts is the total resources assigned to the task
-    // Eg, Map("gpu" -> Map("0" -> 0.7)): assign 0.7 of the gpu address "0" to this task
-    val resourcesAmounts: immutable.Map[String, immutable.Map[String, Double]],
+    // Eg, Map("gpu" -> Map("0" -> 0.7*RESOURCE_TOTAL_AMOUNT)):
+    // assign 0.7 of the gpu address "0" to this task
+    val resourcesAmounts: immutable.Map[String, immutable.Map[String, Long]],
     val serializedTask: ByteBuffer) {
 
   assert(cpus > 0, "CPUs per task should be > 0")
@@ -89,7 +90,7 @@ private[spark] object TaskDescription {
   }
 
 
-  private def serializeResourcesAmounts(map: immutable.Map[String, immutable.Map[String, Double]],
+  private def serializeResourcesAmounts(map: immutable.Map[String, immutable.Map[String, Long]],
       dataOut: DataOutputStream): Unit = {
     dataOut.writeInt(map.size)
     map.foreach { case (rName, addressAmountMap) =>
@@ -97,7 +98,7 @@ private[spark] object TaskDescription {
       dataOut.writeInt(addressAmountMap.size)
       addressAmountMap.foreach { case (address, amount) =>
         dataOut.writeUTF(address)
-        dataOut.writeDouble(amount)
+        dataOut.writeLong(amount)
       }
     }
   }
@@ -213,18 +214,18 @@ private[spark] object TaskDescription {
   }
 
   private def deserializeResourcesAmounts(dataIn: DataInputStream):
-      immutable.Map[String, immutable.Map[String, Double]] = {
-    val map = new HashMap[String, immutable.Map[String, Double]]()
+      immutable.Map[String, immutable.Map[String, Long]] = {
+    val map = new HashMap[String, immutable.Map[String, Long]]()
     val mapSize = dataIn.readInt()
     var i = 0
     while (i < mapSize) {
       val resType = dataIn.readUTF()
-      val addressAmountMap = new HashMap[String, Double]()
+      val addressAmountMap = new HashMap[String, Long]()
       val addressAmountSize = dataIn.readInt()
       var j = 0
       while (j < addressAmountSize) {
         val address = dataIn.readUTF()
-        val amount = dataIn.readDouble()
+        val amount = dataIn.readLong()
         addressAmountMap(address) = amount
         j += 1
       }

@@ -67,21 +67,19 @@ private[spark] trait ResourceAllocator {
   protected def resourceAddresses: Seq[String]
 
   /**
-   * Map from an address to its availability default to RESOURCE_TOTAL_AMOUNT, a value > 0 means
-   * the address is available, while value of 0 means the address is fully assigned.
+   * Map from an address to its availability default to 1.0 (we multiply RESOURCE_TOTAL_AMOUNT
+   * to avoid precision error), a value > 0 means the address is available, while value of
+   * 0 means the address is fully assigned.
    */
   private lazy val addressAvailabilityMap = {
     mutable.HashMap(resourceAddresses.map(address => address -> RESOURCE_TOTAL_AMOUNT): _*)
   }
 
   /**
-   * Get the resources and its amounts.
+   * Get the amounts of resources that have been multiplied by RESOURCE_TOTAL_AMOUNT.
    * @return the resources amounts
    */
-  def resourcesAmounts: Map[String, Double] = addressAvailabilityMap.map {
-    case (address, internalAmount) =>
-      address -> (internalAmount.toDouble / RESOURCE_TOTAL_AMOUNT)
-  }.toMap
+  def resourcesAmounts: Map[String, Long] = addressAvailabilityMap.toMap
 
   /**
    * Sequence of currently available resource addresses which are not fully assigned.
@@ -100,19 +98,20 @@ private[spark] trait ResourceAllocator {
    * available. When the task finishes, it will return the acquired resource addresses.
    * Throw an Exception if an address is not available or doesn't exist.
    */
-  def acquire(addressesAmounts: Map[String, Double]): Unit = {
+  def acquire(addressesAmounts: Map[String, Long]): Unit = {
     addressesAmounts.foreach { case (address, amount) =>
       val prevAmount = addressAvailabilityMap.getOrElse(address,
         throw new SparkException(s"Try to acquire an address that doesn't exist. $resourceName " +
           s"address $address doesn't exist."))
 
-      val internalLeft = addressAvailabilityMap(address) - (amount * RESOURCE_TOTAL_AMOUNT).toLong
+      val left = addressAvailabilityMap(address) - amount
 
-      if (internalLeft < 0) {
+      if (left < 0) {
         throw new SparkException(s"Try to acquire $resourceName address $address " +
-          s"amount: $amount, but only ${prevAmount.toDouble / RESOURCE_TOTAL_AMOUNT} left.")
+          s"amount: ${amount.toDouble / RESOURCE_TOTAL_AMOUNT}, but only " +
+          s"${prevAmount.toDouble / RESOURCE_TOTAL_AMOUNT} left.")
       } else {
-        addressAvailabilityMap(address) = internalLeft
+        addressAvailabilityMap(address) = left
       }
     }
   }
@@ -122,21 +121,21 @@ private[spark] trait ResourceAllocator {
    * addresses are released when a task has finished.
    * Throw an Exception if an address is not assigned or doesn't exist.
    */
-  def release (addressesAmounts: Map[String, Double]): Unit = {
+  def release (addressesAmounts: Map[String, Long]): Unit = {
     addressesAmounts.foreach { case (address, amount) =>
       val prevAmount = addressAvailabilityMap.getOrElse(address,
         throw new SparkException(s"Try to release an address that doesn't exist. $resourceName " +
           s"address $address doesn't exist."))
 
-      val internalTotal = prevAmount + (amount * RESOURCE_TOTAL_AMOUNT).toLong
+      val total = prevAmount + amount
 
-      if (internalTotal > RESOURCE_TOTAL_AMOUNT) {
+      if (total > RESOURCE_TOTAL_AMOUNT) {
         throw new SparkException(s"Try to release $resourceName address $address " +
-          s"amount: $amount. But the total amount: " +
-          s"${internalTotal.toDouble / RESOURCE_TOTAL_AMOUNT} " +
+          s"amount: ${amount.toDouble / RESOURCE_TOTAL_AMOUNT}. But the total amount: " +
+          s"${total.toDouble / RESOURCE_TOTAL_AMOUNT} " +
           s"after release should be <= 1")
       } else {
-        addressAvailabilityMap(address) = internalTotal
+        addressAvailabilityMap(address) = total
       }
     }
   }

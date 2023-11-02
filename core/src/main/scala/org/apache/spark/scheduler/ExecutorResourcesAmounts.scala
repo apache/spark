@@ -32,22 +32,21 @@ import org.apache.spark.resource.ResourceAmountUtils.RESOURCE_TOTAL_AMOUNT
  * One example is GPUs, where the addresses would be the indices of the GPUs
  *
  * @param resources The executor available resources and amount. eg,
- *                  Map("gpu" -> mutable.Map("0" -> 0.2, "1" -> 1.0),
- *                  "fpga" -> mutable.Map("a" -> 0.3, "b" -> 0.9)
+ *                  Map("gpu" -> Map("0" -> 0.2*RESOURCE_TOTAL_AMOUNT,
+ *                                           "1" -> 1.0*RESOURCE_TOTAL_AMOUNT),
+ *                  "fpga" -> Map("a" -> 0.3*RESOURCE_TOTAL_AMOUNT,
+ *                                        "b" -> 0.9*RESOURCE_TOTAL_AMOUNT)
  *                  )
  */
 private[spark] class ExecutorResourcesAmounts(
-    private val resources: Map[String, Map[String, Double]]) extends Serializable {
+    private val resources: Map[String, Map[String, Long]]) extends Serializable {
 
   /**
-   * Multiply the RESOURCE_TOTAL_AMOUNT to avoid using double directly.
-   * and convert the addressesAmounts to be mutable.HashMap
+   * convert the addressesAmounts to be mutable.HashMap
    */
   private val internalResources: Map[String, HashMap[String, Long]] = {
     resources.map { case (rName, addressAmounts) =>
-      rName -> HashMap(addressAmounts.map { case (address, amount) =>
-        address -> (amount * RESOURCE_TOTAL_AMOUNT).toLong
-      }.toSeq: _*)
+      rName -> HashMap(addressAmounts.toSeq: _*)
     }
   }
 
@@ -76,7 +75,7 @@ private[spark] class ExecutorResourcesAmounts(
    * Acquire the resource and update the resource
    * @param assignedResource the assigned resource information
    */
-  def acquire(assignedResource: Map[String, Map[String, Double]]): Unit = {
+  def acquire(assignedResource: Map[String, Map[String, Long]]): Unit = {
     assignedResource.foreach { case (rName, taskResAmounts) =>
       val availableResourceAmounts = internalResources.getOrElse(rName,
         throw new SparkException(s"Try to acquire an address from $rName that doesn't exist"))
@@ -85,14 +84,12 @@ private[spark] class ExecutorResourcesAmounts(
           throw new SparkException(s"Try to acquire an address that doesn't exist. $rName " +
             s"address $address doesn't exist."))
 
-        val internalTaskAmount = (amount * RESOURCE_TOTAL_AMOUNT).toLong
-        val internalLeft = prevInternalTotalAmount - internalTaskAmount
-        val realLeft = internalLeft.toDouble / RESOURCE_TOTAL_AMOUNT
-        if (realLeft < 0) {
-          throw new SparkException(s"The total amount ${realLeft} " +
+        val left = prevInternalTotalAmount - amount
+        if (left < 0) {
+          throw new SparkException(s"The total amount ${left.toDouble / RESOURCE_TOTAL_AMOUNT} " +
             s"after acquiring $rName address $address should be >= 0")
         }
-        internalResources(rName)(address) = internalLeft
+        internalResources(rName)(address) = left
       }
     }
   }
@@ -101,7 +98,7 @@ private[spark] class ExecutorResourcesAmounts(
    * Release the assigned resources to the resource pool
    * @param assignedResource resource to be released
    */
-  def release(assignedResource: Map[String, Map[String, Double]]): Unit = {
+  def release(assignedResource: Map[String, Map[String, Long]]): Unit = {
     assignedResource.foreach { case (rName, taskResAmounts) =>
       val availableResourceAmounts = internalResources.getOrElse(rName,
         throw new SparkException(s"Try to release an address from $rName that doesn't exist"))
@@ -109,14 +106,13 @@ private[spark] class ExecutorResourcesAmounts(
         val prevInternalTotalAmount = availableResourceAmounts.getOrElse(address,
           throw new SparkException(s"Try to release an address that is not assigned. $rName " +
             s"address $address is not assigned."))
-        val internalTaskAmount = (amount * RESOURCE_TOTAL_AMOUNT).toLong
-        val internalTotal = prevInternalTotalAmount + internalTaskAmount
-        if (internalTotal > RESOURCE_TOTAL_AMOUNT) {
+        val total = prevInternalTotalAmount + amount
+        if (total > RESOURCE_TOTAL_AMOUNT) {
           throw new SparkException(s"The total amount " +
-            s"${internalTotal.toDouble / RESOURCE_TOTAL_AMOUNT} " +
+            s"${total.toDouble / RESOURCE_TOTAL_AMOUNT} " +
             s"after releasing $rName address $address should be <= 1.0")
         }
-        internalResources(rName)(address) = internalTotal
+        internalResources(rName)(address) = total
       }
     }
   }
@@ -129,7 +125,7 @@ private[spark] class ExecutorResourcesAmounts(
    * @return the resource
    */
   def assignResources(taskSetProf: ResourceProfile):
-      Option[(Map[String, ResourceInformation], Map[String, Map[String, Double]])] = {
+      Option[(Map[String, ResourceInformation], Map[String, Map[String, Long]])] = {
 
     // only look at the resource other than cpus
     val tsResources = taskSetProf.getCustomTaskResources()
@@ -138,7 +134,7 @@ private[spark] class ExecutorResourcesAmounts(
     }
 
     val localTaskReqAssign = HashMap[String, ResourceInformation]()
-    val allocatedAddresses = HashMap[String, Map[String, Double]]()
+    val allocatedAddresses = HashMap[String, Map[String, Long]]()
 
     // we go through all resources here so that we can make sure they match and also get what the
     // assignments are for the next task
@@ -148,7 +144,7 @@ private[spark] class ExecutorResourcesAmounts(
 
       internalResources.get(rName) match {
         case Some(addressesAmountMap) =>
-          val allocatedAddressesMap = HashMap[String, Double]()
+          val allocatedAddressesMap = HashMap[String, Long]()
 
           // always sort the addresses
           val addresses = addressesAmountMap.keys.toSeq.sorted
@@ -160,15 +156,15 @@ private[spark] class ExecutorResourcesAmounts(
               if (addressesAmountMap(address) == RESOURCE_TOTAL_AMOUNT) {
                 taskAmount -= 1.0
                 // Assign the full resource of the address
-                allocatedAddressesMap(address) = 1.0
+                allocatedAddressesMap(address) = RESOURCE_TOTAL_AMOUNT
               }
             }
           } else if (taskAmount > 0.0) { // 0 < task.amount < 1.0
-            val internalTaskAmount = taskAmount * RESOURCE_TOTAL_AMOUNT
+            val internalTaskAmount = (taskAmount * RESOURCE_TOTAL_AMOUNT).toLong
             for (address <- addresses if taskAmount > 0) {
               if (addressesAmountMap(address) >= internalTaskAmount) {
                 // Assign the part of the address.
-                allocatedAddressesMap(address) = taskAmount
+                allocatedAddressesMap(address) = internalTaskAmount
                 taskAmount = 0
               }
             }

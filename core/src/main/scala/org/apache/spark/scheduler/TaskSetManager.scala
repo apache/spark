@@ -444,7 +444,7 @@ private[spark] class TaskSetManager(
       maxLocality: TaskLocality.TaskLocality,
       taskCpus: Int = sched.CPUS_PER_TASK,
       taskResourceAssignments: Map[String, ResourceInformation] = Map.empty,
-      taskResourceAmounts: Map[String, Map[String, Double]] = Map.empty)
+      taskResourceAmounts: Map[String, Map[String, Long]] = Map.empty)
     : (Option[TaskDescription], Boolean, Int) =
   {
     val offerExcluded = taskSetExcludelistHelperOpt.exists { excludeList =>
@@ -516,7 +516,7 @@ private[spark] class TaskSetManager(
       taskCpus: Int,
       taskResourceAssignments: Map[String, ResourceInformation],
       launchTime: Long,
-      resourcesAmounts: Map[String, Map[String, Double]]): TaskDescription = {
+      resourcesAmounts: Map[String, Map[String, Long]]): TaskDescription = {
     // Found a task; do some bookkeeping and return a task description
     val task = tasks(index)
     val taskId = sched.newTaskId()
@@ -1385,7 +1385,7 @@ private[scheduler] case class BarrierPendingLaunchTask(
     index: Int,
     taskLocality: TaskLocality.TaskLocality,
     assignedResources: Map[String, ResourceInformation],
-    assignedResourcesAmount: Map[String, Map[String, Double]]) {
+    assignedResourcesAmount: Map[String, Map[String, Long]]) {
   // Stored the corresponding index of the WorkerOffer which is responsible to launch the task.
   // Used to revert the assigned resources (e.g., cores, custome resources) when the barrier
   // task set doesn't launch successfully in a single resourceOffers round.

@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+
 import java.io.{ByteArrayOutputStream, DataOutputStream, UTFDataFormatException}
 import java.nio.ByteBuffer
 import java.util.Properties
@@ -24,6 +25,7 @@ import java.util.Properties
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.{JobArtifactSet, SparkFunSuite}
+import org.apache.spark.resource.ResourceAmountUtils.RESOURCE_TOTAL_AMOUNT
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.resource.ResourceUtils.GPU
 
@@ -62,7 +64,9 @@ class TaskDescriptionSuite extends SparkFunSuite {
     val originalResources =
       Map(GPU -> new ResourceInformation(GPU, Array("1", "2", "3")))
 
-    val originalResourcesAmounts = Map(GPU -> Map("1" -> 0.2, "2" -> 0.5, "3" -> 0.1))
+    val originalResourcesAmounts = Map(GPU -> Map("1" -> (0.2*RESOURCE_TOTAL_AMOUNT).toLong,
+      "2" -> (0.5*RESOURCE_TOTAL_AMOUNT).toLong,
+      "3" -> (0.1*RESOURCE_TOTAL_AMOUNT).toLong))
 
     // Create a dummy byte buffer for the task.
     val taskBuffer = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
