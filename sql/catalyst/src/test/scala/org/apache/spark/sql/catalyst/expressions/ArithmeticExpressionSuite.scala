@@ -268,14 +268,25 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       )
       val mulExact = new java.math.BigDecimal(n1).multiply(new java.math.BigDecimal(n2))
 
+      val divActual = Divide(
+        Literal(Decimal(BigDecimal(n1), p1, s1)),
+        Literal(Decimal(BigDecimal(n2), p2, s2))
+      )
+      val divExact = new java.math.BigDecimal(n1).divide(new java.math.BigDecimal(n2))
+
       Seq(true, false).foreach { allowPrecLoss =>
         withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> allowPrecLoss.toString) {
-
           val mulType = Multiply(null, null).resultDecimalType(p1, s1, p2, s2)
           val mulResult = Decimal(mulExact.setScale(mulType.scale, RoundingMode.HALF_UP))
           val mulExpected =
             if (mulResult.precision > DecimalType.MAX_PRECISION) null else mulResult
           checkEvaluation(mulActual, mulExpected)
+
+          val divType = Divide(null, null).resultDecimalType(p1, s1, p2, s2)
+          val divResult = Decimal(divExact.setScale(divType.scale, RoundingMode.HALF_UP))
+          val divExpected =
+            if (divResult.precision > DecimalType.MAX_PRECISION) null else divResult
+          checkEvaluation(divActual, divExpected)
         }
       }
     }
