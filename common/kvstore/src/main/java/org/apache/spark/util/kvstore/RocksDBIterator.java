@@ -293,7 +293,7 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     private final RocksDB rocksDB;
     private final AtomicBoolean status = new AtomicBoolean(true);
 
-    public ResourceCleaner(RocksIterator rocksIterator, RocksDB rocksDB) {
+    ResourceCleaner(RocksIterator rocksIterator, RocksDB rocksDB) {
       this.rocksIterator = rocksIterator;
       this.rocksDB = rocksDB;
     }
