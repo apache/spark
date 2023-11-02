@@ -18,7 +18,6 @@ package org.apache.spark.sql.connect.client
 
 import java.time.DateTimeException
 
-import scala.collection.immutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
@@ -37,6 +36,7 @@ import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, 
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.streaming.StreamingQueryException
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * GrpcExceptionConverter handles the conversion of StatusRuntimeExceptions into Spark exceptions.
@@ -375,7 +375,7 @@ private[client] object GrpcExceptionConverter {
         FetchErrorDetailsResponse.Error
           .newBuilder()
           .setMessage(message)
-          .addAllErrorTypeHierarchy(immutable.ArraySeq.unsafeWrapArray(classes).asJava)
+          .addAllErrorTypeHierarchy(classes.toImmutableArraySeq.asJava)
           .build()))
   }
 }
