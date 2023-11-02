@@ -43,7 +43,9 @@ object MimaExcludes {
     // [SPARK-44198][CORE] Support propagation of the log level to the executors
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages$SparkAppConfig$"),
     // [SPARK-45427][CORE] Add RPC SSL settings to SSLOptions and SparkTransportConf
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.network.netty.SparkTransportConf.fromSparkConf")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.network.netty.SparkTransportConf.fromSparkConf"),
+    // [SPARK-45762][CORE] Support shuffle managers defined in user jars by changing startup order
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkEnv.this")
   )
 
   // Default exclude rules
