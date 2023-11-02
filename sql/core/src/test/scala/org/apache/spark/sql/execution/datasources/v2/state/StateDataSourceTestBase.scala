@@ -21,6 +21,7 @@ import java.sql.Timestamp
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
@@ -351,6 +352,23 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
       CheckNewAnswer((6, 6L, 6, 6L), (8, 8L, 8, 8L), (10, 10L, 10, 10L)),
       assertNumStateRows(8, 6)
     )
+  }
+
+  protected def runStreamStreamJoinQueryWithOneThousandInputs(checkpointRoot: String): Unit = {
+    val inputData = MemoryStream[(Int, Long)]
+    val query = getStreamStreamJoinQuery(inputData)
+
+    // To ease of tests, we do not run a no-data microbatch to not advance watermark.
+    withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+      testStream(query)(
+        StartStream(checkpointLocation = checkpointRoot),
+        AddData(inputData,
+          (1 to 1000).map { i => (i, i.toLong) }: _*),
+        ProcessAllAvailable(),
+        // filter is applied to both sides as an optimization
+        assertNumStateRows(1000, 1000)
+      )
+    }
   }
 
   private def getStreamStreamJoinQuery(inputStream: MemoryStream[(Int, Long)]): DataFrame = {

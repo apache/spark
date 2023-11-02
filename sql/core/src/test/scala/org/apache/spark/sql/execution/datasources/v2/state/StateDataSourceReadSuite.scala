@@ -20,6 +20,7 @@ import java.io.{File, FileWriter}
 
 import org.scalatest.Assertions
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.{AnalysisException, DataFrame, Encoders, Row}
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, GenericInternalRow}
@@ -136,6 +137,8 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
       intercept[IllegalArgumentException] {
         spark.read.format("statestore")
           .option(StateDataSource.PARAM_STORE_NAME, "")
+          // trick to bypass getting the last committed batch before validating operator ID
+          .option(StateDataSource.PARAM_BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
     }
@@ -162,6 +165,17 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
           // trick to bypass getting the last committed batch before validating operator ID
           .option(StateDataSource.PARAM_BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
+      }
+    }
+  }
+
+  test("ERROR: trying to read state data as stream") {
+    withTempDir { tempDir =>
+      runLargeDataStreamingAggregationQuery(tempDir.getAbsolutePath)
+
+      intercept[SparkUnsupportedOperationException] {
+        spark.readStream.format("statestore").load(tempDir.getAbsolutePath)
+          .writeStream.format("noop").start()
       }
     }
   }
@@ -690,6 +704,76 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
           r.getInt(2) % 2 == 0
         }
       )
+    }
+  }
+
+  test("metadata column with stream-stream join") {
+    val numShufflePartitions = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS)
+
+    withTempDir { tempDir =>
+      runStreamStreamJoinQueryWithOneThousandInputs(tempDir.getAbsolutePath)
+
+      def assertPartitionIdColumnIsNotExposedByDefault(df: DataFrame): Unit = {
+        assert(!df.schema.exists(_.name == "_partition_id"),
+          "metadata column should not be exposed until it is explicitly specified!")
+      }
+
+      def assertPartitionIdColumn(df: DataFrame): Unit = {
+        // NOTE: This is a hash function of distribution for stateful operator.
+        // stream-stream join uses the grouping key for the equality match in the join condition.
+        // partitioning is bound to the operator, hence all state stores in stream-stream join
+        // will have the same partition ID, regardless of the key in the internal state store.
+        val hash = HashPartitioning(
+          Seq(BoundReference(0, IntegerType, nullable = true)),
+          numShufflePartitions)
+        val partIdExpr = hash.partitionIdExpression
+
+        val dfWithPartition = df.selectExpr("key.field0 As key_0", "_partition_id")
+          .where("_partition_id % 2 = 0")
+
+        checkAnswer(dfWithPartition,
+          Range.inclusive(2, 1000, 2).map { idx =>
+            val rowForPartition = new GenericInternalRow(Array(idx.asInstanceOf[Any]))
+            Row(idx, partIdExpr.eval(rowForPartition).asInstanceOf[Int])
+          }.filter { r =>
+            r.getInt(1) % 2 == 0
+          }
+        )
+      }
+
+      def testForSide(side: String): Unit = {
+        val stateReaderForLeft = spark.read
+          .format("statestore")
+          .option(StateDataSource.PARAM_PATH, tempDir.getAbsolutePath)
+          .option(StateDataSource.PARAM_JOIN_SIDE, side)
+          .load()
+
+        assertPartitionIdColumnIsNotExposedByDefault(stateReaderForLeft)
+        assertPartitionIdColumn(stateReaderForLeft)
+
+        val stateReaderForKeyToNumValues = spark.read
+          .format("statestore")
+          .option(StateDataSource.PARAM_PATH, tempDir.getAbsolutePath)
+          .option(StateDataSource.PARAM_STORE_NAME,
+            s"$side-keyToNumValues")
+          .load()
+
+        assertPartitionIdColumnIsNotExposedByDefault(stateReaderForKeyToNumValues)
+        assertPartitionIdColumn(stateReaderForKeyToNumValues)
+
+        val stateReaderForKeyWithIndexToValue = spark.read
+          .format("statestore")
+          .option(StateDataSource.PARAM_PATH, tempDir.getAbsolutePath)
+          .option(StateDataSource.PARAM_STORE_NAME,
+            s"$side-keyWithIndexToValue")
+          .load()
+
+        assertPartitionIdColumnIsNotExposedByDefault(stateReaderForKeyWithIndexToValue)
+        assertPartitionIdColumn(stateReaderForKeyWithIndexToValue)
+      }
+
+      testForSide("left")
+      testForSide("right")
     }
   }
 }
