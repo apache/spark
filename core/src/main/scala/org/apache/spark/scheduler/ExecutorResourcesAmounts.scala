@@ -144,42 +144,37 @@ private[spark] class ExecutorResourcesAmounts(
     // assignments are for the next task
     for ((rName, taskReqs) <- tsResources) {
       // TaskResourceRequest checks the task amount should be in (0, 1] or a whole number
-      val taskAmount = taskReqs.amount
+      var taskAmount = taskReqs.amount
 
       internalResources.get(rName) match {
         case Some(addressesAmountMap) =>
-
-          var internalTaskAmount = (taskAmount * RESOURCE_TOTAL_AMOUNT).toLong
           val allocatedAddressesMap = HashMap[String, Double]()
 
           // always sort the addresses
           val addresses = addressesAmountMap.keys.toSeq.sorted
 
-          for (address <- addresses if internalTaskAmount > 0) {
-            val freeAmount = addressesAmountMap(address)
-
-            // The address is still a whole resource
-            if (freeAmount == RESOURCE_TOTAL_AMOUNT) {
-              // Try to assign this whole address first
-              if (internalTaskAmount >= RESOURCE_TOTAL_AMOUNT) {
-                internalTaskAmount -= RESOURCE_TOTAL_AMOUNT
+          // task.amount is a whole number
+          if (taskAmount >= 1.0) {
+            for (address <- addresses if taskAmount > 0) {
+              // The address is still a whole resource
+              if (addressesAmountMap(address) == RESOURCE_TOTAL_AMOUNT) {
+                taskAmount -= 1.0
                 // Assign the full resource of the address
                 allocatedAddressesMap(address) = 1.0
-              } else {
+              }
+            }
+          } else if (taskAmount > 0.0) { // 0 < task.amount < 1.0
+            val internalTaskAmount = taskAmount * RESOURCE_TOTAL_AMOUNT
+            for (address <- addresses if taskAmount > 0) {
+              if (addressesAmountMap(address) >= internalTaskAmount) {
                 // Assign the part of the address.
                 allocatedAddressesMap(address) = taskAmount
-                internalTaskAmount = 0
-              }
-            } else {
-              // The address is fraction
-              if (freeAmount - internalTaskAmount >= 0) {
-                allocatedAddressesMap(address) = taskAmount
-                internalTaskAmount = 0
+                taskAmount = 0
               }
             }
           }
 
-          if (internalTaskAmount == 0 && allocatedAddressesMap.size > 0) {
+          if (taskAmount == 0 && allocatedAddressesMap.size > 0) {
             localTaskReqAssign.put(rName, new ResourceInformation(rName,
               allocatedAddressesMap.keys.toArray))
             allocatedAddresses.put(rName, allocatedAddressesMap.toMap)
