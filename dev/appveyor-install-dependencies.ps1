@@ -32,6 +32,7 @@ Function InstallR {
   }
 
   $rurl = $CRAN + "/bin/windows/base/" + $urlPath + "R-" + $rVer + "-win.exe"
+  echo $rurl
 
   # Downloading R
   Start-FileDownload $rurl "R-win.exe"
