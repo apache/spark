@@ -695,6 +695,76 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...
         """
 
+        print(self.explainString(extended, mode))
+
+    def explainString(
+        self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
+    ) -> str:
+        """Returns the (logical and physical) plans of the DataFrame.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        extended : bool, optional
+            default ``False``. If ``False``, returns only the physical plan.
+            When this is a string without specifying the ``mode``, it works as the mode is
+            specified.
+        mode : str, optional
+            specifies the expected output format of plans.
+
+            * ``simple``: Returns only a physical plan.
+            * ``extended``: Returns both logical and physical plans.
+            * ``codegen``: Returns a physical plan and generated codes if they are available.
+            * ``cost``: Returns a logical plan and statistics if they are available.
+            * ``formatted``: Split explain output into two sections: a physical plan outline \
+                and node details.
+
+        Returns
+        -------
+        str
+            string representation of the plan
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+
+        Returns the physical plan only (default).
+
+        >>> print(df.explainString())  # doctest: +SKIP
+        == Physical Plan ==
+        *(1) Scan ExistingRDD[age...,name...]
+
+        Returns all of the parsed, analyzed, optimized and physical plans.
+
+        >>> print(df.explainString(True))
+        == Parsed Logical Plan ==
+        ...
+        == Analyzed Logical Plan ==
+        ...
+        == Optimized Logical Plan ==
+        ...
+        == Physical Plan ==
+        ...
+
+        Returns the plans with two sections: a physical plan outline and node details
+
+        >>> print(df.explainString(mode="formatted"))  # doctest: +SKIP
+        == Physical Plan ==
+        * Scan ExistingRDD (...)
+        (1) Scan ExistingRDD [codegen id : ...]
+        Output [2]: [age..., name...]
+        ...
+
+        Return a logical plan and statistics if they are available.
+
+        >>> print(df.explainString("cost"))
+        == Optimized Logical Plan ==
+        ...Statistics...
+        ...
+        """
+
         if extended is not None and mode is not None:
             raise PySparkValueError(
                 error_class="CANNOT_SET_TOGETHER",
@@ -742,7 +812,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         elif is_extended_as_mode:
             explain_mode = cast(str, extended)
         assert self._sc._jvm is not None
-        print(self._sc._jvm.PythonSQLUtils.explainString(self._jdf.queryExecution(), explain_mode))
+        return self._sc._jvm.PythonSQLUtils.explainString(self._jdf.queryExecution(), explain_mode)
 
     def exceptAll(self, other: "DataFrame") -> "DataFrame":
         """Return a new :class:`DataFrame` containing rows in this :class:`DataFrame` but

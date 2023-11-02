@@ -1854,7 +1854,12 @@ class DataFrame:
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
     ) -> None:
-        print(self._explain_string(extended=extended, mode=mode))
+        print(self.explainString(extended=extended, mode=mode))
+
+    def explainString(
+        self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
+    ) -> str:
+        return self._explain_string(extended=extended, mode=mode)
 
     explain.__doc__ = PySparkDataFrame.explain.__doc__
 

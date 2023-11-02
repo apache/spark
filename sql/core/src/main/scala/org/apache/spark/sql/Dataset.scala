@@ -585,16 +585,10 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 3.0.0
    */
-  def explain(mode: String): Unit = sparkSession.withActive {
-    // Because temporary views are resolved during analysis when we create a Dataset, and
-    // `ExplainCommand` analyzes input query plan and resolves temporary views again. Using
-    // `ExplainCommand` here will probably output different query plans, compared to the results
-    // of evaluation of the Dataset. So just output QueryExecution's query plans here.
-
+  def explain(mode: String): Unit =
     // scalastyle:off println
-    println(queryExecution.explainString(ExplainMode.fromString(mode)))
+    println(explainString(mode))
     // scalastyle:on println
-  }
 
   /**
    * Prints the plans (logical and physical) to the console for debugging purposes.
@@ -617,6 +611,52 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def explain(): Unit = explain(SimpleMode.name)
+
+  /**
+   * Returns the plans (logical and physical) with a format specified by a given explain mode.
+   *
+   * @param mode specifies the expected output format of plans.
+   *             <ul>
+   *             <li>`simple` Returns only a physical plan.</li>
+   *             <li>`extended`: Returns both logical and physical plans.</li>
+   *             <li>`codegen`: Returns a physical plan and generated codes if they are
+   *             available.</li>
+   *             <li>`cost`: Returns a logical plan and statistics if they are available.</li>
+   *             <li>`formatted`: Splits explain output into two sections: a physical plan outline
+   *             and node details.</li>
+   *             </ul>
+   * @group basic
+   * @since 4.0.0
+   */
+  def explainString(mode: String): String = sparkSession.withActive {
+    // Because temporary views are resolved during analysis when we create a Dataset, and
+    // `ExplainCommand` analyzes input query plan and resolves temporary views again. Using
+    // `ExplainCommand` here will probably output different query plans, compared to the results
+    // of evaluation of the Dataset. So just output QueryExecution's query plans here.
+
+    queryExecution.explainString(ExplainMode.fromString(mode))
+  }
+
+  /**
+   * Returns the plans (logical and physical) for debugging purposes.
+   *
+   * @param extended default `false`. If `false`, returns only the physical plan.
+   * @group basic
+   * @since 4.0.0
+   */
+  def explainString(extended: Boolean): String = if (extended) {
+    explainString(ExtendedMode.name)
+  } else {
+    explainString(SimpleMode.name)
+  }
+
+  /**
+   * Returns the physical plan for debugging purposes.
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def explainString(): String = explainString(SimpleMode.name)
 
   /**
    * Returns all column names and their data types as an array.

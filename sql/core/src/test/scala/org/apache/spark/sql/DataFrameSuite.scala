@@ -2875,6 +2875,28 @@ class DataFrameSuite extends QueryTest
     }
   }
 
+  test("SPARK-00000: explainString method") {
+    val df = Seq(("John", 30), ("Alice", 25), ("Bob", 28)).toDF()
+    val actual = df.explainString(true)
+    val expected =
+      """
+      |== Parsed Logical Plan ==\\n
+      |LogicalRDD \[_1#[\d]+, _2#[\d]+L\], false\\n
+      |\\n
+      |== Analyzed Logical Plan ==\\n
+      |_1: string, _2: bigint\\n
+      |LogicalRDD \[_1#[\d]+, _2#[\d]+L\], false\\n
+      |\\n
+      |== Optimized Logical Plan ==\\n
+      |LogicalRDD \[_1#[\d]+, _2#[\d]+L\], false\\n
+      |\\n
+      |== Physical Plan ==\\n
+      |\*\(1\) Scan ExistingRDD\[_1#[\d]+,_2#[\d]+L\]\\n
+      |\\n
+      |""".stripMargin.replaceAll("\n", "").r
+    assert(expected.matches(actual))
+  }
+
   test("SPARK-29442 Set `default` mode should override the existing mode") {
     val df = Seq(Tuple1(1)).toDF()
     val writer = df.write.mode("overwrite").mode("default")
