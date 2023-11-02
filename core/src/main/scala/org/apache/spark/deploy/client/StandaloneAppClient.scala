@@ -90,7 +90,7 @@ private[spark] class StandaloneAppClient(
         case e: Exception =>
           logWarning("Failed to connect to master", e)
           markDisconnected()
-          stop()
+          this.stop()
       }
     }
 
@@ -168,7 +168,7 @@ private[spark] class StandaloneAppClient(
 
       case ApplicationRemoved(message) =>
         markDead("Master removed our application: %s".format(message))
-        stop()
+        this.stop()
 
       case ExecutorAdded(id: Int, workerId: String, hostPort: String, cores: Int, memory: Int) =>
         val fullId = s"$appId/$id"
@@ -203,7 +203,7 @@ private[spark] class StandaloneAppClient(
         markDead("Application has been stopped.")
         sendToMaster(UnregisterApplication(appId.get))
         context.reply(true)
-        stop()
+        this.stop()
 
       case r: RequestExecutors =>
         master match {

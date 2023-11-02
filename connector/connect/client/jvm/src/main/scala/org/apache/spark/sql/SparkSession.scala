@@ -21,7 +21,6 @@ import java.net.URI
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
-import scala.collection.immutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 
@@ -45,6 +44,7 @@ import org.apache.spark.sql.internal.{CatalogImpl, SqlApiConf}
 import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The entry point to programming Spark with the Dataset and DataFrame API.
@@ -248,7 +248,7 @@ class SparkSession private[sql] (
         proto.SqlCommand
           .newBuilder()
           .setSql(sqlText)
-          .addAllPosArguments(immutable.ArraySeq.unsafeWrapArray(args.map(lit(_).expr)).asJava)))
+          .addAllPosArguments(args.map(lit(_).expr).toImmutableArraySeq.asJava)))
     val plan = proto.Plan.newBuilder().setCommand(cmd)
     // .toBuffer forces that the iterator is consumed and closed
     val responseSeq = client.execute(plan.build()).toBuffer.toSeq
@@ -665,6 +665,9 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   override def close(): Unit = {
+    if (releaseSessionOnClose) {
+      client.releaseSession()
+    }
     client.shutdown()
     allocator.close()
     SparkSession.onSessionClose(this)
@@ -735,6 +738,11 @@ class SparkSession private[sql] (
    * We null out the instance for now.
    */
   private def writeReplace(): Any = null
+
+  /**
+   * Set to false to prevent client.releaseSession on close() (testing only)
+   */
+  private[sql] var releaseSessionOnClose = true
 }
 
 // The minimal builder needed to create a spark session.
