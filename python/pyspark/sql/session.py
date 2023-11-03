@@ -273,9 +273,8 @@ class SparkSession(SparkConversionMixin):
 
             Set multiple configurations.
 
-            >>> SparkSession.builder \\
-            ...     .config("spark.some.config.number", 123) \\
-            ...     .config("spark.some.config.float", 0.123)
+            >>> SparkSession.builder.config(
+            ...     "spark.some.config.number", 123).config("spark.some.config.float", 0.123)
             <pyspark.sql.session.SparkSession.Builder...
 
             Set multiple configurations using a dictionary.
