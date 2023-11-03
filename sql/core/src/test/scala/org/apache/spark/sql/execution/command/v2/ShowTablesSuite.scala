@@ -59,8 +59,11 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
 
   protected override def namespaceKey: String = "Namespace"
 
-  protected override def extendedTableExpectedResultDiff: String =
+  protected override def extendedTableInfo: String =
     s"""Type: MANAGED
        |Provider: _
-       |Owner: ${Utils.getCurrentUserName()}""".stripMargin
+       |Owner: ${Utils.getCurrentUserName()}
+       |Table Properties: <table properties>""".stripMargin
+
+  protected override def selectCommandSchema: Seq[String] = Seq("id", "data")
 }

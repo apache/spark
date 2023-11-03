@@ -4059,19 +4059,25 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   override def visitShowTableExtended(
       ctx: ShowTableExtendedContext): LogicalPlan = withOrigin(ctx) {
-    def createUnresolvedTable(
+    @inline def createUnresolvedTable(
         nsCtx: IdentifierReferenceContext,
         patternCtx: StringLitContext): LogicalPlan = withOrigin(patternCtx) {
-      val ns = Option(nsCtx).map(x => visitMultipartIdentifier(x.multipartIdentifier()))
-      UnresolvedTable(ns.getOrElse(Seq.empty[String]) :+ string(visitStringLit(patternCtx)),
-        "SHOW TABLE EXTENDED ... PARTITION ...")
+      if (nsCtx != null) {
+        withIdentClause(nsCtx, ns => {
+          val names = ns :+ string(visitStringLit(patternCtx))
+          UnresolvedTable(names, "SHOW TABLE EXTENDED ... PARTITION ...")
+        })
+      } else {
+        val names = Seq.empty[String] :+ string(visitStringLit(patternCtx))
+        UnresolvedTable(names, "SHOW TABLE EXTENDED ... PARTITION ...")
+      }
     }
     Option(ctx.partitionSpec).map { spec =>
       val table = createUnresolvedTable(ctx.identifierReference(), ctx.pattern)
       ShowTablePartition(table, UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(spec)))
     }.getOrElse {
       val ns = if (ctx.identifierReference() != null) {
-        withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
+        withIdentClause(ctx.identifierReference, UnresolvedNamespace)
       } else {
         UnresolvedNamespace(Seq.empty[String])
       }

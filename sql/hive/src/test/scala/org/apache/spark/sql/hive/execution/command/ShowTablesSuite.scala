@@ -55,7 +55,7 @@ class ShowTablesSuite extends v1.ShowTablesSuiteBase with CommandSuiteBase {
       |Created Time: <created time>
       |Last Access: <last access>""".stripMargin
 
-  protected override def extendedTableExpectedResultDiff: String =
+  protected override def extendedTableInfo: String =
     s"""Owner: ${Utils.getCurrentUserName()}
        |Created Time: <created time>
        |Last Access: <last access>

@@ -52,19 +52,18 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   protected def namespaceKey: String = "Database"
 
-  protected def extendedTableExpectedResultDiff: String
+  protected def extendedTableInfo: String
 
   private def extendedTableExpectedResult(
       catalog: String,
-      namespaceName: String,
       namespace: String,
       table: String,
       partColName: String,
       dataColName: String): String = {
     s"""Catalog: $catalog
-       |$namespaceName: $namespace
+       |$namespaceKey: $namespace
        |Table: $table
-       |$extendedTableExpectedResultDiff
+       |$extendedTableInfo
        |Partition Provider: Catalog
        |Partition Columns: [`$partColName`]
        |Schema: root
@@ -293,7 +292,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         // replace "Created Time", "Last Access", "Created By", "Location"
         val actualResult_0_3 = replace(resultCollect(0)(3).toString)
         val expectedResult_0_3 = extendedTableExpectedResult(
-          catalog, namespaceKey, namespace, table, "id", "data")
+          catalog, namespace, table, "id", "data")
         assert(actualResult_0_3 === expectedResult_0_3)
 
         assert(resultCollect(1).length == 4)
@@ -302,7 +301,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         val actualResult_1_3 = replace(resultCollect(1)(3).toString)
         // replace "Table Properties"
         val expectedResult_1_3 = extendedTableExpectedResult(
-          catalog, namespaceKey, namespace, table1, "id1", "data1")
+          catalog, namespace, table1, "id1", "data1")
         assert(actualResult_1_3 === expectedResult_1_3)
 
         assert(resultCollect(2).length == 4)
@@ -311,7 +310,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         val actualResult_2_3 = replace(resultCollect(2)(3).toString)
         // replace "Table Properties"
         val expectedResult_2_3 = extendedTableExpectedResult(
-          catalog, namespaceKey, namespace, table2, "id2", "data2")
+          catalog, namespace, table2, "id2", "data2")
         assert(actualResult_2_3 === expectedResult_2_3)
       }
     }
@@ -411,5 +410,56 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
       case s"Partition Parameters:$_" => "Partition Parameters: <partition parameters>"
       case other => other
     }.mkString("\n")
+  }
+
+  /**
+   * - V1: `show extended` and `select *` display the schema,
+   *     the partition columns will be always displayed at the end.
+   * - V2: `show extended` display the schema, the partition columns
+   *     will be always displayed at the end,
+   *     but `select *` will respect the original table schema.
+   */
+  protected def selectCommandSchema: Seq[String] = Seq("data", "id")
+  test("show table extended: partition columns are always showed at the end") {
+    val namespace = "ns1"
+    val table = "tbl"
+    withNamespaceAndTable(namespace, table, catalog) { _ =>
+      sql(s"CREATE TABLE $catalog.$namespace.$table (id bigint, data string) " +
+        s"$defaultUsing PARTITIONED BY (id)")
+      sql(s"INSERT INTO $catalog.$namespace.$table PARTITION (id = 1) (data) VALUES ('data1')")
+      val result = sql(s"SELECT * FROM $catalog.$namespace.$table")
+      assert(result.schema.fieldNames === selectCommandSchema)
+
+      val table1 = "tbl1"
+      withTable(table1) {
+        sql(s"CREATE TABLE $catalog.$namespace.$table1 (data string, id bigint) " +
+          s"$defaultUsing PARTITIONED BY (id)")
+        sql(s"INSERT INTO $catalog.$namespace.$table1 PARTITION (id = 1) (data) VALUES ('data2')")
+        val result1 = sql(s"SELECT * FROM $catalog.$namespace.$table1")
+        assert(result1.schema.fieldNames === Seq("data", "id"))
+
+        val extendedResult = sql(s"SHOW TABLE EXTENDED IN $catalog.$namespace LIKE '$table*'").
+          sort("tableName")
+        val extendedResultCollect = extendedResult.collect()
+
+        assert(extendedResultCollect(0)(1) === table)
+        assert(extendedResultCollect(0)(3).toString.endsWith(
+          """Schema: root
+            | |-- data: string (nullable = true)
+            | |-- id: long (nullable = true)
+            |
+            |""".stripMargin
+        ))
+
+        assert(extendedResultCollect(1)(1) === table1)
+        assert(extendedResultCollect(1)(3).toString.endsWith(
+          """Schema: root
+            | |-- data: string (nullable = true)
+            | |-- id: long (nullable = true)
+            |
+            |""".stripMargin
+        ))
+      }
+    }
   }
 }

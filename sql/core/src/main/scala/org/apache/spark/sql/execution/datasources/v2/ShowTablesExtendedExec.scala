@@ -25,14 +25,14 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.ResolvedPartitionSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal, ToPrettyString}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, StringUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, SupportsPartitionManagement, Table, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits.TableHelper
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * Physical plan node for showing tables without partition, Show the information of tables.
@@ -63,14 +63,12 @@ case class ShowTablesExtendedExec(
       case Seq(db) => Some(db)
       case _ => None
     }
-    val views = sessionCatalog.listTempViews(db.getOrElse(""), pattern)
-    views.map { viewIdent =>
-      val database = viewIdent.database.getOrElse("")
-      val tableName = viewIdent.table
-      val isTemp = sessionCatalog.isTempView(viewIdent)
-      val view = sessionCatalog.getTempViewOrPermanentTableMetadata(viewIdent)
-      val information = view.simpleString
-      rows += toCatalystRow(database, tableName, isTemp, s"$information\n")
+    val tempViews = sessionCatalog.listTempViews(db.getOrElse(""), pattern)
+    tempViews.map { tempView =>
+      val database = tempView.identifier.database.getOrElse("")
+      val tableName = tempView.identifier.table
+      val information = tempView.simpleString
+      rows += toCatalystRow(database, tableName, true, s"$information\n")
     }
 
     rows.toSeq
@@ -106,7 +104,7 @@ case class ShowTablesExtendedExec(
         .sortBy(_._1).map {
         case (key, value) => key + "=" + value
       }.mkString("[", ",", "]")
-    if (table.properties().isEmpty) {
+    if (!table.properties().isEmpty) {
       results.put("Table Properties", properties.mkString("[", ", ", "]"))
     }
 
@@ -162,14 +160,15 @@ case class ShowTablePartitionExec(
     if (partitionIdentifiers.isEmpty) {
       throw QueryCompilationErrors.notExistPartitionError(tableIdent, ident, partitionSchema)
     }
+    assert(partitionIdentifiers.length == 1)
     val row = partitionIdentifiers.head
     val len = partitionSchema.length
     val partitions = new Array[String](len)
     val timeZoneId = conf.sessionLocalTimeZone
     for (i <- 0 until len) {
       val dataType = partitionSchema(i).dataType
-      val partValueUTF8String =
-        Cast(Literal(row.get(i, dataType), dataType), StringType, Some(timeZoneId)).eval()
+      val partValueUTF8String = ToPrettyString(Literal(row.get(i, dataType), dataType),
+        Some(timeZoneId)).eval(null)
       val partValueStr = if (partValueUTF8String == null) "null" else partValueUTF8String.toString
       partitions(i) = escapePathName(partitionSchema(i).name) + "=" + escapePathName(partValueStr)
     }

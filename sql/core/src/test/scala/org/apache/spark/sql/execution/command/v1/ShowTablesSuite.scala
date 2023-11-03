@@ -170,7 +170,7 @@ class ShowTablesSuite extends ShowTablesSuiteBase with CommandSuiteBase {
       |Created Time: <created time>
       |Last Access: <last access>""".stripMargin
 
-  protected override def extendedTableExpectedResultDiff: String =
+  protected override def extendedTableInfo: String =
     """Created Time: <created time>
       |Last Access: <last access>
       |Created By: <created by>
