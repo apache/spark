@@ -1095,7 +1095,7 @@ class SessionCatalog(
    */
   def listTempViews(db: String, pattern: String): Seq[TableIdentifier] = {
     val dbName = format(db)
-    val dbViews = if (dbName == globalTempViewManager.database) {
+    val globalTempViews = if (dbName == globalTempViewManager.database) {
       globalTempViewManager.listViewNames(pattern).map { name =>
         TableIdentifier(name, Some(globalTempViewManager.database))
       }

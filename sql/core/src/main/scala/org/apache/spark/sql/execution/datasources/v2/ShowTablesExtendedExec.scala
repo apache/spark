@@ -63,7 +63,7 @@ case class ShowTablesExtendedExec(
       case Seq(db) => Some(db)
       case _ => None
     }
-    val views = sessionCatalog.listTempViews(db.get, pattern)
+    val views = sessionCatalog.listTempViews(db.getOrElse(""), pattern)
     views.map { viewIdent =>
       val database = viewIdent.database.getOrElse("")
       val tableName = viewIdent.table

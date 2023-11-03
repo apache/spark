@@ -177,7 +177,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
       parameters = Map("schemaName" -> "`nonexist`"))
   }
 
-  test("show table extended in a not existing table") {
+  test("show table extended with no matching table") {
     val namespace = "ns1"
     val table = "nonexist"
     withNamespaceAndTable(namespace, table, catalog) { _ =>
@@ -188,7 +188,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
-  test("show table extended in a not existing partition") {
+  test("show table extended with a not existing partition") {
     val namespace = "ns1"
     val table = "tbl"
     withNamespaceAndTable(namespace, table, catalog) { tbl =>
@@ -317,7 +317,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
-  test("show table extended in temp view, include: temp global, temp local") {
+  test("show table extended with temp views") {
     val namespace = "ns"
     val table = "tbl"
     withNamespaceAndTable(namespace, table, catalog) { t =>
@@ -354,7 +354,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         assert(actualLocalResult === expectedLocalResult)
 
         // temp global view
-        val globalResult = sql(s"SHOW TABLE EXTENDED in global_temp LIKE '$viewName*'").
+        val globalResult = sql(s"SHOW TABLE EXTENDED IN global_temp LIKE '$viewName*'").
           sort("tableName")
         assert(globalResult.schema.fieldNames ===
           Seq("namespace", "tableName", "isTemporary", "information"))
