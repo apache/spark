@@ -122,12 +122,7 @@ class StaxXmlParser(
       }
       val parser = StaxXmlParserUtils.filteredReader(xml)
       val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
-      // A structure object is an attribute-only element
-      // if it only consists of attributes and valueTags.
-      val isRootAttributesOnly = schema.fields.forall { f =>
-        f.name == options.valueTag || f.name.startsWith(options.attributePrefix)
-      }
-      Some(convertObject(parser, schema, options, rootAttributes, isRootAttributesOnly))
+      Some(convertObject(parser, schema, options, rootAttributes))
     } catch {
       case e: SparkUpgradeException => throw e
       case e@(_: RuntimeException | _: XMLStreamException | _: MalformedInputException
@@ -329,8 +324,7 @@ class StaxXmlParser(
       parser: XMLEventReader,
       schema: StructType,
       options: XmlOptions,
-      rootAttributes: Array[Attribute] = Array.empty,
-      isRootAttributesOnly: Boolean = false): InternalRow = {
+      rootAttributes: Array[Attribute] = Array.empty): InternalRow = {
     val row = new Array[Any](schema.length)
     val nameToIndex = schema.map(_.name).zipWithIndex.toMap
     // If there are attributes, then we process them first.
@@ -395,13 +389,6 @@ class StaxXmlParser(
           case NonFatal(e) =>
             badRecordException = badRecordException.orElse(Some(e))
         }
-
-        case c: Characters if !c.isWhiteSpace && isRootAttributesOnly =>
-          nameToIndex.get(options.valueTag) match {
-            case Some(index) =>
-              row(index) = convertTo(c.getData, schema(index).dataType, options)
-            case None => // do nothing
-          }
 
         case _: EndElement =>
           shouldStop = StaxXmlParserUtils.checkEndElement(parser)

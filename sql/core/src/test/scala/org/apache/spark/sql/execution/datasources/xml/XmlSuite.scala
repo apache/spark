@@ -1645,43 +1645,4 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       .xml(getTestResourcePath(resDir + "fias_house.xml"))
     assert(df.collect().length === 37)
   }
-
-  test("root-level value tag for attributes-only object") {
-
-    val schema = buildSchema(field("_attr"), field("_VALUE"))
-    val results = Seq(
-      // user specified schema
-      spark.read
-        .schema(schema)
-        .xml(getTestResourcePath(resDir + "root-level-value.xml")).collect(),
-      // schema inference
-      spark.read
-        .xml(getTestResourcePath(resDir + "root-level-value.xml")).collect())
-    results.foreach { result =>
-      assert(result.length === 3)
-      assert(result(0).getAs[String]("_VALUE") == "value1")
-      assert(result(1).getAs[String]("_attr") == "attr1"
-        && result(1).getAs[String]("_VALUE") == "value2")
-      // comments aren't included in valueTag
-      assert(result(2).getAs[String]("_VALUE") == "\n        value3\n        ")
-    }
-  }
-
-  test("root-level value tag for attributes-only object - from xml") {
-    val xmlData =
-      s"""
-         |<ROW attr="attr1">123456</ROW>
-         |""".stripMargin
-    val df = Seq((1, xmlData)).toDF("number", "payload")
-    val xmlSchema = schema_of_xml(xmlData)
-    val schema = buildSchema(
-      field("_VALUE", LongType),
-      field("_attr"))
-    val expectedSchema = df.schema.add("decoded", schema)
-    val result = df.withColumn("decoded",
-      from_xml(df.col("payload"), xmlSchema, Map[String, String]().asJava))
-    assert(expectedSchema == result.schema)
-    assert(result.select("decoded._VALUE").head().getLong(0) === 123456L)
-    assert(result.select("decoded._attr").head().getString(0) === "attr1")
-  }
 }
