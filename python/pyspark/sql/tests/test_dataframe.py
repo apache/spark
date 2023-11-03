@@ -699,25 +699,44 @@ class DataFrameTestsMixin:
 
     def test_explain_string(self):
         import re
+        from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
         df = self.spark.createDataFrame([("John", 30), ("Alice", 25), ("Bob", 28)])
         actual = df.explainString(True)
-        expected = "".join(
-            [
-                r"== Parsed Logical Plan ==\n",
-                r"LogicalRDD [_1#[\d]+, _2#[\d]+L], false\n",
-                r"\n",
-                r"== Analyzed Logical Plan ==\n",
-                r"_1: string, _2: bigint\n",
-                r"LogicalRDD [_1#[\d]+, _2#[\d]+L], false\n",
-                r"\n",
-                r"== Optimized Logical Plan ==\n",
-                r"LogicalRDD [_1#[\d]+, _2#[\d]+L], false\n",
-                r"\n",
-                r"== Physical Plan ==\n",
-                r"\*\(1\) Scan ExistingRDD[_1#[\d]+,_2#[\d]+L]\n",
-            ]
-        )
+        if isinstance(self.spark, RemoteSparkSession):
+            expected = "".join(
+                [
+                    r"== Parsed Logical Plan ==\n",
+                    r"LocalRelation [_1#[\d]+, _2#[\d]+L]\n",
+                    r"\n",
+                    r"== Analyzed Logical Plan ==\n",
+                    r"_1: string, _2: bigint\n",
+                    r"LocalRelation [_1#[\d]+, _2#[\d]+L]\n",
+                    r"\n",
+                    r"== Optimized Logical Plan ==\n",
+                    r"LocalRelation [_1#[\d]+, _2#[\d]+L]\n",
+                    r"\n",
+                    r"== Physical Plan ==\n",
+                    r"LocalTableScan [_1#[\d]+, _2#[\d]+L]\n",
+                ]
+            )
+        else:
+            expected = "".join(
+                [
+                    r"== Parsed Logical Plan ==\n",
+                    r"LogicalRDD [_1#[\d]+, _2#[\d]+L], false\n",
+                    r"\n",
+                    r"== Analyzed Logical Plan ==\n",
+                    r"_1: string, _2: bigint\n",
+                    r"LogicalRDD [_1#[\d]+, _2#[\d]+L], false\n",
+                    r"\n",
+                    r"== Optimized Logical Plan ==\n",
+                    r"LogicalRDD [_1#[\d]+, _2#[\d]+L], false\n",
+                    r"\n",
+                    r"== Physical Plan ==\n",
+                    r"\*\(1\) Scan ExistingRDD[_1#[\d]+,_2#[\d]+L]\n",
+                ]
+            )
         self.assertTrue(re.match(expected, actual))
 
     def test_unpivot(self):
