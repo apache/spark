@@ -45,6 +45,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Whether to submit, kill, or request the status of an application.
@@ -84,7 +85,7 @@ private[spark] class SparkSubmit extends Logging {
   }
 
   protected def parseArguments(args: Array[String]): SparkSubmitArguments = {
-    new SparkSubmitArguments(args)
+    new SparkSubmitArguments(args.toImmutableArraySeq)
   }
 
   /**
@@ -1057,7 +1058,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
       self =>
 
       override protected def parseArguments(args: Array[String]): SparkSubmitArguments = {
-        new SparkSubmitArguments(args) {
+        new SparkSubmitArguments(args.toImmutableArraySeq) {
           override protected def logInfo(msg: => String): Unit = self.logInfo(msg)
 
           override protected def logWarning(msg: => String): Unit = self.logWarning(msg)
