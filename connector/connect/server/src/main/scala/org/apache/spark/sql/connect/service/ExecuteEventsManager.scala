@@ -275,7 +275,7 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
         }
       case ExecuteStatus.Finished | ExecuteStatus.Failed | ExecuteStatus.Canceled |
           ExecuteStatus.Closed =>
-        if (sessionStatus != SessionStatus.Started || sessionStatus != SessionStatus.Closed) {
+        if (sessionStatus != SessionStatus.Started && sessionStatus != SessionStatus.Closed) {
           throw new IllegalStateException(s"""
             sessionId: $sessionId with status $sessionStatus
             is not Started/Closed for event $eventStatus
