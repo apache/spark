@@ -45,7 +45,6 @@ import org.apache.spark.util.NextIterator
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
 object SparkPlan {
-
   /** The original [[LogicalPlan]] from which this [[SparkPlan]] is converted. */
   val LOGICAL_PLAN_TAG = TreeNodeTag[LogicalPlan]("logical_plan")
 
@@ -79,22 +78,22 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   val id: Int = SparkPlan.newPlanId()
 
   /**
-   * Return true if this stage of the plan supports row-based execution. A plan can also support
-   * columnar execution (see `supportsColumnar`). Spark will decide which execution to be called
-   * during query planning.
+   * Return true if this stage of the plan supports row-based execution. A plan
+   * can also support columnar execution (see `supportsColumnar`). Spark will decide
+   * which execution to be called during query planning.
    */
   def supportsRowBased: Boolean = !supportsColumnar
 
   /**
-   * Return true if this stage of the plan supports columnar execution. A plan can also support
-   * row-based execution (see `supportsRowBased`). Spark will decide which execution to be called
-   * during query planning.
+   * Return true if this stage of the plan supports columnar execution. A plan
+   * can also support row-based execution (see `supportsRowBased`). Spark will decide
+   * which execution to be called during query planning.
    */
   def supportsColumnar: Boolean = false
 
   /**
-   * The exact java types of the columns that are output in columnar processing mode. This is a
-   * performance optimization for code generation and is optional.
+   * The exact java types of the columns that are output in columnar processing mode. This
+   * is a performance optimization for code generation and is optional.
    */
   def vectorTypes: Option[Seq[String]] = None
 
@@ -108,8 +107,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * @return
-   *   The logical plan this plan is linked to.
+   * @return The logical plan this plan is linked to.
    */
   def logicalLink: Option[LogicalPlan] =
     getTagValue(SparkPlan.LOGICAL_PLAN_TAG)
@@ -138,8 +136,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * @return
-   *   All metrics containing metrics of this SparkPlan.
+   * @return All metrics containing metrics of this SparkPlan.
    */
   def metrics: Map[String, SQLMetric] = Map.empty
 
@@ -152,34 +149,33 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * @return
-   *   [[SQLMetric]] for the `name`.
+   * @return [[SQLMetric]] for the `name`.
    */
   def longMetric(name: String): SQLMetric = metrics(name)
 
   // TODO: Move to `DistributedPlan`
   /**
-   * Specifies how data is partitioned across different nodes in the cluster. Note this method may
-   * fail if it is invoked before `EnsureRequirements` is applied since `PartitioningCollection`
-   * requires all its partitionings to have the same number of partitions.
+   * Specifies how data is partitioned across different nodes in the cluster.
+   * Note this method may fail if it is invoked before `EnsureRequirements` is applied
+   * since `PartitioningCollection` requires all its partitionings to have
+   * the same number of partitions.
    */
   def outputPartitioning: Partitioning = UnknownPartitioning(0) // TODO: WRONG WIDTH!
 
   /**
-   * Specifies the data distribution requirements of all the children for this operator. By
-   * default it's [[UnspecifiedDistribution]] for each child, which means each child can have any
+   * Specifies the data distribution requirements of all the children for this operator. By default
+   * it's [[UnspecifiedDistribution]] for each child, which means each child can have any
    * distribution.
    *
    * If an operator overwrites this method, and specifies distribution requirements(excluding
    * [[UnspecifiedDistribution]] and [[BroadcastDistribution]]) for more than one child, Spark
-   * guarantees that the outputs of these children will have same number of partitions, so that
-   * the operator can safely zip partitions of these children's result RDDs. Some operators can
-   * leverage this guarantee to satisfy some interesting requirement, e.g., non-broadcast joins
-   * can specify HashClusteredDistribution(a,b) for its left child, and specify
-   * HashClusteredDistribution(c,d) for its right child, then it's guaranteed that left and right
-   * child are co-partitioned by a,b/c,d, which means tuples of same value are in the partitions
-   * of same index, e.g., (a=1,b=2) and (c=1,d=2) are both in the second partition of left and
-   * right child.
+   * guarantees that the outputs of these children will have same number of partitions, so that the
+   * operator can safely zip partitions of these children's result RDDs. Some operators can leverage
+   * this guarantee to satisfy some interesting requirement, e.g., non-broadcast joins can specify
+   * HashClusteredDistribution(a,b) for its left child, and specify HashClusteredDistribution(c,d)
+   * for its right child, then it's guaranteed that left and right child are co-partitioned by
+   * a,b/c,d, which means tuples of same value are in the partitions of same index, e.g.,
+   * (a=1,b=2) and (c=1,d=2) are both in the second partition of left and right child.
    */
   def requiredChildDistribution: Seq[Distribution] =
     Seq.fill(children.size)(UnspecifiedDistribution)
@@ -201,8 +197,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * Returns the result of this query as a broadcast variable by delegating to
-   * `doExecuteBroadcast` after preparations.
+   * Returns the result of this query as a broadcast variable by delegating to `doExecuteBroadcast`
+   * after preparations.
    *
    * Concrete implementations of SparkPlan should override `doExecuteBroadcast`.
    */
@@ -214,11 +210,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * Returns the result of this query as an RDD[ColumnarBatch] by delegating to
-   * `doColumnarExecute` after preparations.
+   * Returns the result of this query as an RDD[ColumnarBatch] by delegating to `doColumnarExecute`
+   * after preparations.
    *
-   * Concrete implementations of SparkPlan should override `doColumnarExecute` if
-   * `supportsColumnar` returns true.
+   * Concrete implementations of SparkPlan should override `doColumnarExecute` if `supportsColumnar`
+   * returns true.
    */
   final def executeColumnar(): RDD[ColumnarBatch] = executeQuery {
     if (isCanonicalizedPlan) {
@@ -253,8 +249,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * List of (uncorrelated scalar subquery, future holding the subquery result) for this plan
-   * node. This list is populated by [[prepareSubqueries]], which is called in [[prepare]].
+   * List of (uncorrelated scalar subquery, future holding the subquery result) for this plan node.
+   * This list is populated by [[prepareSubqueries]], which is called in [[prepare]].
    */
   @transient
   private val runningSubqueries = new ArrayBuffer[ExecSubqueryExpression]
@@ -264,9 +260,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   protected def prepareSubqueries(): Unit = {
     expressions.foreach {
-      _.collect { case e: ExecSubqueryExpression =>
-        e.plan.prepare()
-        runningSubqueries += e
+      _.collect {
+        case e: ExecSubqueryExpression =>
+          e.plan.prepare()
+          runningSubqueries += e
       }
     }
   }
@@ -321,9 +318,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * `execute` of SparkPlan. This is helpful if we want to set up some state before executing the
    * query, e.g., `BroadcastHashJoin` uses it to broadcast asynchronously.
    *
-   * @note
-   *   `prepare` method has already walked down the tree, so the implementation doesn't have to
-   *   call children's `prepare` methods.
+   * @note `prepare` method has already walked down the tree, so the implementation doesn't have
+   * to call children's `prepare` methods.
    *
    * This will only be called once, protected by `this`.
    */
@@ -351,9 +347,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * when it is no longer needed. This allows input formats to be able to reuse batches if needed.
    */
   protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    throw SparkException.internalError(
-      s"Internal Error ${this.getClass} has column support" +
-        s" mismatch:\n${this}")
+    throw SparkException.internalError(s"Internal Error ${this.getClass} has column support" +
+      s" mismatch:\n${this}")
   }
 
   /**
@@ -362,9 +357,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Overridden by concrete implementations of SparkPlan.
    */
   protected def doExecuteWrite(writeFilesSpec: WriteFilesSpec): RDD[WriterCommitMessage] = {
-    throw SparkException.internalError(
-      s"Internal Error ${this.getClass} has write support" +
-        s" mismatch:\n${this}")
+    throw SparkException.internalError(s"Internal Error ${this.getClass} has write support" +
+      s" mismatch:\n${this}")
   }
 
   /**
@@ -373,18 +367,18 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   def toRowBased: SparkPlan = if (supportsColumnar) ColumnarToRowExec(this) else this
 
   /**
-   * Packing the UnsafeRows into byte array for faster serialization. The byte arrays are in the
-   * following format: [size] [bytes of UnsafeRow] [size] [bytes of UnsafeRow] ... [-1]
+   * Packing the UnsafeRows into byte array for faster serialization.
+   * The byte arrays are in the following format:
+   * [size] [bytes of UnsafeRow] [size] [bytes of UnsafeRow] ... [-1]
    *
    * UnsafeRow is highly compressible (at least 8 bytes for any column), the byte array is also
    * compressed.
    */
   private def getByteArrayRdd(
-      n: Int = -1,
-      takeFromEnd: Boolean = false): RDD[(Long, ChunkedByteBuffer)] = {
+      n: Int = -1, takeFromEnd: Boolean = false): RDD[(Long, ChunkedByteBuffer)] = {
     execute().mapPartitionsInternal { iter =>
       var count = 0
-      val buffer = new Array[Byte](4 << 10) // 4K
+      val buffer = new Array[Byte](4 << 10)  // 4K
       val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
       val cbbos = new ChunkedByteBufferOutputStream(1024 * 1024, ByteBuffer.allocate)
       val out = new DataOutputStream(codec.compressedOutputStream(cbbos))
@@ -475,16 +469,14 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   private[spark] def executeCollectIterator(): (Long, Iterator[InternalRow]) = {
     val countsAndBytes = getByteArrayRdd().collect()
     val total = countsAndBytes.map(_._1).sum
-    val rows =
-      countsAndBytes.iterator.flatMap(countAndBytes => decodeUnsafeRows(countAndBytes._2))
+    val rows = countsAndBytes.iterator.flatMap(countAndBytes => decodeUnsafeRows(countAndBytes._2))
     (total, rows)
   }
 
   /**
    * Runs this query returning the result as an iterator of InternalRow.
    *
-   * @note
-   *   Triggers multiple jobs (one for each partition).
+   * @note Triggers multiple jobs (one for each partition).
    */
   def executeToIterator(): Iterator[InternalRow] = {
     getByteArrayRdd().map(_._2).toLocalIterator.flatMap(decodeUnsafeRows)
@@ -550,11 +542,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         parts
       }
       val sc = sparkContext
-      val res = sc.runJob(
-        childRDD,
-        (it: Iterator[(Long, ChunkedByteBuffer)]) =>
-          if (it.hasNext) it.next() else (0L, new ChunkedByteBuffer()),
-        partsToScan)
+      val res = sc.runJob(childRDD, (it: Iterator[(Long, ChunkedByteBuffer)]) =>
+        if (it.hasNext) it.next() else (0L, new ChunkedByteBuffer()), partsToScan)
 
       var i = 0
 
@@ -590,8 +579,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   /**
    * Cleans up the resources used by the physical operator (if any). In general, all the resources
-   * should be cleaned up when the task finishes but operators like SortMergeJoinExec and
-   * LimitExec may want eager cleanup to free up tight resources (e.g., memory).
+   * should be cleaned up when the task finishes but operators like SortMergeJoinExec and LimitExec
+   * may want eager cleanup to free up tight resources (e.g., memory).
    */
   protected[sql] def cleanupResources(): Unit = {
     children.foreach(_.cleanupResources())
