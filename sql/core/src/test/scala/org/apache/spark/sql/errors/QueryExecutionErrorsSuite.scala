@@ -22,6 +22,8 @@ import java.net.{URI, URL}
 import java.sql.{Connection, DatabaseMetaData, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
 import java.util.{Locale, Properties, ServiceConfigurationError}
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.mockito.Mockito.{mock, spy, when}
@@ -37,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
 import org.apache.spark.sql.catalyst.rules.RuleIdCollection
 import org.apache.spark.sql.catalyst.util.BadRecordException
+import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
@@ -57,7 +60,8 @@ class QueryExecutionErrorsSuite
   extends QueryTest
   with ParquetTest
   with OrcTest
-  with SharedSparkSession {
+  with SharedSparkSession
+  with DataTypeErrorsBase {
 
   import testImplicits._
 
@@ -908,15 +912,15 @@ class QueryExecutionErrorsSuite
               }
               exception
             }
-          assert(exceptions.map(e => e.isDefined).reduceLeft(_ || _))
-          exceptions.map { e =>
-            if (e.isDefined) {
-              checkError(
-                e.get,
-                errorClass = "CONCURRENT_QUERY",
-                sqlState = Some("0A000")
-              )
-            }
+          // Only check if errors exist to deflake. We couldn't guarantee that
+          // the above 50 runs must hit this error.
+          exceptions.flatten.map { e =>
+            checkError(
+              e,
+              errorClass = "CONCURRENT_QUERY",
+              sqlState = Some("0A000"),
+              parameters = e.getMessageParameters.asScala.toMap
+            )
           }
           spark.streams.active.foreach(_.stop())
         }
@@ -1063,6 +1067,33 @@ class QueryExecutionErrorsSuite
         parameters = Map("relationId" -> "`spark_catalog`.`default`.`t`")
       )
     }
+  }
+
+  test("Unexpected `start` for slice()") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("select slice(array(1,2,3), 0, 1)").collect()
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.START",
+      parameters = Map(
+        "parameter" -> toSQLId("start"),
+        "functionName" -> toSQLId("slice")
+      )
+    )
+  }
+
+  test("Unexpected `length` for slice()") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("select slice(array(1,2,3), 1, -1)").collect()
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.LENGTH",
+      parameters = Map(
+        "parameter" -> toSQLId("length"),
+        "length" -> (-1).toString,
+        "functionName" -> toSQLId("slice")
+      )
+    )
   }
 }
 

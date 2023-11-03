@@ -44,6 +44,7 @@ import org.apache.spark.sql.internal.{CatalogImpl, SqlApiConf}
 import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The entry point to programming Spark with the Dataset and DataFrame API.
@@ -247,7 +248,7 @@ class SparkSession private[sql] (
         proto.SqlCommand
           .newBuilder()
           .setSql(sqlText)
-          .addAllPosArguments(args.map(lit(_).expr).toIterable.asJava)))
+          .addAllPosArguments(args.map(lit(_).expr).toImmutableArraySeq.asJava)))
     val plan = proto.Plan.newBuilder().setCommand(cmd)
     // .toBuffer forces that the iterator is consumed and closed
     val responseSeq = client.execute(plan.build()).toBuffer.toSeq
@@ -306,7 +307,7 @@ class SparkSession private[sql] (
           proto.SqlCommand
             .newBuilder()
             .setSql(sqlText)
-            .putAllNamedArguments(args.asScala.mapValues(lit(_).expr).toMap.asJava)))
+            .putAllNamedArguments(args.asScala.view.mapValues(lit(_).expr).toMap.asJava)))
       val plan = proto.Plan.newBuilder().setCommand(cmd)
       // .toBuffer forces that the iterator is consumed and closed
       val responseSeq = client.execute(plan.build()).toBuffer.toSeq
@@ -576,7 +577,7 @@ class SparkSession private[sql] (
   /**
    * Add a single artifact to the client session.
    *
-   * Currently only local files with extensions .jar and .class are supported.
+   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
    *
    * @since 3.4.0
    */
@@ -586,7 +587,7 @@ class SparkSession private[sql] (
   /**
    * Add one or more artifacts to the session.
    *
-   * Currently only local files with extensions .jar and .class are supported.
+   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
    *
    * @since 3.4.0
    */
@@ -664,6 +665,9 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   override def close(): Unit = {
+    if (releaseSessionOnClose) {
+      client.releaseSession()
+    }
     client.shutdown()
     allocator.close()
     SparkSession.onSessionClose(this)
@@ -734,6 +738,11 @@ class SparkSession private[sql] (
    * We null out the instance for now.
    */
   private def writeReplace(): Any = null
+
+  /**
+   * Set to false to prevent client.releaseSession on close() (testing only)
+   */
+  private[sql] var releaseSessionOnClose = true
 }
 
 // The minimal builder needed to create a spark session.

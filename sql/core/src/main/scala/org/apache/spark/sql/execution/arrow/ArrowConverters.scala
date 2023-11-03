@@ -315,7 +315,7 @@ private[sql] object ArrowConverters extends Logging {
       val reader =
         new ArrowStreamReader(new ByteArrayInputStream(arrowBatchIter.next()), allocator)
       val root = if (reader.loadNextBatch()) reader.getVectorSchemaRoot else null
-      resources.append(reader, root)
+      resources.appendAll(Seq(reader, root))
       if (root == null) {
         (Iterator.empty, null)
       } else {

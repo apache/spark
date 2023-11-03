@@ -42,7 +42,7 @@ private[spark] class BoundedPriorityQueue[A](maxSize: Int)(implicit ord: Orderin
   override def knownSize: Int = size
 
   override def addAll(xs: IterableOnce[A]): this.type = {
-    xs.foreach { this += _ }
+    xs.iterator.foreach { this += _ }
     this
   }
 

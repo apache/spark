@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.io.File
+import java.io.{File, PrintStream}
 import java.lang.reflect.InvocationTargetException
 import java.net.{URL, URLClassLoader}
 import java.util
@@ -31,14 +31,14 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.shims.ShimLoader
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.SparkSubmitUtils
+import org.apache.spark.deploy.SparkSubmit
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.NonClosableMutableURLClassLoader
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.{MutableURLClassLoader, Utils, VersionUtils}
+import org.apache.spark.util.{MavenUtils, MutableURLClassLoader, Utils, VersionUtils}
 
 /** Factory for `IsolatedClientLoader` with specific versions of hive. */
 private[hive] object IsolatedClientLoader extends Logging {
@@ -127,10 +127,11 @@ private[hive] object IsolatedClientLoader extends Logging {
         .map(a => s"org.apache.hive:$a:${version.fullVersion}") ++
       Seq("com.google.guava:guava:14.0.1") ++ hadoopJarNames
 
+    implicit val printStream: PrintStream = SparkSubmit.printStream
     val classpaths = quietly {
-      SparkSubmitUtils.resolveMavenCoordinates(
+      MavenUtils.resolveMavenCoordinates(
         hiveArtifacts.mkString(","),
-        SparkSubmitUtils.buildIvySettings(
+        MavenUtils.buildIvySettings(
           Some(remoteRepos),
           ivyPath),
         transitive = true,

@@ -161,14 +161,17 @@ public class ReloadingX509TrustManagerSuite {
       // At this point we haven't reloaded, just the initial load
       assertEquals(0, tm.reloadCount);
 
+      // Wait so that the file modification time is different
+      Thread.sleep((tm.getReloadInterval() + 1000));
+
       // Add another cert
       Map<String, X509Certificate> certs = new HashMap<String, X509Certificate>();
       certs.put("cert1", cert1);
       certs.put("cert2", cert2);
       createTrustStore(trustStore, "password", certs);
 
-      // Wait up to 5s until we reload
-      waitForReloadCount(tm, 1, 50);
+      // Wait up to 10s until we reload
+      waitForReloadCount(tm, 1, 100);
 
       assertEquals(2, tm.getAcceptedIssuers().length);
     } finally {
@@ -286,8 +289,8 @@ public class ReloadingX509TrustManagerSuite {
       trustStoreSymlink.delete();
       Files.createSymbolicLink(trustStoreSymlink.toPath(), trustStore2.toPath());
 
-      // Wait up to 5s until we reload
-      waitForReloadCount(tm, 1, 50);
+      // Wait up to 10s until we reload
+      waitForReloadCount(tm, 1, 100);
 
       assertEquals(2, tm.getAcceptedIssuers().length);
 
@@ -295,8 +298,8 @@ public class ReloadingX509TrustManagerSuite {
       certs.put("cert3", cert3);
       createTrustStore(trustStore2, "password", certs);
 
-      // Wait up to 5s until we reload
-      waitForReloadCount(tm, 2, 50);
+      // Wait up to 10s until we reload
+      waitForReloadCount(tm, 2, 100);
 
       assertEquals(3, tm.getAcceptedIssuers().length);
     } finally {

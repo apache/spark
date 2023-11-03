@@ -25,26 +25,34 @@ import org.apache.spark.sql.types.StructType
 class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   import IntegratedUDFTestUtils._
 
+  private def dataSourceName = "SimpleDataSource"
+  private def simpleDataSourceReaderScript: String =
+    """
+      |class SimpleDataSourceReader(DataSourceReader):
+      |    def partitions(self):
+      |        return range(0, 2)
+      |    def read(self, partition):
+      |        yield (0, partition)
+      |        yield (1, partition)
+      |        yield (2, partition)
+      |""".stripMargin
+
   test("simple data source") {
+    assume(shouldTestPythonUDFs)
     val dataSourceScript =
-      """
+      s"""
         |from pyspark.sql.datasource import DataSource, DataSourceReader
-        |class MyDataSourceReader(DataSourceReader):
-        |    def partitions(self):
-        |        return range(0, 2)
-        |    def read(self, partition):
-        |        yield (0, partition)
-        |        yield (1, partition)
-        |        yield (2, partition)
+        |$simpleDataSourceReaderScript
         |
-        |class MyDataSource(DataSource):
+        |class $dataSourceName(DataSource):
         |    def reader(self, schema):
-        |        return MyDataSourceReader()
+        |        return SimpleDataSourceReader()
         |""".stripMargin
     val schema = StructType.fromDDL("id INT, partition INT")
     val dataSource = createUserDefinedPythonDataSource(
-      name = "MyDataSource", pythonScript = dataSourceScript, schema = schema)
-    val df = dataSource(spark)
+      name = dataSourceName, pythonScript = dataSourceScript)
+    val df = dataSource.apply(
+      spark, provider = dataSourceName, userSpecifiedSchema = Some(schema))
     assert(df.rdd.getNumPartitions == 2)
     val plan = df.queryExecution.optimizedPlan
     plan match {
@@ -55,36 +63,130 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
   }
 
-  test("reader not implemented") {
+  test("simple data source with string schema") {
+    assume(shouldTestPythonUDFs)
     val dataSourceScript =
-      """
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceReader
+         |$simpleDataSourceReaderScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT, partition INT"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    val df = dataSource(spark, provider = dataSourceName)
+    checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
+  }
+
+  test("simple data source with StructType schema") {
+    assume(shouldTestPythonUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceReader
+         |from pyspark.sql.types import IntegerType, StructType, StructField
+         |$simpleDataSourceReaderScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return StructType([
+         |            StructField("id", IntegerType()),
+         |            StructField("partition", IntegerType())
+         |        ])
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    val df = dataSource(spark, provider = dataSourceName)
+    checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
+  }
+
+  test("data source with invalid schema") {
+    assume(shouldTestPythonUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceReader
+         |$simpleDataSourceReaderScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "INT"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    checkError(
+      exception = intercept[AnalysisException](dataSource(spark, provider = dataSourceName)),
+      errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      parameters = Map("inputSchema" -> "INT", "dataType" -> "\"INT\""))
+  }
+
+  test("register data source") {
+    assume(shouldTestPythonUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceReader
+         |$simpleDataSourceReaderScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT, partition INT"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader()
+         |""".stripMargin
+
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sharedState.dataSourceManager.dataSourceExists(dataSourceName))
+
+    // Check error when registering a data source with the same name.
+    val err = intercept[AnalysisException] {
+      spark.dataSource.registerPython(dataSourceName, dataSource)
+    }
+    checkError(
+      exception = err,
+      errorClass = "DATA_SOURCE_ALREADY_EXISTS",
+      parameters = Map("provider" -> dataSourceName))
+  }
+
+  test("reader not implemented") {
+    assume(shouldTestPythonUDFs)
+    val dataSourceScript =
+       s"""
         |from pyspark.sql.datasource import DataSource, DataSourceReader
-        |class MyDataSource(DataSource):
+        |class $dataSourceName(DataSource):
         |    pass
         |""".stripMargin
     val schema = StructType.fromDDL("id INT, partition INT")
     val dataSource = createUserDefinedPythonDataSource(
-      name = "MyDataSource", pythonScript = dataSourceScript, schema = schema)
+      name = dataSourceName, pythonScript = dataSourceScript)
     val err = intercept[AnalysisException] {
-      dataSource(spark).collect()
+      dataSource(spark, dataSourceName, userSpecifiedSchema = Some(schema)).collect()
     }
     assert(err.getErrorClass == "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON")
     assert(err.getMessage.contains("PYTHON_DATA_SOURCE_METHOD_NOT_IMPLEMENTED"))
   }
 
   test("error creating reader") {
+    assume(shouldTestPythonUDFs)
     val dataSourceScript =
-      """
+      s"""
         |from pyspark.sql.datasource import DataSource
-        |class MyDataSource(DataSource):
+        |class $dataSourceName(DataSource):
         |    def reader(self, schema):
         |        raise Exception("error creating reader")
         |""".stripMargin
     val schema = StructType.fromDDL("id INT, partition INT")
     val dataSource = createUserDefinedPythonDataSource(
-      name = "MyDataSource", pythonScript = dataSourceScript, schema = schema)
+      name = dataSourceName, pythonScript = dataSourceScript)
     val err = intercept[AnalysisException] {
-      dataSource(spark).collect()
+      dataSource(spark, dataSourceName, userSpecifiedSchema = Some(schema)).collect()
     }
     assert(err.getErrorClass == "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON")
     assert(err.getMessage.contains("PYTHON_DATA_SOURCE_CREATE_ERROR"))
@@ -92,17 +194,18 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("data source assertion error") {
+    assume(shouldTestPythonUDFs)
     val dataSourceScript =
-      """
-        |class MyDataSource:
+      s"""
+        |class $dataSourceName:
         |   def __init__(self, options):
         |       ...
         |""".stripMargin
     val schema = StructType.fromDDL("id INT, partition INT")
     val dataSource = createUserDefinedPythonDataSource(
-      name = "MyDataSource", pythonScript = dataSourceScript, schema = schema)
+      name = dataSourceName, pythonScript = dataSourceScript)
     val err = intercept[AnalysisException] {
-      dataSource(spark).collect()
+      dataSource(spark, dataSourceName, userSpecifiedSchema = Some(schema)).collect()
     }
     assert(err.getErrorClass == "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON")
     assert(err.getMessage.contains("PYTHON_DATA_SOURCE_TYPE_MISMATCH"))

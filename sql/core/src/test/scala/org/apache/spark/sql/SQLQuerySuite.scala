@@ -1920,7 +1920,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           dfNoCols.select($"b.*")
         },
         errorClass = "CANNOT_RESOLVE_STAR_EXPAND",
-        parameters = Map("targetString" -> "`b`", "columns" -> ""))
+        parameters = Map("targetString" -> "`b`", "columns" -> ""),
+        context = ExpectedContext(
+          fragment = "$",
+          callSitePattern = getCurrentClassCallSitePattern))
     }
   }
 

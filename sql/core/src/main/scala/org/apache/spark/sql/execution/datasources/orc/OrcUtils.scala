@@ -49,12 +49,12 @@ object OrcUtils extends Logging {
 
   // The extensions for ORC compression codecs
   val extensionsForCompressionCodecNames = Map(
-    "NONE" -> "",
-    "SNAPPY" -> ".snappy",
-    "ZLIB" -> ".zlib",
-    "ZSTD" -> ".zstd",
-    "LZ4" -> ".lz4",
-    "LZO" -> ".lzo")
+    OrcCompressionCodec.NONE.name() -> "",
+    OrcCompressionCodec.SNAPPY.name() -> ".snappy",
+    OrcCompressionCodec.ZLIB.name() -> ".zlib",
+    OrcCompressionCodec.ZSTD.name() -> ".zstd",
+    OrcCompressionCodec.LZ4.name() -> ".lz4",
+    OrcCompressionCodec.LZO.name() -> ".lzo")
 
   val CATALYST_TYPE_ATTRIBUTE_NAME = "spark.sql.catalyst.type"
 

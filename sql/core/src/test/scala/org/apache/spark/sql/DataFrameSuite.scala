@@ -354,7 +354,8 @@ class DataFrameSuite extends QueryTest
         "paramIndex" -> "1",
         "inputSql"-> "\"csv\"",
         "inputType" -> "\"STRING\"",
-        "requiredType" -> "(\"ARRAY\" or \"MAP\")")
+        "requiredType" -> "(\"ARRAY\" or \"MAP\")"),
+      context = ExpectedContext(fragment = "explode", getCurrentClassCallSitePattern)
     )
 
     val df2 = Seq(Array("1", "2"), Array("4"), Array("7", "8", "9")).toDF("csv")
@@ -2947,7 +2948,8 @@ class DataFrameSuite extends QueryTest
         df.groupBy($"d", $"b").as[GroupByKey, Row]
       },
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      parameters = Map("objectName" -> "`d`", "proposal" -> "`a`, `b`, `c`"))
+      parameters = Map("objectName" -> "`d`", "proposal" -> "`a`, `b`, `c`"),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("SPARK-40601: flatMapCoGroupsInPandas should fail with different number of keys") {

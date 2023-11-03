@@ -63,7 +63,7 @@ private[spark] class DiskBlockObjectWriter(
    */
   private trait ManualCloseOutputStream extends OutputStream {
     abstract override def close(): Unit = {
-      flush()
+      this.flush()
     }
 
     def manualClose(): Unit = {

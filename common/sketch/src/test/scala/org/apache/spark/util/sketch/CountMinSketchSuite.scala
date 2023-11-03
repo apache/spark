@@ -56,7 +56,7 @@ class CountMinSketchSuite extends AnyFunSuite { // scalastyle:ignore funsuite
 
       val exactFreq = {
         val sampledItems = sampledItemIndices.map(allItems)
-        sampledItems.groupBy(identity).mapValues(_.length.toLong)
+        sampledItems.groupBy(identity).view.mapValues(_.length.toLong)
       }
 
       val sketch = CountMinSketch.create(epsOfTotalCount, confidence, seed)
