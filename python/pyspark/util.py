@@ -346,14 +346,17 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
         def outer(ff: Callable) -> Callable:
             session_client_thread_local_attrs = [
                 (attr, copy.deepcopy(value))
-                for (attr, value) in session.client.thread_local.__dict__.items()
+                for (
+                    attr,
+                    value,
+                ) in session.client.thread_local.__dict__.items()  # type: ignore[union-attr]
             ]
 
             @functools.wraps(ff)
             def inner(*args: Any, **kwargs: Any) -> Any:
                 # Set thread locals in child thread.
                 for attr, value in session_client_thread_local_attrs:
-                    setattr(session.client.thread_local, attr, value)
+                    setattr(session.client.thread_local, attr, value)  # type: ignore[union-attr]
                 return ff(*args, **kwargs)
 
             return inner
