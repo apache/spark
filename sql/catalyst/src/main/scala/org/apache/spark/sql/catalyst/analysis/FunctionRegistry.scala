@@ -834,7 +834,8 @@ object FunctionRegistry {
 
     // Xml
     expression[XmlToStructs]("from_xml"),
-    expression[SchemaOfXml]("schema_of_xml")
+    expression[SchemaOfXml]("schema_of_xml"),
+    expression[StructsToXml]("to_xml")
   )
 
   val builtin: SimpleFunctionRegistry = {

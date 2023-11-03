@@ -22,13 +22,14 @@ import java.util.Comparator
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, SQLQueryContext, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAYS_ZIP, CONCAT, TreePattern}
 import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, PhysicalIntegralType}
 import org.apache.spark.sql.catalyst.util._
@@ -2003,8 +2004,8 @@ case class ArrayJoin(
          |${ev.value} = $buffer.build();""".stripMargin
 
     if (array.nullable || delimiter.nullable) {
-      arrayGen.code + ctx.nullSafeExec(array.nullable, arrayGen.isNull) {
-        delimiterGen.code + ctx.nullSafeExec(delimiter.nullable, delimiterGen.isNull) {
+      arrayGen.code.toString + ctx.nullSafeExec(array.nullable, arrayGen.isNull) {
+        delimiterGen.code.toString + ctx.nullSafeExec(delimiter.nullable, delimiterGen.isNull) {
           s"""
              |${ev.isNull} = false;
              |$resultCode""".stripMargin
@@ -2526,7 +2527,7 @@ case class ElementAt(
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): ElementAt = copy(left = newLeft, right = newRight)
 
-  override def initQueryContext(): Option[SQLQueryContext] = {
+  override def initQueryContext(): Option[QueryContext] = {
     if (failOnError && left.resolved && left.dataType.isInstanceOf[ArrayType]) {
       Some(origin.context)
     } else {
@@ -2650,7 +2651,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
       }
     case ArrayType(elementType, _) =>
       input => {
-        val inputs = children.toStream.map(_.eval(input))
+        val inputs = children.to(LazyList).map(_.eval(input))
         if (inputs.contains(null)) {
           null
         } else {
@@ -3087,9 +3088,9 @@ case class Sequence(
 
     if (nullable) {
       val nullSafeEval =
-        startGen.code + ctx.nullSafeExec(start.nullable, startGen.isNull) {
-          stopGen.code + ctx.nullSafeExec(stop.nullable, stopGen.isNull) {
-            stepGen.code + ctx.nullSafeExec(stepOpt.exists(_.nullable), stepGen.isNull) {
+        startGen.code.toString + ctx.nullSafeExec(start.nullable, startGen.isNull) {
+          stopGen.code.toString + ctx.nullSafeExec(stop.nullable, stopGen.isNull) {
+            stepGen.code.toString + ctx.nullSafeExec(stepOpt.exists(_.nullable), stepGen.isNull) {
               s"""
                  |${ev.isNull} = false;
                  |$resultCode
@@ -5006,8 +5007,8 @@ case class ArrayInsert(
 
     if (nullable) {
       val nullSafeEval =
-        leftGen.code + ctx.nullSafeExec(first.nullable, leftGen.isNull) {
-          midGen.code + ctx.nullSafeExec(second.nullable, midGen.isNull) {
+        leftGen.code.toString + ctx.nullSafeExec(first.nullable, leftGen.isNull) {
+          midGen.code.toString + ctx.nullSafeExec(second.nullable, midGen.isNull) {
             s"""
               ${rightGen.code}
               ${ev.isNull} = false;
@@ -5046,7 +5047,7 @@ case class ArrayInsert(
       newSrcArrayExpr: Expression, newPosExpr: Expression, newItemExpr: Expression): ArrayInsert =
     copy(srcArrayExpr = newSrcArrayExpr, posExpr = newPosExpr, itemExpr = newItemExpr)
 
-  override def initQueryContext(): Option[SQLQueryContext] = Some(origin.context)
+  override def initQueryContext(): Option[QueryContext] = Some(origin.context)
 }
 
 @ExpressionDescription(

@@ -22,6 +22,8 @@ import java.net.{URI, URL}
 import java.sql.{Connection, DatabaseMetaData, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
 import java.util.{Locale, Properties, ServiceConfigurationError}
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.mockito.Mockito.{mock, spy, when}
@@ -910,15 +912,15 @@ class QueryExecutionErrorsSuite
               }
               exception
             }
-          assert(exceptions.map(e => e.isDefined).reduceLeft(_ || _))
-          exceptions.map { e =>
-            if (e.isDefined) {
-              checkError(
-                e.get,
-                errorClass = "CONCURRENT_QUERY",
-                sqlState = Some("0A000")
-              )
-            }
+          // Only check if errors exist to deflake. We couldn't guarantee that
+          // the above 50 runs must hit this error.
+          exceptions.flatten.map { e =>
+            checkError(
+              e,
+              errorClass = "CONCURRENT_QUERY",
+              sqlState = Some("0A000"),
+              parameters = e.getMessageParameters.asScala.toMap
+            )
           }
           spark.streams.active.foreach(_.stop())
         }

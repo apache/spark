@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive
 
 import java.time.{Duration, Period}
 import java.time.temporal.ChronoUnit
-import java.util.Locale
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, ParquetTest}
@@ -158,8 +157,8 @@ class HiveParquetSuite extends QueryTest
 
   test("SPARK-37098: Alter table properties should invalidate cache") {
     // specify the compression in case we change it in future
-    withSQLConf(SQLConf.PARQUET_COMPRESSION.key ->
-      ParquetCompressionCodec.SNAPPY.name().toLowerCase(Locale.ROOT)) {
+    withSQLConf(
+      SQLConf.PARQUET_COMPRESSION.key -> ParquetCompressionCodec.SNAPPY.lowerCaseName()) {
       withTempPath { dir =>
         withTable("t") {
           sql(s"CREATE TABLE t (c int) STORED AS PARQUET LOCATION '${dir.getCanonicalPath}'")

@@ -412,7 +412,10 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`invalid`",
-        "proposal" -> "`value`, `key`"))
+        "proposal" -> "`value`, `key`"),
+      context = ExpectedContext(
+        fragment = "count",
+        callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("numerical aggregate functions on string column") {
@@ -1232,7 +1235,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     ).toDF("a", "b", "c")
 
     val w = Window.partitionBy("a").orderBy("b")
-    val selectExprs = Stream(
+    val selectExprs = LazyList(
       sum("c").over(w.rowsBetween(Window.unboundedPreceding, Window.currentRow)).as("sumc"),
       avg("c").over(w.rowsBetween(Window.unboundedPreceding, Window.currentRow)).as("avgc")
     )

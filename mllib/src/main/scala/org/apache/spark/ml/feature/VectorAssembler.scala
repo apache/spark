@@ -296,7 +296,9 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
         throw new SparkException(s"$o of type ${o.getClass.getName} is not supported.")
     }
 
-    val (idxArray, valArray) = (indices.result(), values.result())
-    Vectors.sparse(featureIndex, idxArray, valArray).compressed(idxArray.length)
+    val idxArray = indices.result()
+    val valArray = values.result()
+    Vectors.sparse(featureIndex, idxArray, valArray)
+      .compressedWithNNZ(idxArray.length)
   }
 }

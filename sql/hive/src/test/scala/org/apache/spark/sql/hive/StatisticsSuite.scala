@@ -77,12 +77,12 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       withTable("csv_table") {
         withTempDir { tempDir =>
           // EXTERNAL OpenCSVSerde table pointing to LOCATION
-          val file1 = new File(tempDir + "/data1")
+          val file1 = new File(s"$tempDir/data1")
           Utils.tryWithResource(new PrintWriter(file1)) { writer =>
             writer.write("1,2")
           }
 
-          val file2 = new File(tempDir + "/data2")
+          val file2 = new File(s"$tempDir/data2")
           Utils.tryWithResource(new PrintWriter(file2)) { writer =>
             writer.write("1,2")
           }
@@ -937,7 +937,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
           withTempDir { loadPath =>
             // load data command
-            val file = new File(loadPath + "/data")
+            val file = new File(s"$loadPath/data")
             Utils.tryWithResource(new PrintWriter(file)) { writer =>
               writer.write("2,xyz")
             }
@@ -1461,7 +1461,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     withTempDir { tempDir =>
       withTable("t1") {
         spark.range(5).write.mode(SaveMode.Overwrite).parquet(tempDir.getCanonicalPath)
-        Utils.tryWithResource(new PrintWriter(new File(tempDir + "/temp.crc"))) { writer =>
+        Utils.tryWithResource(new PrintWriter(new File(s"$tempDir/temp.crc"))) { writer =>
           writer.write("1,2")
         }
 
