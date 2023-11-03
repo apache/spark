@@ -373,7 +373,10 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
         resolution={"id": resolution.raw["id"]},
     )
 
-    print_jira_issue_summary(issue)
+    try:
+        print_jira_issue_summary(asf_jira.issue(issue.key))
+    except Exception:
+        print("Unable to fetch JIRA issue %s after resolving" % issue.key)
     print("Successfully resolved %s with fixVersions=%s!" % (issue.key, fix_versions))
 
 
