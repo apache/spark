@@ -241,10 +241,4 @@ private[spark] object UI {
     .version("3.4.0")
     .booleanConf
     .createWithDefault(true)
-
-  val UI_HISTORY_SERVER_URL = ConfigBuilder("spark.ui.historyServerUrl")
-    .doc("This is the URL where your history server is running.")
-    .version("4.0.0")
-    .stringConf
-    .createOptional
 }
