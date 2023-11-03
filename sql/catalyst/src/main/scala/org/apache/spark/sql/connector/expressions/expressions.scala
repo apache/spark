@@ -21,6 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Helper methods for working with the logical expressions API.
@@ -44,13 +45,14 @@ private[sql] object LogicalExpressions {
   def apply(name: String, arguments: Expression*): Transform = ApplyTransform(name, arguments)
 
   def bucket(numBuckets: Int, references: Array[NamedReference]): BucketTransform =
-    BucketTransform(literal(numBuckets, IntegerType), references)
+    BucketTransform(literal(numBuckets, IntegerType), references.toImmutableArraySeq)
 
   def bucket(
       numBuckets: Int,
       references: Array[NamedReference],
       sortedCols: Array[NamedReference]): SortedBucketTransform =
-    SortedBucketTransform(literal(numBuckets, IntegerType), references, sortedCols)
+    SortedBucketTransform(literal(numBuckets, IntegerType),
+      references.toImmutableArraySeq, sortedCols.toImmutableArraySeq)
 
   def identity(reference: NamedReference): IdentityTransform = IdentityTransform(reference)
 
@@ -198,7 +200,7 @@ private object Lit {
  */
 private object Ref {
   def unapply(named: NamedReference): Some[Seq[String]] = {
-    Some(named.fieldNames)
+    Some(named.fieldNames.toImmutableArraySeq)
   }
 }
 
@@ -207,7 +209,7 @@ private object Ref {
  */
 private[sql] object NamedTransform {
   def unapply(transform: Transform): Some[(String, Seq[Expression])] = {
-    Some((transform.name, transform.arguments))
+    Some((transform.name, transform.arguments.toImmutableArraySeq))
   }
 }
 

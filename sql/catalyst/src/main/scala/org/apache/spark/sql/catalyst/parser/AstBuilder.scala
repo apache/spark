@@ -51,6 +51,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.random.RandomSampler
 
 /**
@@ -2622,7 +2623,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
             .split("\\s")
             .map(_.toLowerCase(Locale.ROOT).stripSuffix("s"))
             .filter(s => s != "interval" && s.matches("[a-z]+"))
-          constructMultiUnitsIntervalLiteral(ctx, interval, units)
+          constructMultiUnitsIntervalLiteral(ctx, interval, units.toImmutableArraySeq)
         } else {
           Literal(interval, CalendarIntervalType)
         }

@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * An extended version of [[InternalRow]] that implements all special getters, toString
@@ -170,7 +171,7 @@ class GenericInternalRow(val values: Array[Any]) extends BaseGenericInternalRow 
 
   override protected def genericGet(ordinal: Int) = values(ordinal)
 
-  override def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = values.clone()
+  override def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = values.clone().toImmutableArraySeq
 
   override def numFields: Int = values.length
 

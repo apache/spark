@@ -42,6 +42,7 @@ import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Object for grouping error messages from exceptions thrown during query compilation.
@@ -845,7 +846,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       ident: Identifier,
       operation: String): Throwable = {
     unsupportedTableOperationError(
-      catalog.name +: ident.namespace :+ ident.name, operation)
+      (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq, operation)
   }
 
   def unsupportedTableOperationError(

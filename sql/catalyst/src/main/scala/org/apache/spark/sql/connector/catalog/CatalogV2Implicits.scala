@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, QuotingUtils}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, LogicalExpressions, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Conversion helpers for working with v2 [[CatalogPlugin]].
@@ -131,7 +132,7 @@ private[sql] object CatalogV2Implicits {
 
     def original: String = ident.namespace() :+ ident.name() mkString "."
 
-    def asMultipartIdentifier: Seq[String] = ident.namespace :+ ident.name
+    def asMultipartIdentifier: Seq[String] = (ident.namespace :+ ident.name).toImmutableArraySeq
 
     def asTableIdentifier: TableIdentifier = ident.namespace match {
       case ns if ns.isEmpty => TableIdentifier(ident.name)
