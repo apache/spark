@@ -44,13 +44,13 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
           case With(child, defs) if defs.forall(!_.containsPattern(WITH_EXPRESSION)) =>
             val idToCheapExpr = mutable.HashMap.empty[Long, Expression]
             val idToNonCheapExpr = mutable.HashMap.empty[Long, Alias]
-            defs.foreach { commonExprDef =>
+            defs.zipWithIndex.foreach { case (commonExprDef, index) =>
               if (CollapseProject.isCheap(commonExprDef.child)) {
                 idToCheapExpr(commonExprDef.id) = commonExprDef.child
               } else {
                 // TODO: we should calculate the ref count and also inline the common expression
                 //       if it's ref count is 1.
-                val alias = Alias(commonExprDef.child, s"_common_expr_${commonExprDef.id}")()
+                val alias = Alias(commonExprDef.child, s"_common_expr_$index")()
                 commonExprs += alias
                 idToNonCheapExpr(commonExprDef.id) = alias
               }

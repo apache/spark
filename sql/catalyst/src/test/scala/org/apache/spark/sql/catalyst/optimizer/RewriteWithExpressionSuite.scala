@@ -19,10 +19,11 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{CommonExpressionDef, CommonExpressionRef, With}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CommonExpressionDef, CommonExpressionRef, With}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.types.IntegerType
 
 class RewriteWithExpressionSuite extends PlanTest {
 
@@ -46,7 +47,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     val commonExprDef = CommonExpressionDef(a + a)
     val ref = new CommonExpressionRef(commonExprDef)
     val plan = testRelation.select(With(ref * ref, Seq(commonExprDef)).as("col"))
-    val commonExprName = "_common_expr_" + commonExprDef.id
+    val commonExprName = "_common_expr_0"
     comparePlans(
       Optimizer.execute(plan),
       testRelation
@@ -61,23 +62,25 @@ class RewriteWithExpressionSuite extends PlanTest {
     val commonExprDef = CommonExpressionDef(a + a)
     val ref = new CommonExpressionRef(commonExprDef)
     val innerExpr = With(ref + ref, Seq(commonExprDef))
-    val innerCommonExprName = "_common_expr_" + commonExprDef.id
+    val innerCommonExprName = "_common_expr_0"
 
     val b = testRelation.output.last
     val outerCommonExprDef = CommonExpressionDef(innerExpr + b)
     val outerRef = new CommonExpressionRef(outerCommonExprDef)
     val outerExpr = With(outerRef * outerRef, Seq(outerCommonExprDef))
-    val outerCommonExprName = "_common_expr_" + outerCommonExprDef.id
+    val outerCommonExprName = "_common_expr_0"
 
     val plan = testRelation.select(outerExpr.as("col"))
     val rewrittenOuterExpr = ($"$innerCommonExprName" + $"$innerCommonExprName" + b)
       .as(outerCommonExprName)
+    val outerExprAttr = AttributeReference(outerCommonExprName, IntegerType)(
+      exprId = rewrittenOuterExpr.exprId)
     comparePlans(
       Optimizer.execute(plan),
       testRelation
         .select((testRelation.output :+ (a + a).as(innerCommonExprName)): _*)
         .select((testRelation.output :+ $"$innerCommonExprName" :+ rewrittenOuterExpr): _*)
-        .select(($"$outerCommonExprName" * $"$outerCommonExprName").as("col"))
+        .select((outerExprAttr * outerExprAttr).as("col"))
         .analyze
     )
   }
@@ -87,7 +90,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     val commonExprDef = CommonExpressionDef(a + a)
     val ref = new CommonExpressionRef(commonExprDef)
     val plan = testRelation.where(With(ref < 10 && ref > 0, Seq(commonExprDef)))
-    val commonExprName = "_common_expr_" + commonExprDef.id
+    val commonExprName = "_common_expr_0"
     comparePlans(
       Optimizer.execute(plan),
       testRelation
@@ -104,7 +107,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     val ref = new CommonExpressionRef(commonExprDef)
     val condition = With(ref < 10 && ref > 0, Seq(commonExprDef))
     val plan = testRelation.join(testRelation2, condition = Some(condition))
-    val commonExprName = "_common_expr_" + commonExprDef.id
+    val commonExprName = "_common_expr_0"
     comparePlans(
       Optimizer.execute(plan),
       testRelation
@@ -121,7 +124,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     val ref = new CommonExpressionRef(commonExprDef)
     val condition = With(ref < 10 && ref > 0, Seq(commonExprDef))
     val plan = testRelation.join(testRelation2, condition = Some(condition))
-    val commonExprName = "_common_expr_" + commonExprDef.id
+    val commonExprName = "_common_expr_0"
     comparePlans(
       Optimizer.execute(plan),
       testRelation
