@@ -163,7 +163,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       // At first, all the rows belong to the root nodes (node Id == 1).
       nodeIds = baggedInput.map { _ => Array.fill(numTrees)(1) }
       nodeIdCheckpointer = new PeriodicRDDCheckpointer[Array[Int]](
-        strategy.getCheckpointInterval, sc, StorageLevel.MEMORY_AND_DISK)
+        strategy.getCheckpointInterval(), sc, StorageLevel.MEMORY_AND_DISK)
       nodeIdCheckpointer.update(nodeIds)
     }
 
@@ -232,7 +232,7 @@ private[spark] object RandomForest extends Logging with Serializable {
         if (strategy.algo == OldAlgo.Classification) {
           topNodes.map { rootNode =>
             new DecisionTreeClassificationModel(uid, rootNode.toNode(prune), numFeatures,
-              strategy.getNumClasses)
+              strategy.getNumClasses())
           }
         } else {
           topNodes.map { rootNode =>
@@ -243,7 +243,7 @@ private[spark] object RandomForest extends Logging with Serializable {
         if (strategy.algo == OldAlgo.Classification) {
           topNodes.map { rootNode =>
             new DecisionTreeClassificationModel(rootNode.toNode(prune), numFeatures,
-              strategy.getNumClasses)
+              strategy.getNumClasses())
           }
         } else {
           topNodes.map(rootNode =>

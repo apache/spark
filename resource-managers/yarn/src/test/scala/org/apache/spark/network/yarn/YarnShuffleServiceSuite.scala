@@ -24,9 +24,9 @@ import java.nio.file.attribute.PosixFilePermission._
 import java.util.EnumSet
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import com.codahale.metrics.MetricSet
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -387,7 +387,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
     val blockResolverDB = ShuffleTestAccessor.shuffleServiceDB(blockResolver)
     ShuffleTestAccessor.reloadRegisteredExecutors(blockResolverDB) should not be empty
-    val mergeManagerDB = ShuffleTestAccessor.mergeManagerLevelDB(mergeManager)
+    val mergeManagerDB = ShuffleTestAccessor.mergeManagerDB(mergeManager)
     ShuffleTestAccessor.reloadAppShuffleInfo(mergeManager, mergeManagerDB) should not be empty
 
     s1.stopApplication(new ApplicationTerminationContext(app1Id))
@@ -613,7 +613,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     val appPathsInfo3NoAttempt = new AppPathsInfo(localDirs3NoAttempt, 4)
 
     val mergeManager1 = s1.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
-    val mergeManager1DB = ShuffleTestAccessor.mergeManagerLevelDB(mergeManager1)
+    val mergeManager1DB = ShuffleTestAccessor.mergeManagerDB(mergeManager1)
     ShuffleTestAccessor.recoveryFile(mergeManager1) should be (mergeMgrFile)
 
     ShuffleTestAccessor.getAppsShuffleInfo(mergeManager1).size() equals 0
@@ -722,7 +722,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     val appPathsInfo2Attempt1 = new AppPathsInfo(localDirs2Attempt1, 5)
 
     val mergeManager1 = s1.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
-    val mergeManager1DB = ShuffleTestAccessor.mergeManagerLevelDB(mergeManager1)
+    val mergeManager1DB = ShuffleTestAccessor.mergeManagerDB(mergeManager1)
     ShuffleTestAccessor.recoveryFile(mergeManager1) should be (mergeMgrFile)
 
     ShuffleTestAccessor.getAppsShuffleInfo(mergeManager1).size() equals 0
@@ -833,7 +833,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     val appPathsInfo2Attempt1 = new AppPathsInfo(localDirs2Attempt1, 5)
 
     val mergeManager1 = s1.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
-    val mergeManager1DB = ShuffleTestAccessor.mergeManagerLevelDB(mergeManager1)
+    val mergeManager1DB = ShuffleTestAccessor.mergeManagerDB(mergeManager1)
     ShuffleTestAccessor.recoveryFile(mergeManager1) should be (mergeMgrFile)
 
     mergeManager1.registerExecutor(app1Id.toString, mergedShuffleInfo1)
@@ -958,7 +958,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     s2 = createYarnShuffleServiceWithCustomMergeManager(
       ShuffleTestAccessor.createMergeManagerWithNoCleanupAfterReload)
     val mergeManager2 = s2.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
-    val mergeManager2DB = ShuffleTestAccessor.mergeManagerLevelDB(mergeManager2)
+    val mergeManager2DB = ShuffleTestAccessor.mergeManagerDB(mergeManager2)
     ShuffleTestAccessor.clearAppShuffleInfo(mergeManager2)
     assert(ShuffleTestAccessor.getOutdatedAppPathInfoCountDuringDBReload(
       mergeManager2, mergeManager2DB) == 1)
@@ -971,7 +971,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     s3.mergeManagerFile should be (mergeMgrFile)
 
     val mergeManager3 = s3.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
-    val mergeManager3DB = ShuffleTestAccessor.mergeManagerLevelDB(mergeManager3)
+    val mergeManager3DB = ShuffleTestAccessor.mergeManagerDB(mergeManager3)
     appShuffleInfo = ShuffleTestAccessor.getAppsShuffleInfo(mergeManager3)
     appShuffleInfo.size() equals 1
     appShuffleInfo.get(
@@ -1026,7 +1026,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
       ShuffleTestAccessor.createMergeManagerWithNoCleanupAfterReload)
 
     val mergeManager2 = s2.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
-    val mergeManager2DB = ShuffleTestAccessor.mergeManagerLevelDB(mergeManager2)
+    val mergeManager2DB = ShuffleTestAccessor.mergeManagerDB(mergeManager2)
     ShuffleTestAccessor.clearAppShuffleInfo(mergeManager2)
     assert(ShuffleTestAccessor.getOutdatedAppPathInfoCountDuringDBReload(
       mergeManager2, mergeManager2DB) == 1)
@@ -1115,7 +1115,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
   test("create remote block push resolver instance") {
     val mockConf = mock(classOf[TransportConf])
-    when(mockConf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND, DBBackend.LEVELDB.name()))
+    when(mockConf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND, DBBackend.ROCKSDB.name()))
       .thenReturn(shuffleDBBackend().name())
     when(mockConf.mergedShuffleFileManagerImpl).thenReturn(
       "org.apache.spark.network.shuffle.RemoteBlockPushResolver")

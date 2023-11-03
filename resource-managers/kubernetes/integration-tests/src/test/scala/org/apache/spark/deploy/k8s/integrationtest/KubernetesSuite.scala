@@ -20,7 +20,7 @@ import java.io.File
 import java.nio.file.{Path, Paths}
 import java.util.UUID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.common.base.Charsets
 import com.google.common.io.Files

@@ -321,7 +321,7 @@ object GraphImpl {
 
     // Convert the vertex partitions in edges to the correct type
     val newEdges = edges.asInstanceOf[EdgeRDDImpl[ED, _]]
-      .mapEdgePartitions((pid, part) => part.withoutVertexAttributes[VD])
+      .mapEdgePartitions((pid, part) => part.withoutVertexAttributes[VD]())
       .cache()
 
     GraphImpl.fromExistingRDDs(vertices, newEdges)

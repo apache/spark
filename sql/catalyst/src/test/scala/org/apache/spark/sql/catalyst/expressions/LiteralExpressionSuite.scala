@@ -22,6 +22,7 @@ import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffse
 import java.time.temporal.ChronoUnit
 import java.util.TimeZone
 
+import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkException, SparkFunSuite}
@@ -207,7 +208,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkArrayLiteral(Array("a", "b", "c"))
     checkArrayLiteral(Array(1.0, 4.0))
     checkArrayLiteral(Array(new CalendarInterval(1, 0, 0), new CalendarInterval(0, 1, 0)))
-    val arr = collection.mutable.WrappedArray.make(Array(1.0, 4.0))
+    val arr = mutable.ArraySeq.make(Array(1.0, 4.0))
     checkEvaluation(Literal(arr), toCatalyst(arr))
   }
 

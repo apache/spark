@@ -27,7 +27,7 @@ import org.apache.spark.sql.types._
 
 class ArrayDataIndexedSeqSuite extends SparkFunSuite {
   private def compArray(arrayData: ArrayData, elementDt: DataType, array: Array[Any]): Unit = {
-    assert(arrayData.numElements == array.length)
+    assert(arrayData.numElements() == array.length)
     array.zipWithIndex.map { case (e, i) =>
       if (e != null) {
         elementDt match {

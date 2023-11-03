@@ -19,10 +19,10 @@ package org.apache.spark.rdd
 
 import java.io.File
 
-import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.concurrent.duration._
 import scala.io.Codec
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{LongWritable, Text}
@@ -164,7 +164,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
   test("pipe with empty partition") {
     val data = sc.parallelize(Seq("foo", "bing"), 8)
     val piped = data.pipe("wc -c")
-    assert(piped.count == 8)
+    assert(piped.count() == 8)
     val charCounts = piped.map(_.trim.toInt).collect().toSet
     val expected = if (Utils.isWindows) {
       // Note that newline character on Windows is \r\n which are two.

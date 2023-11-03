@@ -137,7 +137,7 @@ class ProtobufCatalystDataConversionSuite
       while (
         data != null &&
         (data.get(0) == defaultValue ||
-          (dt == BinaryType &&
+          (dt.fields(0).dataType == BinaryType &&
             data.get(0).asInstanceOf[Array[Byte]].isEmpty)))
         data = generator().asInstanceOf[Row]
 

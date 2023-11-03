@@ -146,7 +146,7 @@ case class PythonUDAF(
 }
 
 abstract class UnevaluableGenerator extends Generator {
-  final override def eval(input: InternalRow): TraversableOnce[InternalRow] =
+  final override def eval(input: InternalRow): IterableOnce[InternalRow] =
     throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
 
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
@@ -159,6 +159,10 @@ abstract class UnevaluableGenerator extends Generator {
  * @param name name of the Python UDTF being called
  * @param func string contents of the Python code in the UDTF, along with other environment state
  * @param elementSchema result schema of the function call
+ * @param pickledAnalyzeResult if the UDTF defined an 'analyze' method, this contains the pickled
+ *                             'AnalyzeResult' instance from that method, which contains all
+ *                             metadata returned including the result schema of the function call as
+ *                             well as optional other information
  * @param children input arguments to the UDTF call; for scalar arguments these are the expressions
  *                 themeselves, and for TABLE arguments, these are instances of
  *                 [[FunctionTableSubqueryArgumentExpression]]
@@ -167,21 +171,20 @@ abstract class UnevaluableGenerator extends Generator {
  * @param udfDeterministic true if this function is deterministic wherein it returns the same result
  *                         rows for every call with the same input arguments
  * @param resultId unique expression ID for this function invocation
- * @param pythonUDTFPartitionColumnIndexes holds the indexes of the TABLE argument to the Python
- *                                         UDTF call, if applicable
- * @param analyzeResult holds the result of the polymorphic Python UDTF 'analze' method, if the UDTF
- *                      defined one
+ * @param pythonUDTFPartitionColumnIndexes holds the zero-based indexes of the projected results of
+ *                                         all PARTITION BY expressions within the TABLE argument of
+ *                                         the Python UDTF call, if applicable
  */
 case class PythonUDTF(
     name: String,
     func: PythonFunction,
     elementSchema: StructType,
+    pickledAnalyzeResult: Option[Array[Byte]],
     children: Seq[Expression],
     evalType: Int,
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId,
-    pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None,
-    analyzeResult: Option[PythonUDTFAnalyzeResult] = None)
+    pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None)
   extends UnevaluableGenerator with PythonFuncExpression {
 
   override lazy val canonicalized: Expression = {
@@ -210,8 +213,7 @@ case class UnresolvedPolymorphicPythonUDTF(
     evalType: Int,
     udfDeterministic: Boolean,
     resolveElementMetadata: (PythonFunction, Seq[Expression]) => PythonUDTFAnalyzeResult,
-    resultId: ExprId = NamedExpression.newExprId,
-    pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None)
+    resultId: ExprId = NamedExpression.newExprId)
   extends UnevaluableGenerator with PythonFuncExpression {
 
   override lazy val resolved = false
@@ -226,6 +228,7 @@ case class UnresolvedPolymorphicPythonUDTF(
 /**
  * Represents the result of invoking the polymorphic 'analyze' method on a Python user-defined table
  * function. This returns the table function's output schema in addition to other optional metadata.
+ *
  * @param schema result schema of this particular function call in response to the particular
  *               arguments provided, including the types of any provided scalar arguments (and
  *               their values, in the case of literals) as well as the names and types of columns of
@@ -243,12 +246,17 @@ case class UnresolvedPolymorphicPythonUDTF(
  * @param orderByExpressions if non-empty, this contains the list of ordering items that the
  *                           'analyze' method explicitly indicated that the UDTF call should consume
  *                           the input table rows by
+ * @param pickledAnalyzeResult this is the pickled 'AnalyzeResult' instance from the UDTF, which
+ *                             contains all metadata returned by the Python UDTF 'analyze' method
+ *                             including the result schema of the function call as well as optional
+ *                             other information
  */
 case class PythonUDTFAnalyzeResult(
     schema: StructType,
     withSinglePartition: Boolean,
     partitionByExpressions: Seq[Expression],
-    orderByExpressions: Seq[SortOrder]) {
+    orderByExpressions: Seq[SortOrder],
+    pickledAnalyzeResult: Array[Byte]) {
   /**
    * Applies the requested properties from this analysis result to the target TABLE argument
    * expression of a UDTF call, throwing an error if any properties of the UDTF call are

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{AliasAwareQueryOutputOrdering, QueryPlan}
@@ -26,7 +27,7 @@ import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, U
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{MapType, StructType}
 
 
 abstract class LogicalPlan
@@ -326,6 +327,62 @@ object LogicalPlanIntegrity {
   }
 
   /**
+   * This method validates there are no dangling attribute references.
+   * Returns an error message if the check does not pass, or None if it does pass.
+   */
+  def validateNoDanglingReferences(plan: LogicalPlan): Option[String] = {
+    plan.collectFirst {
+      // DML commands and multi instance relations (like InMemoryRelation caches)
+      // have different output semantics than typical queries.
+      case _: Command => None
+      case _: MultiInstanceRelation => None
+      case n if canGetOutputAttrs(n) =>
+        if (n.missingInput.nonEmpty) {
+          Some(s"Aliases ${ n.missingInput.mkString(", ")} are dangling " +
+            s"in the references for plan:\n ${n.treeString}")
+        } else {
+          None
+        }
+    }.flatten
+  }
+
+  /**
+   * Validate that the grouping key types in Aggregate plans are valid.
+   * Returns an error message if the check fails, or None if it succeeds.
+   */
+  def validateGroupByTypes(plan: LogicalPlan): Option[String] = {
+    plan.collectFirst {
+      case a @ Aggregate(groupingExprs, _, _) =>
+        val badExprs = groupingExprs.filter(_.dataType.isInstanceOf[MapType]).map(_.toString)
+        if (badExprs.nonEmpty) {
+          Some(s"Grouping expressions ${badExprs.mkString(", ")} cannot be of type Map " +
+            s"for plan:\n ${a.treeString}")
+        } else {
+          None
+        }
+    }.flatten
+  }
+
+  /**
+   * Validate that the aggregation expressions in Aggregate plans are valid.
+   * Returns an error message if the check fails, or None if it succeeds.
+   */
+  def validateAggregateExpressions(plan: LogicalPlan): Option[String] = {
+    plan.collectFirst {
+      case a: Aggregate =>
+        try {
+          ExprUtils.assertValidAggregation(a)
+          None
+        } catch {
+          case e: AnalysisException =>
+            Some(s"Aggregate: ${a.toString} is not a valid aggregate expression: " +
+            s"${e.getSimpleMessage}")
+        }
+    }.flatten
+  }
+
+
+  /**
    * Validate the structural integrity of an optimized plan.
    * For example, we can check after the execution of each rule that each plan:
    * - is still resolved
@@ -337,7 +394,7 @@ object LogicalPlanIntegrity {
   def validateOptimizedPlan(
       previousPlan: LogicalPlan,
       currentPlan: LogicalPlan): Option[String] = {
-    if (!currentPlan.resolved) {
+    var validation = if (!currentPlan.resolved) {
       Some("The plan becomes unresolved: " + currentPlan.treeString + "\nThe previous plan: " +
         previousPlan.treeString)
     } else if (currentPlan.exists(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty)) {
@@ -353,6 +410,13 @@ object LogicalPlanIntegrity {
         }
       }
     }
+    validation = validation
+      .orElse(LogicalPlanIntegrity.validateNoDanglingReferences(currentPlan))
+      .orElse(LogicalPlanIntegrity.validateGroupByTypes(currentPlan))
+      .orElse(LogicalPlanIntegrity.validateAggregateExpressions(currentPlan))
+      .map(err => s"${err}\nPrevious schema:${previousPlan.output.mkString(", ")}" +
+        s"\nPrevious plan: ${previousPlan.treeString}")
+    validation
   }
 }
 

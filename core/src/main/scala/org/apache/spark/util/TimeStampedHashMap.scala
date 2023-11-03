@@ -21,8 +21,8 @@ import java.util.Map.Entry
 import java.util.Set
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.Logging
 

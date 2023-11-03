@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import java.io.OutputStream
 import java.util.concurrent.{CompletableFuture, ConcurrentLinkedDeque, ThreadPoolExecutor}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors

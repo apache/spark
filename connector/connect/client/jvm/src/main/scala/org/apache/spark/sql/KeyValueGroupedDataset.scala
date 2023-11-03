@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.util.Arrays
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.language.existentials
 
 import org.apache.spark.api.java.function._
@@ -111,7 +111,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    *
    * @since 3.5.0
    */
-  def flatMapGroups[U: Encoder](f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
+  def flatMapGroups[U: Encoder](f: (K, Iterator[V]) => IterableOnce[U]): Dataset[U] = {
     flatMapSortedGroups()(f)
   }
 
@@ -162,7 +162,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    * @since 3.5.0
    */
   def flatMapSortedGroups[U: Encoder](sortExprs: Column*)(
-      f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
+      f: (K, Iterator[V]) => IterableOnce[U]): Dataset[U] = {
     throw new UnsupportedOperationException
   }
 
@@ -397,7 +397,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    * @since 3.5.0
    */
   def cogroup[U, R: Encoder](other: KeyValueGroupedDataset[K, U])(
-      f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
+      f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): Dataset[R] = {
     cogroupSorted(other)()()(f)
   }
 
@@ -433,7 +433,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    */
   def cogroupSorted[U, R: Encoder](other: KeyValueGroupedDataset[K, U])(thisSortExprs: Column*)(
       otherSortExprs: Column*)(
-      f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
+      f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): Dataset[R] = {
     throw new UnsupportedOperationException
   }
 
@@ -865,7 +865,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
   }
 
   override def flatMapSortedGroups[U: Encoder](sortExprs: Column*)(
-      f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
+      f: (K, Iterator[V]) => IterableOnce[U]): Dataset[U] = {
     // Apply mapValues changes to the udf
     val nf =
       if (valueMapFunc == UdfUtils.identical()) f else UdfUtils.mapValuesAdaptor(f, valueMapFunc)
@@ -881,7 +881,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
 
   override def cogroupSorted[U, R: Encoder](other: KeyValueGroupedDataset[K, U])(
       thisSortExprs: Column*)(otherSortExprs: Column*)(
-      f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
+      f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): Dataset[R] = {
     assert(other.isInstanceOf[KeyValueGroupedDatasetImpl[K, U, _, _]])
     val otherImpl = other.asInstanceOf[KeyValueGroupedDatasetImpl[K, U, _, _]]
     // Apply mapValues changes to the udf

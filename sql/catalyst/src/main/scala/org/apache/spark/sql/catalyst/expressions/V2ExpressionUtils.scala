@@ -159,7 +159,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
         StaticInvoke(scalarFunc.getClass, scalarFunc.resultType(),
           MAGIC_METHOD_NAME, arguments, inputTypes = declaredInputTypes,
           propagateNull = false, returnNullable = scalarFunc.isResultNullable,
-          isDeterministic = scalarFunc.isDeterministic)
+          isDeterministic = scalarFunc.isDeterministic, scalarFunction = Some(scalarFunc))
       case Some(_) =>
         val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
         Invoke(caller, MAGIC_METHOD_NAME, scalarFunc.resultType(),

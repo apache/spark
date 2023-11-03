@@ -31,9 +31,9 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.channel.socket.SocketChannel;
 
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Assertions;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -55,7 +55,7 @@ public class ShuffleTransportContextSuite {
 
   private ExternalBlockHandler blockHandler;
 
-  @Before
+  @BeforeEach
   public void before() throws IOException {
     blockHandler = mock(ExternalBlockHandler.class);
   }
@@ -96,9 +96,9 @@ public class ShuffleTransportContextSuite {
       ctx.initializePipeline(channel, rpcHandler);
       String handlerName = ShuffleTransportContext.FinalizedHandler.HANDLER_NAME;
       if (enabled) {
-        Assert.assertNotNull(channel.pipeline().get(handlerName));
+        Assertions.assertNotNull(channel.pipeline().get(handlerName));
       } else {
-        Assert.assertNull(channel.pipeline().get(handlerName));
+        Assertions.assertNull(channel.pipeline().get(handlerName));
       }
     }
   }
@@ -115,9 +115,9 @@ public class ShuffleTransportContextSuite {
     List<Object> out = Lists.newArrayList();
     decoder.decode(mock(ChannelHandlerContext.class), messageBuf, out);
 
-    Assert.assertEquals(1, out.size());
-    Assert.assertTrue(out.get(0) instanceof ShuffleTransportContext.RpcRequestInternal);
-    Assert.assertEquals(BlockTransferMessage.Type.FINALIZE_SHUFFLE_MERGE,
+    Assertions.assertEquals(1, out.size());
+    Assertions.assertTrue(out.get(0) instanceof ShuffleTransportContext.RpcRequestInternal);
+    Assertions.assertEquals(BlockTransferMessage.Type.FINALIZE_SHUFFLE_MERGE,
         ((ShuffleTransportContext.RpcRequestInternal) out.get(0)).messageType);
   }
 
@@ -133,8 +133,8 @@ public class ShuffleTransportContextSuite {
     List<Object> out = Lists.newArrayList();
     decoder.decode(mock(ChannelHandlerContext.class), messageBuf, out);
 
-    Assert.assertEquals(1, out.size());
-    Assert.assertTrue(out.get(0) instanceof RpcRequest);
-    Assert.assertEquals(rpcRequest.requestId, ((RpcRequest) out.get(0)).requestId);
+    Assertions.assertEquals(1, out.size());
+    Assertions.assertTrue(out.get(0) instanceof RpcRequest);
+    Assertions.assertEquals(rpcRequest.requestId, ((RpcRequest) out.get(0)).requestId);
   }
 }

@@ -34,10 +34,10 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 import java.util.zip.{GZIPInputStream, ZipInputStream}
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 import scala.util.control.{ControlThrowable, NonFatal}
@@ -857,17 +857,7 @@ private[spark] object Utils
       conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
     } else if (conf.getenv("SPARK_LOCAL_DIRS") != null) {
       conf.getenv("SPARK_LOCAL_DIRS").split(",")
-    } else if (conf.getenv("MESOS_SANDBOX") != null && !shuffleServiceEnabled) {
-      // Mesos already creates a directory per Mesos task. Spark should use that directory
-      // instead so all temporary files are automatically cleaned up when the Mesos task ends.
-      // Note that we don't want this if the shuffle service is enabled because we want to
-      // continue to serve shuffle files after the executors that wrote them have already exited.
-      Array(conf.getenv("MESOS_SANDBOX"))
     } else {
-      if (conf.getenv("MESOS_SANDBOX") != null && shuffleServiceEnabled) {
-        logInfo("MESOS_SANDBOX available but not using provided Mesos sandbox because " +
-          s"${config.SHUFFLE_SERVICE_ENABLED.key} is enabled.")
-      }
       // In non-Yarn mode (or for the driver in yarn-client mode), we cannot trust the user
       // configuration to point to a secure directory. So create a subdirectory with restricted
       // permissions under each listed directory.
@@ -926,7 +916,7 @@ private[spark] object Utils
    * result in a new collection. Unlike scala.util.Random.shuffle, this method
    * uses a local random number generator, avoiding inter-thread contention.
    */
-  def randomize[T: ClassTag](seq: TraversableOnce[T]): Seq[T] = {
+  def randomize[T: ClassTag](seq: IterableOnce[T]): Seq[T] = {
     randomizeInPlace(seq.toArray)
   }
 
@@ -992,8 +982,7 @@ private[spark] object Utils
   private var customHostname: Option[String] = sys.env.get("SPARK_LOCAL_HOSTNAME")
 
   /**
-   * Allow setting a custom host name because when we run on Mesos we need to use the same
-   * hostname it reports to the master.
+   * Allow setting a custom host name
    */
   def setCustomHostname(hostname: String): Unit = {
     // DEBUG code
@@ -1785,7 +1774,17 @@ private[spark] object Utils
   /**
    * Counts the number of elements of an iterator.
    */
-  def getIteratorSize(iterator: Iterator[_]): Long = Iterators.size(iterator)
+  def getIteratorSize(iterator: Iterator[_]): Long = {
+    if (iterator.knownSize >= 0) iterator.knownSize.toLong
+    else {
+      var count = 0L
+      while (iterator.hasNext) {
+        count += 1L
+        iterator.next()
+      }
+      count
+    }
+  }
 
   /**
    * Generate a zipWithIndex iterator, avoid index value overflowing problem
@@ -2139,8 +2138,7 @@ private[spark] object Utils
 
   /** Return a heap dump. Used to capture dumps for the web UI */
   def getHeapHistogram(): Array[String] = {
-    // From Java 9+, we can use 'ProcessHandle.current().pid()'
-    val pid = getProcessName().split("@").head
+    val pid = String.valueOf(ProcessHandle.current().pid())
     val jmap = System.getProperty("java.home") + "/bin/jmap"
     val builder = new ProcessBuilder(jmap, "-histo:live", pid)
     val p = builder.start()
@@ -2198,7 +2196,9 @@ private[spark] object Utils
       Option(threadInfo.getLockName),
       Option(threadInfo.getLockOwnerName),
       threadInfo.isSuspended,
-      threadInfo.isInNative)
+      threadInfo.isInNative,
+      threadInfo.isDaemon,
+      threadInfo.getPriority)
   }
 
   /**

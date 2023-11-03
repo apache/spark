@@ -841,11 +841,7 @@ $(document).ready(function () {
                 data.length = totalTasksToShow;
               }
             },
-            "dataSrc": function (jsons) {
-              var jsonStr = JSON.stringify(jsons);
-              var tasksToShow = JSON.parse(jsonStr);
-              return tasksToShow.aaData;
-            },
+            "dataSrc": (jsons) => jsons.aaData,
             "error": function (_ignored_jqXHR, _ignored_textStatus, _ignored_errorThrown) {
               alert("Unable to connect to the server. Looks like the Spark " +
                 "application must have ended. Please Switch to the history UI.");

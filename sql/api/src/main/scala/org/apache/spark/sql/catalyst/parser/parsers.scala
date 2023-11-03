@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.antlr.v4.runtime._
 import org.antlr.v4.runtime.atn.PredictionMode
@@ -230,7 +230,7 @@ class ParseException(
     builder ++= "\n" ++= message
     start match {
       case Origin(Some(l), Some(p), _, _, _, _, _) =>
-        builder ++= s"(line $l, pos $p)\n"
+        builder ++= s" (line $l, pos $p)\n"
         command.foreach { cmd =>
           val (above, below) = cmd.split("\n").splitAt(l)
           builder ++= "\n== SQL ==\n"

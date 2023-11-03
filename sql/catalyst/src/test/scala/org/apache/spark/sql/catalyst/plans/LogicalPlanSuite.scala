@@ -119,19 +119,19 @@ class LogicalPlanSuite extends SparkFunSuite {
     assert(range.maxRows === Some(100))
     assert(range.maxRowsPerPartition === Some(34))
 
-    val sort = Sort(Seq('id.asc), false, range)
+    val sort = Sort(Seq(Symbol("id").asc), false, range)
     assert(sort.maxRows === Some(100))
     assert(sort.maxRowsPerPartition === Some(34))
-    val sort2 = Sort(Seq('id.asc), true, range)
+    val sort2 = Sort(Seq(Symbol("id").asc), true, range)
     assert(sort2.maxRows === Some(100))
     assert(sort2.maxRowsPerPartition === Some(100))
 
-    val c1 = Literal(1).as('a).toAttribute.newInstance().withNullability(true)
-    val c2 = Literal(2).as('b).toAttribute.newInstance().withNullability(true)
+    val c1 = Literal(1).as(Symbol("a")).toAttribute.newInstance().withNullability(true)
+    val c2 = Literal(2).as(Symbol("b")).toAttribute.newInstance().withNullability(true)
     val expand = Expand(
-      Seq(Seq(Literal(null), 'b), Seq('a, Literal(null))),
+      Seq(Seq(Literal(null), Symbol("b")), Seq(Symbol("a"), Literal(null))),
       Seq(c1, c2),
-      sort.select('id as 'a, 'id + 1 as 'b))
+      sort.select(Symbol("id") as Symbol("a"), Symbol("id") + 1 as Symbol("b")))
     assert(expand.maxRows === Some(200))
     assert(expand.maxRowsPerPartition === Some(68))
 

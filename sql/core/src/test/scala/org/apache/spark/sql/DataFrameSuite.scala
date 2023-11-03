@@ -989,7 +989,7 @@ class DataFrameSuite extends QueryTest
       .parallelize(Seq(StringWrapper("a"), StringWrapper("b"), StringWrapper("c")))
       .toDF()
     val filtered = df.where("s = \"a\"")
-    checkAnswer(filtered, spark.sparkContext.parallelize(Seq(StringWrapper("a"))).toDF)
+    checkAnswer(filtered, spark.sparkContext.parallelize(Seq(StringWrapper("a"))).toDF())
   }
 
   test("SPARK-20384: Tuple2 of value class filter") {
@@ -1000,7 +1000,7 @@ class DataFrameSuite extends QueryTest
       .toDF()
     val filtered = df.where("_2.s = \"a2\"")
     checkAnswer(filtered,
-      spark.sparkContext.parallelize(Seq((StringWrapper("a1"), StringWrapper("a2")))).toDF)
+      spark.sparkContext.parallelize(Seq((StringWrapper("a1"), StringWrapper("a2")))).toDF())
   }
 
   test("SPARK-20384: Tuple3 of value class filter") {
@@ -1012,26 +1012,26 @@ class DataFrameSuite extends QueryTest
     val filtered = df.where("_3.s = \"a3\"")
     checkAnswer(filtered,
       spark.sparkContext.parallelize(
-        Seq((StringWrapper("a1"), StringWrapper("a2"), StringWrapper("a3")))).toDF)
+        Seq((StringWrapper("a1"), StringWrapper("a2"), StringWrapper("a3")))).toDF())
   }
 
   test("SPARK-20384: Array value class filter") {
     val ab = ArrayStringWrapper(Seq(StringWrapper("a"), StringWrapper("b")))
     val cd = ArrayStringWrapper(Seq(StringWrapper("c"), StringWrapper("d")))
 
-    val df = spark.sparkContext.parallelize(Seq(ab, cd)).toDF
+    val df = spark.sparkContext.parallelize(Seq(ab, cd)).toDF()
     val filtered = df.where(array_contains(col("wrappers.s"), "b"))
-    checkAnswer(filtered, spark.sparkContext.parallelize(Seq(ab)).toDF)
+    checkAnswer(filtered, spark.sparkContext.parallelize(Seq(ab)).toDF())
   }
 
   test("SPARK-20384: Nested value class filter") {
     val a = ContainerStringWrapper(StringWrapper("a"))
     val b = ContainerStringWrapper(StringWrapper("b"))
 
-    val df = spark.sparkContext.parallelize(Seq(a, b)).toDF
+    val df = spark.sparkContext.parallelize(Seq(a, b)).toDF()
     // flat value class, `s` field is not in schema
     val filtered = df.where("wrapper = \"a\"")
-    checkAnswer(filtered, spark.sparkContext.parallelize(Seq(a)).toDF)
+    checkAnswer(filtered, spark.sparkContext.parallelize(Seq(a)).toDF())
   }
 
   private lazy val person2: DataFrame = Seq(
@@ -2474,7 +2474,7 @@ class DataFrameSuite extends QueryTest
     val rdd = sparkContext.makeRDD(Seq(Row.fromSeq(Seq.range(0, size))))
     val schemas = List.range(0, size).map(a => StructField("name" + a, LongType, true))
     val df = spark.createDataFrame(rdd, StructType(schemas))
-    assert(df.persist.take(1).apply(0).toSeq(100).asInstanceOf[Long] == 100)
+    assert(df.persist().take(1).apply(0).toSeq(100).asInstanceOf[Long] == 100)
   }
 
   test("SPARK-17409: Do Not Optimize Query in CTAS (Data source tables) More Than Once") {
@@ -2498,7 +2498,7 @@ class DataFrameSuite extends QueryTest
   test("copy results for sampling with replacement") {
     val df = Seq((1, 0), (2, 0), (3, 0)).toDF("a", "b")
     val sampleDf = df.sample(true, 2.00)
-    val d = sampleDf.withColumn("c", monotonically_increasing_id).select($"c").collect
+    val d = sampleDf.withColumn("c", monotonically_increasing_id()).select($"c").collect()
     assert(d.size == d.distinct.size)
   }
 
@@ -2601,7 +2601,7 @@ class DataFrameSuite extends QueryTest
     df1
       .join(df2, df1("x") === df2("x1"), "left_outer")
       .filter($"x1".isNotNull || !$"y".isin("a!"))
-      .count
+      .count()
   }
 
   // The fix of SPARK-21720 avoid an exception regarding JVM code size limit
@@ -2862,7 +2862,7 @@ class DataFrameSuite extends QueryTest
       Console.withOut(captured) {
         df.explain(extended = true)
       }
-      checkAnswer(df, spark.range(10).toDF)
+      checkAnswer(df, spark.range(10).toDF())
       val output = captured.toString
       assert(output.contains(
         """== Parsed Logical Plan ==
@@ -2905,7 +2905,7 @@ class DataFrameSuite extends QueryTest
         data1.zip(data2).map { p =>
           p._1.getInt(2) + p._2.getInt(2)
         }
-      }.toDF
+      }.toDF()
 
     checkAnswer(df3.sort("value"), Row(7) :: Row(9) :: Nil)
 
@@ -2932,7 +2932,7 @@ class DataFrameSuite extends QueryTest
         data1.zip(data2).map { p =>
           p._1.getInt(2) + p._2.getInt(2)
         }
-      }.toDF
+      }.toDF()
 
     checkAnswer(df3.sort("value"), Row(7) :: Row(9) :: Nil)
   }
@@ -3459,7 +3459,7 @@ class DataFrameSuite extends QueryTest
       }
     ))
 
-    assert(res.collect.length == 2)
+    assert(res.collect().length == 2)
   }
 
   test("SPARK-38285: Fix ClassCastException: GenericArrayData cannot be cast to InternalRow") {
@@ -3524,7 +3524,7 @@ class DataFrameSuite extends QueryTest
       }
 
       // UNION (distinct)
-      val df4 = df3.distinct
+      val df4 = df3.distinct()
       checkAnswer(df4, rows.distinct)
 
       val t4 = sqlQuery(cols1, cols2, true)
@@ -3546,7 +3546,7 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-39612: exceptAll with following count should work") {
-    val d1 = Seq("a").toDF
+    val d1 = Seq("a").toDF()
     assert(d1.exceptAll(d1).count() === 0)
   }
 
@@ -3641,7 +3641,7 @@ class DataFrameSuite extends QueryTest
     val df = spark.sparkContext.parallelize(1 to 5).toDF("x")
     val v1 = (rand() * 10000).cast(IntegerType)
     val v2 = to_csv(struct(v1.as("a"))) // to_csv is CodegenFallback
-    df.select(v1, v1, v2, v2).collect.foreach { row =>
+    df.select(v1, v1, v2, v2).collect().foreach { row =>
       assert(row.getInt(0) == row.getInt(1))
       assert(row.getInt(0).toString == row.getString(2))
       assert(row.getInt(0).toString == row.getString(3))
@@ -3656,7 +3656,7 @@ class DataFrameSuite extends QueryTest
     val r3 = random()
     val r4 = uuid()
     val r5 = shuffle(col("a"))
-    df.select(r, r, r2, r2, r3, r3, r4, r4, r5, r5).collect.foreach { row =>
+    df.select(r, r, r2, r2, r3, r3, r4, r4, r5, r5).collect().foreach { row =>
       (0 until 5).foreach(i => assert(row.get(i * 2) === row.get(i * 2 + 1)))
     }
   }

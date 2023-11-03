@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-SQLSTATE: none assigned
+SQLSTATE: 58030
 
 Error writing state store files for provider `<providerClass>`.
 

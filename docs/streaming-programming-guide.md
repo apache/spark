@@ -465,7 +465,7 @@ ssc = StreamingContext(sc, 1)
 {% endhighlight %}
 
 The `appName` parameter is a name for your application to show on the cluster UI.
-`master` is a [Spark, Mesos or YARN cluster URL](submitting-applications.html#master-urls),
+`master` is a [Spark or YARN cluster URL](submitting-applications.html#master-urls),
 or a special __"local[\*]"__ string to run in local mode. In practice, when running on a cluster,
 you will not want to hardcode `master` in the program,
 but rather [launch the application with `spark-submit`](submitting-applications.html) and
@@ -490,7 +490,7 @@ val ssc = new StreamingContext(conf, Seconds(1))
 {% endhighlight %}
 
 The `appName` parameter is a name for your application to show on the cluster UI.
-`master` is a [Spark, Mesos, Kubernetes or YARN cluster URL](submitting-applications.html#master-urls),
+`master` is a [Spark, Kubernetes or YARN cluster URL](submitting-applications.html#master-urls),
 or a special __"local[\*]"__ string to run in local mode. In practice, when running on a cluster,
 you will not want to hardcode `master` in the program,
 but rather [launch the application with `spark-submit`](submitting-applications.html) and
@@ -526,7 +526,7 @@ JavaStreamingContext ssc = new JavaStreamingContext(conf, new Duration(1000));
 {% endhighlight %}
 
 The `appName` parameter is a name for your application to show on the cluster UI.
-`master` is a [Spark, Mesos or YARN cluster URL](submitting-applications.html#master-urls),
+`master` is a [Spark or YARN cluster URL](submitting-applications.html#master-urls),
 or a special __"local[\*]"__ string to run in local mode. In practice, when running on a cluster,
 you will not want to hardcode `master` in the program,
 but rather [launch the application with `spark-submit`](submitting-applications.html) and
@@ -2093,8 +2093,6 @@ To run Spark Streaming applications, you need to have the following.
       [Spark Standalone guide](spark-standalone.html) for more details.
     + *YARN* - Yarn supports a similar mechanism for automatically restarting an application.
       Please refer to YARN documentation for more details.
-    + *Mesos* - [Marathon](https://github.com/mesosphere/marathon) has been used to achieve this
-      with Mesos.
 
 - *Configuring write-ahead logs* - Since Spark 1.2,
   we have introduced _write-ahead logs_ for achieving strong
@@ -2290,19 +2288,6 @@ The overheads of data serialization can be reduced by tuning the serialization f
 In both cases, using Kryo serialization can reduce both CPU and memory overheads. See the [Spark Tuning Guide](tuning.html#data-serialization) for more details. For Kryo, consider registering custom classes, and disabling object reference tracking (see Kryo-related configurations in the [Configuration Guide](configuration.html#compression-and-serialization)).
 
 In specific cases where the amount of data that needs to be retained for the streaming application is not large, it may be feasible to persist data (both types) as deserialized objects without incurring excessive GC overheads. For example, if you are using batch intervals of a few seconds and no window operations, then you can try disabling serialization in persisted data by explicitly setting the storage level accordingly. This would reduce the CPU overheads due to serialization, potentially improving performance without too much GC overheads.
-
-### Task Launching Overheads
-{:.no_toc}
-If the number of tasks launched per second is high (say, 50 or more per second), then the overhead
-of sending out tasks to the executors may be significant and will make it hard to achieve sub-second
-latencies. The overhead can be reduced by the following changes:
-
-* **Execution mode**: Running Spark in Standalone mode or coarse-grained Mesos mode leads to
-  better task launch times than the fine-grained Mesos mode. Please refer to the
-  [Running on Mesos guide](running-on-mesos.html) for more details.
-
-These changes may reduce batch processing time by 100s of milliseconds,
-thus allowing sub-second batch size to be viable.
 
 ***
 

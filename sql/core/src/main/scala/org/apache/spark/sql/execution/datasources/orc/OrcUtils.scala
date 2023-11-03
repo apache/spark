@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}

@@ -48,7 +48,6 @@ from pyspark.sql.types import (
     LongType,
     NumericType,
 )
-
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import (
     Axis,
@@ -729,7 +728,6 @@ class Frame(object, metaclass=ABCMeta):
         DataFrame.to_delta
         DataFrame.to_table
         DataFrame.to_parquet
-        DataFrame.to_spark_io
 
         Examples
         --------

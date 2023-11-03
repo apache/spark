@@ -131,8 +131,7 @@ public class ShuffleTransportContext extends TransportContext {
         List<Object> list) throws Exception {
       delegate.decode(channelHandlerContext, byteBuf, list);
       Object msg = list.get(list.size() - 1);
-      if (msg instanceof RpcRequest) {
-        RpcRequest req = (RpcRequest) msg;
+      if (msg instanceof RpcRequest req) {
         ByteBuffer buffer = req.body().nioByteBuffer();
         byte type = Unpooled.wrappedBuffer(buffer).readByte();
         if (type == BlockTransferMessage.Type.FINALIZE_SHUFFLE_MERGE.id()) {
@@ -171,8 +170,7 @@ public class ShuffleTransportContext extends TransportContext {
 
     @Override
     public boolean acceptInboundMessage(Object msg) throws Exception {
-      if (msg instanceof RpcRequestInternal) {
-        RpcRequestInternal rpcRequestInternal = (RpcRequestInternal) msg;
+      if (msg instanceof RpcRequestInternal rpcRequestInternal) {
         return rpcRequestInternal.messageType == BlockTransferMessage.Type.FINALIZE_SHUFFLE_MERGE;
       }
       return false;

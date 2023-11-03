@@ -127,7 +127,7 @@ class SortSuite extends SparkPlanTest with SharedSparkSession {
         StructType(StructField("a", DecimalType(20, 2)) :: Nil))
       checkAnswer(
         inputDf,
-        (child: SparkPlan) => SortExec('a.asc :: Nil, global = true, child = child),
+        (child: SparkPlan) => SortExec(Symbol("a").asc :: Nil, global = true, child = child),
         input.sorted.map(Row(_)),
         sortAnswers = false)
     }

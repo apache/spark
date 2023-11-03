@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import java.lang.reflect.{ParameterizedType, Type, WildcardType}
 import java.time.Duration
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.{io => hadoopIo}
 import org.apache.hadoop.hive.common.`type`.{HiveChar, HiveDecimal, HiveIntervalDayTime, HiveIntervalYearMonth, HiveVarchar}

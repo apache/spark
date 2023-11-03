@@ -147,7 +147,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     def startQuery(): StreamingQuery = {
       ds.writeStream
         .foreachBatch((ds: Dataset[Row], batchId: Long) => {
-          ds.collect.foreach((row: Row) => {
+          ds.collect().foreach((row: Row) => {
             data += row.getInt(0)
           }: Unit)
           countDownLatch.countDown()
@@ -352,7 +352,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       ds.writeStream
         .trigger(trigger)
         .foreachBatch((ds: Dataset[Row], batchId: Long) => {
-          ds.collect.foreach((row: Row) => {
+          ds.collect().foreach((row: Row) => {
             data += row.getInt(0)
           }: Unit)
           countDownLatch.countDown()
@@ -512,7 +512,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       ds.writeStream
         .trigger(trigger)
         .foreachBatch((ds: Dataset[Row], batchId: Long) => {
-          ds.collect.foreach((row: Row) => {
+          ds.collect().foreach((row: Row) => {
             data += row.getInt(0)
           }: Unit)
           countDownLatch.countDown()
@@ -785,7 +785,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     def startQuery(): StreamingQuery = {
       ds.writeStream
         .foreachBatch((ds: Dataset[Row], batchId: Long) => {
-          ds.collect.foreach((row: Row) => {
+          ds.collect().foreach((row: Row) => {
             data += row.getInt(0)
           }: Unit)
         })

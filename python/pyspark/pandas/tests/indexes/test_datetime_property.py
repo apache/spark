@@ -18,6 +18,7 @@
 import datetime
 import unittest
 
+import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
@@ -83,23 +84,7 @@ class DatetimeIndexPropertyTestsMixin:
             self.assert_eq(psidx.is_leap_year, pd.Index(pidx.is_leap_year))
             self.assert_eq(psidx.day_of_year, pidx.day_of_year)
             self.assert_eq(psidx.day_of_week, pidx.day_of_week)
-
-        # TODO(SPARK-42617): Support isocalendar.week and replace it.
-        expected_results = [
-            ps.Index([1]),
-            ps.Index([1, 1, 13]),
-            ps.Index([52, 52, 1]),
-            ps.Index([52, 52, 52]),
-            ps.Index([52, 52, 52]),
-            ps.Index([52, 52, 52]),
-            ps.Index([52, 52, 52]),
-            ps.Index([52, 52, 52]),
-            ps.Index([52, 1, 2]),
-            ps.Index([13, 26, 39]),
-        ]
-        for psidx, expected_result in zip(self.psidxs, expected_results):
-            self.assert_eq(psidx.week, expected_result)
-            self.assert_eq(psidx.weekofyear, expected_result)
+            self.assert_eq(psidx.isocalendar().week, pidx.isocalendar().week.astype(np.int64))
 
 
 class DatetimeIndexPropertyTests(DatetimeIndexPropertyTestsMixin, PandasOnSparkTestCase, TestUtils):

@@ -19,8 +19,8 @@ package org.apache.spark.sql.connect.service
 
 import java.util.concurrent.{Executors, ScheduledExecutorService, TimeUnit}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.common.cache.CacheBuilder

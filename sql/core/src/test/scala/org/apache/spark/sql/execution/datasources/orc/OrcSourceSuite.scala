@@ -366,7 +366,7 @@ abstract class OrcSuite
   test("SPARK-24322 Fix incorrect workaround for bug in java.sql.Timestamp") {
     withTempPath { path =>
       val ts = Timestamp.valueOf("1900-05-05 12:34:56.000789")
-      Seq(ts).toDF.write.orc(path.getCanonicalPath)
+      Seq(ts).toDF().write.orc(path.getCanonicalPath)
       checkAnswer(spark.read.orc(path.getCanonicalPath), Row(ts))
     }
   }

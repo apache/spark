@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.sql.{Driver, DriverManager}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils

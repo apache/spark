@@ -40,8 +40,7 @@ different options to manage allocation, depending on the cluster manager.
 The simplest option, available on all cluster managers, is _static partitioning_ of resources. With
 this approach, each application is given a maximum amount of resources it can use and holds onto them
 for its whole duration. This is the approach used in Spark's [standalone](spark-standalone.html)
-and [YARN](running-on-yarn.html) modes, as well as the
-[coarse-grained Mesos mode](running-on-mesos.html#mesos-run-modes).
+and [YARN](running-on-yarn.html) modes.
 Resource allocation can be configured as follows, based on the cluster type:
 
 * **Standalone mode:** By default, applications submitted to the standalone mode cluster will run in
@@ -50,22 +49,11 @@ Resource allocation can be configured as follows, based on the cluster type:
   or change the default for applications that don't set this setting through `spark.deploy.defaultCores`.
   Finally, in addition to controlling cores, each application's `spark.executor.memory` setting controls
   its memory use.
-* **Mesos:** To use static partitioning on Mesos, set the `spark.mesos.coarse` configuration property to `true`,
-  and optionally set `spark.cores.max` to limit each application's resource share as in the standalone mode.
-  You should also set `spark.executor.memory` to control the executor memory.
 * **YARN:** The `--num-executors` option to the Spark YARN client controls how many executors it will allocate
   on the cluster (`spark.executor.instances` as configuration property), while `--executor-memory`
   (`spark.executor.memory` configuration property) and `--executor-cores` (`spark.executor.cores` configuration
   property) control the resources per executor. For more information, see the
   [YARN Spark Properties](running-on-yarn.html).
-
-A second option available on Mesos is _dynamic sharing_ of CPU cores. In this mode, each Spark application
-still has a fixed and independent memory allocation (set by `spark.executor.memory`), but when the
-application is not running tasks on a machine, other applications may run tasks on those cores. This mode
-is useful when you expect large numbers of not overly active applications, such as shell sessions from
-separate users. However, it comes with a risk of less predictable latency, because it may take a while for
-an application to gain back cores on one node when it has work to do. To use this mode, simply use a
-`mesos://` URL and set `spark.mesos.coarse` to false.
 
 Note that none of the modes currently provide memory sharing across applications. If you would like to share
 data this way, we recommend running a single server application that can serve multiple requests by querying
@@ -79,8 +67,7 @@ are no longer used and request them again later when there is demand. This featu
 useful if multiple applications share resources in your Spark cluster.
 
 This feature is disabled by default and available on all coarse-grained cluster managers, i.e.
-[standalone mode](spark-standalone.html), [YARN mode](running-on-yarn.html),
-[Mesos coarse-grained mode](running-on-mesos.html#mesos-run-modes) and [K8s mode](running-on-kubernetes.html).
+[standalone mode](spark-standalone.html), [YARN mode](running-on-yarn.html) and [K8s mode](running-on-kubernetes.html).
 
 
 ### Caveats
@@ -102,10 +89,6 @@ without deleting shuffle files written by them (more detail described
 [below](job-scheduling.html#graceful-decommission-of-executors)). While it is simple to enable shuffle tracking, the way to set up the external shuffle service varies across cluster managers:
 
 In standalone mode, simply start your workers with `spark.shuffle.service.enabled` set to `true`.
-
-In Mesos coarse-grained mode, run `$SPARK_HOME/sbin/start-mesos-shuffle-service.sh` on all
-worker nodes with `spark.shuffle.service.enabled` set to `true`. For instance, you may do so
-through Marathon.
 
 In YARN mode, follow the instructions [here](running-on-yarn.html#configuring-the-external-shuffle-service).
 
@@ -201,7 +184,7 @@ mode is best for multi-user settings.
 
 This feature is disabled by default and available on all coarse-grained cluster managers, i.e.
 [standalone mode](spark-standalone.html), [YARN mode](running-on-yarn.html),
-[K8s mode](running-on-kubernetes.html) and [Mesos coarse-grained mode](running-on-mesos.html#mesos-run-modes).
+[K8s mode](running-on-kubernetes.html).
 To enable the fair scheduler, simply set the `spark.scheduler.mode` property to `FAIR` when configuring
 a SparkContext:
 

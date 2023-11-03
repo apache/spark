@@ -21,7 +21,6 @@ import java.io.{BufferedWriter, File, FileWriter}
 
 import scala.util.Properties
 
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.FileUtils
 import org.scalatest.Assertions._
@@ -141,8 +140,7 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
-  test("SPARK-8020: set sql conf in spark conf") {
-    assume(!SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
+  ignore("SPARK-8020: set sql conf in spark conf") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(
       "--class", SparkSQLConfTest.getClass.getName.stripSuffix("$"),
@@ -164,9 +162,8 @@ class HiveSparkSubmitSuite
     // Before the fix in SPARK-8470, this results in a MissingRequirementError because
     // the HiveContext code mistakenly overrides the class loader that contains user classes.
     // For more detail, see sql/hive/src/test/resources/regression-test-SPARK-8489/*scala.
-    // TODO: revisit for Scala 2.13 support
     val version = Properties.versionNumberString match {
-      case v if v.startsWith("2.12") || v.startsWith("2.13") => v.substring(0, 4)
+      case v if v.startsWith("2.13") => v.substring(0, 4)
       case x => throw new Exception(s"Unsupported Scala Version: $x")
     }
     val jarDir = getTestResourcePath("regression-test-SPARK-8489")
@@ -180,8 +177,7 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
-  test("SPARK-9757 Persist Parquet relation with decimal column") {
-    assume(!SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
+  ignore("SPARK-9757 Persist Parquet relation with decimal column") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(
       "--class", SPARK_9757.getClass.getName.stripSuffix("$"),
@@ -277,8 +273,7 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
-  test("SPARK-16901: set javax.jdo.option.ConnectionURL") {
-    assume(!SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
+  ignore("SPARK-16901: set javax.jdo.option.ConnectionURL") {
     // In this test, we set javax.jdo.option.ConnectionURL and set metastore version to
     // 0.13. This test will make sure that javax.jdo.option.ConnectionURL will not be
     // overridden by hive's default settings when we create a HiveConf object inside
@@ -359,9 +354,8 @@ class HiveSparkSubmitSuite
     runSparkSubmit(argsForShowTables)
   }
 
-  test("SPARK-34772: RebaseDateTime loadRebaseRecords should use Spark classloader " +
+  ignore("SPARK-34772: RebaseDateTime loadRebaseRecords should use Spark classloader " +
     "instead of context") {
-    assume(!SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
 
     // We need to specify the metastore database location in case of conflict with other hive

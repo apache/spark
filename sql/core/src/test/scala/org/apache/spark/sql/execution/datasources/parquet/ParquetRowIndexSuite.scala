@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.column.ParquetProperties._

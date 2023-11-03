@@ -77,7 +77,7 @@ class Iso8601DateFormatter(
   override def validatePatternString(): Unit = {
     try {
       formatter
-    } catch checkLegacyFormatter(pattern, legacyFormatter.validatePatternString)
+    } catch checkLegacyFormatter(pattern, legacyFormatter.validatePatternString())
     ()
   }
 }

@@ -102,7 +102,7 @@ private[spark] class TaskThreadDumpPage(
         </div>
       </div>
     }.getOrElse{
-      Text(s"Task $taskId finished or some error occured during dumping thread")
+      Text(s"Task $taskId finished or some error occurred during dumping thread")
     }
     UIUtils.headerSparkPage(request, s"Thread dump for task $taskId", content, parent)
   }

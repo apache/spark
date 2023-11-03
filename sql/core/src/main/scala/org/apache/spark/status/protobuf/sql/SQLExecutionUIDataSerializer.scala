@@ -19,7 +19,7 @@ package org.apache.spark.status.protobuf.sql
 
 import java.util.Date
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.execution.ui.SQLExecutionUIData
 import org.apache.spark.status.protobuf.{JobExecutionStatusSerializer, ProtobufSerDe, StoreTypes}

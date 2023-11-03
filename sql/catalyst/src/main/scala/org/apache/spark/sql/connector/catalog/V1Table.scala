@@ -19,8 +19,8 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper

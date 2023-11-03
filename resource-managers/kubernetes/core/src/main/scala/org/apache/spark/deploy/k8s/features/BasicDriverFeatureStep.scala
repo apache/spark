@@ -18,8 +18,8 @@ package org.apache.spark.deploy.k8s.features
 
 import javax.ws.rs.core.UriBuilder
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model._
 

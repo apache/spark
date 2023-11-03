@@ -194,7 +194,7 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
       if (dataset.storageLevel == StorageLevel.NONE) {
         input.persist(StorageLevel.MEMORY_AND_DISK)
       }
-      Some(input.count)
+      Some(input.count())
     } else {
       None
     }

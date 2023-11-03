@@ -24,8 +24,8 @@ import com.google.common.base.Strings;
 
 import scala.Tuple2;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
@@ -44,8 +44,8 @@ public class JavaWord2VecSuite extends SharedSparkSession {
       .setSeed(42L);
     Word2VecModel model = word2vec.fit(doc);
     Tuple2<String, Object>[] syms = model.findSynonyms("a", 2);
-    Assert.assertEquals(2, syms.length);
-    Assert.assertEquals("b", syms[0]._1());
-    Assert.assertEquals("c", syms[1]._1());
+    Assertions.assertEquals(2, syms.length);
+    Assertions.assertEquals("b", syms[0]._1());
+    Assertions.assertEquals("c", syms[1]._1());
   }
 }

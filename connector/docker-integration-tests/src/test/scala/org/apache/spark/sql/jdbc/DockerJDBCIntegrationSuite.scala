@@ -21,7 +21,7 @@ import java.net.ServerSocket
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.spotify.docker.client._

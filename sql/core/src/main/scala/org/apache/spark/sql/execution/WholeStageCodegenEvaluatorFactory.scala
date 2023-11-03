@@ -44,7 +44,7 @@ class WholeStageCodegenEvaluatorFactory(
           if (!v) durationMs += buffer.durationMs()
           v
         }
-        override def next: InternalRow = buffer.next()
+        override def next(): InternalRow = buffer.next()
       }
     }
   }

@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import java.lang.{Double => JDouble, Integer => JInt}
 import java.util.{Map => JMap, NoSuchElementException}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 

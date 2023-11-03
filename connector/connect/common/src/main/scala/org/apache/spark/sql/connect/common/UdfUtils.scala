@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect.common
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.Row
@@ -45,7 +45,7 @@ private[sql] object UdfUtils extends Serializable {
   }
 
   def flatMapFuncToMapPartitionsAdaptor[T, U](
-      f: T => TraversableOnce[U]): Iterator[T] => Iterator[U] = _.flatMap(f)
+      f: T => IterableOnce[U]): Iterator[T] => Iterator[U] = _.flatMap(f)
 
   def filterFuncToScalaFunc[T](f: FilterFunction[T]): T => Boolean = f.call
 
@@ -62,28 +62,28 @@ private[sql] object UdfUtils extends Serializable {
   def foreachBatchFuncToScalaFunc[D](f: VoidFunction2[D, java.lang.Long]): (D, Long) => Unit =
     (d, i) => f.call(d, i)
 
-  def flatMapFuncToScalaFunc[T, U](f: FlatMapFunction[T, U]): T => TraversableOnce[U] = x =>
+  def flatMapFuncToScalaFunc[T, U](f: FlatMapFunction[T, U]): T => IterableOnce[U] = x =>
     f.call(x).asScala
 
   def flatMapGroupsFuncToScalaFunc[K, V, U](
-      f: FlatMapGroupsFunction[K, V, U]): (K, Iterator[V]) => TraversableOnce[U] = (key, data) =>
+      f: FlatMapGroupsFunction[K, V, U]): (K, Iterator[V]) => IterableOnce[U] = (key, data) =>
     f.call(key, data.asJava).asScala
 
   def mapGroupsFuncToScalaFunc[K, V, U](f: MapGroupsFunction[K, V, U]): (K, Iterator[V]) => U =
     (key, data) => f.call(key, data.asJava)
 
   def coGroupFunctionToScalaFunc[K, V, U, R](
-      f: CoGroupFunction[K, V, U, R]): (K, Iterator[V], Iterator[U]) => TraversableOnce[R] =
+      f: CoGroupFunction[K, V, U, R]): (K, Iterator[V], Iterator[U]) => IterableOnce[R] =
     (key, left, right) => f.call(key, left.asJava, right.asJava).asScala
 
   def mapGroupsFuncToFlatMapAdaptor[K, V, U](
-      f: (K, Iterator[V]) => U): (K, Iterator[V]) => TraversableOnce[U] = {
+      f: (K, Iterator[V]) => U): (K, Iterator[V]) => IterableOnce[U] = {
     (key: K, it: Iterator[V]) => Iterator(f(key, it))
   }
 
   def mapValuesAdaptor[K, V, U, IV](
-      f: (K, Iterator[V]) => TraversableOnce[U],
-      valueMapFunc: IV => V): (K, Iterator[IV]) => TraversableOnce[U] = {
+      f: (K, Iterator[V]) => IterableOnce[U],
+      valueMapFunc: IV => V): (K, Iterator[IV]) => IterableOnce[U] = {
     (k: K, itr: Iterator[IV]) =>
       {
         f(k, itr.map(v => valueMapFunc(v)))
@@ -91,9 +91,9 @@ private[sql] object UdfUtils extends Serializable {
   }
 
   def mapValuesAdaptor[K, V, U, R, IV, IU](
-      f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R],
+      f: (K, Iterator[V], Iterator[U]) => IterableOnce[R],
       valueMapFunc: IV => V,
-      otherValueMapFunc: IU => U): (K, Iterator[IV], Iterator[IU]) => TraversableOnce[R] = {
+      otherValueMapFunc: IU => U): (K, Iterator[IV], Iterator[IU]) => IterableOnce[R] = {
     (k: K, itr: Iterator[IV], otherItr: Iterator[IU]) =>
       {
         f(k, itr.map(v => valueMapFunc(v)), otherItr.map(u => otherValueMapFunc(u)))
@@ -131,7 +131,7 @@ private[sql] object UdfUtils extends Serializable {
 
   def noOp[V, K](): V => K = _ => null.asInstanceOf[K]
 
-  def traversableOnceToSeq[A, B](f: A => TraversableOnce[B]): A => Seq[B] = { value =>
+  def iterableOnceToSeq[A, B](f: A => IterableOnce[B]): A => Seq[B] = { value =>
     f(value).toSeq
   }
 

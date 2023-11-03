@@ -18,8 +18,8 @@ package org.apache.spark.sql
 
 import java.util.{Collections, Locale}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
@@ -2733,7 +2733,7 @@ class Dataset[T] private[sql] (
    * @group typedrel
    * @since 3.5.0
    */
-  def flatMap[U: Encoder](func: T => TraversableOnce[U]): Dataset[U] =
+  def flatMap[U: Encoder](func: T => IterableOnce[U]): Dataset[U] =
     mapPartitions(UdfUtils.flatMapFuncToMapPartitionsAdaptor(func))
 
   /**
@@ -2775,9 +2775,9 @@ class Dataset[T] private[sql] (
    * @since 3.5.0
    */
   @deprecated("use flatMap() or select() with functions.explode() instead", "3.5.0")
-  def explode[A <: Product: TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
+  def explode[A <: Product: TypeTag](input: Column*)(f: Row => IterableOnce[A]): DataFrame = {
     val generator = ScalarUserDefinedFunction(
-      UdfUtils.traversableOnceToSeq(f),
+      UdfUtils.iterableOnceToSeq(f),
       UnboundRowEncoder :: Nil,
       ScalaReflection.encoderFor[Seq[A]])
     select(col("*"), functions.inline(generator(struct(input: _*))))
@@ -2807,9 +2807,9 @@ class Dataset[T] private[sql] (
    */
   @deprecated("use flatMap() or select() with functions.explode() instead", "3.5.0")
   def explode[A, B: TypeTag](inputColumn: String, outputColumn: String)(
-      f: A => TraversableOnce[B]): DataFrame = {
+      f: A => IterableOnce[B]): DataFrame = {
     val generator = ScalarUserDefinedFunction(
-      UdfUtils.traversableOnceToSeq(f),
+      UdfUtils.iterableOnceToSeq(f),
       Nil,
       ScalaReflection.encoderFor[Seq[B]])
     select(col("*"), functions.explode(generator(col(inputColumn))).as((outputColumn)))

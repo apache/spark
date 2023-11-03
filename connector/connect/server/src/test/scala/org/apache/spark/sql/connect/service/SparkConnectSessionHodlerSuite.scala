@@ -20,8 +20,8 @@ package org.apache.spark.sql.connect.service
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.sys.process.Process
 
 import com.google.common.collect.Lists
@@ -31,6 +31,7 @@ import org.apache.spark.api.python.SimplePythonFunction
 import org.apache.spark.sql.IntegratedUDFTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.planner.{PythonStreamingQueryListener, StreamingForeachBatchHelper}
+import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper.RunnerCleaner
 import org.apache.spark.sql.test.SharedSparkSession
 
 class SparkConnectSessionHolderSuite extends SharedSparkSession {
@@ -206,7 +207,8 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
       sessionHolder.streamingForeachBatchRunnerCleanerCache
         .registerCleanerForQuery(query2, cleaner2)
 
-      val (runner1, runner2) = (cleaner1.runner, cleaner2.runner)
+      val (runner1, runner2) =
+        (cleaner1.asInstanceOf[RunnerCleaner].runner, cleaner2.asInstanceOf[RunnerCleaner].runner)
 
       // assert both python processes are running
       assert(!runner1.isWorkerStopped().get)

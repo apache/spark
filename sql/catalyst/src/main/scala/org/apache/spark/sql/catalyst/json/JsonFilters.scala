@@ -152,5 +152,5 @@ class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
   /**
    * Reset states of all predicates by re-initializing reference counters.
    */
-  override def reset(): Unit = predicates.foreach(_.foreach(_.reset))
+  override def reset(): Unit = predicates.foreach(_.foreach(_.reset()))
 }

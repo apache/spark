@@ -67,8 +67,7 @@ public class ColumnDefaultValue {
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
-    if (!(o instanceof ColumnDefaultValue)) return false;
-    ColumnDefaultValue that = (ColumnDefaultValue) o;
+    if (!(o instanceof ColumnDefaultValue that)) return false;
     return sql.equals(that.sql) && value.equals(that.value);
   }
 

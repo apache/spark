@@ -147,9 +147,10 @@ jobs:
           - >-
             catalyst, hive-thriftserver
           - >-
+            mllib-local,mllib
+          - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10,
-            mllib-local, mllib,
-            yarn, mesos, kubernetes, hadoop-cloud, spark-ganglia-lgpl,
+            yarn, kubernetes, hadoop-cloud, spark-ganglia-lgpl,
             connect, protobuf
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
         included-tags: [""]
@@ -180,22 +181,13 @@ jobs:
             java: ${{ inputs.java }}
             hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
-            # Using a tag that will not appear in sql module for placeholder, branch-3.3 and branch-3.4 will not run any UTs.
-            included-tags: >-
-              ${{
-                ((inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4') && 'org.apache.spark.tags.SlowHiveTest')
-                || 'org.apache.spark.tags.SlowSQLTest'
-              }}
+            included-tags: org.apache.spark.tags.SlowSQLTest
             comment: "- slow tests"
           - modules: sql
             java: ${{ inputs.java }}
             hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
-            excluded-tags: >-
-              ${{
-                ((inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4') && 'org.apache.spark.tags.ExtendedSQLTest')
-                || 'org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.SlowSQLTest'
-              }}
+            excluded-tags: org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.SlowSQLTest
             comment: "- other tests"
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
@@ -205,6 +197,8 @@ jobs:
       HIVE_PROFILE: ${{ matrix.hive }}
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
+      SKIP_UNIDOC: true
+      SKIP_MIMA: true
       SKIP_PACKAGING: true
     steps:
     - name: Checkout Spark repository
@@ -270,7 +264,7 @@ jobs:
       shell: 'script -q -e -c "bash {0}"'
       run: |
         # Fix for TTY related issues when launching the Ammonite REPL in tests.
-        export TERM=vt100 && script -qfc 'echo exit | amm -s' && rm typescript
+        export TERM=vt100
         # Hive "other tests" test needs larger metaspace size based on experiment.
         if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
         export SERIAL_SBT_TESTS=1
@@ -375,6 +369,7 @@ jobs:
             pyspark-pandas-connect-part3
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
+      PYTHON_TO_TEST: 'python3.9'
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
@@ -456,7 +451,12 @@ jobs:
           export SKIP_PACKAGING=false
           echo "Python Packaging Tests Enabled!"
         fi
-        ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
+        if [ ! -z "$PYTHON_TO_TEST" ]; then
+          ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --python-executables "$PYTHON_TO_TEST"
+        else
+          # For branch-3.5 and below, it uses the default Python versions.
+          ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
+        fi
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@v2
@@ -468,13 +468,13 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: test-results-${{ matrix.modules }}--8-${{ inputs.hadoop }}-hive2.3
+        name: test-results-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: ${{ !success() }}
       uses: actions/upload-artifact@v3
       with:
-        name: unit-tests-log-${{ matrix.modules }}--8-${{ inputs.hadoop }}-hive2.3
+        name: unit-tests-log-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
 
   sparkr:
@@ -491,6 +491,7 @@ jobs:
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
+      SKIP_UNIDOC: true
       SKIP_MIMA: true
       SKIP_PACKAGING: true
     steps:
@@ -552,7 +553,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: test-results-sparkr--8-${{ inputs.hadoop }}-hive2.3
+        name: test-results-sparkr--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
 
   breaking-changes-buf:
@@ -658,6 +659,8 @@ jobs:
       run: ./dev/check-license
     - name: Dependencies test
       run: ./dev/test-dependencies.sh
+    - name: MIMA test
+      run: ./dev/mima
     - name: Scala linter
       run: ./dev/lint-scala
     - name: Java linter
@@ -823,7 +826,7 @@ jobs:
         export MAVEN_CLI_OPTS="--no-transfer-progress"
         export JAVA_VERSION=${{ matrix.java }}
         # It uses Maven's 'install' intentionally, see https://github.com/apache/spark/pull/26414.
-        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} install
+        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} install
         rm -rf ~/.m2/repository/org/apache/spark
 
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g-gen job of benchmark.yml as well
@@ -918,13 +921,13 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: test-results-tpcds--8-${{ inputs.hadoop }}-hive2.3
+        name: test-results-tpcds--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: ${{ !success() }}
       uses: actions/upload-artifact@v3
       with:
-        name: unit-tests-log-tpcds--8-${{ inputs.hadoop }}-hive2.3
+        name: unit-tests-log-tpcds--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
 
   docker-integration-tests:
@@ -938,7 +941,7 @@ jobs:
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
-      ORACLE_DOCKER_IMAGE_NAME: gvenzl/oracle-xe:21.3.0
+      ORACLE_DOCKER_IMAGE_NAME: gvenzl/oracle-free:23.3
       SKIP_MIMA: true
       SKIP_PACKAGING: true
     steps:
@@ -985,13 +988,13 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: test-results-docker-integration--8-${{ inputs.hadoop }}-hive2.3
+        name: test-results-docker-integration--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: ${{ !success() }}
       uses: actions/upload-artifact@v3
       with:
-        name: unit-tests-log-docker-integration--8-${{ inputs.hadoop }}-hive2.3
+        name: unit-tests-log-docker-integration--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
 
   k8s-integration-tests:

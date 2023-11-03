@@ -176,7 +176,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     val df5 = Seq((Seq("a", null), Seq(1, 2))).toDF("k", "v")
     val e1 = intercept[SparkException] {
-      df5.select(map_from_arrays($"k", $"v")).collect
+      df5.select(map_from_arrays($"k", $"v")).collect()
     }
     assert(e1.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
@@ -187,7 +187,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     val df6 = Seq((Seq(1, 2), Seq("a"))).toDF("k", "v")
     val msg2 = intercept[Exception] {
-      df6.select(map_from_arrays($"k", $"v")).collect
+      df6.select(map_from_arrays($"k", $"v")).collect()
     }.getMessage
     assert(msg2.contains("The key array and value array of MapData must have the same length"))
   }
@@ -224,7 +224,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       StructField("col1", IntegerType, nullable = false),
       StructField("b", StringType)
     ))
-    assert(result.first.schema(0).dataType === expectedType)
+    assert(result.first().schema(0).dataType === expectedType)
     checkAnswer(result, Row(Row(2, "str")))
   }
 
@@ -237,7 +237,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       StructField("col2", DoubleType, nullable = false)
     ))
 
-    assert(result.first.schema(0).dataType === expectedType)
+    assert(result.first().schema(0).dataType === expectedType)
     checkAnswer(result, Seq(Row(Row(2, 5.0)), Row(Row(4, 5.0))))
   }
 
@@ -250,7 +250,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       StructField("col2", DoubleType, nullable = false)
     ))
 
-    assert(result.first.schema(0).dataType === expectedType)
+    assert(result.first().schema(0).dataType === expectedType)
     checkAnswer(result, Seq(Row(Row("v", 5.0)), Row(Row("v", 5.0))))
   }
 
@@ -401,7 +401,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val encryptedEcb = "9J3iZbIxnmaG+OIA9Amd+A=="
     val encryptedGcm = "y5la3muiuxN2suj6VsYXB+0XUFjtrUD0/zv5eDafsA3U"
     val encryptedCbc = "+MgyzJxhusYVGWCljk7fhhl6C6oUqWmtdqoaG93KvhY="
-    val df1 = Seq("Spark").toDF
+    val df1 = Seq("Spark").toDF()
 
     // Successful decryption of fixed values
     Seq(
@@ -426,7 +426,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val encryptedGcm = "AAAAAAAAAAAAAAAAQiYi+sRNYDAOTjdSEcYBFsAWPL1f"
     val cbcIv = "00000000000000000000000000000000"
     val encryptedCbc = "AAAAAAAAAAAAAAAAAAAAAPSd4mWyMZ5mhvjiAPQJnfg="
-    val df1 = Seq("Spark").toDF
+    val df1 = Seq("Spark").toDF()
     Seq(
       (key32, encryptedGcm, "GCM", gcmIv),
       (key32, encryptedCbc, "CBC", cbcIv)).foreach {
@@ -451,7 +451,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val gcmIv = "000000000000000000000000"
     val aad = "This is an AAD mixed into the input"
     val encryptedGcm = "AAAAAAAAAAAAAAAAQiYi+sTLm7KD9UcZ2nlRdYDe/PX4"
-    val df1 = Seq("Spark").toDF
+    val df1 = Seq("Spark").toDF()
     Seq(
       (key32, encryptedGcm, "GCM", gcmIv, aad)).foreach {
       case (key, ciphertext, mode, iv, aad) =>
@@ -481,7 +481,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val encryptedEmptyText24 = "9RDK70sHNzqAFRcpfGM5gQ=="
     val encryptedEmptyText32 = "j9IDsCvlYXtcVJUf4FAjQQ=="
 
-    val df1 = Seq("Spark", "").toDF
+    val df1 = Seq("Spark", "").toDF()
 
     // Successful encryption
     Seq(
@@ -3232,7 +3232,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     ).toDF("a", "b")
     val result10 = df10.select(array_except($"a", $"b"))
     val expectedType10 = ArrayType(IntegerType, containsNull = true)
-    assert(result10.first.schema(0).dataType === expectedType10)
+    assert(result10.first().schema(0).dataType === expectedType10)
   }
 
   test("array_intersect functions") {

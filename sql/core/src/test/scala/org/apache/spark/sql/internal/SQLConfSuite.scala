@@ -422,9 +422,9 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
         e.getMessage.getFormattedMessage.contains(config)))
     }
 
-    val config1 = SQLConf.HIVE_VERIFY_PARTITION_PATH.key
+    val config1 = SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key
     withLogAppender(logAppender) {
-      spark.conf.set(config1, true)
+      spark.conf.set(config1, 1)
     }
     check(config1)
 

@@ -762,7 +762,7 @@ object View {
     // as optimization configs but they are still needed during the view resolution.
     // TODO: remove this `retainedConfigs` after the `RelationConversions` is moved to
     // optimization phase.
-    val retainedConfigs = activeConf.getAllConfs.filterKeys(key =>
+    val retainedConfigs = activeConf.getAllConfs.view.filterKeys(key =>
       Seq(
         "spark.sql.hive.convertMetastoreParquet",
         "spark.sql.hive.convertMetastoreOrc",
@@ -1332,9 +1332,9 @@ object Expand {
     // grouping expression or null, so here we create new instance of it.
     val output = if (hasDuplicateGroupingSets) {
       val gpos = AttributeReference("_gen_grouping_pos", IntegerType, false)()
-      child.output ++ groupByAttrs.map(_.newInstance) :+ gid :+ gpos
+      child.output ++ groupByAttrs.map(_.newInstance()) :+ gid :+ gpos
     } else {
-      child.output ++ groupByAttrs.map(_.newInstance) :+ gid
+      child.output ++ groupByAttrs.map(_.newInstance()) :+ gid
     }
     Expand(projections, output, Project(child.output ++ groupByAliases, child))
   }

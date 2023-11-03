@@ -92,16 +92,46 @@ private[connect] object ErrorUtils extends Logging {
         builder.addAllStackTrace(
           currentError.getStackTrace
             .map { stackTraceElement =>
-              FetchErrorDetailsResponse.StackTraceElement
+              val stackTraceBuilder = FetchErrorDetailsResponse.StackTraceElement
                 .newBuilder()
                 .setDeclaringClass(stackTraceElement.getClassName)
                 .setMethodName(stackTraceElement.getMethodName)
-                .setFileName(stackTraceElement.getFileName)
                 .setLineNumber(stackTraceElement.getLineNumber)
-                .build()
+
+              if (stackTraceElement.getFileName != null) {
+                stackTraceBuilder.setFileName(stackTraceElement.getFileName)
+              }
+
+              stackTraceBuilder.build()
             }
             .toIterable
             .asJava)
+      }
+
+      currentError match {
+        case sparkThrowable: SparkThrowable =>
+          val sparkThrowableBuilder = FetchErrorDetailsResponse.SparkThrowable
+            .newBuilder()
+          if (sparkThrowable.getErrorClass != null) {
+            sparkThrowableBuilder.setErrorClass(sparkThrowable.getErrorClass)
+          }
+          for (queryCtx <- sparkThrowable.getQueryContext) {
+            sparkThrowableBuilder.addQueryContexts(
+              FetchErrorDetailsResponse.QueryContext
+                .newBuilder()
+                .setObjectType(queryCtx.objectType())
+                .setObjectName(queryCtx.objectName())
+                .setStartIndex(queryCtx.startIndex())
+                .setStopIndex(queryCtx.stopIndex())
+                .setFragment(queryCtx.fragment())
+                .build())
+          }
+          if (sparkThrowable.getSqlState != null) {
+            sparkThrowableBuilder.setSqlState(sparkThrowable.getSqlState)
+          }
+          sparkThrowableBuilder.putAllMessageParameters(sparkThrowable.getMessageParameters)
+          builder.setSparkThrowable(sparkThrowableBuilder.build())
+        case _ =>
       }
 
       val causeIdx = buffer.size + 1

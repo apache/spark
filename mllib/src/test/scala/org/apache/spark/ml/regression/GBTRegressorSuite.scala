@@ -112,7 +112,7 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
       .setMaxDepth(2)
       .setMaxIter(2)
     val model = gbt.fit(trainData.toDF())
-    testPredictionModelSinglePrediction(model, validationData.toDF)
+    testPredictionModelSinglePrediction(model, validationData.toDF())
   }
 
   test("Checkpointing") {
@@ -241,14 +241,14 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
         .setMaxDepth(2)
         .setMaxIter(3)
         .setLossType(lossType)
-      val model3 = gbt.fit(trainData.toDF)
+      val model3 = gbt.fit(trainData.toDF())
       val model1 = new GBTRegressionModel("gbt-reg-model-test1",
         model3.trees.take(1), model3.treeWeights.take(1), model3.numFeatures)
       val model2 = new GBTRegressionModel("gbt-reg-model-test2",
         model3.trees.take(2), model3.treeWeights.take(2), model3.numFeatures)
 
       for (evalLossType <- GBTRegressor.supportedLossTypes) {
-        val evalArr = model3.evaluateEachIteration(validationData.toDF, evalLossType)
+        val evalArr = model3.evaluateEachIteration(validationData.toDF(), evalLossType)
         val lossErr1 = GradientBoostedTrees.computeWeightedError(validationData.map(_.toInstance),
           model1.trees, model1.treeWeights, model1.convertToOldLossType(evalLossType))
         val lossErr2 = GradientBoostedTrees.computeWeightedError(validationData.map(_.toInstance),
@@ -315,7 +315,7 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
       .setMaxDepth(2)
       .setCheckpointInterval(5)
       .setSeed(123)
-    val model = gbt.fit(trainData.toDF)
+    val model = gbt.fit(trainData.toDF())
 
     model.trees.foreach (i => {
       assert(i.getMaxDepth === model.getMaxDepth)

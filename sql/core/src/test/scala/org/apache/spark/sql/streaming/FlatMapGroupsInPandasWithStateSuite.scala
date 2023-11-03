@@ -224,7 +224,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
       name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
 
     val inputData = MemoryStream[String]
-    val inputDataDS = inputData.toDS
+    val inputDataDS = inputData.toDS()
     val outputStructType = StructType(
       Seq(
         StructField("key", StringType),
@@ -308,7 +308,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
 
     val clock = new StreamManualClock
     val inputData = MemoryStream[String]
-    val inputDataDS = inputData.toDS
+    val inputDataDS = inputData.toDS()
     val outputStructType = StructType(
       Seq(
         StructField("key", StringType),
@@ -415,7 +415,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
 
       val inputData = MemoryStream[(String, Int)]
       val inputDataDF =
-        inputData.toDF.select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
+        inputData.toDF().select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
       val outputStructType = StructType(
         Seq(
           StructField("key", StringType),
@@ -497,7 +497,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         val clock = new StreamManualClock
         val inputData = MemoryStream[(String, Long)]
         val inputDataDF = inputData
-          .toDF.toDF("key", "time")
+          .toDF().toDF("key", "time")
           .selectExpr("key", "timestamp_seconds(time) as timestamp")
         val outputStructType = StructType(
           Seq(
@@ -762,7 +762,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
 
     val clock = new StreamManualClock
     val inputData = MemoryStream[String]
-    val inputDataDS = inputData.toDS
+    val inputDataDS = inputData.toDS()
       .withColumnRenamed("value", "key1")
       // the type of columns with string literal will be non-nullable
       .withColumn("key2", lit("__FAKE__"))
@@ -847,7 +847,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
     val clock = new StreamManualClock
     val inputData = MemoryStream[String]
     // schema: val1, key2, val2, key1, val3
-    val inputDataDS = inputData.toDS
+    val inputDataDS = inputData.toDS()
       .withColumnRenamed("value", "val1")
       .withColumn("key2", $"val1")
       // the type of columns with string literal will be non-nullable

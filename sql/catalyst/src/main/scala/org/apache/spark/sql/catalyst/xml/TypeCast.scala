@@ -22,10 +22,7 @@ import java.util.Locale
 
 import scala.util.Try
 import scala.util.control.Exception._
-import scala.util.control.NonFatal
 
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -85,25 +82,7 @@ private[sql] object TypeCast {
   }
 
   private def parseXmlTimestamp(value: String, options: XmlOptions): Long = {
-    try {
-      options.timestampFormatter.parse(value)
-    } catch {
-      case NonFatal(e) =>
-        // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-        // compatibility if enabled.
-        val enableParsingFallbackForTimestampType =
-          options.enableDateTimeParsingFallback
-            .orElse(SQLConf.get.jsonEnableDateTimeParsingFallback)
-            .getOrElse {
-              SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
-                options.timestampFormatInRead.isEmpty
-            }
-        if (!enableParsingFallbackForTimestampType) {
-          throw e
-        }
-        val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(value))
-        DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
-    }
+    options.timestampFormatter.parse(value)
   }
 
   // TODO: This function unnecessarily does type dispatch. Should merge it with `castTo`.

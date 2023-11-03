@@ -17,16 +17,15 @@
 package org.apache.spark.sql.connect.planner
 
 import java.io.EOFException
-import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentMap
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
-import org.apache.spark.api.python.{PythonException, PythonRDD, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
+import org.apache.spark.api.python.{PythonException, PythonWorkerUtils, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -41,7 +40,9 @@ object StreamingForeachBatchHelper extends Logging {
 
   type ForeachBatchFnType = (DataFrame, Long) => Unit
 
-  case class RunnerCleaner(runner: StreamingPythonRunner) extends AutoCloseable {
+  // Visible for testing.
+  /** An AutoClosable to clean up resources on query termination. Stops Python worker. */
+  private[connect] case class RunnerCleaner(runner: StreamingPythonRunner) extends AutoCloseable {
     override def close(): Unit = {
       try runner.stop()
       catch {
@@ -99,11 +100,12 @@ object StreamingForeachBatchHelper extends Logging {
   /**
    * Starts up Python worker and initializes it with Python function. Returns a foreachBatch
    * function that sets up the session and Dataframe cache and and interacts with the Python
-   * worker to execute user's function.
+   * worker to execute user's function. In addition, it returns an AutoClosable. The caller must
+   * ensure it is closed so that worker process and related resources are released.
    */
   def pythonForeachBatchWrapper(
       pythonFn: SimplePythonFunction,
-      sessionHolder: SessionHolder): (ForeachBatchFnType, RunnerCleaner) = {
+      sessionHolder: SessionHolder): (ForeachBatchFnType, AutoCloseable) = {
 
     val port = SparkConnectService.localPort
     val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
@@ -124,7 +126,7 @@ object StreamingForeachBatchHelper extends Logging {
       //     the session alive. The session mapping at Connect server does not expire and query
       //     keeps running even if the original client disappears. This keeps the query running.
 
-      PythonRDD.writeUTF(args.dfId, dataOut)
+      PythonWorkerUtils.writeUTF(args.dfId, dataOut)
       dataOut.writeLong(args.batchId)
       dataOut.flush()
 
@@ -133,10 +135,7 @@ object StreamingForeachBatchHelper extends Logging {
           case 0 =>
             logInfo(s"Python foreach batch for dfId ${args.dfId} completed (ret: 0)")
           case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
-            val exLength = dataIn.readInt()
-            val obj = new Array[Byte](exLength)
-            dataIn.readFully(obj)
-            val msg = new String(obj, StandardCharsets.UTF_8)
+            val msg = PythonWorkerUtils.readUTF(dataIn)
             throw new PythonException(
               s"Found error inside foreachBatch Python process: $msg",
               null)

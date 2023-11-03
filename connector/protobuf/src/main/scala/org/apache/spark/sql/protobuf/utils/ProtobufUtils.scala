@@ -22,7 +22,7 @@ import java.io.FileNotFoundException
 import java.nio.file.NoSuchFileException
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.protobuf.{DescriptorProtos, Descriptors, InvalidProtocolBufferException, Message}

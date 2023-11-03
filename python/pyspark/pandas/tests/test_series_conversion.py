@@ -17,7 +17,6 @@
 
 import unittest
 import sys
-from distutils.version import LooseVersion
 
 import pandas as pd
 

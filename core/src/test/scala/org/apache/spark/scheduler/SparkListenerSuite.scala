@@ -20,8 +20,8 @@ package org.apache.spark.scheduler
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.util.concurrent.Semaphore
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.mockito.Mockito
 import org.scalatest.matchers.must.Matchers

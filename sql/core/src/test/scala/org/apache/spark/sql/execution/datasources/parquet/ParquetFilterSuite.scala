@@ -791,7 +791,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
           SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> INT96.toString) {
           import testImplicits._
           withTempPath { file =>
-            millisData.map(i => Tuple1(Timestamp.valueOf(i))).toDF
+            millisData.map(i => Tuple1(Timestamp.valueOf(i))).toDF()
               .write.format(dataSourceName).save(file.getCanonicalPath)
             readParquetFile(file.getCanonicalPath) { df =>
               val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
@@ -1024,7 +1024,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
           // When a filter is pushed to Parquet, Parquet can apply it to every row.
           // So, we can check the number of rows returned from the Parquet
           // to make sure our filter pushdown work.
-          assert(stripSparkFilter(df).count == 1)
+          assert(stripSparkFilter(df).count() == 1)
         }
       }
     }

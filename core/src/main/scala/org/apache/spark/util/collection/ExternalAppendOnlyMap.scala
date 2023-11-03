@@ -565,7 +565,7 @@ class ExternalAppendOnlyMap[K, V, C](
       if (hasSpilled) {
         false
       } else {
-        logInfo(s"Task ${context.taskAttemptId} force spilling in-memory map to disk and " +
+        logInfo(s"Task ${context.taskAttemptId()} force spilling in-memory map to disk and " +
           s"it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
         val nextUpstream = spillMemoryIteratorToDisk(upstream)
         assert(!upstream.hasNext)
@@ -581,7 +581,7 @@ class ExternalAppendOnlyMap[K, V, C](
     }
 
     def toCompletionIterator: CompletionIterator[(K, C), SpillableIterator] = {
-      CompletionIterator[(K, C), SpillableIterator](this, this.destroy)
+      CompletionIterator[(K, C), SpillableIterator](this, this.destroy())
     }
 
     def readNext(): (K, C) = SPILL_LOCK.synchronized {
@@ -592,7 +592,7 @@ class ExternalAppendOnlyMap[K, V, C](
       }
     }
 
-    override def hasNext(): Boolean = cur != null
+    override def hasNext: Boolean = cur != null
 
     override def next(): (K, C) = {
       val r = cur

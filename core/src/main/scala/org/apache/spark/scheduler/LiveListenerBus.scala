@@ -21,8 +21,8 @@ import java.util.{List => JList}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.DynamicVariable
 

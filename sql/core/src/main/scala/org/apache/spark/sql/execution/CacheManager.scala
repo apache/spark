@@ -113,7 +113,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       planToCache: LogicalPlan,
       tableName: Option[String],
       storageLevel: StorageLevel): Unit = {
-    if (lookupCachedData(planToCache).nonEmpty) {
+    if (storageLevel == StorageLevel.NONE) {
+      // Do nothing for StorageLevel.NONE since it will not actually cache any data.
+    } else if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)

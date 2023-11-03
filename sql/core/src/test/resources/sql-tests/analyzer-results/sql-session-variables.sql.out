@@ -776,7 +776,7 @@ Project [NULL AS Expected#x, variablereference(system.session.var1=CAST(NULL AS 
 -- !query
 DECLARE OR REPLACE VARIABLE var1 STRING DEFAULT CURRENT_DATABASE()
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(current_database() as string), CURRENT_DATABASE()), true
+CreateVariable defaultvalueexpression(cast(current_schema() as string), CURRENT_DATABASE()), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -825,10 +825,11 @@ DECLARE OR REPLACE VARIABLE var1 INT DEFAULT (SELECT c1 FROM VALUES(1) AS T(c1))
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
+  "sqlState" : "42623",
   "messageParameters" : {
     "colName" : "`system`.`session`.`var1`",
     "defaultValue" : "(SELECT c1 FROM VALUES(1) AS T(c1))",
-    "statement" : "CRETE VARIABLE"
+    "statement" : "DECLARE VARIABLE"
   }
 }
 
@@ -2109,6 +2110,7 @@ CREATE OR REPLACE VIEW v AS SELECT var1 AS c1
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
     "objName" : "`spark_catalog`.`default`.`v`",

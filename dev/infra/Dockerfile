@@ -91,7 +91,7 @@ RUN python3.9 -m pip install numpy pyarrow 'pandas<=2.1.1' scipy unittest-xml-re
 RUN python3.9 -m pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4'
 
 # Add torch as a testing dependency for TorchDistributor
-RUN python3.9 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+RUN python3.9 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu
 RUN python3.9 -m pip install torcheval
 # Add Deepspeed as a testing dependency for DeepspeedTorchDistributor
 RUN python3.9 -m pip install deepspeed

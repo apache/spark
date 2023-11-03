@@ -19,8 +19,8 @@ package org.apache.spark.sql.connect.service
 
 import java.util.UUID
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
@@ -164,6 +164,10 @@ private[connect] class ExecuteHolder(
   private def addGrpcResponseSender(
       sender: ExecuteGrpcResponseSender[proto.ExecutePlanResponse]) = synchronized {
     if (closedTime.isEmpty) {
+      // Interrupt all other senders - there can be only one active sender.
+      // Interrupted senders will remove themselves with removeGrpcResponseSender when they exit.
+      grpcResponseSenders.foreach(_.interrupt())
+      // And add this one.
       grpcResponseSenders += sender
       lastAttachedRpcTime = None
     } else {

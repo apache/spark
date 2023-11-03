@@ -55,7 +55,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Set(
       "PartitionPruning",
       "RewriteSubquery",
-      "Extract Python UDFs")
+      "Extract Python UDFs",
+      "Infer Filters")
 
   protected def fixedPoint =
     FixedPoint(

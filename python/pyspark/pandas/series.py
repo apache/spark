@@ -53,6 +53,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
     CategoricalDtype,
 )
 from pandas.tseries.frequencies import DateOffset
+
 from pyspark.sql import functions as F, Column as PySparkColumn, DataFrame as SparkDataFrame
 from pyspark.sql.types import (
     ArrayType,
@@ -71,7 +72,6 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.window import Window
 from pyspark.sql.utils import get_column_class, get_window_class
-
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T
 from pyspark.pandas.accessors import PandasOnSparkSeriesMethods
@@ -4054,7 +4054,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     # TODO: add axis, pct, na_option parameter
     def rank(
-        self, method: str = "average", ascending: bool = True, numeric_only: Optional[bool] = None
+        self, method: str = "average", ascending: bool = True, numeric_only: bool = False
     ) -> "Series":
         """
         Compute numerical data ranks (1 through n) along axis. Equal values are
@@ -4075,9 +4075,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             * dense: like 'min', but rank always increases by 1 between groups
         ascending : boolean, default True
             False for ranks by high (1) to low (N)
-        numeric_only : bool, optional
-            If set to True, rank numeric Series, or raise TypeError for non-numeric Series.
-            False is not supported. This parameter is mainly for pandas compatibility.
+        numeric_only : bool, default False
+            For DataFrame objects, rank only numeric columns if set to True.
+
+            .. versionchanged:: 4.0.0
+                The default value of ``numeric_only`` is now ``False``.
+
 
         Returns
         -------
@@ -7033,7 +7036,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sfun: Callable[["Series"], PySparkColumn],
         name: str_type,
         axis: Optional[Axis] = None,
-        numeric_only: bool = True,
+        numeric_only: bool = False,
         skipna: bool = True,
         **kwargs: Any,
     ) -> Scalar:

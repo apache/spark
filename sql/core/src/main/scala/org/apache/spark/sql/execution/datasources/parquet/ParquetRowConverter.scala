@@ -21,8 +21,8 @@ import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteOrder
 import java.time.{ZoneId, ZoneOffset}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.parquet.column.Dictionary
 import org.apache.parquet.io.ColumnIOFactory

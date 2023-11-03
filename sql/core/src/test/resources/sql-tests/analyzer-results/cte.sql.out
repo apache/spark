@@ -359,6 +359,7 @@ FROM t
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "sqlState" : "42000",
   "messageParameters" : {
     "expr" : "\"outer(t.id)\""
   },

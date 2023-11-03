@@ -19,8 +19,8 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.clients.admin.Admin
 import org.apache.kafka.clients.consumer.{Consumer, KafkaConsumer}

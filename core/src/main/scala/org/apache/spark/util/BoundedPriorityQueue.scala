@@ -20,8 +20,8 @@ package org.apache.spark.util
 import java.io.Serializable
 import java.util.{PriorityQueue => JPriorityQueue}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.Growable
+import scala.jdk.CollectionConverters._
 
 /**
  * Bounded priority queue. This class wraps the original PriorityQueue

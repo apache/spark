@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.{Identifier, Table}

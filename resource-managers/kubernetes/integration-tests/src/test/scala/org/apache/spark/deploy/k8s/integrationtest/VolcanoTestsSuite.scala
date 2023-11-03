@@ -20,12 +20,12 @@ import java.io.{File, FileInputStream}
 import java.time.Instant
 import java.util.UUID
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 // scalastyle:off executioncontextglobal
 import scala.concurrent.ExecutionContext.Implicits.global
 // scalastyle:on executioncontextglobal
 import scala.concurrent.Future
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{HasMetadata, Pod, Quantity}
 import io.fabric8.volcano.client.VolcanoClient
