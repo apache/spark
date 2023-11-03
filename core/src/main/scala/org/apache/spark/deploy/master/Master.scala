@@ -121,6 +121,7 @@ private[deploy] class Master(
   if (defaultCores < 1) {
     throw new SparkException(s"${DEFAULT_CORES.key} must be positive")
   }
+  val historyServerUrl = conf.get(MASTER_UI_HISTORY_SERVER_URL)
 
   // Alternative application submission gateway that is stable across Spark versions
   private val restServerEnabled = conf.get(MASTER_REST_SERVER_ENABLED)
