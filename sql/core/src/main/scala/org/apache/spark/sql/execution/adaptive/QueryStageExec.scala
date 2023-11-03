@@ -41,6 +41,8 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  */
 abstract class QueryStageExec extends LeafExecNode {
 
+  // This flag should be relied to identify whether the Join is a "SELf_PUSH" only if it
+  // the exchange is original ( i.e not reused) else it can give false positive.
   val hasStreamSidePushdownDependent = false
 
   /**
