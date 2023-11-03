@@ -178,7 +178,6 @@ case class CatalogTablePartition(
 case class ClusterBySpec(columnNames: Seq[UnresolvedAttribute]) {
   override def toString: String = columnNames.map(_.name).mkString(",")
 
-  // TODO: For SHOW CREATE TABLE
   lazy val toDDL: String = if (columnNames.nonEmpty) s"CLUSTER BY ($toString)" else ""
 }
 

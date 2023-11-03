@@ -3984,6 +3984,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    *     [OPTIONS table_property_list]
    *     [PARTITIONED BY (partition_fields)]
    *     [CLUSTER BY (col_name, col_name, ...)]
+   *     [CLUSTER BY (col_name, col_name, ...)]
    *     [CLUSTERED BY (col_name, col_name, ...)
    *       [SORTED BY (col_name [ASC|DESC], ...)]
    *       INTO num_buckets BUCKETS
@@ -4020,7 +4021,10 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }
 
     val partitioning =
-      partitionExpressions(partTransforms, partCols, ctx) ++ bucketSpec.map(_.asTransform)
+      partitionExpressions(partTransforms, partCols, ctx) ++
+        bucketSpec.map(_.asTransform) ++
+        clusterBySpec.map(_.asTransform)
+
     val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
       serdeInfo, external = false)
 
