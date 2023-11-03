@@ -236,10 +236,11 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     }
 
     val isComplete = jobData.status != JobExecutionStatus.RUNNING
-    val stages = jobData.stageIds.map { stageId =>
+    val stages = jobData.stageIds.flatMap { stageId =>
+      val allStageAttempts = store.stageData(stageId).reverse
       // This could be empty if the listener hasn't received information about the
       // stage or if the stage information has been garbage collected
-      store.asOption(store.lastStageAttempt(stageId)).getOrElse {
+      val latestAttempt = allStageAttempts.headOption.getOrElse {
         new v1.StageData(
           status = v1.StageStatus.PENDING,
           stageId = stageId,
@@ -310,6 +311,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
           isShufflePushEnabled = false,
           shuffleMergersCount = 0)
       }
+      latestAttempt +: allStageAttempts.tail
     }
 
     val activeStages = Buffer[v1.StageData]()
