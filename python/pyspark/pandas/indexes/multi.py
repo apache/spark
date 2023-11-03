@@ -975,28 +975,6 @@ class MultiIndex(Index):
             "only the default get_loc method is currently supported for MultiIndex"
         )
 
-    @property
-    def is_all_dates(self) -> bool:
-        """
-        is_all_dates always returns False for MultiIndex
-
-        Examples
-        --------
-        >>> from datetime import datetime
-
-        >>> idx = ps.MultiIndex.from_tuples(
-        ...     [(datetime(2019, 1, 1, 0, 0, 0), datetime(2019, 1, 1, 0, 0, 0)),
-        ...      (datetime(2019, 1, 1, 0, 0, 0), datetime(2019, 1, 1, 0, 0, 0))])
-        >>> idx  # doctest: +SKIP
-        MultiIndex([('2019-01-01', '2019-01-01'),
-                    ('2019-01-01', '2019-01-01')],
-                   )
-
-        >>> idx.is_all_dates
-        False
-        """
-        return False
-
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeMultiIndex, item):
             property_or_func = getattr(MissingPandasLikeMultiIndex, item)
