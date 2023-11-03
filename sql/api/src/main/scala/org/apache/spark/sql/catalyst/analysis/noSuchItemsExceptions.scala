@@ -21,6 +21,7 @@ import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.QuotingUtils.{quoted, quoteIdentifier, quoteNameParts}
 import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Thrown by a catalog when an item cannot be found. The analyzer will rethrow the exception
@@ -87,7 +88,7 @@ class NoSuchNamespaceException private(
 
   def this(namespace: Array[String]) = {
     this(errorClass = "SCHEMA_NOT_FOUND",
-      Map("schemaName" -> quoteNameParts(namespace)))
+      Map("schemaName" -> quoteNameParts(namespace.toImmutableArraySeq)))
   }
 
   def this(message: String, cause: Option[Throwable] = None) = {
