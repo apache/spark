@@ -363,7 +363,9 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
 
     jira_fix_versions = list(map(lambda v: get_version_json(v), fix_versions))
 
-    resolve = list(filter(lambda a: a["name"] == "Resolve Issue", asf_jira.transitions(issue.key)))[0]
+    resolve = list(filter(lambda a: a["name"] == "Resolve Issue", asf_jira.transitions(issue.key)))[
+        0
+    ]
     resolution = list(filter(lambda r: r.raw["name"] == "Fixed", asf_jira.resolutions()))[0]
     asf_jira.transition_issue(
         issue.key,
