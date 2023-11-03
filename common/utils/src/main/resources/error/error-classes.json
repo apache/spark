@@ -1737,6 +1737,11 @@
           "Session already exists."
         ]
       },
+      "SESSION_CLOSED" : {
+        "message" : [
+          "Session was closed."
+        ]
+      },
       "SESSION_NOT_FOUND" : {
         "message" : [
           "Session not found."
