@@ -23,7 +23,8 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets.UTF_8
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, TimeZone}
-import javax.servlet.http.HttpServletRequest
+import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
+import javax.ws.rs.WebApplicationException
 import javax.ws.rs.core.{MediaType, MultivaluedMap, Response}
 
 import scala.jdk.CollectionConverters._
@@ -375,6 +376,31 @@ private[spark] object UIUtils extends Logging {
         </div>
       </body>
     </html>
+  }
+
+  /** SPARK-45556: Renders a page for a thrown as-expected web exception. */
+  def renderWebException(request: HttpServletRequest,
+                         response: HttpServletResponse,
+                         exception: WebApplicationException): Unit = {
+    try {
+      val exResponse = exception.getResponse
+      val message = exception.getMessage
+      val entity = if (exResponse != null && exResponse.hasEntity && exResponse.getEntity != null) {
+        exResponse.getEntity
+      } else {
+        message
+      }
+      val title = message
+      val body = <div class="row">{entity}</div>
+      response.setStatus(exception.getResponse.getStatus)
+      basicSparkPage(request, body, title).foreach { node =>
+        response.getWriter.write(node.toString)
+      }
+    } catch {
+      case e: Throwable =>
+        logWarning(s"Failed to render web exception due to error: $e", e)
+        throw exception
+    }
   }
 
   /** Returns an HTML table constructed by generating a row for each object in a sequence. */

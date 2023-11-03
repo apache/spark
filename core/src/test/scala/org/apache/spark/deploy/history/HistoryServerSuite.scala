@@ -19,9 +19,10 @@ package org.apache.spark.deploy.history
 import java.io.{File, FileInputStream, FileWriter, InputStream, IOException}
 import java.net.{HttpURLConnection, URL}
 import java.nio.charset.StandardCharsets
-import java.util.zip.ZipInputStream
+import java.util.zip.{ZipInputStream, ZipOutputStream}
 import javax.servlet._
 import javax.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
+import javax.ws.rs.WebApplicationException
 
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
@@ -81,7 +82,8 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
 
   def getExpRoot: File = expRoot
 
-  def init(extraConf: (String, String)*): Unit = {
+  def init(appHistoryProvider: Option[ApplicationHistoryProvider],
+           extraConf: (String, String)*): Unit = {
     Utils.deleteRecursively(storeDir)
     assert(storeDir.mkdir())
     val conf = new SparkConf()
@@ -93,14 +95,21 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
       .set(EXECUTOR_PROCESS_TREE_METRICS_ENABLED, true)
       .set(HYBRID_STORE_DISK_BACKEND, diskBackend.toString)
     conf.setAll(extraConf)
-    provider = new FsHistoryProvider(conf)
-    provider.checkForLogs()
+    val usedProvider = appHistoryProvider.getOrElse {
+      provider = new FsHistoryProvider(conf)
+      provider.checkForLogs()
+      provider
+    }
     val securityManager = HistoryServer.createSecurityManager(conf)
 
-    server = new HistoryServer(conf, provider, securityManager, 18080)
+    server = new HistoryServer(conf, usedProvider, securityManager, 18080)
     server.bind()
-    provider.start()
+    usedProvider.start()
     port = server.boundPort
+  }
+
+  def init(extraConf: (String, String)*): Unit = {
+    init(None, extraConf: _*)
   }
 
   def stop(): Unit = {
@@ -707,6 +716,47 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     conn.connect()
     assert(conn.getResponseCode === 302)
     assert(conn.getHeaderField("Location") === s"http://$localhost:$port/")
+  }
+
+  test("SPARK-45556: HistoryServer should pass-through WebApplicationException") {
+    stop()
+    val exceptionStatusCode = 418
+    val exceptionMessage = "I'm teapot"
+    val errorHistoryProvider = new ApplicationHistoryProvider {
+      private val exception = new WebApplicationException(exceptionMessage, exceptionStatusCode)
+
+      override def getListing(): Iterator[ApplicationInfo] = {
+        throw exception
+      }
+
+      override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
+        throw exception
+      }
+
+      override def writeEventLogs(appId: String,
+                                  attemptId: Option[String],
+                                  zipStream: ZipOutputStream): Unit = {
+        throw exception
+      }
+
+      override def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
+        throw exception
+      }
+
+      override def checkUIViewPermissions(appId: String,
+                                          attemptId: Option[String],
+                                          user: String): Boolean = {
+        throw exception
+      }
+    }
+    init(Some(errorHistoryProvider))
+    val port = server.boundPort
+    val url = new URL(s"http://$localhost:$port/history/application-418")
+    val (status, in, err) = HistoryServerSuite.getContentAndCode(url)
+    assert(status == exceptionStatusCode)
+    assert(in.isEmpty)
+    assert(err.exists(_.contains(s"<title>$exceptionMessage</title>")))
+    assert(err.exists(_.contains(s"<div class=${'"'}row${'"'}>$exceptionMessage</div>")))
   }
 }
 

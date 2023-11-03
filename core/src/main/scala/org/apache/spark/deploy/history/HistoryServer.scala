@@ -20,6 +20,7 @@ package org.apache.spark.deploy.history
 import java.util.NoSuchElementException
 import java.util.zip.ZipOutputStream
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
+import javax.ws.rs.WebApplicationException
 
 import scala.util.control.NonFatal
 import scala.xml.Node
@@ -73,7 +74,8 @@ class HistoryServer(
   val cacheMetrics = appCache.metrics
 
   private val loaderServlet = new HttpServlet {
-    protected override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+    protected override def doGet(req: HttpServletRequest,
+                                 res: HttpServletResponse): Unit = doRequest(req, res) {
 
       res.setContentType("text/html;charset=utf-8")
 
@@ -126,6 +128,20 @@ class HistoryServer(
     // SPARK-5983 ensure TRACE is not supported
     protected override def doTrace(req: HttpServletRequest, res: HttpServletResponse): Unit = {
       res.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
+    }
+
+    private def doRequest(req: HttpServletRequest, res: HttpServletResponse)(fn: => Unit): Unit = {
+      try {
+        fn
+      } catch {
+        case e: WebApplicationException =>
+          // SPARK-45556: Pass-through and render as-expected web exceptions, instead of wrapping
+          // them within 500 responses.
+          UIUtils.renderWebException(req, res, e)
+        case e: Throwable =>
+          logWarning(s"${req.getMethod} ${req.getRequestURI} failed: $e", e)
+          throw e
+      }
     }
   }
 

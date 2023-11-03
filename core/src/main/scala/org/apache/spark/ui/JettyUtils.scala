@@ -21,6 +21,7 @@ import java.net.{URI, URL, URLDecoder}
 import java.util.EnumSet
 import javax.servlet.DispatcherType
 import javax.servlet.http._
+import javax.ws.rs.WebApplicationException
 
 import scala.language.implicitConversions
 import scala.util.Try
@@ -85,7 +86,14 @@ private[spark] object JettyUtils extends Logging {
             response.sendError(HttpServletResponse.SC_BAD_REQUEST, e.getMessage)
           case e: Exception =>
             logWarning(s"GET ${request.getRequestURI} failed: $e", e)
-            throw e
+            e match {
+              case webException: WebApplicationException =>
+                // SPARK-45556: Pass-through and render as-expected web exceptions, instead of
+                // wrapping them within 500 responses.
+                UIUtils.renderWebException(request, response, webException)
+              case _ =>
+                throw e
+            }
         }
       }
       // SPARK-5983 ensure TRACE is not supported

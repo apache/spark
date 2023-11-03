@@ -22,6 +22,8 @@ import java.net.{URI, URL}
 import java.util.Locale
 import javax.servlet._
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
+import javax.ws.rs.WebApplicationException
+import javax.ws.rs.core.{MediaType, Response}
 
 import scala.io.Source
 
@@ -445,6 +447,69 @@ class UISuite extends SparkFunSuite {
       sparkUI.attachAllHandlers()
       assert(TestUtils.httpResponseMessage(new URL(sparkUI.webUrl + "/jobs")).contains(sc.appName))
       sparkUI.stop()
+    }
+  }
+
+  test("SPARK-45556: WebApplicationException pass-through and render") {
+    val (conf, securityMgr, sslOptions) = sslDisabledConf()
+    val exceptionMessage = "I'm a teapot"
+    val createResponse = (entity: Object) => Response
+      .status(418)
+      .entity(entity)
+      .`type`(MediaType.TEXT_PLAIN)
+      .build()
+    // Test exceptions that with and without entity.
+    val testCases = Seq(
+      (new WebApplicationException(exceptionMessage, 418), exceptionMessage),
+      (new WebApplicationException(createResponse(exceptionMessage)), exceptionMessage),
+      (new WebApplicationException(exceptionMessage, createResponse(null)), exceptionMessage)
+    )
+    testCases.foreach { case (exception, message) =>
+      val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
+      try {
+        val path = "/web-exception"
+        val params: JettyUtils.ServletParams[String] = (_: HttpServletRequest) => throw exception
+        val handler = JettyUtils.createServletHandler(path, params, conf)
+        serverInfo.addHandler(handler, securityMgr)
+        val url = new URL(s"http://$localhost:${serverInfo.boundPort}$path")
+        TestUtils.withHttpConnection(url) { connection =>
+          val statusCode = connection.getResponseCode
+          assert(statusCode == 418)
+          val errorStream = connection.getErrorStream
+          val body = Source.fromInputStream(errorStream, "utf-8").getLines().mkString("\n")
+          assert(body.contains(s"<title>${exception.getMessage}</title>"))
+          assert(body.contains(s"<div class=${'"'}row${'"'}>$message</div>"))
+        }
+      } finally {
+        stopServer(serverInfo)
+      }
+    }
+  }
+
+  test("SPARK-45556: wrapping exceptions that is not WebApplicationException") {
+    val (conf, securityMgr, sslOptions) = sslDisabledConf()
+    // Test exceptions that with and without entity.
+    val testCases = Seq(
+      (new RuntimeException("test runtime exception"), 500),
+      (new NoSuchElementException("test no such element"), 500)
+    )
+    testCases.foreach { case (exception, statusCode) =>
+      val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
+      try {
+        val path = "/web-exception"
+        val params: JettyUtils.ServletParams[String] = (_: HttpServletRequest) => throw exception
+        val handler = JettyUtils.createServletHandler(path, params, conf)
+        serverInfo.addHandler(handler, securityMgr)
+        val url = new URL(s"http://$localhost:${serverInfo.boundPort}$path")
+        TestUtils.withHttpConnection(url) { connection =>
+          assert(connection.getResponseCode == statusCode)
+          val errorStream = connection.getErrorStream
+          val body = Source.fromInputStream(errorStream, "utf-8").getLines().mkString("\n")
+          assert(body.contains(exception.getMessage))
+        }
+      } finally {
+        stopServer(serverInfo)
+      }
     }
   }
 
