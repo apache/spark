@@ -2875,23 +2875,23 @@ class DataFrameSuite extends QueryTest
     }
   }
 
-  test("SPARK-00000: explainString method") {
+  test("SPARK-45782: explainString method") {
     val df = Seq(("John", 30), ("Alice", 25), ("Bob", 28)).toDF()
     val actual = df.explainString(true)
     val expected =
       """
-      |== Parsed Logical Plan ==\\n
-      |LogicalRDD \[_1#[\d]+, _2#[\d]+L\], false\\n
-      |\\n
-      |== Analyzed Logical Plan ==\\n
-      |_1: string, _2: bigint\\n
-      |LogicalRDD \[_1#[\d]+, _2#[\d]+L\], false\\n
-      |\\n
-      |== Optimized Logical Plan ==\\n
-      |LogicalRDD \[_1#[\d]+, _2#[\d]+L\], false\\n
-      |\\n
-      |== Physical Plan ==\\n
-      |\*\(1\) Scan ExistingRDD\[_1#[\d]+,_2#[\d]+L\]\\n
+      |== Parsed Logical Plan ==\n
+      |LocalRelation \[_1#[\d]+, _2#[\d]+\]\n
+      |\n
+      |== Analyzed Logical Plan ==\n
+      |_1: string, _2: int\n
+      |LocalRelation \[_1#[\d]+, _2#[\d]+\]\n
+      |\n
+      |== Optimized Logical Plan ==\n
+      |LocalRelation \[_1#[\d]+, _2#[\d]+\]\n
+      |\n
+      |== Physical Plan ==\n
+      |LocalTableScan \[_1#[\d]+, _2#[\d]+\]\n
       |""".stripMargin.replaceAll("\n", "").r
     assert(expected.matches(actual))
   }
