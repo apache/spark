@@ -267,13 +267,20 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
     eventStatus match {
       case ExecuteStatus.Pending | ExecuteStatus.Started | ExecuteStatus.Analyzed |
           ExecuteStatus.ReadyForExecution =>
-        if (sessionHolder.eventManager.status != SessionStatus.Started) {
+        if (sessionStatus != SessionStatus.Started) {
           throw new IllegalStateException(s"""
             sessionId: $sessionId with status $sessionStatus
             is not Started for event $eventStatus
             """)
         }
-      case _ => // do nothing
+      case ExecuteStatus.Finished | ExecuteStatus.Failed | ExecuteStatus.Canceled |
+          ExecuteStatus.Closed =>
+        if (sessionStatus != SessionStatus.Started || sessionStatus != SessionStatus.Closed) {
+          throw new IllegalStateException(s"""
+            sessionId: $sessionId with status $sessionStatus
+            is not Started/Closed for event $eventStatus
+            """)
+        }
     }
     _status = eventStatus
   }

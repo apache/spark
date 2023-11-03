@@ -334,10 +334,82 @@ class ExecuteEventsManagerSuite
     }
   }
 
-  test("SPARK-43923: Started wrong session status") {
-    val events = setupEvents(ExecuteStatus.Started, SessionStatus.Pending)
+  test("SPARK-45738: Failed post when session status is `Pending`") {
+    val events = setupEvents(ExecuteStatus.Pending, SessionStatus.Pending)
     assertThrows[IllegalStateException] {
       events.postStarted()
+    }
+    assertThrows[IllegalStateException] {
+      events.postAnalyzed()
+    }
+    assertThrows[IllegalStateException] {
+      events.postReadyForExecution()
+    }
+    assertThrows[IllegalStateException] {
+      events.postFinished()
+    }
+    assertThrows[IllegalStateException] {
+      events.postFailed(DEFAULT_ERROR)
+    }
+    assertThrows[IllegalStateException] {
+      events.postCanceled()
+    }
+    assertThrows[IllegalStateException] {
+      events.postClosed()
+    }
+  }
+
+  test("SPARK-45738: Succeed post when session status is `Started`") {
+    val events = setupEvents(ExecuteStatus.Pending, SessionStatus.Started)
+    assertResult(None) {
+      events.postStarted()
+    }
+    assertResult(None) {
+      events.postAnalyzed()
+    }
+    assertResult(None) {
+      events.postReadyForExecution()
+    }
+    assertResult(None) {
+      events.postFinished()
+    }
+    assertResult(None) {
+      events.postFailed(DEFAULT_ERROR)
+    }
+    assertResult(None) {
+      events.postCanceled()
+    }
+    assertResult(None) {
+      events.postClosed()
+    }
+  }
+
+  test("SPARK-45738: Failed post when session status is `Closed`") {
+    val events = setupEvents(ExecuteStatus.Pending, SessionStatus.Closed)
+    assertThrows[IllegalStateException] {
+      events.postStarted()
+    }
+    assertThrows[IllegalStateException] {
+      events.postAnalyzed()
+    }
+    assertThrows[IllegalStateException] {
+      events.postReadyForExecution()
+    }
+  }
+
+  test("SPARK-45738: Succeed post when session status is `Closed`") {
+    val events = setupEvents(ExecuteStatus.Pending, SessionStatus.Closed)
+    assertResult(None) {
+      events.postFinished()
+    }
+    assertResult(None) {
+      events.postFailed(DEFAULT_ERROR)
+    }
+    assertResult(None) {
+      events.postCanceled()
+    }
+    assertResult(None) {
+      events.postClosed()
     }
   }
 
