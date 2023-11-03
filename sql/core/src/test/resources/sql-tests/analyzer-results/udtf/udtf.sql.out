@@ -672,7 +672,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
   "sqlState" : "38000",
   "messageParameters" : {
-    "msg" : "Failed to evaluate the user-defined table function 'UDTFWithSinglePartition' because the function call provided keyword argument 'initial_count' whose corresponding value was already specified positionally. Note that the UDTF's static 'analyze' method expects positional argument names in the list: initial_count, input_table. Please update the query so that it provides this argument's value exactly once instead, and then try the query again."
+    "msg" : "Failed to evaluate the user-defined table function 'UDTFWithSinglePartition' because the function call provided keyword argument 'initial_count' whose corresponding value was already specified positionally. Note that the UDTF's static 'analyze' method expects positional argument names in the list: input_table, initial_count. Please update the query so that it provides this argument's value exactly once instead, and then try the query again."
   },
   "queryContext" : [ {
     "objectType" : "",

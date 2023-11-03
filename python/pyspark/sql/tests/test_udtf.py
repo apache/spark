@@ -298,9 +298,7 @@ class BaseUDTFTestsMixin:
             def eval(self, a: int):
                 yield a,
 
-        with self.assertRaisesRegex(
-            PythonException, r".*constructor has more than one argument.*"
-        ):
+        with self.assertRaisesRegex(PythonException, r".*constructor has more than one argument.*"):
             TestUDTF(lit(1)).show()
 
     def test_udtf_terminate_with_additional_args(self):
@@ -1627,19 +1625,13 @@ class BaseUDTFTestsMixin:
 
         func = udtf(TestUDTF)
 
-        with self.assertRaisesRegex(
-            AnalysisException, r"arguments"
-        ):
+        with self.assertRaisesRegex(AnalysisException, r"arguments"):
             func(lit(1)).collect()
 
-        with self.assertRaisesRegex(
-            AnalysisException, r"arguments"
-        ):
+        with self.assertRaisesRegex(AnalysisException, r"arguments"):
             func(lit(1), lit(2), lit(3)).collect()
 
-        with self.assertRaisesRegex(
-            PythonException, r"arguments"
-        ):
+        with self.assertRaisesRegex(PythonException, r"arguments"):
             func(lit(1), lit(2)).collect()
 
     def test_udtf_with_analyze_taking_keyword_arguments(self):

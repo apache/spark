@@ -122,11 +122,16 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Check invariants about the 'analyze' method before running it.
         expected = inspect.getfullargspec(handler.analyze)
-        if (expected.varargs is None and expected.varkw is None and expected.defaults is None and
-                len(args) + len(kwargs) != len(expected.args)):
+        if (
+            expected.varargs is None
+            and expected.varkw is None
+            and expected.defaults is None
+            and len(args) + len(kwargs) != len(expected.args)
+        ):
             # The UDTF call provided the wrong number of positional arguments.
             def arguments(num):
                 return f"{num} argument{'' if num == 1 else 's'}"
+
             raise PySparkValueError(
                 f"{error_prefix()} because its static 'analyze' method expects exactly "
                 f"{arguments(len(expected.args))}, but the function call provided "
@@ -142,7 +147,7 @@ def main(infile: IO, outfile: IO) -> None:
                 # The UDTF call provided a keyword argument whose name was not expected.
                 raise PySparkValueError(
                     f"{error_prefix()} because its static 'analyze' method expects arguments "
-                    f"whose names appear in the set ({', '.join(expected_arg_names)}), but the "
+                    f"whose names appear in the set ({', '.join(expected.args)}), but the "
                     f"function call provided a keyword argument with unexpected name '{arg_name}' "
                     f"instead. Please update the query so that it provides only keyword arguments "
                     f"whose names appear in this set, or else update the table function so that "
@@ -177,8 +182,10 @@ def main(infile: IO, outfile: IO) -> None:
                 f"pyspark.sql.udtf.AnalyzeResult with a 'schema' field comprising a StructType, "
                 f"but the 'schema' field had the wrong type: {type(result.schema)}"
             )
-        has_table_arg = (len([arg for arg in args if arg.isTable]) +
-                         len([arg for arg in kwargs.items() if arg[-1].isTable])) > 0
+        has_table_arg = (
+            len([arg for arg in args if arg.isTable])
+            + len([arg for arg in kwargs.items() if arg[-1].isTable])
+        ) > 0
         if not has_table_arg and result.withSinglePartition:
             raise PySparkValueError(
                 f"{error_prefix()} because the static 'analyze' method returned an 'AnalyzeResult' "
@@ -197,15 +204,19 @@ def main(infile: IO, outfile: IO) -> None:
                 f"'analyze' method returns an 'AnalyzeResult' object with the "
                 f"'partitionBy' list set to empty, and then try the query again."
             )
-        elif (hasattr(result, 'partitionBy') and
-              isinstance(result.partitionBy, (list, tuple)) and
-              (len(result.partitionBy) > 0 and
-               not all([isinstance(val, PartitioningColumn) for val in result.partitionBy]))):
+        elif (
+            hasattr(result, "partitionBy")
+            and isinstance(result.partitionBy, (list, tuple))
+            and (
+                len(result.partitionBy) > 0
+                and not all([isinstance(val, PartitioningColumn) for val in result.partitionBy])
+            )
+        ):
             raise PySparkValueError(
                 f"{error_prefix()} because the static 'analyze' method returned an 'AnalyzeResult' "
                 f"object with the 'partitionBy' field set to a value besides a list or tuple of "
-                f"'PartitioningColumn' objects. " +
-                f"Please update the table function and then try the query again."
+                f"'PartitioningColumn' objects. "
+                + f"Please update the table function and then try the query again."
             )
 
         # Return the analyzed schema.

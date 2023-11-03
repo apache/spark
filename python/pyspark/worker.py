@@ -713,9 +713,7 @@ def read_udtf(pickleSer, infile, eval_type):
         if len(udtf_init_args.args) > 2:
             raise PySparkRuntimeError(
                 error_class="UDTF_CONSTRUCTOR_INVALID_IMPLEMENTS_ANALYZE_METHOD",
-                message_parameters={
-                    "name": handler.__name__
-                },
+                message_parameters={"name": handler.__name__},
             )
         elif len(udtf_init_args.args) == 2:
             prev_handler = handler
@@ -728,9 +726,7 @@ def read_udtf(pickleSer, infile, eval_type):
     elif len(udtf_init_args.args) > 1:
         raise PySparkRuntimeError(
             error_class="UDTF_CONSTRUCTOR_INVALID_NO_ANALYZE_METHOD",
-            message_parameters={
-                "name": handler.__name__
-            },
+            message_parameters={"name": handler.__name__},
         )
 
     class UDTFWithPartitions:
