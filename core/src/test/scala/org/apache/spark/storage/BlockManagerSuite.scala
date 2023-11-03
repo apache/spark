@@ -65,6 +65,7 @@ import org.apache.spark.shuffle.{MigratableResolver, ShuffleBlockInfo, ShuffleBl
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTester
@@ -1972,7 +1973,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val mockBlockManagerMaster = mock(classOf[BlockManagerMaster])
     val blockLocations = Seq(BlockManagerId("1", "host1", 100), BlockManagerId("2", "host2", 200))
     when(mockBlockManagerMaster.getLocations(mc.any[Array[BlockId]]))
-      .thenReturn(Array(blockLocations))
+      .thenReturn(Array(blockLocations).toImmutableArraySeq)
     val env = mock(classOf[SparkEnv])
 
     val blockIds: Array[BlockId] = Array(StreamBlockId(1, 2))
