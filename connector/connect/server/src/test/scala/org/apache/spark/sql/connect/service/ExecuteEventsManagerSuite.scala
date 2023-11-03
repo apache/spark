@@ -361,31 +361,31 @@ class ExecuteEventsManagerSuite
 
   test("SPARK-45738: Succeed post when session status is `Started`") {
     val events = setupEvents(ExecuteStatus.Pending, SessionStatus.Started)
-    assertResult(None) {
+    assertResult(()) {
       events.postStarted()
     }
-    assertResult(None) {
+    assertResult(()) {
       events.postAnalyzed()
     }
-    assertResult(None) {
+    assertResult(()) {
       events.postReadyForExecution()
     }
-    assertResult(None) {
+    assertResult(()) {
       events.postFinished()
     }
-    assertResult(None) {
+    assertResult(()) {
       events.postFailed(DEFAULT_ERROR)
     }
-    assertResult(None) {
+    assertResult(()) {
       events.postCanceled()
     }
-    assertResult(None) {
+    assertResult(()) {
       events.postClosed()
     }
   }
 
   test("SPARK-45738: Failed post when session status is `Closed`") {
-    val events = setupEvents(ExecuteStatus.Pending, SessionStatus.Closed)
+    val events = setupEvents(ExecuteStatus.Started, SessionStatus.Closed)
     assertThrows[IllegalStateException] {
       events.postStarted()
     }
@@ -398,17 +398,17 @@ class ExecuteEventsManagerSuite
   }
 
   test("SPARK-45738: Succeed post when session status is `Closed`") {
-    val events = setupEvents(ExecuteStatus.Pending, SessionStatus.Closed)
-    assertResult(None) {
+    val events = setupEvents(ExecuteStatus.Started, SessionStatus.Closed)
+    assertResult(()) {
       events.postFinished()
     }
-    assertResult(None) {
+    assertResult(()) {
       events.postFailed(DEFAULT_ERROR)
     }
-    assertResult(None) {
+    assertResult(()) {
       events.postCanceled()
     }
-    assertResult(None) {
+    assertResult(()) {
       events.postClosed()
     }
   }
