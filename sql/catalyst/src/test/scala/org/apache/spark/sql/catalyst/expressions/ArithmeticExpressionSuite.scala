@@ -226,7 +226,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
-  test("SPARK-XXXXX: Decimal multiply, divide, remainder, quot") {
+  test("SPARK-45786: Decimal multiply, divide, remainder, quot") {
     // Some known cases
     checkEvaluation(
       Multiply(
