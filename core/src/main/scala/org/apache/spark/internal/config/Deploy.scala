@@ -73,6 +73,7 @@ private[spark] object Deploy {
   val DEFAULT_CORES = ConfigBuilder("spark.deploy.defaultCores")
     .version("0.9.0")
     .intConf
+    .checkValue(_ > 0, "spark.deploy.defaultCores must be positive.")
     .createWithDefault(Int.MaxValue)
 
   val MAX_DRIVERS = ConfigBuilder("spark.deploy.maxDrivers")

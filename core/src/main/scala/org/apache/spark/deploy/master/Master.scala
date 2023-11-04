@@ -24,7 +24,7 @@ import java.util.concurrent.{ScheduledFuture, TimeUnit}
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Random
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState.DriverState
@@ -119,9 +119,6 @@ private[deploy] class Master(
   // Default maxCores for applications that don't specify it (i.e. pass Int.MaxValue)
   private val defaultCores = conf.get(DEFAULT_CORES)
   val reverseProxy = conf.get(UI_REVERSE_PROXY)
-  if (defaultCores < 1) {
-    throw new SparkException(s"${DEFAULT_CORES.key} must be positive")
-  }
   val historyServerUrl = conf.get(MASTER_UI_HISTORY_SERVER_URL)
 
   // Alternative application submission gateway that is stable across Spark versions
