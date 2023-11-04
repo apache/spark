@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.metric.{SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -133,7 +134,7 @@ case class CollectTailExec(limit: Int, child: SparkPlan) extends LimitExec {
 
     // If we use this execution plan separately like `Dataset.limit` without an actual
     // job launch, we might just have to mimic the implementation of `CollectLimitExec`.
-    sparkContext.parallelize(executeCollect(), numSlices = 1)
+    sparkContext.parallelize(executeCollect().toImmutableArraySeq, numSlices = 1)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =

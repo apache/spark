@@ -38,6 +38,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 
 
 /**
@@ -89,7 +90,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     val databases = qe.toRdd.collect().map { row =>
       getNamespace(catalog, parseIdent(row.getString(0)))
     }
-    CatalogImpl.makeDataset(databases, sparkSession)
+    CatalogImpl.makeDataset(databases.toImmutableArraySeq, sparkSession)
   }
 
   /**
@@ -107,7 +108,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     val databases = qe.toRdd.collect().map { row =>
       getNamespace(catalog, parseIdent(row.getString(0)))
     }
-    CatalogImpl.makeDataset(databases, sparkSession)
+    CatalogImpl.makeDataset(databases.toImmutableArraySeq, sparkSession)
   }
 
   /**
@@ -165,7 +166,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         makeTable(catalog.name() +: ns :+ tableName)
       }
     }
-    CatalogImpl.makeDataset(tables, sparkSession)
+    CatalogImpl.makeDataset(tables.toImmutableArraySeq, sparkSession)
   }
 
   private def makeTable(nameParts: Seq[String]): Table = {
@@ -281,7 +282,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       functions += makeFunction(parseIdent(row.getString(0)))
     }
 
-    CatalogImpl.makeDataset(functions.result(), sparkSession)
+    CatalogImpl.makeDataset(functions.result().toImmutableArraySeq, sparkSession)
   }
 
   private def makeFunction(ident: Seq[String]): Function = {

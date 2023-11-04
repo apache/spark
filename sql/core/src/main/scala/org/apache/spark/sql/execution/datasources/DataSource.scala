@@ -53,6 +53,7 @@ import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.{HadoopFSUtils, ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The main class responsible for representing a pluggable Data Source in Spark SQL. In addition to
@@ -270,7 +271,7 @@ case class DataSource(
         SourceInfo(
           s"FileSource[$path]",
           StructType(sourceDataSchema ++ partitionSchema),
-          partitionSchema.fieldNames)
+          partitionSchema.fieldNames.toImmutableArraySeq)
 
       case _ =>
         throw QueryExecutionErrors.streamedOperatorUnsupportedByDataSourceError(

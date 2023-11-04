@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, Par
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Physical plan node for scanning a batch of data from a data source v2.
@@ -55,7 +56,8 @@ case class BatchScanExec(
 
   override def hashCode(): Int = Objects.hashCode(batch, runtimeFilters)
 
-  @transient override lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions()
+  @transient override lazy val inputPartitions: Seq[InputPartition] =
+    batch.planInputPartitions().toImmutableArraySeq
 
   @transient private lazy val filteredPartitions: Seq[Seq[InputPartition]] = {
     val dataSourceFilters = runtimeFilters.flatMap {
@@ -100,11 +102,12 @@ case class BatchScanExec(
                 "partition values that are not present in the original partitioning.")
           }
 
-          groupPartitions(newPartitions).map(_.groupedParts.map(_.parts)).getOrElse(Seq.empty)
+          groupPartitions(newPartitions.toImmutableArraySeq)
+            .map(_.groupedParts.map(_.parts)).getOrElse(Seq.empty)
 
         case _ =>
           // no validation is needed as the data source did not report any specific partitioning
-          newPartitions.map(Seq(_))
+          newPartitions.map(Seq(_)).toImmutableArraySeq
       }
 
     } else {
@@ -135,7 +138,7 @@ case class BatchScanExec(
   override lazy val inputRDD: RDD[InternalRow] = {
     val rdd = if (filteredPartitions.isEmpty && outputPartitioning == SinglePartition) {
       // return an empty RDD with 1 partition if dynamic filtering removed the only split
-      sparkContext.parallelize(Array.empty[InternalRow], 1)
+      sparkContext.parallelize(Array.empty[InternalRow].toImmutableArraySeq, 1)
     } else {
       val finalPartitions = outputPartitioning match {
         case p: KeyGroupedPartitioning =>
