@@ -326,18 +326,6 @@ If this problem persists, you may consider using `rdd.checkpoint()` instead, whi
 
 `MapObjects` does not support the class `<cls>` as resulting collection.
 
-### CLUSTER_BY_NOT_ALLOWED_FOR_SESSION_CATALOG
-
-SQLSTATE: none assigned
-
-CLUSTER BY is not allowed for the session catalog.
-
-### CLUSTER_BY_NOT_ALLOWED_FOR_V1_TABLES
-
-SQLSTATE: none assigned
-
-CLUSTER BY is not allowed for V1 tables.
-
 ### CODEC_NOT_AVAILABLE
 
 SQLSTATE: 56038
@@ -2352,5 +2340,3 @@ The operation `<operation>` requires a `<requiredType>`. But `<objectName>` is a
 The `<functionName>` requires `<expectedNum>` parameters but the actual number is `<actualNum>`.
 
 For more details see [WRONG_NUM_ARGS](sql-error-conditions-wrong-num-args-error-class.html)
-
-
