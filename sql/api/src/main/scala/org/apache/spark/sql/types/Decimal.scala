@@ -497,7 +497,6 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   def * (that: Decimal): Decimal =
     Decimal(toJavaBigDecimal.multiply(that.toJavaBigDecimal, MATH_CONTEXT))
 
-
   def / (that: Decimal): Decimal =
     if (that.isZero) null else Decimal(toJavaBigDecimal.divide(that.toJavaBigDecimal,
       DecimalType.MAX_SCALE + 1, MATH_CONTEXT.getRoundingMode))
