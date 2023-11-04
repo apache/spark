@@ -195,8 +195,11 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     }
   }
 
+  /**
+   * Prevent ResourceCleaner from actually releasing resources after close it.
+   */
   private void cancelResourceClean() {
-    this.resourceCleaner.statusToFalse();
+    this.resourceCleaner.setStartedToFalse();
     this.cleanable.clean();
   }
 
@@ -205,7 +208,7 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     return resourceCleaner;
   }
 
-  public RocksIterator getRocksIterator() {
+  RocksIterator internalIterator() {
     return it;
   }
 
@@ -291,7 +294,7 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
 
     private final RocksIterator rocksIterator;
     private final RocksDB rocksDB;
-    private final AtomicBoolean status = new AtomicBoolean(true);
+    private final AtomicBoolean started = new AtomicBoolean(true);
 
     ResourceCleaner(RocksIterator rocksIterator, RocksDB rocksDB) {
       this.rocksIterator = rocksIterator;
@@ -300,7 +303,7 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
 
     @Override
     public void run() {
-      if (status.compareAndSet(true, false)) {
+      if (started.compareAndSet(true, false)) {
         rocksDB.notifyIteratorClosed(rocksIterator);
         synchronized (rocksDB.getRocksDB()) {
           org.rocksdb.RocksDB _db = rocksDB.getRocksDB().get();
@@ -311,13 +314,13 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
       }
     }
 
-    void statusToFalse() {
-      status.set(false);
+    void setStartedToFalse() {
+      started.set(false);
     }
 
     @VisibleForTesting
-    AtomicBoolean getStatus() {
-      return status;
+    boolean getStarted() {
+      return started.get();
     }
   }
 }

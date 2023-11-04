@@ -19,6 +19,7 @@ package org.apache.spark.util.kvstore;
 
 import java.io.File;
 import java.lang.ref.Reference;
+import java.lang.ref.WeakReference;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
@@ -395,11 +396,10 @@ public class RocksDBSuite {
       }
       RocksDBIterator<CustomType1> rocksDBIterator =
         (RocksDBIterator<CustomType1>) dbForCleanerTest.view(CustomType1.class).iterator();
-      Reference<RocksDBIterator<?>> reference =
-        getRocksDBIteratorRef(rocksDBIterator, dbForCleanerTest);
+      Reference<RocksDBIterator<?>> reference = new WeakReference<>(rocksDBIterator);
       assertNotNull(reference);
       RocksDBIterator.ResourceCleaner resourceCleaner = rocksDBIterator.getResourceCleaner();
-      assertTrue(resourceCleaner.getStatus().get());
+      assertTrue(resourceCleaner.getStarted());
       // Manually set rocksDBIterator to null, to be GC.
       rocksDBIterator = null;
       // 100 times gc, the rocksDBIterator should be GCed.
@@ -413,22 +413,11 @@ public class RocksDBSuite {
       assertTrue(reference.refersTo(null));
       // Verify that the Cleaner will be executed after a period of time,
       // and status will become false.
-      assertFalse(resourceCleaner.getStatus().get());
+      assertFalse(resourceCleaner.getStarted());
     } finally {
       dbForCleanerTest.close();
       FileUtils.deleteQuietly(dbPathForCleanerTest);
     }
-  }
-
-  private Reference<RocksDBIterator<?>> getRocksDBIteratorRef(
-      RocksDBIterator<?> rocksDBIterator,
-      RocksDB rocksDB) {
-    for (Reference<RocksDBIterator<?>> rocksDBIteratorReference : rocksDB.getIteratorTracker()) {
-      if (rocksDBIterator == rocksDBIteratorReference.get()) {
-        return rocksDBIteratorReference;
-      }
-    }
-    return null;
   }
 
   private CustomType1 createCustomType1(int i) {
