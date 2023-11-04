@@ -79,6 +79,7 @@ private[deploy] class Master(
   private val addressToApp = new HashMap[RpcAddress, ApplicationInfo]
   private val completedApps = new ArrayBuffer[ApplicationInfo]
   private var nextAppNumber = 0
+  private val moduloAppNumber = conf.get(APP_NUMBER_MODULO).getOrElse(0)
 
   private val drivers = new HashSet[DriverInfo]
   private val completedDrivers = new ArrayBuffer[DriverInfo]
@@ -1156,6 +1157,9 @@ private[deploy] class Master(
   private def newApplicationId(submitDate: Date): String = {
     val appId = appIdPattern.format(createDateFormat.format(submitDate), nextAppNumber)
     nextAppNumber += 1
+    if (moduloAppNumber > 0) {
+      nextAppNumber %= moduloAppNumber
+    }
     appId
   }
 

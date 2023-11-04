@@ -1266,6 +1266,15 @@ class MasterSuite extends SparkFunSuite
     }.getMessage
     assert(m.contains("Whitespace is not allowed"))
   }
+
+  test("SPARK-45785: Rotate app num with modulo operation") {
+    val conf = new SparkConf().set(APP_ID_PATTERN, "%2$d").set(APP_NUMBER_MODULO, 1000)
+    val master = makeMaster(conf)
+    val submitDate = new Date()
+    (0 to 2000).foreach { i =>
+      assert(master.invokePrivate(_newApplicationId(submitDate)) === s"${i % 1000}")
+    }
+  }
 }
 
 private class FakeRecoveryModeFactory(conf: SparkConf, ser: serializer.Serializer)
