@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryPartitionTable}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
@@ -27,7 +28,7 @@ import org.apache.spark.sql.execution.command
  * The class contains tests for the `CREATE TABLE ... CLUSTER BY` command to check V2 table
  * catalogs.
  */
-class CreateTableWithClusterBySuite extends command.CreateTableWithClusterBySuiteBase
+class CreateTableClusterBySuite extends command.CreateTableClusterBySuiteBase
   with CommandSuiteBase {
   override def validateClusterBy(
       tableIdent: TableIdentifier, clusteringColumns: Seq[String]): Unit = {
@@ -37,5 +38,24 @@ class CreateTableWithClusterBySuite extends command.CreateTableWithClusterBySuit
       .asInstanceOf[InMemoryPartitionTable]
     assert(partTable.partitioning ===
       Array(ClusterByTransform(clusteringColumns.map(FieldReference(_)))))
+  }
+
+  test("test basic CREATE/REPLACE TABLE with clustering columns") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      spark.sql(s"CREATE TABLE $tbl (id INT) $defaultUsing CLUSTER BY (id)")
+      validateClusterBy(toTableIdentifier(tbl), Seq("id"))
+
+      spark.sql(s"REPLACE TABLE $tbl (id2 INT) $defaultUsing CLUSTER BY (id2)")
+      validateClusterBy(toTableIdentifier(tbl), Seq("id2"))
+    }
+  }
+
+  test("clustering columns not defined in schema") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      val err = intercept[AnalysisException] {
+        sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing CLUSTER BY (unknown)")
+      }
+      assert(err.message.contains("Couldn't find column unknown in:"))
+    }
   }
 }

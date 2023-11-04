@@ -181,6 +181,13 @@ case class ClusterBySpec(columnNames: Seq[UnresolvedAttribute]) {
   lazy val toDDL: String = if (columnNames.nonEmpty) s"CLUSTER BY ($toString)" else ""
 }
 
+object ClusterBySpec {
+  def apply(columns: String): ClusterBySpec = columns match {
+    case "" => ClusterBySpec(Seq.empty[UnresolvedAttribute])
+    case _ => ClusterBySpec(columns.split(",").map(_.trim).map(UnresolvedAttribute.quotedString))
+  }
+}
+
 /**
  * A container for bucketing information.
  * Bucketing is a technology for decomposing data sets into more manageable parts, and the number

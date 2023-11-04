@@ -244,7 +244,7 @@ object CatalogUtils {
       normalizeColumnName(tableName, tableCols, colName.name, "cluster by", resolver)
     }
 
-    ClusterBySpec(normalizedClusterByCols.map(UnresolvedAttribute(_)))
+    ClusterBySpec(normalizedClusterByCols.map(UnresolvedAttribute.quotedString(_)))
   }
 
   /**
