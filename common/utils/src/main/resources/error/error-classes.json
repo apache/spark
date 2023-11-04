@@ -393,16 +393,6 @@
     ],
     "sqlState" : "0A000"
   },
-  "CLUSTER_BY_NOT_ALLOWED_FOR_SESSION_CATALOG" : {
-    "message" : [
-      "CLUSTER BY is not allowed for the session catalog."
-    ]
-  },
-  "CLUSTER_BY_NOT_ALLOWED_FOR_V1_TABLES" : {
-    "message" : [
-      "CLUSTER BY is not allowed for V1 tables."
-    ]
-  },
   "CODEC_NOT_AVAILABLE" : {
     "message" : [
       "The codec <codecName> is not available. Consider to set the config <configKey> to <configVal>."

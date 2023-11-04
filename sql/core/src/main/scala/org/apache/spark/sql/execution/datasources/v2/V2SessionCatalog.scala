@@ -115,9 +115,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
       properties: util.Map[String, String]): Table = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TransformHelper
     val (partitionColumns, maybeBucketSpec, maybeClusterBySpec) = partitions.toSeq.convertTransforms
-    if (maybeClusterBySpec.isDefined) {
-      throw QueryCompilationErrors.clusterByNotAllowedForSessionCatalog()
-    }
     val provider = properties.getOrDefault(TableCatalog.PROP_PROVIDER, conf.defaultDataSourceName)
     val tableProperties = properties.asScala
     val location = Option(properties.get(TableCatalog.PROP_LOCATION))
@@ -140,7 +137,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
       bucketSpec = maybeBucketSpec,
       properties = tableProperties.toMap,
       tracksPartitionsInCatalog = conf.manageFilesourcePartitions,
-      comment = Option(properties.get(TableCatalog.PROP_COMMENT)))
+      comment = Option(properties.get(TableCatalog.PROP_COMMENT)),
+      clusterBySpec = maybeClusterBySpec)
 
     try {
       catalog.createTable(tableDesc, ignoreIfExists = false)
