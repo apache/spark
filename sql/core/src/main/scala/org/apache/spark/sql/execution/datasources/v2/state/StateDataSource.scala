@@ -90,7 +90,7 @@ class StateDataSource extends TableProvider with DataSourceRegister {
         .add("value", valueSchema)
     } catch {
       case NonFatal(e) =>
-        throw new IllegalArgumentException("Fail to read the state schema. Either the file " +
+        throw new IllegalArgumentException("Failed to read the state schema. Either the file " +
           s"does not exist, or the file is corrupted. options: $sourceOptions", e)
     }
   }
