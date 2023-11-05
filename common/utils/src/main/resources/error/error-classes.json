@@ -4777,11 +4777,6 @@
       "Hive metastore does not support altering database location."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1221" : {
-    "message" : [
-      "Hive 0.12 doesn't support creating permanent functions. Please use Hive 0.13 or higher."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1222" : {
     "message" : [
       "Unknown resource type: <resourceType>."
