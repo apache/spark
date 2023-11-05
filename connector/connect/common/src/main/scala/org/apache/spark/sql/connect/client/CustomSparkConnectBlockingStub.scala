@@ -53,7 +53,8 @@ private[client] class SparkConnectCommonStub {
    * Wraps an existing iterator with another closeable iterator that verifies the response. This
    * is needed for server-side streaming calls that are converted to iterators.
    */
-  def wrapIterator[T <: GeneratedMessageV3](inner: CloseableIterator[T]): CloseableIterator[T] = {
+  def wrapIterator[T <: GeneratedMessageV3, V <: CloseableIterator[T]](
+      inner: V): WrappedCloseableIterator[T] = {
     new WrappedCloseableIterator[T] {
 
       override def innerIterator: Iterator[T] = inner

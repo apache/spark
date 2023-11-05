@@ -2205,8 +2205,11 @@ class AddArtifactsResponse(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    SESSION_ID_FIELD_NUMBER: builtins.int
     SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
     ARTIFACTS_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """Session id in which the AddArtifact was running."""
     server_side_session_id: builtins.str
     """Server-side generated idempotency key that the client can use to assert that the server side
     session has not changed.
@@ -2221,6 +2224,7 @@ class AddArtifactsResponse(google.protobuf.message.Message):
     def __init__(
         self,
         *,
+        session_id: builtins.str = ...,
         server_side_session_id: builtins.str = ...,
         artifacts: collections.abc.Iterable[global___AddArtifactsResponse.ArtifactSummary]
         | None = ...,
@@ -2228,7 +2232,12 @@ class AddArtifactsResponse(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "artifacts", b"artifacts", "server_side_session_id", b"server_side_session_id"
+            "artifacts",
+            b"artifacts",
+            "server_side_session_id",
+            b"server_side_session_id",
+            "session_id",
+            b"session_id",
         ],
     ) -> None: ...
 
@@ -2312,7 +2321,7 @@ global___ArtifactStatusesRequest = ArtifactStatusesRequest
 
 class ArtifactStatusesResponse(google.protobuf.message.Message):
     """Response to checking artifact statuses.
-    Next ID: 3
+    Next ID: 4
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -2354,6 +2363,7 @@ class ArtifactStatusesResponse(google.protobuf.message.Message):
         ) -> None: ...
 
     STATUSES_FIELD_NUMBER: builtins.int
+    SESSION_ID_FIELD_NUMBER: builtins.int
     SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
     @property
     def statuses(
@@ -2362,6 +2372,8 @@ class ArtifactStatusesResponse(google.protobuf.message.Message):
         builtins.str, global___ArtifactStatusesResponse.ArtifactStatus
     ]:
         """A map of artifact names to their statuses."""
+    session_id: builtins.str
+    """Session id in which the ArtifactStatus was running."""
     server_side_session_id: builtins.str
     """Server-side generated idempotency key that the client can use to assert that the server side
     session has not changed.
@@ -2373,12 +2385,18 @@ class ArtifactStatusesResponse(google.protobuf.message.Message):
             builtins.str, global___ArtifactStatusesResponse.ArtifactStatus
         ]
         | None = ...,
+        session_id: builtins.str = ...,
         server_side_session_id: builtins.str = ...,
     ) -> None: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "server_side_session_id", b"server_side_session_id", "statuses", b"statuses"
+            "server_side_session_id",
+            b"server_side_session_id",
+            "session_id",
+            b"session_id",
+            "statuses",
+            b"statuses",
         ],
     ) -> None: ...
 

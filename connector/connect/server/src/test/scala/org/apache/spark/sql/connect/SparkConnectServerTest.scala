@@ -151,6 +151,8 @@ trait SparkConnectServerTest extends SharedSparkSession {
     // GrpcExceptionConverter.convertIterator
     stubIterator
       .asInstanceOf[WrappedCloseableIterator[proto.ExecutePlanResponse]]
+      .innerIterator
+      .asInstanceOf[WrappedCloseableIterator[proto.ExecutePlanResponse]]
       // ExecutePlanResponseReattachableIterator
       .innerIterator
       .asInstanceOf[ExecutePlanResponseReattachableIterator]
