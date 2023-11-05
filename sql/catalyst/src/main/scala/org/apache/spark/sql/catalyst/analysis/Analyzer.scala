@@ -1122,7 +1122,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       case r @ RelationTimeTravel(u: UnresolvedRelation, timestamp, version)
           if timestamp.forall(ts => ts.resolved && !SubqueryExpression.hasSubquery(ts)) =>
-        resolveRelation(u, TimeTravelSpec.create(timestamp, version, conf)).getOrElse(r)
+        val timeTravelSpec = TimeTravelSpec.create(timestamp, version, conf.sessionLocalTimeZone)
+        resolveRelation(u, timeTravelSpec).getOrElse(r)
 
       case u @ UnresolvedTable(identifier, cmd, suggestAlternative) =>
         lookupTableOrView(identifier).map {
@@ -1255,17 +1256,27 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     private def resolveRelation(
         u: UnresolvedRelation,
         timeTravelSpec: Option[TimeTravelSpec] = None): Option[LogicalPlan] = {
-      resolveTempView(u.multipartIdentifier, u.isStreaming, timeTravelSpec.isDefined).orElse {
+      val timeTravelSpecFromOptions = TimeTravelSpec.fromOptions(
+        u.options,
+        conf.getConf(SQLConf.TIME_TRAVEL_TIMESTAMP_KEY),
+        conf.getConf(SQLConf.TIME_TRAVEL_VERSION_KEY),
+        conf.sessionLocalTimeZone
+      )
+      if (timeTravelSpec.nonEmpty && timeTravelSpecFromOptions.nonEmpty) {
+        throw new AnalysisException("MULTIPLE_TIME_TRAVEL_SPEC", Map.empty[String, String])
+      }
+      val finalTimeTravelSpec = timeTravelSpec.orElse(timeTravelSpecFromOptions)
+      resolveTempView(u.multipartIdentifier, u.isStreaming, finalTimeTravelSpec.isDefined).orElse {
         expandIdentifier(u.multipartIdentifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
-            val key = ((catalog.name +: ident.namespace :+ ident.name).toSeq, timeTravelSpec)
+            val key = ((catalog.name +: ident.namespace :+ ident.name).toSeq, finalTimeTravelSpec)
             AnalysisContext.get.relationCache.get(key).map(_.transform {
               case multi: MultiInstanceRelation =>
                 val newRelation = multi.newInstance()
                 newRelation.copyTagsFrom(multi)
                 newRelation
             }).orElse {
-              val table = CatalogV2Util.loadTable(catalog, ident, timeTravelSpec)
+              val table = CatalogV2Util.loadTable(catalog, ident, finalTimeTravelSpec)
               val loaded = createRelation(catalog, ident, table, u.options, u.isStreaming)
               loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
               loaded
@@ -1303,7 +1314,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val partCols = partitionColumnNames(r.table)
         validatePartitionSpec(partCols, i.partitionSpec)
 
-        val staticPartitions = i.partitionSpec.filter(_._2.isDefined).mapValues(_.get).toMap
+        val staticPartitions = i.partitionSpec.filter(_._2.isDefined).view.mapValues(_.get).toMap
         val query = addStaticPartitionColumns(r, projectByName.getOrElse(i.query), staticPartitions,
           isByName)
 
@@ -3421,6 +3432,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case v2Write: V2WriteCommand
           if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved =>
         validateStoreAssignmentPolicy()
+        TableOutputResolver.suitableForByNameCheck(v2Write.isByName,
+          expected = v2Write.table.output, queryOutput = v2Write.query.output)
         val projection = TableOutputResolver.resolveOutputColumns(
           v2Write.table.name, v2Write.table.output, v2Write.query, v2Write.isByName, conf)
         if (projection != v2Write.query) {
@@ -3603,6 +3616,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // `GetStructField` without the name property.
         .collect { case g: GetStructField if g.name.isEmpty => g }
         .groupBy(_.child)
+        .view
         .mapValues(_.map(_.ordinal).distinct.sorted)
 
       structChildToOrdinals.foreach { case (expr, ordinals) =>

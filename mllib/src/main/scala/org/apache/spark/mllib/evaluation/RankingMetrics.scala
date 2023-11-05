@@ -44,8 +44,10 @@ class RankingMetrics[T: ClassTag] @Since("1.2.0") (predictionAndLabels: RDD[_ <:
     with Serializable {
 
   private val rdd = predictionAndLabels.map {
-    case (pred: Array[T], lab: Array[T]) => (pred, lab, Array.empty[Double])
-    case (pred: Array[T], lab: Array[T], rel: Array[Double]) => (pred, lab, rel)
+    case (pred: Array[T] @unchecked, lab: Array[T] @unchecked) =>
+      (pred, lab, Array.empty[Double])
+    case (pred: Array[T] @unchecked, lab: Array[T] @unchecked, rel: Array[Double]) =>
+      (pred, lab, rel)
     case _ => throw new IllegalArgumentException(s"Expected RDD of tuples or triplets")
   }
 

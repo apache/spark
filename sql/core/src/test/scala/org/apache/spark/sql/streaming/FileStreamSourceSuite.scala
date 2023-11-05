@@ -1411,7 +1411,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     withTempDirs { case (src, tmp) =>
       src.mkdirs()
 
-      val df = spark.readStream.format("text").load(src.getCanonicalPath).map(_ + "-x")
+      val df = spark.readStream.format("text").load(src.getCanonicalPath).map(_.toString + "-x")
       // Test `explain` not throwing errors
       df.explain()
 
@@ -2390,8 +2390,6 @@ class FileStreamSourceStressTestSuite extends FileStreamSourceTest {
  */
 class ExistsThrowsExceptionFileSystem extends RawLocalFileSystem {
   import ExistsThrowsExceptionFileSystem._
-
-  override def getScheme(): String = "existsthrowsexception"
 
   override def getUri: URI = {
     URI.create(s"$scheme:///")

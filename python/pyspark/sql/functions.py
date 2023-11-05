@@ -13679,6 +13679,42 @@ def schema_of_xml(xml: "ColumnOrName", options: Optional[Dict[str, str]] = None)
 
 
 @_try_remote_functions
+def to_xml(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+    """
+    Converts a column containing a :class:`StructType` into a XML string.
+    Throws an exception, in the case of an unsupported type.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column containing a struct.
+    options: dict, optional
+        options to control converting. accepts the same options as the XML datasource.
+        See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option>`_
+        for the version you use.
+
+        .. # noqa
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a XML string converted from given :class:`StructType`.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Row
+    >>> data = [(1, Row(age=2, name='Alice'))]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(to_xml(df.value, {'rowTag':'person'}).alias("xml")).collect()
+    [Row(xml='<person>\\n    <age>2</age>\\n    <name>Alice</name>\\n</person>')]
+    """
+
+    return _invoke_function("to_xml", _to_java_column(col), _options_to_str(options))
+
+
+@_try_remote_functions
 def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
     Parses a CSV string and infers its schema in DDL format.
@@ -17184,9 +17220,9 @@ def udtf(
 
     - The number and order of arguments are the same as the UDTF inputs
     - Each argument is a :class:`pyspark.sql.udtf.AnalyzeArgument`, containing:
-      - data_type: DataType
+      - dataType: DataType
       - value: Any: the calculated value if the argument is foldable; otherwise None
-      - is_table: bool: True if the argument is a table argument
+      - isTable: bool: True if the argument is a table argument
 
     and return a :class:`pyspark.sql.udtf.AnalyzeResult`, containing.
 
@@ -17198,7 +17234,7 @@ def udtf(
     ... class TestUDTFWithAnalyze:
     ...     @staticmethod
     ...     def analyze(a: AnalyzeArgument, b: AnalyzeArgument) -> AnalyzeResult:
-    ...         return AnalyzeResult(StructType().add("a", a.data_type).add("b", b.data_type))
+    ...         return AnalyzeResult(StructType().add("a", a.dataType).add("b", b.dataType))
     ...
     ...     def eval(self, a, b):
     ...         yield a, b
@@ -17219,9 +17255,9 @@ def udtf(
     ...         a: AnalyzeArgument, b: AnalyzeArgument, **kwargs: AnalyzeArgument
     ...     ) -> AnalyzeResult:
     ...         return AnalyzeResult(
-    ...             StructType().add("a", a.data_type)
-    ...                 .add("b", b.data_type)
-    ...                 .add("x", kwargs["x"].data_type)
+    ...             StructType().add("a", a.dataType)
+    ...                 .add("b", b.dataType)
+    ...                 .add("x", kwargs["x"].dataType)
     ...         )
     ...
     ...     def eval(self, a, b, **kwargs):

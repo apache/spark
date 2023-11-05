@@ -228,6 +228,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       case seq => Some(CreateStruct(seq)).map(e => Alias(e, e.sql)()).get
     }
       .groupBy(_.dataType)
+      .view
       .mapValues(values => values.map(value => toSQLId(value.name)).sorted)
       .mapValues(values => if (values.length > 3) values.take(3) :+ "..." else values)
       .toList.sortBy(_._1.sql)
@@ -920,12 +921,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "fieldNames" -> v1Table.schema.fieldNames.mkString(", ")))
   }
 
-  def invalidDatabaseNameError(quoted: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1055",
-      messageParameters = Map("database" -> quoted))
-  }
-
   def wrongCommandForObjectTypeError(
       operation: String,
       requiredType: String,
@@ -1179,10 +1174,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def schemaIsNotStructTypeError(exp: Expression, dataType: DataType): Throwable = {
+    schemaIsNotStructTypeError(toSQLExpr(exp), dataType)
+  }
+
+  def schemaIsNotStructTypeError(inputSchema: String, dataType: DataType): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
       messageParameters = Map(
-        "inputSchema" -> toSQLExpr(exp),
+        "inputSchema" -> inputSchema,
         "dataType" -> toSQLType(dataType)
       ))
   }
@@ -1983,6 +1982,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
       messageParameters = Map("msg" -> msg)
+    )
+  }
+
+  def failToPlanDataSourceError(action: String, tpe: String, msg: String): Throwable = {
+    new AnalysisException(
+      errorClass = "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON",
+      messageParameters = Map("action" -> action, "type" -> tpe, "msg" -> msg)
     )
   }
 
@@ -3342,7 +3348,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def invalidTimeTravelSpecError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1334",
+      errorClass = "INVALID_TIME_TRAVEL_SPEC",
       messageParameters = Map.empty)
   }
 
@@ -3798,5 +3804,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "functionName" -> functionName,
         "reason" -> reason))
+  }
+
+  def dataSourceAlreadyExists(name: String): Throwable = {
+    new AnalysisException(
+      errorClass = "DATA_SOURCE_ALREADY_EXISTS",
+      messageParameters = Map("provider" -> name))
   }
 }

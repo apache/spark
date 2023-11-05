@@ -283,7 +283,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-43522: Fix creating struct column name with index of array") {
-    val df = Seq("a=b,c=d,d=f").toDF().withColumn("key_value", split('value, ","))
+    val df = Seq("a=b,c=d,d=f").toDF().withColumn("key_value", split(Symbol("value"), ","))
       .withColumn("map_entry", transform(col("key_value"), x => struct(split(x, "=")
         .getItem(0), split(x, "=").getItem(1)))).select("map_entry")
 
@@ -1920,7 +1920,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           dfNoCols.select($"b.*")
         },
         errorClass = "CANNOT_RESOLVE_STAR_EXPAND",
-        parameters = Map("targetString" -> "`b`", "columns" -> ""))
+        parameters = Map("targetString" -> "`b`", "columns" -> ""),
+        context = ExpectedContext(
+          fragment = "$",
+          callSitePattern = getCurrentClassCallSitePattern))
     }
   }
 

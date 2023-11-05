@@ -318,6 +318,7 @@
 | org.apache.spark.sql.catalyst.expressions.StringTrimRight | rtrim | SELECT rtrim('    SparkSQL   ') | struct<rtrim(    SparkSQL   ):string> |
 | org.apache.spark.sql.catalyst.expressions.StructsToCsv | to_csv | SELECT to_csv(named_struct('a', 1, 'b', 2)) | struct<to_csv(named_struct(a, 1, b, 2)):string> |
 | org.apache.spark.sql.catalyst.expressions.StructsToJson | to_json | SELECT to_json(named_struct('a', 1, 'b', 2)) | struct<to_json(named_struct(a, 1, b, 2)):string> |
+| org.apache.spark.sql.catalyst.expressions.StructsToXml | to_xml | SELECT to_xml(named_struct('a', 1, 'b', 2)) | struct<to_xml(named_struct(a, 1, b, 2)):string> |
 | org.apache.spark.sql.catalyst.expressions.Substring | substr | SELECT substr('Spark SQL', 5) | struct<substr(Spark SQL, 5, 2147483647):string> |
 | org.apache.spark.sql.catalyst.expressions.Substring | substring | SELECT substring('Spark SQL', 5) | struct<substring(Spark SQL, 5, 2147483647):string> |
 | org.apache.spark.sql.catalyst.expressions.SubstringIndex | substring_index | SELECT substring_index('www.apache.org', '.', 2) | struct<substring_index(www.apache.org, ., 2):string> |

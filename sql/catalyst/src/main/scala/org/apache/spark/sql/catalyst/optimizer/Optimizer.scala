@@ -1055,6 +1055,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       .filter(_.references.exists(producerMap.contains))
       .flatMap(collectReferences)
       .groupBy(identity)
+      .view
       .mapValues(_.size)
       .forall {
         case (reference, count) =>

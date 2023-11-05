@@ -245,7 +245,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
       val provider = new FsHistoryProvider(conf)
 
-      val mergeApplicationListing = PrivateMethod[Unit]('mergeApplicationListing)
+      val mergeApplicationListing = PrivateMethod[Unit](Symbol("mergeApplicationListing"))
 
       val inProgressFile = newLogFile("app1", None, inProgress = true)
       val logAppender1 = new LogAppender("in-progress and final event log files does not exist")

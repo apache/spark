@@ -1244,10 +1244,10 @@ class BaseUDTFTestsMixin:
             @staticmethod
             def analyze(a: AnalyzeArgument) -> AnalyzeResult:
                 assert isinstance(a, AnalyzeArgument)
-                assert isinstance(a.data_type, DataType)
+                assert isinstance(a.dataType, DataType)
                 assert a.value is not None
-                assert a.is_table is False
-                return AnalyzeResult(StructType().add("a", a.data_type))
+                assert a.isTable is False
+                return AnalyzeResult(StructType().add("a", a.dataType))
 
             def eval(self, a):
                 yield a,
@@ -1333,7 +1333,7 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             @staticmethod
             def analyze(a: AnalyzeArgument, b: AnalyzeArgument) -> AnalyzeResult:
-                return AnalyzeResult(StructType().add("a", a.data_type).add("b", b.data_type))
+                return AnalyzeResult(StructType().add("a", a.dataType).add("b", b.dataType))
 
             def eval(self, a, b):
                 yield a, b
@@ -1364,7 +1364,7 @@ class BaseUDTFTestsMixin:
             @staticmethod
             def analyze(*args: AnalyzeArgument) -> AnalyzeResult:
                 return AnalyzeResult(
-                    StructType([StructField(f"col{i}", a.data_type) for i, a in enumerate(args)])
+                    StructType([StructField(f"col{i}", a.dataType) for i, a in enumerate(args)])
                 )
 
             def eval(self, *args):
@@ -1397,10 +1397,10 @@ class BaseUDTFTestsMixin:
             @staticmethod
             def analyze(a: AnalyzeArgument) -> AnalyzeResult:
                 assert isinstance(a, AnalyzeArgument)
-                assert isinstance(a.data_type, StructType)
+                assert isinstance(a.dataType, StructType)
                 assert a.value is None
-                assert a.is_table is True
-                return AnalyzeResult(StructType().add("a", a.data_type[0].dataType))
+                assert a.isTable is True
+                return AnalyzeResult(StructType().add("a", a.dataType[0].dataType))
 
             def eval(self, a: Row):
                 if a["id"] > 5:
@@ -1417,9 +1417,9 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             @staticmethod
             def analyze(a: AnalyzeArgument) -> AnalyzeResult:
-                assert isinstance(a.data_type, StructType)
-                assert a.is_table is True
-                return AnalyzeResult(a.data_type.add("is_even", BooleanType()))
+                assert isinstance(a.dataType, StructType)
+                assert a.isTable is True
+                return AnalyzeResult(a.dataType.add("is_even", BooleanType()))
 
             def eval(self, a: Row):
                 yield a["id"], a["id"] % 2 == 0
@@ -1449,11 +1449,11 @@ class BaseUDTFTestsMixin:
                 if n.value is None or not isinstance(n.value, int) or (n.value < 1 or n.value > 10):
                     raise Exception("The first argument must be a scalar integer between 1 and 10")
 
-                if row.is_table is False:
+                if row.isTable is False:
                     raise Exception("The second argument must be a table argument")
 
-                assert isinstance(row.data_type, StructType)
-                return AnalyzeResult(row.data_type)
+                assert isinstance(row.dataType, StructType)
+                return AnalyzeResult(row.dataType)
 
             def eval(self, n: int, row: Row):
                 for _ in range(n):
@@ -1604,7 +1604,7 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             @staticmethod
             def analyze(a: AnalyzeArgument) -> AnalyzeResult:
-                return AnalyzeResult(StructType().add("a", a.data_type))
+                return AnalyzeResult(StructType().add("a", a.dataType))
 
             def eval(self, a):
                 yield a,
@@ -1619,7 +1619,7 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             @staticmethod
             def analyze(a: AnalyzeArgument, b: AnalyzeArgument) -> AnalyzeResult:
-                return AnalyzeResult(StructType().add("a", a.data_type).add("b", b.data_type))
+                return AnalyzeResult(StructType().add("a", a.dataType).add("b", b.dataType))
 
             def eval(self, a):
                 yield a, a + 1
@@ -1675,7 +1675,7 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             @staticmethod
             def analyze(a: AnalyzeArgument) -> AnalyzeResult:
-                return AnalyzeResult(StructType().add(colname.value, a.data_type))
+                return AnalyzeResult(StructType().add(colname.value, a.dataType))
 
             def eval(self, a):
                 assert colname.value == "col1"
@@ -1700,7 +1700,7 @@ class BaseUDTFTestsMixin:
             @staticmethod
             def analyze(a: AnalyzeArgument) -> AnalyzeResult:
                 test_accum.add(1)
-                return AnalyzeResult(StructType().add("col1", a.data_type))
+                return AnalyzeResult(StructType().add("col1", a.dataType))
 
             def eval(self, a):
                 test_accum.add(10)
@@ -1739,7 +1739,7 @@ class BaseUDTFTestsMixin:
 
                 @staticmethod
                 def analyze(a: AnalyzeArgument) -> AnalyzeResult:
-                    return AnalyzeResult(StructType().add(TestUDTF.call_my_func(), a.data_type))
+                    return AnalyzeResult(StructType().add(TestUDTF.call_my_func(), a.dataType))
 
                 def eval(self, a):
                     assert TestUDTF.call_my_func() == "col1"
@@ -1779,7 +1779,7 @@ class BaseUDTFTestsMixin:
 
                 @staticmethod
                 def analyze(a: AnalyzeArgument) -> AnalyzeResult:
-                    return AnalyzeResult(StructType().add(TestUDTF.call_my_func(), a.data_type))
+                    return AnalyzeResult(StructType().add(TestUDTF.call_my_func(), a.dataType))
 
                 def eval(self, a):
                     assert TestUDTF.call_my_func() == "col1"
@@ -1826,7 +1826,7 @@ class BaseUDTFTestsMixin:
 
                 @staticmethod
                 def analyze(a: AnalyzeArgument) -> AnalyzeResult:
-                    return AnalyzeResult(StructType().add(TestUDTF.read_my_archive(), a.data_type))
+                    return AnalyzeResult(StructType().add(TestUDTF.read_my_archive(), a.dataType))
 
                 def eval(self, a):
                     assert TestUDTF.read_my_archive() == "col1"
@@ -1867,7 +1867,7 @@ class BaseUDTFTestsMixin:
 
                 @staticmethod
                 def analyze(a: AnalyzeArgument) -> AnalyzeResult:
-                    return AnalyzeResult(StructType().add(TestUDTF.read_my_file(), a.data_type))
+                    return AnalyzeResult(StructType().add(TestUDTF.read_my_file(), a.dataType))
 
                 def eval(self, a):
                     assert TestUDTF.read_my_file() == "col1"
@@ -1967,15 +1967,15 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             @staticmethod
             def analyze(**kwargs: AnalyzeArgument) -> AnalyzeResult:
-                assert isinstance(kwargs["a"].data_type, IntegerType)
+                assert isinstance(kwargs["a"].dataType, IntegerType)
                 assert kwargs["a"].value == 10
-                assert not kwargs["a"].is_table
-                assert isinstance(kwargs["b"].data_type, StringType)
+                assert not kwargs["a"].isTable
+                assert isinstance(kwargs["b"].dataType, StringType)
                 assert kwargs["b"].value == "x"
-                assert not kwargs["b"].is_table
+                assert not kwargs["b"].isTable
                 return AnalyzeResult(
                     StructType(
-                        [StructField(key, arg.data_type) for key, arg in sorted(kwargs.items())]
+                        [StructField(key, arg.dataType) for key, arg in sorted(kwargs.items())]
                     )
                 )
 
@@ -2000,7 +2000,7 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             @staticmethod
             def analyze(a, b):
-                return AnalyzeResult(StructType().add("a", a.data_type))
+                return AnalyzeResult(StructType().add("a", a.dataType))
 
             def eval(self, a, b):
                 yield a,
@@ -2028,18 +2028,18 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             @staticmethod
             def analyze(a: AnalyzeArgument, b: Optional[AnalyzeArgument] = None):
-                assert isinstance(a.data_type, IntegerType)
+                assert isinstance(a.dataType, IntegerType)
                 assert a.value == 10
-                assert not a.is_table
+                assert not a.isTable
                 if b is not None:
-                    assert isinstance(b.data_type, StringType)
+                    assert isinstance(b.dataType, StringType)
                     assert b.value == "z"
-                    assert not b.is_table
-                schema = StructType().add("a", a.data_type)
+                    assert not b.isTable
+                schema = StructType().add("a", a.dataType)
                 if b is None:
                     return AnalyzeResult(schema.add("b", IntegerType()))
                 else:
-                    return AnalyzeResult(schema.add("b", b.data_type))
+                    return AnalyzeResult(schema.add("b", b.dataType))
 
             def eval(self, a, b=100):
                 yield a, b
@@ -2298,8 +2298,8 @@ class BaseUDTFTestsMixin:
                     .add("count", IntegerType())
                     .add("total", IntegerType())
                     .add("last", IntegerType()),
-                    with_single_partition=True,
-                    order_by=[OrderingColumn("input"), OrderingColumn("partition_col")],
+                    withSinglePartition=True,
+                    orderBy=[OrderingColumn("input"), OrderingColumn("partition_col")],
                 )
 
             def eval(self, row: Row):
@@ -2352,8 +2352,8 @@ class BaseUDTFTestsMixin:
                     .add("count", IntegerType())
                     .add("total", IntegerType())
                     .add("last", IntegerType()),
-                    partition_by=[PartitioningColumn("partition_col")],
-                    order_by=[
+                    partitionBy=[PartitioningColumn("partition_col")],
+                    orderBy=[
                         OrderingColumn(name="input", ascending=True, overrideNullsFirst=False)
                     ],
                 )
@@ -2433,16 +2433,16 @@ class BaseUDTFTestsMixin:
             def analyze(argument, _):
                 if (
                     argument.value is None
-                    or argument.is_table
+                    or argument.isTable
                     or not isinstance(argument.value, str)
                     or len(argument.value) == 0
                 ):
                     raise Exception("The first argument must be non-empty string")
-                assert argument.data_type == StringType()
-                assert not argument.is_table
+                assert argument.dataType == StringType()
+                assert not argument.isTable
                 return AnalyzeResultWithBuffer(
                     schema=StructType().add("total", IntegerType()).add("buffer", StringType()),
-                    with_single_partition=True,
+                    withSinglePartition=True,
                     buffer=argument.value,
                 )
 

@@ -243,6 +243,16 @@ private[sql] class SparkConnectClient(
     bstub.interrupt(request)
   }
 
+  private[sql] def releaseSession(): proto.ReleaseSessionResponse = {
+    val builder = proto.ReleaseSessionRequest.newBuilder()
+    val request = builder
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .setClientType(userAgent)
+      .build()
+    bstub.releaseSession(request)
+  }
+
   private[this] val tags = new InheritableThreadLocal[mutable.Set[String]] {
     override def childValue(parent: mutable.Set[String]): mutable.Set[String] = {
       // Note: make a clone such that changes in the parent tags aren't reflected in

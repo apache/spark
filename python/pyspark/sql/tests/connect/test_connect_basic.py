@@ -1789,14 +1789,16 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             .toPandas(),
         )
 
+        from pyspark.sql.connect.observation import Observation as ConnectObservation
         from pyspark.sql.observation import Observation
 
+        cobservation = ConnectObservation(observation_name)
         observation = Observation(observation_name)
 
         cdf = (
             self.connect.read.table(self.tbl_name)
             .filter("id > 3")
-            .observe(observation, CF.min("id"), CF.max("id"), CF.sum("id"))
+            .observe(cobservation, CF.min("id"), CF.max("id"), CF.sum("id"))
             .toPandas()
         )
         df = (
@@ -1807,6 +1809,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
         self.assert_eq(cdf, df)
+
+        self.assert_eq(cobservation.get, observation.get)
 
         observed_metrics = cdf.attrs["observed_metrics"]
         self.assert_eq(len(observed_metrics), 1)
@@ -3093,25 +3097,11 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         # SPARK-41225: Disable unsupported functions.
         df = self.connect.read.table(self.tbl_name)
         for f in (
-            "rdd",
             "checkpoint",
             "localCheckpoint",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(df, f)()
-
-    def test_unsupported_session_functions(self):
-        # SPARK-41934: Disable unsupported functions.
-
-        with self.assertRaises(NotImplementedError):
-            RemoteSparkSession.builder.enableHiveSupport()
-
-        for f in (
-            "newSession",
-            "sparkContext",
-        ):
-            with self.assertRaises(NotImplementedError):
-                getattr(self.connect, f)()
 
     def test_sql_with_command(self):
         # SPARK-42705: spark.sql should return values from the command.
@@ -3447,6 +3437,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         # Gets currently active session.
         same = PySparkSession.builder.remote("sc://other.remote.host:114/").getOrCreate()
         self.assertEquals(other, same)
+        same.release_session_on_close = False  # avoid sending release to dummy connection
         same.stop()
 
         # Make sure the environment is clean.

@@ -707,7 +707,7 @@ case class RepairTableCommand(
       val partitionSpecsAndLocs: Seq[(TablePartitionSpec, Path)] =
         try {
           scanPartitions(spark, fs, pathFilter, root, Map(), table.partitionColumnNames, threshold,
-            spark.sessionState.conf.resolver, new ForkJoinTaskSupport(evalPool)).seq
+            spark.sessionState.conf.resolver, new ForkJoinTaskSupport(evalPool))
         } finally {
           evalPool.shutdown()
         }

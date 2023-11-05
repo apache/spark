@@ -30,7 +30,7 @@ import org.apache.spark.scheduler.{EventLoggingListener, SchedulingMode}
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
 import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy}
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{MavenUtils, Utils}
 import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillReader.MAX_BUFFER_SIZE_BYTES
 
 package object config {
@@ -238,7 +238,7 @@ package object config {
         "each event log file to the configured size.")
       .version("3.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val EVENT_LOG_ROLLING_MAX_FILE_SIZE =
     ConfigBuilder("spark.eventLog.rolling.maxFileSize")
@@ -1837,6 +1837,14 @@ package object config {
     .intConf
     .createWithDefault(8080)
 
+  private[spark] val MASTER_UI_HISTORY_SERVER_URL =
+    ConfigBuilder("spark.master.ui.historyServerUrl")
+      .doc("The URL where Spark history server is running. Please note that this assumes " +
+        "that all Spark jobs share the same event log location where the history server accesses.")
+      .version("4.0.0")
+      .stringConf
+      .createOptional
+
   private[spark] val IO_COMPRESSION_SNAPPY_BLOCKSIZE =
     ConfigBuilder("spark.io.compression.snappy.blockSize")
       .doc("Block size in bytes used in Snappy compression, in the case when " +
@@ -2452,7 +2460,7 @@ package object config {
       .createOptional
 
   private[spark] val JAR_IVY_SETTING_PATH =
-    ConfigBuilder("spark.jars.ivySettings")
+    ConfigBuilder(MavenUtils.JAR_IVY_SETTING_PATH_KEY)
       .doc("Path to an Ivy settings file to customize resolution of jars specified " +
         "using spark.jars.packages instead of the built-in defaults, such as maven central. " +
         "Additional repositories given by the command-line option --repositories " +

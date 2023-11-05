@@ -83,7 +83,8 @@ private[spark] object DatasetUtils extends Logging {
 
   private[ml] def checkNonNanVectors(vectorCol: Column): Column = {
     when(vectorCol.isNull, raise_error(lit("Vectors MUST NOT be Null")))
-      .when(!validateVector(vectorCol),
+      .when(exists(unwrap_udt(vectorCol).getField("values"),
+        v => v.isNaN || v === Double.NegativeInfinity || v === Double.PositiveInfinity),
         raise_error(concat(lit("Vector values MUST NOT be NaN or Infinity, but got "),
           vectorCol.cast(StringType))))
       .otherwise(vectorCol)
@@ -91,15 +92,6 @@ private[spark] object DatasetUtils extends Logging {
 
   private[ml] def checkNonNanVectors(vectorCol: String): Column = {
     checkNonNanVectors(col(vectorCol))
-  }
-
-  private lazy val validateVector = udf { vector: Vector =>
-    vector match {
-      case dv: DenseVector =>
-        dv.values.forall(v => !v.isNaN && !v.isInfinity)
-      case sv: SparseVector =>
-        sv.values.forall(v => !v.isNaN && !v.isInfinity)
-    }
   }
 
   private[ml] def extractInstances(

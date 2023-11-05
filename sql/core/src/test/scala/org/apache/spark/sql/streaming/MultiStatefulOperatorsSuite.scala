@@ -426,8 +426,8 @@ class MultiStatefulOperatorsSuite
     val stream = inputDF1.join(inputDF2,
       expr("v1 >= start2 AND v1 < end2 " +
         "AND eventTime1 = start2"), "inner")
-      .groupBy(window($"eventTime1", "5 seconds") as 'window)
-      .agg(count("*") as 'count)
+      .groupBy(window($"eventTime1", "5 seconds") as Symbol("window"))
+      .agg(count("*") as Symbol("count"))
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
     testStream(stream)(

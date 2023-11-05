@@ -195,7 +195,9 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"json_tuple(a, 1)\"",
         "funcName" -> "`json_tuple`"
-      )
+      ),
+      context =
+        ExpectedContext(fragment = "json_tuple", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -648,7 +650,9 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.INVALID_JSON_MAP_KEY_TYPE",
       parameters = Map(
         "schema" -> "\"MAP<STRUCT<f: INT>, STRING>\"",
-        "sqlExpr" -> "\"entries\""))
+        "sqlExpr" -> "\"entries\""),
+      context =
+        ExpectedContext(fragment = "from_json", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("SPARK-24709: infers schemas of json strings and pass them to from_json") {
@@ -958,7 +962,8 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
           .select(from_json($"json", $"schema", options)).collect()
       },
       errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
-      parameters = Map("inputSchema" -> "\"schema\"")
+      parameters = Map("inputSchema" -> "\"schema\""),
+      context = ExpectedContext(fragment = "from_json", getCurrentClassCallSitePattern)
     )
   }
 

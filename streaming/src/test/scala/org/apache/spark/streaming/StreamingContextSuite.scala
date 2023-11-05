@@ -153,7 +153,7 @@ class StreamingContextSuite
     addInputStream(ssc).foreachRDD { rdd =>
       // Refer to this.appName from inside closure so that this closure refers to
       // the instance of StreamingContextSuite, and is therefore not serializable
-      rdd.count() + appName
+      s"${rdd.count()}$appName"
     }
 
     // Test whether start() fails early when checkpointing is enabled

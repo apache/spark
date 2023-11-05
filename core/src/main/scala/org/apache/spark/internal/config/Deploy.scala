@@ -73,6 +73,7 @@ private[spark] object Deploy {
   val DEFAULT_CORES = ConfigBuilder("spark.deploy.defaultCores")
     .version("0.9.0")
     .intConf
+    .checkValue(_ > 0, "spark.deploy.defaultCores must be positive.")
     .createWithDefault(Int.MaxValue)
 
   val MAX_DRIVERS = ConfigBuilder("spark.deploy.maxDrivers")
@@ -82,4 +83,31 @@ private[spark] object Deploy {
     .checkValue(_ > 0, "The maximum number of running drivers should be positive.")
     .createWithDefault(Int.MaxValue)
 
+  val APP_NUMBER_MODULO = ConfigBuilder("spark.deploy.appNumberModulo")
+    .doc("The modulo for app number. By default, the next of `app-yyyyMMddHHmmss-9999` is " +
+      "`app-yyyyMMddHHmmss-10000`. If we have 10000 as modulo, it will be " +
+      "`app-yyyyMMddHHmmss-0000`. In most cases, the prefix `app-yyyyMMddHHmmss` is increased " +
+      "already during creating 10000 applications.")
+    .version("4.0.0")
+    .intConf
+    .checkValue(_ >= 1000, "The modulo for app number should be greater than or equal to 1000.")
+    .createOptional
+
+  val DRIVER_ID_PATTERN = ConfigBuilder("spark.deploy.driverIdPattern")
+    .doc("The pattern for driver ID generation based on Java `String.format` method. " +
+      "The default value is `driver-%s-%04d` which represents the existing driver id string " +
+      ", e.g., `driver-20231031224459-0019`. Please be careful to generate unique IDs")
+    .version("4.0.0")
+    .stringConf
+    .checkValue(!_.format("20231101000000", 0).exists(_.isWhitespace), "Whitespace is not allowed.")
+    .createWithDefault("driver-%s-%04d")
+
+  val APP_ID_PATTERN = ConfigBuilder("spark.deploy.appIdPattern")
+    .doc("The pattern for app ID generation based on Java `String.format` method.. " +
+      "The default value is `app-%s-%04d` which represents the existing app id string, " +
+      "e.g., `app-20231031224509-0008`. Plesae be careful to generate unique IDs.")
+    .version("4.0.0")
+    .stringConf
+    .checkValue(!_.format("20231101000000", 0).exists(_.isWhitespace), "Whitespace is not allowed.")
+    .createWithDefault("app-%s-%04d")
 }

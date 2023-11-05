@@ -157,6 +157,14 @@ unsafe = Module(
     ],
 )
 
+utils = Module(
+    name="utils",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/utils/",
+    ],
+)
+
 launcher = Module(
     name="launcher",
     dependencies=[tags],
@@ -179,9 +187,17 @@ core = Module(
     ],
 )
 
+api = Module(
+    name="api",
+    dependencies=[utils, unsafe],
+    source_file_regexes=[
+        "sql/api/",
+    ],
+)
+
 catalyst = Module(
     name="catalyst",
-    dependencies=[tags, core],
+    dependencies=[tags, core, api],
     source_file_regexes=[
         "sql/catalyst/",
     ],
@@ -198,6 +214,7 @@ sql = Module(
     dependencies=[catalyst],
     source_file_regexes=[
         "sql/core/",
+        "python/pyspark/sql/worker/",  # analyze_udtf is invoked and tested in JVM
     ],
     sbt_test_goals=[
         "sql/test",
@@ -449,6 +466,7 @@ pyspark_sql = Module(
         "pyspark.sql.catalog",
         "pyspark.sql.column",
         "pyspark.sql.dataframe",
+        "pyspark.sql.datasource",
         "pyspark.sql.group",
         "pyspark.sql.functions",
         "pyspark.sql.readwriter",
@@ -838,6 +856,7 @@ pyspark_connect = Module(
         "pyspark.sql.connect.readwriter",
         "pyspark.sql.connect.dataframe",
         "pyspark.sql.connect.functions",
+        "pyspark.sql.connect.observation",
         "pyspark.sql.connect.avro.functions",
         "pyspark.sql.connect.protobuf.functions",
         "pyspark.sql.connect.streaming.readwriter",

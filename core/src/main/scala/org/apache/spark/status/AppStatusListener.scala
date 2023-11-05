@@ -869,7 +869,7 @@ private[spark] class AppStatusListener(
     }
 
     // remove any dead executors that were not running for any currently active stages
-    deadExecutors.retain((execId, exec) => isExecutorActiveForLiveStages(exec))
+    deadExecutors.filterInPlace((execId, exec) => isExecutorActiveForLiveStages(exec))
   }
 
   private def removeExcludedStageFrom(exec: LiveExecutor, stageId: Int, now: Long) = {

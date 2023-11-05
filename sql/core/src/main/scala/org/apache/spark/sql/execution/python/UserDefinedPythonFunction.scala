@@ -171,9 +171,9 @@ case class UserDefinedPythonTableFunction(
  *
  * - The number and order of arguments are the same as the UDTF inputs
  * - Each argument is an `AnalyzeArgument`, containing:
- *   - data_type: DataType
+ *   - dataType: DataType
  *   - value: Any: if the argument is foldable; otherwise None
- *   - is_table: bool: True if the argument is TABLE
+ *   - isTable: bool: True if the argument is TABLE
  *
  * and that return an `AnalyzeResult`.
  *
@@ -196,7 +196,7 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
 
     // Send arguments
     dataOut.writeInt(exprs.length)
-    exprs.zip(tableArgs).foreach { case (expr, is_table) =>
+    exprs.zip(tableArgs).foreach { case (expr, isTable) =>
       PythonWorkerUtils.writeUTF(expr.dataType.json, dataOut)
       val (key, value) = expr match {
         case NamedArgumentExpression(k, v) => (Some(k), v)
@@ -209,7 +209,7 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
       } else {
         dataOut.writeBoolean(false)
       }
-      dataOut.writeBoolean(is_table)
+      dataOut.writeBoolean(isTable)
       // If the expr is NamedArgumentExpression, send its name.
       key match {
         case Some(key) =>

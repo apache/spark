@@ -62,14 +62,14 @@ class CastingSyntaxSuite extends AnalysisTest {
   }
 
   test("boolean expressions") {
-    assertEqual("(a and b) :: int", Cast('a && 'b, IntegerType))
-    assertEqual("(a or b) :: int", Cast('a || 'b, IntegerType))
+    assertEqual("(a and b) :: int", Cast(Symbol("a") && Symbol("b"), IntegerType))
+    assertEqual("(a or b) :: int", Cast(Symbol("a") || Symbol("b"), IntegerType))
   }
 
   test("arithmetic expressions") {
-    assertEqual("(a - b) :: int", Cast('a - 'b, IntegerType))
-    assertEqual("(a * b) :: int", Cast('a * 'b, IntegerType))
-    assertEqual("a + b :: int", 'a + Cast('b, IntegerType))
+    assertEqual("(a - b) :: int", Cast(Symbol("a") - Symbol("b"), IntegerType))
+    assertEqual("(a * b) :: int", Cast(Symbol("a") * Symbol("b"), IntegerType))
+    assertEqual("a + b :: int", Symbol("a") + Cast(Symbol("b"), IntegerType))
   }
 
   test("star expansion") {

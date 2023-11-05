@@ -412,7 +412,10 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`invalid`",
-        "proposal" -> "`value`, `key`"))
+        "proposal" -> "`value`, `key`"),
+      context = ExpectedContext(
+        fragment = "count",
+        callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("numerical aggregate functions on string column") {
@@ -819,6 +822,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         lead($"value", 1, null, true).over(window),
         lead($"value", 2, null, true).over(window),
         lead($"value", 3, null, true).over(window),
+        // offset > rowCount: SPARK-45430
+        lead($"value", 100, null, true).over(window),
         lead(concat($"value", $"key"), 1, null, true).over(window),
         lag($"value", 1).over(window),
         lag($"value", 2).over(window),
@@ -826,27 +831,29 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         lag($"value", 1, null, true).over(window),
         lag($"value", 2, null, true).over(window),
         lag($"value", 3, null, true).over(window),
+        // abs(offset) > rowCount: SPARK-45430
+        lag($"value", -100, null, true).over(window),
         lag(concat($"value", $"key"), 1, null, true).over(window))
         .orderBy($"order"),
       Seq(
-        Row("a", 0, null, "x", null, null, "x", "y", "z", "xa",
-          null, null, null, null, null, null, null),
-        Row("a", 1, "x", null, null, "x", "y", "z", "v", "ya",
-          null, null, "x", null, null, null, null),
-        Row("b", 2, null, null, "y", null, "y", "z", "v", "ya",
-          "x", null, null, "x", null, null, "xa"),
-        Row("c", 3, null, "y", null, null, "y", "z", "v", "ya",
-          null, "x", null, "x", null, null, "xa"),
-        Row("a", 4, "y", null, "z", "y", "z", "v", null, "za",
-          null, null, "y", "x", null, null, "xa"),
-        Row("b", 5, null, "z", "v", null, "z", "v", null, "za",
-          "y", null, null, "y", "x", null, "ya"),
-        Row("a", 6, "z", "v", null, "z", "v", null, null, "va",
-          null, "y", "z", "y", "x", null, "ya"),
-        Row("a", 7, "v", null, null, "v", null, null, null, null,
-          "z", null, "v", "z", "y", "x", "za"),
-        Row("a", 8, null, null, null, null, null, null, null, null,
-          "v", "z", null, "v", "z", "y", "va")))
+        Row("a", 0, null, "x", null, null, "x", "y", "z", null, "xa",
+          null, null, null, null, null, null, null, null),
+        Row("a", 1, "x", null, null, "x", "y", "z", "v", null, "ya",
+          null, null, "x", null, null, null, null, null),
+        Row("b", 2, null, null, "y", null, "y", "z", "v", null, "ya",
+          "x", null, null, "x", null, null, null, "xa"),
+        Row("c", 3, null, "y", null, null, "y", "z", "v", null, "ya",
+          null, "x", null, "x", null, null, null, "xa"),
+        Row("a", 4, "y", null, "z", "y", "z", "v", null, null, "za",
+          null, null, "y", "x", null, null, null, "xa"),
+        Row("b", 5, null, "z", "v", null, "z", "v", null, null, "za",
+          "y", null, null, "y", "x", null, null, "ya"),
+        Row("a", 6, "z", "v", null, "z", "v", null, null, null, "va",
+          null, "y", "z", "y", "x", null, null, "ya"),
+        Row("a", 7, "v", null, null, "v", null, null, null, null, null,
+          "z", null, "v", "z", "y", "x", null, "za"),
+        Row("a", 8, null, null, null, null, null, null, null, null, null,
+          "v", "z", null, "v", "z", "y", null, "va")))
   }
 
   test("lag - Offset expression <offset> must be a literal") {
@@ -1228,7 +1235,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     ).toDF("a", "b", "c")
 
     val w = Window.partitionBy("a").orderBy("b")
-    val selectExprs = Stream(
+    val selectExprs = LazyList(
       sum("c").over(w.rowsBetween(Window.unboundedPreceding, Window.currentRow)).as("sumc"),
       avg("c").over(w.rowsBetween(Window.unboundedPreceding, Window.currentRow)).as("avgc")
     )
@@ -1451,7 +1458,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
             val multipleRowNumbers = df
               .withColumn("rn", row_number().over(window))
               .withColumn("rn2", row_number().over(window))
-              .where('rn < 2 && 'rn2 < 3)
+              .where(Symbol("rn") < 2 && Symbol("rn2") < 3)
             checkAnswer(multipleRowNumbers,
               Seq(
                 Row("a", 4, "", 2.0, 1, 1),
@@ -1464,7 +1471,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
             val multipleRanks = df
               .withColumn("rn", rank().over(window))
               .withColumn("rn2", rank().over(window))
-              .where('rn < 2 && 'rn2 < 3)
+              .where(Symbol("rn") < 2 && Symbol("rn2") < 3)
             checkAnswer(multipleRanks,
               Seq(
                 Row("a", 4, "", 2.0, 1, 1),
@@ -1479,7 +1486,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
             val multipleDenseRanks = df
               .withColumn("rn", dense_rank().over(window))
               .withColumn("rn2", dense_rank().over(window))
-              .where('rn < 2 && 'rn2 < 3)
+              .where(Symbol("rn") < 2 && Symbol("rn2") < 3)
             checkAnswer(multipleDenseRanks,
               Seq(
                 Row("a", 4, "", 2.0, 1, 1),
@@ -1494,7 +1501,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
             val multipleWindows = df
               .withColumn("rn2", row_number().over(window2))
               .withColumn("rn", row_number().over(window))
-              .where('rn < 2 && 'rn2 < 3)
+              .where(Symbol("rn") < 2 && Symbol("rn2") < 3)
             checkAnswer(multipleWindows,
               Seq(
                 Row("b", 1, "h", Double.NaN, 2, 1),

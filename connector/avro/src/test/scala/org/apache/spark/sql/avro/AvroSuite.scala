@@ -38,6 +38,7 @@ import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkUp
 import org.apache.spark.TestUtils.assertExceptionMsg
 import org.apache.spark.sql._
 import org.apache.spark.sql.TestingUDT.IntervalData
+import org.apache.spark.sql.avro.AvroCompressionCodec._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
@@ -680,18 +681,18 @@ abstract class AvroSuite
       val zstandardDir = s"$dir/zstandard"
 
       val df = spark.read.format("avro").load(testAvro)
-      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "uncompressed")
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, UNCOMPRESSED.lowerCaseName())
       df.write.format("avro").save(uncompressDir)
-      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "bzip2")
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, BZIP2.lowerCaseName())
       df.write.format("avro").save(bzip2Dir)
-      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "xz")
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, XZ.lowerCaseName())
       df.write.format("avro").save(xzDir)
-      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "deflate")
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, DEFLATE.lowerCaseName())
       spark.conf.set(SQLConf.AVRO_DEFLATE_LEVEL.key, "9")
       df.write.format("avro").save(deflateDir)
-      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "snappy")
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, SNAPPY.lowerCaseName())
       df.write.format("avro").save(snappyDir)
-      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "zstandard")
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, ZSTANDARD.lowerCaseName())
       df.write.format("avro").save(zstandardDir)
 
       val uncompressSize = FileUtils.sizeOfDirectory(new File(uncompressDir))
@@ -794,7 +795,7 @@ abstract class AvroSuite
       val namespace = "org.apache.spark.avro"
       val parameters = Map("recordName" -> name, "recordNamespace" -> namespace)
 
-      val avroDir = tempDir + "/namedAvro"
+      val avroDir = s"$tempDir/namedAvro"
       spark.read.format("avro").load(testAvro)
         .write.options(parameters).format("avro").save(avroDir)
       checkReloadMatchesSaved(testAvro, avroDir)
@@ -812,6 +813,16 @@ abstract class AvroSuite
       sql("SELECT 3.14 a").write.format("avro").save(path.toString)
       val data = spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString).collect()
       assert(data.map(_ (0)).contains(new java.math.BigDecimal("3.140")))
+    }
+  }
+
+  test("SPARK-45638: Avro should read decimal values with the file schema, same scale") {
+    // write schema has precision and scale as 3
+    // read schema has precision as 4 and scale as 3
+    withTempPath { path =>
+      sql("SELECT 0.314 a").write.format("avro").save(path.toString)
+      val data = spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString).collect()
+      assert(data.map(_(0)).contains(new java.math.BigDecimal("0.314")))
     }
   }
 
@@ -991,7 +1002,7 @@ abstract class AvroSuite
         Row("Munich", 8, new Timestamp(42), Decimal(3.14), arrayOfByte)))
       val cityDataFrame = spark.createDataFrame(cityRDD, testSchema)
 
-      val avroDir = tempDir + "/avro"
+      val avroDir = s"$tempDir/avro"
       cityDataFrame.write.format("avro").save(avroDir)
       assert(spark.read.format("avro").load(avroDir).collect().length == 3)
 
@@ -1023,7 +1034,7 @@ abstract class AvroSuite
         StructField("_1", DateType, false), StructField("_2", TimestampType, false)))
       val writeDs = Seq((currentDate, currentTime)).toDS()
 
-      val avroDir = tempDir + "/avro"
+      val avroDir = s"$tempDir/avro"
       writeDs.write.format("avro").save(avroDir)
       assert(spark.read.format("avro").load(avroDir).collect().length == 1)
 
@@ -1052,7 +1063,7 @@ abstract class AvroSuite
       )
       val writeDs = Seq((nullDate, nullTime)).toDS()
 
-      val avroDir = tempDir + "/avro"
+      val avroDir = s"$tempDir/avro"
       writeDs.write.format("avro").save(avroDir)
       val readValues =
         spark.read.schema(schema).format("avro").load(avroDir).as[(Date, Timestamp)].collect()
@@ -2116,7 +2127,7 @@ abstract class AvroSuite
         val reader = new DataFileReader(file, new GenericDatumReader[Any]())
         val r = reader.getMetaString("avro.codec")
         r
-      }.map(v => if (v == "null") "uncompressed" else v).headOption
+      }.map(v => if (v == "null") UNCOMPRESSED.lowerCaseName() else v).headOption
     }
     def checkCodec(df: DataFrame, dir: String, codec: String): Unit = {
       val subdir = s"$dir/$codec"
@@ -2127,17 +2138,15 @@ abstract class AvroSuite
       val path = dir.toString
       val df = spark.read.format("avro").load(testAvro)
 
-      checkCodec(df, path, "uncompressed")
-      checkCodec(df, path, "deflate")
-      checkCodec(df, path, "snappy")
-      checkCodec(df, path, "bzip2")
-      checkCodec(df, path, "xz")
+      AvroCompressionCodec.values().foreach { codec =>
+        checkCodec(df, path, codec.lowerCaseName())
+      }
     }
   }
 
   private def checkSchemaWithRecursiveLoop(avroSchema: String): Unit = {
     val message = intercept[IncompatibleSchemaException] {
-      SchemaConverters.toSqlType(new Schema.Parser().parse(avroSchema))
+      SchemaConverters.toSqlType(new Schema.Parser().parse(avroSchema), false)
     }.getMessage
 
     assert(message.contains("Found recursive reference in Avro schema"))
