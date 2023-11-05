@@ -62,7 +62,8 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
     long totalInitialSize = headerInBytes + fixedPartInBytesLong;
 
     if (totalInitialSize > Integer.MAX_VALUE) {
-      throw QueryExecutionErrors.tooManyArrayElementsError(numElements, elementSize);
+      throw QueryExecutionErrors.tooManyArrayElementsError(
+        fixedPartInBytesLong,  Integer.MAX_VALUE);
     }
 
     // it's now safe to cast fixedPartInBytesLong and totalInitialSize to int

@@ -405,6 +405,29 @@
     ],
     "sqlState" : "42704"
   },
+  "COLLECTION_SIZE_LIMIT_EXCEEDED" : {
+    "message" : [
+      "Can't create array with <numberOfElements> elements which exceeding the array size limit <maxRoundedArrayLength>,"
+    ],
+    "subClass" : {
+      "FUNCTION" : {
+        "message" : [
+          "unsuccessful try to create arrays in the function <functionName>."
+        ]
+      },
+      "INITIALIZE" : {
+        "message" : [
+          "cannot initialize an array with specified parameters."
+        ]
+      },
+      "PARAMETER" : {
+        "message" : [
+          "the value of parameter(s) <parameter> in the function <functionName> is invalid."
+        ]
+      }
+    },
+    "sqlState" : "54000"
+  },
   "COLUMN_ALIASES_IS_NOT_ALLOWED" : {
     "message" : [
       "Columns aliases are not allowed in <op>."
@@ -3016,12 +3039,6 @@
       "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>."
     ],
     "sqlState" : "428EK"
-  },
-  "TOO_MANY_ARRAY_ELEMENTS" : {
-    "message" : [
-      "Cannot initialize array with <numElements> elements of size <size>."
-    ],
-    "sqlState" : "54000"
   },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [
@@ -5763,26 +5780,6 @@
   "_LEGACY_ERROR_TEMP_2155" : {
     "message" : [
       "<userClass> is not annotated with SQLUserDefinedType nor registered with UDTRegistration.}"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2159" : {
-    "message" : [
-      "Unsuccessful try to concat arrays with <numberOfElements> elements due to exceeding the array size limit <maxRoundedArrayLength>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2160" : {
-    "message" : [
-      "Unsuccessful try to flatten an array of arrays with <numberOfElements> elements due to exceeding the array size limit <maxRoundedArrayLength>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2161" : {
-    "message" : [
-      "Unsuccessful try to create array with <count> elements due to exceeding the array size limit <maxRoundedArrayLength>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2162" : {
-    "message" : [
-      "Unsuccessful try to union arrays with <length> elements due to exceeding the array size limit <maxRoundedArrayLength>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2163" : {
