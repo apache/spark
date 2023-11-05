@@ -39,6 +39,7 @@ import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.NonClosableMutableURLClassLoader
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{MavenUtils, MutableURLClassLoader, Utils, VersionUtils}
+import org.apache.spark.util.ArrayImplicits._
 
 /** Factory for `IsolatedClientLoader` with specific versions of hive. */
 private[hive] object IsolatedClientLoader extends Logging {
@@ -143,7 +144,7 @@ private[hive] object IsolatedClientLoader extends Logging {
     val tempDir = Utils.createTempDir(namePrefix = s"hive-${version}")
     allFiles.foreach(f => FileUtils.copyFileToDirectory(f, tempDir))
     logInfo(s"Downloaded metastore jars to ${tempDir.getCanonicalPath}")
-    tempDir.listFiles().map(_.toURI.toURL)
+    tempDir.listFiles().map(_.toURI.toURL).toImmutableArraySeq
   }
 
   // A map from a given pair of HiveVersion and Hadoop version to jar files.
