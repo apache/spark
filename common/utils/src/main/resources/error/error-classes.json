@@ -4777,11 +4777,6 @@
       "Hive metastore does not support altering database location."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1221" : {
-    "message" : [
-      "Hive 0.12 doesn't support creating permanent functions. Please use Hive 0.13 or higher."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1222" : {
     "message" : [
       "Unknown resource type: <resourceType>."
@@ -5901,16 +5896,6 @@
       "<message>, db: <dbName>, table: <tableName>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2190" : {
-    "message" : [
-      "DROP TABLE ... PURGE."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2191" : {
-    "message" : [
-      "ALTER TABLE ... DROP PARTITION ... PURGE."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2192" : {
     "message" : [
       "Partition filter cannot have both `\"` and `'` characters."
@@ -5929,11 +5914,6 @@
   "_LEGACY_ERROR_TEMP_2195" : {
     "message" : [
       "<cnf> when creating Hive client using classpath: <execJars> Please make sure that jars for your version of hive and hadoop are included in the paths passed to <key>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2197" : {
-    "message" : [
-      "LOCATION clause illegal for view partition."
     ]
   },
   "_LEGACY_ERROR_TEMP_2198" : {
