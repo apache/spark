@@ -34,25 +34,6 @@ fi
 
 rm -f .connect-mima-check-result
 
-echo "Download maven's corrupted file"
-build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-buffer -Dversion=4.1.96.Final -Dtransitive=false --quiet
-build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-codec -Dversion=4.1.96.Final -Dtransitive=false --quiet
-build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-codec-http -Dversion=4.1.96.Final -Dtransitive=false --quiet
-build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-codec-socks -Dversion=4.1.96.Final -Dtransitive=false --quiet
-build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-codec-socks -Dversion=4.1.60.Final -Dtransitive=false --quiet
-build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-handler -Dversion=4.1.96.Final -Dtransitive=false --quiet
-build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-handler-proxy -Dversion=4.1.60.Final -Dtransitive=false --quiet
-build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-resolver -Dversion=4.1.96.Final -Dtransitive=false --quiet
-build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-transport -Dversion=4.1.96.Final -Dtransitive=false --quiet
-build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-transport-classes-epoll -Dversion=4.1.96.Final -Dtransitive=false --quiet
-build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-transport-classes-kqueue -Dversion=4.1.96.Final -Dtransitive=false --quiet
-build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-transport-native-epoll -Dversion=4.1.96.Final -Dtransitive=false --quiet
-build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-transport-native-kqueue -Dversion=4.1.96.Final -Dtransitive=false --quiet
-build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-transport-native-kqueue -Dversion=4.1.99.Final -Dtransitive=false --quiet
-build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-transport-native-unix-common -Dversion=4.1.96.Final -Dtransitive=false --quiet
-build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=com.lihaoyi -DartifactId=geny_2.13 -Dversion=0.7.1 -Dtransitive=false --quiet
-build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=org.scala-lang.modules -DartifactId=scala-collection-compat_2.13 -Dversion=2.9.0 -Dtransitive=false --quiet
-
 echo "Build required modules..."
 build/sbt "sql/package;connect-client-jvm/package;connect-client-jvm/Test/package;avro/package;protobuf/assembly"
 

@@ -659,6 +659,8 @@ jobs:
       run: ./dev/check-license
     - name: Dependencies test
       run: ./dev/test-dependencies.sh
+    - name: Download sbt dependencies corrupted file
+      run: ./dev/download-sbt-dependencies.sh
     - name: MIMA test
       run: ./dev/mima
     - name: Scala linter
@@ -759,7 +761,6 @@ jobs:
           if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
           if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
         fi
-        build/mvn dependency:get -DremoteRepositories=http://repo1.maven.org/maven2/ -DgroupId=io.netty -DartifactId=netty-transport-native-epoll -Dversion=4.1.99.Final -Dtransitive=false --quiet
         cd docs
         bundle exec jekyll build
     - name: Tar documentation
