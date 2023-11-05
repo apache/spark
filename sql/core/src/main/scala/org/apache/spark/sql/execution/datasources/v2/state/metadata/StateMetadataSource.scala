@@ -133,10 +133,6 @@ case class StateMetadataPartitionReaderFactory(hadoopConf: SerializableConfigura
 class StateMetadataPartitionReader(
     checkpointLocation: String,
     serializedHadoopConf: SerializableConfiguration) extends PartitionReader[InternalRow] {
-  private lazy val hadoopConf: Configuration = serializedHadoopConf.value
-
-  private lazy val fileManager =
-    CheckpointFileManager.create(new Path(checkpointLocation), hadoopConf)
 
   override def next(): Boolean = {
     stateMetadata.hasNext
@@ -146,42 +142,44 @@ class StateMetadataPartitionReader(
     stateMetadata.next().toRow()
   }
 
-  private def stateDir = new Path(checkpointLocation, "state")
+  override def close(): Unit = {}
+
+  private def pathToLong(path: Path) = {
+    path.getName.toLong
+  }
 
   private def pathNameCanBeParsedAsLong(path: Path) = {
     try {
-      path.getName.toLong
+      pathToLong(path)
       true
     } catch {
       case _: NumberFormatException => false
     }
   }
 
-  private def pathToLong(path: Path) = {
-    path.getName.toLong
-  }
-
   // Return true when the filename can be parsed as long integer.
-  private val longFileNameFilter = new PathFilter {
+  private val pathNameCanBeParsedAsLongFilter = new PathFilter {
     override def accept(path: Path): Boolean = pathNameCanBeParsedAsLong(path)
   }
 
-  override def close(): Unit = {}
+  private lazy val hadoopConf: Configuration = serializedHadoopConf.value
 
-  // List the state directory to find all the operator id.
-  private def opIds: Array[Long] = {
-    fileManager.list(stateDir, longFileNameFilter).map(f => pathToLong(f.getPath)).sorted
-  }
+  private lazy val fileManager =
+    CheckpointFileManager.create(new Path(checkpointLocation), hadoopConf)
 
   // List the commit log entries to find all the available batch ids.
   private def batchIds: Array[Long] = {
     val commitLog = new Path(checkpointLocation, "commits")
     if (fileManager.exists(commitLog)) {
-      fileManager.list(commitLog, longFileNameFilter).map(f => pathToLong(f.getPath)).sorted
+      fileManager
+        .list(commitLog, pathNameCanBeParsedAsLongFilter).map(f => pathToLong(f.getPath)).sorted
     } else Array.empty
   }
 
   private def allOperatorStateMetadata: Array[OperatorStateMetadata] = {
+    val stateDir = new Path(checkpointLocation, "state")
+    val opIds = fileManager
+      .list(stateDir, pathNameCanBeParsedAsLongFilter).map(f => pathToLong(f.getPath)).sorted
     opIds.map { opId =>
       new OperatorStateMetadataReader(new Path(stateDir, opId.toString), hadoopConf).read()
     }
