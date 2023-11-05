@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
-import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 
 class UnsafeArrayWriterSuite extends SparkFunSuite {
   test("SPARK-40403: don't print negative number when array is too big") {
@@ -34,7 +33,7 @@ class UnsafeArrayWriterSuite extends SparkFunSuite {
       errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.INITIALIZE",
       parameters = Map(
         "numberOfElements" -> (numElements * elementSize).toString,
-        "maxRoundedArrayLength" -> MAX_ROUNDED_ARRAY_LENGTH.toString
+        "maxRoundedArrayLength" -> Int.MaxValue.toString
       )
     )
   }

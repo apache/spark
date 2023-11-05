@@ -2580,7 +2580,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       numElements: Long,
       maxRoundedArrayLength: Int): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED",
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.INITIALIZE",
       messageParameters = Map(
         "numberOfElements" -> numElements.toString,
         "maxRoundedArrayLength" -> maxRoundedArrayLength.toString)
