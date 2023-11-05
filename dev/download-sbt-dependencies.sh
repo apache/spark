@@ -41,6 +41,7 @@ build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-down
 build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-transport-native-kqueue -Dversion=4.1.100.Final -Dtransitive=false --quiet
 build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-transport-native-unix-common -Dversion=4.1.96.Final -Dtransitive=false --quiet
 
+build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=net.sf.jopt-simple -DartifactId=jopt-simple -Dversion=5.0.4 -Dtransitive=false --quiet
 build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=org.slf4j -DartifactId=slf4j-api -Dversion=1.7.5 -Dtransitive=false --quiet
 build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=org.scala-lang.modules -DartifactId=scala-collection-compat_2.13 -Dversion=2.9.0 -Dtransitive=false --quiet
 
