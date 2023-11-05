@@ -143,11 +143,11 @@ jobs:
           - >-
             core, unsafe, kvstore, avro, utils,
             network-common, network-shuffle, repl, launcher,
-            examples, sketch, graphx
+            examples, sketch
           - >-
             api, catalyst, hive-thriftserver
           - >-
-            mllib-local,mllib
+            mllib-local, mllib, graphx
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10,
             yarn, kubernetes, hadoop-cloud, spark-ganglia-lgpl,
