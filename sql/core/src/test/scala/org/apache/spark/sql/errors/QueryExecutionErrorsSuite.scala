@@ -1134,14 +1134,15 @@ class QueryExecutionErrorsSuite
   }
 
   test("Elements exceed limit for array_repeat()") {
+    val count = 2147483647
     checkError(
       exception = intercept[SparkRuntimeException] {
-        sql("select array_repeat(1, 2147483647)").collect()
+        sql(s"select array_repeat(1, $count)").collect()
       },
       errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
       parameters = Map(
         "parameter" -> toSQLId("count"),
-        "numberOfElements" -> "2147483647",
+        "numberOfElements" -> count.toString,
         "functionName" -> toSQLId("array_repeat"),
         "maxRoundedArrayLength" -> MAX_ROUNDED_ARRAY_LENGTH.toString
       )

@@ -19,21 +19,20 @@ license: |
   limitations under the License.
 ---
 
-SQLSTATE: 54000
+[SQLSTATE: 54000](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
 
-Generic Spark Connect error.
+Can't create array with `<numberOfElements>` elements which exceeding the array size limit `<maxRoundedArrayLength>`,
 
-Can't create array with <numberOfElements> elements which exceeding the array size limit <maxRoundedArrayLength>,
+This error class has the following derived error classes:
 
 ## FUNCTION
 
-unsuccessful try to create arrays in function `<functionName>`.
+unsuccessful try to create arrays in the function `<functionName>`.
 
 ## INITIALIZE
 
-cannot initialize array with specified parameters.
+cannot initialize an array with specified parameters.
 
 ## PARAMETER
 
-the value of parameter(s) `<parameter>` in `<functionName>` is invalid.
-
+the value of parameter(s) `<parameter>` in the function `<functionName>` is invalid.

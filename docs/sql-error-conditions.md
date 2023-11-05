@@ -338,13 +338,13 @@ The codec `<codecName>` is not available. Consider to set the config `<configKey
 
 Cannot find a short name for the codec `<codecName>`.
 
-### [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-collection-size-exceed-limit-error-class.html)
+### [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
 
 [SQLSTATE: 54000](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
 
 Can't create array with `<numberOfElements>` elements which exceeding the array size limit `<maxRoundedArrayLength>`,
 
-For more details see [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-collection-size-exceed-limit-error-class.html)
+For more details see [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
 
 ### COLUMN_ALIASES_IS_NOT_ALLOWED
 
