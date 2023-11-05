@@ -29,6 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DateType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A test suite that tests aggregate push down for Parquet and ORC.
@@ -222,7 +223,7 @@ trait FileSourceAggregatePushDownSuite
               "PushedAggregation: [COUNT(*), COUNT(id), MAX(id), COUNT(p), MIN(id)], " +
                 "PushedFilters: [], PushedGroupBy: [p]"
             checkPushedInfo(df, expected_plan_fragment)
-            checkAnswer(df, expected)
+            checkAnswer(df, expected.toImmutableArraySeq)
           }
         }
       }
@@ -256,7 +257,7 @@ trait FileSourceAggregatePushDownSuite
               "PushedAggregation: [COUNT(*), COUNT(value), MAX(value), MIN(value)]," +
                 " PushedFilters: [], PushedGroupBy: [p1, p2, p3, p4]"
             checkPushedInfo(df, expected_plan_fragment)
-            checkAnswer(df, expected)
+            checkAnswer(df, expected.toImmutableArraySeq)
           }
         }
       }

@@ -37,6 +37,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Test suite for functions in [[org.apache.spark.sql.functions]].
@@ -3063,7 +3064,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
   // Shuffle expressions should produce same results at retries in the same DataFrame.
   private def checkShuffleResult(df: DataFrame): Unit = {
-    checkAnswer(df, df.collect())
+    checkAnswer(df, df.collect().toImmutableArraySeq)
   }
 
   test("shuffle function - array for primitive type not containing null") {

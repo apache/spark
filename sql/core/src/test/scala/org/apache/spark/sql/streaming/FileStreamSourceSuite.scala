@@ -46,6 +46,7 @@ import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 abstract class FileStreamSourceTest
@@ -1699,7 +1700,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   private def readLogFromResource(dir: String): Seq[FileEntry] = {
     val input = getClass.getResource(s"/structured-streaming/$dir")
     val log = new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark, input.toString)
-    log.allFiles()
+    log.allFiles().toImmutableArraySeq
   }
 
   private def readOffsetFromResource(file: String): SerializedOffset = {

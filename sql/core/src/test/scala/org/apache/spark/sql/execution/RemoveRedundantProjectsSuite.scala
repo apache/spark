@@ -23,6 +23,7 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, Disable
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 abstract class RemoveRedundantProjectsSuiteBase
@@ -49,7 +50,7 @@ abstract class RemoveRedundantProjectsSuiteBase
       val df2 = sql(query)
       df2.collect()
       assertProjectExecCount(df2, disabled)
-      checkAnswer(df2, result)
+      checkAnswer(df2, result.toImmutableArraySeq)
     }
   }
 

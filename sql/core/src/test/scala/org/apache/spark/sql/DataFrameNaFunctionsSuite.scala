@@ -23,6 +23,7 @@ import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -295,7 +296,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
   test("fill with col(*)") {
     val df = createDF()
     // If columns are specified with "*", they are ignored.
-    checkAnswer(df.na.fill("new name", Seq("*")), df.collect())
+    checkAnswer(df.na.fill("new name", Seq("*")), df.collect().toImmutableArraySeq)
   }
 
   test("drop with col(*)") {

@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.ArrayImplicits._
 
 class SubquerySuite extends QueryTest
   with SharedSparkSession
@@ -97,18 +98,18 @@ class SubquerySuite extends QueryTest
   test("simple uncorrelated scalar subquery") {
     checkAnswer(
       sql("select (select 1 as b) as b"),
-      Array(Row(1))
+      Array(Row(1)).toImmutableArraySeq
     )
 
     checkAnswer(
       sql("select (select (select 1) + 1) + 1"),
-      Array(Row(3))
+      Array(Row(3)).toImmutableArraySeq
     )
 
     // string type
     checkAnswer(
       sql("select (select 's' as s) as b"),
-      Array(Row("s"))
+      Array(Row("s")).toImmutableArraySeq
     )
   }
 
@@ -120,7 +121,7 @@ class SubquerySuite extends QueryTest
           | select a from (select 1 as a union all select 2 as a) t
           | where a = (select max(b) from t2)
         """.stripMargin),
-      Array(Row(1))
+      Array(Row(1)).toImmutableArraySeq
     )
     checkAnswer(
       sql(
@@ -133,7 +134,7 @@ class SubquerySuite extends QueryTest
           | select a from (select 1 as a union all select 2 as a)
           | where a = (select max(d) from t3)
         """.stripMargin),
-      Array(Row(1))
+      Array(Row(1)).toImmutableArraySeq
     )
   }
 
@@ -142,14 +143,14 @@ class SubquerySuite extends QueryTest
       sql("with t2 as (select 1 as b, 2 as c) " +
         "select a from (select 1 as a union all select 2 as a) t " +
         "where a = (select max(b) from t2) "),
-      Array(Row(1))
+      Array(Row(1)).toImmutableArraySeq
     )
   }
 
   test("uncorrelated scalar subquery should return null if there is 0 rows") {
     checkAnswer(
       sql("select (select 's' as s limit 0) as b"),
-      Array(Row(null))
+      Array(Row(null)).toImmutableArraySeq
     )
   }
 
@@ -160,23 +161,23 @@ class SubquerySuite extends QueryTest
 
       checkAnswer(
         sql("select (select key from subqueryData where key > 2 order by key limit 1) + 1"),
-        Array(Row(4))
+        Array(Row(4)).toImmutableArraySeq
       )
 
       checkAnswer(
         sql("select -(select max(key) from subqueryData)"),
-        Array(Row(-3))
+        Array(Row(-3)).toImmutableArraySeq
       )
 
       checkAnswer(
         sql("select (select value from subqueryData limit 0)"),
-        Array(Row(null))
+        Array(Row(null)).toImmutableArraySeq
       )
 
       checkAnswer(
         sql("select (select min(value) from subqueryData" +
           " where key = (select max(key) from subqueryData) - 1)"),
-        Array(Row("two"))
+        Array(Row("two")).toImmutableArraySeq
       )
     }
   }

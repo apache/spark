@@ -45,6 +45,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.StructType.fromDDL
 import org.apache.spark.sql.types.TestUDT.{MyDenseVector, MyDenseVectorUDT}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 class TestFileFilter extends PathFilter {
@@ -1377,7 +1378,7 @@ abstract class JsonSuite
       val d1 = DataSource(
         spark,
         userSpecifiedSchema = None,
-        partitionColumns = Array.empty[String],
+        partitionColumns = Array.empty[String].toImmutableArraySeq,
         bucketSpec = None,
         className = classOf[JsonFileFormat].getCanonicalName,
         options = Map("path" -> path)).resolveRelation()
@@ -1385,7 +1386,7 @@ abstract class JsonSuite
       val d2 = DataSource(
         spark,
         userSpecifiedSchema = None,
-        partitionColumns = Array.empty[String],
+        partitionColumns = Array.empty[String].toImmutableArraySeq,
         bucketSpec = None,
         className = classOf[JsonFileFormat].getCanonicalName,
         options = Map("path" -> path)).resolveRelation()
@@ -1416,7 +1417,7 @@ abstract class JsonSuite
 
         val df2 = spark.read.json(corruptRecords)
         df2.write.mode("overwrite").parquet(path)
-        checkAnswer(spark.read.parquet(path), df2.collect())
+        checkAnswer(spark.read.parquet(path), df2.collect().toImmutableArraySeq)
       }
     }
   }

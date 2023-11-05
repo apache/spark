@@ -30,6 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.util.ArrayImplicits._
 
 @SlowSQLTest
 class BucketedWriteWithoutHiveSupportSuite extends BucketedWriteSuite with SharedSparkSession {
@@ -194,7 +195,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
       // If we specified sort columns while writing bucket table, make sure the data in this
       // bucket file is already sorted.
       if (sortCols.nonEmpty) {
-        checkAnswer(readBack.sort(sortCols.map(col): _*), readBack.collect())
+        checkAnswer(readBack.sort(sortCols.map(col): _*), readBack.collect().toImmutableArraySeq)
       }
 
       // Go through all rows in this bucket file, calculate bucket id according to bucket column

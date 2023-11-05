@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.ResetSystemProperties
 
 class SetCommandSuite extends QueryTest with SharedSparkSession with ResetSystemProperties  {
@@ -47,13 +48,14 @@ class SetCommandSuite extends QueryTest with SharedSparkSession with ResetSystem
     sql(s"SET $testKey=$testVal")
     checkAnswer(
       sql("SET"),
-      overrideConfs ++ Seq(Row(testKey, testVal))
+      (overrideConfs ++ Array(Row(testKey, testVal))).toImmutableArraySeq
     )
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     checkAnswer(
       sql("set"),
-      overrideConfs ++ Seq(Row(testKey, testVal), Row(testKey + testKey, testVal + testVal))
+      (overrideConfs ++ Array(Row(testKey, testVal), Row(testKey + testKey, testVal + testVal)))
+        .toImmutableArraySeq
     )
 
     // "set key"

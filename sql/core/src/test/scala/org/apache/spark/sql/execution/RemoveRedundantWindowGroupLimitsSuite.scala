@@ -22,6 +22,7 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, Disable
 import org.apache.spark.sql.execution.window.WindowGroupLimitExec
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.ArrayImplicits._
 
 abstract class RemoveRedundantWindowGroupLimitsSuiteBase
     extends QueryTest
@@ -37,7 +38,7 @@ abstract class RemoveRedundantWindowGroupLimitsSuiteBase
     val df = sql(query)
     checkNumWindowGroupLimits(df, count)
     val result = df.collect()
-    checkAnswer(df, result)
+    checkAnswer(df, result.toImmutableArraySeq)
   }
 
   test("remove redundant WindowGroupLimits") {

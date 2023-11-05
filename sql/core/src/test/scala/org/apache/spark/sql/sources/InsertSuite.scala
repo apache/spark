@@ -33,6 +33,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 class SimpleInsertSource extends SchemaRelationProvider {
@@ -232,7 +233,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     """.stripMargin)
     checkAnswer(
       sql("SELECT a, b FROM jsonTable"),
-      sql("SELECT a, b FROM jt").collect()
+      sql("SELECT a, b FROM jt").collect().toImmutableArraySeq
     )
 
     sql(
@@ -241,7 +242,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     """.stripMargin)
     checkAnswer(
       sql("SELECT a, b FROM jsonTable"),
-      sql("SELECT a, b FROM jt UNION ALL SELECT a, b FROM jt").collect()
+      sql("SELECT a, b FROM jt UNION ALL SELECT a, b FROM jt").collect().toImmutableArraySeq
     )
   }
 
@@ -390,7 +391,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     // The cached data is the new data.
     checkAnswer(
       sql("SELECT a, b FROM jsonTable"),
-      sql("SELECT a * 2, b FROM jt").collect())
+      sql("SELECT a * 2, b FROM jt").collect().toImmutableArraySeq)
 
     // Verify uncaching
     spark.catalog.uncacheTable("jsonTable")

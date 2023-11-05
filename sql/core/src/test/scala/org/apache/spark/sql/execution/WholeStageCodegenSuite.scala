@@ -28,6 +28,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 // Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
 class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
@@ -77,7 +78,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       case _ => !codegenEnabled.toBoolean
     })
     checkAnswer(expDF, Array(Row("James", "Java", Map("hair" -> "black", "eye" -> "brown")),
-      Row("James", "Scala", Map("hair" -> "black", "eye" -> "brown"))))
+      Row("James", "Scala", Map("hair" -> "black", "eye" -> "brown"))).toImmutableArraySeq)
 
     // Map - explode
     expDF = df.select($"name", $"knownLanguages", explode($"properties"))
@@ -89,7 +90,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     })
     checkAnswer(expDF,
       Array(Row("James", List("Java", "Scala"), "hair", "black"),
-        Row("James", List("Java", "Scala"), "eye", "brown")))
+        Row("James", List("Java", "Scala"), "eye", "brown")).toImmutableArraySeq)
 
     // Array - posexplode
     expDF = df.select($"name", posexplode($"knownLanguages"))
@@ -100,7 +101,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       case _ => !codegenEnabled.toBoolean
     })
     checkAnswer(expDF,
-      Array(Row("James", 0, "Java"), Row("James", 1, "Scala")))
+      Array(Row("James", 0, "Java"), Row("James", 1, "Scala")).toImmutableArraySeq)
 
     // Map - posexplode
     expDF = df.select($"name", posexplode($"properties"))
@@ -111,7 +112,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       case _ => !codegenEnabled.toBoolean
     })
     checkAnswer(expDF,
-      Array(Row("James", 0, "hair", "black"), Row("James", 1, "eye", "brown")))
+      Array(Row("James", 0, "hair", "black"), Row("James", 1, "eye", "brown")).toImmutableArraySeq)
 
     // Array - explode , selecting all columns
     expDF = df.select($"*", explode($"knownLanguages"))
@@ -123,7 +124,8 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     })
     checkAnswer(expDF,
       Array(Row("James", Seq("Java", "Scala"), Map("hair" -> "black", "eye" -> "brown"), "Java"),
-        Row("James", Seq("Java", "Scala"), Map("hair" -> "black", "eye" -> "brown"), "Scala")))
+        Row("James", Seq("Java", "Scala"), Map("hair" -> "black", "eye" -> "brown"), "Scala"))
+        .toImmutableArraySeq)
 
     // Map - explode, selecting all columns
     expDF = df.select($"*", explode($"properties"))
@@ -138,7 +140,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
         Row("James", List("Java", "Scala"),
           Map("hair" -> "black", "eye" -> "brown"), "hair", "black"),
         Row("James", List("Java", "Scala"),
-          Map("hair" -> "black", "eye" -> "brown"), "eye", "brown")))
+          Map("hair" -> "black", "eye" -> "brown"), "eye", "brown")).toImmutableArraySeq)
   }
 
   test("HashAggregate with grouping keys should be included in WholeStageCodegen") {

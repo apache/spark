@@ -39,6 +39,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.util.ArrayImplicits._
 
 @SlowSQLTest
 class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
@@ -1309,7 +1310,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       assert(collect(shjDF.queryExecution.executedPlan) {
         case _: ShuffledHashJoinExec => true }.size === 1)
       // Same result between shuffled hash join and sort merge join
-      checkAnswer(shjDF, smjResult)
+      checkAnswer(shjDF, smjResult.toImmutableArraySeq)
     }
   }
 
@@ -1374,7 +1375,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
             case _: ShuffledHashJoinExec => true
           }.size === 1)
           // Same result between shuffled hash join and sort merge join
-          checkAnswer(shjDF, smjResult)
+          checkAnswer(shjDF, smjResult.toImmutableArraySeq)
         }
 
         // test right outer with right side build
@@ -1390,7 +1391,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
             case _: ShuffledHashJoinExec => true
           }.size === 1)
           // Same result between shuffled hash join and sort merge join
-          checkAnswer(shjDF, smjResult)
+          checkAnswer(shjDF, smjResult.toImmutableArraySeq)
         }
       }
     }

@@ -53,6 +53,7 @@ import org.apache.spark.sql.test.SQLTestData.{ArrayStringWrapper, ContainerStrin
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -625,11 +626,11 @@ class DataFrameSuite extends QueryTest
 
     checkAnswer(
       arrayData.toDF().limit(1),
-      arrayData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
+      arrayData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)).toImmutableArraySeq)
 
     checkAnswer(
       mapData.toDF().limit(1),
-      mapData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
+      mapData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)).toImmutableArraySeq)
 
     // SPARK-12340: overstep the bounds of Int in SparkPlan.executeTake
     checkAnswer(
@@ -645,11 +646,12 @@ class DataFrameSuite extends QueryTest
 
     checkAnswer(
       arrayData.toDF().offset(99),
-      arrayData.collect().drop(99).map(r => Row.fromSeq(r.productIterator.toSeq)))
+      arrayData.collect().drop(99).map(r => Row.fromSeq(r.productIterator.toSeq))
+        .toImmutableArraySeq)
 
     checkAnswer(
       mapData.toDF().offset(99),
-      mapData.collect().drop(99).map(r => Row.fromSeq(r.productIterator.toSeq)))
+      mapData.collect().drop(99).map(r => Row.fromSeq(r.productIterator.toSeq)).toImmutableArraySeq)
   }
 
   test("limit with offset") {
@@ -779,7 +781,7 @@ class DataFrameSuite extends QueryTest
 
   test("SPARK-36642: withMetadata: replace metadata of a column") {
     val metadata = new MetadataBuilder().putLong("key", 1L).build()
-    val df1 = sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
+    val df1 = sparkContext.parallelize(Array(1, 2, 3).toImmutableArraySeq).toDF("x")
     val df2 = df1.withMetadata("x", metadata)
     assert(df2.schema(0).metadata === metadata)
 
@@ -793,7 +795,7 @@ class DataFrameSuite extends QueryTest
   }
 
   test("replace column using withColumn") {
-    val df2 = sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
+    val df2 = sparkContext.parallelize(Array(1, 2, 3).toImmutableArraySeq).toDF("x")
     val df3 = df2.withColumn("x", df2("x") + 1)
     checkAnswer(
       df3.select("x"),
@@ -2723,7 +2725,7 @@ class DataFrameSuite extends QueryTest
 
   test("Uuid expressions should produce same results at retries in the same DataFrame") {
     val df = spark.range(1).select($"id", new Column(Uuid()))
-    checkAnswer(df, df.collect())
+    checkAnswer(df, df.collect().toImmutableArraySeq)
   }
 
   test("SPARK-24313: access map with binary keys") {
@@ -2735,11 +2737,11 @@ class DataFrameSuite extends QueryTest
     val df = Seq(("test1", 0), ("test2", 1)).toDF("name", "id")
     val filter1 = df.select(df("name")).filter(df("id") === 0)
     val filter2 = df.select(col("name")).filter(col("id") === 0)
-    checkAnswer(filter1, filter2.collect())
+    checkAnswer(filter1, filter2.collect().toImmutableArraySeq)
 
     val sort1 = df.select(df("name")).orderBy(df("id"))
     val sort2 = df.select(col("name")).orderBy(col("id"))
-    checkAnswer(sort1, sort2.collect())
+    checkAnswer(sort1, sort2.collect().toImmutableArraySeq)
   }
 
   test("SPARK-24781: Using a reference not in aggregation in Filter/Sort") {
@@ -2748,13 +2750,13 @@ class DataFrameSuite extends QueryTest
 
       val aggPlusSort1 = df.groupBy(df("name")).agg(count(df("name"))).orderBy(df("name"))
       val aggPlusSort2 = df.groupBy(col("name")).agg(count(col("name"))).orderBy(col("name"))
-      checkAnswer(aggPlusSort1, aggPlusSort2.collect())
+      checkAnswer(aggPlusSort1, aggPlusSort2.collect().toImmutableArraySeq)
 
       val aggPlusFilter1 =
         df.groupBy(df("name")).agg(count(df("name"))).filter(df("name") === "test1")
       val aggPlusFilter2 =
         df.groupBy(col("name")).agg(count(col("name"))).filter(col("name") === "test1")
-      checkAnswer(aggPlusFilter1, aggPlusFilter2.collect())
+      checkAnswer(aggPlusFilter1, aggPlusFilter2.collect().toImmutableArraySeq)
     }
   }
 

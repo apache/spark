@@ -48,6 +48,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 
 case class TestDataPoint(x: Int, y: Double, s: String, t: TestDataPoint2)
 case class TestDataPoint2(x: Int, s: String)
@@ -1637,7 +1638,7 @@ class DatasetSuite extends QueryTest
       Route("b", "a", 1),
       Route("b", "a", 5),
       Route("b", "c", 6))
-    val ds = sparkContext.parallelize(data).toDF().as[Route]
+    val ds = sparkContext.parallelize(data.toImmutableArraySeq).toDF().as[Route]
 
     val grouped = ds.map(r => GroupedRoutes(r.src, r.dest, Seq(r)))
       .groupByKey(r => (r.src, r.dest))

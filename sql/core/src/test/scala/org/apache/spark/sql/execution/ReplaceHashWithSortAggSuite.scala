@@ -22,6 +22,7 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, Disable
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.ArrayImplicits._
 
 abstract class ReplaceHashWithSortAggSuiteBase
     extends QueryTest
@@ -49,7 +50,7 @@ abstract class ReplaceHashWithSortAggSuiteBase
       withSQLConf(SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "false") {
         val df = sql(query)
         checkNumAggs(df, disabledHashAggCount, disabledSortAggCount)
-        checkAnswer(df, result)
+        checkAnswer(df, result.toImmutableArraySeq)
       }
     }
   }
