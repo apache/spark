@@ -195,8 +195,8 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
       f: FlatMapGroupsFunction[K, V, U],
       encoder: Encoder[U]): Dataset[U] = {
     import org.apache.spark.util.ArrayImplicits._
-    flatMapSortedGroups(
-      SortExprs.toImmutableArraySeq: _*)(UdfUtils.flatMapGroupsFuncToScalaFunc(f))(encoder)
+    flatMapSortedGroups(SortExprs.toImmutableArraySeq: _*)(
+      UdfUtils.flatMapGroupsFuncToScalaFunc(f))(encoder)
   }
 
   /**

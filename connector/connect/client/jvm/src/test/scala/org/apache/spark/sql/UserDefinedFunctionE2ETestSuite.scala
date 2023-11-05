@@ -287,7 +287,8 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
     val df = Seq((1, 2, 3)).toDF("a", "b", "c")
     val f = udf((row: Row) => row.schema.fieldNames)
     import org.apache.spark.util.ArrayImplicits._
-    checkDataset(df.select(f(struct((df.columns map col).toImmutableArraySeq: _*))),
+    checkDataset(
+      df.select(f(struct((df.columns map col).toImmutableArraySeq: _*))),
       Row(Seq("a", "b", "c")))
   }
 
