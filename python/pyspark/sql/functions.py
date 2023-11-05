@@ -810,11 +810,11 @@ def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
 
     >>> df2 = spark.createDataFrame([(-10,), (0,), (10,)], ["col"])
     >>> df2.select(mode("col", False), mode("col", True)).show()
-    +----------------+---------------+
-    |mode(col, false)|mode(col, true)|
-    +----------------+---------------+
-    |               0|            -10|
-    +----------------+---------------+
+    +----------------+----------------------------------+
+    |mode(col, false)|mode() WITHIN GROUP (ORDER BY col)|
+    +----------------+----------------------------------+
+    |               0|                               -10|
+    +----------------+----------------------------------+
     """
     return _invoke_function("mode", _to_java_column(col), deterministic)
 

@@ -100,6 +100,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def modeWithSortDescUnsupportedError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.MODE_WITH_DESC",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
   def unpivotWithPivotInFromClauseNotAllowedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "NOT_ALLOWED_IN_FROM.UNPIVOT_WITH_PIVOT", ctx)
   }

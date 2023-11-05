@@ -1142,7 +1142,7 @@ struct<mode(col, false):int>
 -- !query
 SELECT mode(col, true) FROM VALUES (-10), (0), (10) AS tab(col)
 -- !query schema
-struct<mode(col, true):int>
+struct<mode() WITHIN GROUP (ORDER BY col):int>
 -- !query output
 -10
 

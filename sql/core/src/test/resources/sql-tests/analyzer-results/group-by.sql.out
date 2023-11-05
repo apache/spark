@@ -1217,7 +1217,7 @@ Aggregate [mode(col#x, 0, 0, false) AS mode(col, false)#x]
 -- !query
 SELECT mode(col, true) FROM VALUES (-10), (0), (10) AS tab(col)
 -- !query analysis
-Aggregate [mode(col#x, 0, 0, true) AS mode(col, true)#x]
+Aggregate [mode(col#x, 0, 0, true) AS mode() WITHIN GROUP (ORDER BY col)#x]
 +- SubqueryAlias tab
    +- LocalRelation [col#x]
 
@@ -1309,6 +1309,6 @@ Aggregate [mode(col#x, 0, 0, false) AS mode(col, false)#x]
 -- !query
 SELECT mode(col, true) FROM VALUES (map(1, 'a')) AS tab(col)
 -- !query analysis
-Aggregate [mode(col#x, 0, 0, true) AS mode(col, true)#x]
+Aggregate [mode(col#x, 0, 0, true) AS mode() WITHIN GROUP (ORDER BY col)#x]
 +- SubqueryAlias tab
    +- LocalRelation [col#x]

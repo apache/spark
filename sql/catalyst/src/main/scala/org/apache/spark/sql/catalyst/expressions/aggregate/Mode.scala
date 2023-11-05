@@ -146,6 +146,14 @@ case class Mode(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): Mode =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
+  override def sql(isDistinct: Boolean): String = {
+    if (!isDistinct && deterministicResult) {
+      s"$prettyName() WITHIN GROUP (ORDER BY ${child.sql})"
+    } else {
+      super.sql(isDistinct)
+    }
+  }
+
   override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
     copy(child = newLeft, deterministicExpr = newRight)
 }

@@ -178,6 +178,7 @@ MILLISECONDS	false
 MINUS	false
 MINUTE	false
 MINUTES	false
+MODE	false
 MONTH	false
 MONTHS	false
 MSCK	false

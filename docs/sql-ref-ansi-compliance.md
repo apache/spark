@@ -524,6 +524,7 @@ Below is a list of all the keywords in Spark SQL.
 |MINUTE|non-reserved|non-reserved|non-reserved|
 |MINUTES|non-reserved|non-reserved|non-reserved|
 |MINUS|non-reserved|strict-non-reserved|non-reserved|
+|MODE|non-reserved|non-reserved|non-reserved|
 |MONTH|non-reserved|non-reserved|non-reserved|
 |MONTHS|non-reserved|non-reserved|non-reserved|
 |MSCK|non-reserved|non-reserved|non-reserved|

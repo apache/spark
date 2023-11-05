@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableId
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, ClusterBySpec}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AnyValue, First, Last, PercentileCont, PercentileDisc}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AnyValue, First, Last, Mode, PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -2206,6 +2206,26 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }
     val filter = Option(ctx.where).map(expression(_))
     val aggregateExpression = percentile.toAggregateExpression(false, filter)
+    ctx.windowSpec match {
+      case spec: WindowRefContext =>
+        UnresolvedWindowExpression(aggregateExpression, visitWindowRef(spec))
+      case spec: WindowDefContext =>
+        WindowExpression(aggregateExpression, visitWindowDef(spec))
+      case _ => aggregateExpression
+    }
+  }
+
+  /**
+   * Create a Mode expression.
+   */
+  override def visitModeCall(ctx: ModeCallContext): Expression = withOrigin(ctx) {
+    val sortOrder = visitSortItem(ctx.sortItem)
+    if (sortOrder.direction == Descending) {
+      throw QueryParsingErrors.modeWithSortDescUnsupportedError(ctx)
+    }
+    val filter = Option(ctx.where).map(expression(_))
+    val aggregateExpression =
+      new Mode(sortOrder.child, Literal.TrueLiteral).toAggregateExpression(false, filter)
     ctx.windowSpec match {
       case spec: WindowRefContext =>
         UnresolvedWindowExpression(aggregateExpression, visitWindowRef(spec))

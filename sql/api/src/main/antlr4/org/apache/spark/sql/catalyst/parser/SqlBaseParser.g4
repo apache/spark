@@ -993,6 +993,8 @@ primaryExpression
     | name=(PERCENTILE_CONT | PERCENTILE_DISC) LEFT_PAREN percentage=valueExpression RIGHT_PAREN
         WITHIN GROUP LEFT_PAREN ORDER BY sortItem RIGHT_PAREN
         (FILTER LEFT_PAREN WHERE where=booleanExpression RIGHT_PAREN)? ( OVER windowSpec)?     #percentile
+    | MODE LEFT_PAREN RIGHT_PAREN WITHIN GROUP LEFT_PAREN ORDER BY sortItem RIGHT_PAREN
+        (FILTER LEFT_PAREN WHERE where=booleanExpression RIGHT_PAREN)? ( OVER windowSpec)?     #modeCall
     ;
 
 literalType
@@ -1428,6 +1430,7 @@ ansiNonReserved
     | MILLISECONDS
     | MINUTE
     | MINUTES
+    | MODE
     | MONTH
     | MONTHS
     | MSCK
@@ -1756,6 +1759,7 @@ nonReserved
     | MILLISECONDS
     | MINUTE
     | MINUTES
+    | MODE
     | MONTH
     | MONTHS
     | MSCK

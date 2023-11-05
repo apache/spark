@@ -3605,6 +3605,11 @@
         "message" : [
           "TRANSFORM with SERDE is only supported in hive mode."
         ]
+      },
+      "MODE_WITH_DESC" : {
+        "message" : [
+          "mode() WITHIN GROUP does not support ORDER BY ... DESC."
+        ]
       }
     },
     "sqlState" : "0A000"
