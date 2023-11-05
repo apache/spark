@@ -53,6 +53,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.v2.avro.AvroScan
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 abstract class AvroSuite
@@ -78,7 +79,7 @@ abstract class AvroSuite
   def checkReloadMatchesSaved(originalFile: String, newFile: String): Unit = {
     val originalEntries = spark.read.format("avro").load(testAvro).collect()
     val newEntries = spark.read.format("avro").load(newFile)
-    checkAnswer(newEntries, originalEntries)
+    checkAnswer(newEntries, originalEntries.toImmutableArraySeq)
   }
 
   def checkAvroSchemaEquals(avroSchema: String, expectedAvroSchema: String): Unit = {
@@ -597,7 +598,7 @@ abstract class AvroSuite
           Paths.get(dir.getCanonicalPath, "episodes.avro"))
 
         val result = spark.read.format("avro").load(episodesAvro).collect()
-        checkAnswer(spark.read.format("avro").load(dir.getAbsolutePath), result)
+        checkAnswer(spark.read.format("avro").load(dir.getAbsolutePath), result.toImmutableArraySeq)
       }
     }
   }
