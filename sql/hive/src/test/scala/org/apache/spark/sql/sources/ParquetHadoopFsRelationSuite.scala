@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtoc
 import org.apache.spark.sql.execution.datasources.parquet.ParquetCompressionCodec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 
 class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
@@ -76,7 +77,8 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         .format("parquet")
         .save(s"${dir.getCanonicalPath}/_temporary")
 
-      checkAnswer(spark.read.format("parquet").load(dir.getCanonicalPath), df.collect())
+      checkAnswer(spark.read.format("parquet").load(dir.getCanonicalPath),
+        df.collect().toImmutableArraySeq)
     }
   }
 

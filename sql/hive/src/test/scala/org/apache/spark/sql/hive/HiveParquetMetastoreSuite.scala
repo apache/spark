@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
 import org.apache.spark.sql.hive.execution.HiveTableScanExec
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A suite to test the automatic conversion of metastore tables with parquet data to use the
@@ -299,7 +300,7 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
 
       checkAnswer(
         sql("SELECT intField FROM test_insert_parquet WHERE test_insert_parquet.intField > 5"),
-        sql("SELECT a FROM jt WHERE jt.a > 5").collect()
+        sql("SELECT a FROM jt WHERE jt.a > 5").collect().toImmutableArraySeq
       )
     }
   }
@@ -328,7 +329,7 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
 
       checkAnswer(
         sql("SELECT int_array FROM test_insert_parquet"),
-        sql("SELECT a FROM jt_array").collect()
+        sql("SELECT a FROM jt_array").collect().toImmutableArraySeq
       )
     }
   }
@@ -484,7 +485,7 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
     // Make sure we can read the data.
     checkAnswer(
       sql("select * from test_insert_parquet"),
-      sql("select a, b from jt").collect())
+      sql("select a, b from jt").collect().toImmutableArraySeq)
     // Invalidate the cache.
     spark.catalog.refreshTable("test_insert_parquet")
     assert(getCachedDataSourceTable(tableIdentifier) === null)
@@ -534,7 +535,7 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
           |select b, '2015-04-01', a FROM jt
           |UNION ALL
           |select b, '2015-04-02', a FROM jt
-        """.stripMargin).collect())
+        """.stripMargin).collect().toImmutableArraySeq)
 
     spark.catalog.refreshTable("test_parquet_partitioned_cache_test")
     assert(getCachedDataSourceTable(tableIdentifier) === null)

@@ -29,6 +29,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowHiveTest
+import org.apache.spark.util.ArrayImplicits._
 
 class MyDoubleAvgAggBase extends Aggregator[jlDouble, (Double, Long), jlDouble] {
   def zero: (Double, Long) = (0.0, 0L)
@@ -431,6 +432,6 @@ class HashUDAQueryWithControlledFallbackSuite extends UDAQuerySuite {
 
   // Override it to make sure we call the actually overridden checkAnswer.
   override protected def checkAnswer(df: => DataFrame, expectedAnswer: DataFrame): Unit = {
-    checkAnswer(df, expectedAnswer.collect())
+    checkAnswer(df, expectedAnswer.collect().toImmutableArraySeq)
   }
 }

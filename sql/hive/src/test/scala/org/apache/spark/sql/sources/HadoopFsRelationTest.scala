@@ -34,6 +34,7 @@ import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 
 abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with TestHiveSingleton {
@@ -221,7 +222,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
           .option("path", file.getCanonicalPath)
           .option("dataSchema", dataSchema.json)
           .load(),
-        testDF.collect())
+        testDF.collect().toImmutableArraySeq)
     }
   }
 
@@ -234,7 +235,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath).orderBy("a"),
-        testDF.union(testDF).orderBy("a").collect())
+        testDF.union(testDF).orderBy("a").collect().toImmutableArraySeq)
     }
   }
 
@@ -295,7 +296,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
-        partitionedTestDF.collect())
+        partitionedTestDF.collect().toImmutableArraySeq)
     }
   }
 
@@ -317,7 +318,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
-        partitionedTestDF.union(partitionedTestDF).collect())
+        partitionedTestDF.union(partitionedTestDF).collect().toImmutableArraySeq)
     }
   }
 
@@ -339,7 +340,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
-        partitionedTestDF.collect())
+        partitionedTestDF.collect().toImmutableArraySeq)
     }
   }
 
@@ -377,7 +378,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(spark.table("t"), testDF.collect())
+      checkAnswer(spark.table("t"), testDF.collect().toImmutableArraySeq)
     }
   }
 
@@ -386,7 +387,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     testDF.write.format(dataSourceName).mode(SaveMode.Append).saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(spark.table("t"), testDF.union(testDF).orderBy("a").collect())
+      checkAnswer(spark.table("t"), testDF.union(testDF).orderBy("a").collect().toImmutableArraySeq)
     }
   }
 
@@ -448,7 +449,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(spark.table("t"), partitionedTestDF.collect())
+      checkAnswer(spark.table("t"), partitionedTestDF.collect().toImmutableArraySeq)
     }
   }
 
@@ -468,7 +469,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(spark.table("t"), partitionedTestDF.union(partitionedTestDF).collect())
+      checkAnswer(spark.table("t"),
+        partitionedTestDF.union(partitionedTestDF).collect().toImmutableArraySeq)
     }
   }
 
@@ -488,7 +490,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(spark.table("t"), partitionedTestDF.collect())
+      checkAnswer(spark.table("t"), partitionedTestDF.collect().toImmutableArraySeq)
     }
   }
 
@@ -607,7 +609,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       require(dir.listFiles().exists(!_.isDirectory))
       require(subdir.exists())
       require(subdir.listFiles().exists(!_.isDirectory))
-      testWithPath(dir, dataInDir.collect())
+      testWithPath(dir, dataInDir.collect().toImmutableArraySeq)
     }
   }
 
@@ -792,7 +794,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
         val realData = input.collect()
 
-        checkAnswer(spark.table("t"), realData ++ realData)
+        checkAnswer(spark.table("t"), (realData ++ realData).toImmutableArraySeq)
       }
     }
   }
@@ -807,7 +809,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(spark.table("t").select("b", "c", "a"), df.select("b", "c", "a").collect())
+      checkAnswer(spark.table("t").select("b", "c", "a"),
+        df.select("b", "c", "a").collect().toImmutableArraySeq)
     }
   }
 
