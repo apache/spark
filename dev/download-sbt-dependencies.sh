@@ -20,6 +20,7 @@
 echo "Start to download sbt dependencies corrupted file."
 
 build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=com.lihaoyi -DartifactId=geny_2.13 -Dversion=0.7.1 -Dtransitive=false --quiet
+build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=com.lihaoyi -DartifactId=sourcecode_2.13 -Dversion=0.3.0 -Dtransitive=false --quiet
 
 build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-buffer -Dversion=4.1.96.Final -Dtransitive=false --quiet
 build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-codec -Dversion=4.1.96.Final -Dtransitive=false --quiet
@@ -34,10 +35,13 @@ build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-down
 build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-transport-classes-kqueue -Dversion=4.1.96.Final -Dtransitive=false --quiet
 build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-transport-native-epoll -Dversion=4.1.96.Final -Dtransitive=false --quiet
 build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-transport-native-epoll -Dversion=4.1.99.Final -Dtransitive=false --quiet
+build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-transport-native-epoll -Dversion=4.1.100.Final -Dtransitive=false --quiet
 build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-transport-native-kqueue -Dversion=4.1.96.Final -Dtransitive=false --quiet
 build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-transport-native-kqueue -Dversion=4.1.99.Final -Dtransitive=false --quiet
+build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-transport-native-kqueue -Dversion=4.1.100.Final -Dtransitive=false --quiet
 build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-transport-native-unix-common -Dversion=4.1.96.Final -Dtransitive=false --quiet
 
+build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=org.slf4j -DartifactId=slf4j-api -Dversion=1.7.5 -Dtransitive=false --quiet
 build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=org.scala-lang.modules -DartifactId=scala-collection-compat_2.13 -Dversion=2.9.0 -Dtransitive=false --quiet
 
 echo "Finish to download sbt dependencies corrupted file."
