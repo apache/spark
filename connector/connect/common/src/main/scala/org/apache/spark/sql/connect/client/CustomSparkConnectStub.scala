@@ -23,13 +23,14 @@ import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse
 
 private[client] class CustomSparkConnectStub(
     channel: ManagedChannel,
-    retryPolicy: GrpcRetryHandler.RetryPolicy) {
+    retryPolicy: GrpcRetryHandler.RetryPolicy)
+    extends SparkConnectCommonStub {
 
   private val stub = SparkConnectServiceGrpc.newStub(channel)
   private val retryHandler = new GrpcRetryHandler(retryPolicy)
 
   def addArtifacts(responseObserver: StreamObserver[AddArtifactsResponse])
       : StreamObserver[AddArtifactsRequest] = {
-    retryHandler.RetryStreamObserver(responseObserver, stub.addArtifacts)
+    wrapStreamObserver(retryHandler.RetryStreamObserver(responseObserver, stub.addArtifacts))
   }
 }

@@ -2994,7 +2994,7 @@ class FetchErrorDetailsRequest(google.protobuf.message.Message):
 global___FetchErrorDetailsRequest = FetchErrorDetailsRequest
 
 class FetchErrorDetailsResponse(google.protobuf.message.Message):
-    """Next ID: 4"""
+    """Next ID: 5"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -3317,6 +3317,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
     ROOT_ERROR_IDX_FIELD_NUMBER: builtins.int
     ERRORS_FIELD_NUMBER: builtins.int
     SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
+    SESSION_ID_FIELD_NUMBER: builtins.int
     root_error_idx: builtins.int
     """The index of the root error in errors. The field will not be set if the error is not found."""
     @property
@@ -3330,12 +3331,14 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
     """Server-side generated idempotency key that the client can use to assert that the server side
     session has not changed.
     """
+    session_id: builtins.str
     def __init__(
         self,
         *,
         root_error_idx: builtins.int | None = ...,
         errors: collections.abc.Iterable[global___FetchErrorDetailsResponse.Error] | None = ...,
         server_side_session_id: builtins.str = ...,
+        session_id: builtins.str = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -3354,6 +3357,8 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             b"root_error_idx",
             "server_side_session_id",
             b"server_side_session_id",
+            "session_id",
+            b"session_id",
         ],
     ) -> None: ...
     def WhichOneof(

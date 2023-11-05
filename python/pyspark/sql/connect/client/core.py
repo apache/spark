@@ -1603,6 +1603,7 @@ class SparkConnectClient(object):
             pb2.AddArtifactsResponse,
             pb2.AnalyzePlanResponse,
             pb2.FetchErrorDetailsResponse,
+            pb2.ReleaseSessionResponse,
         ],
     ) -> None:
         """
