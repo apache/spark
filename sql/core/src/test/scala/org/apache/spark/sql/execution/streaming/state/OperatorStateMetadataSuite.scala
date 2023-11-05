@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.Column
+import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
@@ -53,6 +53,13 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       val operatorMetadata = OperatorStateMetadataV1(operatorInfo, stateStoreInfo.toArray)
       new OperatorStateMetadataWriter(statePath, hadoopConf).write(operatorMetadata)
       checkOperatorStateMetadata(checkpointDir.toString, 0, operatorMetadata)
+      // Commit log is empty, there is no available batch id.
+      checkAnswer(spark.read.format("state-metadata").load(checkpointDir.toString),
+        Seq(Row(1, "Join", "store1", 200, 1, -1L, -1L),
+          Row(1, "Join", "store2", 200, 1, -1L, -1L),
+          Row(1, "Join", "store3", 200, 1, -1L, -1L),
+          Row(1, "Join", "store4", 200, 1, -1L, -1L)
+        ))
     }
   }
 
@@ -105,6 +112,13 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       val expectedMetadata = OperatorStateMetadataV1(
         OperatorInfoV1(0, "symmetricHashJoin"), expectedStateStoreInfo)
       checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata)
+
+      checkAnswer(spark.read.format("state-metadata").load(checkpointDir.toString),
+        Seq(Row(0, "symmetricHashJoin", "left-keyToNumValues", 5, 0, 0L, 1L),
+          Row(0, "symmetricHashJoin", "left-keyWithIndexToValue", 5, 0, 0L, 1L),
+          Row(0, "symmetricHashJoin", "right-keyToNumValues", 5, 0, 0L, 1L),
+          Row(0, "symmetricHashJoin", "right-keyWithIndexToValue", 5, 0, 0L, 1L)
+        ))
     }
   }
 
@@ -147,6 +161,9 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
         Array(StateStoreMetadataV1("default", 1, spark.sessionState.conf.numShufflePartitions))
       )
       checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata)
+
+      checkAnswer(spark.read.format("state-metadata").load(checkpointDir.toString),
+        Seq(Row(0, "sessionWindowStateStoreSaveExec", "default", 5, 1, 0L, 0L)))
     }
   }
 
@@ -176,6 +193,10 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
         Array(StateStoreMetadataV1("default", 0, numShufflePartitions)))
       checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata0)
       checkOperatorStateMetadata(checkpointDir.toString, 1, expectedMetadata1)
+
+      checkAnswer(spark.read.format("state-metadata").load(checkpointDir.toString),
+        Seq(Row(0, "stateStoreSave", "default", 5, 0, 0L, 1L),
+          Row(1, "stateStoreSave", "default", 5, 0, 0L, 1L)))
     }
   }
 }
