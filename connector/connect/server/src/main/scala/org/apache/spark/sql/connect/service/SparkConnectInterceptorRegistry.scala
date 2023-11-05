@@ -65,7 +65,8 @@ object SparkConnectInterceptorRegistry {
         .map(_.trim)
         .filter(_.nonEmpty)
         .map(Utils.classForName[ServerInterceptor](_))
-        .map(createInstance).toImmutableArraySeq
+        .map(createInstance)
+        .toImmutableArraySeq
     } else {
       Seq.empty
     }
