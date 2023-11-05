@@ -42,7 +42,8 @@ private[sql] object H2Dialect extends JdbcDialect {
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:h2")
 
   private val distinctUnsupportedAggregateFunctions =
-    Set("COVAR_POP", "COVAR_SAMP", "CORR", "REGR_INTERCEPT", "REGR_R2", "REGR_SLOPE", "REGR_SXY")
+    Set("COVAR_POP", "COVAR_SAMP", "CORR", "REGR_INTERCEPT", "REGR_R2", "REGR_SLOPE", "REGR_SXY",
+      "MODE")
 
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
     "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP") ++ distinctUnsupportedAggregateFunctions
@@ -256,7 +257,13 @@ private[sql] object H2Dialect extends JdbcDialect {
         throw new UnsupportedOperationException(s"${this.getClass.getSimpleName} does not " +
           s"support aggregate function: $funcName with DISTINCT")
       } else {
-        super.visitAggregateFunction(funcName, isDistinct, inputs)
+        funcName match {
+          case "MODE" =>
+            assert(inputs.length == 1)
+            s"MODE() WITHIN GROUP (ORDER BY ${inputs.head})"
+          case _ =>
+            super.visitAggregateFunction(funcName, isDistinct, inputs)
+        }
       }
 
     override def visitExtract(field: String, source: String): String = {

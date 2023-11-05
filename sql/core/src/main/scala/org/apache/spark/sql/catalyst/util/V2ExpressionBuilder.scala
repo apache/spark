@@ -345,6 +345,9 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       Some(new GeneralAggregateFunc("REGR_SLOPE", isDistinct, Array(left, right)))
     case aggregate.RegrSXY(PushableExpression(left), PushableExpression(right)) =>
       Some(new GeneralAggregateFunc("REGR_SXY", isDistinct, Array(left, right)))
+    // Translate Mode if it is deterministic.
+    case aggregate.Mode(PushableExpression(expr), _, _, BooleanLiteral(true)) =>
+      Some(new GeneralAggregateFunc("MODE", isDistinct, Array(expr)))
     // TODO supports other aggregate functions
     case aggregate.V2Aggregator(aggrFunc, children, _, _) =>
       val translatedExprs = children.flatMap(PushableExpression.unapply(_))
