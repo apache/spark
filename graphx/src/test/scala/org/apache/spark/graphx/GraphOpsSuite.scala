@@ -19,6 +19,7 @@ package org.apache.spark.graphx
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.graphx.Graph._
+import org.apache.spark.util.ArrayImplicits._
 
 class GraphOpsSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -60,7 +61,7 @@ class GraphOpsSuite extends SparkFunSuite with LocalSparkContext {
           case (a, b) => (a.toLong, b.toLong)
         }
       val correctEdges = edgeArray.filter { case (a, b) => a != b }.toSet
-      val graph = Graph.fromEdgeTuples(sc.parallelize(edgeArray), 1)
+      val graph = Graph.fromEdgeTuples(sc.parallelize(edgeArray.toImmutableArraySeq), 1)
       val canonicalizedEdges = graph.removeSelfEdges().edges.map(e => (e.srcId, e.dstId))
         .collect()
       assert(canonicalizedEdges.toSet.size === canonicalizedEdges.size)
