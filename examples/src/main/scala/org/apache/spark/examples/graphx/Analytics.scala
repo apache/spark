@@ -51,7 +51,8 @@ object Analytics {
         case _ => throw new IllegalArgumentException(s"Invalid argument: $arg")
       }
     }
-    val options = mutable.Map(optionsList: _*)
+    import org.apache.spark.util.ArrayImplicits._
+    val options = mutable.Map(optionsList.toImmutableArraySeq: _*)
 
     val conf = new SparkConf()
     GraphXUtils.registerKryoClasses(conf)

@@ -702,6 +702,7 @@ class CliSuite extends SparkFunSuite {
   test("formats of error messages") {
     def check(format: ErrorMessageFormat.Value, errorMessage: String, silent: Boolean): Unit = {
       val expected = errorMessage.split(System.lineSeparator()).map("" -> _)
+      import org.apache.spark.util.ArrayImplicits._
       runCliWithin(
         1.minute,
         extraArgs = Seq(
@@ -709,7 +710,7 @@ class CliSuite extends SparkFunSuite {
           "--conf", s"${SQLConf.ERROR_MESSAGE_FORMAT.key}=$format",
           "--conf", s"${SQLConf.ANSI_ENABLED.key}=true",
           "-e", "select 1 / 0"),
-        errorResponses = Seq("DIVIDE_BY_ZERO"))(expected: _*)
+        errorResponses = Seq("DIVIDE_BY_ZERO"))(expected.toImmutableArraySeq: _*)
     }
     check(
       format = ErrorMessageFormat.PRETTY,

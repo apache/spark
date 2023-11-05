@@ -476,7 +476,8 @@ private class ColumnPruner(override val uid: String, val columnsToPrune: Set[Str
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     val columnsToKeep = dataset.columns.filter(!columnsToPrune.contains(_))
-    dataset.select(columnsToKeep.map(dataset.col): _*)
+    import org.apache.spark.util.ArrayImplicits._
+    dataset.select(columnsToKeep.map(dataset.col).toImmutableArraySeq: _*)
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -564,7 +565,8 @@ private class VectorAttributeRewriter(
     }
     val otherCols = dataset.columns.filter(_ != vectorCol).map(dataset.col)
     val rewrittenCol = dataset.col(vectorCol).as(vectorCol, metadata)
-    dataset.select(otherCols :+ rewrittenCol : _*)
+    import org.apache.spark.util.ArrayImplicits._
+    dataset.select((otherCols :+ rewrittenCol).toImmutableArraySeq : _*)
   }
 
   override def transformSchema(schema: StructType): StructType = {
