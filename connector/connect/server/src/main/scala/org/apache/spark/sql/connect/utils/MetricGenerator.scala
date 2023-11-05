@@ -33,6 +33,7 @@ private[connect] object MetricGenerator extends AdaptiveSparkPlanHelper {
     ExecutePlanResponse
       .newBuilder()
       .setSessionId(sessionId)
+      .setServerSideSessionId(rows.sparkSession.sessionUUID)
       .setMetrics(MetricGenerator.buildMetrics(rows.queryExecution.executedPlan))
       .build()
   }

@@ -54,6 +54,7 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
     }
 
     builder.setSessionId(request.getSessionId)
+    builder.setServerSideSessionId(session.sessionUUID)
     responseObserver.onNext(builder.build())
     responseObserver.onCompleted()
   }

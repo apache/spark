@@ -197,8 +197,12 @@ message AnalyzePlanRequest {
 
 // Response to performing analysis of the query. Contains relevant metadata to be able to
 // reason about the performance.
+// Next ID: 16
 message AnalyzePlanResponse {
   string session_id = 1;
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session has not changed.
+  string server_side_session_id = 15;
 
   oneof result {
     Schema schema = 2;
@@ -317,8 +321,12 @@ message ExecutePlanRequest {
 
 // The response of a query, can be one or more for each request. Responses belonging to the
 // same input query, carry the same `session_id`.
+// Next ID: 16
 message ExecutePlanResponse {
   string session_id = 1;
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session has not changed.
+  string server_side_session_id = 15;
 
   // Identifies the ExecutePlan execution.
   // If set by the client in ExecutePlanRequest.operationId, that value is returned.
@@ -492,8 +500,12 @@ message ConfigRequest {
 }
 
 // Response to the config request.
+// Next ID: 5
 message ConfigResponse {
   string session_id = 1;
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session has not changed.
+  string server_side_session_id = 4;
 
   // (Optional) The result key-value pairs.
   //
@@ -584,7 +596,11 @@ message AddArtifactsRequest {
 
 // Response to adding an artifact. Contains relevant metadata to verify successful transfer of
 // artifact(s).
+// Next ID: 4
 message AddArtifactsResponse {
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session has not changed.
+  string server_side_session_id = 3;
   // Metadata of an artifact.
   message ArtifactSummary {
     string name = 1;
@@ -626,6 +642,7 @@ message ArtifactStatusesRequest {
 }
 
 // Response to checking artifact statuses.
+// Next ID: 3
 message ArtifactStatusesResponse {
   message ArtifactStatus {
     // Exists or not particular artifact at the server.
@@ -634,6 +651,9 @@ message ArtifactStatusesResponse {
 
   // A map of artifact names to their statuses.
   map<string, ArtifactStatus> statuses = 1;
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session has not changed.
+  string server_side_session_id = 2;
 }
 
 message InterruptRequest {
@@ -678,12 +698,17 @@ message InterruptRequest {
   }
 }
 
+// Next ID: 4
 message InterruptResponse {
   // Session id in which the interrupt was running.
   string session_id = 1;
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session has not changed.
+  string server_side_session_id = 3;
 
   // Operation ids of the executions which were interrupted.
   repeated string interrupted_ids = 2;
+
 }
 
 message ReattachOptions {
@@ -774,9 +799,13 @@ message ReleaseExecuteRequest {
   }
 }
 
+// Next ID: 4
 message ReleaseExecuteResponse {
   // Session id in which the release was running.
   string session_id = 1;
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session has not changed.
+  string server_side_session_id = 3;
 
   // Operation id of the operation on which the release executed.
   // If the operation couldn't be found (because e.g. it was concurrently released), will be unset.
@@ -803,9 +832,13 @@ message ReleaseSessionRequest {
   optional string client_type = 3;
 }
 
+// Next ID: 3
 message ReleaseSessionResponse {
   // Session id of the session on which the release executed.
   string session_id = 1;
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session has not changed.
+  string server_side_session_id = 2;
 }
 
 message FetchErrorDetailsRequest {
@@ -828,6 +861,7 @@ message FetchErrorDetailsRequest {
   optional string client_type = 4;
 }
 
+// Next ID: 4
 message FetchErrorDetailsResponse {
 
   message StackTraceElement {
@@ -920,6 +954,10 @@ message FetchErrorDetailsResponse {
 
   // A list of errors.
   repeated Error errors = 2;
+
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session has not changed.
+  string server_side_session_id = 3;
 }
 
 // Main interface for the SparkConnect service.

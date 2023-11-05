@@ -2602,6 +2602,7 @@ class SparkConnectPlanner(
       ExecutePlanResponse
         .newBuilder()
         .setSessionId(sessionId)
+        .setServerSideSessionId(session.sessionUUID)
         .setSqlCommandResult(result)
         .build())
 
@@ -2994,6 +2995,7 @@ class SparkConnectPlanner(
       ExecutePlanResponse
         .newBuilder()
         .setSessionId(sessionId)
+        .setServerSideSessionId(session.sessionUUID)
         .setWriteStreamOperationStartResult(result)
         .build())
   }
@@ -3114,6 +3116,7 @@ class SparkConnectPlanner(
       ExecutePlanResponse
         .newBuilder()
         .setSessionId(sessionId)
+        .setServerSideSessionId(session.sessionUUID)
         .setStreamingQueryCommandResult(respBuilder.build())
         .build())
   }
@@ -3251,6 +3254,7 @@ class SparkConnectPlanner(
       ExecutePlanResponse
         .newBuilder()
         .setSessionId(sessionId)
+        .setServerSideSessionId(session.sessionUUID)
         .setStreamingQueryManagerCommandResult(respBuilder.build())
         .build())
   }
@@ -3262,6 +3266,7 @@ class SparkConnectPlanner(
       proto.ExecutePlanResponse
         .newBuilder()
         .setSessionId(sessionId)
+        .setServerSideSessionId(session.sessionUUID)
         .setGetResourcesCommandResult(
           proto.GetResourcesCommandResult
             .newBuilder()

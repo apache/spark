@@ -111,7 +111,11 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
 
     var numSent = 0
     def sendBatch(bytes: Array[Byte], count: Long, startOffset: Long): Unit = {
-      val response = proto.ExecutePlanResponse.newBuilder().setSessionId(sessionId)
+      val response = proto.ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setServerSideSessionId(sessionHolder.session.sessionUUID)
+
       val batch = proto.ExecutePlanResponse.ArrowBatch
         .newBuilder()
         .setRowCount(count)
@@ -235,6 +239,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     ExecutePlanResponse
       .newBuilder()
       .setSessionId(sessionId)
+      .setServerSideSessionId(sessionHolder.session.sessionUUID)
       .setSchema(DataTypeProtoConverter.toConnectProtoType(schema))
       .build()
   }
@@ -257,6 +262,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     ExecutePlanResponse
       .newBuilder()
       .setSessionId(sessionId)
+      .setServerSideSessionId(sessionHolder.session.sessionUUID)
       .addAllObservedMetrics(observedMetrics.asJava)
       .build()
   }

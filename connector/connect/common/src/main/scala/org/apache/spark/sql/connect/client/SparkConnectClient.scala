@@ -48,6 +48,11 @@ private[sql] class SparkConnectClient(
 
   private[client] def userAgent: String = configuration.userAgent
 
+  // Server side session ID, used to detect if the server side session changed. This is set upon
+  // receiving the first response from the server. This value is used only for executions that
+  // do not use server-side streaming.
+  private var serverSideSessionId: Option[String] = None
+
   /**
    * Placeholder method.
    * @return
@@ -117,7 +122,19 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .setUserContext(userContext)
       .build()
-    bstub.config(request)
+    val response = bstub.config(request)
+    serverSideSessionId match {
+      case Some(id) =>
+        val serverSideId = response.getServerSideSessionId
+        if (serverSideId != null && id != serverSideId) {
+          throw new IllegalStateException(
+            s"Server side session ID changed. Create a new SparkSession to continue. " +
+              s"(Old: $id, New: ${serverSideId})")
+        }
+      case None =>
+        serverSideSessionId = Some(response.getServerSideSessionId)
+    }
+    response
   }
 
   /**
@@ -176,7 +193,22 @@ private[sql] class SparkConnectClient(
         builder.setSparkVersion(proto.AnalyzePlanRequest.SparkVersion.newBuilder().build())
       case other => throw new IllegalArgumentException(s"Unknown Analyze request $other")
     }
-    analyze(builder)
+    val response = analyze(builder)
+    // Check the server side session ID based on the response.
+    serverSideSessionId match {
+      case Some(id) =>
+        // Check the server-side session ID based on the response but only if the
+        // ID in the response is not null.
+        val serverSideId = response.getServerSideSessionId
+        if (serverSideId != null && id != serverSideId) {
+          throw new IllegalStateException(
+            s"Server side session ID changed. Create a new SparkSession to continue. " +
+              s"(Old: $id, New: ${serverSideId})")
+        }
+      case None =>
+        serverSideSessionId = Some(response.getServerSideSessionId)
+    }
+    response
   }
 
   def sameSemantics(plan: proto.Plan, otherPlan: proto.Plan): proto.AnalyzePlanResponse = {
@@ -216,7 +248,22 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL)
       .build()
-    bstub.interrupt(request)
+    val response = bstub.interrupt(request)
+    // Check the server-side session ID based on the response.
+    serverSideSessionId match {
+      case Some(id) =>
+        // Check the server-side session ID based on the response but only if the
+        // ID in the response is not null.
+        val serverSideId = response.getServerSideSessionId
+        if (serverSideId != null && id != serverSideId) {
+          throw new IllegalStateException(
+            s"Server side session ID changed. Create a new SparkSession to continue. " +
+              s"(Old: $id, New: ${serverSideId})")
+        }
+      case None =>
+        serverSideSessionId = Some(response.getServerSideSessionId)
+    }
+    response
   }
 
   private[sql] def interruptTag(tag: String): proto.InterruptResponse = {
@@ -228,7 +275,22 @@ private[sql] class SparkConnectClient(
       .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_TAG)
       .setOperationTag(tag)
       .build()
-    bstub.interrupt(request)
+    val response = bstub.interrupt(request)
+    // Check the server-side session ID based on the response.
+    serverSideSessionId match {
+      case Some(id) =>
+        // Check the server-side session ID based on the response but only if the
+        // ID in the response is not null.
+        val serverSideId = response.getServerSideSessionId
+        if (serverSideId != null && id != serverSideId) {
+          throw new IllegalStateException(
+            s"Server side session ID changed. Create a new SparkSession to continue. " +
+              s"(Old: $id, New: ${serverSideId})")
+        }
+      case None =>
+        serverSideSessionId = Some(response.getServerSideSessionId)
+    }
+    response
   }
 
   private[sql] def interruptOperation(id: String): proto.InterruptResponse = {
@@ -240,7 +302,22 @@ private[sql] class SparkConnectClient(
       .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_OPERATION_ID)
       .setOperationId(id)
       .build()
-    bstub.interrupt(request)
+    val response = bstub.interrupt(request)
+    // Check the server-side session ID based on the response.
+    serverSideSessionId match {
+      case Some(id) =>
+        // Check the server-side session ID based on the response but only if the
+        // ID in the response is not null.
+        val serverSideId = response.getServerSideSessionId
+        if (serverSideId != null && id != serverSideId) {
+          throw new IllegalStateException(
+            s"Server side session ID changed. Create a new SparkSession to continue. " +
+              s"(Old: $id, New: ${serverSideId})")
+        }
+      case None =>
+        serverSideSessionId = Some(response.getServerSideSessionId)
+    }
+    response
   }
 
   private[sql] def releaseSession(): proto.ReleaseSessionResponse = {

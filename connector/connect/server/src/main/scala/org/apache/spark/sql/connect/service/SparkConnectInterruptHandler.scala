@@ -54,6 +54,7 @@ class SparkConnectInterruptHandler(responseObserver: StreamObserver[proto.Interr
     val response = proto.InterruptResponse
       .newBuilder()
       .setSessionId(v.getSessionId)
+      .setServerSideSessionId(sessionHolder.session.sessionUUID)
       .addAllInterruptedIds(interruptedIds.asJava)
       .build()
 
