@@ -2467,6 +2467,41 @@ class BaseUDTFTestsMixin:
             [Row(count=20, buffer="abc")],
         )
 
+    def test_udtf_with_stop_iteration_exception(self):
+        @udtf
+        class TestUDTF:
+            def __init__(self):
+                self._total = 0
+
+            @staticmethod
+            def analyze(_):
+                return AnalyzeResult(
+                    schema=StructType().add("total", IntegerType()), withSinglePartition=True
+                )
+
+            def eval(self, _: Row):
+                self._total += 1
+                if self._total >= 3:
+                    raise StopIteration("StopIteration at self._total >= 3")
+
+            def terminate(self):
+                yield self._total,
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        assertDataFrameEqual(
+            self.spark.sql(
+                """
+                WITH t AS (
+                  SELECT id FROM range(1, 21)
+                )
+                SELECT total
+                FROM test_udtf(TABLE(t))
+                """
+            ),
+            [Row(total=3)],
+        )
+
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     @classmethod

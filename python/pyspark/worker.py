@@ -995,6 +995,8 @@ def read_udtf(pickleSer, infile, eval_type):
             def func(*a: Any) -> Any:
                 try:
                     return f(*a)
+                except StopIteration:
+                    raise
                 except Exception as e:
                     raise PySparkRuntimeError(
                         error_class="UDTF_EXEC_ERROR",
@@ -1057,6 +1059,9 @@ def read_udtf(pickleSer, infile, eval_type):
                     yield from eval(*[a[o] for o in args_kwargs_offsets])
                 if terminate is not None:
                     yield from terminate()
+            except StopIteration:
+                if terminate is not None:
+                    yield from terminate()
             finally:
                 if cleanup is not None:
                     cleanup()
@@ -1098,6 +1103,8 @@ def read_udtf(pickleSer, infile, eval_type):
             def evaluate(*a) -> tuple:
                 try:
                     res = f(*a)
+                except StopIteration:
+                    raise
                 except Exception as e:
                     raise PySparkRuntimeError(
                         error_class="UDTF_EXEC_ERROR",
@@ -1142,6 +1149,9 @@ def read_udtf(pickleSer, infile, eval_type):
             try:
                 for a in it:
                     yield eval(*[a[o] for o in args_kwargs_offsets])
+                if terminate is not None:
+                    yield terminate()
+            except StopIteration:
                 if terminate is not None:
                     yield terminate()
             finally:
