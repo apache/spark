@@ -71,7 +71,9 @@ class SparkEnv (
 
   // We initialize the ShuffleManager later, in SparkContext and Executor, to allow
   // user jars to define custom ShuffleManagers.
-  var shuffleManager: ShuffleManager = _
+  private var _shuffleManager: ShuffleManager = _
+
+  def shuffleManager: ShuffleManager = _shuffleManager
 
   @volatile private[spark] var isStopped = false
 
@@ -190,8 +192,8 @@ class SparkEnv (
       pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, worker)
   }
 
-  private[spark] def setShuffleManager(sm: ShuffleManager): Unit = {
-    shuffleManager = sm
+  private[spark] def setShuffleManager(shuffleManager: ShuffleManager): Unit = {
+    _shuffleManager = shuffleManager
   }
 }
 

@@ -24,25 +24,6 @@ import org.apache.spark.internal.config
 import org.apache.spark.util.Utils
 
 /**
- * Utility companion object to create a ShuffleManager given a spark configuration.
- */
-private[spark] object ShuffleManager {
-  def create(conf: SparkConf, isDriver: Boolean): ShuffleManager = {
-    Utils.instantiateSerializerOrShuffleManager[ShuffleManager](
-      getShuffleManagerClassName(conf), conf, isDriver)
-  }
-
-  def getShuffleManagerClassName(conf: SparkConf): String = {
-    val shortShuffleMgrNames = Map(
-      "sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName,
-      "tungsten-sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName)
-
-    val shuffleMgrName = conf.get(config.SHUFFLE_MANAGER)
-    shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase(Locale.ROOT), shuffleMgrName)
-  }
-}
-
-/**
  * Pluggable interface for shuffle systems. A ShuffleManager is created in SparkEnv on the driver
  * and on each executor, based on the spark.shuffle.manager setting. The driver registers shuffles
  * with it, and executors (or tasks running locally in the driver) can ask to read and write data.
@@ -117,3 +98,23 @@ private[spark] trait ShuffleManager {
   /** Shut down this ShuffleManager. */
   def stop(): Unit
 }
+
+/**
+ * Utility companion object to create a ShuffleManager given a spark configuration.
+ */
+private[spark] object ShuffleManager {
+  def create(conf: SparkConf, isDriver: Boolean): ShuffleManager = {
+    Utils.instantiateSerializerOrShuffleManager[ShuffleManager](
+      getShuffleManagerClassName(conf), conf, isDriver)
+  }
+
+  def getShuffleManagerClassName(conf: SparkConf): String = {
+    val shortShuffleMgrNames = Map(
+      "sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName,
+      "tungsten-sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName)
+
+    val shuffleMgrName = conf.get(config.SHUFFLE_MANAGER)
+    shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase(Locale.ROOT), shuffleMgrName)
+  }
+}
+
