@@ -13586,6 +13586,7 @@ def from_xml(
     --------
     Example 1: Parsing XML with a :class:`StructType` schema
 
+    >>> import pyspark.sql.functions as sf
     >>> from pyspark.sql.types import StructType, StructField, LongType
     ... # Sample data with an XML column
     >>> data = [(1, '''<p><a>1</a></p>''')]
@@ -13593,38 +13594,41 @@ def from_xml(
     ... # Define the schema using a StructType
     >>> schema = StructType([StructField("a", LongType())])
     ... # Parse the XML column using the specified schema
-    >>> df.select(from_xml(df.value, schema).alias("xml")).collect()
+    >>> df.select(sf.from_xml(df.value, schema).alias("xml")).collect()
     [Row(xml=Row(a=1))]
 
     Example 2: Parsing XML with a DDL-formatted string schema
 
+    >>> import pyspark.sql.functions as sf
     >>> data = [(1, '''<p><a>1</a></p>''')]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     ... # Define the schema using a DDL-formatted string
     >>> schema = "STRUCT<a: BIGINT>"
     ... # Parse the XML column using the DDL-formatted schema
-    >>> df.select(from_xml(df.value, schema).alias("xml")).collect()
+    >>> df.select(sf.from_xml(df.value, schema).alias("xml")).collect()
     [Row(xml=Row(a=1))]
 
     Example 3: Parsing XML with :class:`ArrayType` in schema
 
+    >>> import pyspark.sql.functions as sf
     >>> data = [(1, '<p><a>1</a><a>2</a></p>')]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     ... # Define the schema with an Array type
     >>> schema = "STRUCT<a: ARRAY<BIGINT>>"
     ... # Parse the XML column using the schema with an Array
-    >>> df.select(from_xml(df.value, schema).alias("xml")).collect()
+    >>> df.select(sf.from_xml(df.value, schema).alias("xml")).collect()
     [Row(xml=Row(a=[1, 2]))]
 
     Example 4: Parsing XML using :meth:`pyspark.sql.functions.schema_of_xml`
 
+    >>> import pyspark.sql.functions as sf
     >>> # Sample data with an XML column
     ... data = [(1, '<p><a>1</a><a>2</a></p>')]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     ... # Generate the schema from an example XML value
-    >>> schema = schema_of_xml(lit(data[0][1]))
+    >>> schema = sf.schema_of_xml(sf.lit(data[0][1]))
     ... # Parse the XML column using the generated schema
-    >>> df.select(from_xml(df.value, schema).alias("xml")).collect()
+    >>> df.select(sf.from_xml(df.value, schema).alias("xml")).collect()
     [Row(xml=Row(a=[1, 2]))]
     """
 
