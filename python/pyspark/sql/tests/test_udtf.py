@@ -1620,7 +1620,7 @@ class BaseUDTFTestsMixin:
             def analyze(a: AnalyzeArgument, b: AnalyzeArgument) -> AnalyzeResult:
                 return AnalyzeResult(StructType().add("a", a.dataType).add("b", b.dataType))
 
-            def eval(self, a):
+            def eval(self, a, b):
                 yield a, a + 1
 
         func = udtf(TestUDTF)
@@ -1630,9 +1630,6 @@ class BaseUDTFTestsMixin:
 
         with self.assertRaisesRegex(AnalysisException, r"arguments"):
             func(lit(1), lit(2), lit(3)).collect()
-
-        with self.assertRaisesRegex(PythonException, r"arguments"):
-            func(lit(1), lit(2)).collect()
 
     def test_udtf_with_analyze_taking_keyword_arguments(self):
         @udtf
