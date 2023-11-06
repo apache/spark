@@ -237,9 +237,7 @@ object Project {
 
 case class UnresolvedDropColumns(dropList: Seq[Expression], child: LogicalPlan)
   extends UnaryNode {
-  override def output: Seq[Attribute] = {
-    child.output.filterNot(attr => dropList.exists(_.semanticEquals(attr)))
-  }
+  override def output: Seq[Attribute] = Nil
 
   override def maxRows: Option[Long] = child.maxRows
   override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition

@@ -31,7 +31,10 @@ class ResolveDropColumns(val catalogManager: CatalogManager)
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(DROP_COLUMNS)) {
     case d: UnresolvedDropColumns =>
-      val dropped = d.dropList.map(resolveExpressionByPlanChildren(_, d.child))
+      val dropped = d.dropList.map {
+        case u: UnresolvedAttribute => resolveExpressionByPlanChildren(u, d.child)
+        case e => e
+      }
       val remaining = d.child.output.filterNot(attr => dropped.exists(_.semanticEquals(attr)))
       if (remaining.size == d.child.output.size) {
         d.child
