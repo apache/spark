@@ -2658,7 +2658,8 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
           val arrayData = inputs.map(_.asInstanceOf[ArrayData])
           val numberOfElements = arrayData.foldLeft(0L)((sum, ad) => sum + ad.numElements())
           if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-            throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(numberOfElements)
+            throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+              prettyName, numberOfElements)
           }
           val finalData = new Array[AnyRef](numberOfElements.toInt)
           var position = 0
@@ -2839,7 +2840,8 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
       val arrayData = elements.map(_.asInstanceOf[ArrayData])
       val numberOfElements = arrayData.foldLeft(0L)((sum, e) => sum + e.numElements())
       if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-        throw QueryExecutionErrors.flattenArraysWithElementsExceedLimitError(numberOfElements)
+        throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+          prettyName, numberOfElements)
       }
       val flattenedData = new Array(numberOfElements.toInt)
       var position = 0
@@ -3552,7 +3554,8 @@ case class ArrayRepeat(left: Expression, right: Expression)
       null
     } else {
       if (count.asInstanceOf[Int] > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-        throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(count)
+        throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(
+          prettyName, count)
       }
       val element = left.eval(input)
       new GenericArrayData(Array.fill(count.asInstanceOf[Int])(element))
@@ -3842,10 +3845,12 @@ trait ArraySetLike {
       builder: String,
       value : String,
       size : String,
-      nullElementIndex : String): String = withResultArrayNullCheck(
+      nullElementIndex : String,
+      functionName: String): String = withResultArrayNullCheck(
     s"""
        |if ($size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-       |  throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($size);
+       |  throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+       |    "$functionName", $size);
        |}
        |
        |if (!UnsafeArrayData.shouldUseGenericArrayData(${et.defaultSize}, $size)) {
@@ -3903,7 +3908,8 @@ case class ArrayDistinct(child: Expression)
         (value: Any) =>
           if (!hs.contains(value)) {
             if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-              ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.size)
+              throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+                prettyName, arrayBuffer.size)
             }
             arrayBuffer += value
             hs.add(value)
@@ -4013,7 +4019,7 @@ case class ArrayDistinct(child: Expression)
            |for (int $i = 0; $i < $array.numElements(); $i++) {
            |  $processArray
            |}
-           |${buildResultArray(builder, ev.value, size, nullElementIndex)}
+           |${buildResultArray(builder, ev.value, size, nullElementIndex, prettyName)}
          """.stripMargin
       })
     } else {
@@ -4048,13 +4054,6 @@ trait ArrayBinaryLike
   }
 }
 
-object ArrayBinaryLike {
-  def throwUnionLengthOverflowException(length: Int): Unit = {
-    throw QueryExecutionErrors.unionArrayWithElementsExceedLimitError(length)
-  }
-}
-
-
 /**
  * Returns an array of the elements in the union of x and y, without duplicates
  */
@@ -4082,7 +4081,8 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
           (value: Any) =>
             if (!hs.contains(value)) {
               if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-                ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.size)
+                throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+                  prettyName, arrayBuffer.size)
               }
               arrayBuffer += value
               hs.add(value)
@@ -4125,7 +4125,8 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
           }
           if (!found) {
             if (arrayBuffer.length > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-              ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.length)
+              throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+                prettyName, arrayBuffer.length)
             }
             arrayBuffer += elem
           }
@@ -4213,7 +4214,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
            |    $processArray
            |  }
            |}
-           |${buildResultArray(builder, ev.value, size, nullElementIndex)}
+           |${buildResultArray(builder, ev.value, size, nullElementIndex, prettyName)}
          """.stripMargin
       })
     } else {
@@ -4228,44 +4229,6 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): ArrayUnion = copy(left = newLeft, right = newRight)
-}
-
-object ArrayUnion {
-  def unionOrdering(
-      array1: ArrayData,
-      array2: ArrayData,
-      elementType: DataType,
-      ordering: Ordering[Any]): ArrayData = {
-    val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
-    var alreadyIncludeNull = false
-    Seq(array1, array2).foreach(_.foreach(elementType, (_, elem) => {
-      var found = false
-      if (elem == null) {
-        if (alreadyIncludeNull) {
-          found = true
-        } else {
-          alreadyIncludeNull = true
-        }
-      } else {
-        // check elem is already stored in arrayBuffer or not?
-        var j = 0
-        while (!found && j < arrayBuffer.size) {
-          val va = arrayBuffer(j)
-          if (va != null && ordering.equiv(va, elem)) {
-            found = true
-          }
-          j = j + 1
-        }
-      }
-      if (!found) {
-        if (arrayBuffer.length > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-          ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.length)
-        }
-        arrayBuffer += elem
-      }
-    }))
-    new GenericArrayData(arrayBuffer)
-  }
 }
 
 /**
@@ -4482,7 +4445,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
            |for (int $i = 0; $i < $array1.numElements(); $i++) {
            |  $processArray1
            |}
-           |${buildResultArray(builder, ev.value, size, nullElementIndex)}
+           |${buildResultArray(builder, ev.value, size, nullElementIndex, prettyName)}
          """.stripMargin
       })
     } else {
@@ -4693,7 +4656,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
            |for (int $i = 0; $i < $array1.numElements(); $i++) {
            |  $processArray1
            |}
-           |${buildResultArray(builder, ev.value, size, nullElementIndex)}
+           |${buildResultArray(builder, ev.value, size, nullElementIndex, prettyName)}
          """.stripMargin
       })
     } else {
@@ -4808,7 +4771,8 @@ case class ArrayInsert(
       val newArrayLength = math.max(baseArr.numElements() + 1, positivePos.get)
 
       if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-        throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
+        throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+          prettyName, newArrayLength)
       }
 
       val newArray = new Array[Any](newArrayLength)
@@ -4842,7 +4806,8 @@ case class ArrayInsert(
         val newArrayLength = -posInt + baseOffset
 
         if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-          throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
+          throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+            prettyName, newArrayLength)
         }
 
         val newArray = new Array[Any](newArrayLength)
@@ -4866,7 +4831,8 @@ case class ArrayInsert(
         val newArrayLength = math.max(baseArr.numElements() + 1, posInt + 1)
 
         if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-          throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
+          throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+            prettyName, newArrayLength)
         }
 
         val newArray = new Array[Any](newArrayLength)
@@ -4912,7 +4878,8 @@ case class ArrayInsert(
            |
            |final int $resLength = java.lang.Math.max($arr.numElements() + 1, ${positivePos.get});
            |if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-           |  throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($resLength);
+           |  throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+           |    "$prettyName", $resLength);
            |}
            |
            |$allocation
@@ -4949,7 +4916,8 @@ case class ArrayInsert(
            |
            |  $resLength = java.lang.Math.abs($pos) + $baseOffset;
            |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-           |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($resLength);
+           |    throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+           |      "$prettyName", $resLength);
            |  }
            |
            |  $allocation
@@ -4976,7 +4944,8 @@ case class ArrayInsert(
            |
            |  $resLength = java.lang.Math.max($arr.numElements() + 1, $itemInsertionIndex + 1);
            |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-           |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($resLength);
+           |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(
+           |      "$prettyName", $resLength);
            |  }
            |
            |  $allocation

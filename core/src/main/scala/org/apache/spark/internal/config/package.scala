@@ -1837,6 +1837,14 @@ package object config {
     .intConf
     .createWithDefault(8080)
 
+  private[spark] val MASTER_UI_HISTORY_SERVER_URL =
+    ConfigBuilder("spark.master.ui.historyServerUrl")
+      .doc("The URL where Spark history server is running. Please note that this assumes " +
+        "that all Spark jobs share the same event log location where the history server accesses.")
+      .version("4.0.0")
+      .stringConf
+      .createOptional
+
   private[spark] val IO_COMPRESSION_SNAPPY_BLOCKSIZE =
     ConfigBuilder("spark.io.compression.snappy.blockSize")
       .doc("Block size in bytes used in Snappy compression, in the case when " +

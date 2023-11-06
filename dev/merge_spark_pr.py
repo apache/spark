@@ -248,37 +248,49 @@ def cherry_pick(pr_num, merge_hash, default_branch):
     return pick_ref
 
 
-def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
-    jira_id = input("Enter a JIRA id [%s]: " % default_jira_id)
+def print_jira_issue_summary(issue):
+    summary = issue.fields.summary
+    assignee = issue.fields.assignee
+    if assignee is not None:
+        assignee = assignee.displayName
+    status = issue.fields.status.name
+    print("=== JIRA %s ===" % issue.key)
+    print(
+        "summary\t\t%s\nassignee\t%s\nstatus\t\t%s\nurl\t\t%s/%s\n"
+        % (summary, assignee, status, JIRA_BASE, issue.key)
+    )
+
+
+def get_jira_issue(prompt, default_jira_id=""):
+    jira_id = input("%s [%s]: " % (prompt, default_jira_id))
     if jira_id == "":
         jira_id = default_jira_id
         if jira_id == "":
             print("JIRA ID not found, skipping.")
-            return
-
+            return None
     try:
         issue = asf_jira.issue(jira_id)
+        print_jira_issue_summary(issue)
+        status = issue.fields.status.name
+        if status == "Resolved" or status == "Closed":
+            print("JIRA issue %s already has status '%s'" % (jira_id, status))
+            return None
+        if input("Check if the JIRA information is as expected (y/n): ").lower() != "n":
+            return issue
+        else:
+            return get_jira_issue("Enter the revised JIRA ID again or leave blank to skip")
     except Exception as e:
-        fail("ASF JIRA could not find %s\n%s" % (jira_id, e))
+        print("ASF JIRA could not find %s: %s" % (jira_id, e))
+        return get_jira_issue("Enter the revised JIRA ID again or leave blank to skip")
 
-    cur_status = issue.fields.status.name
-    cur_summary = issue.fields.summary
-    cur_assignee = issue.fields.assignee
-    if cur_assignee is None:
-        cur_assignee = choose_jira_assignee(issue)
-    # Check again, we might not have chosen an assignee
-    if cur_assignee is None:
-        cur_assignee = "NOT ASSIGNED!!!"
-    else:
-        cur_assignee = cur_assignee.displayName
 
-    if cur_status == "Resolved" or cur_status == "Closed":
-        fail("JIRA issue %s already has status '%s'" % (jira_id, cur_status))
-    print("=== JIRA %s ===" % jira_id)
-    print(
-        "summary\t\t%s\nassignee\t%s\nstatus\t\t%s\nurl\t\t%s/%s\n"
-        % (cur_summary, cur_assignee, cur_status, JIRA_BASE, jira_id)
-    )
+def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
+    issue = get_jira_issue("Enter a JIRA id", default_jira_id)
+    if issue is None:
+        return
+
+    if issue.fields.assignee is None:
+        choose_jira_assignee(issue)
 
     versions = asf_jira.project_versions("SPARK")
     # Consider only x.y.z, unreleased, unarchived versions
@@ -351,17 +363,23 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
 
     jira_fix_versions = list(map(lambda v: get_version_json(v), fix_versions))
 
-    resolve = list(filter(lambda a: a["name"] == "Resolve Issue", asf_jira.transitions(jira_id)))[0]
+    resolve = list(filter(lambda a: a["name"] == "Resolve Issue", asf_jira.transitions(issue.key)))[
+        0
+    ]
     resolution = list(filter(lambda r: r.raw["name"] == "Fixed", asf_jira.resolutions()))[0]
     asf_jira.transition_issue(
-        jira_id,
+        issue.key,
         resolve["id"],
         fixVersions=jira_fix_versions,
         comment=comment,
         resolution={"id": resolution.raw["id"]},
     )
 
-    print("Successfully resolved %s with fixVersions=%s!" % (jira_id, fix_versions))
+    try:
+        print_jira_issue_summary(asf_jira.issue(issue.key))
+    except Exception:
+        print("Unable to fetch JIRA issue %s after resolving" % issue.key)
+    print("Successfully resolved %s with fixVersions=%s!" % (issue.key, fix_versions))
 
 
 def choose_jira_assignee(issue):

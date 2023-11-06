@@ -34,7 +34,7 @@ import org.apache.spark.{SparkConf, SparkException, SparkFileNotFoundException, 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, HadoopCompressionCodec}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLType
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, InMemoryFileIndex, NoopCache}
@@ -1689,7 +1689,7 @@ abstract class JsonSuite
       val jsonDir = new File(dir, "json").getCanonicalPath
       jsonDF.coalesce(1).write
         .format("json")
-        .option("compression", "none")
+        .option("compression", HadoopCompressionCodec.NONE.lowerCaseName())
         .options(extraOptions)
         .save(jsonDir)
 

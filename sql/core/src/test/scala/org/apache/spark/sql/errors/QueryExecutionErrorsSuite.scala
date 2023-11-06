@@ -33,28 +33,31 @@ import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NamedParameter, UnresolvedGenerator}
-import org.apache.spark.sql.catalyst.expressions.{Grouping, Literal, RowNumber}
+import org.apache.spark.sql.catalyst.expressions.{Concat, CreateArray, EmptyRow, Flatten, Grouping, Literal, RowNumber}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
 import org.apache.spark.sql.catalyst.rules.RuleIdCollection
 import org.apache.spark.sql.catalyst.util.BadRecordException
-import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.execution.streaming.FileSystemBasedCheckpointFileManager
+import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
 import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, DecimalType, LongType, MetadataBuilder, StructType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, DecimalType, LongType, MetadataBuilder, StructType}
+import org.apache.spark.sql.vectorized.ColumnarArray
+import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.Utils
+
 
 class QueryExecutionErrorsSuite
   extends QueryTest
@@ -1092,6 +1095,56 @@ class QueryExecutionErrorsSuite
         "parameter" -> toSQLId("length"),
         "length" -> (-1).toString,
         "functionName" -> toSQLId("slice")
+      )
+    )
+  }
+
+  test("Elements exceed limit for concat()") {
+    val array = new ColumnarArray(
+      new ConstantColumnVector(Int.MaxValue, BooleanType), 0, Int.MaxValue)
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        Concat(Seq(Literal.create(array, ArrayType(BooleanType)))).eval(EmptyRow)
+      },
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
+      parameters = Map(
+        "numberOfElements" -> Int.MaxValue.toString,
+        "maxRoundedArrayLength" -> MAX_ROUNDED_ARRAY_LENGTH.toString,
+        "functionName" -> toSQLId("concat")
+      )
+    )
+  }
+
+  test("Elements exceed limit for flatten()") {
+    val array = new ColumnarArray(
+      new ConstantColumnVector(Int.MaxValue, BooleanType), 0, Int.MaxValue)
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        Flatten(CreateArray(Seq(Literal.create(array, ArrayType(BooleanType))))).eval(EmptyRow)
+      },
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
+      parameters = Map(
+        "numberOfElements" -> Int.MaxValue.toString,
+        "maxRoundedArrayLength" -> MAX_ROUNDED_ARRAY_LENGTH.toString,
+        "functionName" -> toSQLId("flatten")
+      )
+    )
+  }
+
+  test("Elements exceed limit for array_repeat()") {
+    val count = 2147483647
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql(s"select array_repeat(1, $count)").collect()
+      },
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      parameters = Map(
+        "parameter" -> toSQLId("count"),
+        "numberOfElements" -> count.toString,
+        "functionName" -> toSQLId("array_repeat"),
+        "maxRoundedArrayLength" -> MAX_ROUNDED_ARRAY_LENGTH.toString
       )
     )
   }
