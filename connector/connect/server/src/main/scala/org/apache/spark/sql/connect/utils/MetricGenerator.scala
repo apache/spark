@@ -21,6 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 
@@ -29,11 +30,13 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
  */
 private[connect] object MetricGenerator extends AdaptiveSparkPlanHelper {
 
-  def createMetricsResponse(sessionId: String, rows: DataFrame): ExecutePlanResponse = {
+  def createMetricsResponse(
+      sessionHolder: SessionHolder,
+      rows: DataFrame): ExecutePlanResponse = {
     ExecutePlanResponse
       .newBuilder()
-      .setSessionId(sessionId)
-      .setServerSideSessionId(rows.sparkSession.sessionUUID)
+      .setSessionId(sessionHolder.sessionId)
+      .setServerSideSessionId(sessionHolder.serverSessionId)
       .setMetrics(MetricGenerator.buildMetrics(rows.queryExecution.executedPlan))
       .build()
   }

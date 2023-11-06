@@ -603,6 +603,10 @@ message AddArtifactsResponse {
   // Server-side generated idempotency key that the client can use to assert that the server side
   // session has not changed.
   string server_side_session_id = 3;
+
+  // The list of artifact(s) seen by the server.
+  repeated ArtifactSummary artifacts = 1;
+
   // Metadata of an artifact.
   message ArtifactSummary {
     string name = 1;
@@ -611,9 +615,6 @@ message AddArtifactsResponse {
     // If false, the client may choose to resend the artifact specified by `name`.
     bool is_crc_successful = 2;
   }
-
-  // The list of artifact(s) seen by the server.
-  repeated ArtifactSummary artifacts = 1;
 }
 
 // Request to get current statuses of artifacts at the server side.
@@ -646,18 +647,18 @@ message ArtifactStatusesRequest {
 // Response to checking artifact statuses.
 // Next ID: 4
 message ArtifactStatusesResponse {
-  message ArtifactStatus {
-    // Exists or not particular artifact at the server.
-    bool exists = 1;
-  }
-
-  // A map of artifact names to their statuses.
-  map<string, ArtifactStatus> statuses = 1;
   // Session id in which the ArtifactStatus was running.
   string session_id = 2;
   // Server-side generated idempotency key that the client can use to assert that the server side
   // session has not changed.
   string server_side_session_id = 3;
+  // A map of artifact names to their statuses.
+  map<string, ArtifactStatus> statuses = 1;
+
+  message ArtifactStatus {
+    // Exists or not particular artifact at the server.
+    bool exists = 1;
+  }
 }
 
 message InterruptRequest {

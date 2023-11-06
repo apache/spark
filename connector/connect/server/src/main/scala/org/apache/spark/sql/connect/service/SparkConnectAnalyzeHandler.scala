@@ -203,7 +203,7 @@ private[connect] class SparkConnectAnalyzeHandler(
 
     builder
       .setSessionId(request.getSessionId)
-      .setServerSideSessionId(session.sessionUUID)
+      .setServerSideSessionId(sessionHolder.serverSessionId)
     builder.build()
   }
 }

@@ -27,7 +27,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.connect.client.{CloseableIterator, CustomSparkConnectBlockingStub, ExecutePlanResponseReattachableIterator, GrpcRetryHandler, SparkConnectClient, WrappedCloseableIterator}
+import org.apache.spark.sql.connect.client.{CloseableIterator, CustomSparkConnectBlockingStub, ExecutePlanResponseReattachableIterator, GrpcRetryHandler, SparkConnectClient, SparkConnectStubState, WrappedCloseableIterator}
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.config.Connect
@@ -256,7 +256,8 @@ trait SparkConnectServerTest extends SharedSparkSession {
       f: CustomSparkConnectBlockingStub => Unit): Unit = {
     val conf = SparkConnectClient.Configuration(port = serverPort)
     val channel = conf.createChannel()
-    val bstub = new CustomSparkConnectBlockingStub(channel, retryPolicy)
+    val stubState = new SparkConnectStubState()
+    val bstub = new CustomSparkConnectBlockingStub(channel, retryPolicy, stubState)
     try f(bstub)
     finally {
       channel.shutdownNow()

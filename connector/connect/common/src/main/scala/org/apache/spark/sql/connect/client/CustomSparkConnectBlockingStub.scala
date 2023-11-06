@@ -18,98 +18,14 @@ package org.apache.spark.sql.connect.client
 
 import scala.jdk.CollectionConverters._
 
-import com.google.protobuf.GeneratedMessageV3
 import io.grpc.ManagedChannel
-import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto._
 
-// This is common logic shared between the blocking and non-blocking stubs.
-//
-// The common logic is responsible to verify the integrity of the response. The invariant is
-// that the same stub instance is used for all requests from the same client.
-private[client] class SparkConnectCommonStub {
-  // Server side session ID, used to detect if the server side session changed. This is set upon
-  // receiving the first response from the server. This value is used only for executions that
-  // do not use server-side streaming.
-  private var serverSideSessionId: Option[String] = None
-
-  protected def verifyResponse[RespT <: GeneratedMessageV3](fn: => RespT): RespT = {
-    val response = fn
-    val field = response.getDescriptorForType.findFieldByName("server_side_session_id")
-    // If the field does not exist, we ignore this for now.
-    if (field != null) {
-      val value = response.getField(field)
-      serverSideSessionId match {
-        case Some(id) if value != id =>
-          throw new IllegalStateException(s"Server side session ID changed from $id to $value")
-        case _ =>
-          synchronized {
-            serverSideSessionId = Some(value.toString)
-          }
-      }
-    }
-    response
-  }
-
-  /**
-   * Wraps an existing iterator with another closeable iterator that verifies the response. This
-   * is needed for server-side streaming calls that are converted to iterators.
-   */
-  def wrapIterator[T <: GeneratedMessageV3, V <: CloseableIterator[T]](
-      inner: V): WrappedCloseableIterator[T] = {
-    new WrappedCloseableIterator[T] {
-
-      override def innerIterator: Iterator[T] = inner
-
-      override def hasNext: Boolean = {
-        innerIterator.hasNext
-      }
-
-      override def next(): T = {
-        verifyResponse {
-          innerIterator.next()
-        }
-      }
-
-      override def close(): Unit = {
-        innerIterator match {
-          case it: CloseableIterator[T] => it.close()
-          case _ => // nothing
-        }
-      }
-    }
-  }
-
-  /**
-   * Wraps an existing stream observer with another stream observer that verifies the response.
-   * This is necessary for client-side streaming calls.
-   */
-  def wrapStreamObserver[T <: GeneratedMessageV3](inner: StreamObserver[T]): StreamObserver[T] = {
-    new StreamObserver[T] {
-      private val innerObserver = inner
-      override def onNext(value: T): Unit = {
-        try {
-          innerObserver.onNext(verifyResponse(value))
-        } catch {
-            case e: Exception =>
-                onError(e)
-        }
-      }
-      override def onError(t: Throwable): Unit = {
-        innerObserver.onError(t)
-      }
-      override def onCompleted(): Unit = {
-        innerObserver.onCompleted()
-      }
-    }
-  }
-}
-
 private[connect] class CustomSparkConnectBlockingStub(
     channel: ManagedChannel,
-    retryPolicy: GrpcRetryHandler.RetryPolicy)
-    extends SparkConnectCommonStub {
+    retryPolicy: GrpcRetryHandler.RetryPolicy,
+    stubState: SparkConnectStubState) {
 
   private val stub = SparkConnectServiceGrpc.newBlockingStub(channel)
 
@@ -130,7 +46,7 @@ private[connect] class CustomSparkConnectBlockingStub(
         retryHandler.RetryIterator[ExecutePlanRequest, ExecutePlanResponse](
           request,
           r => {
-            wrapIterator(CloseableIterator(stub.executePlan(r).asScala))
+            stubState.wrapIterator(CloseableIterator(stub.executePlan(r).asScala))
           }))
     }
   }
@@ -146,7 +62,8 @@ private[connect] class CustomSparkConnectBlockingStub(
         request.getUserContext,
         request.getClientType,
         // Don't use retryHandler - own retry handling is inside.
-        wrapIterator(new ExecutePlanResponseReattachableIterator(request, channel, retryPolicy)))
+        stubState.wrapIterator(
+          new ExecutePlanResponseReattachableIterator(request, channel, retryPolicy)))
     }
   }
 
@@ -156,7 +73,7 @@ private[connect] class CustomSparkConnectBlockingStub(
       request.getUserContext,
       request.getClientType) {
       retryHandler.retry {
-        verifyResponse {
+        stubState.verifyResponse {
           stub.analyzePlan(request)
         }
       }
@@ -169,7 +86,7 @@ private[connect] class CustomSparkConnectBlockingStub(
       request.getUserContext,
       request.getClientType) {
       retryHandler.retry {
-        verifyResponse {
+        stubState.verifyResponse {
           stub.config(request)
         }
       }
@@ -182,7 +99,7 @@ private[connect] class CustomSparkConnectBlockingStub(
       request.getUserContext,
       request.getClientType) {
       retryHandler.retry {
-        verifyResponse {
+        stubState.verifyResponse {
           stub.interrupt(request)
         }
       }
@@ -195,7 +112,7 @@ private[connect] class CustomSparkConnectBlockingStub(
       request.getUserContext,
       request.getClientType) {
       retryHandler.retry {
-        verifyResponse {
+        stubState.verifyResponse {
           stub.releaseSession(request)
         }
       }
@@ -208,7 +125,7 @@ private[connect] class CustomSparkConnectBlockingStub(
       request.getUserContext,
       request.getClientType) {
       retryHandler.retry {
-        verifyResponse {
+        stubState.verifyResponse {
           stub.artifactStatus(request)
         }
       }

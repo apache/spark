@@ -65,8 +65,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         tracker)
     responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(dataframe, responseObserver, executeHolder)
-    responseObserver.onNext(
-      MetricGenerator.createMetricsResponse(request.getSessionId, dataframe))
+    responseObserver.onNext(MetricGenerator.createMetricsResponse(sessionHolder, dataframe))
     if (dataframe.queryExecution.observedMetrics.nonEmpty) {
       responseObserver.onNext(createObservedMetricsResponse(request.getSessionId, dataframe))
     }
@@ -114,7 +113,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       val response = proto.ExecutePlanResponse
         .newBuilder()
         .setSessionId(sessionId)
-        .setServerSideSessionId(sessionHolder.session.sessionUUID)
+        .setServerSideSessionId(sessionHolder.serverSessionId)
 
       val batch = proto.ExecutePlanResponse.ArrowBatch
         .newBuilder()
@@ -239,7 +238,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     ExecutePlanResponse
       .newBuilder()
       .setSessionId(sessionId)
-      .setServerSideSessionId(sessionHolder.session.sessionUUID)
+      .setServerSideSessionId(sessionHolder.serverSessionId)
       .setSchema(DataTypeProtoConverter.toConnectProtoType(schema))
       .build()
   }
@@ -262,7 +261,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     ExecutePlanResponse
       .newBuilder()
       .setSessionId(sessionId)
-      .setServerSideSessionId(sessionHolder.session.sessionUUID)
+      .setServerSideSessionId(sessionHolder.serverSessionId)
       .addAllObservedMetrics(observedMetrics.asJava)
       .build()
   }
