@@ -89,8 +89,7 @@ object JDBCRDD extends Logging {
    * @return A Catalyst schema corresponding to columns in the given order.
    */
   private def pruneSchema(schema: StructType, columns: Array[String]): StructType = {
-    import org.apache.spark.util.ArrayImplicits._
-    val fieldMap = Map(schema.fields.map(x => x.name -> x).toImmutableArraySeq: _*)
+    val fieldMap = schema.fields.map(x => x.name -> x).toMap
     new StructType(columns.map(name => fieldMap(name)))
   }
 

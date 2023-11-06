@@ -313,8 +313,10 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     val converter = factory.create(fieldTypes)
 
     val row = new SpecificInternalRow(fieldTypes)
-    val values = Seq(new CalendarInterval(0, 7, 0L), null)
-    row.update(0, createArray(values: _*))
+    val values = Array(new CalendarInterval(0, 7, 0L), null)
+
+    import org.apache.spark.util.ArrayImplicits._
+    row.update(0, createArray(values.toImmutableArraySeq: _*))
     val unsafeRow: UnsafeRow = converter.apply(row)
     testArrayInterval(unsafeRow.getArray(0), values)
   }
