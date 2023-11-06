@@ -160,10 +160,8 @@ def main(infile: IO, outfile: IO) -> None:
                 raise PySparkValueError(
                     f"{error_prefix()} because the function call provided keyword argument "
                     f"'{arg_name}' whose corresponding value was already specified positionally. "
-                    f"Note that the UDTF's static 'analyze' method expects positional argument "
-                    f"names in the list: {', '.join(expected_arg_names)}. Please update the "
-                    f"query so that it provides this argument's value exactly once instead, "
-                    f"and then try the query again."
+                    f"Please update the query so that it provides this argument's value "
+                    f"exactly once instead, and then try the query again."
                 )
 
         # Invoke the UDTF's 'analyze' method.
