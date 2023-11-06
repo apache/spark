@@ -112,13 +112,15 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
     val columnsWithMetadata = dataframe.schema.map { structField =>
       col(structField.name).as(structField.name, structField.metadata)
     }
-    val streamDF = stream.toDS().toDF(columnNames: _*).select(columnsWithMetadata: _*)
+    import org.apache.spark.util.ArrayImplicits._
+    val streamDF = stream.toDS()
+      .toDF(columnNames.toImmutableArraySeq: _*).select(columnsWithMetadata: _*)
     val data = dataframe.as[A].collect()
 
     val streamOutput = transformer.transform(streamDF)
       .select(firstResultCol, otherResultCols: _*)
     testStream(streamOutput) (
-      AddData(stream, data: _*),
+      AddData(stream, data.toImmutableArraySeq: _*),
       CheckAnswer(globalCheckFunction)
     )
   }

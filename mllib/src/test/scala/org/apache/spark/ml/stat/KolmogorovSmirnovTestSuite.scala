@@ -60,9 +60,10 @@ class KolmogorovSmirnovTestSuite
         val cdf = (x: Double) => theoreticalDist.cumulativeProbability(x)
         KolmogorovSmirnovTest.test(sampledDF, "sample", cdf).head()
       } else {
+        import org.apache.spark.util.ArrayImplicits._
         KolmogorovSmirnovTest.test(sampledDF, "sample",
           theoreticalDistByName._1,
-          theoreticalDistByName._2: _*
+          theoreticalDistByName._2.toImmutableArraySeq: _*
         ).head()
       }
     val theoreticalDistMath3 = if (theoreticalDist == null) {

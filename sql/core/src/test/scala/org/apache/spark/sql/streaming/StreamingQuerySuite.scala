@@ -891,7 +891,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       }
       override def getOffset: Option[Offset] = Some(LongOffset(1))
       override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-        spark.range(2).toDF(MockSourceProvider.fakeSchema.fieldNames: _*)
+        import org.apache.spark.util.ArrayImplicits._
+        spark.range(2).toDF(MockSourceProvider.fakeSchema.fieldNames.toImmutableArraySeq: _*)
       }
       override def schema: StructType = MockSourceProvider.fakeSchema
     }

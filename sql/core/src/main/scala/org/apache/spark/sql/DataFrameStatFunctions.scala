@@ -98,8 +98,9 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       cols: Array[String],
       probabilities: Array[Double],
       relativeError: Double): Array[Array[Double]] = withOrigin {
+    import org.apache.spark.util.ArrayImplicits._
     StatFunctions.multipleApproxQuantiles(
-      df.select(cols.map(col): _*),
+      df.select(cols.map(col).toImmutableArraySeq: _*),
       cols,
       probabilities,
       relativeError).map(_.toArray).toArray
