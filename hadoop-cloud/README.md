@@ -16,5 +16,5 @@ Integration tests will have some extra configurations for example selecting the 
 run the test against. Those configs are passed as environment variables and the existence of these
 variables must be checked by the test.
 Like for `AwsS3AbortableStreamBasedCheckpointFileManagerSuite` the S3 bucket used for testing
-is passed in the `S3A_PATH` and the credetinals to access AWS S3 are AWS_ACCESS_KEY_ID and
+is passed in the `S3A_PATH` and the credentials to access AWS S3 are AWS_ACCESS_KEY_ID and
 AWS_SECRET_ACCESS_KEY (in addition you can define optional AWS_SESSION_TOKEN and AWS_ENDPOINT_URL too).
