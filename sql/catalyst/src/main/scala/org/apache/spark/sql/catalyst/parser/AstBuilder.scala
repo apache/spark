@@ -3839,6 +3839,16 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val serdeInfo =
       getSerdeInfo(ctx.rowFormat.asScala.toSeq, ctx.createFileFormat.asScala.toSeq, ctx)
     val clusterBySpec = ctx.clusterBySpec().asScala.headOption.map(visitClusterBySpec)
+
+    if (clusterBySpec.isDefined) {
+      if (partCols.nonEmpty || partTransforms.nonEmpty) {
+        throw QueryParsingErrors.clusterByWithPartitionedBy(ctx)
+      }
+      if (bucketSpec.isDefined) {
+        throw QueryParsingErrors.clusterByWithBucketing(ctx)
+      }
+    }
+
     (partTransforms, partCols, bucketSpec, cleanedProperties, cleanedOptions, newLocation, comment,
       serdeInfo, clusterBySpec)
   }
@@ -3917,15 +3927,6 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val (partTransforms, partCols, bucketSpec, properties, options, location,
       comment, serdeInfo, clusterBySpec) = visitCreateTableClauses(ctx.createTableClauses())
 
-    if (clusterBySpec.isDefined) {
-      if (partCols.nonEmpty || partTransforms.nonEmpty) {
-        throw QueryParsingErrors.clusterByWithPartitionedBy(ctx)
-      }
-      if (bucketSpec.isDefined) {
-        throw QueryParsingErrors.clusterByWithBucketing(ctx)
-      }
-    }
-
     if (provider.isDefined && serdeInfo.isDefined) {
       operationNotAllowed(s"CREATE TABLE ... USING ... ${serdeInfo.get.describe}", ctx)
     }
@@ -3984,7 +3985,6 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    *     [OPTIONS table_property_list]
    *     [PARTITIONED BY (partition_fields)]
    *     [CLUSTER BY (col_name, col_name, ...)]
-   *     [CLUSTER BY (col_name, col_name, ...)]
    *     [CLUSTERED BY (col_name, col_name, ...)
    *       [SORTED BY (col_name [ASC|DESC], ...)]
    *       INTO num_buckets BUCKETS
@@ -4004,15 +4004,6 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       clusterBySpec) = visitCreateTableClauses(ctx.createTableClauses())
     val columns = Option(ctx.createOrReplaceTableColTypeList())
       .map(visitCreateOrReplaceTableColTypeList).getOrElse(Nil)
-
-    if (clusterBySpec.isDefined) {
-      if (partCols.nonEmpty || partTransforms.nonEmpty) {
-        throw QueryParsingErrors.clusterByWithPartitionedBy(ctx)
-      }
-      if (bucketSpec.isDefined) {
-        throw QueryParsingErrors.clusterByWithBucketing(ctx)
-      }
-    }
 
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
 
