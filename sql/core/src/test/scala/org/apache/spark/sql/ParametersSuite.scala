@@ -541,7 +541,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     }
     def createMap(keys: Array[_], values: Array[_]): Column = {
       val zipped = keys.map(k => Column(Literal(k))).zip(values.map(v => Column(Literal(v))))
-      map(zipped.map { case (k, v) => Seq(k, v) }.flatten.toImmutableArraySeq: _*)
+      map(zipped.flatMap { case (k, v) => Seq(k, v) }.toImmutableArraySeq: _*)
     }
     def callMap(keys: Array[_], values: Array[_]): Column = {
       val zipped = keys.map(k => Column(Literal(k))).zip(values.map(v => Column(Literal(v))))
