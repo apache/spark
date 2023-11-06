@@ -89,7 +89,12 @@ private[client] class SparkConnectCommonStub {
     new StreamObserver[T] {
       private val innerObserver = inner
       override def onNext(value: T): Unit = {
-        innerObserver.onNext(verifyResponse(value))
+        try {
+          innerObserver.onNext(verifyResponse(value))
+        } catch {
+            case e: Exception =>
+                onError(e)
+        }
       }
       override def onError(t: Throwable): Unit = {
         innerObserver.onError(t)
