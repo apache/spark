@@ -150,7 +150,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
 
   // Convert resources to ExecutorResourcesAmounts automatically
   implicit def convertResources(resources: Map[String, mutable.Buffer[String]]):
-  ExecutorResourcesAmounts = {
+      ExecutorResourcesAmounts = {
     // convert the old resources to ExecutorResourcesAmounts
     new ExecutorResourcesAmounts(resources.map { case (rName, addresses) =>
       rName -> addresses.map(address => address -> RESOURCE_TOTAL_AMOUNT).toMap
@@ -1760,8 +1760,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     taskDescriptions = taskScheduler.resourceOffers(singleCoreWorkerOffers).flatten
     assert(2 === taskDescriptions.length)
     assert(!failedTaskSet)
-    assert(ArrayBuffer("0") === taskDescriptions(0).resources.get(GPU).get.addresses)
-    assert(ArrayBuffer("1") === taskDescriptions(1).resources.get(GPU).get.addresses)
+    assert(ArrayBuffer("0") === taskDescriptions(0).resources.get(GPU).get.keys.toArray.sorted)
+    assert(ArrayBuffer("1") === taskDescriptions(1).resources.get(GPU).get.keys.toArray.sorted)
   }
 
   test("Scheduler correctly accounts for GPUs per task with fractional amount") {
@@ -1787,9 +1787,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     val taskDescriptions = taskScheduler.resourceOffers(singleCoreWorkerOffers).flatten
     assert(3 === taskDescriptions.length)
     assert(!failedTaskSet)
-    assert(ArrayBuffer("0") === taskDescriptions(0).resources.get(GPU).get.addresses)
-    assert(ArrayBuffer("0") === taskDescriptions(1).resources.get(GPU).get.addresses)
-    assert(ArrayBuffer("0") === taskDescriptions(2).resources.get(GPU).get.addresses)
+    assert(ArrayBuffer("0") === taskDescriptions(0).resources.get(GPU).get.keys.toArray.sorted)
+    assert(ArrayBuffer("0") === taskDescriptions(1).resources.get(GPU).get.keys.toArray.sorted)
+    assert(ArrayBuffer("0") === taskDescriptions(2).resources.get(GPU).get.keys.toArray.sorted)
   }
 
   test("Scheduler works with multiple ResourceProfiles and gpus") {
@@ -1827,10 +1827,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     var has1Gpu = 0
     for (tDesc <- taskDescriptions) {
       assert(tDesc.resources.contains(GPU))
-      if (tDesc.resources(GPU).addresses.size == 2) {
+      if (tDesc.resources(GPU).keys.size == 2) {
         has2Gpus += 1
       }
-      if (tDesc.resources(GPU).addresses.size == 1) {
+      if (tDesc.resources(GPU).keys.size == 1) {
         has1Gpu += 1
       }
     }
@@ -1848,7 +1848,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     taskDescriptions = taskScheduler.resourceOffers(workerOffers3).flatten
     assert(2 === taskDescriptions.length)
     assert(taskDescriptions.head.resources.contains(GPU))
-    assert(2 == taskDescriptions.head.resources(GPU).addresses.size)
+    assert(2 == taskDescriptions.head.resources(GPU).keys.size)
   }
 
   test("Scheduler works with task resource profiles") {
@@ -1887,10 +1887,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     var has1Gpu = 0
     for (tDesc <- taskDescriptions) {
       assert(tDesc.resources.contains(GPU))
-      if (tDesc.resources(GPU).addresses.size == 2) {
+      if (tDesc.resources(GPU).keys.size == 2) {
         has2Gpus += 1
       }
-      if (tDesc.resources(GPU).addresses.size == 1) {
+      if (tDesc.resources(GPU).keys.size == 1) {
         has1Gpu += 1
       }
     }
@@ -1908,7 +1908,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     taskDescriptions = taskScheduler.resourceOffers(workerOffers3).flatten
     assert(2 === taskDescriptions.length)
     assert(taskDescriptions.head.resources.contains(GPU))
-    assert(2 == taskDescriptions.head.resources(GPU).addresses.size)
+    assert(2 == taskDescriptions.head.resources(GPU).keys.size)
   }
 
   test("Calculate available tasks slots for task resource profiles") {
@@ -2325,10 +2325,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
       assert(4 === taskDescriptions.length)
       assert(!failedTaskSet)
-      assert(ArrayBuffer("0") === taskDescriptions(0).resources.get(GPU).get.addresses)
-      assert(ArrayBuffer("1") === taskDescriptions(1).resources.get(GPU).get.addresses)
-      assert(ArrayBuffer("2") === taskDescriptions(2).resources.get(GPU).get.addresses)
-      assert(ArrayBuffer("3") === taskDescriptions(3).resources.get(GPU).get.addresses)
+      assert(ArrayBuffer("0") === taskDescriptions(0).resources.get(GPU).get.keys.toArray.sorted)
+      assert(ArrayBuffer("1") === taskDescriptions(1).resources.get(GPU).get.keys.toArray.sorted)
+      assert(ArrayBuffer("2") === taskDescriptions(2).resources.get(GPU).get.keys.toArray.sorted)
+      assert(ArrayBuffer("3") === taskDescriptions(3).resources.get(GPU).get.keys.toArray.sorted)
     }
   }
 
@@ -2368,8 +2368,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       val assignedExecutorsGpus = ArrayBuffer[(String, String)]()
       for (tDesc <- taskDescriptions) {
         assert(tDesc.resources.contains(GPU))
-        assert(tDesc.resources.get(GPU).get.addresses.length == 1)
-        assignedExecutorsGpus.append((tDesc.executorId, tDesc.resources.get(GPU).get.addresses(0)))
+        assert(tDesc.resources.get(GPU).get.keys.size == 1)
+        val address = tDesc.resources.get(GPU).get.keys.toArray.sorted
+        assignedExecutorsGpus.append((tDesc.executorId, address(0)))
       }
 
       assert(assignedExecutorsGpus.sorted sameElements
@@ -2423,15 +2424,14 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     var index = 0
     for (tDesc <- taskDescriptions) {
       assert(tDesc.resources.contains(GPU))
-      assert(tDesc.resources.get(GPU).get.addresses.length == 1)
+      val addresses = tDesc.resources.get(GPU).get.keys.toArray.sorted
+      assert(addresses.length == 1)
       if (index < 4) { // the first 4 tasks will grab 0.7 gpu
-        assert(tDesc.resources.get(GPU).get.addresses(0) == index.toString)
-        assert(tDesc.resourcesAmounts.get(GPU).get(index.toString).toDouble/RESOURCE_TOTAL_AMOUNT
-          == 0.7)
+        assert(addresses(0) == index.toString)
+        assert(tDesc.resources.get(GPU).get(index.toString).toDouble/RESOURCE_TOTAL_AMOUNT == 0.7)
       } else {
-        assert(tDesc.resources.get(GPU).get.addresses(0) == (index - 4).toString)
-        assert(
-          tDesc.resourcesAmounts.get(GPU).get((index - 4).toString).toDouble/RESOURCE_TOTAL_AMOUNT
+        assert(addresses(0) == (index - 4).toString)
+        assert(tDesc.resources.get(GPU).get((index - 4).toString).toDouble/RESOURCE_TOTAL_AMOUNT
           == 0.3)
       }
       index += 1
@@ -2489,19 +2489,20 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
 
     for (tDesc <- taskDescriptions) {
       assert(tDesc.resources.contains(GPU))
-      assert(tDesc.resources.get(GPU).get.addresses.length == 1)
-      val address = tDesc.resources.get(GPU).get.addresses(0)
+      val addresses = tDesc.resources.get(GPU).get.keys.toArray.sorted
+      assert(addresses.length == 1)
+      val address = addresses(0)
 
       //    Executor 0,       executor 1,           executor 2,      executor 3
       // task_0.7, task_03  task_0.7, task_03  task_0.7, task_03  task_0.7, task_03
       if (index % 2 == 0) {
         higherAssignedExecutorsGpus.append(
-          (tDesc.executorId, tDesc.resources.get(GPU).get.addresses(0)))
-        assert(tDesc.resourcesAmounts.get(GPU).get(address).toDouble/RESOURCE_TOTAL_AMOUNT == 0.7)
+          (tDesc.executorId, address))
+        assert(tDesc.resources.get(GPU).get(address).toDouble/RESOURCE_TOTAL_AMOUNT == 0.7)
       } else {
         lowerAssignedExecutorsGpus.append(
-          (tDesc.executorId, tDesc.resources.get(GPU).get.addresses(0)))
-        assert(tDesc.resourcesAmounts.get(GPU).get(address).toDouble/RESOURCE_TOTAL_AMOUNT == 0.3)
+          (tDesc.executorId, address))
+        assert(tDesc.resources.get(GPU).get(address).toDouble/RESOURCE_TOTAL_AMOUNT == 0.3)
       }
       index += 1
     }
@@ -2555,10 +2556,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     var index = 0
     for (tDesc <- taskDescriptions) {
       assert(tDesc.resources.contains(GPU))
-      assert(tDesc.resources.get(GPU).get.addresses.length == 1)
-      assert(tDesc.resources.get(GPU).get.addresses(0) == index.toString)
-      assert(tDesc.resourcesAmounts.get(GPU).get(index.toString).toDouble/RESOURCE_TOTAL_AMOUNT
-        == 0.7)
+      val addresses = tDesc.resources.get(GPU).get.keys.toArray.sorted
+      assert(addresses.length == 1)
+      assert(addresses(0) == index.toString)
+      assert(tDesc.resources.get(GPU).get(index.toString).toDouble/RESOURCE_TOTAL_AMOUNT == 0.7)
       index += 1
     }
   }

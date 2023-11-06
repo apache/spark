@@ -32,7 +32,6 @@ private[spark] class ExecutorResourceInfo(
   extends ResourceInformation(name, addresses.toArray) with ResourceAllocator {
 
   override protected def resourceName = this.name
-
   override protected def resourceAddresses = this.addresses
 
   /**

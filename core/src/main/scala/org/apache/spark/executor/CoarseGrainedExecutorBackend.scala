@@ -191,7 +191,10 @@ private[spark] class CoarseGrainedExecutorBackend(
       } else {
         val taskDesc = TaskDescription.decode(data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
-        taskResources.put(taskDesc.taskId, taskDesc.resources)
+        // Convert resources amounts into ResourceInformation
+        val resources = taskDesc.resources.map { case (rName, addressesAmounts) =>
+          rName -> new ResourceInformation(rName, addressesAmounts.keys.toSeq.sorted.toArray)}
+        taskResources.put(taskDesc.taskId, resources)
         executor.launchTask(this, taskDesc)
       }
 
@@ -271,10 +274,9 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer): Unit = {
-    val resources = taskResources.getOrDefault(taskId, Map.empty[String, ResourceInformation])
+    val resources = executor.runningTasks.get(taskId).taskDescription.resources
     val cpus = executor.runningTasks.get(taskId).taskDescription.cpus
-    val resourcesAmounts = executor.runningTasks.get(taskId).taskDescription.resourcesAmounts
-    val msg = StatusUpdate(executorId, taskId, state, data, cpus, resources, resourcesAmounts)
+    val msg = StatusUpdate(executorId, taskId, state, data, cpus, resources)
     if (TaskState.isFinished(state)) {
       taskResources.remove(taskId)
     }

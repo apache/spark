@@ -642,8 +642,7 @@ class ExecutorSuite extends SparkFunSuite
       JobArtifactSet.emptyJobArtifactSet,
       properties = new Properties,
       cpus = 1,
-      resources = immutable.Map[String, ResourceInformation](),
-      Map.empty,
+      resources = Map.empty,
       serializedTask)
   }
 

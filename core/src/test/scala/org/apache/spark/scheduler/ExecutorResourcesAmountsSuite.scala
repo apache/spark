@@ -61,10 +61,8 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
 
     // assign nothing to rp without resource profile
     val assigned = availableExecResAmounts.assignResources(rp)
-    assigned.foreach { case (resource, resourceAmounts) =>
-      assert(resource.isEmpty)
-      assert(resourceAmounts.isEmpty)
-    }
+    assert(assigned.isDefined)
+    assigned.foreach { case resource => assert(resource.isEmpty) }
   }
 
   test("Convert ExecutorResourceInfos to ExecutorResourcesAmounts") {
@@ -150,7 +148,7 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
     // taskMount = 0.1 < 1.0 which can be assigned.
     val assigned = availableExecResAmounts.assignResources(rp)
     // update the value
-    availableExecResAmounts.acquire(assigned.get._2)
+    availableExecResAmounts.acquire(assigned.get)
 
     val availableRes = availableExecResAmounts.availableResources
     availableRes.foreach { case (rName, addressesAmount) =>
@@ -199,10 +197,7 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
 
     var assigned = availableExecResAmounts.assignResources(rp)
     assert(!assigned.isEmpty)
-    assigned.foreach { case (resource, resourcesAmounts) =>
-      assert(!resource.isEmpty)
-      assert(!resourcesAmounts.isEmpty)
-    }
+    assigned.foreach { case resource => assert(!resource.isEmpty)}
 
     val treqs1 = new TaskResourceRequests()
       .resource("gpu", gpuTaskAmount)
@@ -285,18 +280,12 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
     // taskMount = 0.1 < 1.0 which can be assigned.
     val assigned = availableExecResAmounts.assignResources(rp)
     assert(!assigned.isEmpty)
-    assigned.foreach { case (resource, resourceAmounts) =>
+    assigned.foreach { case resource =>
       assert(resource.size === 1)
       assert(resource.keys.toSeq === Seq("gpu"))
-      assert(resource("gpu").name === "gpu")
-      assert(resource("gpu").addresses === Array("2"))
-
-      assert(resourceAmounts.size === 1)
-      assert(resourceAmounts.keys.toSeq === Seq("gpu"))
-      assert(resourceAmounts("gpu").size === 1)
-      assert(resourceAmounts("gpu").keys.toSeq === Seq("2"))
-      assert(resourceAmounts("gpu")(resource("gpu").addresses(0)).toDouble/RESOURCE_TOTAL_AMOUNT ===
-        gpuTaskAmount)
+      assert(resource("gpu").size === 1)
+      assert(resource("gpu").keys.toSeq === Seq("2"))
+      assert(resource("gpu")("2").toDouble / RESOURCE_TOTAL_AMOUNT === gpuTaskAmount)
     }
 
     // assign will not update the real value.
@@ -310,7 +299,7 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
     }
 
     // acquire will updates the value
-    availableExecResAmounts.acquire(assigned.get._2)
+    availableExecResAmounts.acquire(assigned.get)
 
     // after acquire
     availableRes = availableExecResAmounts.availableResources
@@ -326,7 +315,7 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
     }
 
     // release
-    availableExecResAmounts.release(assigned.get._2)
+    availableExecResAmounts.release(assigned.get)
 
     availableRes = availableExecResAmounts.availableResources
     availableRes.foreach { case (rName, addressesAmount) =>
@@ -358,28 +347,17 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
     // taskMount = 0.1 < 1.0 which can be assigned.
     val assigned = availableExecResAmounts.assignResources(rp)
     assert(!assigned.isEmpty)
-    assigned.foreach { case (resource, resourceAmounts) =>
-      assert(resource.size === 2)
-      assert(resource.keys.toSeq.sorted === Seq("gpu", "fpga").sorted)
-
-      assert(resource("gpu").name === "gpu")
-      assert(resource("gpu").addresses === Array("2"))
-
-      assert(resource("fpga").name === "fpga")
-      assert(resource("fpga").addresses === Array("aa"))
-
+    assigned.foreach { case resourceAmounts =>
       assert(resourceAmounts.size === 2)
       assert(resourceAmounts.keys.toSeq.sorted === Seq("gpu", "fpga").sorted)
 
       assert(resourceAmounts("gpu").size === 1)
       assert(resourceAmounts("gpu").keys.toSeq === Seq("2"))
-      assert(resourceAmounts("gpu")(resource("gpu").addresses(0)).toDouble/RESOURCE_TOTAL_AMOUNT
-        === gpuTaskAmount)
+      assert(resourceAmounts("gpu")("2").toDouble / RESOURCE_TOTAL_AMOUNT === gpuTaskAmount)
 
       assert(resourceAmounts("fpga").size === 1)
       assert(resourceAmounts("fpga").keys.toSeq === Seq("aa"))
-      assert(resourceAmounts("fpga")(resource("fpga").addresses(0)).toDouble/RESOURCE_TOTAL_AMOUNT
-        === fpgaTaskAmount)
+      assert(resourceAmounts("fpga")("aa").toDouble / RESOURCE_TOTAL_AMOUNT === fpgaTaskAmount)
     }
 
     // assign will not update the real value.
@@ -393,7 +371,7 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
     }
 
     // acquire will updates the value
-    availableExecResAmounts.acquire(assigned.get._2)
+    availableExecResAmounts.acquire(assigned.get)
 
     // after acquire
     availableRes = availableExecResAmounts.availableResources
@@ -407,7 +385,7 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
     }
 
     // release
-    availableExecResAmounts.release(assigned.get._2)
+    availableExecResAmounts.release(assigned.get)
 
     availableRes = availableExecResAmounts.availableResources
     availableRes.foreach { case (rName, addressesAmount) =>
@@ -432,12 +410,11 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
       val rp = new ResourceProfileBuilder().require(treqs).build()
       val assigned = availableExecResAmounts.assignResources(rp)
       assert(!assigned.isEmpty)
-      assigned.foreach { case (resource, resourceAmounts) =>
-        assert(resource("gpu").addresses.sorted === expectedAssignedAddress.sorted)
-        assert(resourceAmounts("gpu").values.toArray.sorted.map(_.toDouble/RESOURCE_TOTAL_AMOUNT)
+      assigned.foreach { case resources =>
+        assert(resources("gpu").values.toArray.sorted.map(_.toDouble / RESOURCE_TOTAL_AMOUNT)
           === expectedAssignedAmount.sorted)
 
-        availableExecResAmounts.acquire(resourceAmounts)
+        availableExecResAmounts.acquire(resources)
 
         val leftRes = availableExecResAmounts.availableResources
         assert(leftRes.size == 1)

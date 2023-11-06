@@ -35,7 +35,7 @@ import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
-import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEndpoint
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
@@ -406,31 +406,30 @@ private[spark] class TaskSchedulerImpl(
         .canBeScheduled(taskSetRpID, shuffledOffers(i).resourceProfileId)) {
         val taskResAssignmentsOpt = resourcesMeetTaskRequirements(taskSet, availableCpus(i),
           availableResources(i))
-        taskResAssignmentsOpt.foreach { case (taskResAssignments, taskResAmounts) =>
+        taskResAssignmentsOpt.foreach { taskResAssignments =>
           try {
             val prof = sc.resourceProfileManager.resourceProfileFromId(taskSetRpID)
             val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(prof, conf)
             val (taskDescOption, didReject, index) =
-              taskSet.resourceOffer(execId, host, maxLocality, taskCpus, taskResAssignments,
-                taskResAmounts)
+              taskSet.resourceOffer(execId, host, maxLocality, taskCpus, taskResAssignments)
             noDelayScheduleRejects &= !didReject
             for (task <- taskDescOption) {
-              val (locality, resourcesAmounts) = if (task != null) {
+              val (locality, resources) = if (task != null) {
                 tasks(i) += task
                 addRunningTask(task.taskId, execId, taskSet)
-                (taskSet.taskInfos(task.taskId).taskLocality, task.resourcesAmounts)
+                (taskSet.taskInfos(task.taskId).taskLocality, task.resources)
               } else {
                 assert(taskSet.isBarrier, "TaskDescription can only be null for barrier task")
                 val barrierTask = taskSet.barrierPendingLaunchTasks(index)
                 barrierTask.assignedOfferIndex = i
                 barrierTask.assignedCores = taskCpus
-                (barrierTask.taskLocality, barrierTask.assignedResourcesAmount)
+                (barrierTask.taskLocality, barrierTask.assignedResources)
               }
 
               minLaunchedLocality = minTaskLocality(minLaunchedLocality, Some(locality))
               availableCpus(i) -= taskCpus
               assert(availableCpus(i) >= 0)
-              availableResources(i).acquire(resourcesAmounts)
+              availableResources(i).acquire(resources)
             }
           } catch {
             case e: TaskNotSerializableException =>
@@ -457,14 +456,13 @@ private[spark] class TaskSchedulerImpl(
   /**
    * Check whether the resources from the WorkerOffer are enough to run at least one task.
    * Returns None if the resources don't meet the task requirements, otherwise returns
-   * the task resource assignments and the resource amounts to give to the next task.
-   * Note that the assignments maybe be empty if no custom resources are used.
+   * the task resource assignments to give to the next task. Note that the assignments maybe
+   * be empty if no custom resources are used.
    */
   private def resourcesMeetTaskRequirements(
       taskSet: TaskSetManager,
       availCpus: Int,
-      availWorkerResources: ExecutorResourcesAmounts): Option[(Map[String, ResourceInformation],
-    Map[String, Map[String, Long]])] = {
+      availWorkerResources: ExecutorResourcesAmounts): Option[Map[String, Map[String, Long]]] = {
     val rpId = taskSet.taskSet.resourceProfileId
     val taskSetProf = sc.resourceProfileManager.resourceProfileFromId(rpId)
     val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(taskSetProf, conf)
@@ -688,7 +686,7 @@ private[spark] class TaskSchedulerImpl(
                 // revert all assigned resources
                 availableCpus(task.assignedOfferIndex) += task.assignedCores
                 availableResources(task.assignedOfferIndex).release(
-                  task.assignedResourcesAmount)
+                  task.assignedResources)
                 // re-add the task to the schedule pending list
                 taskSet.addPendingTask(task.index)
               }
@@ -706,8 +704,7 @@ private[spark] class TaskSchedulerImpl(
                 false,
                 task.assignedCores,
                 task.assignedResources,
-                launchTime,
-                task.assignedResourcesAmount)
+                launchTime)
               addRunningTask(taskDesc.taskId, taskDesc.executorId, taskSet)
               tasks(task.assignedOfferIndex) += taskDesc
               shuffledOffers(task.assignedOfferIndex).address.get -> taskDesc

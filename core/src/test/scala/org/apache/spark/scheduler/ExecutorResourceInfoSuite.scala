@@ -34,11 +34,6 @@ class ExecutorResourceInfoSuite extends SparkFunSuite {
     resources.map { case (k, v) => k -> (v * RESOURCE_TOTAL_AMOUNT).toLong }.toMap
   }
 
-  implicit def convertResMapDoubleToMapLong(resources: Map[String, Map[String, Double]]):
-  Map[String, Map[String, Long]] = {
-    resources.map { case (k, v) => k -> convertMapDoubleToLong(v) }
-  }
-
   test("Track Executor Resource information") {
     // Init Executor Resource.
     val info = new ExecutorResourceInfo(GPU, Seq("0", "1", "2", "3"))

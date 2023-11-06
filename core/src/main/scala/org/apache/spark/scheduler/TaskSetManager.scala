@@ -32,7 +32,6 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
-import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.util.{AccumulatorV2, Clock, LongAccumulator, SystemClock, Utils}
 import org.apache.spark.util.collection.PercentileHeap
@@ -443,8 +442,7 @@ private[spark] class TaskSetManager(
       host: String,
       maxLocality: TaskLocality.TaskLocality,
       taskCpus: Int = sched.CPUS_PER_TASK,
-      taskResourceAssignments: Map[String, ResourceInformation] = Map.empty,
-      taskResourceAmounts: Map[String, Map[String, Long]] = Map.empty)
+      taskResourceAssignments: Map[String, Map[String, Long]] = Map.empty)
     : (Option[TaskDescription], Boolean, Int) =
   {
     val offerExcluded = taskSetExcludelistHelperOpt.exists { excludeList =>
@@ -479,8 +477,7 @@ private[spark] class TaskSetManager(
                   host,
                   index,
                   taskLocality,
-                  taskResourceAssignments,
-                  taskResourceAmounts)
+                  taskResourceAssignments)
               // return null since the TaskDescription for the barrier task is not ready yet
               null
             } else {
@@ -492,8 +489,7 @@ private[spark] class TaskSetManager(
                 speculative,
                 taskCpus,
                 taskResourceAssignments,
-                curTime,
-                taskResourceAmounts)
+                curTime)
             }
           }
       val hasPendingTasks = pendingTasks.all.nonEmpty || pendingSpeculatableTasks.all.nonEmpty
@@ -514,9 +510,8 @@ private[spark] class TaskSetManager(
       taskLocality: TaskLocality.Value,
       speculative: Boolean,
       taskCpus: Int,
-      taskResourceAssignments: Map[String, ResourceInformation],
-      launchTime: Long,
-      resourcesAmounts: Map[String, Map[String, Long]]): TaskDescription = {
+      taskResourceAssignments: Map[String, Map[String, Long]],
+      launchTime: Long): TaskDescription = {
     // Found a task; do some bookkeeping and return a task description
     val task = tasks(index)
     val taskId = sched.newTaskId()
@@ -570,7 +565,6 @@ private[spark] class TaskSetManager(
       task.localProperties,
       taskCpus,
       taskResourceAssignments,
-      resourcesAmounts,
       serializedTask)
   }
 
@@ -1384,8 +1378,7 @@ private[scheduler] case class BarrierPendingLaunchTask(
     host: String,
     index: Int,
     taskLocality: TaskLocality.TaskLocality,
-    assignedResources: Map[String, ResourceInformation],
-    assignedResourcesAmount: Map[String, Map[String, Long]]) {
+    assignedResources: Map[String, Map[String, Long]]) {
   // Stored the corresponding index of the WorkerOffer which is responsible to launch the task.
   // Used to revert the assigned resources (e.g., cores, custome resources) when the barrier
   // task set doesn't launch successfully in a single resourceOffers round.

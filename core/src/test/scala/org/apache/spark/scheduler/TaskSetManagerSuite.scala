@@ -38,7 +38,8 @@ import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.{SKIP_VALIDATE_CORES_TESTING, TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED}
-import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
+import org.apache.spark.resource.ResourceAmountUtils.RESOURCE_TOTAL_AMOUNT
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
@@ -1824,7 +1825,8 @@ class TaskSetManagerSuite
     val taskSet = FakeTask.createTaskSet(1)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
-    val taskResourceAssignments = Map(GPU -> new ResourceInformation(GPU, Array("0", "1")))
+    val taskResourceAssignments = Map(
+      GPU -> Map("0" -> RESOURCE_TOTAL_AMOUNT, "1" -> RESOURCE_TOTAL_AMOUNT))
     val taskOption =
       manager.resourceOffer("exec1", "host1", NO_PREF, 2, taskResourceAssignments)._1
     assert(taskOption.isDefined)
@@ -1832,7 +1834,9 @@ class TaskSetManagerSuite
     val allocatedResources = taskOption.get.resources
     assert(allocatedCpus == 2)
     assert(allocatedResources.size == 1)
-    assert(allocatedResources(GPU).addresses sameElements Array("0", "1"))
+    assert(allocatedResources(GPU).keys.toArray.sorted sameElements Array("0", "1"))
+    assert(allocatedResources === taskResourceAssignments)
+
   }
 
   test("SPARK-26755 Ensure that a speculative task is submitted only once for execution") {

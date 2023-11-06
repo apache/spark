@@ -165,13 +165,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     override def receive: PartialFunction[Any, Unit] = {
-      case StatusUpdate(executorId, taskId, state, data, taskCpus, resources, resourcesAmounts) =>
+      case StatusUpdate(executorId, taskId, state, data, taskCpus, resources) =>
         scheduler.statusUpdate(taskId, state, data.value)
         if (TaskState.isFinished(state)) {
           executorDataMap.get(executorId) match {
             case Some(executorInfo) =>
               executorInfo.freeCores += taskCpus
-              resourcesAmounts.foreach { case (rName, addressAmount) =>
+              resources.foreach { case (rName, addressAmount) =>
                 addressAmount.foreach { case (address, amount) =>
                   executorInfo.resourcesInfo.get(rName).foreach { r =>
                     r.release(Map(address -> amount))
@@ -440,7 +440,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           // Do resources allocation here. The allocated resources will get released after the task
           // finishes.
           executorData.freeCores -= task.cpus
-          task.resourcesAmounts.foreach { case (rName, addressAmounts) =>
+          task.resources.foreach { case (rName, addressAmounts) =>
             addressAmounts.foreach { case (address, amount) =>
               executorData.resourcesInfo(rName).acquire(Map(address -> amount))
             }

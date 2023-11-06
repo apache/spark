@@ -20,8 +20,8 @@ package org.apache.spark.scheduler
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.SparkException
-import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.resource.ResourceAmountUtils.RESOURCE_TOTAL_AMOUNT
+import org.apache.spark.resource.ResourceProfile
 
 /**
  * Class to hold information about a series of resources belonging to an executor.
@@ -33,16 +33,16 @@ import org.apache.spark.resource.ResourceAmountUtils.RESOURCE_TOTAL_AMOUNT
  *
  * @param resources The executor available resources and amount. eg,
  *                  Map("gpu" -> Map("0" -> 0.2*RESOURCE_TOTAL_AMOUNT,
- *                                           "1" -> 1.0*RESOURCE_TOTAL_AMOUNT),
+ *                                   "1" -> 1.0*RESOURCE_TOTAL_AMOUNT),
  *                  "fpga" -> Map("a" -> 0.3*RESOURCE_TOTAL_AMOUNT,
- *                                        "b" -> 0.9*RESOURCE_TOTAL_AMOUNT)
+ *                                "b" -> 0.9*RESOURCE_TOTAL_AMOUNT)
  *                  )
  */
 private[spark] class ExecutorResourcesAmounts(
     private val resources: Map[String, Map[String, Long]]) extends Serializable {
 
   /**
-   * convert the addressesAmounts to be mutable.HashMap
+   * convert the resources to be mutable HashMap
    */
   private val internalResources: Map[String, HashMap[String, Long]] = {
     resources.map { case (rName, addressAmounts) =>
@@ -52,8 +52,11 @@ private[spark] class ExecutorResourcesAmounts(
 
   /**
    * The total address count of each resource. Eg,
-   * Map("gpu" -> Map("0" -> 0.5, "1" -> 0.5, "2" -> 0.5),
-   *     "fpga" -> Map("a" -> 0.5, "b" -> 0.5))
+   * Map("gpu" -> Map("0" -> 0.5 * RESOURCE_TOTAL_AMOUNT,
+   *                  "1" -> 0.5 * RESOURCE_TOTAL_AMOUNT,
+   *                  "2" -> 0.5 * RESOURCE_TOTAL_AMOUNT),
+   *     "fpga" -> Map("a" -> 0.5 * RESOURCE_TOTAL_AMOUNT,
+   *                   "b" -> 0.5 * RESOURCE_TOTAL_AMOUNT))
    * the resourceAmount will be Map("gpu" -> 3, "fpga" -> 2)
    */
   lazy val resourceAmount: Map[String, Int] = internalResources.map { case (rName, addressMap) =>
@@ -118,22 +121,20 @@ private[spark] class ExecutorResourcesAmounts(
   }
 
   /**
-   * Try to assign the address according to the task requirement.
+   * Try to assign the addresses according to the task requirement.
    * Please note that this function will not update the values.
    *
    * @param taskSetProf assign resources based on which resource profile
-   * @return the resource
+   * @return the optional resources amounts
    */
-  def assignResources(taskSetProf: ResourceProfile):
-      Option[(Map[String, ResourceInformation], Map[String, Map[String, Long]])] = {
+  def assignResources(taskSetProf: ResourceProfile): Option[Map[String, Map[String, Long]]] = {
 
     // only look at the resource other than cpus
     val tsResources = taskSetProf.getCustomTaskResources()
     if (tsResources.isEmpty) {
-      return Some(Map.empty, Map.empty)
+      return Some(Map.empty)
     }
 
-    val localTaskReqAssign = HashMap[String, ResourceInformation]()
     val allocatedAddresses = HashMap[String, Map[String, Long]]()
 
     // we go through all resources here so that we can make sure they match and also get what the
@@ -171,15 +172,13 @@ private[spark] class ExecutorResourcesAmounts(
           }
 
           if (taskAmount == 0 && allocatedAddressesMap.size > 0) {
-            localTaskReqAssign.put(rName, new ResourceInformation(rName,
-              allocatedAddressesMap.keys.toArray))
             allocatedAddresses.put(rName, allocatedAddressesMap.toMap)
           } else return None
 
         case None => return None
       }
     }
-    Some(localTaskReqAssign.toMap, allocatedAddresses.toMap)
+    Some(allocatedAddresses.toMap)
   }
 
 }

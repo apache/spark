@@ -255,14 +255,11 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val exec3ResourceProfileId = backend.getExecutorResourceProfileId("3")
     assert(exec3ResourceProfileId === rp.id)
 
-    val taskResources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
-    val taskResourcesAmount = Map(GPU ->
-      taskResources(GPU).addresses.map(address => address -> RESOURCE_TOTAL_AMOUNT).toMap)
-
+    val taskResources = Map(GPU -> Map("0" -> RESOURCE_TOTAL_AMOUNT))
     val taskCpus = 1
     val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
-      taskCpus, taskResources, taskResourcesAmount, bytebuffer)))
+      taskCpus, taskResources, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
 
@@ -278,8 +275,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     // make sure that `availableAddrs` below won't change
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(Seq.empty)
     backend.driverEndpoint.send(
-      StatusUpdate("1", 1, TaskState.FINISHED, buffer, taskCpus, taskResources,
-        taskResourcesAmount))
+      StatusUpdate("1", 1, TaskState.FINISHED, buffer, taskCpus, taskResources))
 
     eventually(timeout(5 seconds)) {
       execResources = backend.getExecutorAvailableResources("1")
@@ -366,14 +362,11 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val exec3ResourceProfileId = backend.getExecutorResourceProfileId("3")
     assert(exec3ResourceProfileId === rp.id)
 
-    val taskResources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
-    val taskResourcesAmount = Map(GPU ->
-      taskResources(GPU).addresses.map(address => address -> RESOURCE_TOTAL_AMOUNT).toMap)
-
+    val taskResources = Map(GPU -> Map("0" -> RESOURCE_TOTAL_AMOUNT))
     val taskCpus = 1
     val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
-      taskCpus, taskResources, taskResourcesAmount, bytebuffer)))
+      taskCpus, taskResources, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
 
@@ -389,8 +382,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     // make sure that `availableAddrs` below won't change
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(Seq.empty)
     backend.driverEndpoint.send(
-      StatusUpdate("1", 1, TaskState.FINISHED, buffer, taskCpus, taskResources,
-        taskResourcesAmount))
+      StatusUpdate("1", 1, TaskState.FINISHED, buffer, taskCpus, taskResources))
 
     eventually(timeout(5 seconds)) {
       execResources = backend.getExecutorAvailableResources("1")
@@ -467,7 +459,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val taskCpus = 2
     val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
-      taskCpus, Map.empty, Map.empty, bytebuffer)))
+      taskCpus, Map.empty, bytebuffer)))
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
 
     backend.driverEndpoint.send(ReviveOffers)
