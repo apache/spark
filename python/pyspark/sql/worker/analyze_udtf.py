@@ -121,7 +121,7 @@ def main(infile: IO, outfile: IO) -> None:
         error_prefix = f"Failed to evaluate the user-defined table function '{handler.__name__}'"
 
         def format_error(msg: str) -> str:
-            return dedent(msg).replace('\n', ' ')
+            return dedent(msg).replace("\n", " ")
 
         # Check invariants about the 'analyze' and 'eval' methods before running them.
         def check_method_invariants_before_running(
@@ -185,10 +185,12 @@ def main(infile: IO, outfile: IO) -> None:
                     )
 
         check_method_invariants_before_running(
-            inspect.getfullargspec(handler.analyze), "static analyze", is_static = True)
+            inspect.getfullargspec(handler.analyze), "static analyze", is_static=True
+        )
         if hasattr(handler, "eval"):
             check_method_invariants_before_running(
-                inspect.getfullargspec(handler.eval), "eval", is_static = False)
+                inspect.getfullargspec(handler.eval), "eval", is_static=False
+            )
 
         # Invoke the UDTF's 'analyze' method.
         result = handler.analyze(*args, **kwargs)  # type: ignore[attr-defined]
