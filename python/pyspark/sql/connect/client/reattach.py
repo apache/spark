@@ -317,9 +317,3 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
     def __del__(self) -> None:
         return self.close()
-
-
-class RetryException(Exception):
-    """
-    An exception that can be thrown upstream when inside retry and which is always retryable
-    """

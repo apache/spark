@@ -20,7 +20,7 @@ __all__ = [
 ]
 
 from pyspark.loose_version import LooseVersion
-from pyspark.sql.connect.client.retries import RetryPolicy, Retrying
+from pyspark.sql.connect.client.retries import RetryPolicy, Retrying, DefaultPolicy
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -60,10 +60,7 @@ from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql.connect.client.artifact import ArtifactManager
 from pyspark.sql.connect.client.logging import logger
-from pyspark.sql.connect.client.reattach import (
-    ExecutePlanResponseReattachableIterator,
-    RetryException,
-)
+from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
 from pyspark.sql.connect.conversion import storage_level_to_proto, proto_to_storage_level
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
@@ -545,45 +542,6 @@ class ConfigResult:
         )
 
 
-class DefaultPolicy(RetryPolicy):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def can_retry(self, e: Exception) -> bool:
-        """
-        Helper function that is used to identify if an exception thrown by the server
-        can be retried or not.
-
-        Parameters
-        ----------
-        e : Exception
-            The GRPC error as received from the server. Typed as Exception, because other exception
-            thrown during client processing can be passed here as well.
-
-        Returns
-        -------
-        True if the exception can be retried, False otherwise.
-
-        """
-        if isinstance(e, RetryException):
-            return True
-
-        if not isinstance(e, grpc.RpcError):
-            return False
-
-        if e.code() in [grpc.StatusCode.INTERNAL]:
-            msg = str(e)
-
-            # This error happens if another RPC preempts this RPC.
-            if "INVALID_CURSOR.DISCONNECTED" in msg:
-                return True
-
-        if e.code() == grpc.StatusCode.UNAVAILABLE:
-            return True
-
-        return False
-
-
 class SparkConnectClient(object):
     """
     Conceptually the remote spark session that communicates with the server
@@ -696,12 +654,34 @@ class SparkConnectClient(object):
         return self
 
     def register_retry_policy(self, policy: RetryPolicy):
+        """
+        Registers specified policy in the dictionary of known policies.
+
+        To activate it, use set_retry_policies().
+        """
         if policy.name in self._known_retry_policies:
             raise ValueError("Already known policy")
         self._known_retry_policies[policy.name] = policy
 
-    def set_retry_policies(self, policies: List[str]):
-        self._retry_policies = [self._known_retry_policies[name] for name in policies]
+    def set_retry_policies(self, policies: List[Union[str, RetryPolicy]]):
+        """
+        Sets list of policies to be used for retries.
+        I.e. set_retry_policies(["DefaultPolicy", "CustomPolicy"]).
+
+        If policy is given as string, the policy object is sourced from previously
+        registered policies.
+        Specifying policy directly bypasses the registration mechanism.
+        """
+        self._retry_policies = [
+            policy if isinstance(policy, RetryPolicy) else self._known_retry_policies[policy]
+            for policy in policies
+        ]
+
+    def get_retry_policies(self) -> List[str]:
+        """
+        Return list of currently used policies, i.e. ["DefaultPolicy", "MyCustomPolicy"].
+        """
+        return [policy.name for policy in self._retry_policies]
 
     def register_udf(
         self,

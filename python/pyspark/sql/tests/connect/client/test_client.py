@@ -29,11 +29,10 @@ if should_test_connect:
     import pandas as pd
     import pyarrow as pa
     from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
-    from pyspark.sql.connect.client.core import Retrying, DefaultPolicy
-    from pyspark.sql.connect.client.reattach import (
-        RetryException,
-        ExecutePlanResponseReattachableIterator,
+    from pyspark.sql.connect.client.retries import (
+        Retrying, DefaultPolicy, RetryPolicy, RetryException
     )
+    from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
     import pyspark.sql.connect.proto as proto
 
 
@@ -108,9 +107,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
             total_sleep += t
 
         try:
-            for attempt in Retrying(
-                can_retry=SparkConnectClient.retry_exception, sleep=sleep, **client._retry_policy
-            ):
+            for attempt in client._retrying():
                 with attempt:
                     raise RetryException()
         except RetryException:
@@ -118,6 +115,20 @@ class SparkConnectClientTestCase(unittest.TestCase):
 
         # tolerated at least 10 mins of fails
         self.assertGreaterEqual(total_sleep, 600)
+
+    def test_retry_client_unit(self):
+        client = SparkConnectClient("sc://foo/;token=bar")
+        client.register_retry_policy(TestPolicy())
+
+        # Using policy names.
+        client.set_retry_policies([DefaultPolicy().name, TestPolicy().name])
+
+        self.assertEqual(client.get_retry_policies(), [DefaultPolicy().name, TestPolicy().name])
+
+        # Explicitly specified objects
+        client.set_retry_policies([TestPolicy(), DefaultPolicy()])
+
+        self.assertEqual(client.get_retry_policies(), [TestPolicy().name, DefaultPolicy().name])
 
     def test_channel_builder_with_session(self):
         dummy = str(uuid.uuid4())

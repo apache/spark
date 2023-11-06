@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import grpc
 import random
 import time
 import typing
@@ -226,3 +227,56 @@ class Retrying:
         while not self._done:
             self._wait()
             yield AttemptManager(self)
+
+
+class RetryException(Exception):
+    """
+    An exception that can be thrown upstream when inside retry and which is always retryable
+    """
+
+
+class DefaultPolicy(RetryPolicy):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def can_retry(self, e: Exception) -> bool:
+        """
+        Helper function that is used to identify if an exception thrown by the server
+        can be retried or not.
+
+        Parameters
+        ----------
+        e : Exception
+            The GRPC error as received from the server. Typed as Exception, because other exception
+            thrown during client processing can be passed here as well.
+
+        Returns
+        -------
+        True if the exception can be retried, False otherwise.
+
+        """
+        if isinstance(e, RetryException):
+            return True
+
+        if not isinstance(e, grpc.RpcError):
+            return False
+
+        if e.code() in [grpc.StatusCode.INTERNAL]:
+            msg = str(e)
+
+            # This error happens if another RPC preempts this RPC.
+            if "INVALID_CURSOR.DISCONNECTED" in msg:
+                return True
+
+        if e.code() == grpc.StatusCode.UNAVAILABLE:
+            return True
+
+        return False
+
+
+class RetriesExceeded(Exception):
+    """
+    Represents an exception which is considered retriable, but retry limits
+    were exceeded
+    """
+    pass
