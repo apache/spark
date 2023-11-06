@@ -165,8 +165,9 @@ def lit(col: Any) -> Column:
     --------
     Example 1: Creating a literal column with an integer value.
 
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.range(1)
-    >>> df.select(lit(5).alias('height'), df.id).show()
+    >>> df.select(sf.lit(5).alias('height'), df.id).show()
     +------+---+
     |height| id|
     +------+---+
@@ -175,7 +176,8 @@ def lit(col: Any) -> Column:
 
     Example 2: Creating a literal column from a list.
 
-    >>> spark.range(1).select(lit([1, 2, 3])).show()
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.lit([1, 2, 3])).show()
     +--------------+
     |array(1, 2, 3)|
     +--------------+
@@ -184,8 +186,9 @@ def lit(col: Any) -> Column:
 
     Example 3: Creating a literal column from a string.
 
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.range(1)
-    >>> df.select(lit("PySpark").alias('framework'), df.id).show()
+    >>> df.select(sf.lit("PySpark").alias('framework'), df.id).show()
     +---------+---+
     |framework| id|
     +---------+---+
@@ -194,8 +197,9 @@ def lit(col: Any) -> Column:
 
     Example 4: Creating a literal column from a boolean value.
 
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(True, "Yes"), (False, "No")], ["flag", "response"])
-    >>> df.select(lit(False).alias('is_approved'), df.response).show()
+    >>> df.select(sf.lit(False).alias('is_approved'), df.response).show()
     +-----------+--------+
     |is_approved|response|
     +-----------+--------+
