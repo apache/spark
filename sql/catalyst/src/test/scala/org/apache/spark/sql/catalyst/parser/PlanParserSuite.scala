@@ -1678,23 +1678,22 @@ class PlanParserSuite extends AnalysisTest {
           List.empty, List.empty, None, None, false)))
 
     // verify with ROW FORMAT DELIMITED
-    val sqlWithRowFormatDelimited =
-        "SELECT TRANSFORM(a, b, c)" + "\n" +
-        "  ROW FORMAT DELIMITED" + "\n" +
-      """  FIELDS TERMINATED BY '\t'""" + "\n" +
-        "  COLLECTION ITEMS TERMINATED BY '\u0002'" + "\n" +
-        "  MAP KEYS TERMINATED BY '\u0003'" + "\n" +
-      """  LINES TERMINATED BY '\n'""" + "\n" +
-        "  NULL DEFINED AS 'null'" + "\n" +
-        "  USING 'cat' AS (a, b, c)" + "\n" +
-        "  ROW FORMAT DELIMITED" + "\n" +
-      """  FIELDS TERMINATED BY '\t'""" + "\n" +
-        "  COLLECTION ITEMS TERMINATED BY '\u0004'" + "\n" +
-        "  MAP KEYS TERMINATED BY '\u0005'" + "\n" +
-      """  LINES TERMINATED BY '\n'""" + "\n" +
-        "  NULL DEFINED AS 'NULL'" + "\n" +
-        "FROM testData"
-    assertEqual(sqlWithRowFormatDelimited,
+    assertEqual(
+      "SELECT TRANSFORM(a, b, c)\n" +
+        "  ROW FORMAT DELIMITED\n" +
+        "  FIELDS TERMINATED BY '\\t'\n" +
+        "  COLLECTION ITEMS TERMINATED BY '\u0002'\n" +
+        "  MAP KEYS TERMINATED BY '\u0003'\n" +
+        "  LINES TERMINATED BY '\\n'\n" +
+        "  NULL DEFINED AS 'null'\n" +
+        "  USING 'cat' AS (a, b, c)\n" +
+        "  ROW FORMAT DELIMITED\n" +
+        "  FIELDS TERMINATED BY '\\t'\n" +
+        "  COLLECTION ITEMS TERMINATED BY '\u0004'\n" +
+        "  MAP KEYS TERMINATED BY '\u0005'\n" +
+        "  LINES TERMINATED BY '\\n'\n" +
+        "  NULL DEFINED AS 'NULL'\n" +
+        "FROM testData",
       ScriptTransformation(
         "cat",
         Seq(AttributeReference("a", StringType)(),
