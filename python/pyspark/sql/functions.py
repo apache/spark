@@ -163,6 +163,8 @@ def lit(col: Any) -> Column:
 
     Examples
     --------
+    Example 1: Creating a literal column with an integer value.
+
     >>> df = spark.range(1)
     >>> df.select(lit(5).alias('height'), df.id).show()
     +------+---+
@@ -171,7 +173,7 @@ def lit(col: Any) -> Column:
     |     5|  0|
     +------+---+
 
-    Create a literal from a list.
+    Example 2: Creating a literal column from a list.
 
     >>> spark.range(1).select(lit([1, 2, 3])).show()
     +--------------+
@@ -179,6 +181,27 @@ def lit(col: Any) -> Column:
     +--------------+
     |     [1, 2, 3]|
     +--------------+
+
+    Example 3: Creating a literal column from a string.
+
+    >>> df = spark.range(1)
+    >>> df.select(lit("PySpark").alias('framework'), df.id).show()
+    +---------+---+
+    |framework| id|
+    +---------+---+
+    |  PySpark|  0|
+    +---------+---+
+
+    Example 4: Creating a literal column from a boolean value.
+
+    >>> df = spark.createDataFrame([(True, "Yes"), (False, "No")], ["flag", "response"])
+    >>> df.select(lit(False).alias('is_approved'), df.response).show()
+    +-----------+--------+
+    |is_approved|response|
+    +-----------+--------+
+    |      false|     Yes|
+    |      false|      No|
+    +-----------+--------+
     """
     if isinstance(col, Column):
         return col
