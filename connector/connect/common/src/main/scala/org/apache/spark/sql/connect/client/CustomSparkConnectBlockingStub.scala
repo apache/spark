@@ -37,14 +37,17 @@ private[client] class SparkConnectCommonStub {
   protected def verifyResponse[RespT <: GeneratedMessageV3](fn: => RespT): RespT = {
     val response = fn
     val field = response.getDescriptorForType.findFieldByName("server_side_session_id")
-    val value = response.getField(field)
-    serverSideSessionId match {
-      case Some(id) if value != id =>
-        throw new IllegalStateException(s"Server side session ID changed from $id to $value")
-      case _ =>
-        synchronized {
-          serverSideSessionId = Some(value.toString)
-        }
+    // If the field does not exist, we ignore this for now.
+    if (field != null) {
+      val value = response.getField(field)
+      serverSideSessionId match {
+        case Some(id) if value != id =>
+          throw new IllegalStateException(s"Server side session ID changed from $id to $value")
+        case _ =>
+          synchronized {
+            serverSideSessionId = Some(value.toString)
+          }
+      }
     }
     response
   }
