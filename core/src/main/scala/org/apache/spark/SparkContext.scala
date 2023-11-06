@@ -561,7 +561,6 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // Initialize any plugins before the task scheduler is initialized.
     _plugins = PluginContainer(this, _resources.asJava)
-    val shuffleManager = ShuffleManager.create(_conf, true)
 
     Option(System.getenv("SPARK_PREPEND_CLASSES")).foreach { v =>
       executorEnvs("SPARK_PREPEND_CLASSES") = v
@@ -579,6 +578,7 @@ class SparkContext(config: SparkConf) extends Logging {
       executorEnvs.put("OMP_NUM_THREADS", _conf.get("spark.task.cpus", "1"))
     }
 
+    val shuffleManager = ShuffleManager.create(_conf, true)
     _env.setShuffleManager(shuffleManager)
 
     // Create and start the scheduler
