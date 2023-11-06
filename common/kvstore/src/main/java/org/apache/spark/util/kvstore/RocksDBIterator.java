@@ -319,8 +319,8 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     }
 
     @VisibleForTesting
-    boolean getStarted() {
-      return started.get();
+    boolean isCompleted() {
+      return !started.get();
     }
   }
 }

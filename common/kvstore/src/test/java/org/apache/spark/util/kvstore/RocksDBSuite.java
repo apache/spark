@@ -399,7 +399,7 @@ public class RocksDBSuite {
       Reference<RocksDBIterator<?>> reference = new WeakReference<>(rocksDBIterator);
       assertNotNull(reference);
       RocksDBIterator.ResourceCleaner resourceCleaner = rocksDBIterator.getResourceCleaner();
-      assertTrue(resourceCleaner.getStarted());
+      assertFalse(resourceCleaner.isCompleted());
       // Manually set rocksDBIterator to null, to be GC.
       rocksDBIterator = null;
       // 100 times gc, the rocksDBIterator should be GCed.
@@ -413,7 +413,7 @@ public class RocksDBSuite {
       assertTrue(reference.refersTo(null));
       // Verify that the Cleaner will be executed after a period of time,
       // and status will become false.
-      assertFalse(resourceCleaner.getStarted());
+      assertTrue(resourceCleaner.isCompleted());
     } finally {
       dbForCleanerTest.close();
       FileUtils.deleteQuietly(dbPathForCleanerTest);
