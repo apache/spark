@@ -26,14 +26,14 @@ private[spark] object ResourceAmountUtils {
   /**
    * Using "double" to do the resource calculation may encounter a problem of precision loss. Eg
    *
-   * scala> val taskAmount = 1.0 / 9
+   * scala&gt; val taskAmount = 1.0 / 9
    * taskAmount: Double = 0.1111111111111111
    *
-   * scala> var total = 1.0
+   * scala&gt; var total = 1.0
    * total: Double = 1.0
    *
-   * scala> for (i <- 1 to 9 ) {
-   * |   if (total >= taskAmount) {
+   * scala&gt; for (i &lt;- 1 to 9 ) {
+   * |   if (total &gt;= taskAmount) {
    * |           total -= taskAmount
    * |           println(s"assign $taskAmount for task $i, total left: $total")
    * |   } else {
@@ -68,7 +68,7 @@ private[spark] trait ResourceAllocator {
 
   /**
    * Map from an address to its availability default to 1.0 (we multiply RESOURCE_TOTAL_AMOUNT
-   * to avoid precision error), a value > 0 means the address is available, while value of
+   * to avoid precision error), a value &gt; 0 means the address is available, while value of
    * 0 means the address is fully assigned.
    */
   private lazy val addressAvailabilityMap = {
