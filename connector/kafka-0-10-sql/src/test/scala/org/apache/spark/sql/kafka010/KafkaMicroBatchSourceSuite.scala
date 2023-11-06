@@ -2096,8 +2096,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       },
       CheckAnswer(-21, -22, -11, -12, 2, 12),
       Execute { q =>
-        sendMessagesWithTimestamp(
-          topic, Array(23, 24, 25).map(_.toString).toImmutableArraySeq, 4, secondTimestamp)
+        sendMessagesWithTimestamp(topic, Array(23, 24, 25).map(_.toString), 4, secondTimestamp)
         // wait to reach the new last offset in every partition
         val partitions = (0 to 3).map(new TopicPartition(topic, _)).map(tp => tp -> 3L) ++
           Seq(new TopicPartition(topic, 4) -> 6L)
@@ -2143,8 +2142,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       },
       CheckAnswer(-21, -22, -11, -12, 2, 12),
       Execute { q =>
-        sendMessagesWithTimestamp(
-          topic, Array(23, 24, 25).map(_.toString).toImmutableArraySeq, 4, secondTimestamp)
+        sendMessagesWithTimestamp(topic, Array(23, 24, 25).map(_.toString), 4, secondTimestamp)
         // wait to reach the new last offset in every partition
         val partitions = (0 to 3).map(new TopicPartition(topic, _)).map(tp => tp -> 3L) ++
           Seq(new TopicPartition(topic, 4) -> 6L)
@@ -2372,8 +2370,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
     setupTestMessagesForTestOnTimestampOffsets(topic, firstTimestamp, secondTimestamp)
     // here we should add records in partition 4 which match with second timestamp
     // as the query will break if there's no matching records
-    sendMessagesWithTimestamp(
-      topic, Array(23, 24).map(_.toString).toImmutableArraySeq, 4, secondTimestamp)
+    sendMessagesWithTimestamp(topic, Array(23, 24).map(_.toString), 4, secondTimestamp)
 
     require(testUtils.getLatestOffsets(Set(topic)).size === 5)
 
@@ -2414,38 +2411,29 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
 
   private def sendMessagesWithTimestamp(
       topic: String,
-      msgs: Seq[String],
+      msgs: Array[String],
       part: Int,
       ts: Long): Unit = {
     val records = msgs.map { msg =>
       new RecordBuilder(topic, msg).partition(part).timestamp(ts).build()
     }
-    testUtils.sendMessages(records)
+    testUtils.sendMessages(records.toImmutableArraySeq)
   }
 
   private def setupTestMessagesForTestOnTimestampOffsets(
       topic: String,
       firstTimestamp: Long,
       secondTimestamp: Long): Unit = {
-    sendMessagesWithTimestamp(
-      topic, Array(-20).map(_.toString).toImmutableArraySeq, 0, firstTimestamp)
-    sendMessagesWithTimestamp(
-      topic, Array(-10).map(_.toString).toImmutableArraySeq, 1, firstTimestamp)
-    sendMessagesWithTimestamp(
-      topic, Array(0, 1).map(_.toString).toImmutableArraySeq, 2, firstTimestamp)
-    sendMessagesWithTimestamp(
-      topic, Array(10, 11).map(_.toString).toImmutableArraySeq, 3, firstTimestamp)
-    sendMessagesWithTimestamp(
-      topic, Array(20, 21, 22).map(_.toString).toImmutableArraySeq, 4, firstTimestamp)
+    sendMessagesWithTimestamp(topic, Array(-20).map(_.toString), 0, firstTimestamp)
+    sendMessagesWithTimestamp(topic, Array(-10).map(_.toString), 1, firstTimestamp)
+    sendMessagesWithTimestamp(topic, Array(0, 1).map(_.toString), 2, firstTimestamp)
+    sendMessagesWithTimestamp(topic, Array(10, 11).map(_.toString), 3, firstTimestamp)
+    sendMessagesWithTimestamp(topic, Array(20, 21, 22).map(_.toString), 4, firstTimestamp)
 
-    sendMessagesWithTimestamp(
-      topic, Array(-21, -22).map(_.toString).toImmutableArraySeq, 0, secondTimestamp)
-    sendMessagesWithTimestamp(
-      topic, Array(-11, -12).map(_.toString).toImmutableArraySeq, 1, secondTimestamp)
-    sendMessagesWithTimestamp(
-      topic, Array(2).map(_.toString).toImmutableArraySeq, 2, secondTimestamp)
-    sendMessagesWithTimestamp(
-      topic, Array(12).map(_.toString).toImmutableArraySeq, 3, secondTimestamp)
+    sendMessagesWithTimestamp(topic, Array(-21, -22).map(_.toString), 0, secondTimestamp)
+    sendMessagesWithTimestamp(topic, Array(-11, -12).map(_.toString), 1, secondTimestamp)
+    sendMessagesWithTimestamp(topic, Array(2).map(_.toString), 2, secondTimestamp)
+    sendMessagesWithTimestamp(topic, Array(12).map(_.toString), 3, secondTimestamp)
     // no data after second timestamp for partition 4
   }
 
