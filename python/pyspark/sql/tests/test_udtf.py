@@ -2481,8 +2481,8 @@ class BaseUDTFTestsMixin:
 
             def eval(self, _: Row):
                 self._total += 1
-                if self._total >= 3:
-                    raise StopIteration("StopIteration at self._total >= 3")
+                if self._total >= 4:
+                    raise StopIteration("StopIteration at self._total >= 4")
 
             def terminate(self):
                 yield self._total,
@@ -2499,7 +2499,7 @@ class BaseUDTFTestsMixin:
                 FROM test_udtf(TABLE(t))
                 """
             ),
-            [Row(total=3)],
+            [Row(total=4)],
         )
 
 
