@@ -18,7 +18,7 @@
 # Image for building Spark releases. Based on Ubuntu 20.04.
 #
 # Includes:
-# * Java 8
+# * Java 17
 # * Ivy
 # * Python (3.8.5)
 # * R-base/R-base-dev (4.0.3)
