@@ -13656,14 +13656,40 @@ def schema_of_xml(xml: "ColumnOrName", options: Optional[Dict[str, str]] = None)
 
     Examples
     --------
+    Example 1: Parsing a simple XML with a single element
+
     >>> df = spark.range(1)
     >>> df.select(schema_of_xml(lit('<p><a>1</a></p>')).alias("xml")).collect()
     [Row(xml='STRUCT<a: BIGINT>')]
+
+    Example 2: Parsing an XML with multiple elements in an array
+
     >>> df.select(schema_of_xml(lit('<p><a>1</a><a>2</a></p>')).alias("xml")).collect()
     [Row(xml='STRUCT<a: ARRAY<BIGINT>>')]
+
+    Example 3: Parsing XML with options to exclude attributes
+
     >>> schema = schema_of_xml('<p><a attr="2">1</a></p>', {'excludeAttribute':'true'})
     >>> df.select(schema.alias("xml")).collect()
     [Row(xml='STRUCT<a: BIGINT>')]
+
+    Example 4: Parsing XML with complex structure
+
+    >>> df.select(
+    ...     schema_of_xml(
+    ...         lit('<root><person><name>Alice</name><age>30</age></person></root>')
+    ...     ).alias("xml")
+    ... ).collect()
+    [Row(xml='STRUCT<person: STRUCT<age: BIGINT, name: STRING>>')]
+
+    Example 5: Parsing XML with nested arrays
+
+    >>> df.select(
+    ...     schema_of_xml(
+    ...         lit('<data><values><value>1</value><value>2</value></values></data>')
+    ...     ).alias("xml")
+    ... ).collect()
+    [Row(xml='STRUCT<values: STRUCT<value: ARRAY<BIGINT>>>')]
     """
     if isinstance(xml, str):
         col = _create_column_from_literal(xml)
