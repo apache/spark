@@ -715,7 +715,7 @@ private[spark] class SparkSubmit extends Logging {
       if (opt.value != null &&
           (deployMode & opt.deployMode) != 0 &&
           (clusterManager & opt.clusterManager) != 0) {
-        if (opt.clOption != null) { childArgs += (opt.clOption, opt.value) }
+        if (opt.clOption != null) { childArgs += opt.clOption += opt.value }
         if (opt.confKey != null) {
           if (opt.mergeFn.isDefined && sparkConf.contains(opt.confKey)) {
             sparkConf.set(opt.confKey, opt.mergeFn.get.apply(sparkConf.get(opt.confKey), opt.value))
@@ -747,15 +747,15 @@ private[spark] class SparkSubmit extends Logging {
     if (args.isStandaloneCluster) {
       if (args.useRest) {
         childMainClass = REST_CLUSTER_SUBMIT_CLASS
-        childArgs += (args.primaryResource, args.mainClass)
+        childArgs += args.primaryResource += args.mainClass
       } else {
         // In legacy standalone cluster mode, use Client as a wrapper around the user class
         childMainClass = STANDALONE_CLUSTER_SUBMIT_CLASS
         if (args.supervise) { childArgs += "--supervise" }
-        Option(args.driverMemory).foreach { m => childArgs += ("--memory", m) }
-        Option(args.driverCores).foreach { c => childArgs += ("--cores", c) }
+        Option(args.driverMemory).foreach { m => childArgs += "--memory" += m }
+        Option(args.driverCores).foreach { c => childArgs += "--cores" += c }
         childArgs += "launch"
-        childArgs += (args.master, args.primaryResource, args.mainClass)
+        childArgs += args.master += args.primaryResource += args.mainClass
       }
       if (args.childArgs != null) {
         childArgs ++= args.childArgs
@@ -777,20 +777,20 @@ private[spark] class SparkSubmit extends Logging {
     if (isYarnCluster) {
       childMainClass = YARN_CLUSTER_SUBMIT_CLASS
       if (args.isPython) {
-        childArgs += ("--primary-py-file", args.primaryResource)
-        childArgs += ("--class", "org.apache.spark.deploy.PythonRunner")
+        childArgs += "--primary-py-file" += args.primaryResource
+        childArgs += "--class" += "org.apache.spark.deploy.PythonRunner"
       } else if (args.isR) {
         val mainFile = new Path(args.primaryResource).getName
-        childArgs += ("--primary-r-file", mainFile)
-        childArgs += ("--class", "org.apache.spark.deploy.RRunner")
+        childArgs += "--primary-r-file" += mainFile
+        childArgs += "--class" += "org.apache.spark.deploy.RRunner"
       } else {
         if (args.primaryResource != SparkLauncher.NO_RESOURCE) {
-          childArgs += ("--jar", args.primaryResource)
+          childArgs += "--jar" += args.primaryResource
         }
-        childArgs += ("--class", args.mainClass)
+        childArgs += "--class" += args.mainClass
       }
       if (args.childArgs != null) {
-        args.childArgs.foreach { arg => childArgs += ("--arg", arg) }
+        args.childArgs.foreach { arg => childArgs += "--arg" += arg }
       }
     }
 
@@ -813,12 +813,12 @@ private[spark] class SparkSubmit extends Logging {
       }
       if (args.childArgs != null) {
         args.childArgs.foreach { arg =>
-          childArgs += ("--arg", arg)
+          childArgs += "--arg" += arg
         }
       }
       // Pass the proxyUser to the k8s app so it is possible to add it to the driver args
       if (args.proxyUser != null) {
-        childArgs += ("--proxy-user", args.proxyUser)
+        childArgs += "--proxy-user" += args.proxyUser
       }
     }
 

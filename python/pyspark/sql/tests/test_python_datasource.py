@@ -33,6 +33,8 @@ class BasePythonDataSourceTestsMixin:
             ds.schema()
         with self.assertRaises(NotImplementedError):
             ds.reader(None)
+        with self.assertRaises(NotImplementedError):
+            ds.writer(None, None)
 
     def test_basic_data_source_reader_class(self):
         class MyDataSourceReader(DataSourceReader):

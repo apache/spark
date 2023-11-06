@@ -1411,7 +1411,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     withTempDirs { case (src, tmp) =>
       src.mkdirs()
 
-      val df = spark.readStream.format("text").load(src.getCanonicalPath).map(_ + "-x")
+      val df = spark.readStream.format("text").load(src.getCanonicalPath).map(_.toString + "-x")
       // Test `explain` not throwing errors
       df.explain()
 

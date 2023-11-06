@@ -731,6 +731,7 @@ class SparkSubmitSuite
         "--conf", "spark.master.rest.enabled=false",
         "--conf", "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD=secret_password",
         "--conf", "spark.eventLog.enabled=true",
+        "--conf", "spark.eventLog.rolling.enabled=false",
         "--conf", "spark.eventLog.testing=true",
         "--conf", s"spark.eventLog.dir=${testDirPath.toUri.toString}",
         "--conf", "spark.hadoop.fs.defaultFS=unsupported://example.com",
@@ -1633,7 +1634,7 @@ object JarCreationTest extends Logging {
         Utils.classForName(args(1))
       } catch {
         case t: Throwable =>
-          exception = t + "\n" + Utils.exceptionString(t)
+          exception = t.toString + "\n" + Utils.exceptionString(t)
           exception = exception.replaceAll("\n", "\n\t")
       }
       Option(exception).toSeq.iterator

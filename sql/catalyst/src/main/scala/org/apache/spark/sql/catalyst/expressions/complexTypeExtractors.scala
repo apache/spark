@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
-import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTRACT_VALUE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -316,7 +316,7 @@ case class GetArrayItem(
       newLeft: Expression, newRight: Expression): GetArrayItem =
     copy(child = newLeft, ordinal = newRight)
 
-  override def initQueryContext(): Option[SQLQueryContext] = if (failOnError) {
+  override def initQueryContext(): Option[QueryContext] = if (failOnError) {
     Some(origin.context)
   } else {
     None

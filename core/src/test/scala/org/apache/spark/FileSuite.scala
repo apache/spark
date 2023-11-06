@@ -380,12 +380,12 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
   test("file caching") {
     sc = new SparkContext("local", "test")
-    val out = new FileWriter(tempDir + "/input")
+    val out = new FileWriter(s"$tempDir/input")
     out.write("Hello world!\n")
     out.write("What's up?\n")
     out.write("Goodbye\n")
     out.close()
-    val rdd = sc.textFile(tempDir + "/input").cache()
+    val rdd = sc.textFile(s"$tempDir/input").cache()
     assert(rdd.count() === 3)
     assert(rdd.count() === 3)
     assert(rdd.count() === 3)

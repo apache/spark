@@ -238,7 +238,7 @@ package object config {
         "each event log file to the configured size.")
       .version("3.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val EVENT_LOG_ROLLING_MAX_FILE_SIZE =
     ConfigBuilder("spark.eventLog.rolling.maxFileSize")
@@ -1836,6 +1836,14 @@ package object config {
     .version("1.1.0")
     .intConf
     .createWithDefault(8080)
+
+  private[spark] val MASTER_UI_HISTORY_SERVER_URL =
+    ConfigBuilder("spark.master.ui.historyServerUrl")
+      .doc("The URL where Spark history server is running. Please note that this assumes " +
+        "that all Spark jobs share the same event log location where the history server accesses.")
+      .version("4.0.0")
+      .stringConf
+      .createOptional
 
   private[spark] val IO_COMPRESSION_SNAPPY_BLOCKSIZE =
     ConfigBuilder("spark.io.compression.snappy.blockSize")

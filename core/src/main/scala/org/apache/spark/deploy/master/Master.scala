@@ -24,7 +24,7 @@ import java.util.concurrent.{ScheduledFuture, TimeUnit}
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Random
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState.DriverState
@@ -53,6 +53,9 @@ private[deploy] class Master(
   private val forwardMessageThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("master-forward-message-thread")
 
+  private val driverIdPattern = conf.get(DRIVER_ID_PATTERN)
+  private val appIdPattern = conf.get(APP_ID_PATTERN)
+
   // For application IDs
   private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
 
@@ -76,6 +79,7 @@ private[deploy] class Master(
   private val addressToApp = new HashMap[RpcAddress, ApplicationInfo]
   private val completedApps = new ArrayBuffer[ApplicationInfo]
   private var nextAppNumber = 0
+  private val moduloAppNumber = conf.get(APP_NUMBER_MODULO).getOrElse(0)
 
   private val drivers = new HashSet[DriverInfo]
   private val completedDrivers = new ArrayBuffer[DriverInfo]
@@ -115,9 +119,7 @@ private[deploy] class Master(
   // Default maxCores for applications that don't specify it (i.e. pass Int.MaxValue)
   private val defaultCores = conf.get(DEFAULT_CORES)
   val reverseProxy = conf.get(UI_REVERSE_PROXY)
-  if (defaultCores < 1) {
-    throw new SparkException(s"${DEFAULT_CORES.key} must be positive")
-  }
+  val historyServerUrl = conf.get(MASTER_UI_HISTORY_SERVER_URL)
 
   // Alternative application submission gateway that is stable across Spark versions
   private val restServerEnabled = conf.get(MASTER_REST_SERVER_ENABLED)
@@ -1150,8 +1152,11 @@ private[deploy] class Master(
 
   /** Generate a new app ID given an app's submission date */
   private def newApplicationId(submitDate: Date): String = {
-    val appId = "app-%s-%04d".format(createDateFormat.format(submitDate), nextAppNumber)
+    val appId = appIdPattern.format(createDateFormat.format(submitDate), nextAppNumber)
     nextAppNumber += 1
+    if (moduloAppNumber > 0) {
+      nextAppNumber %= moduloAppNumber
+    }
     appId
   }
 
@@ -1175,7 +1180,7 @@ private[deploy] class Master(
   }
 
   private def newDriverId(submitDate: Date): String = {
-    val appId = "driver-%s-%04d".format(createDateFormat.format(submitDate), nextDriverNumber)
+    val appId = driverIdPattern.format(createDateFormat.format(submitDate), nextDriverNumber)
     nextDriverNumber += 1
     appId
   }
