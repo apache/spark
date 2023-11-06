@@ -1417,7 +1417,7 @@ abstract class JsonSuite
 
         val df2 = spark.read.json(corruptRecords)
         df2.write.mode("overwrite").parquet(path)
-        checkAnswer(spark.read.parquet(path), df2.collect().toImmutableArraySeq)
+        checkAnswer(spark.read.parquet(path), df2.collect())
       }
     }
   }

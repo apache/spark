@@ -162,6 +162,16 @@ abstract class QueryTest extends PlanTest {
   }
 
   /**
+   * Runs the plan and makes sure the answer matches the expected result.
+   *
+   * @param df the [[DataFrame]] to be executed
+   * @param expectedAnswer the expected result in a [[Array]] of [[Row]]s.
+   */
+  protected def checkAnswer(df: => DataFrame, expectedAnswer: Array[Row]): Unit = {
+    checkAnswer(df, expectedAnswer.toImmutableArraySeq)
+  }
+
+  /**
    * Runs the plan and makes sure the answer is within absTol of the expected result.
    *
    * @param dataFrame the [[DataFrame]] to be executed

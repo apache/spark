@@ -42,7 +42,6 @@ import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 case class AllDataTypesWithNonPrimitiveType(
@@ -77,7 +76,7 @@ abstract class OrcQueryTest extends OrcTest {
     withOrcFile(data) { file =>
       checkAnswer(
         spark.read.orc(file),
-        data.toDF().collect().toImmutableArraySeq)
+        data.toDF().collect())
     }
   }
 
@@ -102,7 +101,7 @@ abstract class OrcQueryTest extends OrcTest {
     withOrcFile(data) { file =>
       checkAnswer(
         spark.read.orc(file),
-        data.toDF().collect().toImmutableArraySeq)
+        data.toDF().collect())
     }
   }
 
@@ -120,7 +119,7 @@ abstract class OrcQueryTest extends OrcTest {
     val data = (1 to 100).map(i => (i, s"val_$i"))
     sparkContext.parallelize(data).toDF().createOrReplaceTempView("t")
     withTempView("t") {
-      checkAnswer(sql("SELECT * FROM t"), data.toDF().collect().toImmutableArraySeq)
+      checkAnswer(sql("SELECT * FROM t"), data.toDF().collect())
     }
   }
 
@@ -808,7 +807,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
 
     withOrcFile(data) { file =>
       withAllNativeOrcReaders {
-        checkAnswer(spark.read.orc(file), data.toDF().collect().toImmutableArraySeq)
+        checkAnswer(spark.read.orc(file), data.toDF().collect())
       }
     }
   }

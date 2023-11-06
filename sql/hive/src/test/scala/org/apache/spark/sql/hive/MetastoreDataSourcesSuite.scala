@@ -38,7 +38,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -302,7 +301,7 @@ class MetastoreDataSourcesSuite extends QueryTest
 
         checkAnswer(
           sql("SELECT * FROM ctasJsonTable"),
-          sql("SELECT * FROM jsonTable").collect().toImmutableArraySeq)
+          sql("SELECT * FROM jsonTable").collect())
       }
     }
   }
@@ -363,7 +362,7 @@ class MetastoreDataSourcesSuite extends QueryTest
         // Table data should not be changed.
         checkAnswer(
           sql("SELECT * FROM ctasJsonTable"),
-          sql("SELECT * FROM jsonTable").collect().toImmutableArraySeq)
+          sql("SELECT * FROM jsonTable").collect())
       }
     }
   }

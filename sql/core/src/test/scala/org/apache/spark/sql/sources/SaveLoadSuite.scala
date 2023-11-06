@@ -27,7 +27,6 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 class SaveLoadSuite extends DataSourceTest with SharedSparkSession with BeforeAndAfter {
@@ -64,18 +63,18 @@ class SaveLoadSuite extends DataSourceTest with SharedSparkSession with BeforeAn
 
   def checkLoad(expectedDF: DataFrame = df, tbl: String = "jsonTable"): Unit = {
     spark.conf.set(SQLConf.DEFAULT_DATA_SOURCE_NAME.key, "org.apache.spark.sql.json")
-    checkAnswer(spark.read.load(path.toString), expectedDF.collect().toImmutableArraySeq)
+    checkAnswer(spark.read.load(path.toString), expectedDF.collect())
 
     // Test if we can pick up the data source name passed in load.
     spark.conf.set(SQLConf.DEFAULT_DATA_SOURCE_NAME.key, "not a source name")
     checkAnswer(spark.read.format("json").load(path.toString),
-      expectedDF.collect().toImmutableArraySeq)
+      expectedDF.collect())
     checkAnswer(spark.read.format("json").load(path.toString),
-      expectedDF.collect().toImmutableArraySeq)
+      expectedDF.collect())
     val schema = StructType(StructField("b", StringType, true) :: Nil)
     checkAnswer(
       spark.read.format("json").schema(schema).load(path.toString),
-      sql(s"SELECT b FROM $tbl").collect().toImmutableArraySeq)
+      sql(s"SELECT b FROM $tbl").collect())
   }
 
   test("save with path and load") {

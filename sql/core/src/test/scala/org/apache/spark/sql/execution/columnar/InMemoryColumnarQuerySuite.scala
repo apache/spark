@@ -36,7 +36,6 @@ import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel._
-import org.apache.spark.util.ArrayImplicits._
 
 class TestCachedBatchSerializer(
     useCompression: Boolean,
@@ -163,7 +162,7 @@ class InMemoryColumnarQuerySuite extends QueryTest
 
     checkAnswer(scan, testData.collect().map {
       case Row(key: Int, value: String) => value -> key
-    }.map(Row.fromTuple).toImmutableArraySeq)
+    }.map(Row.fromTuple))
   }
 
   test("access only some column of the all of columns") {
@@ -308,7 +307,7 @@ class InMemoryColumnarQuerySuite extends QueryTest
     // Issue a query and check the results.
     checkAnswer(
       sql(s"SELECT DISTINCT ${allColumns} FROM InMemoryCache_different_data_types"),
-      spark.table("InMemoryCache_different_data_types").collect().toImmutableArraySeq)
+      spark.table("InMemoryCache_different_data_types").collect())
     spark.catalog.dropTempView("InMemoryCache_different_data_types")
   }
 
@@ -359,7 +358,7 @@ class InMemoryColumnarQuerySuite extends QueryTest
 
     // Materialize the data.
     val expectedAnswer = data.collect()
-    checkAnswer(cached, expectedAnswer.toImmutableArraySeq)
+    checkAnswer(cached, expectedAnswer)
 
     // Check that the right size was calculated.
     assert(cached.cacheBuilder.sizeInBytesStats.value === expectedAnswer.size * INT.defaultSize)
@@ -373,7 +372,7 @@ class InMemoryColumnarQuerySuite extends QueryTest
 
     // Materialize the data.
     val expectedAnswer = data.collect()
-    checkAnswer(cached, expectedAnswer.toImmutableArraySeq)
+    checkAnswer(cached, expectedAnswer)
 
     // Check that the right row count was calculated.
     assert(cached.cacheBuilder.rowCountStats.value === 6)

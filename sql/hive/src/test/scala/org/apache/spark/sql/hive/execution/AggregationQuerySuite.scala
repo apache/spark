@@ -33,7 +33,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, unsafeRowMutableFieldTypes}
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.unsafe.UnsafeAlignedOffset
-import org.apache.spark.util.ArrayImplicits._
 
 
 class ScalaAggregateFunction(schema: StructType) extends UserDefinedAggregateFunction {
@@ -1110,6 +1109,6 @@ class HashAggregationQueryWithControlledFallbackSuite extends AggregationQuerySu
 
   // Override it to make sure we call the actually overridden checkAnswer.
   override protected def checkAnswer(df: => DataFrame, expectedAnswer: DataFrame): Unit = {
-    checkAnswer(df, expectedAnswer.collect().toImmutableArraySeq)
+    checkAnswer(df, expectedAnswer.collect())
   }
 }

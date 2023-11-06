@@ -57,7 +57,6 @@ import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.ResetSystemProperties
 
 @ExtendedSQLTest
@@ -3294,13 +3293,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   test("SPARK-29000: arithmetic computation overflow when don't allow decimal precision loss ") {
     withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> "false") {
       val df1 = sql("select case when 1=2 then 1 else 100.000000000000000000000000 end * 1")
-      checkAnswer(df1, Array(Row(100)).toImmutableArraySeq)
+      checkAnswer(df1, Array(Row(100)))
       val df2 = sql("select case when 1=2 then 1 else 100.000000000000000000000000 end * " +
         "case when 1=2 then 2 else 1 end")
-      checkAnswer(df2, Array(Row(100)).toImmutableArraySeq)
+      checkAnswer(df2, Array(Row(100)))
       val df3 = sql("select case when 1=2 then 1 else 1.000000000000000000000001 end / 10")
-      checkAnswer(df3,
-        Array(Row(new java.math.BigDecimal("0.100000000000000000000000100"))).toImmutableArraySeq)
+      checkAnswer(df3, Array(Row(new java.math.BigDecimal("0.100000000000000000000000100"))))
     }
   }
 
@@ -3376,7 +3374,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         sql(
           "CREATE TEMPORARY VIEW tf AS SELECT * FROM VALUES(CAST(1 AS DECIMAL(38, 38))) AS tf(id)")
         val df5 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM tf)")
-        checkAnswer(df5, Array.empty[Row].toImmutableArraySeq)
+        checkAnswer(df5, Array.empty[Row])
       }
     }
   }

@@ -44,7 +44,6 @@ import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.util.ArrayImplicits._
 
 abstract class CSVSuite
   extends QueryTest
@@ -974,7 +973,7 @@ abstract class CSVSuite
         Row(iso8501.format(r.toSeq.head))
       }
 
-      checkAnswer(iso8601Timestamps, expectedTimestamps.toImmutableArraySeq)
+      checkAnswer(iso8601Timestamps, expectedTimestamps)
     }
   }
 
@@ -1009,7 +1008,7 @@ abstract class CSVSuite
           Row(iso8501.format(r.toSeq.head))
         }
 
-        checkAnswer(iso8601dates, expectedDates.toImmutableArraySeq)
+        checkAnswer(iso8601dates, expectedDates)
       }
     }
   }

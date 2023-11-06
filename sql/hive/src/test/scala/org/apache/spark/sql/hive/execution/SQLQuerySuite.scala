@@ -48,7 +48,6 @@ import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowHiveTest
-import org.apache.spark.util.ArrayImplicits._
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -691,7 +690,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         sql("create table gen__tmp as select key as a, value as b from mytable1")
         checkAnswer(
           sql("SELECT a, b from gen__tmp"),
-          sql("select key, value from mytable1").collect().toImmutableArraySeq)
+          sql("select key, value from mytable1").collect())
       }
 
       withTable("gen__tmp") {
@@ -2408,7 +2407,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
             sql("ALTER TABLE test DROP PARTITION(name='n1')")
             sql("INSERT OVERWRITE TABLE test PARTITION(name='n1') SELECT 2")
             checkAnswer(sql("SELECT id FROM test WHERE name = 'n1' ORDER BY id"),
-              Array(Row(2)).toImmutableArraySeq)
+              Array(Row(2)))
           }
         }
       }
@@ -2430,13 +2429,13 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
                 |SELECT * FROM VALUES (1, 'n2'), (2, 'n3') AS t(id, p2)
               """.stripMargin)
             checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = 'n2' ORDER BY id"),
-              Array(Row(1)).toImmutableArraySeq)
+              Array(Row(1)))
             checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = 'n3' ORDER BY id"),
-              Array(Row(2)).toImmutableArraySeq)
+              Array(Row(2)))
 
             sql("INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2) SELECT 4, 'n4'")
             checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = 'n4' ORDER BY id"),
-              Array(Row(4)).toImmutableArraySeq)
+              Array(Row(4)))
 
             sql("ALTER TABLE test DROP PARTITION(p1='n1',p2='n2')")
             sql("ALTER TABLE test DROP PARTITION(p1='n1',p2='n3')")
@@ -2447,12 +2446,12 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
                 |SELECT * FROM VALUES (5, 'n2'), (6, 'n3') AS t(id, p2)
               """.stripMargin)
             checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = 'n2' ORDER BY id"),
-              Array(Row(5)).toImmutableArraySeq)
+              Array(Row(5)))
             checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = 'n3' ORDER BY id"),
-              Array(Row(6)).toImmutableArraySeq)
+              Array(Row(6)))
             // Partition not overwritten should not be deleted.
             checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = 'n4' ORDER BY id"),
-              Array(Row(4)).toImmutableArraySeq)
+              Array(Row(4)))
           }
         }
       }
@@ -2469,7 +2468,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
             sql("ALTER TABLE test DROP PARTITION(p1='n1',p2='/')")
             sql("INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2) SELECT 2, '/'")
             checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = '/' ORDER BY id"),
-              Array(Row(2)).toImmutableArraySeq)
+              Array(Row(2)))
           }
         }
       }

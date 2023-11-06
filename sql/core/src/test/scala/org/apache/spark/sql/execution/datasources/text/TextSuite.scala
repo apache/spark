@@ -30,7 +30,6 @@ import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFileDataSourceSuite {
@@ -173,7 +172,7 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
       Seq(10, 100, 1000).foreach { bytes =>
         withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> bytes.toString) {
           val df2 = spark.read.format("text").load(path)
-          checkAnswer(df2, expected.toImmutableArraySeq)
+          checkAnswer(df2, expected)
         }
       }
     }

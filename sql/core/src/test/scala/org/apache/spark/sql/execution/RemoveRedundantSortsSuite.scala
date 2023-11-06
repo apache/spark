@@ -23,7 +23,6 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, Disable
 import org.apache.spark.sql.execution.joins.ShuffledJoin
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.util.ArrayImplicits._
 
 
 abstract class RemoveRedundantSortsSuiteBase
@@ -45,7 +44,7 @@ abstract class RemoveRedundantSortsSuiteBase
       withSQLConf(SQLConf.REMOVE_REDUNDANT_SORTS_ENABLED.key -> "false") {
         val df = sql(query)
         checkNumSorts(df, disabledCount)
-        checkAnswer(df, result.toImmutableArraySeq)
+        checkAnswer(df, result)
       }
     }
   }
@@ -136,7 +135,7 @@ abstract class RemoveRedundantSortsSuiteBase
         val resorted = df.sort($"key".desc)
         resorted.collect()
         checkNumSorts(resorted, 1)
-        checkAnswer(resorted, result.toImmutableArraySeq)
+        checkAnswer(resorted, result)
       }
     }
   }

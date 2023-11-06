@@ -22,7 +22,6 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.test.{QueryTest, SQLHelper}
 import org.apache.spark.sql.types.{StringType, StructType}
-import org.apache.spark.util.ArrayImplicits._
 
 class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
   private def createDF(): DataFrame = {
@@ -74,18 +73,18 @@ class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
 
     val result1 = input.na.drop("name" :: Nil).select("name")
     val expected1 = Array(Row("Bob"), Row("Alice"), Row("David"), Row("Nina"), Row("Amy"))
-    checkAnswer(result1, expected1.toImmutableArraySeq)
+    checkAnswer(result1, expected1)
 
     val result2 = input.na.drop("age" :: Nil).select("name")
     val expected2 = Array(Row("Bob"), Row("David"), Row("Nina"))
-    checkAnswer(result2, expected2.toImmutableArraySeq)
+    checkAnswer(result2, expected2)
 
     val result3 = input.na.drop("age" :: "height" :: Nil)
     val expected3 = Array(rows(0))
-    checkAnswer(result3, expected3.toImmutableArraySeq)
+    checkAnswer(result3, expected3)
 
     val result4 = input.na.drop()
-    checkAnswer(result4, expected3.toImmutableArraySeq)
+    checkAnswer(result4, expected3)
 
     // dropna on an a dataframe with no column should return an empty data frame.
     val empty = input.filter("age > 100")
@@ -274,7 +273,7 @@ class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
   test("fill with col(*)") {
     val df = createDF()
     // If columns are specified with "*", they are ignored.
-    checkAnswer(df.na.fill("new name", Seq("*")), df.collect().toImmutableArraySeq)
+    checkAnswer(df.na.fill("new name", Seq("*")), df.collect())
   }
 
   test("drop with col(*)") {

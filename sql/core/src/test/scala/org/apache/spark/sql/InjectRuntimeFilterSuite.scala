@@ -26,7 +26,6 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEProp
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{IntegerType, StructType}
-import org.apache.spark.util.ArrayImplicits._
 
 class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -240,7 +239,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
 
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true") {
       planEnabled = sql(query).queryExecution.optimizedPlan
-      checkAnswer(sql(query), expectedAnswer.toImmutableArraySeq)
+      checkAnswer(sql(query), expectedAnswer)
       assert(getNumBloomFilters(planDisabled) == 0)
       if (shouldReplace) {
         assert(!columnPruningTakesEffect(planEnabled))
@@ -384,7 +383,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
 
       withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true") {
         planEnabled = sql(query).queryExecution.optimizedPlan
-        checkAnswer(sql(query), expectedAnswer.toImmutableArraySeq)
+        checkAnswer(sql(query), expectedAnswer)
       }
       assert(getNumBloomFilters(planEnabled) == getNumBloomFilters(planDisabled) + 2)
     }
@@ -409,7 +408,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
         withSQLConf( SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true",
           SQLConf.RUNTIME_FILTER_NUMBER_THRESHOLD.key -> numFilterThreshold.toString) {
           planEnabled = sql(query).queryExecution.optimizedPlan
-          checkAnswer(sql(query), expectedAnswer.toImmutableArraySeq)
+          checkAnswer(sql(query), expectedAnswer)
         }
         if (numFilterThreshold < 3) {
           assert(getNumBloomFilters(planEnabled) == getNumBloomFilters(planDisabled)
@@ -438,7 +437,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
 
       withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true") {
         planEnabled = sql(query).queryExecution.optimizedPlan
-        checkAnswer(sql(query), expectedAnswer.toImmutableArraySeq)
+        checkAnswer(sql(query), expectedAnswer)
       }
       assert(getNumBloomFilters(planEnabled) == getNumBloomFilters(planDisabled) + 1)
     }

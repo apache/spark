@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.functions.{bitmap_bit_position, bitmap_bucket_number, bitmap_construct_agg, bitmap_count, bitmap_or_agg, col, hex, lit, substring, to_binary}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.util.ArrayImplicits._
 
 class BitmapExpressionsQuerySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -44,7 +43,7 @@ class BitmapExpressionsQuerySuite extends QueryTest with SharedSparkSession {
           |   group by 1
           | )
           |""".stripMargin)
-      checkAnswer(df, expected.toImmutableArraySeq)
+      checkAnswer(df, expected)
     }
 
     val df = Seq(1, 2, 3).toDF("a")
@@ -79,7 +78,7 @@ class BitmapExpressionsQuerySuite extends QueryTest with SharedSparkSession {
            |   from $table group by 1, 2 order by 1, 2
            | ) group by 1 order by 1
            |""".stripMargin)
-      checkAnswer(df, expected.toImmutableArraySeq)
+      checkAnswer(df, expected)
     }
   }
 
@@ -112,7 +111,7 @@ class BitmapExpressionsQuerySuite extends QueryTest with SharedSparkSession {
                | select part1, part2, sum(bitmap_count(bm))
                | from $precomputed group by 1, 2 order by 1, 2
                |""".stripMargin)
-          checkAnswer(df, expected.toImmutableArraySeq)
+          checkAnswer(df, expected)
         }
 
         // Compute over one of the partitions
@@ -130,7 +129,7 @@ class BitmapExpressionsQuerySuite extends QueryTest with SharedSparkSession {
                  |   from $precomputed group by 1, 2
                  | ) group by 1 order by 1
                  |""".stripMargin)
-            checkAnswer(df, expected.toImmutableArraySeq)
+            checkAnswer(df, expected)
         }
       }
     }
@@ -157,7 +156,7 @@ class BitmapExpressionsQuerySuite extends QueryTest with SharedSparkSession {
            |   from $table group by 1, 2 order by 1, 2
            | ) group by 1 order by 1
            |""".stripMargin)
-      checkAnswer(df, expected.toImmutableArraySeq)
+      checkAnswer(df, expected)
     }
   }
 

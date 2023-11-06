@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.util.ArrayImplicits._
 
 /**
  * This base suite contains unified tests for the `DROP TABLE` command that check V1 and V2
@@ -112,10 +111,10 @@ trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         df.createOrReplaceTempView("source")
         sql(s"CREATE TABLE $t $defaultUsing AS SELECT id, data FROM source")
         sql(s"CACHE TABLE $view AS SELECT id FROM $t")
-        checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source").collect().toImmutableArraySeq)
+        checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source").collect())
         checkAnswer(
           sql(s"SELECT * FROM $view"),
-          spark.table("source").select("id").collect().toImmutableArraySeq)
+          spark.table("source").select("id").collect())
 
         val oldTable = spark.table(view)
         assert(spark.sharedState.cacheManager.lookupCachedData(oldTable).isDefined)

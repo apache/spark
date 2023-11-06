@@ -47,6 +47,10 @@ abstract class QueryTest extends RemoteSparkSession {
     checkAnswer(df, expectedAnswer.collect().toImmutableArraySeq)
   }
 
+  protected def checkAnswer(df: => DataFrame, expectedAnswer: Array[Row]): Unit = {
+    checkAnswer(df, expectedAnswer.toImmutableArraySeq)
+  }
+
   /**
    * Evaluates a dataset to make sure that the result of calling collect matches the given
    * expected answer.

@@ -222,7 +222,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
           .option("path", file.getCanonicalPath)
           .option("dataSchema", dataSchema.json)
           .load(),
-        testDF.collect().toImmutableArraySeq)
+        testDF.collect())
     }
   }
 
@@ -235,7 +235,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath).orderBy("a"),
-        testDF.union(testDF).orderBy("a").collect().toImmutableArraySeq)
+        testDF.union(testDF).orderBy("a").collect())
     }
   }
 
@@ -296,7 +296,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
-        partitionedTestDF.collect().toImmutableArraySeq)
+        partitionedTestDF.collect())
     }
   }
 
@@ -318,7 +318,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
-        partitionedTestDF.union(partitionedTestDF).collect().toImmutableArraySeq)
+        partitionedTestDF.union(partitionedTestDF).collect())
     }
   }
 
@@ -340,7 +340,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
-        partitionedTestDF.collect().toImmutableArraySeq)
+        partitionedTestDF.collect())
     }
   }
 
@@ -378,7 +378,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(spark.table("t"), testDF.collect().toImmutableArraySeq)
+      checkAnswer(spark.table("t"), testDF.collect())
     }
   }
 
@@ -387,7 +387,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     testDF.write.format(dataSourceName).mode(SaveMode.Append).saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(spark.table("t"), testDF.union(testDF).orderBy("a").collect().toImmutableArraySeq)
+      checkAnswer(spark.table("t"), testDF.union(testDF).orderBy("a").collect())
     }
   }
 
@@ -449,7 +449,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(spark.table("t"), partitionedTestDF.collect().toImmutableArraySeq)
+      checkAnswer(spark.table("t"), partitionedTestDF.collect())
     }
   }
 
@@ -469,8 +469,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(spark.table("t"),
-        partitionedTestDF.union(partitionedTestDF).collect().toImmutableArraySeq)
+      checkAnswer(spark.table("t"), partitionedTestDF.union(partitionedTestDF).collect())
     }
   }
 
@@ -490,7 +489,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(spark.table("t"), partitionedTestDF.collect().toImmutableArraySeq)
+      checkAnswer(spark.table("t"), partitionedTestDF.collect())
     }
   }
 
@@ -794,7 +793,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
         val realData = input.collect()
 
-        checkAnswer(spark.table("t"), (realData ++ realData).toImmutableArraySeq)
+        checkAnswer(spark.table("t"), realData ++ realData)
       }
     }
   }
@@ -809,8 +808,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(spark.table("t").select("b", "c", "a"),
-        df.select("b", "c", "a").collect().toImmutableArraySeq)
+      checkAnswer(spark.table("t").select("b", "c", "a"), df.select("b", "c", "a").collect())
     }
   }
 

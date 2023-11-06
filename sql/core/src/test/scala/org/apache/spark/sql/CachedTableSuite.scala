@@ -48,7 +48,6 @@ import org.apache.spark.storage.StorageLevel.{MEMORY_AND_DISK_2, MEMORY_ONLY}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.{AccumulatorContext, Utils}
-import org.apache.spark.util.ArrayImplicits._
 
 private case class BigData(s: String)
 
@@ -535,8 +534,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       verifyNumExchanges(sql("SELECT key, count(*) FROM orderedTable GROUP BY key"), 0)
       checkAnswer(
         sql("SELECT key, count(*) FROM orderedTable GROUP BY key ORDER BY key"),
-        sql("SELECT key, count(*) FROM testData3x GROUP BY key ORDER BY key").collect()
-          .toImmutableArraySeq)
+        sql("SELECT key, count(*) FROM testData3x GROUP BY key ORDER BY key").collect())
       uncacheTable("orderedTable")
       spark.catalog.dropTempView("orderedTable")
 

@@ -31,7 +31,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.SlowHiveTest
-import org.apache.spark.util.ArrayImplicits._
 
 @SlowHiveTest
 class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
@@ -246,7 +245,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       }
       checkAnswer(
         sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1' AND d = '2'"),
-        sql("SELECT * FROM non_part_table").collect().toImmutableArraySeq)
+        sql("SELECT * FROM non_part_table").collect())
 
       // Different order of partition columns.
       withInputFile { f =>

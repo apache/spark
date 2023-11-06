@@ -24,7 +24,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.tags.SlowSQLTest
-import org.apache.spark.util.ArrayImplicits._
 
 @SlowSQLTest
 class DisableUnnecessaryBucketedScanWithoutHiveSupportSuite
@@ -79,7 +78,7 @@ abstract class DisableUnnecessaryBucketedScanSuite
 
       withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "false") {
         checkNumBucketedScan(query, expectedNumScanWithAutoScanDisabled)
-        checkAnswer(sql(query), result.toImmutableArraySeq)
+        checkAnswer(sql(query), result)
       }
     }
   }
