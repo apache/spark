@@ -553,6 +553,16 @@ class SparkContext(config: SparkConf) extends Logging {
       value <- Option(System.getenv(envKey)).orElse(Option(System.getProperty(propKey)))} {
       executorEnvs(envKey) = value
     }
+
+    // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
+    // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
+    _heartbeatReceiver = env.rpcEnv.setupEndpoint(
+      HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
+
+    // Initialize any plugins before the task scheduler is initialized.
+    _plugins = PluginContainer(this, _resources.asJava)
+    val shuffleManager = ShuffleManager.create(_conf, true)
+
     Option(System.getenv("SPARK_PREPEND_CLASSES")).foreach { v =>
       executorEnvs("SPARK_PREPEND_CLASSES") = v
     }
@@ -569,14 +579,6 @@ class SparkContext(config: SparkConf) extends Logging {
       executorEnvs.put("OMP_NUM_THREADS", _conf.get("spark.task.cpus", "1"))
     }
 
-    // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
-    // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
-    _heartbeatReceiver = env.rpcEnv.setupEndpoint(
-      HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
-
-    // Initialize any plugins before the task scheduler is initialized.
-    _plugins = PluginContainer(this, _resources.asJava)
-    val shuffleManager = ShuffleManager.create(_conf, true)
     _env.setShuffleManager(shuffleManager)
 
     // Create and start the scheduler
