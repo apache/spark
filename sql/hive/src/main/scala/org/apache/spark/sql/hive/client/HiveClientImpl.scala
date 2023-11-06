@@ -503,15 +503,12 @@ private[hive] class HiveClientImpl(
       // For EXTERNAL_TABLE, the table properties has a particular field "EXTERNAL". This is added
       // in the function toHiveTable.
       "EXTERNAL",
-      // Used to store clusterBySpec.
-      "clusteringColumns"
     )
 
     val filteredProperties = properties.filterNot {
       case (key, _) => excludedTableProperties.contains(key)
     }
     val comment = properties.get("comment")
-    val clusterBySpec = properties.get("clusteringColumns").map(ClusterBySpec(_))
 
     CatalogTable(
       identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
@@ -562,8 +559,7 @@ private[hive] class HiveClientImpl(
       viewOriginalText = Option(h.getViewOriginalText),
       viewText = Option(h.getViewExpandedText),
       unsupportedFeatures = unsupportedFeatures.toSeq,
-      ignoredProperties = ignoredProperties.toMap,
-      clusterBySpec = clusterBySpec)
+      ignoredProperties = ignoredProperties.toMap)
   }
 
   override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {
@@ -1151,12 +1147,6 @@ private[hive] object HiveClientImpl extends Logging {
           )
         }
       case _ =>
-    }
-
-    table.clusterBySpec.foreach { clusterBySpec =>
-      hiveTable.setProperty(
-        "clusteringColumns",
-        clusterBySpec.columnNames.map(_.name).mkString(","))
     }
 
     hiveTable

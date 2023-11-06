@@ -19,13 +19,11 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.net.URI
 import java.util
-
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
-
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, SessionCatalog}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableCatalogCapability, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
@@ -135,10 +133,9 @@ class V2SessionCatalog(catalog: SessionCatalog)
       provider = Some(provider),
       partitionColumnNames = partitionColumns,
       bucketSpec = maybeBucketSpec,
-      properties = tableProperties.toMap,
+      properties = tableProperties.toMap ++ maybeClusterBySpec.map(ClusterBySpec.asProperty),
       tracksPartitionsInCatalog = conf.manageFilesourcePartitions,
-      comment = Option(properties.get(TableCatalog.PROP_COMMENT)),
-      clusterBySpec = maybeClusterBySpec)
+      comment = Option(properties.get(TableCatalog.PROP_COMMENT)))
 
     try {
       catalog.createTable(tableDesc, ignoreIfExists = false)

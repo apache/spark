@@ -177,14 +177,16 @@ case class CatalogTablePartition(
  */
 case class ClusterBySpec(columnNames: Seq[UnresolvedAttribute]) {
   override def toString: String = columnNames.map(_.name).mkString(",")
-
-  lazy val toDDL: String = if (columnNames.nonEmpty) s"CLUSTER BY ($toString)" else ""
 }
 
 object ClusterBySpec {
-  def apply(columns: String): ClusterBySpec = columns match {
+  def fromProperty(columns: String): ClusterBySpec = columns match {
     case "" => ClusterBySpec(Seq.empty[UnresolvedAttribute])
     case _ => ClusterBySpec(columns.split(",").map(_.trim).map(UnresolvedAttribute.quotedString))
+  }
+
+  def asProperty(clusterBySpec: ClusterBySpec): (String, String) = {
+    CatalogTable.PROP_CLUSTERING_COLUMNS -> clusterBySpec.toString
   }
 }
 
@@ -270,8 +272,7 @@ case class CatalogTable(
     tracksPartitionsInCatalog: Boolean = false,
     schemaPreservesCase: Boolean = true,
     ignoredProperties: Map[String, String] = Map.empty,
-    viewOriginalText: Option[String] = None,
-    clusterBySpec: Option[ClusterBySpec] = None) {
+    viewOriginalText: Option[String] = None) {
 
   import CatalogTable._
 
@@ -480,6 +481,10 @@ case class CatalogTable(
       if (value.isEmpty) key else s"$key: $value"
     }.mkString("", "\n", "")
   }
+
+  lazy val clusterBySpec: Option[ClusterBySpec] = {
+    properties.get(PROP_CLUSTERING_COLUMNS).map(ClusterBySpec.fromProperty)
+  }
 }
 
 object CatalogTable {
@@ -516,6 +521,8 @@ object CatalogTable {
   val VIEW_REFERRED_TEMP_VARIABLE_NAMES = VIEW_PREFIX + "referredTempVariablesNames"
 
   val VIEW_STORING_ANALYZED_PLAN = VIEW_PREFIX + "storingAnalyzedPlan"
+
+  val PROP_CLUSTERING_COLUMNS: String = "clusteringColumns"
 
   def splitLargeTableProp(
       key: String,
