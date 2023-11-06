@@ -118,8 +118,7 @@ case class ShowTablesExtendedExec(
     }
 
     if (table.schema().nonEmpty) {
-      val dataColumns = table.schema().filterNot(partitionColumns.contains)
-      results.put("Schema", StructType(dataColumns ++ partitionColumns).treeString)
+      results.put("Schema", table.schema().treeString)
     }
 
     results.map { case (key, value) =>

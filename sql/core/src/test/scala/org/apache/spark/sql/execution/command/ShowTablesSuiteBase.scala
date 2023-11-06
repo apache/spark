@@ -54,12 +54,17 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   protected def extendedTableInfo: String
 
+  protected def extendedTableSchema: String =
+    s"""Schema: root
+       | |-- data: string (nullable = true)
+       | |-- id: long (nullable = true)""".stripMargin
+
   private def extendedTableExpectedResult(
       catalog: String,
       namespace: String,
       table: String,
-      partColName: String,
-      dataColName: String): String = {
+      dataColName: String,
+      partColName: String): String = {
     s"""Catalog: $catalog
        |$namespaceKey: $namespace
        |Table: $table
@@ -191,7 +196,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
     val namespace = "ns1"
     val table = "tbl"
     withNamespaceAndTable(namespace, table, catalog) { tbl =>
-      sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      sql(s"CREATE TABLE $tbl (data string, id bigint) $defaultUsing PARTITIONED BY (id)")
       sql(s"ALTER TABLE $tbl ADD PARTITION (id = 1)")
       checkError(
         exception = intercept[AnalysisException] {
@@ -210,7 +215,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
     val namespace = "ns1"
     val table = "tbl"
     withNamespaceAndTable(namespace, table, catalog) { tbl =>
-      sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing")
+      sql(s"CREATE TABLE $tbl (data string, id bigint) $defaultUsing")
       val e = intercept[AnalysisException] {
         sql(s"SHOW TABLE EXTENDED IN $catalog.$namespace LIKE '$table' PARTITION(id = 1)")
       }
@@ -224,7 +229,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
     val namespace = "ns1"
     val table = "tbl"
     withNamespaceAndTable(namespace, table, catalog) { tbl =>
-      sql(s"CREATE TABLE $tbl (id1 bigint, id2 bigint, data string) " +
+      sql(s"CREATE TABLE $tbl (data string, id1 bigint, id2 bigint) " +
         s"$defaultUsing PARTITIONED BY (id1, id2)")
       sql(s"ALTER TABLE $tbl ADD PARTITION (id1 = 1, id2 = 2)")
 
@@ -247,7 +252,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
     val namespace = "ns1"
     val table = "tbl"
     withNamespaceAndTable(namespace, table, catalog) { tbl =>
-      sql(s"CREATE TABLE $tbl (id1 bigint, id2 bigint, data string) " +
+      sql(s"CREATE TABLE $tbl (data string, id1 bigint, id2 bigint) " +
         s"$defaultUsing PARTITIONED BY (id1, id2)")
       sql(s"ALTER TABLE $tbl ADD PARTITION (id1 = 1, id2 = 2)")
 
@@ -269,14 +274,14 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
     val namespace = "ns1"
     val table = "tbl"
     withNamespaceAndTable(namespace, table, catalog) { _ =>
-      sql(s"CREATE TABLE $catalog.$namespace.$table (id bigint, data string) " +
+      sql(s"CREATE TABLE $catalog.$namespace.$table (data string, id bigint) " +
         s"$defaultUsing PARTITIONED BY (id)")
       val table1 = "tbl1"
       val table2 = "tbl2"
       withTable(table1, table2) {
-        sql(s"CREATE TABLE $catalog.$namespace.$table1 (id1 bigint, data1 string) " +
+        sql(s"CREATE TABLE $catalog.$namespace.$table1 (data1 string, id1 bigint) " +
           s"$defaultUsing PARTITIONED BY (id1)")
-        sql(s"CREATE TABLE $catalog.$namespace.$table2 (id2 bigint, data2 string) " +
+        sql(s"CREATE TABLE $catalog.$namespace.$table2 (data2 string, id2 bigint) " +
           s"$defaultUsing PARTITIONED BY (id2)")
 
         val result = sql(s"SHOW TABLE EXTENDED FROM $catalog.$namespace LIKE '$table*'")
@@ -292,7 +297,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         // replace "Created Time", "Last Access", "Created By", "Location"
         val actualResult_0_3 = replace(resultCollect(0)(3).toString)
         val expectedResult_0_3 = extendedTableExpectedResult(
-          catalog, namespace, table, "id", "data")
+          catalog, namespace, table, "data", "id")
         assert(actualResult_0_3 === expectedResult_0_3)
 
         assert(resultCollect(1).length == 4)
@@ -301,7 +306,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         val actualResult_1_3 = replace(resultCollect(1)(3).toString)
         // replace "Table Properties"
         val expectedResult_1_3 = extendedTableExpectedResult(
-          catalog, namespace, table1, "id1", "data1")
+          catalog, namespace, table1, "data1", "id1")
         assert(actualResult_1_3 === expectedResult_1_3)
 
         assert(resultCollect(2).length == 4)
@@ -310,7 +315,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         val actualResult_2_3 = replace(resultCollect(2)(3).toString)
         // replace "Table Properties"
         val expectedResult_2_3 = extendedTableExpectedResult(
-          catalog, namespace, table2, "id2", "data2")
+          catalog, namespace, table2, "data2", "id2")
         assert(actualResult_2_3 === expectedResult_2_3)
       }
     }
@@ -415,50 +420,41 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
   /**
    * - V1: `show extended` and `select *` display the schema,
    *     the partition columns will be always displayed at the end.
-   * - V2: `show extended` display the schema, the partition columns
-   *     will be always displayed at the end,
-   *     but `select *` will respect the original table schema.
+   * - V2: `show extended` and `select *` display the schema,
+   *     the columns order will respect the original table schema.
    */
-  protected def selectCommandSchema: Seq[String] = Seq("data", "id")
-  test("show table extended: partition columns are always showed at the end") {
+  protected def selectCommandSchema: Array[String] = Array("data", "id")
+  test("show table extended: the display order of the columns is different in v1 and v2") {
     val namespace = "ns1"
     val table = "tbl"
     withNamespaceAndTable(namespace, table, catalog) { _ =>
-      sql(s"CREATE TABLE $catalog.$namespace.$table (id bigint, data string) " +
+      sql(s"CREATE TABLE $catalog.$namespace.$table (data string, id bigint) " +
         s"$defaultUsing PARTITIONED BY (id)")
       sql(s"INSERT INTO $catalog.$namespace.$table PARTITION (id = 1) (data) VALUES ('data1')")
       val result = sql(s"SELECT * FROM $catalog.$namespace.$table")
-      assert(result.schema.fieldNames === selectCommandSchema)
+      assert(result.schema.fieldNames === Array("data", "id"))
 
       val table1 = "tbl1"
       withTable(table1) {
-        sql(s"CREATE TABLE $catalog.$namespace.$table1 (data string, id bigint) " +
+        sql(s"CREATE TABLE $catalog.$namespace.$table1 (id bigint, data string) " +
           s"$defaultUsing PARTITIONED BY (id)")
         sql(s"INSERT INTO $catalog.$namespace.$table1 PARTITION (id = 1) (data) VALUES ('data2')")
+
         val result1 = sql(s"SELECT * FROM $catalog.$namespace.$table1")
-        assert(result1.schema.fieldNames === Seq("data", "id"))
+        assert(result1.schema.fieldNames === selectCommandSchema)
 
         val extendedResult = sql(s"SHOW TABLE EXTENDED IN $catalog.$namespace LIKE '$table*'").
           sort("tableName")
         val extendedResultCollect = extendedResult.collect()
 
         assert(extendedResultCollect(0)(1) === table)
-        assert(extendedResultCollect(0)(3).toString.endsWith(
-          """Schema: root
-            | |-- data: string (nullable = true)
-            | |-- id: long (nullable = true)
-            |
-            |""".stripMargin
-        ))
+        assert(extendedResultCollect(0)(3).toString.contains(
+          s"""Schema: root
+             | |-- data: string (nullable = true)
+             | |-- id: long (nullable = true)""".stripMargin))
 
         assert(extendedResultCollect(1)(1) === table1)
-        assert(extendedResultCollect(1)(3).toString.endsWith(
-          """Schema: root
-            | |-- data: string (nullable = true)
-            | |-- id: long (nullable = true)
-            |
-            |""".stripMargin
-        ))
+        assert(extendedResultCollect(1)(3).toString.contains(extendedTableSchema))
       }
     }
   }

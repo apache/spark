@@ -65,5 +65,10 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
        |Owner: ${Utils.getCurrentUserName()}
        |Table Properties: <table properties>""".stripMargin
 
-  protected override def selectCommandSchema: Seq[String] = Seq("id", "data")
+  protected override def extendedTableSchema: String =
+    s"""Schema: root
+       | |-- id: long (nullable = true)
+       | |-- data: string (nullable = true)""".stripMargin
+
+  protected override def selectCommandSchema: Array[String] = Array("id", "data")
 }

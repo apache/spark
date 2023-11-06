@@ -1096,17 +1096,15 @@ class SessionCatalog(
   def listTempViews(db: String, pattern: String): Seq[CatalogTable] = {
     val dbName = format(db)
     val globalTempViews = if (dbName == globalTempViewManager.database) {
-      globalTempViewManager.listViewNames(pattern).map { viewName =>
-        globalTempViewManager.get(viewName).map(_.tableMeta).getOrElse(
-          throw new NoSuchTableException(globalTempViewManager.database, viewName))
+      globalTempViewManager.listViewNames(pattern).flatMap { viewName =>
+        globalTempViewManager.get(viewName).map(_.tableMeta)
       }
     } else {
       Seq.empty
     }
 
-    val localTempViews = listLocalTempViews(pattern).map { viewIndent =>
-      tempViews.get(viewIndent.table).map(_.tableMeta).getOrElse(
-        throw new NoSuchTableException(viewIndent.database.getOrElse(""), viewIndent.table))
+    val localTempViews = listLocalTempViews(pattern).flatMap { viewIndent =>
+      tempViews.get(viewIndent.table).map(_.tableMeta)
     }
 
     globalTempViews ++ localTempViews

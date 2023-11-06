@@ -4059,21 +4059,18 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   override def visitShowTableExtended(
       ctx: ShowTableExtendedContext): LogicalPlan = withOrigin(ctx) {
-    @inline def createUnresolvedTable(
-        nsCtx: IdentifierReferenceContext,
-        patternCtx: StringLitContext): LogicalPlan = withOrigin(patternCtx) {
-      if (nsCtx != null) {
-        withIdentClause(nsCtx, ns => {
-          val names = ns :+ string(visitStringLit(patternCtx))
-          UnresolvedTable(names, "SHOW TABLE EXTENDED ... PARTITION ...")
-        })
-      } else {
-        val names = Seq.empty[String] :+ string(visitStringLit(patternCtx))
-        UnresolvedTable(names, "SHOW TABLE EXTENDED ... PARTITION ...")
-      }
-    }
     Option(ctx.partitionSpec).map { spec =>
-      val table = createUnresolvedTable(ctx.identifierReference(), ctx.pattern)
+      val table = withOrigin(ctx.pattern) {
+        if (ctx.identifierReference() != null) {
+          withIdentClause(ctx.identifierReference(), ns => {
+            val names = ns :+ string(visitStringLit(ctx.pattern))
+            UnresolvedTable(names, "SHOW TABLE EXTENDED ... PARTITION ...")
+          })
+        } else {
+          val names = Seq.empty[String] :+ string(visitStringLit(ctx.pattern))
+          UnresolvedTable(names, "SHOW TABLE EXTENDED ... PARTITION ...")
+        }
+      }
       ShowTablePartition(table, UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(spec)))
     }.getOrElse {
       val ns = if (ctx.identifierReference() != null) {

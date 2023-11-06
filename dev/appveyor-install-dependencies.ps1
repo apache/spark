@@ -27,13 +27,11 @@ Function InstallR {
 
   $urlPath = ""
   $latestVer = $(ConvertFrom-JSON $(Invoke-WebRequest https://rversions.r-pkg.org/r-release-win).Content).version
-  $latestVer = "4.3.2"
   If ($rVer -ne $latestVer) {
     $urlPath = ("old/" + $rVer + "/")
   }
 
   $rurl = $CRAN + "/bin/windows/base/" + $urlPath + "R-" + $rVer + "-win.exe"
-  echo $rurl
 
   # Downloading R
   Start-FileDownload $rurl "R-win.exe"
