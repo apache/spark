@@ -39,6 +39,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.AddArtifactsResponse
 import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
 import org.apache.spark.util.{MavenUtils, SparkFileUtils, SparkThreadUtils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The Artifact Manager is responsible for handling and transferring artifacts from the local
@@ -384,7 +385,7 @@ object Artifact {
 
     val exclusionsList: Seq[String] =
       if (!StringUtils.isBlank(exclusions)) {
-        exclusions.split(",")
+        exclusions.split(",").toImmutableArraySeq
       } else {
         Nil
       }

@@ -46,6 +46,7 @@ import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManage
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.util.{RpcUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * :: DeveloperApi ::
@@ -533,7 +534,7 @@ object SparkEnv extends Logging {
       .map(entry => (entry.getKey, entry.getValue)).toSeq.sorted
     Map[String, Seq[(String, String)]](
       "JVM Information" -> jvmInformation,
-      "Spark Properties" -> sparkProperties,
+      "Spark Properties" -> sparkProperties.toImmutableArraySeq,
       "Hadoop Properties" -> hadoopProperties,
       "System Properties" -> otherProperties,
       "Classpath Entries" -> classPaths,

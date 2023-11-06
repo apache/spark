@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A user-defined Python data source. This is used by the Python API.
@@ -53,7 +54,7 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
     val pickledDataSourceInstance = result.dataSource
 
     val dataSource = SimplePythonFunction(
-      command = pickledDataSourceInstance,
+      command = pickledDataSourceInstance.toImmutableArraySeq,
       envVars = dataSourceCls.envVars,
       pythonIncludes = dataSourceCls.pythonIncludes,
       pythonExec = dataSourceCls.pythonExec,

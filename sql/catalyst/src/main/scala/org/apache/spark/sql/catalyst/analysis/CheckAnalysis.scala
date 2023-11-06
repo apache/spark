@@ -35,6 +35,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -580,7 +581,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case create: V2CreateTablePlan =>
             val references = create.partitioning.flatMap(_.references).toSet
             val badReferences = references.map(_.fieldNames).flatMap { column =>
-              create.tableSchema.findNestedField(column) match {
+              create.tableSchema.findNestedField(column.toImmutableArraySeq) match {
                 case Some(_) =>
                   None
                 case _ =>
@@ -607,7 +608,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               if c.resolved && c.defaultExpr.child.containsPattern(PLAN_EXPRESSION) =>
             val ident = c.name.asInstanceOf[ResolvedIdentifier]
             val varName = toSQLId(
-              ident.catalog.name +: ident.identifier.namespace :+ ident.identifier.name)
+              (ident.catalog.name +: ident.identifier.namespace :+ ident.identifier.name)
+                .toImmutableArraySeq)
             throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
               "DECLARE VARIABLE",
               varName,

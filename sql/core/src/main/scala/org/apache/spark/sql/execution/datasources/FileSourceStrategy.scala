@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{PLAN_EXPRESSION, SCALAR_
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.types.{DoubleType, FloatType, StructType}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -335,7 +336,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         // Here, we *explicitly* enforce the not null to `CreateStruct(structColumns)`
         // to avoid any risk of inconsistent schema nullability
         val metadataAlias =
-          Alias(KnownNotNull(CreateStruct(structColumns)),
+          Alias(KnownNotNull(CreateStruct(structColumns.toImmutableArraySeq)),
             FileFormat.METADATA_NAME)(exprId = metadataStruct.exprId)
         execution.ProjectExec(
           readDataColumns ++ partitionColumns :+ metadataAlias, scan)

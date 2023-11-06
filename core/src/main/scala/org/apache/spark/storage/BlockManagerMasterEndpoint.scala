@@ -40,6 +40,7 @@ import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseG
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * BlockManagerMasterEndpoint is an [[IsolatedThreadSafeRpcEndpoint]] on the master node to
@@ -877,7 +878,7 @@ class BlockManagerMasterEndpoint(
 
   private def getLocationsMultipleBlockIds(
       blockIds: Array[BlockId]): IndexedSeq[Seq[BlockManagerId]] = {
-    blockIds.map(blockId => getLocations(blockId))
+    blockIds.map(blockId => getLocations(blockId)).toImmutableArraySeq
   }
 
   /** Get the list of the peers of the given block manager */
