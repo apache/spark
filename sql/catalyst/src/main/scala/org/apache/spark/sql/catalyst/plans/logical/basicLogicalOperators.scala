@@ -235,6 +235,23 @@ object Project {
   }
 }
 
+case class UnresolvedDropColumns(dropList: Seq[Expression], child: LogicalPlan)
+  extends UnaryNode {
+  override def output: Seq[Attribute] = {
+    child.output.filterNot(attr => dropList.exists(_.semanticEquals(attr)))
+  }
+
+  override def maxRows: Option[Long] = child.maxRows
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(DROP_COLUMNS)
+
+  override lazy val resolved: Boolean = false
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedDropColumns =
+    copy(child = newChild)
+}
+
 /**
  * Applies a [[Generator]] to a stream of input rows, combining the
  * output of each into a new stream of rows.  This operation is similar to a `flatMap` in functional
