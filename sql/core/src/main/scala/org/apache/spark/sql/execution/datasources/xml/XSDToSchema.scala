@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.xml
+package org.apache.spark.sql.execution.datasources.xml
 
 import java.io.{File, FileInputStream, InputStreamReader, StringReader}
 import java.nio.charset.StandardCharsets
@@ -25,6 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.ws.commons.schema._
 import org.apache.ws.commons.schema.constants.Constants
 
+import org.apache.spark.sql.catalyst.xml.XmlOptions
 import org.apache.spark.sql.types._
 
 /**
