@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{QueryTest, SaveMode}
-import org.apache.spark.sql.execution.split.SplitExec
+import org.apache.spark.sql.execution.split.SplitExchangeExec
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -57,8 +57,9 @@ class SplitSourcePartitionSuite extends QueryTest with SharedSparkSession {
                        |""".stripMargin)
 
         val plan = df.queryExecution.executedPlan
-        assertResult(1, "SplitExec applied.")(plan.collectWithSubqueries { case e: SplitExec =>
-          e
+        assertResult(1, "SplitExchangeExec applied.")(plan.collectWithSubqueries {
+          case e: SplitExchangeExec =>
+            e
         }.size)
 
         assertResult(spark.sparkContext.defaultParallelism, "split partitions.")(

@@ -27,16 +27,20 @@ object SplitSourcePartition extends Rule[SparkPlan] {
 
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!plan.conf.splitSourcePartitionEnabled ||
-      plan.find(_.isInstanceOf[DataSourceScanExec]).isEmpty) {
+      plan.find {
+        case _: DataSourceScanExec => true
+        case _ => false
+      }.isEmpty) {
       return plan
     }
 
     val r = plan.transformOnceWithPruning(shouldBreak) {
-      case p if p != null && p.isInstanceOf[DataSourceScanExec] =>
-        val maxExpandNum = plan.conf.splitSourcePartitionMaxExpandNum
-        val thresholdSize = plan.conf.splitSourcePartitionThreshold
-        SplitExec(maxExpandNum, thresholdSize, p)
-      case other => other
+      case d: DataSourceScanExec =>
+        SplitExchangeExec(
+          plan.conf.splitSourcePartitionMaxExpandNum,
+          plan.conf.splitSourcePartitionThreshold,
+          d)
+      case o => o
     }
     r
   }
