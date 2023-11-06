@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 
 
 abstract class QueryTest extends PlanTest {
@@ -161,6 +162,16 @@ abstract class QueryTest extends PlanTest {
   }
 
   /**
+   * Runs the plan and makes sure the answer matches the expected result.
+   *
+   * @param df the [[DataFrame]] to be executed
+   * @param expectedAnswer the expected result in a [[Array]] of [[Row]]s.
+   */
+  protected def checkAnswer(df: => DataFrame, expectedAnswer: Array[Row]): Unit = {
+    checkAnswer(df, expectedAnswer.toImmutableArraySeq)
+  }
+
+  /**
    * Runs the plan and makes sure the answer is within absTol of the expected result.
    *
    * @param dataFrame the [[DataFrame]] to be executed
@@ -256,6 +267,17 @@ object QueryTest extends Assertions {
       case Some(errorMessage) => fail(errorMessage)
       case None =>
     }
+  }
+
+  /**
+   * Runs the plan and makes sure the answer matches the expected result.
+   *
+   * @param df the DataFrame to be executed
+   * @param expectedAnswer the expected result in a Array of Rows.
+   * @param checkToRDD whether to verify deserialization to an RDD. This runs the query twice.
+   */
+  def checkAnswer(df: DataFrame, expectedAnswer: Array[Row], checkToRDD: Boolean = true): Unit = {
+    checkAnswer(df, expectedAnswer.toImmutableArraySeq, checkToRDD)
   }
 
   /**
