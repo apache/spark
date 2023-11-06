@@ -4626,26 +4626,38 @@ def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import types
-    >>> df1 = spark.createDataFrame([1, 1, 3], types.IntegerType())
-    >>> df2 = spark.createDataFrame([1, 2], types.IntegerType())
-    >>> df1.join(df2).show()
-    +-----+-----+
-    |value|value|
-    +-----+-----+
-    |    1|    1|
-    |    1|    2|
-    |    1|    1|
-    |    1|    2|
-    |    3|    1|
-    |    3|    2|
-    +-----+-----+
-    >>> df1.join(df2).select(count_distinct(df1.value, df2.value)).show()
-    +----------------------------+
-    |count(DISTINCT value, value)|
-    +----------------------------+
-    |                           4|
-    +----------------------------+
+    Example 1: Counting distinct values of a single column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1,), (1,), (3,)], ["value"])
+    >>> df.select(sf.count_distinct(df.value)).show()
+    +---------------------+
+    |count(DISTINCT value)|
+    +---------------------+
+    |                    2|
+    +---------------------+
+
+    Example 2: Counting distinct values of multiple columns
+
+    >>> from pyspark.sql import functions as sf
+    >>> df1 = spark.createDataFrame([(1, 1), (1, 2)], ["value1", "value2"])
+    >>> df1.select(sf.count_distinct(df1.value1, df1.value2)).show()
+    +------------------------------+
+    |count(DISTINCT value1, value2)|
+    +------------------------------+
+    |                             2|
+    +------------------------------+
+
+    Example 3: Counting distinct values with column names as strings
+
+    >>> from pyspark.sql import functions as sf
+    >>> df3 = spark.createDataFrame([(1, 1), (1, 2)], ["value1", "value2"])
+    >>> df3.select(sf.count_distinct("value1", "value2")).show()
+    +------------------------------+
+    |count(DISTINCT value1, value2)|
+    +------------------------------+
+    |                             2|
+    +------------------------------+
     """
     sc = _get_active_spark_context()
     return _invoke_function(
