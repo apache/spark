@@ -616,7 +616,96 @@ pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defin
 
 
 -- !query
-SELECT * FROM InvalidAnalyzeMethodWithSinglePartitionNoInputTable(a => 1)
+SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
+  "messageParameters" : {
+    "msg" : "Failed to evaluate the user-defined table function 'UDTFForwardStateFromAnalyzeWithKwargs' because its 'eval' method expects exactly 2 arguments, but the function call provided 1 argument instead. Please update the query so that it provides exactly 2 arguments, or else update the table function so that its 'eval' method accepts exactly 1 argument, and then try the query again."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 53,
+    "fragment" : "UDTFForwardStateFromAnalyzeWithKwargs()"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs(1, 2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
+  "messageParameters" : {
+    "msg" : "Failed to evaluate the user-defined table function 'UDTFForwardStateFromAnalyzeWithKwargs' because its 'eval' method expects exactly 2 arguments, but the function call provided 3 arguments instead. Please update the query so that it provides exactly 2 arguments, or else update the table function so that its 'eval' method accepts exactly 3 arguments, and then try the query again."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 57,
+    "fragment" : "UDTFForwardStateFromAnalyzeWithKwargs(1, 2)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs(invalid => 2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
+  "messageParameters" : {
+    "msg" : "Failed to evaluate the user-defined table function 'UDTFForwardStateFromAnalyzeWithKwargs' because its 'eval' method expects arguments whose names appear in the set (self, argument), but the function call provided a keyword argument with unexpected name 'invalid' instead. Please update the query so that it provides only keyword arguments whose names appear in this set, or else update the table function so that its 'eval' method accepts argument names including 'invalid', and then try the query again."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 65,
+    "fragment" : "UDTFForwardStateFromAnalyzeWithKwargs(invalid => 2)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs(argument => 1, argument => 2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+  "sqlState" : "4274K",
+  "messageParameters" : {
+    "functionName" : "`UDTFForwardStateFromAnalyzeWithKwargs`",
+    "parameterName" : "`argument`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 81,
+    "fragment" : "UDTFForwardStateFromAnalyzeWithKwargs(argument => 1, argument => 2)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM InvalidAnalyzeMethodWithSinglePartitionNoInputTable(argument => 1)
 -- !query schema
 struct<>
 -- !query output
@@ -631,14 +720,14 @@ org.apache.spark.sql.AnalysisException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 15,
-    "stopIndex" : 73,
-    "fragment" : "InvalidAnalyzeMethodWithSinglePartitionNoInputTable(a => 1)"
+    "stopIndex" : 80,
+    "fragment" : "InvalidAnalyzeMethodWithSinglePartitionNoInputTable(argument => 1)"
   } ]
 }
 
 
 -- !query
-SELECT * FROM InvalidAnalyzeMethodWithPartitionByNoInputTable(a => 1)
+SELECT * FROM InvalidAnalyzeMethodWithPartitionByNoInputTable(argument => 1)
 -- !query schema
 struct<>
 -- !query output
@@ -653,8 +742,8 @@ org.apache.spark.sql.AnalysisException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 15,
-    "stopIndex" : 69,
-    "fragment" : "InvalidAnalyzeMethodWithPartitionByNoInputTable(a => 1)"
+    "stopIndex" : 76,
+    "fragment" : "InvalidAnalyzeMethodWithPartitionByNoInputTable(argument => 1)"
   } ]
 }
 
@@ -682,7 +771,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-SELECT * FROM InvalidAnalyzeMethodWithPartitionByListOfStrings(t => TABLE(t2))
+SELECT * FROM InvalidAnalyzeMethodWithPartitionByListOfStrings(argument => TABLE(t2))
 -- !query schema
 struct<>
 -- !query output
@@ -697,8 +786,8 @@ org.apache.spark.sql.AnalysisException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 15,
-    "stopIndex" : 78,
-    "fragment" : "InvalidAnalyzeMethodWithPartitionByListOfStrings(t => TABLE(t2))"
+    "stopIndex" : 85,
+    "fragment" : "InvalidAnalyzeMethodWithPartitionByListOfStrings(argument => TABLE(t2))"
   } ]
 }
 
@@ -731,7 +820,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
   "sqlState" : "38000",
   "messageParameters" : {
-    "msg" : "Failed to evaluate the user-defined table function 'UDTFWithSinglePartition' because its static 'analyze' method expects exactly 2 arguments, but the function call provided 1 argument instead. Please update the query so that it provides exactly 2 arguments, or else update the table function so that its 'analyze' method accepts exactly 1 argument, and then try the query again."
+    "msg" : "Failed to evaluate the user-defined table function 'UDTFWithSinglePartition' because its 'static analyze' method expects exactly 2 arguments, but the function call provided 1 argument instead. Please update the query so that it provides exactly 2 arguments, or else update the table function so that its 'static analyze' method accepts exactly 1 argument, and then try the query again."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -753,7 +842,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
   "sqlState" : "38000",
   "messageParameters" : {
-    "msg" : "Failed to evaluate the user-defined table function 'UDTFWithSinglePartition' because its static 'analyze' method expects exactly 2 arguments, but the function call provided 3 arguments instead. Please update the query so that it provides exactly 2 arguments, or else update the table function so that its 'analyze' method accepts exactly 3 arguments, and then try the query again."
+    "msg" : "Failed to evaluate the user-defined table function 'UDTFWithSinglePartition' because its 'static analyze' method expects exactly 2 arguments, but the function call provided 3 arguments instead. Please update the query so that it provides exactly 2 arguments, or else update the table function so that its 'static analyze' method accepts exactly 3 arguments, and then try the query again."
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -775,7 +864,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
   "sqlState" : "38000",
   "messageParameters" : {
-    "msg" : "Failed to evaluate the user-defined table function 'UDTFWithSinglePartition' because its static 'analyze' method expects arguments whose names appear in the set (initial_count, input_table), but the function call provided a keyword argument with unexpected name 'invalid_arg_name' instead. Please update the query so that it provides only keyword arguments whose names appear in this set, or else update the table function so that its 'analyze' method accepts argument names including 'invalid_arg_name', and then try the query again."
+    "msg" : "Failed to evaluate the user-defined table function 'UDTFWithSinglePartition' because its 'static analyze' method expects arguments whose names appear in the set (initial_count, input_table), but the function call provided a keyword argument with unexpected name 'invalid_arg_name' instead. Please update the query so that it provides only keyword arguments whose names appear in this set, or else update the table function so that its 'static analyze' method accepts argument names including 'invalid_arg_name', and then try the query again."
   },
   "queryContext" : [ {
     "objectType" : "",
