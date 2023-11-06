@@ -2447,12 +2447,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "tableType" -> tableType))
   }
 
-  def hiveCreatePermanentFunctionsUnsupportedError(): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1221",
-      messageParameters = Map.empty)
-  }
-
   def unknownHiveResourceTypeError(resourceType: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1222",
