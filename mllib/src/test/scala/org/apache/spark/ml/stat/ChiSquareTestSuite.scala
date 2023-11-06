@@ -26,6 +26,7 @@ import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.stat.test.ChiSqTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.util.ArrayImplicits._
 
 class ChiSquareTestSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -95,7 +96,7 @@ class ChiSquareTestSuite
     val sparseData = Array(
       LabeledPoint(0.0, Vectors.sparse(numCols, Seq((100, 2.0)))),
       LabeledPoint(0.1, Vectors.sparse(numCols, Seq((200, 1.0)))))
-    val df = spark.createDataFrame(sparseData)
+    val df = spark.createDataFrame(sparseData.toImmutableArraySeq)
     val chi = ChiSquareTest.test(df, "features", "label")
     val (pValues: Vector, degreesOfFreedom: Array[Int], statistics: Vector) =
       chi.select("pValues", "degreesOfFreedom", "statistics")

@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.SerializeFromObjectExec
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming._
+import org.apache.spark.util.ArrayImplicits._
 
 case class KV(key: Int, value: Long)
 
@@ -220,7 +221,8 @@ class ForeachBatchSinkSuite extends StreamTest {
 
     def check(in: Int*)(out: T*): Test = Check(in, out)
     def checkMetrics: Test = CheckMetrics
-    def record(batchId: Long, ds: Dataset[T]): Unit = recordedOutput.put(batchId, ds.collect())
+    def record(batchId: Long, ds: Dataset[T]): Unit =
+      recordedOutput.put(batchId, ds.collect().toImmutableArraySeq)
     implicit def conv(x: (Int, Long)): KV = KV(x._1, x._2)
   }
 }

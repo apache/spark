@@ -43,6 +43,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
@@ -766,7 +767,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
   }
 
   test("SPARK-18268: ALS with empty RDD should fail with better message") {
-    val ratings = sc.parallelize(Array.empty[Rating[Int]])
+    val ratings = sc.parallelize(Array.empty[Rating[Int]].toImmutableArraySeq)
     intercept[IllegalArgumentException] {
       ALS.train(ratings)
     }

@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordR
 import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A test suite on the vectorized Parquet reader. Unlike `ParquetIOSuite`, this focuses on
@@ -509,7 +510,7 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     val pageFirstRowIndexes = ArrayBuffer.empty[Long]
     pageSizes.foreach { size =>
       pageFirstRowIndexes += i
-      writeDataPage(cd, memPageStore, repetitionLevels.slice(i, i + size),
+      writeDataPage(cd, memPageStore, repetitionLevels.slice(i, i + size).toImmutableArraySeq,
         definitionLevels.slice(i, i + size), inputValues.slice(i, i + size), maxDef,
         dictionaryEnabled)
       i += size

@@ -52,6 +52,7 @@ import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryException, 
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 abstract class KafkaSourceTest extends StreamTest with SharedSparkSession with KafkaTest {
@@ -2410,13 +2411,13 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
 
   private def sendMessagesWithTimestamp(
       topic: String,
-      msgs: Seq[String],
+      msgs: Array[String],
       part: Int,
       ts: Long): Unit = {
     val records = msgs.map { msg =>
       new RecordBuilder(topic, msg).partition(part).timestamp(ts).build()
     }
-    testUtils.sendMessages(records)
+    testUtils.sendMessages(records.toImmutableArraySeq)
   }
 
   private def setupTestMessagesForTestOnTimestampOffsets(

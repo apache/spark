@@ -46,6 +46,7 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, Column
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.util.ArrayImplicits._
 
 @ExtendedSQLTest
 class ColumnarBatchSuite extends SparkFunSuite {
@@ -1476,7 +1477,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
               case _ => assert(a1 === a2, "Seed = " + seed)
             }
           case StructType(childFields) =>
-            compareStruct(childFields, r1.getStruct(ordinal, fields.length),
+            compareStruct(childFields.toImmutableArraySeq, r1.getStruct(ordinal, fields.length),
               r2.getStruct(ordinal), seed)
           case _ =>
             throw new UnsupportedOperationException("Not implemented " + field.dataType)
@@ -1526,9 +1527,9 @@ class ColumnarBatchSuite extends SparkFunSuite {
     var i = 0
     while (i < NUM_ITERS) {
       val schema = if (flatSchema) {
-        RandomDataGenerator.randomSchema(random, numFields, types)
+        RandomDataGenerator.randomSchema(random, numFields, types.toImmutableArraySeq)
       } else {
-        RandomDataGenerator.randomNestedSchema(random, numFields, types)
+        RandomDataGenerator.randomNestedSchema(random, numFields, types.toImmutableArraySeq)
       }
       val rows = mutable.ArrayBuffer.empty[Row]
       var j = 0

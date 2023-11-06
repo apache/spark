@@ -32,6 +32,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.EventLogTestHelper._
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 
@@ -367,6 +368,6 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
 
   private def listEventLogFiles(logDirPath: Path): Seq[FileStatus] = {
     fileSystem.listStatus(logDirPath).filter(isEventLogFile)
-      .sortBy { fs => getEventLogFileIndex(fs.getPath.getName) }
+      .sortBy { fs => getEventLogFileIndex(fs.getPath.getName) }.toImmutableArraySeq
   }
 }
