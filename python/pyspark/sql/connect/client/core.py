@@ -1564,7 +1564,7 @@ class SparkConnectClient(object):
         except grpc.RpcError:
             return None
 
-    def _display_stack_trace(self) -> bool:
+    def _display_server_stack_trace(self) -> bool:
         from pyspark.sql.connect.conf import RuntimeConf
 
         conf = RuntimeConf(self)
@@ -1605,7 +1605,7 @@ class SparkConnectClient(object):
                         info,
                         status.message,
                         self._fetch_enriched_error(info),
-                        self._display_stack_trace(),
+                        self._display_server_stack_trace(),
                     ) from None
 
             raise SparkConnectGrpcException(status.message) from None

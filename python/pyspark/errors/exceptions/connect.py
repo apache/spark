@@ -16,7 +16,7 @@
 #
 import pyspark.sql.connect.proto as pb2
 import json
-from typing import Dict, List, Optional, TYPE_CHECKING, overload
+from typing import Dict, List, Optional, TYPE_CHECKING
 
 from pyspark.errors.exceptions.base import (
     AnalysisException as BaseAnalysisException,
@@ -49,7 +49,7 @@ def convert_exception(
     info: "ErrorInfo",
     truncated_message: str,
     resp: Optional[pb2.FetchErrorDetailsResponse],
-    display_stacktrace: bool = False,
+    display_server_stacktrace: bool = False,
 ) -> SparkConnectException:
     classes = []
     sql_state = None
@@ -70,15 +70,15 @@ def convert_exception(
     else:
         message = truncated_message
         stacktrace = info.metadata["stackTrace"] if "stackTrace" in info.metadata else None
-        display_stacktrace = display_stacktrace if stacktrace is not None else False
+        display_server_stacktrace = display_server_stacktrace if stacktrace is not None else False
 
     if "org.apache.spark.sql.catalyst.parser.ParseException" in classes:
         return ParseException(
             message,
             error_class=error_class,
             sql_state=sql_state,
-            stacktrace=stacktrace,
-            display_stacktrace=display_stacktrace,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
         )
     # Order matters. ParseException inherits AnalysisException.
     elif "org.apache.spark.sql.AnalysisException" in classes:
@@ -86,24 +86,24 @@ def convert_exception(
             message,
             error_class=error_class,
             sql_state=sql_state,
-            stacktrace=stacktrace,
-            display_stacktrace=display_stacktrace,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
         )
     elif "org.apache.spark.sql.streaming.StreamingQueryException" in classes:
         return StreamingQueryException(
             message,
             error_class=error_class,
             sql_state=sql_state,
-            stacktrace=stacktrace,
-            display_stacktrace=display_stacktrace,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
         )
     elif "org.apache.spark.sql.execution.QueryExecutionException" in classes:
         return QueryExecutionException(
             message,
             error_class=error_class,
             sql_state=sql_state,
-            stacktrace=stacktrace,
-            display_stacktrace=display_stacktrace,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
         )
     # Order matters. NumberFormatException inherits IllegalArgumentException.
     elif "java.lang.NumberFormatException" in classes:
@@ -111,64 +111,64 @@ def convert_exception(
             message,
             error_class=error_class,
             sql_state=sql_state,
-            stacktrace=stacktrace,
-            display_stacktrace=display_stacktrace,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
         )
     elif "java.lang.IllegalArgumentException" in classes:
         return IllegalArgumentException(
             message,
             error_class=error_class,
             sql_state=sql_state,
-            stacktrace=stacktrace,
-            display_stacktrace=display_stacktrace,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
         )
     elif "java.lang.ArithmeticException" in classes:
         return ArithmeticException(
             message,
             error_class=error_class,
             sql_state=sql_state,
-            stacktrace=stacktrace,
-            display_stacktrace=display_stacktrace,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
         )
     elif "java.lang.UnsupportedOperationException" in classes:
         return UnsupportedOperationException(
             message,
             error_class=error_class,
             sql_state=sql_state,
-            stacktrace=stacktrace,
-            display_stacktrace=display_stacktrace,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
         )
     elif "java.lang.ArrayIndexOutOfBoundsException" in classes:
         return ArrayIndexOutOfBoundsException(
             message,
             error_class=error_class,
             sql_state=sql_state,
-            stacktrace=stacktrace,
-            display_stacktrace=display_stacktrace,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
         )
     elif "java.time.DateTimeException" in classes:
         return DateTimeException(
             message,
             error_class=error_class,
             sql_state=sql_state,
-            stacktrace=stacktrace,
-            display_stacktrace=display_stacktrace,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
         )
     elif "org.apache.spark.SparkRuntimeException" in classes:
         return SparkRuntimeException(
             message,
             error_class=error_class,
             sql_state=sql_state,
-            stacktrace=stacktrace,
-            display_stacktrace=display_stacktrace,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
         )
     elif "org.apache.spark.SparkUpgradeException" in classes:
         return SparkUpgradeException(
             message,
             error_class=error_class,
             sql_state=sql_state,
-            stacktrace=stacktrace,
-            display_stacktrace=display_stacktrace,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
         )
     elif "org.apache.spark.api.python.PythonException" in classes:
         return PythonException(
@@ -181,8 +181,8 @@ def convert_exception(
             message,
             error_class=error_class,
             sql_state=sql_state,
-            stacktrace=stacktrace,
-            display_stacktrace=display_stacktrace,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
         )
     else:
         return SparkConnectGrpcException(
@@ -190,8 +190,8 @@ def convert_exception(
             reason=info.reason,
             error_class=error_class,
             sql_state=sql_state,
-            stacktrace=stacktrace,
-            display_stacktrace=display_stacktrace,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
         )
 
 
@@ -234,8 +234,8 @@ class SparkConnectGrpcException(SparkConnectException):
         message_parameters: Optional[Dict[str, str]] = None,
         reason: Optional[str] = None,
         sql_state: Optional[str] = None,
-        stacktrace: Optional[str] = None,
-        display_stacktrace: bool = False,
+        server_stacktrace: Optional[str] = None,
+        display_server_stacktrace: bool = False,
     ) -> None:
         self.message = message  # type: ignore[assignment]
         if reason is not None:
@@ -258,8 +258,8 @@ class SparkConnectGrpcException(SparkConnectException):
         )
         self.error_class = error_class
         self._sql_state: Optional[str] = sql_state
-        self._stacktrace: Optional[str] = stacktrace
-        self._display_stacktrace: bool = display_stacktrace
+        self._stacktrace: Optional[str] = server_stacktrace
+        self._display_stacktrace: bool = display_server_stacktrace
 
     def getSqlState(self) -> None:
         if self._sql_state is not None:
