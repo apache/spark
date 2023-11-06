@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, CommonExpressionRef, Expression, With}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CommonExpressionDef, CommonExpressionRef, Expression, With}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, WITH_EXPRESSION}
@@ -35,57 +35,48 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformWithPruning(_.containsPattern(WITH_EXPRESSION)) {
       case p if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
-        val commonExprs = mutable.ArrayBuffer.empty[Alias]
-        // `With` can be nested, we should only rewrite the leaf `With` expression, as the outer
-        // `With` needs to add its own Project, in the next iteration when it becomes leaf.
-        // This is done via "transform down" and check if the common expression definitions does not
-        // contain nested `With`.
-        var newPlan: LogicalPlan = p.transformExpressionsDown {
-          case With(child, defs) if defs.forall(!_.containsPattern(WITH_EXPRESSION)) =>
-            val idToCheapExpr = mutable.HashMap.empty[Long, Expression]
-            val idToNonCheapExpr = mutable.HashMap.empty[Long, Alias]
-            defs.zipWithIndex.foreach { case (commonExprDef, index) =>
-              if (CollapseProject.isCheap(commonExprDef.child)) {
-                idToCheapExpr(commonExprDef.id) = commonExprDef.child
+        var newChildren = p.children
+        var newPlan: LogicalPlan = p.transformExpressionsUp {
+          case With(child, defs) =>
+            val refToExpr = mutable.HashMap.empty[Long, Expression]
+            val childProjections = Array.fill(newChildren.size)(mutable.ArrayBuffer.empty[Alias])
+
+            defs.zipWithIndex.foreach { case (CommonExpressionDef(child, id), index) =>
+              if (CollapseProject.isCheap(child)) {
+                refToExpr(id) = child
               } else {
-                // TODO: we should calculate the ref count and also inline the common expression
-                //       if it's ref count is 1.
-                val alias = Alias(commonExprDef.child, s"_common_expr_$index")()
-                commonExprs += alias
-                idToNonCheapExpr(commonExprDef.id) = alias
+                val childProjectionIndex = newChildren.indexWhere(
+                  c => child.references.subsetOf(c.outputSet)
+                )
+                if (childProjectionIndex == -1) {
+                  // When we cannot rewrite the common expressions, force to inline them so that the
+                  // query can still run. This can happen if the join condition contains `With` and
+                  // the common expression references columns from both join sides.
+                  // TODO: things can go wrong if the common expression is nondeterministic. We
+                  //       don't fix it for now to match the old buggy behavior when certain
+                  //       `RuntimeReplaceable` did not use the `With` expression.
+                  // TODO: we should calculate the ref count and also inline the common expression
+                  //       if it's ref count is 1.
+                  refToExpr(id) = child
+                } else {
+                  val alias = Alias(child, s"_common_expr_$index")()
+                  childProjections(childProjectionIndex) += alias
+                  refToExpr(id) = alias.toAttribute
+                }
+              }
+            }
+
+            newChildren = newChildren.zip(childProjections).map { case (child, projections) =>
+              if (projections.nonEmpty) {
+                Project(child.output ++ projections, child)
+              } else {
+                child
               }
             }
 
             child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
-              case ref: CommonExpressionRef =>
-                idToCheapExpr.getOrElse(ref.id, idToNonCheapExpr(ref.id).toAttribute)
+              case ref: CommonExpressionRef => refToExpr(ref.id)
             }
-        }
-
-        var exprsToAdd = commonExprs.toSeq
-        val newChildren = newPlan.children.map { child =>
-          val (newExprs, others) = exprsToAdd.partition(_.references.subsetOf(child.outputSet))
-          exprsToAdd = others
-          if (newExprs.nonEmpty) {
-            Project(child.output ++ newExprs, child)
-          } else {
-            child
-          }
-        }
-
-        if (exprsToAdd.nonEmpty) {
-          // When we cannot rewrite the common expressions, force to inline them so that the query
-          // can still run. This can happen if the join condition contains `With` and the common
-          // expression references columns from both join sides.
-          // TODO: things can go wrong if the common expression is nondeterministic. We don't fix
-          //       it for now to match the old buggy behavior when certain `RuntimeReplaceable`
-          //       did not use the `With` expression.
-          val attrToExpr = AttributeMap(exprsToAdd.map { alias =>
-            alias.toAttribute -> alias.child
-          })
-          newPlan = newPlan.transformExpressionsUp {
-            case a: Attribute => attrToExpr.getOrElse(a, a)
-          }
         }
 
         newPlan = newPlan.withNewChildren(newChildren)

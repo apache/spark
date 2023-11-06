@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.IntegerType
 class RewriteWithExpressionSuite extends PlanTest {
 
   object Optimizer extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("Rewrite With expression", FixedPoint(10), RewriteWithExpression) :: Nil
+    val batches = Batch("Rewrite With expression", Once, RewriteWithExpression) :: Nil
   }
 
   private val testRelation = LocalRelation($"a".int, $"b".int)

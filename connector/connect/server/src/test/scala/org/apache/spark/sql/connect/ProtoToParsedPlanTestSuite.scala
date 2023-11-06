@@ -187,7 +187,7 @@ class ProtoToParsedPlanTestSuite
         object Helper extends RuleExecutor[LogicalPlan] {
           val batches =
             Batch("Finish Analysis", Once, ReplaceExpressions) ::
-              Batch("Rewrite With expression", FixedPoint(10), RewriteWithExpression) :: Nil
+              Batch("Rewrite With expression", Once, RewriteWithExpression) :: Nil
         }
         Helper.execute(catalystPlan)
       }
