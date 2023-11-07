@@ -25,13 +25,13 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV1}
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SerializableConfiguration
@@ -41,18 +41,18 @@ case class StateMetadataTableEntry(
     operatorName: String,
     stateStoreName: String,
     numPartitions: Int,
-    numColsPrefixKey: Int,
     minBatchId: Long,
-    maxBatchId: Long) {
+    maxBatchId: Long,
+    numColsPrefixKey: Int) {
   def toRow(): InternalRow = {
     InternalRow.fromSeq(
       Seq(operatorId,
         UTF8String.fromString(operatorName),
         UTF8String.fromString(stateStoreName),
         numPartitions,
-        numColsPrefixKey,
         minBatchId,
-        maxBatchId))
+        maxBatchId,
+        numColsPrefixKey))
   }
 }
 
@@ -63,7 +63,6 @@ object StateMetadataTableEntry {
       .add("operatorName", StringType)
       .add("stateStoreName", StringType)
       .add("numPartitions", IntegerType)
-      .add("numColsPrefixKey", IntegerType)
       .add("minBatchId", LongType)
       .add("maxBatchId", LongType)
   }
@@ -86,7 +85,7 @@ class StateMetadataSource extends TableProvider with DataSourceRegister {
 }
 
 
-class StateMetadataTable extends Table with SupportsRead {
+class StateMetadataTable extends Table with SupportsRead with SupportsMetadataColumns {
   override def name(): String = "state-metadata-table"
 
   override def schema(): StructType = StateMetadataTableEntry.schema
@@ -95,10 +94,21 @@ class StateMetadataTable extends Table with SupportsRead {
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     () => {
-      assert(options.containsKey("path"), "Must specify checkpoint path to read state metadata")
+      if (!options.containsKey("path")) {
+        throw new IllegalArgumentException("Checkpoint path is not specified for" +
+          " state metadata data source.")
+      }
       new StateMetadataScan(options.get("path"))
     }
   }
+
+  private object NumColsPrefixKeyColumn extends MetadataColumn {
+    override def name: String = "_numColsPrefixKey"
+    override def dataType: DataType = IntegerType
+    override def comment: String = "Number of columns in prefix key of the state store instance"
+  }
+
+  override val metadataColumns: Array[MetadataColumn] = Array(NumColsPrefixKeyColumn)
 }
 
 case class StateMetadataInputPartition(checkpointLocation: String) extends InputPartition
@@ -194,9 +204,9 @@ class StateMetadataPartitionReader(
           operatorStateMetadataV1.operatorInfo.operatorName,
           stateStoreMetadata.storeName,
           stateStoreMetadata.numPartitions,
-          stateStoreMetadata.numColsPrefixKey,
           if (batchIds.nonEmpty) batchIds.head else -1,
-          if (batchIds.nonEmpty) batchIds.last else -1
+          if (batchIds.nonEmpty) batchIds.last else -1,
+          stateStoreMetadata.numColsPrefixKey
         )
       }
     }
