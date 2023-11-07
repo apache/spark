@@ -4640,8 +4640,8 @@ def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     Example 2: Counting distinct values of multiple columns
 
     >>> from pyspark.sql import functions as sf
-    >>> df1 = spark.createDataFrame([(1, 1), (1, 2)], ["value1", "value2"])
-    >>> df1.select(sf.count_distinct(df1.value1, df1.value2)).show()
+    >>> df = spark.createDataFrame([(1, 1), (1, 2)], ["value1", "value2"])
+    >>> df.select(sf.count_distinct(df.value1, df.value2)).show()
     +------------------------------+
     |count(DISTINCT value1, value2)|
     +------------------------------+
@@ -4651,8 +4651,8 @@ def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     Example 3: Counting distinct values with column names as strings
 
     >>> from pyspark.sql import functions as sf
-    >>> df3 = spark.createDataFrame([(1, 1), (1, 2)], ["value1", "value2"])
-    >>> df3.select(sf.count_distinct("value1", "value2")).show()
+    >>> df = spark.createDataFrame([(1, 1), (1, 2)], ["value1", "value2"])
+    >>> df.select(sf.count_distinct("value1", "value2")).show()
     +------------------------------+
     |count(DISTINCT value1, value2)|
     +------------------------------+
