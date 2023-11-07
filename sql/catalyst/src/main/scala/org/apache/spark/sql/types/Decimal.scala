@@ -564,7 +564,11 @@ object Decimal {
 
   private val BIG_DEC_ZERO = BigDecimal(0)
 
-  private val MATH_CONTEXT = new MathContext(DecimalType.MAX_PRECISION, RoundingMode.HALF_UP)
+  // SPARK-45786 Using RoundingMode.HALF_UP with MathContext may cause inaccurate SQL results
+  // because TypeCoercion later rounds again. Instead, always round down and use 1 digit longer
+  // precision than DecimalType.MAX_PRECISION. Then, TypeCoercion will properly round up/down
+  // the last extra digit.
+  private val MATH_CONTEXT = new MathContext(DecimalType.MAX_PRECISION + 1, RoundingMode.DOWN)
 
   private[sql] val ZERO = Decimal(0)
   private[sql] val ONE = Decimal(1)
