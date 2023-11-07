@@ -46,55 +46,155 @@ class SparkConnectException(PySparkException):
 
 
 def convert_exception(
-    info: "ErrorInfo", truncated_message: str, resp: Optional[pb2.FetchErrorDetailsResponse]
+    info: "ErrorInfo",
+    truncated_message: str,
+    resp: Optional[pb2.FetchErrorDetailsResponse],
+    display_server_stacktrace: bool = False,
 ) -> SparkConnectException:
     classes = []
+    sql_state = None
+    error_class = None
+
+    stacktrace: Optional[str] = None
+
     if "classes" in info.metadata:
         classes = json.loads(info.metadata["classes"])
+
+    if "sqlState" in info.metadata:
+        sql_state = info.metadata["sqlState"]
+
+    if "errorClass" in info.metadata:
+        error_class = info.metadata["errorClass"]
 
     if resp is not None and resp.HasField("root_error_idx"):
         message = resp.errors[resp.root_error_idx].message
         stacktrace = _extract_jvm_stacktrace(resp)
     else:
         message = truncated_message
-        stacktrace = info.metadata["stackTrace"] if "stackTrace" in info.metadata else ""
-
-    if len(stacktrace) > 0:
-        message += f"\n\nJVM stacktrace:\n{stacktrace}"
+        stacktrace = info.metadata["stackTrace"] if "stackTrace" in info.metadata else None
+        display_server_stacktrace = display_server_stacktrace if stacktrace is not None else False
 
     if "org.apache.spark.sql.catalyst.parser.ParseException" in classes:
-        return ParseException(message)
+        return ParseException(
+            message,
+            error_class=error_class,
+            sql_state=sql_state,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
+        )
     # Order matters. ParseException inherits AnalysisException.
     elif "org.apache.spark.sql.AnalysisException" in classes:
-        return AnalysisException(message)
+        return AnalysisException(
+            message,
+            error_class=error_class,
+            sql_state=sql_state,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
+        )
     elif "org.apache.spark.sql.streaming.StreamingQueryException" in classes:
-        return StreamingQueryException(message)
+        return StreamingQueryException(
+            message,
+            error_class=error_class,
+            sql_state=sql_state,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
+        )
     elif "org.apache.spark.sql.execution.QueryExecutionException" in classes:
-        return QueryExecutionException(message)
+        return QueryExecutionException(
+            message,
+            error_class=error_class,
+            sql_state=sql_state,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
+        )
     # Order matters. NumberFormatException inherits IllegalArgumentException.
     elif "java.lang.NumberFormatException" in classes:
-        return NumberFormatException(message)
+        return NumberFormatException(
+            message,
+            error_class=error_class,
+            sql_state=sql_state,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
+        )
     elif "java.lang.IllegalArgumentException" in classes:
-        return IllegalArgumentException(message)
+        return IllegalArgumentException(
+            message,
+            error_class=error_class,
+            sql_state=sql_state,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
+        )
     elif "java.lang.ArithmeticException" in classes:
-        return ArithmeticException(message)
+        return ArithmeticException(
+            message,
+            error_class=error_class,
+            sql_state=sql_state,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
+        )
     elif "java.lang.UnsupportedOperationException" in classes:
-        return UnsupportedOperationException(message)
+        return UnsupportedOperationException(
+            message,
+            error_class=error_class,
+            sql_state=sql_state,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
+        )
     elif "java.lang.ArrayIndexOutOfBoundsException" in classes:
-        return ArrayIndexOutOfBoundsException(message)
+        return ArrayIndexOutOfBoundsException(
+            message,
+            error_class=error_class,
+            sql_state=sql_state,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
+        )
     elif "java.time.DateTimeException" in classes:
-        return DateTimeException(message)
+        return DateTimeException(
+            message,
+            error_class=error_class,
+            sql_state=sql_state,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
+        )
     elif "org.apache.spark.SparkRuntimeException" in classes:
-        return SparkRuntimeException(message)
+        return SparkRuntimeException(
+            message,
+            error_class=error_class,
+            sql_state=sql_state,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
+        )
     elif "org.apache.spark.SparkUpgradeException" in classes:
-        return SparkUpgradeException(message)
+        return SparkUpgradeException(
+            message,
+            error_class=error_class,
+            sql_state=sql_state,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
+        )
     elif "org.apache.spark.api.python.PythonException" in classes:
         return PythonException(
             "\n  An exception was thrown from the Python worker. "
             "Please see the stack trace below.\n%s" % message
         )
+    # Make sure that the generic SparkException is handled last.
+    elif "org.apache.spark.SparkException" in classes:
+        return SparkException(
+            message,
+            error_class=error_class,
+            sql_state=sql_state,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
+        )
     else:
-        return SparkConnectGrpcException(message, reason=info.reason)
+        return SparkConnectGrpcException(
+            message,
+            reason=info.reason,
+            error_class=error_class,
+            sql_state=sql_state,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
+        )
 
 
 def _extract_jvm_stacktrace(resp: pb2.FetchErrorDetailsResponse) -> str:
@@ -106,7 +206,7 @@ def _extract_jvm_stacktrace(resp: pb2.FetchErrorDetailsResponse) -> str:
     def format_stacktrace(error: pb2.FetchErrorDetailsResponse.Error) -> None:
         message = f"{error.error_type_hierarchy[0]}: {error.message}"
         if len(lines) == 0:
-            lines.append(message)
+            lines.append(error.error_type_hierarchy[0])
         else:
             lines.append(f"Caused by: {message}")
         for elem in error.stack_trace:
@@ -135,16 +235,48 @@ class SparkConnectGrpcException(SparkConnectException):
         error_class: Optional[str] = None,
         message_parameters: Optional[Dict[str, str]] = None,
         reason: Optional[str] = None,
+        sql_state: Optional[str] = None,
+        server_stacktrace: Optional[str] = None,
+        display_server_stacktrace: bool = False,
     ) -> None:
         self.message = message  # type: ignore[assignment]
         if reason is not None:
             self.message = f"({reason}) {self.message}"
 
+        # PySparkException has the assumption that error_class and message_parameters are
+        # only occurring together. If only one is set, we assume the message to be fully
+        # parsed.
+        tmp_error_class = error_class
+        tmp_message_parameters = message_parameters
+        if error_class is not None and message_parameters is None:
+            tmp_error_class = None
+        elif error_class is None and message_parameters is not None:
+            tmp_message_parameters = None
+
         super().__init__(
             message=self.message,
-            error_class=error_class,
-            message_parameters=message_parameters,
+            error_class=tmp_error_class,
+            message_parameters=tmp_message_parameters,
         )
+        self.error_class = error_class
+        self._sql_state: Optional[str] = sql_state
+        self._stacktrace: Optional[str] = server_stacktrace
+        self._display_stacktrace: bool = display_server_stacktrace
+
+    def getSqlState(self) -> Optional[str]:
+        if self._sql_state is not None:
+            return self._sql_state
+        else:
+            return super().getSqlState()
+
+    def getStackTrace(self) -> Optional[str]:
+        return self._stacktrace
+
+    def __str__(self) -> str:
+        desc = self.message
+        if self._display_stacktrace:
+            desc += "\n\nJVM stacktrace:\n%s" % self._stacktrace
+        return desc
 
 
 class AnalysisException(SparkConnectGrpcException, BaseAnalysisException):
@@ -223,3 +355,7 @@ class SparkUpgradeException(SparkConnectGrpcException, BaseSparkUpgradeException
     """
     Exception thrown because of Spark upgrade from Spark Connect.
     """
+
+
+class SparkException(SparkConnectGrpcException):
+    """ """

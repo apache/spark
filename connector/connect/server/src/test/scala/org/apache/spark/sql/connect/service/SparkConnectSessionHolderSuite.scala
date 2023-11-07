@@ -282,6 +282,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
       assert(spark.streams.listListeners().length == 1) // only process termination listener
     } finally {
       SparkConnectService.stop()
+      // Wait for things to calm down.
       Thread.sleep(4.seconds.toMillis)
       // remove process termination listener
       spark.streams.listListeners().foreach(spark.streams.removeListener)

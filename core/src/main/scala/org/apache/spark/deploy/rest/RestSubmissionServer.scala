@@ -55,6 +55,7 @@ private[spark] abstract class RestSubmissionServer(
   protected val submitRequestServlet: SubmitRequestServlet
   protected val killRequestServlet: KillRequestServlet
   protected val statusRequestServlet: StatusRequestServlet
+  protected val clearRequestServlet: ClearRequestServlet
 
   private var _server: Option[Server] = None
 
@@ -64,6 +65,7 @@ private[spark] abstract class RestSubmissionServer(
     s"$baseContext/create/*" -> submitRequestServlet,
     s"$baseContext/kill/*" -> killRequestServlet,
     s"$baseContext/status/*" -> statusRequestServlet,
+    s"$baseContext/clear/*" -> clearRequestServlet,
     "/*" -> new ErrorServlet // default handler
   )
 
@@ -228,6 +230,24 @@ private[rest] abstract class KillRequestServlet extends RestServlet {
 }
 
 /**
+ * A servlet for handling clear requests passed to the [[RestSubmissionServer]].
+ */
+private[rest] abstract class ClearRequestServlet extends RestServlet {
+
+  /**
+   * Clear the completed drivers and apps.
+   */
+  protected override def doPost(
+      request: HttpServletRequest,
+      response: HttpServletResponse): Unit = {
+    val responseMessage = handleClear()
+    sendResponse(responseMessage, response)
+  }
+
+  protected def handleClear(): ClearResponse
+}
+
+/**
  * A servlet for handling status requests passed to the [[RestSubmissionServer]].
  */
 private[rest] abstract class StatusRequestServlet extends RestServlet {
@@ -311,7 +331,7 @@ private class ErrorServlet extends RestServlet {
           "Missing the /submissions prefix."
         case `serverVersion` :: "submissions" :: tail =>
           // http://host:port/correct-version/submissions/*
-          "Missing an action: please specify one of /create, /kill, or /status."
+          "Missing an action: please specify one of /create, /kill, /clear or /status."
         case unknownVersion :: tail =>
           // http://host:port/unknown-version/*
           versionMismatch = true

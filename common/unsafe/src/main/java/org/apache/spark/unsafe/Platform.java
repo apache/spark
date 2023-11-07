@@ -59,13 +59,6 @@ public final class Platform {
     // reflection to invoke it, which is not necessarily possible by default in Java 9+.
     // Code below can test for null to see whether to use it.
 
-    // The implementation of Cleaner changed from JDK 8 to 9
-    String cleanerClassName;
-    if (majorVersion < 9) {
-      cleanerClassName = "sun.misc.Cleaner";
-    } else {
-      cleanerClassName = "jdk.internal.ref.Cleaner";
-    }
     try {
       Class<?> cls = Class.forName("java.nio.DirectByteBuffer");
       Constructor<?> constructor = (majorVersion < 21) ?
@@ -84,7 +77,7 @@ public final class Platform {
 
       // no point continuing if the above failed:
       if (DBB_CONSTRUCTOR != null && DBB_CLEANER_FIELD != null) {
-        Class<?> cleanerClass = Class.forName(cleanerClassName);
+        Class<?> cleanerClass = Class.forName("jdk.internal.ref.Cleaner");
         Method createMethod = cleanerClass.getMethod("create", Object.class, Runnable.class);
         // Accessing jdk.internal.ref.Cleaner should actually fail by default in JDK 9+,
         // unfortunately, unless the user has allowed access with something like
@@ -314,7 +307,7 @@ public final class Platform {
     }
   }
 
-  // This requires `majorVersion` and `_UNSAFE`.
+  // This requires `_UNSAFE`.
   static {
     boolean _unaligned;
     String arch = System.getProperty("os.arch", "");
@@ -326,10 +319,8 @@ public final class Platform {
       try {
         Class<?> bitsClass =
           Class.forName("java.nio.Bits", false, ClassLoader.getSystemClassLoader());
-        if (_UNSAFE != null && majorVersion >= 9) {
-          // Java 9/10 and 11/12 have different field names.
-          Field unalignedField =
-            bitsClass.getDeclaredField(majorVersion >= 11 ? "UNALIGNED" : "unaligned");
+        if (_UNSAFE != null) {
+          Field unalignedField = bitsClass.getDeclaredField("UNALIGNED");
           _unaligned = _UNSAFE.getBoolean(
             _UNSAFE.staticFieldBase(unalignedField), _UNSAFE.staticFieldOffset(unalignedField));
         } else {

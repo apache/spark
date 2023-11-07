@@ -460,6 +460,14 @@ private[deploy] class Master(
         }
       }
 
+    case RequestClearCompletedDriversAndApps =>
+      val numDrivers = completedDrivers.length
+      val numApps = completedApps.length
+      logInfo(s"Asked to clear $numDrivers completed drivers and $numApps completed apps.")
+      completedDrivers.clear()
+      completedApps.clear()
+      context.reply(true)
+
     case RequestDriverStatus(driverId) =>
       if (state != RecoveryState.ALIVE) {
         val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +

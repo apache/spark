@@ -75,7 +75,7 @@ class PySparkException(Exception):
         """
         return self.message_parameters
 
-    def getSqlState(self) -> None:
+    def getSqlState(self) -> Optional[str]:
         """
         Returns an SQLSTATE as a string.
 

@@ -65,6 +65,8 @@ private[deploy] class StandaloneRestServer(
     new StandaloneKillRequestServlet(masterEndpoint, masterConf)
   protected override val statusRequestServlet =
     new StandaloneStatusRequestServlet(masterEndpoint, masterConf)
+  protected override val clearRequestServlet =
+    new StandaloneClearRequestServlet(masterEndpoint, masterConf)
 }
 
 /**
@@ -104,6 +106,23 @@ private[rest] class StandaloneStatusRequestServlet(masterEndpoint: RpcEndpointRe
     d.workerHostPort = response.workerHostPort.orNull
     d.message = message.orNull
     d
+  }
+}
+
+/**
+ * A servlet for handling clear requests passed to the [[StandaloneRestServer]].
+ */
+private[rest] class StandaloneClearRequestServlet(masterEndpoint: RpcEndpointRef, conf: SparkConf)
+  extends ClearRequestServlet {
+
+  protected def handleClear(): ClearResponse = {
+    val response = masterEndpoint.askSync[Boolean](
+      DeployMessages.RequestClearCompletedDriversAndApps)
+    val c = new ClearResponse
+    c.serverSparkVersion = sparkVersion
+    c.message = ""
+    c.success = response
+    c
   }
 }
 
