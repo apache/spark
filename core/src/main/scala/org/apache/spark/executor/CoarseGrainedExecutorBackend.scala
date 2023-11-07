@@ -60,8 +60,6 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   import CoarseGrainedExecutorBackend._
 
-  private implicit val formats: Formats = DefaultFormats
-
   private[spark] val stopping = new AtomicBoolean(false)
   var executor: Executor = null
   @volatile var driver: Option[RpcEndpointRef] = None
