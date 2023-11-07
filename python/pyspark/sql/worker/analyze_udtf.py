@@ -187,13 +187,13 @@ def main(infile: IO, outfile: IO) -> None:
         check_method_invariants_before_running(
             inspect.getfullargspec(handler.analyze),  # type: ignore[attr-defined]
             "static analyze",
-            is_static=True
+            is_static=True,
         )
         if hasattr(handler, "eval"):
             check_method_invariants_before_running(
                 inspect.getfullargspec(handler.eval),  # type: ignore[attr-defined]
                 "eval",
-                is_static=False
+                is_static=False,
             )
 
         # Invoke the UDTF's 'analyze' method.
