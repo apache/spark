@@ -1197,13 +1197,27 @@ def sum(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Calculating the sum of values in a column
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.range(10)
-    >>> df.select(sum(df["id"])).show()
+    >>> df.select(sf.sum(df["id"])).show()
     +-------+
     |sum(id)|
     +-------+
     |     45|
     +-------+
+
+    Example 2: Using a plus expression together to calculate the sum
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 2), (3, 4)], ["A", "B"])
+    >>> df.select(sf.sum(sf.col("A") + sf.col("B"))).show()
+    +------------+
+    |sum((A + B))|
+    +------------+
+    |          10|
+    +------------+
     """
     return _invoke_function_over_columns("sum", col)
 
