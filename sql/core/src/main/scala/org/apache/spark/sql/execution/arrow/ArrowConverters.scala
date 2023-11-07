@@ -230,6 +230,13 @@ private[sql] object ArrowConverters extends Logging {
         Iterator.empty, schema, 0L, 0L,
         timeZoneId, errorOnDuplicatedFieldNames, TaskContext.get()) {
       override def hasNext: Boolean = true
+
+      // SPARK-45814: We need to call `super.hasNext` to avoid memory leak.
+      override def next(): Array[Byte] = {
+        val res = super.next()
+        super.hasNext
+        res
+      }
     }.next()
   }
 
