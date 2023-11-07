@@ -114,7 +114,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   def testInvalidName(func: (String) => Unit): Unit = {
     // scalastyle:off
     // non ascii characters are not allowed in the source code, so we disable the scalastyle.
-    val name = "砖"
+    val name = "砖#$"
     // scalastyle:on
     val e = intercept[AnalysisException] {
       func(name)

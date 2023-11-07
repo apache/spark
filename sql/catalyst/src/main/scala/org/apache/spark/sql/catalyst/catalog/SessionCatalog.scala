@@ -133,7 +133,7 @@ class SessionCatalog(
   @GuardedBy("this")
   protected var currentDb: String = format(defaultDatabase)
 
-  private val validNameFormat = "([\\w_]+)".r
+  private var validNameFormat = "([\\w_]+)".r
 
   /**
    * Checks if the given name conforms the Hive standard ("[a-zA-Z_0-9]+"),
@@ -143,6 +143,9 @@ class SessionCatalog(
    * org.apache.hadoop.hive.metastore.MetaStoreUtils.validateName.
    */
   private def validateName(name: String): Unit = {
+    if (conf.allLanguagesSupported) {
+      validNameFormat = "(\\p{IsAlphabetic}|\\p{Sc}|_|\\p{IsDigit})+".r;
+    }
     if (!validNameFormat.pattern.matcher(name).matches()) {
       throw QueryCompilationErrors.invalidNameForTableOrDatabaseError(name)
     }
