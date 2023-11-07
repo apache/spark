@@ -95,8 +95,7 @@ from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_sch
 from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
-from pyspark.errors import PySparkValueError
-
+from pyspark.errors import PySparkValueError, PySparkAssertionError
 
 if TYPE_CHECKING:
     from google.rpc.error_details_pb2 import ErrorInfo
@@ -1614,15 +1613,15 @@ class SparkConnectClient(object):
         response - One of the different response types handled by the Spark Connect service
         """
         if self._session_id != response.session_id:
-            raise SparkConnectException(
+            raise PySparkAssertionError(
                 "Received incorrect session identifier for request:"
                 f"{response.session_id} != {self._session_id}"
             )
         if self._server_session_id is not None:
             if response.server_side_session_id != self._server_session_id:
-                raise SparkConnectException(
+                raise PySparkAssertionError(
                     "Received incorrect server side session identifier for request. "
-                    "Please restart Spark Session. ("
+                    "Please create a new Spark Session to reconnect. ("
                     f"{response.server_side_session_id} != {self._server_session_id})"
                 )
         else:
