@@ -20,7 +20,7 @@ package org.apache.spark.mllib.clustering
 import breeze.linalg.{argmax, argtopk, normalize, sum, DenseMatrix => BDM, DenseVector => BDV}
 import breeze.numerics.{exp, lgamma}
 import org.apache.hadoop.fs.Path
-import org.json4s.DefaultFormats
+import org.json4s.{DefaultFormats, Formats}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
