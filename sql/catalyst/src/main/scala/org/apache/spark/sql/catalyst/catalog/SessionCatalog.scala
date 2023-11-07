@@ -1094,8 +1094,7 @@ class SessionCatalog(
    * List all matching temp views in the specified database, including global/local temporary views.
    */
   def listTempViews(db: String, pattern: String): Seq[CatalogTable] = {
-    val dbName = format(db)
-    val globalTempViews = if (dbName == globalTempViewManager.database) {
+    val globalTempViews = if (format(db) == globalTempViewManager.database) {
       globalTempViewManager.listViewNames(pattern).flatMap { viewName =>
         globalTempViewManager.get(viewName).map(_.tableMeta)
       }
