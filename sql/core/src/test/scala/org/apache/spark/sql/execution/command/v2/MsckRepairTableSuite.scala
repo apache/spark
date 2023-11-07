@@ -32,10 +32,13 @@ class MsckRepairTableSuite
   test("repairing of v2 tables is not supported") {
     withNamespaceAndTable("ns", "tbl") { t =>
       spark.sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
-      val errMsg = intercept[AnalysisException] {
-        sql(s"MSCK REPAIR TABLE $t")
-      }.getMessage
-      assert(errMsg.contains("MSCK REPAIR TABLE is not supported for v2 tables"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"MSCK REPAIR TABLE $t")
+        },
+        errorClass = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
+        parameters = Map("cmd" -> "MSCK REPAIR TABLE")
+      )
     }
   }
 }

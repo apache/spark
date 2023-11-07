@@ -24,7 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, LogicalPlan, UnaryCommand}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
@@ -35,7 +35,7 @@ import org.apache.spark.util.SerializableConfiguration
 /**
  * A special `Command` which writes data out and updates metrics.
  */
-trait DataWritingCommand extends UnaryCommand {
+trait DataWritingCommand extends UnaryCommand with CTEInChildren {
   /**
    * The input query plan that produces the data to be written.
    * IMPORTANT: the input query plan MUST be analyzed, so that we can carry its output columns

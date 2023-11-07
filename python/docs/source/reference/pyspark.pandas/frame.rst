@@ -79,7 +79,6 @@ Indexing, iteration
    DataFrame.iloc
    DataFrame.insert
    DataFrame.items
-   DataFrame.iteritems
    DataFrame.iterrows
    DataFrame.itertuples
    DataFrame.keys
@@ -128,6 +127,7 @@ Function application, GroupBy & Window
 
    DataFrame.apply
    DataFrame.applymap
+   DataFrame.map
    DataFrame.pipe
    DataFrame.agg
    DataFrame.aggregate
@@ -155,7 +155,6 @@ Computations / Descriptive Stats
    DataFrame.ewm
    DataFrame.kurt
    DataFrame.kurtosis
-   DataFrame.mad
    DataFrame.max
    DataFrame.mean
    DataFrame.min
@@ -252,7 +251,6 @@ Combining / joining / merging
 .. autosummary::
    :toctree: api/
 
-   DataFrame.append
    DataFrame.assign
    DataFrame.merge
    DataFrame.join
@@ -278,7 +276,6 @@ Serialization / IO / Conversion
    DataFrame.to_table
    DataFrame.to_delta
    DataFrame.to_parquet
-   DataFrame.to_spark_io
    DataFrame.to_csv
    DataFrame.to_orc
    DataFrame.to_pandas

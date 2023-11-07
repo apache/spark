@@ -73,4 +73,8 @@ Correlated scalar subqueries can only be used in filters, aggregations, projecti
 
 IN/EXISTS predicate subqueries can only be used in filters, joins, aggregations, window functions, projections, and UPDATE/MERGE/DELETE commands`<treeNode>`.
 
+## UNSUPPORTED_TABLE_ARGUMENT
+
+Table arguments are used in a function where they are not supported`<treeNode>`.
+
 

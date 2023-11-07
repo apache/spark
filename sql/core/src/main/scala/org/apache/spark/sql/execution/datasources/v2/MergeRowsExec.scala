@@ -49,7 +49,17 @@ case class MergeRowsExec(
     AttributeSet(output.filterNot(attr => inputSet.contains(attr)))
   }
 
-  @transient override lazy val references: AttributeSet = child.outputSet
+  @transient
+  override lazy val references: AttributeSet = {
+    val usedExprs = if (checkCardinality) {
+      val rowIdAttr = child.output.find(attr => conf.resolver(attr.name, ROW_ID))
+      assert(rowIdAttr.isDefined, "Cannot find row ID attr")
+      rowIdAttr.get +: expressions
+    } else {
+      expressions
+    }
+    AttributeSet.fromAttributeSets(usedExprs.map(_.references)) -- producedAttributes
+  }
 
   override def simpleString(maxFields: Int): String = {
     s"MergeRowsExec${truncatedString(output, "[", ", ", "]", maxFields)}"

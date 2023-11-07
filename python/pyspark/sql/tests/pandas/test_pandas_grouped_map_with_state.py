@@ -60,7 +60,7 @@ class GroupedApplyInPandasWithStateTestsMixin:
         cfg.set("spark.sql.shuffle.partitions", "5")
         return cfg
 
-    def test_apply_in_pandas_with_state_basic(self):
+    def _test_apply_in_pandas_with_state_basic(self, func, check_results):
         input_path = tempfile.mkdtemp()
 
         def prepare_test_resource():
@@ -81,6 +81,22 @@ class GroupedApplyInPandasWithStateTestsMixin:
         )
         state_type = StructType([StructField("c", LongType())])
 
+        q = (
+            df.groupBy(df["value"])
+            .applyInPandasWithState(
+                func, output_type, state_type, "Update", GroupStateTimeout.NoTimeout
+            )
+            .writeStream.queryName("this_query")
+            .foreachBatch(check_results)
+            .outputMode("update")
+            .start()
+        )
+
+        self.assertEqual(q.name, "this_query")
+        self.assertTrue(q.isActive)
+        q.processAllAvailable()
+
+    def test_apply_in_pandas_with_state_basic(self):
         def func(key, pdf_iter, state):
             assert isinstance(state, GroupState)
 
@@ -98,20 +114,92 @@ class GroupedApplyInPandasWithStateTestsMixin:
                 {Row(key="hello", countAsString="1"), Row(key="this", countAsString="1")},
             )
 
-        q = (
-            df.groupBy(df["value"])
-            .applyInPandasWithState(
-                func, output_type, state_type, "Update", GroupStateTimeout.NoTimeout
-            )
-            .writeStream.queryName("this_query")
-            .foreachBatch(check_results)
-            .outputMode("update")
-            .start()
-        )
+        self._test_apply_in_pandas_with_state_basic(func, check_results)
 
-        self.assertEqual(q.name, "this_query")
-        self.assertTrue(q.isActive)
-        q.processAllAvailable()
+    def test_apply_in_pandas_with_state_basic_no_state(self):
+        def func(key, pdf_iter, state):
+            assert isinstance(state, GroupState)
+            # 2 data rows
+            yield pd.DataFrame({"key": [key[0], "foo"], "countAsString": ["100", "222"]})
+
+        def check_results(batch_df, _):
+            self.assertEqual(
+                set(batch_df.sort("key").collect()),
+                {
+                    Row(key="hello", countAsString="100"),
+                    Row(key="this", countAsString="100"),
+                    Row(key="foo", countAsString="222"),
+                },
+            )
+
+        self._test_apply_in_pandas_with_state_basic(func, check_results)
+
+    def test_apply_in_pandas_with_state_basic_no_state_no_data(self):
+        def func(key, pdf_iter, state):
+            assert isinstance(state, GroupState)
+            # 2 data rows
+            yield pd.DataFrame({"key": [], "countAsString": []})
+
+        def check_results(batch_df, _):
+            self.assertTrue(len(set(batch_df.sort("key").collect())) == 0)
+
+        self._test_apply_in_pandas_with_state_basic(func, check_results)
+
+    def test_apply_in_pandas_with_state_basic_more_data(self):
+        # Test data rows returned are more or fewer than state.
+        def func(key, pdf_iter, state):
+            state.update((1,))
+            assert isinstance(state, GroupState)
+            # 3 rows
+            yield pd.DataFrame(
+                {"key": [key[0], "foo", key[0] + "_2"], "countAsString": ["1", "666", "2"]}
+            )
+
+        def check_results(batch_df, _):
+            self.assertEqual(
+                set(batch_df.sort("key").collect()),
+                {
+                    Row(key="hello", countAsString="1"),
+                    Row(key="foo", countAsString="666"),
+                    Row(key="hello_2", countAsString="2"),
+                    Row(key="this", countAsString="1"),
+                    Row(key="this_2", countAsString="2"),
+                },
+            )
+
+        self._test_apply_in_pandas_with_state_basic(func, check_results)
+
+    def test_apply_in_pandas_with_state_basic_fewer_data(self):
+        # Test data rows returned are more or fewer than state.
+        def func(key, pdf_iter, state):
+            state.update((1,))
+            assert isinstance(state, GroupState)
+            yield pd.DataFrame({"key": [], "countAsString": []})
+
+        def check_results(batch_df, _):
+            self.assertTrue(len(set(batch_df.sort("key").collect())) == 0)
+
+        self._test_apply_in_pandas_with_state_basic(func, check_results)
+
+    def test_apply_in_pandas_with_state_basic_with_null(self):
+        def func(key, pdf_iter, state):
+            assert isinstance(state, GroupState)
+
+            total_len = 0
+            for pdf in pdf_iter:
+                total_len += len(pdf)
+
+            state.update((total_len,))
+            assert state.get[0] == 1
+            yield pd.DataFrame({"key": [None], "countAsString": [str(total_len)]})
+
+        def check_results(batch_df, _):
+            self.assertEqual(
+                set(batch_df.sort("key").collect()),
+                {Row(key=None, countAsString="1")},
+            )
+
+        self._test_apply_in_pandas_with_state_basic(func, check_results)
 
     def test_apply_in_pandas_with_state_python_worker_random_failure(self):
         input_path = tempfile.mkdtemp()
@@ -231,7 +319,7 @@ class GroupedApplyInPandasWithStateTestsMixin:
                 return False
 
         try:
-            eventually(assert_test, timeout=120)
+            eventually(timeout=120)(assert_test)()
         finally:
             q.stop()
 

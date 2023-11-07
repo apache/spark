@@ -64,7 +64,7 @@ case class AnalyzePartitionCommand(
         tableId.table, tableId.database.get, schemaColumns, specColumns)
     }
 
-    val filteredSpec = normalizedPartitionSpec.filter(_._2.isDefined).mapValues(_.get)
+    val filteredSpec = normalizedPartitionSpec.filter(_._2.isDefined).view.mapValues(_.get)
     if (filteredSpec.isEmpty) {
       None
     } else {

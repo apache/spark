@@ -371,23 +371,12 @@ WHERE  EXISTS (SELECT *
                FROM   dept
                WHERE  dept_id = emp.dept_id and state = "TX")
 -- !query schema
-struct<>
+struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))\n+- SubqueryAlias dept\n   +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])\n      +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n         +- Project [dept_id#x, dept_name#x, state#x]\n            +- SubqueryAlias DEPT\n               +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 36,
-    "stopIndex" : 131,
-    "fragment" : "SELECT *\n               FROM   dept\n               WHERE  dept_id = emp.dept_id and state = \"CA\""
-  } ]
-}
+100	emp 1	2005-01-01	100.0	10
+100	emp 1	2005-01-01	100.0	10
+200	emp 2	2003-01-01	200.0	10
+400	emp 4	2005-01-01	400.0	30
 
 
 -- !query
@@ -401,23 +390,13 @@ WHERE NOT EXISTS (SELECT *
                FROM   dept
                WHERE  dept_id = emp.dept_id and state = "TX")
 -- !query schema
-struct<>
+struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))\n+- SubqueryAlias dept\n   +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])\n      +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n         +- Project [dept_id#x, dept_name#x, state#x]\n            +- SubqueryAlias DEPT\n               +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 39,
-    "stopIndex" : 134,
-    "fragment" : "SELECT *\n               FROM   dept\n               WHERE  dept_id = emp.dept_id and state = \"CA\""
-  } ]
-}
+300	emp 3	2002-01-01	300.0	20
+500	emp 5	2001-01-01	400.0	NULL
+600	emp 6 - no dept	2001-01-01	400.0	100
+700	emp 7	2010-01-01	400.0	100
+800	emp 8	2016-01-01	150.0	70
 
 
 -- !query
@@ -431,23 +410,9 @@ WHERE  EXISTS (SELECT *
                FROM   dept
                WHERE  dept_id = emp.dept_id and state = "TX")
 -- !query schema
-struct<>
+struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))\n+- SubqueryAlias dept\n   +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])\n      +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n         +- Project [dept_id#x, dept_name#x, state#x]\n            +- SubqueryAlias DEPT\n               +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 36,
-    "stopIndex" : 131,
-    "fragment" : "SELECT *\n               FROM   dept\n               WHERE  dept_id = emp.dept_id and state = \"CA\""
-  } ]
-}
+
 
 
 -- !query
@@ -461,23 +426,9 @@ WHERE EXISTS (SELECT *
                FROM   dept
                WHERE  dept_id = emp.dept_id and state = "TX")
 -- !query schema
-struct<>
+struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))\n+- SubqueryAlias dept\n   +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])\n      +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n         +- Project [dept_id#x, dept_name#x, state#x]\n            +- SubqueryAlias DEPT\n               +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 35,
-    "stopIndex" : 130,
-    "fragment" : "SELECT *\n               FROM   dept\n               WHERE  dept_id = emp.dept_id and state = \"CA\""
-  } ]
-}
+
 
 
 -- !query
@@ -491,23 +442,11 @@ WHERE  EXISTS (SELECT *
                FROM   dept
                WHERE  dept_id = emp.dept_id and state = "TX")
 -- !query schema
-struct<>
+struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))\n+- SubqueryAlias dept\n   +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])\n      +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n         +- Project [dept_id#x, dept_name#x, state#x]\n            +- SubqueryAlias DEPT\n               +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 36,
-    "stopIndex" : 131,
-    "fragment" : "SELECT *\n               FROM   dept\n               WHERE  dept_id = emp.dept_id and state = \"CA\""
-  } ]
-}
+100	emp 1	2005-01-01	100.0	10
+100	emp 1	2005-01-01	100.0	10
+200	emp 2	2003-01-01	200.0	10
 
 
 -- !query
@@ -521,23 +460,11 @@ WHERE  EXISTS (SELECT *
                FROM   dept
                WHERE  dept_id = emp.dept_id and state = "TX")
 -- !query schema
-struct<>
+struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))\n+- SubqueryAlias dept\n   +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])\n      +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n         +- Project [dept_id#x, dept_name#x, state#x]\n            +- SubqueryAlias DEPT\n               +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 36,
-    "stopIndex" : 131,
-    "fragment" : "SELECT *\n               FROM   dept\n               WHERE  dept_id = emp.dept_id and state = \"CA\""
-  } ]
-}
+100	emp 1	2005-01-01	100.0	10
+100	emp 1	2005-01-01	100.0	10
+200	emp 2	2003-01-01	200.0	10
 
 
 -- !query
@@ -551,23 +478,17 @@ WHERE NOT EXISTS (SELECT *
                FROM   dept
                WHERE  dept_id = emp.dept_id and state = "TX")
 -- !query schema
-struct<>
+struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))\n+- SubqueryAlias dept\n   +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])\n      +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n         +- Project [dept_id#x, dept_name#x, state#x]\n            +- SubqueryAlias DEPT\n               +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 39,
-    "stopIndex" : 134,
-    "fragment" : "SELECT *\n               FROM   dept\n               WHERE  dept_id = emp.dept_id and state = \"CA\""
-  } ]
-}
+100	emp 1	2005-01-01	100.0	10
+100	emp 1	2005-01-01	100.0	10
+200	emp 2	2003-01-01	200.0	10
+300	emp 3	2002-01-01	300.0	20
+400	emp 4	2005-01-01	400.0	30
+500	emp 5	2001-01-01	400.0	NULL
+600	emp 6 - no dept	2001-01-01	400.0	100
+700	emp 7	2010-01-01	400.0	100
+800	emp 8	2016-01-01	150.0	70
 
 
 -- !query
@@ -581,20 +502,11 @@ WHERE NOT EXISTS (SELECT *
                FROM   dept 
                WHERE  dept_id = emp.dept_id and state = "TX")
 -- !query schema
-struct<>
+struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))\n+- SubqueryAlias dept\n   +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])\n      +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n         +- Project [dept_id#x, dept_name#x, state#x]\n            +- SubqueryAlias DEPT\n               +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 39,
-    "stopIndex" : 134,
-    "fragment" : "SELECT *\n               FROM   dept\n               WHERE  dept_id = emp.dept_id and state = \"CA\""
-  } ]
-}
+300	emp 3	2002-01-01	300.0	20
+400	emp 4	2005-01-01	400.0	30
+500	emp 5	2001-01-01	400.0	NULL
+600	emp 6 - no dept	2001-01-01	400.0	100
+700	emp 7	2010-01-01	400.0	100
+800	emp 8	2016-01-01	150.0	70

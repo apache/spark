@@ -276,8 +276,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
           sc.addJar(badURL)
         }
         assert(e2.getMessage.contains(badURL))
-        assert(sc.addedFiles.isEmpty)
-        assert(sc.addedJars.isEmpty)
+        assert(sc.allAddedFiles.isEmpty)
+        assert(sc.allAddedJars.isEmpty)
       }
     } finally {
       sc.stop()
@@ -852,8 +852,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     sc.addSparkListener(listener)
     sc.range(0, 2).groupBy((x: Long) => x % 2, 2).map { case (x, _) =>
       val context = org.apache.spark.TaskContext.get()
-      if (context.stageAttemptNumber == 0) {
-        if (context.partitionId == 0) {
+      if (context.stageAttemptNumber() == 0) {
+        if (context.partitionId() == 0) {
           // Make the first task in the first stage attempt fail.
           throw new FetchFailedException(SparkEnv.get.blockManager.blockManagerId, 0, 0L, 0, 0,
             new java.io.IOException("fake"))

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.execution.command.CharVarcharDDLTestBase
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
@@ -95,8 +95,12 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
           matchPVals = true
         )
 
-        val e2 = intercept[RuntimeException](sql("ALTER TABLE t DROP PARTITION(c=100000)"))
-        assert(e2.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+        val e2 = intercept[SparkRuntimeException](sql("ALTER TABLE t DROP PARTITION(c=100000)"))
+        checkError(
+          exception = e2,
+          errorClass = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "5")
+        )
       }
     }
   }
@@ -106,6 +110,8 @@ class HiveCharVarcharDDLTestSuite extends CharVarcharDDLTestBase with TestHiveSi
 
   // The default Hive serde doesn't support nested null values.
   override def format: String = "hive OPTIONS(fileFormat='parquet')"
+
+  override def getTableName(name: String): String = s"`spark_catalog`.`default`.`$name`"
 
   private var originalPartitionMode = ""
 

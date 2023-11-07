@@ -538,8 +538,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof UnsafeRow) {
-      UnsafeRow o = (UnsafeRow) other;
+    if (other instanceof UnsafeRow o) {
       return (sizeInBytes == o.sizeInBytes) &&
         ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
           sizeInBytes);

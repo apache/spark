@@ -108,7 +108,7 @@ As an example, the following creates a DataFrame based on the content of a JSON 
 
 ## Untyped Dataset Operations (aka DataFrame Operations)
 
-DataFrames provide a domain-specific language for structured data manipulation in [Scala](api/scala/org/apache/spark/sql/Dataset.html), [Java](api/java/index.html?org/apache/spark/sql/Dataset.html), [Python](api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.html) and [R](api/R/reference/SparkDataFrame.html).
+DataFrames provide a domain-specific language for structured data manipulation in [Python](api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.html), [Scala](api/scala/org/apache/spark/sql/Dataset.html), [Java](api/java/index.html?org/apache/spark/sql/Dataset.html) and [R](api/R/reference/SparkDataFrame.html).
 
 As mentioned above, in Spark 2.0, DataFrames are just Dataset of `Row`s in Scala and Java API. These operations are also referred as "untyped transformations" in contrast to "typed transformations" come with strongly typed Scala/Java Datasets.
 
@@ -357,7 +357,7 @@ Scalar functions are functions that return a single value per row, as opposed to
 
 ## Aggregate Functions
 
-Aggregate functions are functions that return a single value on a group of rows. The [Built-in Aggregation Functions](sql-ref-functions-builtin.html#aggregate-functions) provide common aggregations such as `count()`, `count_distinct()`, `avg()`, `max()`, `min()`, etc.
+Aggregate functions are functions that return a single value on a group of rows. The [Built-in Aggregate Functions](sql-ref-functions-builtin.html#aggregate-functions) provide common aggregations such as `count()`, `count_distinct()`, `avg()`, `max()`, `min()`, etc.
 Users are not limited to the predefined aggregate functions and can create their own. For more details
 about user defined aggregate functions, please refer to the documentation of
 [User Defined Aggregate Functions](sql-ref-functions-udf-aggregate.html).

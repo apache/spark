@@ -39,37 +39,30 @@ function drawAreaStack(id, labels, values, minX, maxX, minY, maxY) {
 
   var data = values;
 
-  var parse = d3.time.format("%H:%M:%S.%L").parse;
+  var parse = d3.timeParse("%H:%M:%S.%L");
 
   // Transpose the data into layers
-  var dataset = d3.layout.stack()(labels.map(function(fruit) {
+  var dataset = d3.stack()(labels.map(function(fruit) {
     return data.map(function(d) {
       return {_x: d.x, x: parse(d.x), y: +d[fruit]};
     });
   }));
 
   // Set x, y and colors
-  var x = d3.scale.ordinal()
+  var x = d3.scaleOrdinal()
     .domain(dataset[0].map(function(d) { return d.x; }))
     .rangeRoundBands([10, width-10], 0.02);
 
-  var y = d3.scale.linear()
+  var y = d3.scaleLinear()
     .domain([0, d3.max(dataset, function(d) {  return d3.max(d, function(d) { return d.y0 + d.y; });  })])
     .range([height, 0]);
 
   var colors = colorPool.slice(0, labels.length);
 
   // Define and draw axes
-  var yAxis = d3.svg.axis()
-    .scale(y)
-    .orient("left")
-    .ticks(7)
-    .tickFormat( function(d) { return d } );
+  var yAxis = d3.axisLeft(y).ticks(7).tickFormat( function(d) { return d } );
 
-  var xAxis = d3.svg.axis()
-    .scale(x)
-    .orient("bottom")
-    .tickFormat(d3.time.format("%H:%M:%S.%L"));
+  var xAxis = d3.axisBottom(x).tickFormat(d3.timeFormat("%H:%M:%S.%L"));
 
   // Only show the first and last time in the graph
   var xline = [];
@@ -118,9 +111,9 @@ function drawAreaStack(id, labels, values, minX, maxX, minY, maxY) {
     .on('mouseout',  function() {
       hideBootstrapTooltip(d3.select(this).node());
     })
-    .on("mousemove", function(d) {
-      var xPosition = d3.mouse(this)[0] - 15;
-      var yPosition = d3.mouse(this)[1] - 25;
+    .on("mousemove", (event, d) => {
+      var xPosition = d3.pointer(event)[0] - 15;
+      var yPosition = d3.pointer(event)[1] - 25;
       tooltip.attr("transform", "translate(" + xPosition + "," + yPosition + ")");
       tooltip.select("text").text(d.y);
     });
@@ -144,9 +137,9 @@ function drawAreaStack(id, labels, values, minX, maxX, minY, maxY) {
     .on('mouseout',  function() {
       hideBootstrapTooltip(d3.select(this).node());
     })
-    .on("mousemove", function(d) {
-      var xPosition = d3.mouse(this)[0] - 15;
-      var yPosition = d3.mouse(this)[1] - 25;
+    .on("mousemove", (event, d) => {
+      var xPosition = d3.pointer(event)[0] - 15;
+      var yPosition = d3.pointer(event)[1] - 25;
       tooltip.attr("transform", "translate(" + xPosition + "," + yPosition + ")");
       tooltip.select("text").text(d.y);
     });

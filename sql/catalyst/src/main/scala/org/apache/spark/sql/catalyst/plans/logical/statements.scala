@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.DataType
  * Parsed logical plans are located in Catalyst so that as much SQL parsing logic as possible is be
  * kept in a [[org.apache.spark.sql.catalyst.parser.AbstractSqlParser]].
  */
-abstract class ParsedStatement extends LogicalPlan {
+abstract class ParsedStatement extends LogicalPlan with CTEInChildren {
   // Redact properties and options when parsed nodes are used by generic methods like toString
   override def productIterator: Iterator[Any] = super.productIterator.map {
     case mapArg: Map[_, _] => conf.redactOptions(mapArg)

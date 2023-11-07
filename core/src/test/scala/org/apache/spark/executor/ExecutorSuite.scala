@@ -623,7 +623,7 @@ class ExecutorSuite extends SparkFunSuite
       numPartitions = 1,
       locs = Seq(),
       outputId = 0,
-      JobArtifactSet(),
+      JobArtifactSet.emptyJobArtifactSet,
       localProperties = new Properties(),
       serializedTaskMetrics = serializedTaskMetrics
     )
@@ -639,7 +639,7 @@ class ExecutorSuite extends SparkFunSuite
       name = "",
       index = 0,
       partitionId = 0,
-      JobArtifactSet(),
+      JobArtifactSet.emptyJobArtifactSet,
       properties = new Properties,
       cpus = 1,
       resources = immutable.Map[String, ResourceInformation](),

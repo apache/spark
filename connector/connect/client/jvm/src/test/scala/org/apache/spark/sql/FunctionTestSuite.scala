@@ -18,12 +18,12 @@ package org.apache.spark.sql
 
 import java.util.Collections
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.avro.{functions => avroFn}
-import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.protobuf.{functions => pbFn}
+import org.apache.spark.sql.test.ConnectFunSuite
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -218,7 +218,6 @@ class FunctionTestSuite extends ConnectFunSuite {
     to_json(a, Collections.emptyMap[String, String]),
     to_json(a, Map.empty[String, String]))
   testEquals("sort_array", sort_array(a), sort_array(a, asc = true))
-  testEquals("sequence", sequence(lit(1), lit(10)), sequence(lit(1), lit(10), lit(1L)))
   testEquals(
     "from_csv",
     from_csv(a, lit(schema.toDDL), Collections.emptyMap[String, String]),
@@ -229,6 +228,22 @@ class FunctionTestSuite extends ConnectFunSuite {
     schema_of_csv("x,y"),
     schema_of_csv(lit("x,y"), Collections.emptyMap()))
   testEquals("to_csv", to_csv(a), to_csv(a, Collections.emptyMap[String, String]))
+  testEquals(
+    "from_xml",
+    from_xml(a, schema),
+    from_xml(a, lit(schema.json)),
+    from_xml(a, schema.json, Collections.emptyMap[String, String]),
+    from_xml(a, schema.json, Map.empty[String, String].asJava),
+    from_xml(a, schema, Map.empty[String, String].asJava),
+    from_xml(a, schema, Collections.emptyMap[String, String]),
+    from_xml(a, lit(schema.json), Collections.emptyMap[String, String]))
+  testEquals(
+    "schema_of_xml",
+    schema_of_xml(lit("<p><a>1.0</a><b>test</b></p>")),
+    schema_of_xml("<p><a>1.0</a><b>test</b></p>"),
+    schema_of_xml(lit("<p><a>1.0</a><b>test</b></p>"), Collections.emptyMap()))
+  testEquals("to_xml", to_xml(a), to_xml(a, Collections.emptyMap[String, String]))
+
   testEquals(
     "from_avro",
     avroFn.from_avro(a, """{"type": "int", "name": "id"}"""),
@@ -249,6 +264,8 @@ class FunctionTestSuite extends ConnectFunSuite {
     pbFn.to_protobuf(a, "FakeMessage", "fakeBytes".getBytes(), Map.empty[String, String].asJava),
     pbFn.to_protobuf(a, "FakeMessage", "fakeBytes".getBytes()))
 
+  testEquals("call_udf", callUDF("bob", lit(1)), call_udf("bob", lit(1)))
+
   test("assert_true no message") {
     val e = assert_true(a).expr
     assert(e.hasUnresolvedFunction)
@@ -267,7 +284,7 @@ class FunctionTestSuite extends ConnectFunSuite {
     assert(e.hasUnresolvedFunction)
     val fn = e.getUnresolvedFunction
     assert(fn.getFunctionName == "rand")
-    assert(fn.getArgumentsCount == 0)
+    assert(fn.getArgumentsCount == 1)
   }
 
   test("randn no seed") {
@@ -275,6 +292,6 @@ class FunctionTestSuite extends ConnectFunSuite {
     assert(e.hasUnresolvedFunction)
     val fn = e.getUnresolvedFunction
     assert(fn.getFunctionName == "randn")
-    assert(fn.getArgumentsCount == 0)
+    assert(fn.getArgumentsCount == 1)
   }
 }

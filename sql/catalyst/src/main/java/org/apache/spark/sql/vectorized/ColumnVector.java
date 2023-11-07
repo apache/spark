@@ -288,8 +288,10 @@ public abstract class ColumnVector implements AutoCloseable {
    * containing all the day values of all the interval values in this vector. The third child vector
    * is a long type vector, containing all the microsecond values of all the interval values in this
    * vector.
+   * Note that the ArrowColumnVector leverages its built-in IntervalMonthDayNanoVector instead of
+   * above-mentioned protocol.
    */
-  public final CalendarInterval getInterval(int rowId) {
+  public CalendarInterval getInterval(int rowId) {
     if (isNullAt(rowId)) return null;
     final int months = getChild(0).getInt(rowId);
     final int days = getChild(1).getInt(rowId);

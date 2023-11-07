@@ -21,7 +21,7 @@ import java.io.{File, OutputStream}
 import java.net.Socket
 import java.util.{Map => JMap}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark._

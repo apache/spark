@@ -33,7 +33,6 @@ class SparkSessionTests(ReusedSQLTestCase):
 
 
 class SparkSessionTests1(ReusedSQLTestCase):
-
     # We can't include this test into SQLTests because we will stop class's SparkContext and cause
     # other tests failed.
     def test_sparksession_with_stopped_sparkcontext(self):
@@ -49,7 +48,6 @@ class SparkSessionTests1(ReusedSQLTestCase):
 
 
 class SparkSessionTests2(PySparkTestCase):
-
     # This test is separate because it's closely related with session's start and stop.
     # See SPARK-23228.
     def test_set_jvm_default_session(self):

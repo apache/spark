@@ -22,8 +22,8 @@ import java.nio.charset.StandardCharsets
 import java.util.{Map => JMap}
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import com.codahale.metrics.Gauge
 import com.google.common.io.Files
@@ -264,7 +264,7 @@ object NonLocalModeSparkPlugin {
       resources: Map[String, ResourceInformation]): String = {
     // try to keep this simple and only write the gpus addresses, if we add more resources need to
     // make more complex
-    val resourcesString = resources.filterKeys(_.equals(GPU)).map {
+    val resourcesString = resources.view.filterKeys(_.equals(GPU)).map {
       case (_, ri) =>
         s"${ri.addresses.mkString(",")}"
     }.mkString(",")

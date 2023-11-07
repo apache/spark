@@ -17,7 +17,6 @@
 
 import unittest
 import sys
-from distutils.version import LooseVersion
 
 import pandas as pd
 
@@ -49,16 +48,11 @@ class SeriesConversionTestsMixin:
             psser.to_clipboard(sep=",", index=False), pser.to_clipboard(sep=",", index=False)
         )
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43458): Enable SeriesConversionTests.test_to_latex for pandas 2.0.0.",
-    )
     def test_to_latex(self):
         pser = self.pser
         psser = self.psser
 
         self.assert_eq(psser.to_latex(), pser.to_latex())
-        self.assert_eq(psser.to_latex(col_space=2), pser.to_latex(col_space=2))
         self.assert_eq(psser.to_latex(header=True), pser.to_latex(header=True))
         self.assert_eq(psser.to_latex(index=False), pser.to_latex(index=False))
         self.assert_eq(psser.to_latex(na_rep="-"), pser.to_latex(na_rep="-"))

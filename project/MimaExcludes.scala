@@ -16,7 +16,6 @@
  */
 
 import com.typesafe.tools.mima.core._
-import com.typesafe.tools.mima.core.ProblemFilters._
 
 /**
  * Additional excludes for checking of Spark's binary compatibility.
@@ -34,34 +33,29 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  */
 object MimaExcludes {
 
-  // Exclude rules for 3.5.x from 3.4.0
-  lazy val v35excludes = defaultExcludes ++ Seq(
-    // [SPARK-43165][SQL] Move canWrite to DataTypeUtils
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.DataType.canWrite"),
-    // [SPARK-43195][CORE] Remove unnecessary serializable wrapper in HadoopFSUtils
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.HadoopFSUtils$SerializableBlockLocation"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.HadoopFSUtils$SerializableBlockLocation$"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.HadoopFSUtils$SerializableFileStatus"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.HadoopFSUtils$SerializableFileStatus$"),
-    // [SPARK-43792][SQL][PYTHON][CONNECT] Add optional pattern for Catalog.listCatalogs
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.listCatalogs"),
-    // [SPARK-43881][SQL][PYTHON][CONNECT] Add optional pattern for Catalog.listDatabases
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.listDatabases"),
-    // [SPARK-43961][SQL][PYTHON][CONNECT] Add optional pattern for Catalog.listTables
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.listTables"),
-    // [SPARK-43992][SQL][PYTHON][CONNECT] Add optional pattern for Catalog.listFunctions
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.listFunctions"),
-     // [SPARK-43919][SQL] Extract JSON functionality out of Row
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.Row.json"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.Row.prettyJson"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.expressions.MutableAggregationBuffer.json"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.expressions.MutableAggregationBuffer.prettyJson"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.expressions.MutableAggregationBuffer.jsonValue"),
-    // [SPARK-43952][CORE][CONNECT][SQL] Add SparkContext APIs for query cancellation by tag
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.JobData.this")
+  // Exclude rules for 4.0.x from 3.5.0
+  lazy val v40excludes = defaultExcludes ++ Seq(
+    // [SPARK-44863][UI] Add a button to download thread dump as a txt in Spark UI
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ThreadStackTrace.*"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.ThreadStackTrace$"),
+    // [SPARK-44705][PYTHON] Make PythonRunner single-threaded
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.api.python.BasePythonRunner#ReaderIterator.this"),
+    // [SPARK-44198][CORE] Support propagation of the log level to the executors
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages$SparkAppConfig$"),
+    // [SPARK-45427][CORE] Add RPC SSL settings to SSLOptions and SparkTransportConf
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.network.netty.SparkTransportConf.fromSparkConf"),
+    // [SPARK-45136][CONNECT] Enhance ClosureCleaner with Ammonite support
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.MethodIdentifier$"),
+    // [SPARK-45022][SQL] Provide context for dataset API errors
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.QueryContext.contextType"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.QueryContext.code"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.QueryContext.callSite"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.QueryContext.summary"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI$default$3"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI")
   )
 
-  // Defulat exclude rules
+  // Default exclude rules
   lazy val defaultExcludes = Seq(
     // Spark Internals
     ProblemFilters.exclude[Problem]("org.apache.spark.rpc.*"),
@@ -87,17 +81,12 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.sparkproject.spark_core.protobuf.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.status.protobuf.StoreTypes*"),
 
-    // SPARK-43265: Move Error framework to a common utils module
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.QueryContext"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.SparkException"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.SparkException$"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.SparkThrowable"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ErrorInfo$"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ErrorSubInfo$"),
-
     // SPARK-44104: shaded protobuf code and Apis with parameters relocated
     ProblemFilters.exclude[Problem]("org.sparkproject.spark_protobuf.protobuf.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.protobuf.utils.SchemaConverters.*"),
+
+    // SPARK-43299: Convert StreamingQueryException in Scala Client
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryException"),
 
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&
@@ -106,8 +95,8 @@ object MimaExcludes {
     }
   )
 
-  def excludes(version: String) = version match {
-    case v if v.startsWith("3.5") => v35excludes
+  def excludes(version: String): Seq[Problem => Boolean] = version match {
+    case v if v.startsWith("4.0") => v40excludes
     case _ => Seq()
   }
 }

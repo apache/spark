@@ -255,7 +255,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT db1.t1.i1 FROM t1, mydb2.t1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -289,7 +289,7 @@ SetCatalogAndNamespace
 -- !query
 SELECT mydb1.t1 FROM t1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -313,6 +313,7 @@ SELECT t1.x.y.* FROM t1
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "CANNOT_RESOLVE_STAR_EXPAND",
+  "sqlState" : "42704",
   "messageParameters" : {
     "columns" : "`i1`",
     "targetString" : "`t1`.`x`.`y`"
@@ -330,7 +331,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT t1 FROM mydb1.t1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -358,7 +359,7 @@ SetCatalogAndNamespace
 -- !query
 SELECT mydb1.t1.i1 FROM t1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -413,11 +414,12 @@ SELECT * FROM v1
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
+  "sqlState" : "51024",
   "messageParameters" : {
     "actualCols" : "[]",
     "colName" : "i1",
     "expectedNum" : "1",
-    "suggestion" : "CREATE OR REPLACE VIEW spark_catalog.mydb1.v1  AS SELECT * FROM t1",
+    "suggestion" : "CREATE OR REPLACE VIEW spark_catalog.mydb1.v1 AS SELECT * FROM t1",
     "viewName" : "`spark_catalog`.`mydb1`.`v1`"
   }
 }
@@ -460,6 +462,7 @@ SELECT * FROM v2
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
+  "sqlState" : "51024",
   "messageParameters" : {
     "actualCols" : "[]",
     "colName" : "i1",

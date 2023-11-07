@@ -25,6 +25,6 @@ UDTF
 .. autosummary::
     :toctree: api/
 
-    udtf.UserDefinedTableFunction.asNondeterministic
+    udtf.UserDefinedTableFunction.asDeterministic
     udtf.UserDefinedTableFunction.returnType
     UDTFRegistration.register

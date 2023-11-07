@@ -198,10 +198,12 @@ private[spark] abstract class WebUITab(parent: WebUI, val prefix: String) {
     pages += page
   }
 
-  /** Get a list of header tabs from the parent UI. */
-  def headerTabs: Seq[WebUITab] = parent.getTabs
+  /** Get a list of header tabs from the parent UI sorted by displayOrder. */
+  def headerTabs: Seq[WebUITab] = parent.getTabs.sortBy(_.displayOrder)
 
   def basePath: String = parent.getBasePath
+
+  def displayOrder: Int = Integer.MIN_VALUE
 }
 
 

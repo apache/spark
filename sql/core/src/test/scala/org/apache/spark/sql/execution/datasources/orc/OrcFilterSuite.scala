@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, LocalDateTime, Period}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument, SearchArgumentImpl}
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
@@ -650,7 +650,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
     withTempPath { dir =>
       val count = 10
       val tableName = "spark_32622"
-      val tableDir1 = dir.getAbsoluteFile + "/table1"
+      val tableDir1 = s"${dir.getAbsoluteFile}/table1"
 
       // Physical ORC files have both `A` and `a` fields.
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
@@ -712,7 +712,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       }
 
       // Physical ORC files have only `A` field.
-      val tableDir2 = dir.getAbsoluteFile + "/table2"
+      val tableDir2 = s"${dir.getAbsoluteFile}/table2"
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
         spark.range(count).repartition(count).selectExpr("id - 1 as A")
           .write.mode("overwrite").orc(tableDir2)

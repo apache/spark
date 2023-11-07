@@ -168,12 +168,8 @@ class GroupbyAggregateMixin:
         stats_psdf = psdf.groupby(10).agg({20: ["min", "max"], 30: "sum"})
         stats_pdf = pdf.groupby(10).agg({20: ["min", "max"], 30: "sum"})
         self.assert_eq(
-            stats_psdf.sort_values(by=[(20, "min"), (20, "max"), (30, "sum")]).reset_index(
-                drop=True
-            ),
-            stats_pdf.sort_values(by=[(20, "min"), (20, "max"), (30, "sum")]).reset_index(
-                drop=True
-            ),
+            stats_psdf.reset_index(drop=True),
+            stats_pdf.reset_index(drop=True),
         )
 
     def test_aggregate_func_str_list(self):
@@ -189,7 +185,6 @@ class GroupbyAggregateMixin:
 
         agg_funcs = ["max", "min", ["min", "max"]]
         for aggfunc in agg_funcs:
-
             # Since in Koalas groupby, the order of rows might be different
             # so sort on index to ensure they have same output
             sorted_agg_psdf = psdf.groupby("kind").agg(aggfunc).sort_index()

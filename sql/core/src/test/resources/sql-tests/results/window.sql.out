@@ -101,7 +101,7 @@ ROWS BETWEEN CURRENT ROW AND 2147483648 FOLLOWING) FROM testData ORDER BY cate, 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
   "sqlState" : "42K09",
@@ -339,7 +339,7 @@ ORDER BY cate, val_date
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE",
   "sqlState" : "42K09",
@@ -381,7 +381,7 @@ ROWS BETWEEN UNBOUNDED FOLLOWING AND 1 FOLLOWING) FROM testData ORDER BY cate, v
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_INVALID_BOUND",
   "sqlState" : "42K09",
@@ -406,7 +406,7 @@ RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_WITHOUT_ORDER",
   "sqlState" : "42K09",
@@ -429,7 +429,7 @@ RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
   "sqlState" : "42K09",
@@ -453,7 +453,7 @@ RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE",
   "sqlState" : "42K09",
@@ -478,7 +478,7 @@ RANGE BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM testData ORDER BY cate, val
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_WRONG_COMPARISON",
   "sqlState" : "42K09",
@@ -1318,7 +1318,7 @@ FROM
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "_LEGACY_ERROR_TEMP_1004",
   "messageParameters" : {
@@ -1335,10 +1335,100 @@ FROM
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "_LEGACY_ERROR_TEMP_1004",
   "messageParameters" : {
     "windowName" : "w"
   }
 }
+
+
+-- !query
+create or replace temp view t1 (p, o) as values (1, 1), (1, 1), (1, 2), (2, 1), (2, 1), (2, 2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select * from (select *, dense_rank() over (partition by p order by o) as rnk from t1) where rnk = 1
+-- !query schema
+struct<p:int,o:int,rnk:int>
+-- !query output
+1	1	1
+1	1	1
+2	1	1
+2	1	1
+
+
+-- !query
+SELECT * FROM (SELECT cate, val, rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r = 1
+-- !query schema
+struct<cate:string,val:int,r:int>
+-- !query output
+NULL	NULL	1
+a	NULL	1
+b	1	1
+
+
+-- !query
+SELECT * FROM (SELECT cate, val, rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r <= 2
+-- !query schema
+struct<cate:string,val:int,r:int>
+-- !query output
+NULL	3	2
+NULL	NULL	1
+a	1	2
+a	1	2
+a	NULL	1
+b	1	1
+b	2	2
+
+
+-- !query
+SELECT * FROM (SELECT cate, val, dense_rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r = 1
+-- !query schema
+struct<cate:string,val:int,r:int>
+-- !query output
+NULL	NULL	1
+a	NULL	1
+b	1	1
+
+
+-- !query
+SELECT * FROM (SELECT cate, val, dense_rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r <= 2
+-- !query schema
+struct<cate:string,val:int,r:int>
+-- !query output
+NULL	3	2
+NULL	NULL	1
+a	1	2
+a	1	2
+a	NULL	1
+b	1	1
+b	2	2
+
+
+-- !query
+SELECT * FROM (SELECT cate, val, row_number() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r = 1
+-- !query schema
+struct<cate:string,val:int,r:int>
+-- !query output
+NULL	NULL	1
+a	NULL	1
+b	1	1
+
+
+-- !query
+SELECT * FROM (SELECT cate, val, row_number() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r <= 2
+-- !query schema
+struct<cate:string,val:int,r:int>
+-- !query output
+NULL	3	2
+NULL	NULL	1
+a	1	2
+a	NULL	1
+b	1	1
+b	2	2

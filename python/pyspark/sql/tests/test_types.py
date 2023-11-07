@@ -28,6 +28,7 @@ from pyspark.sql import Row
 from pyspark.sql import functions as F
 from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
 from pyspark.sql.types import (
+    DataType,
     ByteType,
     ShortType,
     IntegerType,
@@ -36,6 +37,7 @@ from pyspark.sql.types import (
     TimestampType,
     DayTimeIntervalType,
     YearMonthIntervalType,
+    CalendarIntervalType,
     MapType,
     StringType,
     CharType,
@@ -1163,6 +1165,7 @@ class TypesTestsMixin:
             IntegerType(),
             LongType(),
             ShortType(),
+            CalendarIntervalType(),
             ArrayType(StringType()),
             MapType(StringType(), IntegerType()),
             StructField("f1", StringType(), True),
@@ -1204,6 +1207,8 @@ class TypesTestsMixin:
             ),
             (datetime.timedelta(microseconds=-123),),
             (datetime.timedelta(days=-1),),
+            (datetime.timedelta(microseconds=388629894454999981),),
+            (datetime.timedelta(days=-1, seconds=86399, microseconds=999999),),  # -1 microsecond
         ]
         df = self.spark.createDataFrame(timedetlas, schema="td interval day to second")
         self.assertEqual(set(r.td for r in df.collect()), set(set(r[0] for r in timedetlas)))
@@ -1270,6 +1275,31 @@ class TypesTestsMixin:
         schema3 = self.spark.sql("SELECT INTERVAL '8' MONTH AS interval").schema
         self.assertEqual(schema3.fields[0].dataType, YearMonthIntervalType(1, 1))
 
+    def test_calendar_interval_type_constructor(self):
+        self.assertEqual(CalendarIntervalType().simpleString(), "interval")
+
+        with self.assertRaisesRegex(TypeError, "takes 1 positional argument but 2 were given"):
+            CalendarIntervalType(3)
+
+    def test_calendar_interval_type(self):
+        schema1 = self.spark.sql("SELECT make_interval(100, 11, 1, 1, 12, 30, 01.001001)").schema
+        self.assertEqual(schema1.fields[0].dataType, CalendarIntervalType())
+
+    def test_calendar_interval_type_with_sf(self):
+        schema1 = self.spark.range(1).select(F.make_interval(F.lit(1))).schema
+        self.assertEqual(schema1.fields[0].dataType, CalendarIntervalType())
+
+    def test_from_ddl(self):
+        self.assertEqual(DataType.fromDDL("long"), LongType())
+        self.assertEqual(
+            DataType.fromDDL("a: int, b: string"),
+            StructType([StructField("a", IntegerType()), StructField("b", StringType())]),
+        )
+        self.assertEqual(
+            DataType.fromDDL("a int, b string"),
+            StructType([StructField("a", IntegerType()), StructField("b", StringType())]),
+        )
+
 
 class DataTypeTests(unittest.TestCase):
     # regression test for SPARK-6055
@@ -1322,6 +1352,15 @@ class DataTypeTests(unittest.TestCase):
 
         # test __repr__ with unicode values
         self.assertEqual(repr(Row("数", "量")), "<Row('数', '量')>")
+
+    # SPARK-44643: test __repr__ with empty Row
+    def test_row_repr_with_empty_row(self):
+        self.assertEqual(repr(Row(a=Row())), "Row(a=<Row()>)")
+        self.assertEqual(repr(Row(Row())), "<Row(<Row()>)>")
+
+        EmptyRow = Row()
+        self.assertEqual(repr(Row(a=EmptyRow())), "Row(a=Row())")
+        self.assertEqual(repr(Row(EmptyRow())), "<Row(Row())>")
 
     def test_empty_row(self):
         row = Row()
@@ -1539,6 +1578,13 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
 
         self.assertEqual(r, expected)
         self.assertEqual(repr(r), "Row(b=1, a=2)")
+
+    def test_struct_field_from_json(self):
+        # SPARK-40820: fromJson with only name and type
+        json = {"name": "c1", "type": "string"}
+        struct_field = StructField.fromJson(json)
+
+        self.assertEqual(repr(struct_field), "StructField('c1', StringType(), True)")
 
 
 class TypesTests(TypesTestsMixin, ReusedSQLTestCase):

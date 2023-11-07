@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.execution.FileSourceScanExec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /** These tests exercise passing constant but non-literal OPTIONS lists, and folding them. */
@@ -50,7 +51,18 @@ class TableOptionsConstantFoldingSuite extends QueryTest with SharedSparkSession
     checkOption("round(cast(2.25 as decimal(5, 3)), 1)", "2.3")
     // The result of invoking this "ROUND" function call is NULL, since the target decimal type is
     // too narrow to contain the result of the cast.
-    checkOption("round(cast(2.25 as decimal(3, 3)), 1)", "null")
+    val cannotBeRepresented = "round(cast(2.25 as decimal(3, 3)), 1)"
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        if (ansiEnabled) {
+          val exception = intercept[AnalysisException](sql(s"$prefix ('k' = $cannotBeRepresented)"))
+          assert(exception.cause.exists(_.getMessage.contains(
+            "2.25 cannot be represented as Decimal(3, 3)")))
+        } else {
+          checkOption(cannotBeRepresented, "null")
+        }
+      }
+    }
 
     // Test some cases where the provided option value is a non-constant or invalid expression.
     checkError(

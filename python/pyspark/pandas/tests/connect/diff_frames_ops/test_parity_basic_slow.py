@@ -24,23 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 class DiffFramesParityBasicSlowTests(
     DiffFramesBasicSlowMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_diff(self):
-        super().test_diff()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_rank(self):
-        super().test_rank()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_shift(self):
-        super().test_shift()
+    pass
 
 
 if __name__ == "__main__":

@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s._
@@ -95,7 +95,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "/tmp",
       "",
       true,
-      KubernetesPVCVolumeConf("pvc-spark-SPARK_EXECUTOR_ID", Some("fast"), Some("512mb"))
+      KubernetesPVCVolumeConf("pvc-spark-SPARK_EXECUTOR_ID", Some("fast"), Some("512M"))
     )
     val driverConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
     val driverStep = new MountVolumesFeatureStep(driverConf)

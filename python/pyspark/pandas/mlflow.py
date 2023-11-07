@@ -19,12 +19,12 @@
 MLflow-related functions to load models and apply them to pandas-on-Spark dataframes.
 """
 from typing import List, Union
-
-from pyspark.sql.types import DataType
-import pandas as pd
-import numpy as np
 from typing import Any
 
+import pandas as pd
+import numpy as np
+
+from pyspark.sql.types import DataType
 from pyspark.pandas._typing import Label, Dtype
 from pyspark.pandas.utils import lazy_property, default_session
 from pyspark.pandas.frame import DataFrame

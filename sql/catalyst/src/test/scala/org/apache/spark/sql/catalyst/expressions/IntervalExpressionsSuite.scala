@@ -146,7 +146,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     check("2 months 4 seconds", -0.5, "-1 months -2 seconds")
     check("1 month 2 microseconds", 1.5, "1 months 3 microseconds")
     check("2 months", Int.MaxValue, "integer overflow", Some(true))
-    check("2 months", Int.MaxValue, Int.MaxValue + " months", Some(false))
+    check("2 months", Int.MaxValue, s"${Int.MaxValue} months", Some(false))
   }
 
   test("divide") {
@@ -179,7 +179,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     check("1 second", 0, "Division by zero", Some(true))
     check("1 second", 0, null, Some(false))
     check(s"${Int.MaxValue} months", 0.9, "integer overflow", Some(true))
-    check(s"${Int.MaxValue} months", 0.9, Int.MaxValue + " months", Some(false))
+    check(s"${Int.MaxValue} months", 0.9, s"${Int.MaxValue} months", Some(false))
   }
 
   test("make interval") {

@@ -315,6 +315,19 @@ class StreamingTestsMixin:
             contains = msg in e.desc
         self.assertTrue(contains, "Exception tree doesn't contain the expected message: %s" % msg)
 
+    def test_query_manager_get(self):
+        df = self.spark.readStream.format("rate").load()
+        for q in self.spark.streams.active:
+            q.stop()
+        q = df.writeStream.format("noop").start()
+
+        self.assertTrue(q.isActive)
+        self.assertTrue(q.id == self.spark.streams.get(q.id).id)
+
+        q.stop()
+
+        self.assertIsNone(self.spark.streams.get(q.id))
+
     def test_query_manager_await_termination(self):
         df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
         for q in self.spark.streams.active:

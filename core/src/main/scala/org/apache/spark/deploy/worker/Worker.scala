@@ -103,7 +103,7 @@ private[deploy] class Worker(
   private val FUZZ_MULTIPLIER_INTERVAL_LOWER_BOUND = 0.500
   private val REGISTRATION_RETRY_FUZZ_MULTIPLIER = {
     val randomNumberGenerator = new Random(UUID.randomUUID.getMostSignificantBits)
-    randomNumberGenerator.nextDouble + FUZZ_MULTIPLIER_INTERVAL_LOWER_BOUND
+    randomNumberGenerator.nextDouble() + FUZZ_MULTIPLIER_INTERVAL_LOWER_BOUND
   }
   private val INITIAL_REGISTRATION_RETRY_INTERVAL_SECONDS = (math.round(10 *
     REGISTRATION_RETRY_FUZZ_MULTIPLIER))

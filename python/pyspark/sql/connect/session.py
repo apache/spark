@@ -18,10 +18,10 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import threading
 import os
 import warnings
 from collections.abc import Sized
-from distutils.version import LooseVersion
 from functools import reduce
 from threading import RLock
 from typing import (
@@ -31,10 +31,12 @@ from typing import (
     Dict,
     List,
     Tuple,
+    Set,
     cast,
     overload,
     Iterable,
     TYPE_CHECKING,
+    ClassVar,
 )
 
 import numpy as np
@@ -42,12 +44,12 @@ import pandas as pd
 import pyarrow as pa
 from pandas.api.types import (  # type: ignore[attr-defined]
     is_datetime64_dtype,
-    is_datetime64tz_dtype,
     is_timedelta64_dtype,
 )
 import urllib
 
 from pyspark import SparkContext, SparkConf, __version__
+from pyspark.loose_version import LooseVersion
 from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
@@ -58,9 +60,11 @@ from pyspark.sql.connect.plan import (
     LogicalPlan,
     CachedLocalRelation,
     CachedRelation,
+    CachedRemoteRelation,
 )
 from pyspark.sql.connect.readwriter import DataFrameReader
-from pyspark.sql.connect.streaming import DataStreamReader, StreamingQueryManager
+from pyspark.sql.connect.streaming.readwriter import DataStreamReader
+from pyspark.sql.connect.streaming.query import StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type, _deduplicate_field_names
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
@@ -88,14 +92,16 @@ if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
     from pyspark.sql.connect.catalog import Catalog
     from pyspark.sql.connect.udf import UDFRegistration
-
-
-# `_active_spark_session` stores the active spark connect session created by
-# `SparkSession.builder.getOrCreate`. It is used by ML code.
-_active_spark_session = None
+    from pyspark.sql.connect.udtf import UDTFRegistration
 
 
 class SparkSession:
+    # The active SparkSession for the current thread
+    _active_session: ClassVar[threading.local] = threading.local()
+    # Reference to the root SparkSession
+    _default_session: ClassVar[Optional["SparkSession"]] = None
+    _lock: ClassVar[RLock] = RLock()
+
     class Builder:
         """Builder for :class:`SparkSession`."""
 
@@ -170,6 +176,20 @@ class SparkSession:
                 error_class="NOT_IMPLEMENTED", message_parameters={"feature": "enableHiveSupport"}
             )
 
+        def _apply_options(self, session: "SparkSession") -> None:
+            with self._lock:
+                for k, v in self._options.items():
+                    # the options are applied after session creation,
+                    # so following options always take no effect
+                    if k not in [
+                        "spark.remote",
+                        "spark.master",
+                    ]:
+                        try:
+                            session.conf.set(k, v)
+                        except Exception as e:
+                            warnings.warn(str(e))
+
         def create(self) -> "SparkSession":
             has_channel_builder = self._channel_builder is not None
             has_spark_remote = "spark.remote" in self._options
@@ -187,25 +207,33 @@ class SparkSession:
 
             if has_channel_builder:
                 assert self._channel_builder is not None
-                return SparkSession(connection=self._channel_builder)
+                session = SparkSession(connection=self._channel_builder)
             else:
                 spark_remote = to_str(self._options.get("spark.remote"))
                 assert spark_remote is not None
-                return SparkSession(connection=spark_remote)
+                session = SparkSession(connection=spark_remote)
+
+            SparkSession._set_default_and_active_session(session)
+            self._apply_options(session)
+            return session
 
         def getOrCreate(self) -> "SparkSession":
-            global _active_spark_session
-            if _active_spark_session is not None:
-                return _active_spark_session
-            _active_spark_session = self.create()
-            return _active_spark_session
+            with SparkSession._lock:
+                session = SparkSession.getActiveSession()
+                if session is None:
+                    session = SparkSession._default_session
+                    if session is None:
+                        session = self.create()
+                self._apply_options(session)
+                return session
 
     _client: SparkConnectClient
 
     @classproperty
     def builder(cls) -> Builder:
-        """Creates a :class:`Builder` for constructing a :class:`SparkSession`."""
         return cls.Builder()
+
+    builder.__doc__ = PySparkSession.builder.__doc__
 
     def __init__(self, connection: Union[str, ChannelBuilder], userId: Optional[str] = None):
         """
@@ -223,8 +251,43 @@ class SparkSession:
             the $USER environment. Defining the user ID as part of the connection string
             takes precedence.
         """
-        self._client = SparkConnectClient(connection=connection, userId=userId)
+        self._client = SparkConnectClient(connection=connection, user_id=userId)
         self._session_id = self._client._session_id
+
+        # Set to false to prevent client.release_session on close() (testing only)
+        self.release_session_on_close = True
+
+    @classmethod
+    def _set_default_and_active_session(cls, session: "SparkSession") -> None:
+        """
+        Set the (global) default :class:`SparkSession`, and (thread-local)
+        active :class:`SparkSession` when they are not set yet.
+        """
+        with cls._lock:
+            if cls._default_session is None:
+                cls._default_session = session
+        if getattr(cls._active_session, "session", None) is None:
+            cls._active_session.session = session
+
+    @classmethod
+    def getActiveSession(cls) -> Optional["SparkSession"]:
+        return getattr(cls._active_session, "session", None)
+
+    getActiveSession.__doc__ = PySparkSession.getActiveSession.__doc__
+
+    @classmethod
+    def active(cls) -> "SparkSession":
+        session = cls.getActiveSession()
+        if session is None:
+            session = cls._default_session
+            if session is None:
+                raise PySparkRuntimeError(
+                    error_class="NO_ACTIVE_OR_DEFAULT_SESSION",
+                    message_parameters={},
+                )
+        return session
+
+    active.__doc__ = PySparkSession.active.__doc__
 
     def table(self, tableName: str) -> DataFrame:
         return self.read.table(tableName)
@@ -240,6 +303,8 @@ class SparkSession:
     @property
     def readStream(self) -> "DataStreamReader":
         return DataStreamReader(self)
+
+    readStream.__doc__ = PySparkSession.readStream.__doc__
 
     def _inferSchemaFromList(
         self, data: Iterable[Any], names: Optional[List[str]] = None
@@ -356,7 +421,7 @@ class SparkSession:
                 # Any timestamps must be coerced to be compatible with Spark
                 spark_types = [
                     TimestampType()
-                    if is_datetime64_dtype(t) or is_datetime64tz_dtype(t)
+                    if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
                     else DayTimeIntervalType()
                     if is_timedelta64_dtype(t)
                     else None
@@ -495,7 +560,7 @@ class SparkSession:
         if "sql_command_result" in properties:
             return DataFrame.withPlan(CachedRelation(properties["sql_command_result"]), self)
         else:
-            return DataFrame.withPlan(SQL(sqlQuery, args), self)
+            return DataFrame.withPlan(cmd, self)
 
     sql.__doc__ = PySparkSession.sql.__doc__
 
@@ -541,31 +606,71 @@ class SparkSession:
         except Exception:
             pass
 
-    def interrupt_all(self) -> None:
-        self.client.interrupt_all()
+    def interruptAll(self) -> List[str]:
+        op_ids = self.client.interrupt_all()
+        assert op_ids is not None
+        return op_ids
+
+    interruptAll.__doc__ = PySparkSession.interruptAll.__doc__
+
+    def interruptTag(self, tag: str) -> List[str]:
+        op_ids = self.client.interrupt_tag(tag)
+        assert op_ids is not None
+        return op_ids
+
+    interruptTag.__doc__ = PySparkSession.interruptTag.__doc__
+
+    def interruptOperation(self, op_id: str) -> List[str]:
+        op_ids = self.client.interrupt_operation(op_id)
+        assert op_ids is not None
+        return op_ids
+
+    interruptOperation.__doc__ = PySparkSession.interruptOperation.__doc__
+
+    def addTag(self, tag: str) -> None:
+        self.client.add_tag(tag)
+
+    addTag.__doc__ = PySparkSession.addTag.__doc__
+
+    def removeTag(self, tag: str) -> None:
+        self.client.remove_tag(tag)
+
+    removeTag.__doc__ = PySparkSession.removeTag.__doc__
+
+    def getTags(self) -> Set[str]:
+        return self.client.get_tags()
+
+    getTags.__doc__ = PySparkSession.getTags.__doc__
+
+    def clearTags(self) -> None:
+        return self.client.clear_tags()
+
+    clearTags.__doc__ = PySparkSession.clearTags.__doc__
 
     def stop(self) -> None:
-        # Stopping the session will only close the connection to the current session (and
-        # the life cycle of the session is maintained by the server),
-        # whereas the regular PySpark session immediately terminates the Spark Context
-        # itself, meaning that stopping all Spark sessions.
+        # Whereas the regular PySpark session immediately terminates the Spark Context
+        # itself, meaning that stopping all Spark sessions, this will only stop this one session
+        # on the server.
         # It is controversial to follow the existing the regular Spark session's behavior
         # specifically in Spark Connect the Spark Connect server is designed for
         # multi-tenancy - the remote client side cannot just stop the server and stop
         # other remote clients being used from other users.
-        global _active_spark_session
-        self.client.close()
-        _active_spark_session = None
+        with SparkSession._lock:
+            if not self.is_stopped and self.release_session_on_close:
+                self.client.release_session()
+            self.client.close()
+            if self is SparkSession._default_session:
+                SparkSession._default_session = None
+            if self is getattr(SparkSession._active_session, "session", None):
+                SparkSession._active_session.session = None
 
-        if "SPARK_LOCAL_REMOTE" in os.environ:
-            # When local mode is in use, follow the regular Spark session's
-            # behavior by terminating the Spark Connect server,
-            # meaning that you can stop local mode, and restart the Spark Connect
-            # client with a different remote address.
-            active_session = PySparkSession.getActiveSession()
-            if active_session is not None:
-                active_session.stop()
-            with SparkContext._lock:
+            if "SPARK_LOCAL_REMOTE" in os.environ:
+                # When local mode is in use, follow the regular Spark session's
+                # behavior by terminating the Spark Connect server,
+                # meaning that you can stop local mode, and restart the Spark Connect
+                # client with a different remote address.
+                if PySparkSession._activeSession is not None:
+                    PySparkSession._activeSession.stop()
                 del os.environ["SPARK_LOCAL_REMOTE"]
                 del os.environ["SPARK_CONNECT_MODE_ENABLED"]
                 if "SPARK_REMOTE" in os.environ:
@@ -573,28 +678,29 @@ class SparkSession:
 
     stop.__doc__ = PySparkSession.stop.__doc__
 
-    @classmethod
-    def getActiveSession(cls) -> Any:
-        raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED", message_parameters={"feature": "getActiveSession()"}
-        )
+    @property
+    def is_stopped(self) -> bool:
+        """
+        Returns if this session was stopped
+        """
+        return self.client.is_closed
 
     @property
     def conf(self) -> RuntimeConf:
         return RuntimeConf(self.client)
 
+    conf.__doc__ = PySparkSession.conf.__doc__
+
     @property
     def streams(self) -> "StreamingQueryManager":
         return StreamingQueryManager(self)
 
+    streams.__doc__ = PySparkSession.streams.__doc__
+
     def __getattr__(self, name: str) -> Any:
-        if name in ["_jsc", "_jconf", "_jvm", "_jsparkSession"]:
+        if name in ["_jsc", "_jconf", "_jvm", "_jsparkSession", "sparkContext", "newSession"]:
             raise PySparkAttributeError(
                 error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
-            )
-        elif name in ["newSession", "sparkContext", "udtf"]:
-            raise PySparkNotImplementedError(
-                error_class="NOT_IMPLEMENTED", message_parameters={"feature": f"{name}()"}
             )
         return object.__getattribute__(self, name)
 
@@ -607,10 +713,20 @@ class SparkSession:
     udf.__doc__ = PySparkSession.udf.__doc__
 
     @property
+    def udtf(self) -> "UDTFRegistration":
+        from pyspark.sql.connect.udtf import UDTFRegistration
+
+        return UDTFRegistration(self)
+
+    udtf.__doc__ = PySparkSession.udtf.__doc__
+
+    @property
     def version(self) -> str:
         result = self._client._analyze(method="spark_version").spark_version
         assert result is not None
         return result
+
+    version.__doc__ = PySparkSession.version.__doc__
 
     @property
     def client(self) -> "SparkConnectClient":
@@ -646,6 +762,14 @@ class SparkSession:
         self._client.copy_from_local_to_fs(local_path, dest_path)
 
     copyFromLocalToFs.__doc__ = PySparkSession.copyFromLocalToFs.__doc__
+
+    def _create_remote_dataframe(self, remote_id: str) -> "DataFrame":
+        """
+        In internal API to reference a runtime DataFrame on the server side.
+        This is used in ForeachBatch() runner, where the remote DataFrame refers to the
+        output of a micro batch.
+        """
+        return DataFrame.withPlan(CachedRemoteRelation(remote_id), self)
 
     @staticmethod
     def _start_connect_server(master: str, opts: Dict[str, Any]) -> None:
@@ -686,7 +810,6 @@ class SparkSession:
         """
         session = PySparkSession._instantiatedSession
         if session is None or session._sc._jsc is None:
-
             # Configurations to be overwritten
             overwrite_conf = opts
             overwrite_conf["spark.master"] = master
@@ -747,6 +870,16 @@ class SparkSession:
                             pyutils = SparkContext._jvm.PythonSQLUtils  # type: ignore[union-attr]
                             pyutils.addJarToCurrentClassLoader(connect_jar)
 
+                            # Required for local-cluster testing as their executors need the jars
+                            # to load the Spark plugin for Spark Connect.
+                            if master.startswith("local-cluster"):
+                                if "spark.jars" in overwrite_conf:
+                                    overwrite_conf[
+                                        "spark.jars"
+                                    ] = f"{overwrite_conf['spark.jars']},{connect_jar}"
+                                else:
+                                    overwrite_conf["spark.jars"] = connect_jar
+
                     except ImportError:
                         pass
 
@@ -755,6 +888,15 @@ class SparkSession:
                 PySparkSession(
                     SparkContext.getOrCreate(create_conf(loadDefaults=True, _jvm=SparkContext._jvm))
                 )
+
+                # Lastly only keep runtime configurations because other configurations are
+                # disallowed to set in the regular Spark Connect session.
+                utl = SparkContext._jvm.PythonSQLUtils  # type: ignore[union-attr]
+                runtime_conf_keys = [c._1() for c in utl.listRuntimeSQLConfigs()]
+                new_opts = {k: opts[k] for k in opts if k in runtime_conf_keys}
+                opts.clear()
+                opts.update(new_opts)
+
             finally:
                 if origin_remote is not None:
                     os.environ["SPARK_REMOTE"] = origin_remote

@@ -29,7 +29,7 @@ import com.google.common.io.Closeables
 import io.netty.channel.DefaultFileRegion
 import org.apache.commons.io.FileUtils
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils}
@@ -67,8 +67,9 @@ private[spark] class DiskStore(
         diskManager.getFile(blockId).delete()
       } catch {
         case e: Exception =>
-          throw new IllegalStateException(
-            s"Block $blockId is already present in the disk store and could not delete it $e")
+          throw SparkException.internalError(
+            s"Block $blockId is already present in the disk store and could not delete it $e",
+            category = "STORAGE")
       }
     }
     logDebug(s"Attempting to put block $blockId")
@@ -183,6 +184,14 @@ private class DiskBlockData(
   */
   override def toNetty(): AnyRef = new DefaultFileRegion(file, 0, size)
 
+  /**
+   * Returns a Netty-friendly wrapper for the block's data.
+   *
+   * Please see `ManagedBuffer.convertToNettyForSsl()` for more details.
+   */
+  override def toNettyForSsl(): AnyRef =
+    toChunkedByteBuffer(ByteBuffer.allocate).toNettyForSsl
+
   override def toChunkedByteBuffer(allocator: (Int) => ByteBuffer): ChunkedByteBuffer = {
     Utils.tryWithResource(open()) { channel =>
       var remaining = blockSize
@@ -232,6 +241,9 @@ private[spark] class EncryptedBlockData(
   override def toInputStream(): InputStream = Channels.newInputStream(open())
 
   override def toNetty(): Object = new ReadableChannelFileRegion(open(), blockSize)
+
+  override def toNettyForSsl(): AnyRef =
+    toChunkedByteBuffer(ByteBuffer.allocate).toNettyForSsl
 
   override def toChunkedByteBuffer(allocator: Int => ByteBuffer): ChunkedByteBuffer = {
     val source = open()
@@ -295,6 +307,8 @@ private[spark] class EncryptedManagedBuffer(
   override def nioByteBuffer(): ByteBuffer = blockData.toByteBuffer()
 
   override def convertToNetty(): AnyRef = blockData.toNetty()
+
+  override def convertToNettyForSsl(): AnyRef = blockData.toNettyForSsl()
 
   override def createInputStream(): InputStream = blockData.toInputStream()
 

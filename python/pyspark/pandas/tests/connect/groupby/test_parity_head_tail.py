@@ -24,7 +24,6 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 class GroupbyParityHeadTailTests(
     GroupbyHeadTailMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-
     pass
 
 

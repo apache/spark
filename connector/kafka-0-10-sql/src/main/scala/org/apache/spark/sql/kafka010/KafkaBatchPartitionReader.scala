@@ -34,7 +34,11 @@ private[kafka010] case class KafkaBatchInputPartition(
     executorKafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean,
-    includeHeaders: Boolean) extends InputPartition
+    includeHeaders: Boolean) extends InputPartition {
+  override def preferredLocations(): Array[String] = {
+    offsetRange.preferredLoc.map(Array(_)).getOrElse(Array())
+  }
+}
 
 private[kafka010] object KafkaBatchReaderFactory extends PartitionReaderFactory with Logging {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {

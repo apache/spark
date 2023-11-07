@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.common.cache._
 import org.apache.hadoop.fs.{FileStatus, Path}

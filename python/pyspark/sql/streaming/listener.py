@@ -62,6 +62,21 @@ class StreamingQueryListener(ABC):
     >>> spark.streams.addListener(MyListener())
     """
 
+    def _set_spark_session(
+        self, spark: "SparkSession"  # type: ignore[name-defined] # noqa: F821
+    ) -> None:
+        self._sparkSession = spark
+
+    @property
+    def spark(self) -> Optional["SparkSession"]:  # type: ignore[name-defined] # noqa: F821
+        if hasattr(self, "_sparkSession"):
+            return self._sparkSession
+        else:
+            return None
+
+    def _init_listener_id(self) -> None:
+        self._id = str(uuid.uuid4())
+
     @abstractmethod
     def onQueryStarted(self, event: "QueryStartedEvent") -> None:
         """
@@ -92,7 +107,9 @@ class StreamingQueryListener(ABC):
         """
         pass
 
-    @abstractmethod
+    # NOTE: Do not mark this as abstract method, since we released this abstract class without
+    # this method in prior version and marking this as abstract method would break existing
+    # implementations.
     def onQueryIdle(self, event: "QueryIdleEvent") -> None:
         """
         Called when the query is idle and waiting for new data to process.
@@ -463,8 +480,8 @@ class StreamingQueryProgress:
             timestamp=j["timestamp"],
             batchId=j["batchId"],
             batchDuration=j["batchDuration"],
-            durationMs=dict(j["durationMs"]),
-            eventTime=dict(j["eventTime"]),
+            durationMs=dict(j["durationMs"]) if "durationMs" in j else {},
+            eventTime=dict(j["eventTime"]) if "eventTime" in j else {},
             stateOperators=[StateOperatorProgress.fromJson(s) for s in j["stateOperators"]],
             sources=[SourceProgress.fromJson(s) for s in j["sources"]],
             sink=SinkProgress.fromJson(j["sink"]),
@@ -474,7 +491,9 @@ class StreamingQueryProgress:
             observedMetrics={
                 k: Row(*row_dict.keys())(*row_dict.values())  # Assume no nested rows
                 for k, row_dict in j["observedMetrics"].items()
-            },
+            }
+            if "observedMetrics" in j
+            else {},
         )
 
     @property
@@ -696,7 +715,7 @@ class StateOperatorProgress:
             numRowsDroppedByWatermark=j["numRowsDroppedByWatermark"],
             numShufflePartitions=j["numShufflePartitions"],
             numStateStoreInstances=j["numStateStoreInstances"],
-            customMetrics=dict(j["customMetrics"]),
+            customMetrics=dict(j["customMetrics"]) if "customMetrics" in j else {},
         )
 
     @property
@@ -831,7 +850,7 @@ class SourceProgress:
             numInputRows=j["numInputRows"],
             inputRowsPerSecond=j["inputRowsPerSecond"],
             processedRowsPerSecond=j["processedRowsPerSecond"],
-            metrics=dict(j["metrics"]),
+            metrics=dict(j["metrics"]) if "metrics" in j else {},
         )
 
     @property
@@ -951,7 +970,7 @@ class SinkProgress:
             jdict=j,
             description=j["description"],
             numOutputRows=j["numOutputRows"],
-            metrics=j["metrics"],
+            metrics=dict(j["metrics"]) if "metrics" in j else {},
         )
 
     @property

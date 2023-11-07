@@ -80,20 +80,24 @@ class ResolvedDataSourceSuite extends SharedSparkSession {
 
   test("avro: show deploy guide for loading the external avro module") {
     Seq("avro", "org.apache.spark.sql.avro").foreach { provider =>
-      val message = intercept[AnalysisException] {
-        getProvidingClass(provider)
-      }.getMessage
-      assert(message.contains(s"Failed to find data source: $provider"))
-      assert(message.contains("Please deploy the application as per the deployment section of"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          getProvidingClass(provider)
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1139",
+        parameters = Map("provider" -> provider)
+      )
     }
   }
 
   test("kafka: show deploy guide for loading the external kafka module") {
-    val message = intercept[AnalysisException] {
-      getProvidingClass("kafka")
-    }.getMessage
-    assert(message.contains("Failed to find data source: kafka"))
-    assert(message.contains("Please deploy the application as per the deployment section of"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        getProvidingClass("kafka")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_1140",
+      parameters = Map("provider" -> "kafka")
+    )
   }
 
   test("error message for unknown data sources") {

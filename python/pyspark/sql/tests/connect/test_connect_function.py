@@ -16,10 +16,12 @@
 #
 import os
 import unittest
+from inspect import getmembers, isfunction
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql import SparkSession as PySparkSession
 from pyspark.sql.types import StringType, StructType, StructField, ArrayType, IntegerType
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -726,7 +728,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             (CF.ntile(2), SF.ntile(2)),
             (CF.ntile(4), SF.ntile(4)),
         ]:
-
             for cwin, swin in [
                 (CW.orderBy("b"), SW.orderBy("b")),
                 (CW.partitionBy("a").orderBy("b"), SW.partitionBy("a").orderBy("b")),
@@ -741,7 +742,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
                     SW.partitionBy("a").orderBy("b", sdf.c.desc()),
                 ),
             ]:
-
                 self.assert_eq(
                     cdf.select(ccol.over(cwin)).toPandas(),
                     sdf.select(scol.over(swin)).toPandas(),
@@ -754,7 +754,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             (CF.max(cdf.c), SF.max(sdf.c)),
             (CF.min(cdf.c), SF.min(sdf.c)),
         ]:
-
             for cwin, swin in [
                 (CW.orderBy("b"), SW.orderBy("b")),
                 (
@@ -855,7 +854,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
                     .rangeBetween(SW.currentRow, SW.unboundedFollowing),
                 ),
             ]:
-
                 self.assert_eq(
                     cdf.select(ccol.over(cwin)).toPandas(),
                     sdf.select(scol.over(swin)).toPandas(),
@@ -1819,6 +1817,126 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             sdf.select(SF.to_json(SF.struct(SF.lit("a"), SF.lit("b")), {"mode": "FAILFAST"})),
         )
 
+    def test_xml_functions(self):
+        query = """
+            SELECT * FROM VALUES
+            ('<p><a>1</a></p>', '<p><a>1</a><a>2</a><a>3</a></p>',
+            '<p><a attr="s"><b>5.0</b></a></p>'),
+            ('<p><a>0</a></p>', '<p><a>4</a><a>5</a><a>6</a></p>', '<p><a attr="t"></a></p>')
+            AS tab(a, b, c)
+            """
+        # +---------------+-------------------------------+---------------------------------+
+        # |              a|                              b|                                c|
+        # +---------------+-------------------------------+---------------------------------+
+        # |<p><a>1</a></p>|<p><a>1</a><a>2</a><a>3</a></p>|<p><a attr="s"><b>5.0</b></a></p>|
+        # |<p><a>1</a></p>|<p><a>4</a><a>5</a><a>6</a></p>|          <p><a attr="t"></a></p>|
+        # +---------------+-------------------------------+---------------------------------+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # test from_xml
+        # TODO(SPARK-45190): Address StructType schema parse error
+        for schema in [
+            "a INT",
+            # StructType([StructField("a", IntegerType())]),
+            # StructType([StructField("a", ArrayType(IntegerType()))]),
+        ]:
+            self.compare_by_show(
+                cdf.select(CF.from_xml(cdf.a, schema)),
+                sdf.select(SF.from_xml(sdf.a, schema)),
+            )
+            self.compare_by_show(
+                cdf.select(CF.from_xml("a", schema)),
+                sdf.select(SF.from_xml("a", schema)),
+            )
+            self.compare_by_show(
+                cdf.select(CF.from_xml(cdf.a, schema, {"mode": "FAILFAST"})),
+                sdf.select(SF.from_xml(sdf.a, schema, {"mode": "FAILFAST"})),
+            )
+            self.compare_by_show(
+                cdf.select(CF.from_xml("a", schema, {"mode": "FAILFAST"})),
+                sdf.select(SF.from_xml("a", schema, {"mode": "FAILFAST"})),
+            )
+
+        for schema in [
+            "STRUCT<a: ARRAY<INT>>",
+            # StructType([StructField("a", ArrayType(IntegerType()))]),
+        ]:
+            self.compare_by_show(
+                cdf.select(CF.from_xml(cdf.b, schema)),
+                sdf.select(SF.from_xml(sdf.b, schema)),
+            )
+            self.compare_by_show(
+                cdf.select(CF.from_xml("b", schema)),
+                sdf.select(SF.from_xml("b", schema)),
+            )
+            self.compare_by_show(
+                cdf.select(CF.from_xml(cdf.b, schema, {"mode": "FAILFAST"})),
+                sdf.select(SF.from_xml(sdf.b, schema, {"mode": "FAILFAST"})),
+            )
+            self.compare_by_show(
+                cdf.select(CF.from_xml("b", schema, {"mode": "FAILFAST"})),
+                sdf.select(SF.from_xml("b", schema, {"mode": "FAILFAST"})),
+            )
+            self.compare_by_show(
+                sdf.select(SF.to_xml(SF.struct(SF.from_xml("b", schema)), {"rowTag": "person"})),
+                sdf.select(SF.to_xml(SF.struct(SF.from_xml("b", schema)), {"rowTag": "person"})),
+            )
+
+        c_schema = CF.schema_of_xml(CF.lit("""<p><a>1</a></p>"""))
+        s_schema = SF.schema_of_xml(SF.lit("""<p><a>1</a></p>"""))
+
+        self.compare_by_show(
+            cdf.select(CF.from_xml(cdf.a, c_schema)),
+            sdf.select(SF.from_xml(sdf.a, s_schema)),
+        )
+        self.compare_by_show(
+            cdf.select(CF.from_xml("a", c_schema)),
+            sdf.select(SF.from_xml("a", s_schema)),
+        )
+        self.compare_by_show(
+            cdf.select(CF.from_xml(cdf.a, c_schema, {"mode": "FAILFAST"})),
+            sdf.select(SF.from_xml(sdf.a, s_schema, {"mode": "FAILFAST"})),
+        )
+        self.compare_by_show(
+            cdf.select(CF.from_xml("a", c_schema, {"mode": "FAILFAST"})),
+            sdf.select(SF.from_xml("a", s_schema, {"mode": "FAILFAST"})),
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            CF.from_xml("a", [c_schema])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STR_OR_STRUCT",
+            message_parameters={"arg_name": "schema", "arg_type": "list"},
+        )
+
+        # test schema_of_xml
+        self.assert_eq(
+            cdf.select(CF.schema_of_xml(CF.lit("<p><a>1</a></p>"))).toPandas(),
+            sdf.select(SF.schema_of_xml(SF.lit("<p><a>1</a></p>"))).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(
+                CF.schema_of_xml(CF.lit("<p><a>1</a></p>"), {"mode": "FAILFAST"})
+            ).toPandas(),
+            sdf.select(
+                SF.schema_of_xml(SF.lit("<p><a>1</a></p>"), {"mode": "FAILFAST"})
+            ).toPandas(),
+        )
+
+        # test to_xml
+        self.compare_by_show(
+            cdf.select(CF.to_xml(CF.struct(CF.lit("a"), CF.lit("b")))),
+            sdf.select(SF.to_xml(SF.struct(SF.lit("a"), SF.lit("b")))),
+        )
+        self.compare_by_show(
+            cdf.select(CF.to_xml(CF.struct(CF.lit("a"), CF.lit("b")), {"mode": "FAILFAST"})),
+            sdf.select(SF.to_xml(SF.struct(SF.lit("a"), SF.lit("b")), {"mode": "FAILFAST"})),
+        )
+
     def test_string_functions_one_arg(self):
         query = """
             SELECT * FROM VALUES
@@ -2342,8 +2460,64 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             sdf.withColumn("A", sfun(sdf.c)).toPandas(),
         )
 
+    def test_udtf(self):
+        class TestUDTF:
+            def eval(self, x: int, y: int):
+                yield x, x + 1
+                yield y, y + 1
+
+        sfunc = SF.udtf(TestUDTF, returnType="a: int, b: int")
+        cfunc = CF.udtf(TestUDTF, returnType="a: int, b: int")
+
+        assertDataFrameEqual(sfunc(SF.lit(1), SF.lit(1)), cfunc(CF.lit(1), CF.lit(1)))
+
+        self.spark.udtf.register("test_udtf", sfunc)
+        self.connect.udtf.register("test_udtf", cfunc)
+
+        query = "select * from test_udtf(1, 2)"
+        assertDataFrameEqual(self.spark.sql(query), self.connect.sql(query))
+
     def test_pandas_udf_import(self):
         self.assert_eq(getattr(CF, "pandas_udf"), getattr(SF, "pandas_udf"))
+
+    def test_function_parity(self):
+        # This test compares the available list of functions in pyspark.sql.functions with those
+        # available in the Spark Connect Python Client in pyspark.sql.connect.functions
+
+        sf_fn = {name for (name, value) in getmembers(SF, isfunction) if name[0] != "_"}
+
+        cf_fn = {name for (name, value) in getmembers(CF, isfunction) if name[0] != "_"}
+
+        # Functions in vanilla PySpark we do not expect to be available in Spark Connect
+        sf_excluded_fn = set()
+
+        self.assertEqual(
+            sf_fn - cf_fn,
+            sf_excluded_fn,
+            "Missing functions in Spark Connect not as expected",
+        )
+
+        # Functions in Spark Connect we do not expect to be available in vanilla PySpark
+        cf_excluded_fn = {
+            "check_dependencies",  # internal helper function
+        }
+
+        self.assertEqual(
+            cf_fn - sf_fn,
+            cf_excluded_fn,
+            "Missing functions in vanilla PySpark not as expected",
+        )
+
+    # SPARK-45216: Fix non-deterministic seeded Dataset APIs
+    def test_non_deterministic_with_seed(self):
+        df = self.connect.createDataFrame([([*range(0, 10, 1)],)], ["a"])
+
+        r = CF.rand()
+        r2 = CF.randn()
+        r3 = CF.shuffle("a")
+        res = df.select(r, r, r2, r2, r3, r3).collect()
+        for i in range(3):
+            self.assertEqual(res[0][i * 2], res[0][i * 2 + 1])
 
 
 if __name__ == "__main__":

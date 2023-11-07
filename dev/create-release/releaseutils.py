@@ -32,7 +32,7 @@ try:
         from jira.utils import JIRAError
 except ImportError:
     print("This tool requires the jira-python library")
-    print("Install using 'sudo pip3 install jira'")
+    print("Install using 'pip3 install jira'")
     sys.exit(-1)
 
 try:
@@ -40,7 +40,7 @@ try:
     from github import GithubException
 except ImportError:
     print("This tool requires the PyGithub library")
-    print("Install using 'sudo pip install PyGithub'")
+    print("Install using 'pip install PyGithub'")
     sys.exit(-1)
 
 
@@ -187,7 +187,6 @@ known_components = {
     "java api": "Java API",
     "k8s": "Kubernetes",
     "kubernetes": "Kubernetes",
-    "mesos": "Mesos",
     "ml": "MLlib",
     "mllib": "MLlib",
     "project infra": "Project Infra",

@@ -27,6 +27,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
@@ -137,7 +138,7 @@ trait FileFormat {
       sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
 
     new (PartitionedFile => Iterator[InternalRow]) with Serializable {
-      private val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+      private val fullSchema = toAttributes(requiredSchema) ++ toAttributes(partitionSchema)
 
       // Using lazy val to avoid serialization
       private lazy val appendPartitionColumns =
@@ -292,9 +293,9 @@ object FileFormat {
       name: String,
       file: PartitionedFile,
       metadataExtractors: Map[String, PartitionedFile => Any]): Literal = {
-    val extractor = metadataExtractors.get(name).getOrElse {
-      pf: PartitionedFile => pf.otherConstantMetadataColumnValues.get(name).orNull
-    }
+    val extractor = metadataExtractors.getOrElse(name,
+      { pf: PartitionedFile => pf.otherConstantMetadataColumnValues.get(name).orNull }
+    )
     Literal(extractor.apply(file))
   }
 
@@ -309,7 +310,8 @@ object FileFormat {
     // fields whose values can be derived from a file status. In particular, we don't have accurate
     // file split information yet, nor do we have a way to provide custom metadata column values.
     val validFieldNames = Set(FILE_PATH, FILE_NAME, FILE_SIZE, FILE_MODIFICATION_TIME)
-    val extractors = FileFormat.BASE_METADATA_EXTRACTORS.filterKeys(validFieldNames.contains).toMap
+    val extractors =
+      FileFormat.BASE_METADATA_EXTRACTORS.view.filterKeys(validFieldNames.contains).toMap
     assert(fieldNames.forall(validFieldNames.contains))
     val pf = PartitionedFile(
       partitionValues = partitionValues,

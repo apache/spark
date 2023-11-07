@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpress
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, NamedTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
+import org.apache.spark.util.SparkSchemaUtils
 
 
 /**
@@ -278,13 +279,5 @@ private[spark] object SchemaUtils {
    * @param str The string to be escaped.
    * @return The escaped string.
    */
-  def escapeMetaCharacters(str: String): String = {
-    str.replaceAll("\n", "\\\\n")
-      .replaceAll("\r", "\\\\r")
-      .replaceAll("\t", "\\\\t")
-      .replaceAll("\f", "\\\\f")
-      .replaceAll("\b", "\\\\b")
-      .replaceAll("\u000B", "\\\\v")
-      .replaceAll("\u0007", "\\\\a")
-  }
+  def escapeMetaCharacters(str: String): String = SparkSchemaUtils.escapeMetaCharacters(str)
 }

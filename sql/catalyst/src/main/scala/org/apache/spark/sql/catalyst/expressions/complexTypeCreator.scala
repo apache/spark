@@ -374,6 +374,7 @@ object CreateStruct {
       case (u @ UnresolvedExtractValue(_, e: Literal), _) if e.dataType == StringType => Seq(e, u)
       case (e: NamedExpression, _) if e.resolved => Seq(Literal(e.name), e)
       case (e: NamedExpression, _) => Seq(NamePlaceholder, e)
+      case (g @ GetStructField(_, _, Some(name)), _) => Seq(Literal(name), g)
       case (e, index) => Seq(Literal(s"col${index + 1}"), e)
     })
   }

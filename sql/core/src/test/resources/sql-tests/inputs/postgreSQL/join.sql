@@ -1287,53 +1287,53 @@ select * from
 --
 
 -- explain (verbose, costs off)
--- select * from
---   text_tbl t1
---   left join int8_tbl i8
---   on i8.q2 = 123,
---   lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss
--- where t1.f1 = ss.f1;
+select * from
+   text_tbl t1
+   left join int8_tbl i8
+   on i8.q2 = 123,
+   lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss
+where t1.f1 = ss.f1;
 
--- select * from
---   text_tbl t1
---   left join int8_tbl i8
---   on i8.q2 = 123,
---   lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss
--- where t1.f1 = ss.f1;
-
--- explain (verbose, costs off)
--- select * from
---   text_tbl t1
---   left join int8_tbl i8
---   on i8.q2 = 123,
---   lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss1,
---   lateral (select ss1.* from text_tbl t3 limit 1) as ss2
--- where t1.f1 = ss2.f1;
-
--- select * from
---   text_tbl t1
---   left join int8_tbl i8
---   on i8.q2 = 123,
---   lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss1,
---   lateral (select ss1.* from text_tbl t3 limit 1) as ss2
--- where t1.f1 = ss2.f1;
+select * from
+  text_tbl t1
+  left join int8_tbl i8
+  on i8.q2 = 123,
+  lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss
+where t1.f1 = ss.f1;
 
 -- explain (verbose, costs off)
--- select 1 from
---   text_tbl as tt1
---   inner join text_tbl as tt2 on (tt1.f1 = 'foo')
---   left join text_tbl as tt3 on (tt3.f1 = 'foo')
---   left join text_tbl as tt4 on (tt3.f1 = tt4.f1),
---   lateral (select tt4.f1 as c0 from text_tbl as tt5 limit 1) as ss1
--- where tt1.f1 = ss1.c0;
+select * from
+  text_tbl t1
+  left join int8_tbl i8
+  on i8.q2 = 123,
+  lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss1,
+  lateral (select ss1.* from text_tbl t3 limit 1) as ss2
+where t1.f1 = ss2.f1;
 
--- select 1 from
---   text_tbl as tt1
---   inner join text_tbl as tt2 on (tt1.f1 = 'foo')
---   left join text_tbl as tt3 on (tt3.f1 = 'foo')
---   left join text_tbl as tt4 on (tt3.f1 = tt4.f1),
---   lateral (select tt4.f1 as c0 from text_tbl as tt5 limit 1) as ss1
--- where tt1.f1 = ss1.c0;
+select * from
+  text_tbl t1
+  left join int8_tbl i8
+  on i8.q2 = 123,
+  lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss1,
+  lateral (select ss1.* from text_tbl t3 limit 1) as ss2
+where t1.f1 = ss2.f1;
+
+-- explain (verbose, costs off)
+select 1 from
+  text_tbl as tt1
+  inner join text_tbl as tt2 on (tt1.f1 = 'foo')
+  left join text_tbl as tt3 on (tt3.f1 = 'foo')
+  left join text_tbl as tt4 on (tt3.f1 = tt4.f1),
+  lateral (select tt4.f1 as c0 from text_tbl as tt5 limit 1) as ss1
+where tt1.f1 = ss1.c0;
+
+select 1 from
+  text_tbl as tt1
+  inner join text_tbl as tt2 on (tt1.f1 = 'foo')
+  left join text_tbl as tt3 on (tt3.f1 = 'foo')
+  left join text_tbl as tt4 on (tt3.f1 = tt4.f1),
+  lateral (select tt4.f1 as c0 from text_tbl as tt5 limit 1) as ss1
+where tt1.f1 = ss1.c0;
 
 --
 -- check a case in which a PlaceHolderVar forces join order

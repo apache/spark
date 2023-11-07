@@ -22,7 +22,6 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class SeriesParityAsTypeTests(SeriesAsTypeMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-
     pass
 
 

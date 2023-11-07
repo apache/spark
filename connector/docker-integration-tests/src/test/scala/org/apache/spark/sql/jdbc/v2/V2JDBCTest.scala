@@ -95,10 +95,20 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       expectedSchema = expectedSchema.add("C3", StringType, true, defaultMetadata)
       assert(t.schema === expectedSchema)
       // Add already existing column
-      val msg = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C3 DOUBLE)")
-      }.getMessage
-      assert(msg.contains("Cannot add column, because C3 already exists"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C3 DOUBLE)")
+        },
+        errorClass = "FIELDS_ALREADY_EXISTS",
+        parameters = Map(
+          "op" -> "add",
+          "fieldNames" -> "`C3`",
+          "struct" -> """"STRUCT<ID: STRING, C1: STRING, C2: STRING, C3: STRING>""""),
+        context = ExpectedContext(
+          fragment = s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C3 DOUBLE)",
+          start = 0,
+          stop = 45 + catalogName.length)
+      )
     }
     // Add a column to not existing table
     val e = intercept[AnalysisException] {
@@ -156,10 +166,20 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         s" ID1 STRING NOT NULL, ID2 STRING NOT NULL)")
       testRenameColumn(s"$catalogName.alt_table")
       // Rename to already existing column
-      val msg = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $catalogName.alt_table RENAME COLUMN ID1 TO ID2")
-      }.getMessage
-      assert(msg.contains("Cannot rename column, because ID2 already exists"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $catalogName.alt_table RENAME COLUMN ID1 TO ID2")
+        },
+        errorClass = "FIELDS_ALREADY_EXISTS",
+        parameters = Map(
+          "op" -> "rename",
+          "fieldNames" -> "`ID2`",
+          "struct" -> """"STRUCT<RENAMED: STRING, ID1: STRING, ID2: STRING>""""),
+        context = ExpectedContext(
+          fragment = s"ALTER TABLE $catalogName.alt_table RENAME COLUMN ID1 TO ID2",
+          start = 0,
+          stop = 46 + catalogName.length)
+      )
     }
     // Rename a column in a not existing table
     val e = intercept[AnalysisException] {

@@ -65,38 +65,26 @@ public class NettyUtils {
   public static EventLoopGroup createEventLoop(IOMode mode, int numThreads, String threadPrefix) {
     ThreadFactory threadFactory = createThreadFactory(threadPrefix);
 
-    switch (mode) {
-      case NIO:
-        return new NioEventLoopGroup(numThreads, threadFactory);
-      case EPOLL:
-        return new EpollEventLoopGroup(numThreads, threadFactory);
-      default:
-        throw new IllegalArgumentException("Unknown io mode: " + mode);
-    }
+    return switch (mode) {
+      case NIO -> new NioEventLoopGroup(numThreads, threadFactory);
+      case EPOLL -> new EpollEventLoopGroup(numThreads, threadFactory);
+    };
   }
 
   /** Returns the correct (client) SocketChannel class based on IOMode. */
   public static Class<? extends Channel> getClientChannelClass(IOMode mode) {
-    switch (mode) {
-      case NIO:
-        return NioSocketChannel.class;
-      case EPOLL:
-        return EpollSocketChannel.class;
-      default:
-        throw new IllegalArgumentException("Unknown io mode: " + mode);
-    }
+    return switch (mode) {
+      case NIO -> NioSocketChannel.class;
+      case EPOLL -> EpollSocketChannel.class;
+    };
   }
 
   /** Returns the correct ServerSocketChannel class based on IOMode. */
   public static Class<? extends ServerChannel> getServerChannelClass(IOMode mode) {
-    switch (mode) {
-      case NIO:
-        return NioServerSocketChannel.class;
-      case EPOLL:
-        return EpollServerSocketChannel.class;
-      default:
-        throw new IllegalArgumentException("Unknown io mode: " + mode);
-    }
+    return switch (mode) {
+      case NIO -> NioServerSocketChannel.class;
+      case EPOLL -> EpollServerSocketChannel.class;
+    };
   }
 
   /**

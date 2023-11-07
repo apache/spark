@@ -79,8 +79,8 @@ class MinHashLSHModel private[ml](
       return 1.0
     }
 
-    var xIndex = xIter.next
-    var yIndex = yIter.next
+    var xIndex = xIter.next()
+    var yIndex = yIter.next()
     var xSize = 1
     var ySize = 1
     var intersectionSize = 0
@@ -88,12 +88,12 @@ class MinHashLSHModel private[ml](
     while (xIndex != -1 && yIndex != -1) {
       if (xIndex == yIndex) {
         intersectionSize += 1
-        xIndex = if (xIter.hasNext) { xSize += 1; xIter.next } else -1
-        yIndex = if (yIter.hasNext) { ySize += 1; yIter.next } else -1
+        xIndex = if (xIter.hasNext) { xSize += 1; xIter.next() } else -1
+        yIndex = if (yIter.hasNext) { ySize += 1; yIter.next() } else -1
       } else if (xIndex > yIndex) {
-        yIndex = if (yIter.hasNext) { ySize += 1; yIter.next } else -1
+        yIndex = if (yIter.hasNext) { ySize += 1; yIter.next() } else -1
       } else {
-        xIndex = if (xIter.hasNext) { xSize += 1; xIter.next } else -1
+        xIndex = if (xIter.hasNext) { xSize += 1; xIter.next() } else -1
       }
     }
 

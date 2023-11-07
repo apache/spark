@@ -92,6 +92,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveLateralColumnAliasReference" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveOrderByAll" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveRowLevelCommandAssignments" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveSetVariable" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTableSpec" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTimeZone" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveUnion" ::

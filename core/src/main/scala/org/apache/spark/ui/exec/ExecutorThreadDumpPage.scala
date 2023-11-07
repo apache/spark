@@ -22,11 +22,17 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.{Node, Text}
 
 import org.apache.spark.SparkContext
+import org.apache.spark.internal.config.UI.UI_FLAMEGRAPH_ENABLED
+import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.ui.{SparkUITab, UIUtils, WebUIPage}
+import org.apache.spark.ui.UIUtils.prependBaseUri
+import org.apache.spark.ui.flamegraph.FlamegraphNode
 
 private[ui] class ExecutorThreadDumpPage(
     parent: SparkUITab,
     sc: Option[SparkContext]) extends WebUIPage("threadDump") {
+
+  private val flamegraphEnabled = sc.isDefined && sc.get.conf.get(UI_FLAMEGRAPH_ENABLED)
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val executorId = Option(request.getParameter("executorId")).map { executorId =>
@@ -48,7 +54,9 @@ private[ui] class ExecutorThreadDumpPage(
             </div>
           case None => Text("")
         }
-        val heldLocks = thread.holdingLocks.mkString(", ")
+        val synchronizers = thread.synchronizers.map(l => s"Lock($l)")
+        val monitors = thread.monitors.map(m => s"Monitor($m)")
+        val heldLocks = (synchronizers ++ monitors).mkString(", ")
 
         <tr id={s"thread_${threadId}_tr"} class="accordion-heading"
             onclick={s"toggleThreadStackTrace($threadId, false)"}
@@ -65,20 +73,26 @@ private[ui] class ExecutorThreadDumpPage(
     <div class="row">
       <div class="col-12">
         <p>Updated at {UIUtils.formatDate(time)}</p>
+        { if (flamegraphEnabled) {
+            drawExecutorFlamegraph(request, threadDump) }
+          else {
+            Seq.empty
+          }
+        }
         {
           // scalastyle:off
-          <p><a class="expandbutton" onClick="expandAllThreadStackTrace(true)">
-            Expand All
-          </a></p>
-          <p><a class="expandbutton d-none" onClick="collapseAllThreadStackTrace(true)">
-            Collapse All
-          </a></p>
-          <div class="form-inline">
-            <div class="bs-example" data-example-id="simple-form-inline">
-              <div class="form-group">
-                <div class="input-group">
-                  <label class="mr-2" for="search">Search:</label>
-                  <input type="text" class="form-control" id="search" oninput="onSearchStringChange()"></input>
+          <p></p>
+          <div style="display: flex; align-items: center;">
+            <a class="expandbutton" onClick="expandAllThreadStackTrace(true)">Expand All</a>
+            <a class="expandbutton d-none" onClick="collapseAllThreadStackTrace(true)">Collapse All</a>
+            <a class="downloadbutton" href={"data:text/plain;charset=utf-8," + threadDump.map(_.toString).mkString} download={"threaddump_" + executorId + ".txt"}>Download</a>
+            <div class="form-inline">
+              <div class="bs-example" data-example-id="simple-form-inline">
+                <div class="form-group">
+                  <div class="input-group">
+                    <label class="mr-2" for="search">Search:</label>
+                    <input type="text" class="form-control" id="search" oninput="onSearchStringChange()"></input>
+                  </div>
                 </div>
               </div>
             </div>
@@ -105,4 +119,19 @@ private[ui] class ExecutorThreadDumpPage(
     }.getOrElse(Text("Error fetching thread dump"))
     UIUtils.headerSparkPage(request, s"Thread dump for executor $executorId", content, parent)
   }
+
+  // scalastyle:off
+  private def drawExecutorFlamegraph(request: HttpServletRequest, thread: Array[ThreadStackTrace]): Seq[Node] = {
+    <div>
+      <div id="executor-flamegraph-data" class="d-none">{FlamegraphNode(thread).toJsonString}</div>
+      <div id="executor-flamegraph-chart">
+        <link rel="stylesheet" type="text/css" href={prependBaseUri(request, "/static/d3-flamegraph.css")}></link>
+        <script src={UIUtils.prependBaseUri(request, "/static/d3-flamegraph.min.js")}></script>
+        <script src={UIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
+        <script src={UIUtils.prependBaseUri(request, "/static/flamegraph.js")}></script>
+        <script>drawFlamegraph()</script>
+      </div>
+    </div>
+  }
+  // scalastyle:off
 }

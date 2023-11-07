@@ -20,7 +20,7 @@ package org.apache.spark.sql.api.r
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.util.{Locale, Map => JMap}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.matching.Regex
 
 import org.apache.spark.TaskContext
@@ -30,7 +30,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericRowWithSchema}
+import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericRowWithSchema, Literal}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
@@ -220,8 +220,8 @@ private[sql] object SQLUtils extends Logging {
     sparkSession.catalog.listTables(db).collect().map(_.name)
   }
 
-  def createArrayType(column: Column): ArrayType = {
-    new ArrayType(ExprUtils.evalTypeExpr(column.expr), true)
+  def createArrayType(elementType: String): ArrayType = {
+    ArrayType(ExprUtils.evalTypeExpr(Literal(elementType)), true)
   }
 
   /**

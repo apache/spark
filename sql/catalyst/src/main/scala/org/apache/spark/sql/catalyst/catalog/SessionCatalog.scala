@@ -288,7 +288,7 @@ class SessionCatalog(
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
     val dbName = format(db)
     if (dbName == DEFAULT_DATABASE) {
-      throw QueryCompilationErrors.cannotDropDefaultDatabaseError
+      throw QueryCompilationErrors.cannotDropDefaultDatabaseError(dbName)
     }
     if (!ignoreIfNotExists) {
       requireDbExists(dbName)
@@ -370,7 +370,7 @@ class SessionCatalog(
       validateLocation: Boolean = true): Unit = {
     val isExternal = tableDefinition.tableType == CatalogTableType.EXTERNAL
     if (isExternal && tableDefinition.storage.locationUri.isEmpty) {
-      throw QueryCompilationErrors.createExternalTableWithoutLocationError
+      throw QueryCompilationErrors.createExternalTableWithoutLocationError()
     }
 
     val qualifiedIdent = qualifyIdentifier(tableDefinition.identifier)
@@ -416,7 +416,7 @@ class SessionCatalog(
     }
   }
 
-  private def makeQualifiedTablePath(locationUri: URI, database: String): URI = {
+  def makeQualifiedTablePath(locationUri: URI, database: String): URI = {
     if (locationUri.isAbsolute) {
       locationUri
     } else if (new Path(locationUri).isAbsolute) {
@@ -909,11 +909,11 @@ class SessionCatalog(
       val viewText = metadata.viewText.get
       val userSpecifiedColumns =
         if (metadata.schema.fieldNames.toSeq == metadata.viewQueryColumnNames) {
-          ""
+          " "
         } else {
-          s"(${metadata.schema.fieldNames.mkString(", ")})"
+          s" (${metadata.schema.fieldNames.mkString(", ")}) "
         }
-      Some(s"CREATE OR REPLACE VIEW $viewName $userSpecifiedColumns AS $viewText")
+      Some(s"CREATE OR REPLACE VIEW $viewName${userSpecifiedColumns}AS $viewText")
     }
   }
 
@@ -968,7 +968,7 @@ class SessionCatalog(
       } else {
         _.toLowerCase(Locale.ROOT)
       }
-      val nameToCounts = viewColumnNames.groupBy(normalizeColName).mapValues(_.length)
+      val nameToCounts = viewColumnNames.groupBy(normalizeColName).view.mapValues(_.length)
       val nameToCurrentOrdinal = scala.collection.mutable.HashMap.empty[String, Int]
       val viewDDL = buildViewDDL(metadata, isTempView)
 
@@ -1124,7 +1124,7 @@ class SessionCatalog(
    *      updated.
    */
   def refreshTable(name: TableIdentifier): Unit = synchronized {
-    getLocalOrGlobalTempView(name).map(_.refresh).getOrElse {
+    getLocalOrGlobalTempView(name).map(_.refresh()).getOrElse {
       val qualifiedIdent = qualifyIdentifier(name)
       val qualifiedTableName = QualifiedTableName(qualifiedIdent.database.get, qualifiedIdent.table)
       tableRelationCache.invalidate(qualifiedTableName)

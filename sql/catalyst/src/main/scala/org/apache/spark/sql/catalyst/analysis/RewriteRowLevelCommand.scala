@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.ProjectingInternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, ExprId, Literal, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.catalyst.util.WriteDeltaProjections
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
@@ -31,7 +32,6 @@ import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperatio
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
@@ -162,7 +162,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       attrs: Seq[Attribute]): ProjectingInternalRow = {
 
     val colOrdinals = attrs.map(attr => findColOrdinal(plan, attr.name))
-    val schema = StructType.fromAttributes(attrs)
+    val schema = DataTypeUtils.fromAttributes(attrs)
     ProjectingInternalRow(schema, colOrdinals)
   }
 
@@ -176,7 +176,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       val originalValueIndex = findColOrdinal(plan, ORIGINAL_ROW_ID_VALUE_PREFIX + attr.name)
       if (originalValueIndex != -1) originalValueIndex else findColOrdinal(plan, attr.name)
     }
-    val schema = StructType.fromAttributes(rowIdAttrs)
+    val schema = DataTypeUtils.fromAttributes(rowIdAttrs)
     ProjectingInternalRow(schema, colOrdinals)
   }
 

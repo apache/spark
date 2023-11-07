@@ -420,7 +420,7 @@ abstract class RDD[T: ClassTag](
    *  Return a new RDD by first applying a function to all elements of this
    *  RDD, and then flattening the results.
    */
-  def flatMap[U: ClassTag](f: T => TraversableOnce[U]): RDD[U] = withScope {
+  def flatMap[U: ClassTag](f: T => IterableOnce[U]): RDD[U] = withScope {
     val cleanF = sc.clean(f)
     new MapPartitionsRDD[U, T](this, (_, _, iter) => iter.flatMap(cleanF))
   }
@@ -1204,7 +1204,7 @@ abstract class RDD[T: ClassTag](
    * Aggregate the elements of each partition, and then the results for all the partitions, using
    * given combine functions and a neutral "zero value". This function can return a different result
    * type, U, than the type of this RDD, T. Thus, we need one operation for merging a T into an U
-   * and one operation for merging two U's, as in scala.TraversableOnce. Both of these functions are
+   * and one operation for merging two U's, as in scala.IterableOnce. Both of these functions are
    * allowed to modify and return their first argument instead of creating a new U to avoid memory
    * allocation.
    *
@@ -1219,8 +1219,7 @@ abstract class RDD[T: ClassTag](
     // Clone the zero value since we will also be serializing it as part of tasks
     var jobResult = Utils.clone(zeroValue, sc.env.serializer.newInstance())
     val cleanSeqOp = sc.clean(seqOp)
-    val cleanCombOp = sc.clean(combOp)
-    val aggregatePartition = (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp)
+    val aggregatePartition = (it: Iterator[T]) => it.foldLeft(zeroValue)(cleanSeqOp)
     val mergeResult = (_: Int, taskResult: U) => jobResult = combOp(jobResult, taskResult)
     sc.runJob(this, aggregatePartition, mergeResult)
     jobResult
@@ -1258,7 +1257,7 @@ abstract class RDD[T: ClassTag](
       val cleanSeqOp = context.clean(seqOp)
       val cleanCombOp = context.clean(combOp)
       val aggregatePartition =
-        (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp)
+        (it: Iterator[T]) => it.foldLeft(zeroValue)(cleanSeqOp)
       var partiallyAggregated: RDD[U] = mapPartitions(it => Iterator(aggregatePartition(it)))
       var numPartitions = partiallyAggregated.partitions.length
       val scale = math.max(math.ceil(math.pow(numPartitions, 1.0 / depth)).toInt, 2)
@@ -2176,6 +2175,7 @@ object RDD {
  * Note that, the output of an RDD usually relies on the parent RDDs. When the parent RDD's output
  * is INDETERMINATE, it's very likely the RDD's output is also INDETERMINATE.
  */
-private[spark] object DeterministicLevel extends Enumeration {
+@DeveloperApi
+object DeterministicLevel extends Enumeration {
   val DETERMINATE, UNORDERED, INDETERMINATE = Value
 }

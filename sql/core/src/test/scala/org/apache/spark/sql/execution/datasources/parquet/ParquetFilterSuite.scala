@@ -48,9 +48,8 @@ import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsR
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.{CORRECTED, LEGACY}
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
+import org.apache.spark.sql.internal.LegacyBehaviorPolicy.{CORRECTED, LEGACY}
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType.{INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -792,7 +791,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
           SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> INT96.toString) {
           import testImplicits._
           withTempPath { file =>
-            millisData.map(i => Tuple1(Timestamp.valueOf(i))).toDF
+            millisData.map(i => Tuple1(Timestamp.valueOf(i))).toDF()
               .write.format(dataSourceName).save(file.getCanonicalPath)
             readParquetFile(file.getCanonicalPath) { df =>
               val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
@@ -1025,7 +1024,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
           // When a filter is pushed to Parquet, Parquet can apply it to every row.
           // So, we can check the number of rows returned from the Parquet
           // to make sure our filter pushdown work.
-          assert(stripSparkFilter(df).count == 1)
+          assert(stripSparkFilter(df).count() == 1)
         }
       }
     }
@@ -1557,7 +1556,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   private def checkStringFilterPushdown(
       stringPredicate: String => Expression,
       sourceFilter: (String, String) => sources.Filter): Unit = {
-    withParquetDataFrame((1 to 4).map(i => Tuple1(i + "str" + i))) { implicit df =>
+    withParquetDataFrame((1 to 4).map(i => Tuple1(s"${i}str$i"))) { implicit df =>
       checkFilterPredicate(
         stringPredicate("").asInstanceOf[Predicate],
         classOf[UserDefinedByInstance[_, _]],
@@ -1867,7 +1866,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     withTempPath { dir =>
       val count = 10
       val tableName = "spark_25207"
-      val tableDir = dir.getAbsoluteFile + "/table"
+      val tableDir = s"${dir.getAbsoluteFile}/table"
       withTable(tableName) {
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
           spark.range(count).selectExpr("id as A", "id as B", "id as b")

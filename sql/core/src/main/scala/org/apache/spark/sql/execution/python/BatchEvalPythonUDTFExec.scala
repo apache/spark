@@ -17,22 +17,21 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.io.File
+import java.io.DataOutputStream
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.Unpickler
 
-import org.apache.spark.{ContextAwareIterator, SparkEnv, TaskContext}
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.{JobArtifactSet, TaskContext}
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonWorkerUtils}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.types.{DataType, StructField, StructType}
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
+import org.apache.spark.sql.types.StructType
 
 /**
  * A physical plan that evaluates a [[PythonUDTF]]. This is similar to [[BatchEvalPythonExec]].
@@ -48,96 +47,16 @@ case class BatchEvalPythonUDTFExec(
     requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
     child: SparkPlan)
-  extends UnaryExecNode with PythonSQLMetrics {
+  extends EvalPythonUDTFExec with PythonSQLMetrics {
 
-  override def output: Seq[Attribute] = requiredChildOutput ++ resultAttrs
-
-  override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
-
-  protected override def doExecute(): RDD[InternalRow] = {
-    val inputRDD = child.execute().map(_.copy())
-
-    inputRDD.mapPartitions { iter =>
-      val context = TaskContext.get()
-      val contextAwareIterator = new ContextAwareIterator(context, iter)
-
-      // The queue used to buffer input rows so we can drain it to
-      // combine input with output from Python.
-      val queue = HybridRowQueue(context.taskMemoryManager(),
-        new File(Utils.getLocalDir(SparkEnv.get.conf)), child.output.length)
-      context.addTaskCompletionListener[Unit] { ctx =>
-        queue.close()
-      }
-
-      val inputs = Seq(udtf.children)
-
-      // flatten all the arguments
-      val allInputs = new ArrayBuffer[Expression]
-      val dataTypes = new ArrayBuffer[DataType]
-      val argOffsets = inputs.map { input =>
-        input.map { e =>
-          if (allInputs.exists(_.semanticEquals(e))) {
-            allInputs.indexWhere(_.semanticEquals(e))
-          } else {
-            allInputs += e
-            dataTypes += e.dataType
-            allInputs.length - 1
-          }
-        }.toArray
-      }.toArray
-      val projection = MutableProjection.create(allInputs.toSeq, child.output)
-      projection.initialize(context.partitionId())
-      val schema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
-        StructField(s"_$i", dt)
-      }.toArray)
-
-      // Add rows to the queue to join later with the result.
-      // Also keep track of the number rows added to the queue.
-      // This is needed to process extra output rows from the `terminate()` call of the UDTF.
-      var count = 0L
-      val projectedRowIter = contextAwareIterator.map { inputRow =>
-        queue.add(inputRow.asInstanceOf[UnsafeRow])
-        count += 1
-        projection(inputRow)
-      }
-
-      val outputRowIterator = evaluate(udtf, argOffsets, projectedRowIter, schema, context)
-
-      val pruneChildForResult: InternalRow => InternalRow =
-        if (child.outputSet == AttributeSet(requiredChildOutput)) {
-          identity
-        } else {
-          UnsafeProjection.create(requiredChildOutput, child.output)
-        }
-
-      val joined = new JoinedRow
-      val resultProj = UnsafeProjection.create(output, output)
-
-      outputRowIterator.flatMap { outputRows =>
-        // If `count` is greater than zero, it means there are remaining input rows in the queue.
-        // In this case, the output rows of the UDTF are joined with the corresponding input row
-        // in the queue.
-        if (count > 0) {
-          val left = queue.remove()
-          count -= 1
-          joined.withLeft(pruneChildForResult(left))
-        }
-        // If `count` is zero, it means all input rows have been consumed. Any additional rows
-        // from the UDTF are from the `terminate()` call. We leave the left side as the last
-        // element of its child output to keep it consistent with the Generate implementation
-        // and Hive UDTFs.
-        outputRows.map(r => resultProj(joined.withRight(r)))
-      }
-    }
-  }
+  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
   /**
    * Evaluates a Python UDTF. It computes the results using the PythonUDFRunner, and returns
    * an iterator of internal rows for every input row.
    */
-  private def evaluate(
-      udtf: PythonUDTF,
-      argOffsets: Array[Array[Int]],
+  override protected def evaluate(
+      argMetas: Array[ArgumentMetadata],
       iter: Iterator[InternalRow],
       schema: StructType,
       context: TaskContext): Iterator[Iterator[InternalRow]] = {
@@ -147,9 +66,8 @@ case class BatchEvalPythonUDTFExec(
     val inputIterator = BatchEvalPythonExec.getInputIterator(iter, schema)
 
     // Output iterator for results from Python.
-    val funcs = Seq(ChainedPythonFunctions(Seq(udtf.func)))
     val outputIterator =
-      new PythonUDFRunner(funcs, PythonEvalType.SQL_TABLE_UDF, argOffsets, pythonMetrics)
+      new PythonUDTFRunner(udtf, argMetas, pythonMetrics, jobArtifactUUID)
         .compute(inputIterator, context.partitionId(), context)
 
     val unpickle = new Unpickler
@@ -166,10 +84,63 @@ case class BatchEvalPythonUDTFExec(
       val res = results.asInstanceOf[Array[_]]
       pythonMetrics("pythonNumRowsReceived") += res.length
       fromJava(results).asInstanceOf[GenericArrayData]
-        .array.map(_.asInstanceOf[InternalRow]).toIterator
+        .array.map(_.asInstanceOf[InternalRow]).iterator
     }
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): BatchEvalPythonUDTFExec =
     copy(child = newChild)
+}
+
+class PythonUDTFRunner(
+    udtf: PythonUDTF,
+    argMetas: Array[ArgumentMetadata],
+    pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String])
+  extends BasePythonUDFRunner(
+    Seq(ChainedPythonFunctions(Seq(udtf.func))),
+    PythonEvalType.SQL_TABLE_UDF, Array(argMetas.map(_.offset)), pythonMetrics, jobArtifactUUID) {
+
+  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
+    PythonUDTFRunner.writeUDTF(dataOut, udtf, argMetas)
+  }
+}
+
+object PythonUDTFRunner {
+
+  def writeUDTF(
+      dataOut: DataOutputStream,
+      udtf: PythonUDTF,
+      argMetas: Array[ArgumentMetadata]): Unit = {
+    // Write the argument types of the UDTF.
+    dataOut.writeInt(argMetas.length)
+    argMetas.foreach {
+      case ArgumentMetadata(offset, name) =>
+        dataOut.writeInt(offset)
+        name match {
+          case Some(name) =>
+            dataOut.writeBoolean(true)
+            PythonWorkerUtils.writeUTF(name, dataOut)
+          case _ =>
+            dataOut.writeBoolean(false)
+        }
+    }
+    // Write the zero-based indexes of the projected results of all PARTITION BY expressions within
+    // the TABLE argument of the Python UDTF call, if applicable.
+    udtf.pythonUDTFPartitionColumnIndexes match {
+      case Some(partitionColumnIndexes) =>
+        dataOut.writeInt(partitionColumnIndexes.partitionChildIndexes.length)
+        assert(partitionColumnIndexes.partitionChildIndexes.nonEmpty)
+        partitionColumnIndexes.partitionChildIndexes.foreach(dataOut.writeInt)
+      case None =>
+        dataOut.writeInt(0)
+    }
+    // Write the pickled AnalyzeResult buffer from the UDTF "analyze" method, if any.
+    dataOut.writeBoolean(udtf.pickledAnalyzeResult.nonEmpty)
+    udtf.pickledAnalyzeResult.foreach(PythonWorkerUtils.writeBytes(_, dataOut))
+    // Write the contents of the Python script itself.
+    PythonWorkerUtils.writePythonFunction(udtf.func, dataOut)
+    // Write the result schema of the UDTF call.
+    PythonWorkerUtils.writeUTF(udtf.elementSchema.json, dataOut)
+  }
 }

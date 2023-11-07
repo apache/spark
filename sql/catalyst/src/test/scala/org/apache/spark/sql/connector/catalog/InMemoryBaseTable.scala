@@ -452,7 +452,7 @@ abstract class InMemoryBaseTable(
             val matchingKeys = values.map { value =>
               if (value != null) value.toString else null
             }.toSet
-            data = data.filter(partition => {
+            this.data = this.data.filter(partition => {
               val rows = partition.asInstanceOf[BufferedRows]
               rows.key match {
                 // null partitions are represented as Seq(null)
@@ -534,7 +534,7 @@ abstract class InMemoryBaseTable(
 
   protected object TruncateAndAppend extends TestBatchWrite {
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
-      dataMap.clear
+      dataMap.clear()
       withData(messages.map(_.asInstanceOf[BufferedRows]))
     }
   }
@@ -572,7 +572,7 @@ abstract class InMemoryBaseTable(
   protected object StreamingTruncateAndAppend extends TestStreamingWrite {
     override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
       dataMap.synchronized {
-        dataMap.clear
+        dataMap.clear()
         withData(messages.map(_.asInstanceOf[BufferedRows]))
       }
     }
@@ -656,7 +656,7 @@ private class BufferedRowsReader(
   private def addMetadata(row: InternalRow): InternalRow = {
     val metadataRow = new GenericInternalRow(metadataColumnNames.map {
       case "index" => index
-      case "_partition" => UTF8String.fromString(partition.keyString)
+      case "_partition" => UTF8String.fromString(partition.keyString())
     }.toArray)
     new JoinedRow(row, metadataRow)
   }

@@ -27,9 +27,8 @@ import io
 from contextlib import redirect_stdout
 
 from pyspark import StorageLevel
-from pyspark.sql import SparkSession, Row
+from pyspark.sql import SparkSession, Row, functions
 from pyspark.sql.functions import col, lit, count, sum, mean, struct
-from pyspark.sql.pandas.utils import pyarrow_version_less_than_minimum
 from pyspark.sql.types import (
     StringType,
     IntegerType,
@@ -645,11 +644,48 @@ class DataFrameTestsMixin:
             df1.join(df2.hint("broadcast"), "id").explain(True)
             self.assertEqual(1, buf.getvalue().count("BroadcastHashJoin"))
 
+    def test_coalesce_hints_with_string_parameter(self):
+        with self.sql_conf({"spark.sql.adaptive.coalescePartitions.enabled": False}):
+            df = self.spark.createDataFrame(
+                zip(["A", "B"] * 2**9, range(2**10)),
+                StructType([StructField("a", StringType()), StructField("n", IntegerType())]),
+            )
+            with io.StringIO() as buf, redirect_stdout(buf):
+                # COALESCE
+                coalesce = df.hint("coalesce", 2)
+                coalesce.explain(True)
+                output = buf.getvalue()
+                self.assertGreaterEqual(output.count("Coalesce 2"), 1)
+                buf.truncate(0)
+                buf.seek(0)
+
+                # REPARTITION_BY_RANGE
+                range_partitioned = df.hint("REPARTITION_BY_RANGE", 2, "a")
+                range_partitioned.explain(True)
+                output = buf.getvalue()
+                self.assertGreaterEqual(output.count("REPARTITION_BY_NUM"), 1)
+                buf.truncate(0)
+                buf.seek(0)
+
+                # REBALANCE
+                rebalanced1 = df.hint("REBALANCE", "a")  # just check this doesn't error
+                rebalanced1.explain(True)
+                rebalanced2 = df.hint("REBALANCE", 2)
+                rebalanced2.explain(True)
+                rebalanced3 = df.hint("REBALANCE", 2, "a")
+                rebalanced3.explain(True)
+                rebalanced4 = df.hint("REBALANCE", functions.col("a"))
+                rebalanced4.explain(True)
+                output = buf.getvalue()
+                self.assertGreaterEqual(output.count("REBALANCE_PARTITIONS_BY_NONE"), 1)
+                self.assertGreaterEqual(output.count("REBALANCE_PARTITIONS_BY_COL"), 3)
+
     # add tests for SPARK-23647 (test more types for hint)
     def test_extended_hint_types(self):
         df = self.spark.range(10e10).toDF("id")
         such_a_nice_list = ["itworks1", "itworks2", "itworks3"]
-        hinted_df = df.hint("my awesome hint", 1.2345, "what", such_a_nice_list)
+        int_list = [1, 2, 3]
+        hinted_df = df.hint("my awesome hint", 1.2345, "what", such_a_nice_list, int_list)
 
         self.assertIsInstance(df.hint("broadcast", []), type(df))
         self.assertIsInstance(df.hint("broadcast", ["foo", "bar"]), type(df))
@@ -987,6 +1023,24 @@ class DataFrameTestsMixin:
         self.assertGreaterEqual(row.cnt, 0)
         self.assertGreaterEqual(row.sum, 0)
 
+    def test_observe_with_same_name_on_different_dataframe(self):
+        # SPARK-45656: named observations with the same name on different datasets
+        from pyspark.sql import Observation
+
+        observation1 = Observation("named")
+        df1 = self.spark.range(50)
+        observed_df1 = df1.observe(observation1, count(lit(1)).alias("cnt"))
+
+        observation2 = Observation("named")
+        df2 = self.spark.range(100)
+        observed_df2 = df2.observe(observation2, count(lit(1)).alias("cnt"))
+
+        observed_df1.collect()
+        observed_df2.collect()
+
+        self.assertEqual(observation1.get, dict(cnt=50))
+        self.assertEqual(observation2.get, dict(cnt=100))
+
     def test_sample(self):
         with self.assertRaises(PySparkTypeError) as pe:
             self.spark.range(1).sample()
@@ -1006,6 +1060,23 @@ class DataFrameTestsMixin:
 
         self.assertRaises(
             IllegalArgumentException, lambda: self.spark.range(1).sample(-1.0).count()
+        )
+
+    def test_toDF_with_string(self):
+        df = self.spark.createDataFrame([("John", 30), ("Alice", 25), ("Bob", 28)])
+        data = [("John", 30), ("Alice", 25), ("Bob", 28)]
+
+        result = df.toDF("key", "value")
+        self.assertEqual(result.schema.simpleString(), "struct<key:string,value:bigint>")
+        self.assertEqual(result.collect(), data)
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.toDF("key", None)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OF_STR",
+            message_parameters={"arg_name": "cols", "arg_type": "NoneType"},
         )
 
     def test_toDF_with_schema_string(self):
@@ -1085,7 +1156,6 @@ class DataFrameTestsMixin:
 
     # Cartesian products require cross join syntax
     def test_require_cross(self):
-
         df1 = self.spark.createDataFrame([(1, "1")], ("key", "value"))
         df2 = self.spark.createDataFrame([(1, "1")], ("key", "value"))
 
@@ -1382,10 +1452,8 @@ class DataFrameTestsMixin:
         self.assertTrue(np.all(pdf_with_only_nulls.dtypes == pdf_with_some_nulls.dtypes))
 
     @unittest.skipIf(
-        not have_pandas or not have_pyarrow or pyarrow_version_less_than_minimum("2.0.0"),
-        pandas_requirement_message
-        or pyarrow_requirement_message
-        or "Pyarrow version must be 2.0.0 or higher",
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_to_pandas_for_array_of_struct(self):
         for is_arrow_enabled in [True, False]:

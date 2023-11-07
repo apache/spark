@@ -84,7 +84,7 @@ SELECT cast(1 as tinyint) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -111,7 +111,7 @@ SELECT cast(1 as tinyint) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -138,7 +138,7 @@ SELECT cast(1 as tinyint) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as ti
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -165,7 +165,7 @@ SELECT cast(1 as tinyint) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -264,7 +264,7 @@ SELECT cast(1 as smallint) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -291,7 +291,7 @@ SELECT cast(1 as smallint) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -318,7 +318,7 @@ SELECT cast(1 as smallint) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -345,7 +345,7 @@ SELECT cast(1 as smallint) FROM t UNION SELECT cast('2017-12-11 09:30:00' as dat
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -444,7 +444,7 @@ SELECT cast(1 as int) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -471,7 +471,7 @@ SELECT cast(1 as int) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -498,7 +498,7 @@ SELECT cast(1 as int) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timest
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -525,7 +525,7 @@ SELECT cast(1 as int) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FR
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -624,7 +624,7 @@ SELECT cast(1 as bigint) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -651,7 +651,7 @@ SELECT cast(1 as bigint) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -678,7 +678,7 @@ SELECT cast(1 as bigint) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as tim
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -705,7 +705,7 @@ SELECT cast(1 as bigint) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -804,7 +804,7 @@ SELECT cast(1 as float) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -831,7 +831,7 @@ SELECT cast(1 as float) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -858,7 +858,7 @@ SELECT cast(1 as float) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as time
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -885,7 +885,7 @@ SELECT cast(1 as float) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -984,7 +984,7 @@ SELECT cast(1 as double) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1011,7 +1011,7 @@ SELECT cast(1 as double) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1038,7 +1038,7 @@ SELECT cast(1 as double) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as tim
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1065,7 +1065,7 @@ SELECT cast(1 as double) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1164,7 +1164,7 @@ SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1191,7 +1191,7 @@ SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1218,7 +1218,7 @@ SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast('2017-12-11 09:30:00.0
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1245,7 +1245,7 @@ SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast('2017-12-11 09:30:00' 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1344,7 +1344,7 @@ SELECT cast(1 as string) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1371,7 +1371,7 @@ SELECT cast(1 as string) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1416,7 +1416,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as tinyint) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1443,7 +1443,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as smallint) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1470,7 +1470,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as int) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1497,7 +1497,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as bigint) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1524,7 +1524,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1551,7 +1551,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as double) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1578,7 +1578,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1605,7 +1605,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1641,7 +1641,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1668,7 +1668,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1695,7 +1695,7 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast('2017-12-11 09:30:00' as dat
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1722,7 +1722,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as tinyint) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1749,7 +1749,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as smallint) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1776,7 +1776,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as int) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1803,7 +1803,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as bigint) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1830,7 +1830,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1857,7 +1857,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as double) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1884,7 +1884,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1911,7 +1911,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1938,7 +1938,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -1973,7 +1973,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as ti
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -2000,7 +2000,7 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -2027,7 +2027,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -2054,7 +2054,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -2081,7 +2081,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -2108,7 +2108,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -2135,7 +2135,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -2162,7 +2162,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -2189,7 +2189,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -2225,7 +2225,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast('2' a
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -2252,7 +2252,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -2297,7 +2297,7 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as tinyint
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -2324,7 +2324,7 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as smallin
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -2351,7 +2351,7 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as int) FR
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -2378,7 +2378,7 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as bigint)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -2405,7 +2405,7 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as float) 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -2432,7 +2432,7 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as double)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -2459,7 +2459,7 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as decimal
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -2495,7 +2495,7 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast('2' as binar
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -2522,7 +2522,7 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as boolean
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",

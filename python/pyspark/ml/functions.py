@@ -17,9 +17,16 @@
 from __future__ import annotations
 
 import inspect
-import numpy as np
-import pandas as pd
 import uuid
+from typing import Any, Callable, Iterator, List, Mapping, TYPE_CHECKING, Tuple, Union, Optional
+
+import numpy as np
+
+try:
+    import pandas as pd
+except ImportError:
+    pass  # Let it throw a better error message later when the API is invoked.
+
 from pyspark import SparkContext
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.column import Column, _to_java_column
@@ -36,7 +43,6 @@ from pyspark.sql.types import (
     StructType,
 )
 from pyspark.ml.util import try_remote_functions
-from typing import Any, Callable, Iterator, List, Mapping, TYPE_CHECKING, Tuple, Union, Optional
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
@@ -821,6 +827,21 @@ def _test() -> None:
     from pyspark.sql import SparkSession
     import pyspark.ml.functions
     import sys
+
+    from pyspark.sql.pandas.utils import (
+        require_minimum_pandas_version,
+        require_minimum_pyarrow_version,
+    )
+
+    try:
+        require_minimum_pandas_version()
+        require_minimum_pyarrow_version()
+    except Exception as e:
+        print(
+            f"Skipping pyspark.ml.functions doctests: {e}",
+            file=sys.stderr,
+        )
+        sys.exit(0)
 
     globs = pyspark.ml.functions.__dict__.copy()
     spark = SparkSession.builder.master("local[2]").appName("ml.functions tests").getOrCreate()

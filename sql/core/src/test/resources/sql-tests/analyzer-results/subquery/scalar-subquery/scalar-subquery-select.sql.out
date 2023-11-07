@@ -1057,3 +1057,21 @@ Project [c1#xL, c2#xL]
          :           +- Range (1, 2, step=1, splits=None)
          +- SubqueryAlias t1
             +- Range (1, 3, step=1, splits=None)
+
+
+-- !query
+SELECT c1, c2, (SELECT count(*) cnt FROM t1 t2 WHERE t1.c1 = t2.c1 HAVING cnt = 0) FROM t1
+-- !query analysis
+Project [c1#x, c2#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#xL]
+:  +- Filter (cnt#xL = cast(0 as bigint))
+:     +- Aggregate [count(1) AS cnt#xL]
+:        +- Filter (outer(c1#x) = c1#x)
+:           +- SubqueryAlias t2
+:              +- SubqueryAlias t1
+:                 +- View (`t1`, [c1#x,c2#x])
+:                    +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+:                       +- LocalRelation [col1#x, col2#x]
++- SubqueryAlias t1
+   +- View (`t1`, [c1#x,c2#x])
+      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+         +- LocalRelation [col1#x, col2#x]

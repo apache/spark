@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.common
 
 import org.apache.spark.connect.proto
 
-private[connect] object ProtoDataTypes {
+private[sql] object ProtoDataTypes {
 
   val NullType: proto.DataType = proto.DataType
     .newBuilder()

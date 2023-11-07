@@ -22,18 +22,22 @@ import java.net.{URI, URL}
 import java.sql.{Connection, DatabaseMetaData, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
 import java.util.{Locale, Properties, ServiceConfigurationError}
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.mockito.Mockito.{mock, spy, when}
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NamedParameter, UnresolvedGenerator}
-import org.apache.spark.sql.catalyst.expressions.{Grouping, Literal, RowNumber}
+import org.apache.spark.sql.catalyst.expressions.{Concat, CreateArray, EmptyRow, Flatten, Grouping, Literal, RowNumber}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
+import org.apache.spark.sql.catalyst.rules.RuleIdCollection
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
@@ -41,20 +45,26 @@ import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.execution.streaming.FileSystemBasedCheckpointFileManager
+import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
 import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
+import org.apache.spark.sql.internal.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, DecimalType, LongType, MetadataBuilder, StructType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, DecimalType, LongType, MetadataBuilder, StructType}
+import org.apache.spark.sql.vectorized.ColumnarArray
+import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
+import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.Utils
+
 
 class QueryExecutionErrorsSuite
   extends QueryTest
   with ParquetTest
   with OrcTest
-  with SharedSparkSession {
+  with SharedSparkSession
+  with DataTypeErrorsBase {
 
   import testImplicits._
 
@@ -102,7 +112,7 @@ class QueryExecutionErrorsSuite
     val encryptedEmptyText24 = "9RDK70sHNzqAFRcpfGM5gQ=="
     val encryptedEmptyText32 = "j9IDsCvlYXtcVJUf4FAjQQ=="
 
-    val df1 = Seq("Spark", "").toDF
+    val df1 = Seq("Spark", "").toDF()
     val df2 = Seq(
       (encryptedText16, encryptedText24, encryptedText32),
       (encryptedEmptyText16, encryptedEmptyText24, encryptedEmptyText32)
@@ -116,7 +126,7 @@ class QueryExecutionErrorsSuite
     def checkInvalidKeyLength(df: => DataFrame, inputBytes: Int): Unit = {
       checkError(
         exception = intercept[SparkException] {
-          df.collect
+          df.collect()
         }.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "INVALID_PARAMETER_VALUE.AES_KEY_LENGTH",
         parameters = Map(
@@ -153,7 +163,7 @@ class QueryExecutionErrorsSuite
       ("value32", "12345678123456781234567812345678")).foreach { case (colName, key) =>
       checkError(
         exception = intercept[SparkException] {
-          df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect
+          df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect()
         }.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "INVALID_PARAMETER_VALUE.AES_CRYPTO_ERROR",
         parameters = Map("parameter" -> "`expr`, `key`",
@@ -171,7 +181,7 @@ class QueryExecutionErrorsSuite
     def checkUnsupportedMode(df: => DataFrame, mode: String, padding: String): Unit = {
       checkError(
         exception = intercept[SparkException] {
-          df.collect
+          df.collect()
         }.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "UNSUPPORTED_FEATURE.AES_MODE",
         parameters = Map("mode" -> mode,
@@ -221,7 +231,7 @@ class QueryExecutionErrorsSuite
       exception = e2,
       errorClass = "UNSUPPORTED_FEATURE.PIVOT_TYPE",
       parameters = Map("value" -> "[dotnet,Dummies]",
-      "type" -> "\"STRUCT<col1: STRING, training: STRING>\""),
+      "type" -> "unknown"),
       sqlState = "0A000")
   }
 
@@ -499,6 +509,16 @@ class QueryExecutionErrorsSuite
     }
   }
 
+  test("SPARK-42330: rule id not found") {
+    checkError(
+      exception = intercept[SparkException] {
+          RuleIdCollection.getRuleId("incorrect")
+      },
+      errorClass = "RULE_ID_NOT_FOUND",
+      parameters = Map("ruleName" -> "incorrect")
+    )
+  }
+
   test("CANNOT_RESTORE_PERMISSIONS_FOR_PATH: can't set permission") {
       withTable("t") {
         withSQLConf(
@@ -714,6 +734,23 @@ class QueryExecutionErrorsSuite
     }
   }
 
+  test("CANNOT_PARSE_STRING_AS_DATATYPE: parse string as float use from_json") {
+    val jsonStr = """{"a": "str"}"""
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql(s"""SELECT from_json('$jsonStr', 'a FLOAT', map('mode','FAILFAST'))""").collect()
+      },
+      errorClass = "MALFORMED_RECORD_IN_PARSING.CANNOT_PARSE_STRING_AS_DATATYPE",
+      parameters = Map(
+        "badRecord" -> jsonStr,
+        "failFastMode" -> "FAILFAST",
+        "fieldName" -> "`a`",
+        "fieldValue" -> "'str'",
+        "inputType" -> "StringType",
+        "targetType" -> "FloatType"),
+      sqlState = "22023")
+  }
+
   test("BINARY_ARITHMETIC_OVERFLOW: byte plus byte result overflow") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       checkError(
@@ -848,6 +885,52 @@ class QueryExecutionErrorsSuite
     assert(e.getCause.isInstanceOf[NullPointerException])
   }
 
+  test("CONCURRENT_QUERY: streaming query is resumed from many sessions") {
+    failAfter(90 seconds) {
+      withSQLConf(SQLConf.STREAMING_STOP_ACTIVE_RUN_ON_RESTART.key -> "true") {
+        withTempDir { dir =>
+          val ds = spark.readStream.format("rate").load()
+
+          // Queries have the same ID when they are resumed from the same checkpoint.
+          val chkLocation = new File(dir, "_checkpoint").getCanonicalPath
+          val dataLocation = new File(dir, "data").getCanonicalPath
+
+          // Run an initial query to setup the checkpoint.
+          val initialQuery = ds.writeStream.format("parquet")
+            .option("checkpointLocation", chkLocation).start(dataLocation)
+
+          // Error is thrown due to a race condition. Ensure it happens with high likelihood in the
+          // test by spawning many threads.
+          val exceptions = ThreadUtils.parmap(Seq.range(1, 50), "QueryExecutionErrorsSuite", 50)
+            { _ =>
+              var exception = None : Option[SparkConcurrentModificationException]
+              try {
+                val restartedQuery = ds.writeStream.format("parquet")
+                  .option("checkpointLocation", chkLocation).start(dataLocation)
+                restartedQuery.stop()
+                restartedQuery.awaitTermination()
+              } catch {
+                case e: SparkConcurrentModificationException =>
+                  exception = Some(e)
+              }
+              exception
+            }
+          // Only check if errors exist to deflake. We couldn't guarantee that
+          // the above 50 runs must hit this error.
+          exceptions.flatten.map { e =>
+            checkError(
+              e,
+              errorClass = "CONCURRENT_QUERY",
+              sqlState = Some("0A000"),
+              parameters = e.getMessageParameters.asScala.toMap
+            )
+          }
+          spark.streams.active.foreach(_.stop())
+        }
+      }
+    }
+  }
+
   test("UNSUPPORTED_EXPR_FOR_WINDOW: to_date is not supported with WINDOW") {
     withTable("t") {
       sql("CREATE TABLE t(c String) USING parquet")
@@ -937,6 +1020,34 @@ class QueryExecutionErrorsSuite
       sqlState = "XX000")
   }
 
+  test("INVALID_BITMAP_POSITION: position out of bounds") {
+    val e = intercept[SparkException] {
+      sql("select bitmap_construct_agg(col) from values (32768) as tab(col)").collect()
+    }.getCause.asInstanceOf[SparkArrayIndexOutOfBoundsException]
+    checkError(
+      exception = e,
+      errorClass = "INVALID_BITMAP_POSITION",
+      parameters = Map(
+        "bitPosition" -> "32768",
+        "bitmapNumBytes" -> "4096",
+        "bitmapNumBits" -> "32768"),
+      sqlState = "22003")
+  }
+
+  test("INVALID_BITMAP_POSITION: negative position") {
+    val e = intercept[SparkException] {
+      sql("select bitmap_construct_agg(col) from values (-1) as tab(col)").collect()
+    }.getCause.asInstanceOf[SparkArrayIndexOutOfBoundsException]
+    checkError(
+      exception = e,
+      errorClass = "INVALID_BITMAP_POSITION",
+      parameters = Map(
+        "bitPosition" -> "-1",
+        "bitmapNumBytes" -> "4096",
+        "bitmapNumBits" -> "32768"),
+      sqlState = "22003")
+  }
+
   test("SPARK-43589: Use bytesToString instead of shift operation") {
     checkError(
       exception = intercept[SparkException] {
@@ -959,6 +1070,83 @@ class QueryExecutionErrorsSuite
         parameters = Map("relationId" -> "`spark_catalog`.`default`.`t`")
       )
     }
+  }
+
+  test("Unexpected `start` for slice()") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("select slice(array(1,2,3), 0, 1)").collect()
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.START",
+      parameters = Map(
+        "parameter" -> toSQLId("start"),
+        "functionName" -> toSQLId("slice")
+      )
+    )
+  }
+
+  test("Unexpected `length` for slice()") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("select slice(array(1,2,3), 1, -1)").collect()
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.LENGTH",
+      parameters = Map(
+        "parameter" -> toSQLId("length"),
+        "length" -> (-1).toString,
+        "functionName" -> toSQLId("slice")
+      )
+    )
+  }
+
+  test("Elements exceed limit for concat()") {
+    val array = new ColumnarArray(
+      new ConstantColumnVector(Int.MaxValue, BooleanType), 0, Int.MaxValue)
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        Concat(Seq(Literal.create(array, ArrayType(BooleanType)))).eval(EmptyRow)
+      },
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
+      parameters = Map(
+        "numberOfElements" -> Int.MaxValue.toString,
+        "maxRoundedArrayLength" -> MAX_ROUNDED_ARRAY_LENGTH.toString,
+        "functionName" -> toSQLId("concat")
+      )
+    )
+  }
+
+  test("Elements exceed limit for flatten()") {
+    val array = new ColumnarArray(
+      new ConstantColumnVector(Int.MaxValue, BooleanType), 0, Int.MaxValue)
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        Flatten(CreateArray(Seq(Literal.create(array, ArrayType(BooleanType))))).eval(EmptyRow)
+      },
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
+      parameters = Map(
+        "numberOfElements" -> Int.MaxValue.toString,
+        "maxRoundedArrayLength" -> MAX_ROUNDED_ARRAY_LENGTH.toString,
+        "functionName" -> toSQLId("flatten")
+      )
+    )
+  }
+
+  test("Elements exceed limit for array_repeat()") {
+    val count = 2147483647
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql(s"select array_repeat(1, $count)").collect()
+      },
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      parameters = Map(
+        "parameter" -> toSQLId("count"),
+        "numberOfElements" -> count.toString,
+        "functionName" -> toSQLId("array_repeat"),
+        "maxRoundedArrayLength" -> MAX_ROUNDED_ARRAY_LENGTH.toString
+      )
+    )
   }
 }
 

@@ -14,10 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.types import UnparsedDataType
 from pyspark.sql.functions import pandas_udf, PandasUDFType
 from pyspark.sql.tests.pandas.test_pandas_udf import PandasUDFTestsMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.connectutils import should_test_connect, ReusedConnectTestCase
+
+if should_test_connect:
+    from pyspark.sql.connect.types import UnparsedDataType
 
 
 class PandasUDFParityTests(PandasUDFTestsMixin, ReusedConnectTestCase):

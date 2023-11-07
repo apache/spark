@@ -28,6 +28,12 @@ import org.apache.spark.sql.connector.read.streaming
 class AvailableNowDataStreamWrapper(val delegate: SparkDataStream)
   extends SparkDataStream with SupportsTriggerAvailableNow with Logging {
 
+  // See SPARK-45178 for more details.
+  logWarning("Activating the wrapper implementation of Trigger.AvailableNow for source " +
+    s"[$delegate]. Note that this might introduce possibility of deduplication, dataloss, " +
+    "correctness issue. Enable the config with extreme care. We strongly recommend to contact " +
+    "the data source developer to support Trigger.AvailableNow.")
+
   private var fetchedOffset: streaming.Offset = _
 
   override def initialOffset(): streaming.Offset = delegate.initialOffset()

@@ -423,7 +423,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
   }
 
   test("Dataset.toExplainString has mode as string") {
-    val df = spark.range(10).toDF
+    val df = spark.range(10).toDF()
     def assertExplainOutput(mode: ExplainMode): Unit = {
       assert(df.queryExecution.explainString(mode).replaceAll("#\\d+", "#x").trim ===
         getNormalizedExplain(df, mode).trim)
@@ -736,7 +736,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
       val query = "SELECT * FROM (SELECT * FROM t1) join t2 " +
         "ON k = t2.key"
       val df = sql(query).toDF()
-
+      df.collect()
       val inMemoryRelationRegex = """InMemoryRelation \(([0-9]+)\)""".r
       val columnarToRowRegex = """ColumnarToRow \(([0-9]+)\)""".r
       val explainString = getNormalizedExplain(df, FormattedMode)

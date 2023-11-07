@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
 
 abstract class TypeCoercionSuiteBase extends AnalysisTest {
@@ -1577,6 +1578,22 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     val nullLit = Literal.create(null, NullType)
     ruleTest(rules, Divide(1L, nullLit), Divide(Cast(1L, DoubleType), Cast(nullLit, DoubleType)))
     ruleTest(rules, Divide(nullLit, 1L), Divide(Cast(nullLit, DoubleType), Cast(1L, DoubleType)))
+  }
+
+  test("Do not promote strings in binary arithmetic with intervals") {
+    val rule = TypeCoercion.PromoteStrings
+    // Verify String literal is not promoted in binary arithmetic operations with
+    // CalendarIntervalType, DayTimeIntervalType and YearMonthIntervalType
+    Seq(
+      Literal(Duration.ofHours(1)),
+      Literal(Period.ofDays(1)),
+      Literal(new CalendarInterval(1, 1, 1))).foreach { interval =>
+      val l = Literal("a")
+      Seq(Add(l, interval), Subtract(l, interval), Multiply(l, interval), Divide(l, interval))
+        .foreach { expr =>
+          ruleTest(rule, expr, expr)
+        }
+    }
   }
 
   test("binary comparison with string promotion") {

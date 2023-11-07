@@ -30,13 +30,12 @@ import java.util.concurrent.TimeoutException;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
-
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.stubbing.Answer;
 import org.mockito.stubbing.Stubber;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -60,7 +59,7 @@ public class RetryingBlockTransferorSuite {
 
   private static final int MAX_RETRIES = 2;
 
-  @Before
+  @BeforeEach
   public void initMap() {
     configMap = new HashMap<String, String>() {{
       put("spark.shuffle.io.maxRetries", Integer.toString(MAX_RETRIES));
@@ -372,6 +371,32 @@ public class RetryingBlockTransferorSuite {
     assert(_retryingBlockTransferor.getRetryCount() == MAX_RETRIES);
   }
 
+  @Test
+  public void testRetryInitiationFailure() throws IOException, InterruptedException {
+    BlockFetchingListener listener = mock(BlockFetchingListener.class);
+
+    List<? extends Map<String, Object>> interactions = Arrays.asList(
+        // IOException will initiate a retry, but the initiation will fail
+        ImmutableMap.<String, Object>builder()
+            .put("b0", new IOException("Connection failed or something"))
+            .put("b1", block1)
+            .build()
+    );
+
+    configureInteractions(interactions, listener);
+    _retryingBlockTransferor = spy(_retryingBlockTransferor);
+    // Simulate a failure to initiate a retry.
+    doReturn(false).when(_retryingBlockTransferor).initiateRetry(any());
+    // Override listener, so that it delegates to the spied instance and not the original class.
+    _retryingBlockTransferor.setCurrentListener(
+        _retryingBlockTransferor.new RetryingBlockTransferListener());
+    _retryingBlockTransferor.start();
+
+    verify(listener, timeout(5000)).onBlockTransferFailure(eq("b0"), any());
+    verify(listener, timeout(5000)).onBlockTransferSuccess("b1", block1);
+    verifyNoMoreInteractions(listener);
+  }
+
   /**
    * Performs a set of interactions in response to block requests from a RetryingBlockFetcher.
    * Each interaction is a Map from BlockId to either ManagedBuffer or Exception. This interaction
@@ -383,6 +408,13 @@ public class RetryingBlockTransferorSuite {
    * subset of the original blocks in a second interaction.
    */
   private static void performInteractions(List<? extends Map<String, Object>> interactions,
+                                          BlockFetchingListener listener)
+      throws IOException, InterruptedException {
+    configureInteractions(interactions, listener);
+    _retryingBlockTransferor.start();
+  }
+
+  private static void configureInteractions(List<? extends Map<String, Object>> interactions,
                                           BlockFetchingListener listener)
     throws IOException, InterruptedException {
 
@@ -440,6 +472,5 @@ public class RetryingBlockTransferorSuite {
     String[] blockIdArray = blockIds.toArray(new String[blockIds.size()]);
     _retryingBlockTransferor =
         new RetryingBlockTransferor(conf, fetchStarter, blockIdArray, listener);
-    _retryingBlockTransferor.start();
   }
 }

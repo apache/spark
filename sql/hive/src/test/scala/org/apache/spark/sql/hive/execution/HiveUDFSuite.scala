@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.execution
 import java.io.{DataInput, DataOutput, File, PrintWriter}
 import java.util.{ArrayList, Arrays, Properties}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.exec.UDF
@@ -37,7 +37,7 @@ import org.apache.spark.{SparkException, SparkFiles, TestUtils}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.WholeStageCodegenExec
-import org.apache.spark.sql.functions.max
+import org.apache.spark.sql.functions.{call_function, max}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -453,12 +453,12 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
       // EXTERNAL OpenCSVSerde table pointing to LOCATION
 
-      val file1 = new File(tempDir + "/data1")
+      val file1 = new File(s"$tempDir/data1")
       Utils.tryWithResource(new PrintWriter(file1)) { writer =>
         writer.write("1,2")
       }
 
-      val file2 = new File(tempDir + "/data2")
+      val file2 = new File(s"$tempDir/data2")
       Utils.tryWithResource(new PrintWriter(file2)) { writer =>
         writer.write("1,2")
       }
@@ -493,7 +493,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         sql("SELECT input_file_name() as file FROM external_t5").head().getString(0)
       assert(answer1.contains("data1") || answer1.contains("data2"))
 
-      val count2 = sql("SELECT input_file_name() as file FROM external_t5").distinct().count
+      val count2 = sql("SELECT input_file_name() as file FROM external_t5").distinct().count()
       assert(count2 == 2)
       sql("DROP TABLE external_t5")
     }
@@ -515,7 +515,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         sql("SELECT input_file_name() as file FROM external_parquet").head().getString(0)
       assert(answer3.contains("external_parquet"))
 
-      val count3 = sql("SELECT input_file_name() as file FROM external_parquet").distinct().count
+      val count3 = sql("SELECT input_file_name() as file FROM external_parquet").distinct().count()
       assert(count3 == 1)
       sql("DROP TABLE external_parquet")
     }
@@ -527,7 +527,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       sql("SELECT input_file_name() as file FROM parquet_tmp").head().getString(0)
     assert(answer4.contains("parquet_tmp"))
 
-    val count4 = sql("SELECT input_file_name() as file FROM parquet_tmp").distinct().count
+    val count4 = sql("SELECT input_file_name() as file FROM parquet_tmp").distinct().count()
     assert(count4 == 1)
     sql("DROP TABLE parquet_tmp")
   }
@@ -549,6 +549,19 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       // Expected Max(s) is 1, as stateless UDF is deterministic and foldable and replaced
       // by constant 1 by ConstantFolding optimizer.
       checkAnswer(testData.selectExpr("statelessUDF() as s").agg(max($"s")), Row(1))
+    }
+  }
+
+  test("Invoke a persist hive function with call_function") {
+    val testData = spark.range(5).repartition(1)
+    withUserDefinedFunction("custom_avg" -> false) {
+      sql(s"CREATE FUNCTION custom_avg AS '${classOf[GenericUDAFAverage].getName}'")
+      checkAnswer(
+        testData.select(
+          call_function("custom_avg", $"id"),
+          call_function("default.custom_avg", $"id"),
+          call_function("spark_catalog.default.custom_avg", $"id")),
+        Row(2.0, 2.0, 2.0))
     }
   }
 

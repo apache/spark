@@ -14,13 +14,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect.utils import check_dependencies
+
+check_dependencies(__name__)
 
 import json
 import sys
+import pickle
 from typing import TYPE_CHECKING, Any, cast, Dict, List, Optional
 
 from pyspark.errors import StreamingQueryException, PySparkValueError
 import pyspark.sql.connect.proto as pb2
+from pyspark.serializers import CloudPickleSerializer
+from pyspark.sql.connect import proto
+from pyspark.sql.connect.utils import get_python_ver
+from pyspark.sql.streaming import StreamingQueryListener
 from pyspark.sql.streaming.query import (
     StreamingQuery as PySparkStreamingQuery,
     StreamingQueryManager as PySparkStreamingQueryManager,
@@ -28,8 +36,7 @@ from pyspark.sql.streaming.query import (
 from pyspark.errors.exceptions.connect import (
     StreamingQueryException as CapturedStreamingQueryException,
 )
-
-__all__ = ["StreamingQuery", "StreamingQueryManager"]
+from pyspark.errors import PySparkPicklingError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
@@ -226,25 +233,33 @@ class StreamingQueryManager:
         cmd = pb2.StreamingQueryManagerCommand()
         cmd.reset_terminated = True
         self._execute_streaming_query_manager_cmd(cmd)
-        return None
 
     resetTerminated.__doc__ = PySparkStreamingQueryManager.resetTerminated.__doc__
 
-    def addListener(self, listener: Any) -> None:
-        # TODO(SPARK-42941): Change listener type to Connect StreamingQueryListener
-        # and implement below
-        raise NotImplementedError("addListener() is not implemented.")
+    def addListener(self, listener: StreamingQueryListener) -> None:
+        listener._init_listener_id()
+        cmd = pb2.StreamingQueryManagerCommand()
+        expr = proto.PythonUDF()
+        try:
+            expr.command = CloudPickleSerializer().dumps(listener)
+        except pickle.PicklingError:
+            raise PySparkPicklingError(
+                error_class="STREAMING_CONNECT_SERIALIZATION_ERROR",
+                message_parameters={"name": "addListener"},
+            )
+        expr.python_ver = get_python_ver()
+        cmd.add_listener.python_listener_payload.CopyFrom(expr)
+        cmd.add_listener.id = listener._id
+        self._execute_streaming_query_manager_cmd(cmd)
 
-    # TODO(SPARK-42941): uncomment below
-    # addListener.__doc__ = PySparkStreamingQueryManager.addListener.__doc__
+    addListener.__doc__ = PySparkStreamingQueryManager.addListener.__doc__
 
-    def removeListener(self, listener: Any) -> None:
-        # TODO(SPARK-42941): Change listener type to Connect StreamingQueryListener
-        # and implement below
-        raise NotImplementedError("removeListener() is not implemented.")
+    def removeListener(self, listener: StreamingQueryListener) -> None:
+        cmd = pb2.StreamingQueryManagerCommand()
+        cmd.remove_listener.id = listener._id
+        self._execute_streaming_query_manager_cmd(cmd)
 
-    # TODO(SPARK-42941): uncomment below
-    # removeListener.__doc__ = PySparkStreamingQueryManager.removeListener.__doc__
+    removeListener.__doc__ = PySparkStreamingQueryManager.removeListener.__doc__
 
     def _execute_streaming_query_manager_cmd(
         self, cmd: pb2.StreamingQueryManagerCommand

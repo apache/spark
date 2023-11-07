@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, Ta
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.internal.SQLConf
@@ -210,7 +211,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
         errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
         sqlState = "0A000",
         parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
-          "operation" -> "ALTER COLUMN ... FIRST | ALTER"))
+          "operation" -> "ALTER COLUMN ... FIRST | AFTER"))
     }
   }
 
@@ -429,7 +430,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       if (userSpecifiedSchema.isEmpty && userSpecifiedPartitionCols.nonEmpty) {
         checkError(
           exception = intercept[AnalysisException](sql(sqlCreateTable)),
-          errorClass = null,
+          errorClass = "SPECIFY_PARTITION_IS_NOT_ALLOWED",
           parameters = Map.empty
         )
       } else {
@@ -960,7 +961,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     createTable(catalog, tableIdent)
     val sql1 = "ALTER TABLE dbx.tab1 CLUSTERED BY (blood, lemon, grape) INTO 11 BUCKETS"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql1)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -968,7 +969,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       context = ExpectedContext(fragment = sql1, start = 0, stop = 70))
     val sql2 = "ALTER TABLE dbx.tab1 CLUSTERED BY (fuji) SORTED BY (grape) INTO 5 BUCKETS"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql2)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -976,7 +977,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       context = ExpectedContext(fragment = sql2, start = 0, stop = 72))
     val sql3 = "ALTER TABLE dbx.tab1 NOT CLUSTERED"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql3)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -984,7 +985,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       context = ExpectedContext(fragment = sql3, start = 0, stop = 33))
     val sql4 = "ALTER TABLE dbx.tab1 NOT SORTED"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql4)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -1000,7 +1001,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     val sql1 = "ALTER TABLE dbx.tab1 SKEWED BY (dt, country) ON " +
       "(('2008-08-08', 'us'), ('2009-09-09', 'uk'), ('2010-10-10', 'cn'))"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql1)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -1010,7 +1011,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     val sql2 = "ALTER TABLE dbx.tab1 SKEWED BY (dt, country) ON " +
       "(('2008-08-08', 'us'), ('2009-09-09', 'uk')) STORED AS DIRECTORIES"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql2)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -1019,7 +1020,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     )
     val sql3 = "ALTER TABLE dbx.tab1 NOT SKEWED"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql3)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -1028,7 +1029,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     )
     val sql4 = "ALTER TABLE dbx.tab1 NOT STORED AS DIRECTORIES"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql4)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -1040,7 +1041,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   test("alter table: add partition is not supported for views") {
     val sql1 = "ALTER VIEW dbx.tab1 ADD IF NOT EXISTS PARTITION (b='2')"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql1)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -1052,7 +1053,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   test("alter table: drop partition is not supported for views") {
     val sql1 = "ALTER VIEW dbx.tab1 DROP IF EXISTS PARTITION (b='2')"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql1)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -1159,7 +1160,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     // table to alter does not exist
     val sql1 = "ALTER TABLE does_not_exist UNSET TBLPROPERTIES ('c' = 'lan')"
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql(sql1)
       },
       errorClass = "_LEGACY_ERROR_TEMP_0035",
@@ -1316,19 +1317,21 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       withTable("jsonTable") {
         (("a", "b") :: Nil).toDF().write.json(tempDir.getCanonicalPath)
 
-        val e = intercept[AnalysisException] {
-        sql(
-          s"""
-             |CREATE TABLE jsonTable
-             |USING org.apache.spark.sql.json
-             |OPTIONS (
-             |  path '${tempDir.getCanonicalPath}'
-             |)
-             |CLUSTERED BY (nonexistentColumnA) SORTED BY (nonexistentColumnB) INTO 2 BUCKETS
-           """.stripMargin)
-        }
-        assert(e.message == "Cannot specify bucketing information if the table schema is not " +
-          "specified when creating and will be inferred at runtime")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(
+              s"""
+                 |CREATE TABLE jsonTable
+                 |USING org.apache.spark.sql.json
+                 |OPTIONS (
+                 |  path '${tempDir.getCanonicalPath}'
+                 |)
+                 |CLUSTERED BY (nonexistentColumnA) SORTED BY (nonexistentColumnB) INTO 2 BUCKETS
+               """.stripMargin)
+          },
+          errorClass = "SPECIFY_BUCKETING_IS_NOT_ALLOWED",
+          parameters = Map.empty
+        )
       }
     }
   }
@@ -1353,8 +1356,11 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           exception = intercept[AnalysisException] {
             sql("CREATE TEMPORARY VIEW view1 (col1, col3) AS SELECT * FROM tab1")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1277",
-          parameters = Map("analyzedPlanLength" -> "1", "userSpecifiedColumnsLength" -> "2")
+          errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+          parameters = Map(
+            "viewName" -> "`view1`",
+            "viewColumns" -> "`col1`, `col3`",
+            "dataColumns" -> "`id`")
         )
       }
     }
@@ -1489,7 +1495,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test("SPARK-18009 calling toLocalIterator on commands") {
-    import scala.collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
     val df = sql("show databases")
     val rows: Seq[Row] = df.toLocalIterator().asScala.toSeq
     assert(rows.length > 0)
@@ -2058,22 +2064,38 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   test("alter table add columns -- not support temp view") {
     withTempView("tmp_v") {
       sql("CREATE TEMPORARY VIEW tmp_v AS SELECT 1 AS c1, 2 AS c2")
-      val e = intercept[AnalysisException] {
-        sql("ALTER TABLE tmp_v ADD COLUMNS (c3 INT)")
-      }
-      assert(e.message.contains(
-        "tmp_v is a temp view. 'ALTER TABLE ... ADD COLUMNS' expects a table."))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE tmp_v ADD COLUMNS (c3 INT)")
+        },
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        parameters = Map(
+          "viewName" -> "`tmp_v`",
+          "operation" -> "ALTER TABLE ... ADD COLUMNS"),
+        context = ExpectedContext(
+          fragment = "tmp_v",
+          start = 12,
+          stop = 16)
+      )
     }
   }
 
   test("alter table add columns -- not support view") {
     withView("v1") {
       sql("CREATE VIEW v1 AS SELECT 1 AS c1, 2 AS c2")
-      val e = intercept[AnalysisException] {
-        sql("ALTER TABLE v1 ADD COLUMNS (c3 INT)")
-      }
-      assert(e.message.contains(s"${SESSION_CATALOG_NAME}.default.v1 is a view. " +
-        "'ALTER TABLE ... ADD COLUMNS' expects a table."))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE v1 ADD COLUMNS (c3 INT)")
+        },
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        parameters = Map(
+          "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
+          "operation" -> "ALTER TABLE ... ADD COLUMNS"),
+        context = ExpectedContext(
+          fragment = "v1",
+          start = 12,
+          stop = 13)
+      )
     }
   }
 
@@ -2162,12 +2184,12 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
 
   test("Refresh table before drop database cascade") {
     withTempDir { tempDir =>
-      val file1 = new File(tempDir + "/first.csv")
+      val file1 = new File(s"$tempDir/first.csv")
       Utils.tryWithResource(new PrintWriter(file1)) { writer =>
         writer.write("first")
       }
 
-      val file2 = new File(tempDir + "/second.csv")
+      val file2 = new File(s"$tempDir/second.csv")
       Utils.tryWithResource(new PrintWriter(file2)) { writer =>
         writer.write("second")
       }
@@ -2247,8 +2269,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           exception = intercept[SparkException] {
             sql(s"ADD FILE $testDir")
           },
-          errorClass = null,
-          parameters = Map.empty
+          errorClass = "UNSUPPORTED_ADD_FILE.DIRECTORY",
+          parameters = Map("path" -> s"file:${testDir.getCanonicalPath}/")
         )
       }
     }
@@ -2382,6 +2404,21 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
         "operation" -> "generated columns")
     )
+  }
+
+  test("SPARK-44837: Error when altering partition column in non-delta table") {
+    withTable("t") {
+      sql("CREATE TABLE t(i INT, j INT, k INT) USING parquet PARTITIONED BY (i, j)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE t ALTER COLUMN i COMMENT 'comment'")
+        },
+        errorClass = "CANNOT_ALTER_PARTITION_COLUMN",
+        sqlState = "428FR",
+        parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
+          "columnName" -> "`i`")
+      )
+    }
   }
 }
 

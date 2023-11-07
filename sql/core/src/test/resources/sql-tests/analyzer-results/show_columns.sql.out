@@ -66,7 +66,7 @@ ShowColumnsCommand showdb, `spark_catalog`.`showdb`.`showcolumn2`, [col_name#x]
 -- !query
 SHOW COLUMNS IN badtable FROM showdb
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -111,7 +111,7 @@ ShowColumnsCommand `showcolumn3`, [col_name#x]
 -- !query
 SHOW COLUMNS IN showdb.showcolumn3
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -131,7 +131,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SHOW COLUMNS IN showcolumn3 FROM showdb
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -151,7 +151,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SHOW COLUMNS IN showcolumn4
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",

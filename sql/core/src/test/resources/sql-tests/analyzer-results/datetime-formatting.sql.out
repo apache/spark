@@ -23,9 +23,9 @@ CreateViewCommand `v`, select col from values
 
 
 -- !query
-select col, date_format(col, 'G GG GGG GGGG') from v
+select col, date_format(col, 'G GG GGG GGGG'), to_char(col, 'G GG GGG GGGG'), to_varchar(col, 'G GG GGG GGGG') from v
 -- !query analysis
-Project [col#x, date_format(col#x, G GG GGG GGGG, Some(America/Los_Angeles)) AS date_format(col, G GG GGG GGGG)#x]
+Project [col#x, date_format(col#x, G GG GGG GGGG, Some(America/Los_Angeles)) AS date_format(col, G GG GGG GGGG)#x, date_format(col#x, G GG GGG GGGG, Some(America/Los_Angeles)) AS date_format(col, G GG GGG GGGG)#x, date_format(col#x, G GG GGG GGGG, Some(America/Los_Angeles)) AS date_format(col, G GG GGG GGGG)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -35,9 +35,9 @@ Project [col#x, date_format(col#x, G GG GGG GGGG, Some(America/Los_Angeles)) AS 
 
 
 -- !query
-select col, date_format(col, 'y yy yyy yyyy yyyyy yyyyyy') from v
+select col, date_format(col, 'y yy yyy yyyy yyyyy yyyyyy'), to_char(col, 'y yy yyy yyyy yyyyy yyyyyy'), to_varchar(col, 'y yy yyy yyyy yyyyy yyyyyy') from v
 -- !query analysis
-Project [col#x, date_format(col#x, y yy yyy yyyy yyyyy yyyyyy, Some(America/Los_Angeles)) AS date_format(col, y yy yyy yyyy yyyyy yyyyyy)#x]
+Project [col#x, date_format(col#x, y yy yyy yyyy yyyyy yyyyyy, Some(America/Los_Angeles)) AS date_format(col, y yy yyy yyyy yyyyy yyyyyy)#x, date_format(col#x, y yy yyy yyyy yyyyy yyyyyy, Some(America/Los_Angeles)) AS date_format(col, y yy yyy yyyy yyyyy yyyyyy)#x, date_format(col#x, y yy yyy yyyy yyyyy yyyyyy, Some(America/Los_Angeles)) AS date_format(col, y yy yyy yyyy yyyyy yyyyyy)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -47,9 +47,9 @@ Project [col#x, date_format(col#x, y yy yyy yyyy yyyyy yyyyyy, Some(America/Los_
 
 
 -- !query
-select col, date_format(col, 'q qq') from v
+select col, date_format(col, 'q qq'), to_char(col, 'q qq'), to_varchar(col, 'q qq') from v
 -- !query analysis
-Project [col#x, date_format(col#x, q qq, Some(America/Los_Angeles)) AS date_format(col, q qq)#x]
+Project [col#x, date_format(col#x, q qq, Some(America/Los_Angeles)) AS date_format(col, q qq)#x, date_format(col#x, q qq, Some(America/Los_Angeles)) AS date_format(col, q qq)#x, date_format(col#x, q qq, Some(America/Los_Angeles)) AS date_format(col, q qq)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -59,9 +59,9 @@ Project [col#x, date_format(col#x, q qq, Some(America/Los_Angeles)) AS date_form
 
 
 -- !query
-select col, date_format(col, 'Q QQ QQQ QQQQ') from v
+select col, date_format(col, 'Q QQ QQQ QQQQ'), to_char(col, 'Q QQ QQQ QQQQ'), to_varchar(col, 'Q QQ QQQ QQQQ') from v
 -- !query analysis
-Project [col#x, date_format(col#x, Q QQ QQQ QQQQ, Some(America/Los_Angeles)) AS date_format(col, Q QQ QQQ QQQQ)#x]
+Project [col#x, date_format(col#x, Q QQ QQQ QQQQ, Some(America/Los_Angeles)) AS date_format(col, Q QQ QQQ QQQQ)#x, date_format(col#x, Q QQ QQQ QQQQ, Some(America/Los_Angeles)) AS date_format(col, Q QQ QQQ QQQQ)#x, date_format(col#x, Q QQ QQQ QQQQ, Some(America/Los_Angeles)) AS date_format(col, Q QQ QQQ QQQQ)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -71,9 +71,9 @@ Project [col#x, date_format(col#x, Q QQ QQQ QQQQ, Some(America/Los_Angeles)) AS 
 
 
 -- !query
-select col, date_format(col, 'M MM MMM MMMM') from v
+select col, date_format(col, 'M MM MMM MMMM'), to_char(col, 'M MM MMM MMMM'), to_varchar(col, 'M MM MMM MMMM') from v
 -- !query analysis
-Project [col#x, date_format(col#x, M MM MMM MMMM, Some(America/Los_Angeles)) AS date_format(col, M MM MMM MMMM)#x]
+Project [col#x, date_format(col#x, M MM MMM MMMM, Some(America/Los_Angeles)) AS date_format(col, M MM MMM MMMM)#x, date_format(col#x, M MM MMM MMMM, Some(America/Los_Angeles)) AS date_format(col, M MM MMM MMMM)#x, date_format(col#x, M MM MMM MMMM, Some(America/Los_Angeles)) AS date_format(col, M MM MMM MMMM)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -83,9 +83,9 @@ Project [col#x, date_format(col#x, M MM MMM MMMM, Some(America/Los_Angeles)) AS 
 
 
 -- !query
-select col, date_format(col, 'L LL') from v
+select col, date_format(col, 'L LL'), to_char(col, 'L LL'), to_varchar(col, 'L LL') from v
 -- !query analysis
-Project [col#x, date_format(col#x, L LL, Some(America/Los_Angeles)) AS date_format(col, L LL)#x]
+Project [col#x, date_format(col#x, L LL, Some(America/Los_Angeles)) AS date_format(col, L LL)#x, date_format(col#x, L LL, Some(America/Los_Angeles)) AS date_format(col, L LL)#x, date_format(col#x, L LL, Some(America/Los_Angeles)) AS date_format(col, L LL)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -95,9 +95,9 @@ Project [col#x, date_format(col#x, L LL, Some(America/Los_Angeles)) AS date_form
 
 
 -- !query
-select col, date_format(col, 'E EE EEE EEEE') from v
+select col, date_format(col, 'E EE EEE EEEE'), to_char(col, 'E EE EEE EEEE'), to_varchar(col, 'E EE EEE EEEE') from v
 -- !query analysis
-Project [col#x, date_format(col#x, E EE EEE EEEE, Some(America/Los_Angeles)) AS date_format(col, E EE EEE EEEE)#x]
+Project [col#x, date_format(col#x, E EE EEE EEEE, Some(America/Los_Angeles)) AS date_format(col, E EE EEE EEEE)#x, date_format(col#x, E EE EEE EEEE, Some(America/Los_Angeles)) AS date_format(col, E EE EEE EEEE)#x, date_format(col#x, E EE EEE EEEE, Some(America/Los_Angeles)) AS date_format(col, E EE EEE EEEE)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -107,9 +107,9 @@ Project [col#x, date_format(col#x, E EE EEE EEEE, Some(America/Los_Angeles)) AS 
 
 
 -- !query
-select col, date_format(col, 'F') from v
+select col, date_format(col, 'F'), to_char(col, 'F'), to_varchar(col, 'F') from v
 -- !query analysis
-Project [col#x, date_format(col#x, F, Some(America/Los_Angeles)) AS date_format(col, F)#x]
+Project [col#x, date_format(col#x, F, Some(America/Los_Angeles)) AS date_format(col, F)#x, date_format(col#x, F, Some(America/Los_Angeles)) AS date_format(col, F)#x, date_format(col#x, F, Some(America/Los_Angeles)) AS date_format(col, F)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -119,9 +119,9 @@ Project [col#x, date_format(col#x, F, Some(America/Los_Angeles)) AS date_format(
 
 
 -- !query
-select col, date_format(col, 'd dd') from v
+select col, date_format(col, 'd dd'), to_char(col, 'd dd'), to_varchar(col, 'd dd') from v
 -- !query analysis
-Project [col#x, date_format(col#x, d dd, Some(America/Los_Angeles)) AS date_format(col, d dd)#x]
+Project [col#x, date_format(col#x, d dd, Some(America/Los_Angeles)) AS date_format(col, d dd)#x, date_format(col#x, d dd, Some(America/Los_Angeles)) AS date_format(col, d dd)#x, date_format(col#x, d dd, Some(America/Los_Angeles)) AS date_format(col, d dd)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -131,15 +131,15 @@ Project [col#x, date_format(col#x, d dd, Some(America/Los_Angeles)) AS date_form
 
 
 -- !query
-select col, date_format(col, 'DD') from v where col = timestamp '2100-01-01 01:33:33.123America/Los_Angeles'
+select col, date_format(col, 'DD'), to_char(col, 'DD'), to_varchar(col, 'DD') from v where col = timestamp '2100-01-01 01:33:33.123America/Los_Angeles'
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
-select col, date_format(col, 'D DDD') from v
+select col, date_format(col, 'D DDD'), to_char(col, 'D DDD'), to_varchar(col, 'D DDD') from v
 -- !query analysis
-Project [col#x, date_format(col#x, D DDD, Some(America/Los_Angeles)) AS date_format(col, D DDD)#x]
+Project [col#x, date_format(col#x, D DDD, Some(America/Los_Angeles)) AS date_format(col, D DDD)#x, date_format(col#x, D DDD, Some(America/Los_Angeles)) AS date_format(col, D DDD)#x, date_format(col#x, D DDD, Some(America/Los_Angeles)) AS date_format(col, D DDD)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -149,9 +149,9 @@ Project [col#x, date_format(col#x, D DDD, Some(America/Los_Angeles)) AS date_for
 
 
 -- !query
-select col, date_format(col, 'H HH') from v
+select col, date_format(col, 'H HH'), to_char(col, 'H HH'), to_varchar(col, 'H HH') from v
 -- !query analysis
-Project [col#x, date_format(col#x, H HH, Some(America/Los_Angeles)) AS date_format(col, H HH)#x]
+Project [col#x, date_format(col#x, H HH, Some(America/Los_Angeles)) AS date_format(col, H HH)#x, date_format(col#x, H HH, Some(America/Los_Angeles)) AS date_format(col, H HH)#x, date_format(col#x, H HH, Some(America/Los_Angeles)) AS date_format(col, H HH)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -161,9 +161,9 @@ Project [col#x, date_format(col#x, H HH, Some(America/Los_Angeles)) AS date_form
 
 
 -- !query
-select col, date_format(col, 'h hh') from v
+select col, date_format(col, 'h hh'), to_char(col, 'h hh'), to_varchar(col, 'h hh') from v
 -- !query analysis
-Project [col#x, date_format(col#x, h hh, Some(America/Los_Angeles)) AS date_format(col, h hh)#x]
+Project [col#x, date_format(col#x, h hh, Some(America/Los_Angeles)) AS date_format(col, h hh)#x, date_format(col#x, h hh, Some(America/Los_Angeles)) AS date_format(col, h hh)#x, date_format(col#x, h hh, Some(America/Los_Angeles)) AS date_format(col, h hh)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -173,9 +173,9 @@ Project [col#x, date_format(col#x, h hh, Some(America/Los_Angeles)) AS date_form
 
 
 -- !query
-select col, date_format(col, 'k kk') from v
+select col, date_format(col, 'k kk'), to_char(col, 'k kk'), to_varchar(col, 'k kk') from v
 -- !query analysis
-Project [col#x, date_format(col#x, k kk, Some(America/Los_Angeles)) AS date_format(col, k kk)#x]
+Project [col#x, date_format(col#x, k kk, Some(America/Los_Angeles)) AS date_format(col, k kk)#x, date_format(col#x, k kk, Some(America/Los_Angeles)) AS date_format(col, k kk)#x, date_format(col#x, k kk, Some(America/Los_Angeles)) AS date_format(col, k kk)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -185,9 +185,9 @@ Project [col#x, date_format(col#x, k kk, Some(America/Los_Angeles)) AS date_form
 
 
 -- !query
-select col, date_format(col, 'K KK') from v
+select col, date_format(col, 'K KK'), to_char(col, 'K KK'), to_varchar(col, 'K KK') from v
 -- !query analysis
-Project [col#x, date_format(col#x, K KK, Some(America/Los_Angeles)) AS date_format(col, K KK)#x]
+Project [col#x, date_format(col#x, K KK, Some(America/Los_Angeles)) AS date_format(col, K KK)#x, date_format(col#x, K KK, Some(America/Los_Angeles)) AS date_format(col, K KK)#x, date_format(col#x, K KK, Some(America/Los_Angeles)) AS date_format(col, K KK)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -197,9 +197,9 @@ Project [col#x, date_format(col#x, K KK, Some(America/Los_Angeles)) AS date_form
 
 
 -- !query
-select col, date_format(col, 'm mm') from v
+select col, date_format(col, 'm mm'), to_char(col, 'm mm'), to_varchar(col, 'm mm') from v
 -- !query analysis
-Project [col#x, date_format(col#x, m mm, Some(America/Los_Angeles)) AS date_format(col, m mm)#x]
+Project [col#x, date_format(col#x, m mm, Some(America/Los_Angeles)) AS date_format(col, m mm)#x, date_format(col#x, m mm, Some(America/Los_Angeles)) AS date_format(col, m mm)#x, date_format(col#x, m mm, Some(America/Los_Angeles)) AS date_format(col, m mm)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -209,9 +209,9 @@ Project [col#x, date_format(col#x, m mm, Some(America/Los_Angeles)) AS date_form
 
 
 -- !query
-select col, date_format(col, 's ss') from v
+select col, date_format(col, 's ss'), to_char(col, 's ss'), to_varchar(col, 's ss') from v
 -- !query analysis
-Project [col#x, date_format(col#x, s ss, Some(America/Los_Angeles)) AS date_format(col, s ss)#x]
+Project [col#x, date_format(col#x, s ss, Some(America/Los_Angeles)) AS date_format(col, s ss)#x, date_format(col#x, s ss, Some(America/Los_Angeles)) AS date_format(col, s ss)#x, date_format(col#x, s ss, Some(America/Los_Angeles)) AS date_format(col, s ss)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -221,9 +221,9 @@ Project [col#x, date_format(col#x, s ss, Some(America/Los_Angeles)) AS date_form
 
 
 -- !query
-select col, date_format(col, 'S SS SSS SSSS SSSSS SSSSSS SSSSSSS SSSSSSSS SSSSSSSSS') from v
+select col, date_format(col, 'S SS SSS SSSS SSSSS SSSSSS SSSSSSS SSSSSSSS SSSSSSSSS'), to_char(col, 'S SS SSS SSSS SSSSS SSSSSS SSSSSSS SSSSSSSS SSSSSSSSS'), to_varchar(col, 'S SS SSS SSSS SSSSS SSSSSS SSSSSSS SSSSSSSS SSSSSSSSS') from v
 -- !query analysis
-Project [col#x, date_format(col#x, S SS SSS SSSS SSSSS SSSSSS SSSSSSS SSSSSSSS SSSSSSSSS, Some(America/Los_Angeles)) AS date_format(col, S SS SSS SSSS SSSSS SSSSSS SSSSSSS SSSSSSSS SSSSSSSSS)#x]
+Project [col#x, date_format(col#x, S SS SSS SSSS SSSSS SSSSSS SSSSSSS SSSSSSSS SSSSSSSSS, Some(America/Los_Angeles)) AS date_format(col, S SS SSS SSSS SSSSS SSSSSS SSSSSSS SSSSSSSS SSSSSSSSS)#x, date_format(col#x, S SS SSS SSSS SSSSS SSSSSS SSSSSSS SSSSSSSS SSSSSSSSS, Some(America/Los_Angeles)) AS date_format(col, S SS SSS SSSS SSSSS SSSSSS SSSSSSS SSSSSSSS SSSSSSSSS)#x, date_format(col#x, S SS SSS SSSS SSSSS SSSSSS SSSSSSS SSSSSSSS SSSSSSSSS, Some(America/Los_Angeles)) AS date_format(col, S SS SSS SSSS SSSSS SSSSSS SSSSSSS SSSSSSSS SSSSSSSSS)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -233,9 +233,9 @@ Project [col#x, date_format(col#x, S SS SSS SSSS SSSSS SSSSSS SSSSSSS SSSSSSSS S
 
 
 -- !query
-select col, date_format(col, 'a') from v
+select col, date_format(col, 'a'), to_char(col, 'a'), to_varchar(col, 'a') from v
 -- !query analysis
-Project [col#x, date_format(col#x, a, Some(America/Los_Angeles)) AS date_format(col, a)#x]
+Project [col#x, date_format(col#x, a, Some(America/Los_Angeles)) AS date_format(col, a)#x, date_format(col#x, a, Some(America/Los_Angeles)) AS date_format(col, a)#x, date_format(col#x, a, Some(America/Los_Angeles)) AS date_format(col, a)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -245,9 +245,9 @@ Project [col#x, date_format(col#x, a, Some(America/Los_Angeles)) AS date_format(
 
 
 -- !query
-select col, date_format(col, 'VV') from v
+select col, date_format(col, 'VV'), to_char(col, 'VV'), to_varchar(col, 'VV') from v
 -- !query analysis
-Project [col#x, date_format(col#x, VV, Some(America/Los_Angeles)) AS date_format(col, VV)#x]
+Project [col#x, date_format(col#x, VV, Some(America/Los_Angeles)) AS date_format(col, VV)#x, date_format(col#x, VV, Some(America/Los_Angeles)) AS date_format(col, VV)#x, date_format(col#x, VV, Some(America/Los_Angeles)) AS date_format(col, VV)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -257,9 +257,9 @@ Project [col#x, date_format(col#x, VV, Some(America/Los_Angeles)) AS date_format
 
 
 -- !query
-select col, date_format(col, 'z zz zzz zzzz') from v
+select col, date_format(col, 'z zz zzz zzzz'), to_char(col, 'z zz zzz zzzz'), to_varchar(col, 'z zz zzz zzzz') from v
 -- !query analysis
-Project [col#x, date_format(col#x, z zz zzz zzzz, Some(America/Los_Angeles)) AS date_format(col, z zz zzz zzzz)#x]
+Project [col#x, date_format(col#x, z zz zzz zzzz, Some(America/Los_Angeles)) AS date_format(col, z zz zzz zzzz)#x, date_format(col#x, z zz zzz zzzz, Some(America/Los_Angeles)) AS date_format(col, z zz zzz zzzz)#x, date_format(col#x, z zz zzz zzzz, Some(America/Los_Angeles)) AS date_format(col, z zz zzz zzzz)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -269,9 +269,9 @@ Project [col#x, date_format(col#x, z zz zzz zzzz, Some(America/Los_Angeles)) AS 
 
 
 -- !query
-select col, date_format(col, 'X XX XXX') from v
+select col, date_format(col, 'X XX XXX'), to_char(col, 'X XX XXX'), to_varchar(col, 'X XX XXX') from v
 -- !query analysis
-Project [col#x, date_format(col#x, X XX XXX, Some(America/Los_Angeles)) AS date_format(col, X XX XXX)#x]
+Project [col#x, date_format(col#x, X XX XXX, Some(America/Los_Angeles)) AS date_format(col, X XX XXX)#x, date_format(col#x, X XX XXX, Some(America/Los_Angeles)) AS date_format(col, X XX XXX)#x, date_format(col#x, X XX XXX, Some(America/Los_Angeles)) AS date_format(col, X XX XXX)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -281,9 +281,9 @@ Project [col#x, date_format(col#x, X XX XXX, Some(America/Los_Angeles)) AS date_
 
 
 -- !query
-select col, date_format(col, 'XXXX XXXXX') from v
+select col, date_format(col, 'XXXX XXXXX'), to_char(col, 'XXXX XXXXX'), to_varchar(col, 'XXXX XXXXX') from v
 -- !query analysis
-Project [col#x, date_format(col#x, XXXX XXXXX, Some(America/Los_Angeles)) AS date_format(col, XXXX XXXXX)#x]
+Project [col#x, date_format(col#x, XXXX XXXXX, Some(America/Los_Angeles)) AS date_format(col, XXXX XXXXX)#x, date_format(col#x, XXXX XXXXX, Some(America/Los_Angeles)) AS date_format(col, XXXX XXXXX)#x, date_format(col#x, XXXX XXXXX, Some(America/Los_Angeles)) AS date_format(col, XXXX XXXXX)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -293,9 +293,9 @@ Project [col#x, date_format(col#x, XXXX XXXXX, Some(America/Los_Angeles)) AS dat
 
 
 -- !query
-select col, date_format(col, 'Z ZZ ZZZ ZZZZ ZZZZZ') from v
+select col, date_format(col, 'Z ZZ ZZZ ZZZZ ZZZZZ'), to_char(col, 'Z ZZ ZZZ ZZZZ ZZZZZ'), to_varchar(col, 'Z ZZ ZZZ ZZZZ ZZZZZ') from v
 -- !query analysis
-Project [col#x, date_format(col#x, Z ZZ ZZZ ZZZZ ZZZZZ, Some(America/Los_Angeles)) AS date_format(col, Z ZZ ZZZ ZZZZ ZZZZZ)#x]
+Project [col#x, date_format(col#x, Z ZZ ZZZ ZZZZ ZZZZZ, Some(America/Los_Angeles)) AS date_format(col, Z ZZ ZZZ ZZZZ ZZZZZ)#x, date_format(col#x, Z ZZ ZZZ ZZZZ ZZZZZ, Some(America/Los_Angeles)) AS date_format(col, Z ZZ ZZZ ZZZZ ZZZZZ)#x, date_format(col#x, Z ZZ ZZZ ZZZZ ZZZZZ, Some(America/Los_Angeles)) AS date_format(col, Z ZZ ZZZ ZZZZ ZZZZZ)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -305,9 +305,9 @@ Project [col#x, date_format(col#x, Z ZZ ZZZ ZZZZ ZZZZZ, Some(America/Los_Angeles
 
 
 -- !query
-select col, date_format(col, 'O OOOO') from v
+select col, date_format(col, 'O OOOO'), to_char(col, 'O OOOO'), to_varchar(col, 'O OOOO') from v
 -- !query analysis
-Project [col#x, date_format(col#x, O OOOO, Some(America/Los_Angeles)) AS date_format(col, O OOOO)#x]
+Project [col#x, date_format(col#x, O OOOO, Some(America/Los_Angeles)) AS date_format(col, O OOOO)#x, date_format(col#x, O OOOO, Some(America/Los_Angeles)) AS date_format(col, O OOOO)#x, date_format(col#x, O OOOO, Some(America/Los_Angeles)) AS date_format(col, O OOOO)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -317,9 +317,9 @@ Project [col#x, date_format(col#x, O OOOO, Some(America/Los_Angeles)) AS date_fo
 
 
 -- !query
-select col, date_format(col, 'x xx xxx xxxx xxxx xxxxx') from v
+select col, date_format(col, 'x xx xxx xxxx xxxx xxxxx'), to_char(col, 'x xx xxx xxxx xxxx xxxxx'), to_varchar(col, 'x xx xxx xxxx xxxx xxxxx') from v
 -- !query analysis
-Project [col#x, date_format(col#x, x xx xxx xxxx xxxx xxxxx, Some(America/Los_Angeles)) AS date_format(col, x xx xxx xxxx xxxx xxxxx)#x]
+Project [col#x, date_format(col#x, x xx xxx xxxx xxxx xxxxx, Some(America/Los_Angeles)) AS date_format(col, x xx xxx xxxx xxxx xxxxx)#x, date_format(col#x, x xx xxx xxxx xxxx xxxxx, Some(America/Los_Angeles)) AS date_format(col, x xx xxx xxxx xxxx xxxxx)#x, date_format(col#x, x xx xxx xxxx xxxx xxxxx, Some(America/Los_Angeles)) AS date_format(col, x xx xxx xxxx xxxx xxxxx)#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -329,9 +329,9 @@ Project [col#x, date_format(col#x, x xx xxx xxxx xxxx xxxxx, Some(America/Los_An
 
 
 -- !query
-select col, date_format(col, '[yyyy-MM-dd HH:mm:ss]') from v
+select col, date_format(col, '[yyyy-MM-dd HH:mm:ss]'), to_char(col, '[yyyy-MM-dd HH:mm:ss]'), to_varchar(col, '[yyyy-MM-dd HH:mm:ss]') from v
 -- !query analysis
-Project [col#x, date_format(col#x, [yyyy-MM-dd HH:mm:ss], Some(America/Los_Angeles)) AS date_format(col, [yyyy-MM-dd HH:mm:ss])#x]
+Project [col#x, date_format(col#x, [yyyy-MM-dd HH:mm:ss], Some(America/Los_Angeles)) AS date_format(col, [yyyy-MM-dd HH:mm:ss])#x, date_format(col#x, [yyyy-MM-dd HH:mm:ss], Some(America/Los_Angeles)) AS date_format(col, [yyyy-MM-dd HH:mm:ss])#x, date_format(col#x, [yyyy-MM-dd HH:mm:ss], Some(America/Los_Angeles)) AS date_format(col, [yyyy-MM-dd HH:mm:ss])#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -341,9 +341,9 @@ Project [col#x, date_format(col#x, [yyyy-MM-dd HH:mm:ss], Some(America/Los_Angel
 
 
 -- !query
-select col, date_format(col, "姚123'GyYqQMLwWuEFDdhHmsSaVzZxXOV'") from v
+select col, date_format(col, "姚123'GyYqQMLwWuEFDdhHmsSaVzZxXOV'"), to_char(col, "姚123'GyYqQMLwWuEFDdhHmsSaVzZxXOV'"), to_varchar(col, "姚123'GyYqQMLwWuEFDdhHmsSaVzZxXOV'") from v
 -- !query analysis
-Project [col#x, date_format(col#x, 姚123'GyYqQMLwWuEFDdhHmsSaVzZxXOV', Some(America/Los_Angeles)) AS date_format(col, 姚123'GyYqQMLwWuEFDdhHmsSaVzZxXOV')#x]
+Project [col#x, date_format(col#x, 姚123'GyYqQMLwWuEFDdhHmsSaVzZxXOV', Some(America/Los_Angeles)) AS date_format(col, 姚123'GyYqQMLwWuEFDdhHmsSaVzZxXOV')#x, date_format(col#x, 姚123'GyYqQMLwWuEFDdhHmsSaVzZxXOV', Some(America/Los_Angeles)) AS date_format(col, 姚123'GyYqQMLwWuEFDdhHmsSaVzZxXOV')#x, date_format(col#x, 姚123'GyYqQMLwWuEFDdhHmsSaVzZxXOV', Some(America/Los_Angeles)) AS date_format(col, 姚123'GyYqQMLwWuEFDdhHmsSaVzZxXOV')#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -353,9 +353,9 @@ Project [col#x, date_format(col#x, 姚123'GyYqQMLwWuEFDdhHmsSaVzZxXOV', Some(Ame
 
 
 -- !query
-select col, date_format(col, "''") from v
+select col, date_format(col, "''"), to_char(col, "''"), to_varchar(col, "''") from v
 -- !query analysis
-Project [col#x, date_format(col#x, '', Some(America/Los_Angeles)) AS date_format(col, '')#x]
+Project [col#x, date_format(col#x, '', Some(America/Los_Angeles)) AS date_format(col, '')#x, date_format(col#x, '', Some(America/Los_Angeles)) AS date_format(col, '')#x, date_format(col#x, '', Some(America/Los_Angeles)) AS date_format(col, '')#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
@@ -365,12 +365,31 @@ Project [col#x, date_format(col#x, '', Some(America/Los_Angeles)) AS date_format
 
 
 -- !query
-select col, date_format(col, '') from v
+select col, date_format(col, ''), to_char(col, ''), to_varchar(col, '') from v
 -- !query analysis
-Project [col#x, date_format(col#x, , Some(America/Los_Angeles)) AS date_format(col, )#x]
+Project [col#x, date_format(col#x, , Some(America/Los_Angeles)) AS date_format(col, )#x, date_format(col#x, , Some(America/Los_Angeles)) AS date_format(col, )#x, date_format(col#x, , Some(America/Los_Angeles)) AS date_format(col, )#x]
 +- SubqueryAlias v
    +- View (`v`, [col#x])
       +- Project [cast(col#x as timestamp) AS col#x]
          +- Project [col#x]
             +- SubqueryAlias t
                +- LocalRelation [col#x]
+
+
+-- !query
+select date_format(date'2023-08-18', 'yyyy-MM-dd'), to_char(date'2023-08-18', 'yyyy-MM-dd'), to_varchar(date'2023-08-18', 'yyyy-MM-dd')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select date_format(timestamp_ltz'2023-08-18 09:13:14.123456Z', 'yyyy-MM-dd HH:mm:ss.SSSSSSZ'), to_char(timestamp_ltz'2023-08-18 09:13:14.123456Z', 'yyyy-MM-dd HH:mm:ss.SSSSSSZ'), to_varchar(timestamp_ltz'2023-08-18 09:13:14.123456Z', 'yyyy-MM-dd HH:mm:ss.SSSSSSZ')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select date_format(timestamp_ntz'2023-08-18 09:13:14.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS'), to_char(timestamp_ntz'2023-08-18 09:13:14.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS'), to_varchar(timestamp_ntz'2023-08-18 09:13:14.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS')
+-- !query analysis
+Project [date_format(cast(2023-08-18 09:13:14.123456 as timestamp), yyyy-MM-dd HH:mm:ss.SSSSSS, Some(America/Los_Angeles)) AS date_format(TIMESTAMP_NTZ '2023-08-18 09:13:14.123456', yyyy-MM-dd HH:mm:ss.SSSSSS)#x, date_format(cast(2023-08-18 09:13:14.123456 as timestamp), yyyy-MM-dd HH:mm:ss.SSSSSS, Some(America/Los_Angeles)) AS date_format(TIMESTAMP_NTZ '2023-08-18 09:13:14.123456', yyyy-MM-dd HH:mm:ss.SSSSSS)#x, date_format(cast(2023-08-18 09:13:14.123456 as timestamp), yyyy-MM-dd HH:mm:ss.SSSSSS, Some(America/Los_Angeles)) AS date_format(TIMESTAMP_NTZ '2023-08-18 09:13:14.123456', yyyy-MM-dd HH:mm:ss.SSSSSS)#x]
++- OneRowRelation

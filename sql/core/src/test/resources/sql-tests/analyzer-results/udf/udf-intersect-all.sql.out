@@ -161,7 +161,7 @@ SELECT k, udf(v) FROM tab1
 INTERSECT ALL
 SELECT array(1), udf(2)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -188,7 +188,7 @@ SELECT udf(k) FROM tab1
 INTERSECT ALL
 SELECT udf(k), udf(v) FROM tab2
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "NUM_COLUMNS_MISMATCH",
   "sqlState" : "42826",

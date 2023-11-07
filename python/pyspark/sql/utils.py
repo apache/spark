@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import inspect
 import functools
 import os
 from typing import Any, Callable, Optional, Sequence, TYPE_CHECKING, cast, TypeVar, Union, Type
@@ -139,13 +140,41 @@ def is_timestamp_ntz_preferred() -> bool:
     """
     Return a bool if TimestampNTZType is preferred according to the SQL configuration set.
     """
-    jvm = SparkContext._jvm
-    return jvm is not None and jvm.PythonSQLUtils.isTimestampNTZPreferred()
+    if is_remote():
+        from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
+
+        session = ConnectSparkSession.getActiveSession()
+        if session is None:
+            return False
+        else:
+            return session.conf.get("spark.sql.timestampType", None) == "TIMESTAMP_NTZ"
+    else:
+        jvm = SparkContext._jvm
+        return jvm is not None and jvm.PythonSQLUtils.isTimestampNTZPreferred()
 
 
 def is_remote() -> bool:
     """
     Returns if the current running environment is for Spark Connect.
+
+    .. versionadded:: 4.0.0
+
+    Notes
+    -----
+    This will only return ``True`` if there is a remote session running.
+    Otherwise, it returns ``False``.
+
+    This API is unstable, and for developers.
+
+    Returns
+    -------
+    bool
+
+    Examples
+    --------
+    >>> from pyspark.sql import is_remote
+    >>> is_remote()
+    False
     """
     return "SPARK_CONNECT_MODE_ENABLED" in os.environ
 
@@ -155,7 +184,6 @@ def try_remote_functions(f: FuncT) -> FuncT:
 
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
-
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.sql.connect import functions
 
@@ -171,9 +199,23 @@ def try_remote_avro_functions(f: FuncT) -> FuncT:
 
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
-
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.sql.connect.avro import functions
+
+            return getattr(functions, f.__name__)(*args, **kwargs)
+        else:
+            return f(*args, **kwargs)
+
+    return cast(FuncT, wrapped)
+
+
+def try_remote_protobuf_functions(f: FuncT) -> FuncT:
+    """Mark API supported from Spark Connect."""
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.sql.connect.protobuf import functions
 
             return getattr(functions, f.__name__)(*args, **kwargs)
         else:
@@ -187,7 +229,6 @@ def try_remote_window(f: FuncT) -> FuncT:
 
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
-
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.sql.connect.window import Window  # type: ignore[misc]
 
@@ -203,7 +244,6 @@ def try_remote_windowspec(f: FuncT) -> FuncT:
 
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
-
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.sql.connect.window import WindowSpec
 
@@ -223,18 +263,18 @@ def get_active_spark_context() -> SparkContext:
     return sc
 
 
-def try_remote_observation(f: FuncT) -> FuncT:
+def try_remote_session_classmethod(f: FuncT) -> FuncT:
     """Mark API supported from Spark Connect."""
 
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
-        # TODO(SPARK-41527): Add the support of Observation.
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            raise PySparkNotImplementedError(
-                error_class="NOT_IMPLEMENTED",
-                message_parameters={"feature": "Observation support for Spark Connect"},
-            )
-        return f(*args, **kwargs)
+            from pyspark.sql.connect.session import SparkSession  # type: ignore[misc]
+
+            assert inspect.isclass(args[0])
+            return getattr(SparkSession, f.__name__)(*args[1:], **kwargs)
+        else:
+            return f(*args, **kwargs)
 
     return cast(FuncT, wrapped)
 

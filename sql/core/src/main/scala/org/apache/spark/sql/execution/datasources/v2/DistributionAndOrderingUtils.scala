@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, ResolveTimeZone, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, SortOrder, TransformExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RebalancePartitions, RepartitionByExpression, Sort}
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.connector.catalog.FunctionCatalog
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.connector.distributions._
@@ -83,11 +83,15 @@ object DistributionAndOrderingUtils {
         queryWithDistribution
       }
 
-      // Apply typeCoercionRules since the converted expression from TransformExpression
-      // implemented ImplicitCastInputTypes
-      typeCoercionRules.foldLeft(queryWithDistributionAndOrdering)((plan, rule) => rule(plan))
+      TypeCoercionExecutor.execute(queryWithDistributionAndOrdering)
     case _ =>
       query
+  }
+
+  private object TypeCoercionExecutor extends RuleExecutor[LogicalPlan] {
+    override val batches =
+      Batch("Resolve TypeCoercion", FixedPoint(1), typeCoercionRules: _*) ::
+      Batch("Resolve TimeZone", FixedPoint(1), ResolveTimeZone) :: Nil
   }
 
   private def resolveTransformExpression(expr: Expression): Expression = expr.transform {

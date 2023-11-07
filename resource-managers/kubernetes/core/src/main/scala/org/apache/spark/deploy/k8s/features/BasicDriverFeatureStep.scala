@@ -18,8 +18,8 @@ package org.apache.spark.deploy.k8s.features
 
 import javax.ws.rs.core.UriBuilder
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model._
 
@@ -143,8 +143,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       .editOrNewMetadata()
         .withName(driverPodName)
         .addToLabels(conf.labels.asJava)
-        .addToAnnotations(conf.annotations.map { case (k, v) =>
-          (k, Utils.substituteAppNExecIds(v, conf.appId, "")) }.asJava)
+        .addToAnnotations(conf.annotations.asJava)
         .endMetadata()
       .editOrNewSpec()
         .withRestartPolicy("Never")

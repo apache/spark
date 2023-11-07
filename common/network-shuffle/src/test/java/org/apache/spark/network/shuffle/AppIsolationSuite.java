@@ -26,10 +26,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.TestUtils;
@@ -64,7 +64,7 @@ public class AppIsolationSuite {
   private static SecretKeyHolder secretKeyHolder;
   private static TransportConf conf;
 
-  @BeforeClass
+  @BeforeAll
   public static void beforeAll() {
     Map<String, String> confMap = new HashMap<>();
     confMap.put("spark.network.crypto.enabled", "true");
@@ -177,8 +177,8 @@ public class AppIsolationSuite {
   }
 
   private static void checkSecurityException(Throwable t) {
-    assertNotNull("No exception was caught.", t);
-    assertTrue("Expected SecurityException.",
-      t.getMessage().contains(SecurityException.class.getName()));
+    assertNotNull(t,"No exception was caught.");
+    assertTrue(t.getMessage().contains(SecurityException.class.getName()),
+      "Expected SecurityException.");
   }
 }

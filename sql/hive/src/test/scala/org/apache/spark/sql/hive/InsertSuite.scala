@@ -194,7 +194,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         """.stripMargin)
     checkAnswer(sql(selQuery), Row(5, 2, 3, 6))
 
-    val e = intercept[AnalysisException] {
+    val e = intercept[ParseException] {
       sql(
         s"""
            |INSERT OVERWRITE TABLE $tableName
@@ -391,10 +391,10 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         sql(s"INSERT INTO TABLE $tableName PARTITION (c=11, b=10) SELECT 9, 12")
 
         // The data is missing a column. The default value for the missing column is null.
-        sql(s"INSERT INTO TABLE $tableName PARTITION (c=15, b=16) SELECT 13")
+        sql(s"INSERT INTO TABLE $tableName PARTITION (c=15, b=16) (a) SELECT 13")
 
         // c is defined twice. Analyzer will complain.
-        intercept[AnalysisException] {
+        intercept[ParseException] {
           sql(s"INSERT INTO TABLE $tableName PARTITION (b=14, c=15, c=16) SELECT 13")
         }
 

@@ -22,6 +22,7 @@ import java.nio.channels.{ClosedByInterruptException, FileChannel}
 import java.nio.file.Files
 import java.util.zip.Checksum
 
+import org.apache.spark.SparkException
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.MutableCheckedOutputStream
@@ -62,7 +63,7 @@ private[spark] class DiskBlockObjectWriter(
    */
   private trait ManualCloseOutputStream extends OutputStream {
     abstract override def close(): Unit = {
-      flush()
+      this.flush()
     }
 
     def manualClose(): Unit = {
@@ -153,7 +154,8 @@ private[spark] class DiskBlockObjectWriter(
 
   def open(): DiskBlockObjectWriter = {
     if (hasBeenClosed) {
-      throw new IllegalStateException("Writer already closed. Cannot be reopened.")
+      throw SparkException.internalError(
+        "Writer already closed. Cannot be reopened.", category = "STORAGE")
     }
     if (!initialized) {
       initialize()

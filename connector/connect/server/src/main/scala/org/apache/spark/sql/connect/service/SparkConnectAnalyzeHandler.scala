@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.service
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.grpc.stub.StreamObserver
 
@@ -38,7 +38,7 @@ private[connect] class SparkConnectAnalyzeHandler(
       request.getSessionId)
     // `withSession` ensures that session-specific artifacts (such as JARs and class files) are
     // available during processing (such as deserialization).
-    sessionHolder.withSessionHolder { sessionHolder =>
+    sessionHolder.withSession { _ =>
       val response = process(request, sessionHolder)
       responseObserver.onNext(response)
       responseObserver.onCompleted()

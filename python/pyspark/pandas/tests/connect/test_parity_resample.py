@@ -16,21 +16,21 @@
 #
 import unittest
 
-from pyspark.pandas.tests.test_resample import ResampleTestsMixin
+from pyspark.pandas.tests.test_resample import ResampleTestsMixin, ResampleWithTimezoneMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 
 
-class ResampleTestsParityMixin(
+class ResampleParityTests(
     ResampleTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("TODO(SPARK-43660): Enable `resample` with Spark Connect.")
-    def test_dataframe_resample(self):
-        super().test_dataframe_resample()
+    pass
 
-    @unittest.skip("TODO(SPARK-43660): Enable `resample` with Spark Connect.")
-    def test_series_resample(self):
-        super().test_series_resample()
+
+class ResampleWithTimezoneTests(
+    ResampleWithTimezoneMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
+):
+    pass
 
 
 if __name__ == "__main__":

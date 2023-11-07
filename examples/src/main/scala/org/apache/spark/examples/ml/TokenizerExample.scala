@@ -27,7 +27,7 @@ import org.apache.spark.sql.functions._
 object TokenizerExample {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("TokenizerExample")
       .getOrCreate()
 

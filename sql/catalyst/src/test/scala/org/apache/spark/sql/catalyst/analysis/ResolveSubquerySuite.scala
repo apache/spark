@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{CreateArray, Expression, GetStructField, InSubquery, LateralSubquery, ListQuery, OuterReference, ScalarSubquery}
@@ -47,19 +46,6 @@ class ResolveSubquerySuite extends AnalysisTest {
       joinType: JoinType = Inner,
       condition: Option[Expression] = None): LateralJoin =
     LateralJoin(left, LateralSubquery(right), joinType, condition)
-
-  test("SPARK-17251 Improve `OuterReference` to be `NamedExpression`") {
-    val expr = Filter(
-      InSubquery(Seq(a), ListQuery(Project(Seq(UnresolvedAttribute("a")), t2))), t1)
-    checkError(
-      exception = intercept[AnalysisException] {
-        SimpleAnalyzer.checkAnalysis(SimpleAnalyzer.ResolveSubquery(expr))
-      },
-      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
-      parameters = Map("sqlExprs" -> "\"a\""),
-      matchPVals = true
-    )
-  }
 
   test("SPARK-29145 Support subquery in join condition") {
     val expr = Join(t1,
@@ -245,10 +231,10 @@ class ResolveSubquerySuite extends AnalysisTest {
       LateralJoin(t1,
         LateralSubquery(t0.select(newArray.as(newArray.sql)), Seq(a, b)), Inner, None)
     )
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       lateralJoin(t1.as("t1"), t0.select(Count(star("t1")))),
-      Seq("Invalid usage of '*' in expression 'count'")
-    )
+      expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+      expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "expression `count`"))
   }
 
   test("SPARK-35618: lateral join with struct type star expansion") {

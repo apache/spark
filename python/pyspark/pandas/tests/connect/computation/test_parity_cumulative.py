@@ -29,54 +29,6 @@ class FrameParityCumulativeTests(
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_cummax(self):
-        super().test_cummax()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_cummax_multiindex_columns(self):
-        super().test_cummax_multiindex_columns()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_cummin(self):
-        super().test_cummin()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_cummin_multiindex_columns(self):
-        super().test_cummin_multiindex_columns()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_cumprod(self):
-        super().test_cumprod()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_cumprod_multiindex_columns(self):
-        super().test_cumprod_multiindex_columns()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_cumsum(self):
-        super().test_cumsum()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_cumsum_multiindex_columns(self):
-        super().test_cumsum_multiindex_columns()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.computation.test_parity_cumulative import *  # noqa: F401

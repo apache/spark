@@ -15,9 +15,12 @@
  * limitations under the License.
  */
 
+/* global $, anchors */
+
 /* Custom JavaScript code in the MarkDown docs */
 
 // Enable language-specific code tabs
+
 function codeTabs() {
   var counter = 0;
   var langImages = {
@@ -48,12 +51,13 @@ function codeTabs() {
       var capitalizedLang = lang.substr(0, 1).toUpperCase() + lang.substr(1);
       var id = "tab_" + lang + "_" + counter;
       $(this).attr("id", id);
+      var buttonLabel = "";
       if (image != null && langImages[lang]) {
-        var buttonLabel = "<img src='" +langImages[lang] + "' alt='" + capitalizedLang + "' />";
+        buttonLabel = "<img src='" +langImages[lang] + "' alt='" + capitalizedLang + "' />";
       } else if (notabs == null) {
-        var buttonLabel = "<b>" + capitalizedLang + "</b>";
+        buttonLabel = "<b>" + capitalizedLang + "</b>";
       } else {
-        var buttonLabel = ""
+        buttonLabel = ""
       }
 
       // Add the link to the tab
@@ -65,11 +69,20 @@ function codeTabs() {
 
       tabBar.append(
         '<li class="nav-item"><button class="' +
-        active + 'nav-link tab_' + lang + '" data-bs-target="#' + id +
-        '" data-bs-toggle="tab">' + buttonLabel + '</button></li>'
+        active + 'nav-link tab_' + lang + '" data-bs-target="#' +
+        id + '" data-tab-lang="tab_' + lang + '" data-bs-toggle="tab">' +
+        buttonLabel + '</button></li>'
       );
     });
     counter++;
+  });
+  $("ul.nav-tabs button").click(function (e) {
+    // Toggling a tab should switch all tabs corresponding to the same language
+    // while retaining the scroll position
+    e.preventDefault();
+    var scrollOffset = $(this).offset().top - $(document).scrollTop();
+    $("." + $(this).attr('data-tab-lang')).tab('show');
+    $(document).scrollTop($(this).offset().top - scrollOffset);
   });
 }
 

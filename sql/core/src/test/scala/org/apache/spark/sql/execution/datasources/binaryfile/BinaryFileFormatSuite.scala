@@ -21,7 +21,7 @@ import java.io.{File, IOException}
 import java.nio.file.{Files, StandardOpenOption}
 import java.sql.Timestamp
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.common.io.{ByteStreams, Closeables}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
@@ -29,7 +29,7 @@ import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf.SOURCES_BINARY_FILE_MAX_LENGTH
@@ -165,7 +165,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
       val thrown = intercept[UnsupportedOperationException] {
         df.write
           .format(BINARY_FILE)
-          .save(tmpDir + "/test_save")
+          .save(s"$tmpDir/test_save")
       }
       assert(thrown.getMessage.contains("Write is not supported for binary file data source"))
     }
@@ -306,7 +306,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
     )
     val partitionedFile = mock(classOf[PartitionedFile])
     when(partitionedFile.toPath).thenReturn(new Path(file.toURI))
-    val encoder = RowEncoder(requiredSchema).resolveAndBind()
+    val encoder = ExpressionEncoder(requiredSchema).resolveAndBind()
     encoder.createDeserializer().apply(reader(partitionedFile).next())
   }
 

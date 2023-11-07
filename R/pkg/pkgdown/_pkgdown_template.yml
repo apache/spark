@@ -289,13 +289,19 @@ reference:
 - title: "Spark Session and Context"
 - contents:
   - cancelJobGroup
+  - cancelJobsWithTag
   - clearCache
   - clearJobGroup
   - getLocalProperty
   - install.spark
   - setCheckpointDir
   - setJobDescription
+  - setInterruptOnCancel
   - setJobGroup
+  - addJobTag
+  - removeJobTag
+  - getJobTags
+  - clearJobTags
   - setLocalProperty
   - setLogLevel
   - spark.addFile

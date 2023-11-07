@@ -32,16 +32,17 @@ TakeOrderedAndProject [item_id,ss_item_rev,ss_dev,cs_item_rev,cs_dev,ws_item_rev
                                                       WholeStageCodegen (1)
                                                         Project [d_date]
                                                           Filter [d_week_seq]
-                                                            Subquery #2
-                                                              WholeStageCodegen (1)
-                                                                Project [d_week_seq]
-                                                                  Filter [d_date]
-                                                                    ColumnarToRow
-                                                                      InputAdapter
-                                                                        Scan parquet spark_catalog.default.date_dim [d_date,d_week_seq]
+                                                            ReusedSubquery [d_week_seq] #2
                                                             ColumnarToRow
                                                               InputAdapter
                                                                 Scan parquet spark_catalog.default.date_dim [d_date,d_week_seq]
+                                                                  Subquery #2
+                                                                    WholeStageCodegen (1)
+                                                                      Project [d_week_seq]
+                                                                        Filter [d_date]
+                                                                          ColumnarToRow
+                                                                            InputAdapter
+                                                                              Scan parquet spark_catalog.default.date_dim [d_date,d_week_seq]
                                 InputAdapter
                                   ReusedExchange [d_date_sk] #2
                             InputAdapter

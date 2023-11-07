@@ -23,10 +23,10 @@ import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolE
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import scala.collection
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, ListBuffer, Map}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
@@ -171,7 +171,10 @@ private class ShuffleStatus(
    * Get the map output that corresponding to a given mapId.
    */
   def getMapStatus(mapId: Long): Option[MapStatus] = withReadLock {
-    mapIdToMapIndex.get(mapId).map(mapStatuses(_))
+    mapIdToMapIndex.get(mapId).map(mapStatuses(_)) match {
+      case Some(null) => None
+      case m => m
+    }
   }
 
   /**
@@ -677,6 +680,9 @@ private[spark] class MapOutputTrackerMaster(
   /** Whether to compute locality preferences for reduce tasks */
   private val shuffleLocalityEnabled = conf.get(SHUFFLE_REDUCE_LOCALITY_ENABLE)
 
+  private val shuffleMigrationEnabled = conf.get(DECOMMISSION_ENABLED) &&
+    conf.get(STORAGE_DECOMMISSION_ENABLED) && conf.get(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)
+
   // Number of map and reduce tasks above which we do not assign preferred locations based on map
   // output sizes. We limit the size of jobs for which assign preferred locations as computing the
   // top locations by size becomes expensive.
@@ -805,6 +811,8 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
         shuffleStatus.updateMapOutput(mapId, bmAddress)
+      case None if shuffleMigrationEnabled =>
+        logWarning(s"Asked to update map output for unknown shuffle ${shuffleId}")
       case None =>
         logError(s"Asked to update map output for unknown shuffle ${shuffleId}")
     }
@@ -898,12 +906,8 @@ private[spark] class MapOutputTrackerMaster(
   /** Unregister shuffle data */
   def unregisterShuffle(shuffleId: Int): Unit = {
     shuffleStatuses.remove(shuffleId).foreach { shuffleStatus =>
-      // SPARK-39553: Add protection for Scala 2.13 due to https://github.com/scala/bug/issues/12613
-      // We should revert this if Scala 2.13 solves this issue.
-      if (shuffleStatus != null) {
-        shuffleStatus.invalidateSerializedMapOutputStatusCache()
-        shuffleStatus.invalidateSerializedMergeOutputStatusCache()
-      }
+      shuffleStatus.invalidateSerializedMapOutputStatusCache()
+      shuffleStatus.invalidateSerializedMergeOutputStatusCache()
     }
   }
 

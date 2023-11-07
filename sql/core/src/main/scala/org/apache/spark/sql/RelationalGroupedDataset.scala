@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.annotation.Stable
@@ -31,10 +31,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{NumericType, StructType}
 
@@ -59,8 +59,8 @@ class RelationalGroupedDataset protected[sql](
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
     val aggregates = if (df.sparkSession.sessionState.conf.dataFrameRetainGroupColumns) {
       groupingExprs match {
-        // call `toList` because `Stream` can't serialize in scala 2.13
-        case s: Stream[Expression] => s.toList ++ aggExprs
+        // call `toList` because `LazyList` can't serialize in scala 2.13
+        case s: LazyList[Expression] => s.toList ++ aggExprs
         case other => other ++ aggExprs
       }
     } else {
@@ -463,7 +463,7 @@ class RelationalGroupedDataset protected[sql](
               Literal.apply(v)
             } catch {
               case _: SparkRuntimeException =>
-                throw QueryExecutionErrors.pivotColumnUnsupportedError(v, pivotColumn.expr.dataType)
+                throw QueryExecutionErrors.pivotColumnUnsupportedError(v, pivotColumn.expr)
             }
         })
         new RelationalGroupedDataset(
@@ -563,7 +563,7 @@ class RelationalGroupedDataset protected[sql](
     val project = df.sparkSession.sessionState.executePlan(
       Project(groupingNamedExpressions ++ child.output, child)).analyzed
     val groupingAttributes = project.output.take(groupingNamedExpressions.length)
-    val output = expr.dataType.asInstanceOf[StructType].toAttributes
+    val output = toAttributes(expr.dataType.asInstanceOf[StructType])
     val plan = FlatMapGroupsInPandas(groupingAttributes, expr, output, project)
 
     Dataset.ofRows(df.sparkSession, plan)
@@ -608,7 +608,7 @@ class RelationalGroupedDataset protected[sql](
     val right = r.df.sparkSession.sessionState.executePlan(
       Project(rightGroupingNamedExpressions ++ rightChild.output, rightChild)).analyzed
 
-    val output = expr.dataType.asInstanceOf[StructType].toAttributes
+    val output = toAttributes(expr.dataType.asInstanceOf[StructType])
     val plan = FlatMapCoGroupsInPandas(
       leftGroupingNamedExpressions.length, rightGroupingNamedExpressions.length,
       expr, output, left, right)
@@ -646,7 +646,7 @@ class RelationalGroupedDataset protected[sql](
       case other => Alias(other, other.toString)()
     }
     val groupingAttrs = groupingNamedExpressions.map(_.toAttribute)
-    val outputAttrs = outputStructType.toAttributes
+    val outputAttrs = toAttributes(outputStructType)
     val plan = FlatMapGroupsInPandasWithState(
       func,
       groupingAttrs,
@@ -705,9 +705,8 @@ private[sql] object RelationalGroupedDataset {
 
   private def alias(expr: Expression): NamedExpression = expr match {
     case expr: NamedExpression => expr
-    case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
-      UnresolvedAlias(a, Some(Column.generateAlias))
-    case u: UnresolvedFunction => UnresolvedAlias(expr, None)
+    case a: AggregateExpression => UnresolvedAlias(a, Some(Column.generateAlias))
+    case _ if !expr.resolved => UnresolvedAlias(expr, None)
     case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
 

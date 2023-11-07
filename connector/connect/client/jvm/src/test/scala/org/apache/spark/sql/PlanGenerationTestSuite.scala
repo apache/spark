@@ -20,8 +20,8 @@ import java.nio.file.{Files, Path}
 import java.util.{Collections, Properties}
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 import com.google.protobuf.util.JsonFormat
@@ -37,14 +37,13 @@ import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.connect.client.SparkConnectClient
-import org.apache.spark.sql.connect.client.util.ConnectFunSuite
-import org.apache.spark.sql.connect.client.util.IntegrationTestUtils
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.protobuf.{functions => pbFn}
+import org.apache.spark.sql.test.{ConnectFunSuite, IntegrationTestUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
-import org.apache.spark.util.Utils
+import org.apache.spark.util.SparkFileUtils
 
 // scalastyle:off
 /**
@@ -113,8 +112,7 @@ class PlanGenerationTestSuite
   override protected def beforeAll(): Unit = {
     super.beforeAll()
     val client = SparkConnectClient(InProcessChannelBuilder.forName("/dev/null").build())
-    session =
-      new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
+    session = new SparkSession(client, planIdGenerator = new AtomicLong)
   }
 
   override protected def beforeEach(): Unit = {
@@ -122,7 +120,9 @@ class PlanGenerationTestSuite
   }
 
   override protected def afterAll(): Unit = {
-    session.close()
+    // Don't call client.releaseSession on close(), because the connection details are dummy.
+    session.releaseSessionOnClose = false
+    session.stop()
     if (cleanOrphanedGoldenFiles) {
       cleanOrphanedGoldenFile()
     }
@@ -131,7 +131,7 @@ class PlanGenerationTestSuite
 
   private def cleanOrphanedGoldenFile(): Unit = {
     val allTestNames = testNames.map(_.replace(' ', '_'))
-    val orphans = Utils
+    val orphans = SparkFileUtils
       .recursiveList(queryFilePath.toFile)
       .filter(g =>
         g.getAbsolutePath.endsWith(".proto.bin") ||
@@ -139,7 +139,7 @@ class PlanGenerationTestSuite
       .filter(g =>
         !allTestNames.contains(g.getName.stripSuffix(".proto.bin")) &&
           !allTestNames.contains(g.getName.stripSuffix(".json")))
-    orphans.foreach(Utils.deleteRecursively)
+    orphans.foreach(SparkFileUtils.deleteRecursively)
   }
 
   private def test(name: String)(f: => Dataset[_]): Unit = super.test(name) {
@@ -486,7 +486,7 @@ class PlanGenerationTestSuite
   }
 
   test("as symbol") {
-    simple.as('bar)
+    simple.as(Symbol("bar"))
   }
   test("alias string") {
     simple.alias("fooz")
@@ -1181,6 +1181,10 @@ class PlanGenerationTestSuite
     boolean.select(fn.some(fn.col("flag")))
   }
 
+  test("function any") {
+    boolean.select(fn.any(fn.col("flag")))
+  }
+
   test("function bool_or") {
     boolean.select(fn.bool_or(fn.col("flag")))
   }
@@ -1561,6 +1565,10 @@ class PlanGenerationTestSuite
     fn.user()
   }
 
+  functionTest("session_user") {
+    fn.session_user()
+  }
+
   functionTest("md5") {
     fn.md5(fn.col("g").cast("binary"))
   }
@@ -1627,6 +1635,10 @@ class PlanGenerationTestSuite
 
   functionTest("length") {
     fn.length(fn.col("g"))
+  }
+
+  functionTest("len") {
+    fn.len(fn.col("g"))
   }
 
   functionTest("lower") {
@@ -1969,6 +1981,26 @@ class PlanGenerationTestSuite
 
   functionTest("row_number") {
     fn.row_number().over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("bitmap_bucket_number") {
+    fn.bitmap_bit_position(fn.col("id"))
+  }
+
+  functionTest("bitmap_bit_position") {
+    fn.bitmap_bit_position(fn.col("id"))
+  }
+
+  functionTest("bitmap_construct_agg") {
+    fn.bitmap_construct_agg(fn.col("id"))
+  }
+
+  test("function bitmap_count") {
+    binary.select(fn.bitmap_count(fn.col("bytes")))
+  }
+
+  test("function bitmap_or_agg") {
+    binary.select(fn.bitmap_or_agg(fn.col("bytes")))
   }
 
   private def temporalFunctionTest(name: String)(f: => Column): Unit = {
@@ -2522,6 +2554,10 @@ class PlanGenerationTestSuite
     fn.to_char(fn.col("b"), lit("$99.99"))
   }
 
+  functionTest("to_varchar") {
+    fn.to_varchar(fn.col("b"), lit("$99.99"))
+  }
+
   functionTest("to_number") {
     fn.to_number(fn.col("g"), lit("$99.99"))
   }
@@ -2698,6 +2734,54 @@ class PlanGenerationTestSuite
     fn.right(fn.col("g"), fn.col("g"))
   }
 
+  functionTest("array_agg") {
+    fn.array_agg(fn.col("a"))
+  }
+
+  functionTest("array_size") {
+    fn.array_size(fn.col("e"))
+  }
+
+  functionTest("cardinality") {
+    fn.cardinality(fn.col("f"))
+  }
+
+  functionTest("count_min_sketch") {
+    fn.count_min_sketch(fn.col("a"), fn.lit(0.1), fn.lit(0.95), fn.lit(11))
+  }
+
+  functionTest("named_struct") {
+    fn.named_struct(fn.lit("x"), fn.col("a"), fn.lit("y"), fn.col("id"))
+  }
+
+  functionTest("json_array_length") {
+    fn.json_array_length(fn.col("g"))
+  }
+
+  functionTest("json_object_keys") {
+    fn.json_object_keys(fn.col("g"))
+  }
+
+  functionTest("mask with specific upperChar lowerChar digitChar otherChar") {
+    fn.mask(fn.col("g"), fn.lit('X'), fn.lit('x'), fn.lit('n'), fn.lit('*'))
+  }
+
+  functionTest("mask with specific upperChar lowerChar digitChar") {
+    fn.mask(fn.col("g"), fn.lit('X'), fn.lit('x'), fn.lit('n'))
+  }
+
+  functionTest("mask with specific upperChar lowerChar") {
+    fn.mask(fn.col("g"), fn.lit('X'), fn.lit('x'))
+  }
+
+  functionTest("mask with specific upperChar") {
+    fn.mask(fn.col("g"), fn.lit('X'))
+  }
+
+  functionTest("mask") {
+    fn.mask(fn.col("g"))
+  }
+
   functionTest("aes_encrypt with mode padding iv aad") {
     fn.aes_encrypt(
       fn.col("g"),
@@ -2745,6 +2829,22 @@ class PlanGenerationTestSuite
     fn.aes_decrypt(fn.col("g"), fn.col("g"))
   }
 
+  functionTest("try_aes_decrypt with mode padding aad") {
+    fn.try_aes_decrypt(fn.col("g"), fn.col("g"), fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_aes_decrypt with mode padding") {
+    fn.try_aes_decrypt(fn.col("g"), fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_aes_decrypt with mode") {
+    fn.try_aes_decrypt(fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_aes_decrypt") {
+    fn.try_aes_decrypt(fn.col("g"), fn.col("g"))
+  }
+
   functionTest("sha") {
     fn.sha(fn.col("g"))
   }
@@ -2765,6 +2865,10 @@ class PlanGenerationTestSuite
     fn.java_method(lit("java.util.UUID"), lit("fromString"), fn.col("g"))
   }
 
+  functionTest("try_reflect") {
+    fn.try_reflect(lit("java.util.UUID"), lit("fromString"), fn.col("g"))
+  }
+
   functionTest("typeof") {
     fn.typeof(fn.col("g"))
   }
@@ -2775,6 +2879,50 @@ class PlanGenerationTestSuite
 
   functionTest("random with seed") {
     fn.random(lit(1))
+  }
+
+  functionTest("call_function") {
+    fn.call_function("lower", fn.col("g"))
+  }
+
+  test("hll_sketch_agg with column lgConfigK") {
+    binary.select(fn.hll_sketch_agg(fn.col("bytes"), lit(0)))
+  }
+
+  test("hll_sketch_agg with column lgConfigK_int") {
+    binary.select(fn.hll_sketch_agg(fn.col("bytes"), 0))
+  }
+
+  test("hll_sketch_agg with columnName lgConfigK_int") {
+    binary.select(fn.hll_sketch_agg("bytes", 0))
+  }
+
+  test("hll_sketch_agg") {
+    binary.select(fn.hll_sketch_agg(fn.col("bytes")))
+  }
+
+  test("hll_sketch_agg with columnName") {
+    binary.select(fn.hll_sketch_agg("bytes"))
+  }
+
+  test("hll_union_agg with column allowDifferentLgConfigK") {
+    binary.select(fn.hll_union_agg(fn.col("bytes"), lit(false)))
+  }
+
+  test("hll_union_agg with column allowDifferentLgConfigK_boolean") {
+    binary.select(fn.hll_union_agg(fn.col("bytes"), false))
+  }
+
+  test("hll_union_agg with columnName allowDifferentLgConfigK_boolean") {
+    binary.select(fn.hll_union_agg("bytes", false))
+  }
+
+  test("hll_union_agg") {
+    binary.select(fn.hll_union_agg(fn.col("bytes")))
+  }
+
+  test("hll_union_agg with columnName") {
+    binary.select(fn.hll_union_agg("bytes"))
   }
 
   test("groupby agg") {
@@ -2880,7 +3028,7 @@ class PlanGenerationTestSuite
   test("function lit") {
     simple.select(
       fn.lit(fn.col("id")),
-      fn.lit('id),
+      fn.lit(Symbol("id")),
       fn.lit(true),
       fn.lit(68.toByte),
       fn.lit(9872.toShort),
@@ -2894,7 +3042,7 @@ class PlanGenerationTestSuite
       fn.lit('T'),
       fn.lit(Array.tabulate(10)(i => ('A' + i).toChar)),
       fn.lit(Array.tabulate(23)(i => (i + 120).toByte)),
-      fn.lit(mutable.WrappedArray.make(Array[Byte](8.toByte, 6.toByte))),
+      fn.lit(mutable.ArraySeq.make(Array[Byte](8.toByte, 6.toByte))),
       fn.lit(null),
       fn.lit(java.time.LocalDate.of(2020, 10, 10)),
       fn.lit(Decimal.apply(BigDecimal(8997620, 6))),
@@ -2947,7 +3095,7 @@ class PlanGenerationTestSuite
   test("function typedLit") {
     simple.select(
       fn.typedLit(fn.col("id")),
-      fn.typedLit('id),
+      fn.typedLit(Symbol("id")),
       fn.typedLit(1),
       fn.typedLit[String](null),
       fn.typedLit(true),
@@ -2963,7 +3111,7 @@ class PlanGenerationTestSuite
       fn.typedLit('T'),
       fn.typedLit(Array.tabulate(10)(i => ('A' + i).toChar)),
       fn.typedLit(Array.tabulate(23)(i => (i + 120).toByte)),
-      fn.typedLit(mutable.WrappedArray.make(Array[Byte](8.toByte, 6.toByte))),
+      fn.typedLit(mutable.ArraySeq.make(Array[Byte](8.toByte, 6.toByte))),
       fn.typedLit(null),
       fn.typedLit(java.time.LocalDate.of(2020, 10, 10)),
       fn.typedLit(Decimal.apply(BigDecimal(8997620, 6))),
@@ -3092,11 +3240,15 @@ class PlanGenerationTestSuite
   private val testDescFilePath: String = s"${IntegrationTestUtils.sparkHome}/connector/" +
     "connect/common/src/test/resources/protobuf-tests/common.desc"
 
-  test("from_protobuf messageClassName") {
+  // TODO(SPARK-45030): Re-enable this test when all Maven test scenarios succeed and there
+  //  are no other negative impacts. For the problem description, please refer to SPARK-45029
+  ignore("from_protobuf messageClassName") {
     binary.select(pbFn.from_protobuf(fn.col("bytes"), classOf[StorageLevel].getName))
   }
 
-  test("from_protobuf messageClassName options") {
+  // TODO(SPARK-45030): Re-enable this test when all Maven test scenarios succeed and there
+  //  are no other negative impacts. For the problem description, please refer to SPARK-45029
+  ignore("from_protobuf messageClassName options") {
     binary.select(
       pbFn.from_protobuf(
         fn.col("bytes"),

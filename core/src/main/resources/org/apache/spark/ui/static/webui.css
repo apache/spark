@@ -286,6 +286,12 @@ span.expand-dag-viz, .collapse-table {
 
 a.expandbutton {
   cursor: pointer;
+  margin-right: 10px;
+}
+
+a.downloadbutton {
+  cursor: pointer;
+  margin-right: 10px;
 }
 
 .threaddump-td-mouseover {

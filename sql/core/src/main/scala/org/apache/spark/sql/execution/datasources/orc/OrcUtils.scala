@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -49,12 +49,12 @@ object OrcUtils extends Logging {
 
   // The extensions for ORC compression codecs
   val extensionsForCompressionCodecNames = Map(
-    "NONE" -> "",
-    "SNAPPY" -> ".snappy",
-    "ZLIB" -> ".zlib",
-    "ZSTD" -> ".zstd",
-    "LZ4" -> ".lz4",
-    "LZO" -> ".lzo")
+    OrcCompressionCodec.NONE.name() -> "",
+    OrcCompressionCodec.SNAPPY.name() -> ".snappy",
+    OrcCompressionCodec.ZLIB.name() -> ".zlib",
+    OrcCompressionCodec.ZSTD.name() -> ".zstd",
+    OrcCompressionCodec.LZ4.name() -> ".lz4",
+    OrcCompressionCodec.LZO.name() -> ".lzo")
 
   val CATALYST_TYPE_ATTRIBUTE_NAME = "spark.sql.catalyst.type"
 

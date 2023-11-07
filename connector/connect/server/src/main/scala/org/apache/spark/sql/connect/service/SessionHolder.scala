@@ -19,20 +19,29 @@ package org.apache.spark.sql.connect.service
 
 import java.nio.file.Path
 import java.util.UUID
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
 
-import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
+import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.{compact, render}
+import com.google.common.base.Ticker
+import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.JobArtifactSet
-import org.apache.spark.connect.proto
+import org.apache.spark.{JobArtifactSet, SparkException, SparkSQLException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
+import org.apache.spark.sql.connect.common.InvalidPlanInput
+import org.apache.spark.sql.connect.planner.PythonStreamingQueryListener
+import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper
+import org.apache.spark.sql.connect.service.SessionHolder.{ERROR_CACHE_SIZE, ERROR_CACHE_TIMEOUT_SEC}
+import org.apache.spark.sql.streaming.StreamingQueryListener
+import org.apache.spark.util.SystemClock
 import org.apache.spark.util.Utils
+
+// Unique key identifying session by combination of user, and session id
+case class SessionKey(userId: String, sessionId: String)
 
 /**
  * Object used to hold the Spark Connect session state.
@@ -40,32 +49,114 @@ import org.apache.spark.util.Utils
 case class SessionHolder(userId: String, sessionId: String, session: SparkSession)
     extends Logging {
 
-  val executePlanOperations: ConcurrentMap[String, ExecutePlanHolder] =
-    new ConcurrentHashMap[String, ExecutePlanHolder]()
+  @volatile private var lastRpcAccessTime: Option[Long] = None
 
-  private[connect] def createExecutePlanHolder(
-      request: proto.ExecutePlanRequest): ExecutePlanHolder = {
+  @volatile private var isClosing: Boolean = false
 
-    val operationId = UUID.randomUUID().toString
-    val executePlanHolder = ExecutePlanHolder(operationId, this, request)
-    assert(executePlanOperations.putIfAbsent(operationId, executePlanHolder) == null)
-    executePlanHolder
+  private val executions: ConcurrentMap[String, ExecuteHolder] =
+    new ConcurrentHashMap[String, ExecuteHolder]()
+
+  // The cache that maps an error id to a throwable. The throwable in cache is independent to
+  // each other.
+  private[connect] val errorIdToError = CacheBuilder
+    .newBuilder()
+    .ticker(Ticker.systemTicker())
+    .maximumSize(ERROR_CACHE_SIZE)
+    .expireAfterAccess(ERROR_CACHE_TIMEOUT_SEC, TimeUnit.SECONDS)
+    .build[String, Throwable]()
+
+  val eventManager: SessionEventsManager = SessionEventsManager(this, new SystemClock())
+
+  // Mapping from relation ID (passed to client) to runtime dataframe. Used for callbacks like
+  // foreachBatch() in Streaming. Lazy since most sessions don't need it.
+  private lazy val dataFrameCache: ConcurrentMap[String, DataFrame] = new ConcurrentHashMap()
+
+  // Mapping from id to StreamingQueryListener. Used for methods like removeListener() in
+  // StreamingQueryManager.
+  private lazy val listenerCache: ConcurrentMap[String, StreamingQueryListener] =
+    new ConcurrentHashMap()
+
+  // Handles Python process clean up for streaming queries. Initialized on first use in a query.
+  private[connect] lazy val streamingForeachBatchRunnerCleanerCache =
+    new StreamingForeachBatchHelper.CleanerCache(this)
+
+  def key: SessionKey = SessionKey(userId, sessionId)
+
+  /**
+   * Add ExecuteHolder to this session.
+   *
+   * Called only by SparkConnectExecutionManager under executionsLock.
+   */
+  private[service] def addExecuteHolder(executeHolder: ExecuteHolder): Unit = {
+    if (isClosing) {
+      // Do not accept new executions if the session is closing.
+      throw new SparkSQLException(
+        errorClass = "INVALID_HANDLE.SESSION_CLOSED",
+        messageParameters = Map("handle" -> sessionId))
+    }
+
+    val oldExecute = executions.putIfAbsent(executeHolder.operationId, executeHolder)
+    if (oldExecute != null) {
+      // the existence of this should alrady be checked by SparkConnectExecutionManager
+      throw new IllegalStateException(
+        s"ExecuteHolder with opId=${executeHolder.operationId} already exists!")
+    }
   }
 
-  private[connect] def removeExecutePlanHolder(operationId: String): Unit = {
-    executePlanOperations.remove(operationId)
+  /** Remove ExecuteHolder to this session. Called only by SparkConnectExecutionManager. */
+  private[service] def removeExecuteHolder(operationId: String): Unit = {
+    executions.remove(operationId)
   }
 
-  private[connect] def interruptAll(): Unit = {
-    executePlanOperations.asScala.values.foreach { execute =>
-      // Eat exception while trying to interrupt a given execution and move forward.
-      try {
-        execute.interrupt()
-      } catch {
-        case NonFatal(e) =>
-          logWarning(s"Exception $e while trying to interrupt execution ${execute.operationId}")
+  private[connect] def executeHolder(operationId: String): Option[ExecuteHolder] = {
+    Option(executions.get(operationId))
+  }
+
+  /**
+   * Interrupt all executions in the session.
+   * @return
+   *   list of operationIds of interrupted executions
+   */
+  private[service] def interruptAll(): Seq[String] = {
+    val interruptedIds = new mutable.ArrayBuffer[String]()
+    executions.asScala.values.foreach { execute =>
+      if (execute.interrupt()) {
+        interruptedIds += execute.operationId
       }
     }
+    interruptedIds.toSeq
+  }
+
+  /**
+   * Interrupt executions in the session with a given tag.
+   * @return
+   *   list of operationIds of interrupted executions
+   */
+  private[service] def interruptTag(tag: String): Seq[String] = {
+    val interruptedIds = new mutable.ArrayBuffer[String]()
+    executions.asScala.values.foreach { execute =>
+      if (execute.sparkSessionTags.contains(tag)) {
+        if (execute.interrupt()) {
+          interruptedIds += execute.operationId
+        }
+      }
+    }
+    interruptedIds.toSeq
+  }
+
+  /**
+   * Interrupt the execution with the given operation_id
+   * @return
+   *   list of operationIds of interrupted executions (one element or empty)
+   */
+  private[service] def interruptOperation(operationId: String): Seq[String] = {
+    val interruptedIds = new mutable.ArrayBuffer[String]()
+    Option(executions.get(operationId)).foreach { execute =>
+      if (execute.interrupt()) {
+        interruptedIds += execute.operationId
+      }
+    }
+    interruptedIds.toSeq
   }
 
   private[connect] lazy val artifactManager = new SparkConnectArtifactManager(this)
@@ -85,21 +176,59 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   /**
-   * A [[JobArtifactSet]] for this SparkConnect session.
-   */
-  def connectJobArtifactSet: JobArtifactSet = artifactManager.jobArtifactSet
-
-  /**
    * A [[ClassLoader]] for jar/class file resources specific to this SparkConnect session.
    */
   def classloader: ClassLoader = artifactManager.classloader
 
+  private[connect] def updateAccessTime(): Unit = {
+    lastRpcAccessTime = Some(System.currentTimeMillis())
+  }
+
+  /**
+   * Initialize the session.
+   *
+   * Called only by SparkConnectSessionManager.
+   */
+  private[connect] def initializeSession(): Unit = {
+    updateAccessTime()
+    eventManager.postStarted()
+  }
+
   /**
    * Expire this session and trigger state cleanup mechanisms.
+   *
+   * Called only by SparkConnectSessionManager.
    */
-  private[connect] def expireSession(): Unit = {
-    logDebug(s"Expiring session with userId: $userId and sessionId: $sessionId")
+  private[connect] def close(): Unit = {
+    logInfo(s"Closing session with userId: $userId and sessionId: $sessionId")
+
+    // After isClosing=true, SessionHolder.addExecuteHolder() will not allow new executions for
+    // this session. Because both SessionHolder.addExecuteHolder() and
+    // SparkConnectExecutionManager.removeAllExecutionsForSession() are executed under
+    // executionsLock, this guarantees that removeAllExecutionsForSession triggered below will
+    // remove all executions and no new executions will be added in the meanwhile.
+    isClosing = true
+
+    // Note on the below notes about concurrency:
+    // While closing the session can potentially race with operations started on the session, the
+    // intended use is that the client session will get closed when it's really not used anymore,
+    // or that it expires due to inactivity, in which case there should be no races.
+
+    // Clean up all artifacts.
+    // Note: there can be concurrent AddArtifact calls still adding something.
     artifactManager.cleanUpResources()
+
+    // Clean up running streaming queries.
+    // Note: there can be concurrent streaming queries being started.
+    SparkConnectService.streamingSessionManager.cleanupRunningQueries(this)
+    streamingForeachBatchRunnerCleanerCache.cleanUpAll() // Clean up any streaming workers.
+    removeAllListeners() // removes all listener and stop python listener processes if necessary.
+
+    // Clean up all executions
+    // It is guaranteed at this point that no new addExecuteHolder are getting started.
+    SparkConnectService.executionManager.removeAllExecutionsForSession(this.key)
+
+    eventManager.postClosed()
   }
 
   /**
@@ -107,29 +236,12 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * @param f
    * @tparam T
    */
-  def withContext[T](f: => T): T = {
+  def withContextClassLoader[T](f: => T): T = {
     // Needed for deserializing and evaluating the UDF on the driver
     Utils.withContextClassLoader(classloader) {
-      // Needed for propagating the dependencies to the executors.
-      JobArtifactSet.withActive(connectJobArtifactSet) {
+      JobArtifactSet.withActiveJobArtifactState(artifactManager.state) {
         f
       }
-    }
-  }
-
-  /**
-   * Set the session-based Python paths to include in Python UDF.
-   * @param f
-   * @tparam T
-   */
-  def withSessionBasedPythonPaths[T](f: => T): T = {
-    try {
-      session.conf.set(
-        "spark.connect.pythonUDF.includes",
-        compact(render(artifactManager.getSparkConnectPythonIncludes)))
-      f
-    } finally {
-      session.conf.unset("spark.connect.pythonUDF.includes")
     }
   }
 
@@ -139,36 +251,112 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * @tparam T
    */
   def withSession[T](f: SparkSession => T): T = {
-    withSessionBasedPythonPaths {
-      withContext {
-        session.withActive {
-          f(session)
-        }
+    withContextClassLoader {
+      session.withActive {
+        f(session)
       }
     }
   }
 
+  /** Get SessionInfo with information about this SessionHolder. */
+  def getSessionHolderInfo: SessionHolderInfo =
+    SessionHolderInfo(userId, sessionId, eventManager.status, lastRpcAccessTime)
+
   /**
-   * Execute a block of code using the session from this [[SessionHolder]] as the active
-   * SparkConnect session.
-   * @param f
-   * @tparam T
+   * Caches given DataFrame with the ID. The cache does not expire. The entry needs to be
+   * explicitly removed by the owners of the DataFrame once it is not needed.
    */
-  def withSessionHolder[T](f: SessionHolder => T): T = {
-    withSessionBasedPythonPaths {
-      withContext {
-        session.withActive {
-          f(this)
-        }
-      }
+  private[connect] def cacheDataFrameById(dfId: String, df: DataFrame): Unit = {
+    if (dataFrameCache.putIfAbsent(dfId, df) != null) {
+      SparkException.internalError(s"A dataframe is already associated with id $dfId")
     }
+  }
+
+  /**
+   * Returns [[DataFrame]] cached for DataFrame ID `dfId`. If it is not found, throw
+   * [[InvalidPlanInput]].
+   */
+  private[connect] def getDataFrameOrThrow(dfId: String): DataFrame = {
+    Option(dataFrameCache.get(dfId))
+      .getOrElse {
+        throw InvalidPlanInput(s"No DataFrame with id $dfId is found in the session $sessionId")
+      }
+  }
+
+  private[connect] def removeCachedDataFrame(dfId: String): DataFrame = {
+    dataFrameCache.remove(dfId)
+  }
+
+  /**
+   * Caches given StreamingQueryListener with the ID.
+   */
+  private[connect] def cacheListenerById(id: String, listener: StreamingQueryListener): Unit = {
+    if (listenerCache.putIfAbsent(id, listener) != null) {
+      SparkException.internalError(s"A listener is already associated with id $id")
+    }
+  }
+
+  /**
+   * Returns [[StreamingQueryListener]] cached for Listener ID `id`. If it is not found, return
+   * None.
+   */
+  private[connect] def getListener(id: String): Option[StreamingQueryListener] = {
+    Option(listenerCache.get(id))
+  }
+
+  /**
+   * Removes corresponding StreamingQueryListener by ID. Terminates the python process if it's a
+   * Spark Connect PythonStreamingQueryListener.
+   */
+  private[connect] def removeCachedListener(id: String): Unit = {
+    Option(listenerCache.remove(id)) match {
+      case Some(pyListener: PythonStreamingQueryListener) => pyListener.stopListenerProcess()
+      case _ => // do nothing
+    }
+  }
+
+  /**
+   * Stop all streaming listener threads, and removes all python process if applicable. Only
+   * called when session is expired.
+   */
+  private def removeAllListeners(): Unit = {
+    listenerCache.forEach((id, listener) => {
+      session.streams.removeListener(listener)
+      removeCachedListener(id)
+    })
+  }
+
+  /**
+   * List listener IDs that have been register on server side.
+   */
+  private[connect] def listListenerIds(): Seq[String] = {
+    listenerCache.keySet().asScala.toSeq
   }
 }
 
 object SessionHolder {
 
+  // The maximum number of distinct errors in the cache.
+  private val ERROR_CACHE_SIZE = 20
+
+  // The maximum time for an error to stay in the cache.
+  private val ERROR_CACHE_TIMEOUT_SEC = 60
+
   /** Creates a dummy session holder for use in tests. */
   def forTesting(session: SparkSession): SessionHolder = {
-    SessionHolder(userId = "testUser", sessionId = UUID.randomUUID().toString, session = session)
+    val ret =
+      SessionHolder(
+        userId = "testUser",
+        sessionId = UUID.randomUUID().toString,
+        session = session)
+    SparkConnectService.sessionManager.putSessionForTesting(ret)
+    ret
   }
 }
+
+/** Basic information about SessionHolder. */
+case class SessionHolderInfo(
+    userId: String,
+    sessionId: String,
+    status: SessionStatus,
+    lastRpcAccesTime: Option[Long])

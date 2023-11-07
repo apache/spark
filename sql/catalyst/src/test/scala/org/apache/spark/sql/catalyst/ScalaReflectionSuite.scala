@@ -183,13 +183,13 @@ class ScalaReflectionSuite extends SparkFunSuite {
   // A helper method used to test `ScalaReflection.serializerForType`.
   private def serializerFor[T: TypeTag]: Expression = {
     val enc = ScalaReflection.encoderFor[T]
-    ScalaReflection.serializerFor(enc)
+    SerializerBuildHelper.createSerializer(enc)
   }
 
   // A helper method used to test `ScalaReflection.deserializerForType`.
   private def deserializerFor[T: TypeTag]: Expression = {
     val enc = ScalaReflection.encoderFor[T]
-    ScalaReflection.deserializerFor(enc)
+    DeserializerBuildHelper.createDeserializer(enc)
   }
 
   test("isSubtype") {
@@ -611,7 +611,8 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(encoderForWithRowEncoderSupport[MyClass] ===
       ProductEncoder(
         ClassTag(getClassFromType(typeTag[MyClass].tpe)),
-        Seq(EncoderField("row", UnboundRowEncoder, true, Metadata.empty))))
+        Seq(EncoderField("row", UnboundRowEncoder, true, Metadata.empty)),
+        None))
   }
 
   case class MyClass(row: Row)

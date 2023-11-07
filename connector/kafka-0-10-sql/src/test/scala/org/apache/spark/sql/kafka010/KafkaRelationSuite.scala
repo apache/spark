@@ -97,11 +97,11 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     // Specify explicit earliest and latest offset values
     val df = createDF(topic,
       withOptions = Map("startingOffsets" -> "earliest", "endingOffsets" -> "latest"))
-    checkAnswer(df, (0 to 20).map(_.toString).toDF)
+    checkAnswer(df, (0 to 20).map(_.toString).toDF())
 
     // "latest" should late bind to the current (latest) offset in the df
     testUtils.sendMessages(topic, (21 to 29).map(_.toString).toArray, Some(2))
-    checkAnswer(df, (0 to 29).map(_.toString).toDF)
+    checkAnswer(df, (0 to 29).map(_.toString).toDF())
   }
 
   test("default starting and ending offsets") {
@@ -114,7 +114,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     // Implicit offset values, should default to earliest and latest
     val df = createDF(topic)
     // Test that we default to "earliest" and "latest"
-    checkAnswer(df, (0 to 20).map(_.toString).toDF)
+    checkAnswer(df, (0 to 20).map(_.toString).toDF())
   }
 
   test("explicit offsets") {
@@ -140,15 +140,15 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     val endingOffsets = JsonUtils.partitionOffsets(endPartitionOffsets)
     val df = createDF(topic,
         withOptions = Map("startingOffsets" -> startingOffsets, "endingOffsets" -> endingOffsets))
-    checkAnswer(df, (0 to 20).map(_.toString).toDF)
+    checkAnswer(df, (0 to 20).map(_.toString).toDF())
 
     // static offset partition 2, nothing should change
     testUtils.sendMessages(topic, (31 to 39).map(_.toString).toArray, Some(2))
-    checkAnswer(df, (0 to 20).map(_.toString).toDF)
+    checkAnswer(df, (0 to 20).map(_.toString).toDF())
 
     // latest offset partition 1, should change
     testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray, Some(1))
-    checkAnswer(df, (0 to 30).map(_.toString).toDF)
+    checkAnswer(df, (0 to 30).map(_.toString).toDF())
   }
 
   test("default starting and ending offsets with headers") {
@@ -171,7 +171,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     // Test that we default to "earliest" and "latest"
     checkAnswer(df, Seq(("1", null),
       ("2", Seq(("a", "b".getBytes(UTF_8)), ("c", "d".getBytes(UTF_8)))),
-      ("3", Seq(("e", "f".getBytes(UTF_8)), ("e", "g".getBytes(UTF_8))))).toDF)
+      ("3", Seq(("e", "f".getBytes(UTF_8)), ("e", "g".getBytes(UTF_8))))).toDF())
   }
 
   test("timestamp provided for starting and ending") {
@@ -393,7 +393,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
       .option("subscribe", topic)
 
     val df2 = optionFn(df).load().selectExpr("CAST(value AS STRING)")
-    checkAnswer(df2, expectation.map(_.toString).toDF)
+    checkAnswer(df2, expectation.map(_.toString).toDF())
   }
 
   test("reuse same dataframe in query") {
@@ -405,7 +405,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     // Specify explicit earliest and latest offset values
     val df = createDF(topic,
       withOptions = Map("startingOffsets" -> "earliest", "endingOffsets" -> "latest"))
-    checkAnswer(df.union(df), ((0 to 10) ++ (0 to 10)).map(_.toString).toDF)
+    checkAnswer(df.union(df), ((0 to 10) ++ (0 to 10)).map(_.toString).toDF())
   }
 
   test("test late binding start offsets") {
@@ -432,13 +432,13 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
       val df = createDF(topic,
         withOptions = Map("startingOffsets" -> "earliest", "endingOffsets" -> "latest"),
         Some(kafkaUtils.brokerAddress))
-      checkAnswer(df, (0 to 9).map(_.toString).toDF)
+      checkAnswer(df, (0 to 9).map(_.toString).toDF())
       // Blow away current set of messages.
       kafkaUtils.cleanupLogs()
       // Add some more data, but do not call cleanup
       kafkaUtils.sendMessages(topic, (10 to 19).map(_.toString).toArray, Some(0))
       // Ensure that we late bind to the new starting position
-      checkAnswer(df, (10 to 19).map(_.toString).toDF)
+      checkAnswer(df, (10 to 19).map(_.toString).toDF())
     } finally {
       if (kafkaUtils != null) {
         kafkaUtils.teardown()
@@ -521,7 +521,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
 
       // Should read all committed messages
       testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 6)
-      checkAnswer(df, (1 to 5).map(_.toString).toDF)
+      checkAnswer(df, (1 to 5).map(_.toString).toDF())
 
       producer.beginTransaction()
       (6 to 10).foreach { i =>
@@ -531,7 +531,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
 
       // Should not read aborted messages
       testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 12)
-      checkAnswer(df, (1 to 5).map(_.toString).toDF)
+      checkAnswer(df, (1 to 5).map(_.toString).toDF())
 
       producer.beginTransaction()
       (11 to 15).foreach { i =>
@@ -541,7 +541,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
 
       // Should skip aborted messages and read new committed ones.
       testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 18)
-      checkAnswer(df, ((1 to 5) ++ (11 to 15)).map(_.toString).toDF)
+      checkAnswer(df, ((1 to 5) ++ (11 to 15)).map(_.toString).toDF())
     }
   }
 
@@ -565,13 +565,13 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
 
       // "read_uncommitted" should see all messages including uncommitted ones
       testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 5)
-      checkAnswer(df, (1 to 5).map(_.toString).toDF)
+      checkAnswer(df, (1 to 5).map(_.toString).toDF())
 
       producer.commitTransaction()
 
       // Should read all committed messages
       testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 6)
-      checkAnswer(df, (1 to 5).map(_.toString).toDF)
+      checkAnswer(df, (1 to 5).map(_.toString).toDF())
 
       producer.beginTransaction()
       (6 to 10).foreach { i =>
@@ -581,7 +581,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
 
       // "read_uncommitted" should see all messages including uncommitted or aborted ones
       testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 12)
-      checkAnswer(df, (1 to 10).map(_.toString).toDF)
+      checkAnswer(df, (1 to 10).map(_.toString).toDF())
 
       producer.beginTransaction()
       (11 to 15).foreach { i =>
@@ -591,7 +591,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
 
       // Should read all messages
       testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 18)
-      checkAnswer(df, (1 to 15).map(_.toString).toDF)
+      checkAnswer(df, (1 to 15).map(_.toString).toDF())
     }
   }
 

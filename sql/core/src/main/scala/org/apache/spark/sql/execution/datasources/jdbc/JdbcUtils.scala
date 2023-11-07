@@ -23,8 +23,8 @@ import java.util
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -34,7 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData}
@@ -78,7 +78,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * Drops a table from the JDBC database.
    */
   def dropTable(conn: Connection, table: String, options: JDBCOptions): Unit = {
-    executeStatement(conn, options, s"DROP TABLE $table")
+    val dialect = JdbcDialects.get(options.url)
+    executeStatement(conn, options, dialect.dropTable(table))
   }
 
   /**
@@ -114,22 +115,19 @@ object JdbcUtils extends Logging with SQLConfHelper {
       isCaseSensitive: Boolean,
       dialect: JdbcDialect): String = {
     val columns = if (tableSchema.isEmpty) {
-      rddSchema.fields.map(x => dialect.quoteIdentifier(x.name)).mkString(",")
+      rddSchema.fields
     } else {
       // The generated insert statement needs to follow rddSchema's column sequence and
       // tableSchema's column names. When appending data into some case-sensitive DBMSs like
       // PostgreSQL/Oracle, we need to respect the existing case-sensitive column names instead of
       // RDD column names for user convenience.
-      val tableColumnNames = tableSchema.get.fieldNames
       rddSchema.fields.map { col =>
-        val normalizedName = tableColumnNames.find(f => conf.resolver(f, col.name)).getOrElse {
+        tableSchema.get.find(f => conf.resolver(f.name, col.name)).getOrElse {
           throw QueryCompilationErrors.columnNotFoundInSchemaError(col, tableSchema)
         }
-        dialect.quoteIdentifier(normalizedName)
-      }.mkString(",")
+      }
     }
-    val placeholders = rddSchema.fields.map(_ => "?").mkString(",")
-    s"INSERT INTO $table ($columns) VALUES ($placeholders)"
+    dialect.insertIntoTable(table, columns)
   }
 
   /**
@@ -222,8 +220,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       // including java.sql.Types.ARRAY,DATALINK,DISTINCT,JAVA_OBJECT,NULL,OTHER,REF_CURSOR,
       // TIME_WITH_TIMEZONE,TIMESTAMP_WITH_TIMEZONE, and among others.
       val jdbcType = classOf[JDBCType].getEnumConstants()
-        .filter(_.getVendorTypeNumber == sqlType)
-        .headOption
+        .find(_.getVendorTypeNumber == sqlType)
         .map(_.getName)
         .getOrElse(sqlType.toString)
       throw QueryExecutionErrors.unrecognizedSqlTypeError(jdbcType, typeName)
@@ -328,7 +325,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       dialect: JdbcDialect): Iterator[Row] = {
     val inputMetrics =
       Option(TaskContext.get()).map(_.taskMetrics().inputMetrics).getOrElse(new InputMetrics)
-    val fromRow = RowEncoder(schema).resolveAndBind().createDeserializer()
+    val fromRow = ExpressionEncoder(schema).resolveAndBind().createDeserializer()
     val internalRows = resultSetToSparkInternalRows(resultSet, dialect, schema, inputMetrics)
     internalRows.map(fromRow)
   }
@@ -454,7 +451,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case StringType if metadata.contains("rowid") =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        row.update(pos, UTF8String.fromString(rs.getRowId(pos + 1).toString))
+        val rawRowId = rs.getRowId(pos + 1)
+        if (rawRowId == null) {
+          row.update(pos, null)
+        } else {
+          row.update(pos, UTF8String.fromString(rawRowId.toString))
+        }
 
     case StringType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
@@ -484,7 +486,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         val t = rs.getTimestamp(pos + 1)
         if (t != null) {
-          row.setLong(pos, DateTimeUtils.fromJavaTimestamp(t))
+          row.setLong(pos, DateTimeUtils.
+                            fromJavaTimestamp(dialect.convertJavaTimestampToTimestamp(t)))
         } else {
           row.update(pos, null)
         }
@@ -893,7 +896,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case Some(n) if n < df.rdd.getNumPartitions => df.coalesce(n)
       case _ => df
     }
-    repartitionedDF.rdd.foreachPartition { iterator => savePartition(
+    repartitionedDF.foreachPartition { iterator => savePartition(
       table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel, options)
     }
   }

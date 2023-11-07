@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.getPartitionValueString
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
@@ -364,7 +365,7 @@ object PartitioningUtils extends SQLConfHelper {
     }
 
   def getPathFragment(spec: TablePartitionSpec, partitionColumns: Seq[Attribute]): String = {
-    getPathFragment(spec, StructType.fromAttributes(partitionColumns))
+    getPathFragment(spec, DataTypeUtils.fromAttributes(partitionColumns))
   }
 
   /**
@@ -405,7 +406,7 @@ object PartitioningUtils extends SQLConfHelper {
     val distinctPartColNames = pathWithPartitionValues.map(_._2.columnNames).distinct
 
     def groupByKey[K, V](seq: Seq[(K, V)]): Map[K, Iterable[V]] =
-      seq.groupBy { case (key, _) => key }.mapValues(_.map { case (_, value) => value }).toMap
+      seq.groupBy { case (key, _) => key }.view.mapValues(_.map { case (_, value) => value }).toMap
 
     val partColNamesToPaths = groupByKey(pathWithPartitionValues.map {
       case (path, partValues) => partValues.columnNames -> path

@@ -29,12 +29,6 @@ class FrameParityTimeSeriesTests(
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_shift(self):
-        super().test_shift()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.frame.test_parity_time_series import *  # noqa: F401

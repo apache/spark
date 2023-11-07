@@ -19,13 +19,10 @@ package org.apache.spark.sql.catalyst.util
 
 import java.time.{DateTimeException, LocalDateTime}
 
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
-
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.unsafe.types.UTF8String
 
 class TimestampFormatterSuite extends DatetimeFormatterSuite {
@@ -271,7 +268,7 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
             withClue(s"zoneId = ${zoneId.getId}") {
               val formatters = LegacyDateFormats.values.toSeq.map { legacyFormat =>
                 TimestampFormatter(
-                  TimestampFormatter.defaultPattern,
+                  TimestampFormatter.defaultPattern(),
                   zoneId,
                   TimestampFormatter.defaultLocale,
                   legacyFormat,
@@ -334,14 +331,8 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       val micros1 = formatter.parse("2009-12-12 00 am")
       assert(micros1 === date(2009, 12, 12))
 
-      // JDK-8223773: DateTimeFormatter Fails to throw an Exception on Invalid HOUR_OF_AMPM
       // For `KK`, "12:00:00 am" is the same as "00:00:00 pm".
-      if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_13)) {
-        intercept[DateTimeException](formatter.parse("2009-12-12 12 am"))
-      } else {
-        val micros2 = formatter.parse("2009-12-12 12 am")
-        assert(micros2 === date(2009, 12, 12, 12))
-      }
+      intercept[DateTimeException](formatter.parse("2009-12-12 12 am"))
 
       val micros3 = formatter.parse("2009-12-12 00 pm")
       assert(micros3 === date(2009, 12, 12, 12))
@@ -411,15 +402,7 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     val formatter = TimestampFormatter("DD", UTC, isParsing = false)
     assert(formatter.format(date(1970, 1, 3)) == "03")
     assert(formatter.format(date(1970, 4, 9)) == "99")
-
-    if (System.getProperty("java.version").split("\\D+")(0).toInt < 9) {
-      // https://bugs.openjdk.java.net/browse/JDK-8079628
-      intercept[SparkUpgradeException] {
-        formatter.format(date(1970, 4, 10))
-      }
-    } else {
-      assert(formatter.format(date(1970, 4, 10)) == "100")
-    }
+    assert(formatter.format(date(1970, 4, 10)) == "100")
   }
 
   test("SPARK-32424: avoid silent data change when timestamp overflows") {
@@ -507,5 +490,15 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     assert(simpleFormatter.parseOptional("2023-12-31 23:59:59.9990").contains(1704067208990000L))
     assert(simpleFormatter.parseOptional("abc").isEmpty)
 
+  }
+
+  test("SPARK-45424: do not return optional parse results when only prefix match") {
+    val formatter = new Iso8601TimestampFormatter(
+      "yyyy-MM-dd HH:mm:ss",
+      locale = DateFormatter.defaultLocale,
+      legacyFormat = LegacyDateFormats.SIMPLE_DATE_FORMAT,
+      isParsing = true, zoneId = DateTimeTestUtils.LA)
+    assert(formatter.parseOptional("9999-12-31 23:59:59.999").isEmpty)
+    assert(formatter.parseWithoutTimeZoneOptional("9999-12-31 23:59:59.999", true).isEmpty)
   }
 }

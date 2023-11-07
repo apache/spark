@@ -22,6 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Attribute, CreateNamedStruct, Expression, GetStructField, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.Assignment
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.getDefaultValueExprOrNullLit
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -118,7 +119,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         val colPath = Seq(attr.name)
         val actualAttr = restoreActualType(attr)
         val value = matchingAssignments.head.value
-        TableOutputResolver.resolveUpdate(value, actualAttr, conf, err => errors += err, colPath)
+        TableOutputResolver.resolveUpdate(
+          "", value, actualAttr, conf, err => errors += err, colPath)
       }
       Assignment(attr, resolvedValue)
     }
@@ -162,7 +164,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       TableOutputResolver.checkNullability(colExpr, col, conf, colPath)
     } else if (exactAssignments.nonEmpty) {
       val value = exactAssignments.head.value
-      TableOutputResolver.resolveUpdate(value, col, conf, addError, colPath)
+      TableOutputResolver.resolveUpdate("", value, col, conf, addError, colPath)
     } else {
       applyFieldAssignments(col, colExpr, fieldAssignments, addError, colPath)
     }
@@ -177,7 +179,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
 
     col.dataType match {
       case structType: StructType =>
-        val fieldAttrs = structType.toAttributes
+        val fieldAttrs = DataTypeUtils.toAttributes(structType)
         val fieldExprs = structType.fields.zipWithIndex.map { case (field, ordinal) =>
           GetStructField(colExpr, ordinal, Some(field.name))
         }

@@ -16,9 +16,6 @@
 #
 
 from abc import ABCMeta, abstractmethod
-
-import pandas as pd
-
 from typing import (
     Any,
     Generic,
@@ -30,6 +27,8 @@ from typing import (
     Tuple,
     Callable,
 )
+
+import pandas as pd
 
 from pyspark import since
 from pyspark.ml.common import inherit_doc
@@ -135,10 +134,10 @@ class Transformer(Params, metaclass=ABCMeta):
         """
         raise NotImplementedError()
 
-    def _get_transform_fn(self) -> Callable[["pd.Series"], Any]:
+    def _get_transform_fn(self) -> Callable[..., Any]:
         """
-        Return a transformation function that accepts an instance of `pd.Series` as input and
-        returns transformed result as an instance of `pd.Series` or `pd.DataFrame`.
+        Return a transformation function that accepts one or more `pd.Series` instances as inputs
+        and returns transformed result as an instance of `pd.Series` or `pd.DataFrame`.
         If there's only one output column, the transformed result must be an
         instance of `pd.Series`, if there are multiple output columns, the transformed result
         must be an instance of `pd.DataFrame` with column names matching output schema
@@ -146,14 +145,16 @@ class Transformer(Params, metaclass=ABCMeta):
         """
         raise NotImplementedError()
 
-    def transform(self, dataset: Union[DataFrame, pd.DataFrame]) -> Union[DataFrame, pd.DataFrame]:
+    def transform(
+        self, dataset: Union[DataFrame, pd.DataFrame], params: Optional["ParamMap"] = None
+    ) -> Union[DataFrame, pd.DataFrame]:
         """
         Transforms the input dataset.
-        The dataset can be either pandas dataframe or spark dataframe,
+        The dataset can be either pandas dataframe or spark dataframe，
         if it is a spark DataFrame, the result of transformation is a new spark DataFrame
-        that contains all existing columns and output columns with names.
-        if it is a pandas DataFrame, the input pandas dataframe is appended with output
-        columns in place.
+        that contains all existing columns and output columns with names,
+        If it is a pandas DataFrame, the result of transformation is a shallow copy
+        of the input pandas dataframe with output columns with names.
 
         Note: Transformers does not allow output column having the same name with
         existing columns.
@@ -163,12 +164,24 @@ class Transformer(Params, metaclass=ABCMeta):
         dataset : :py:class:`pyspark.sql.DataFrame` or py:class:`pandas.DataFrame`
             input dataset.
 
+        params : dict, optional
+            an optional param map that overrides embedded params.
+
         Returns
         -------
         :py:class:`pyspark.sql.DataFrame` or py:class:`pandas.DataFrame`
             transformed dataset, the type of output dataframe is consistent with
             input dataframe.
         """
+        if params is None:
+            params = dict()
+        if isinstance(params, dict):
+            if params:
+                return self.copy(params)._transform(dataset)
+            else:
+                return self._transform(dataset)
+
+    def _transform(self, dataset: Union[DataFrame, pd.DataFrame]) -> Union[DataFrame, pd.DataFrame]:
         input_cols = self._input_columns()
         transform_fn = self._get_transform_fn()
         output_cols = self._output_columns()
@@ -249,7 +262,7 @@ class Evaluator(Params, metaclass=ABCMeta):
         (True, default) or minimized (False).
         A given evaluator may support multiple metrics which may be maximized or minimized.
         """
-        return True
+        raise NotImplementedError()
 
 
 @inherit_doc

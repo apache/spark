@@ -69,7 +69,7 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
    */
   ignore("export test data into CSV format") {
     binaryDataset.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile("target/tmp/LinearSVC/binaryDataset")
   }
 

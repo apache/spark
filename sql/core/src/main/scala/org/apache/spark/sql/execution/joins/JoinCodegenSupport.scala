@@ -79,7 +79,7 @@ trait JoinCodegenSupport extends CodegenSupport with BaseJoinExec {
       setDefaultValue: Boolean): Seq[ExprCode] = {
     ctx.currentVars = null
     ctx.INPUT_ROW = row
-    plan.output.zipWithIndex.map { case (a, i) =>
+    plan.output.toIndexedSeq.zipWithIndex.map { case (a, i) =>
       val ev = BoundReference(i, a.dataType, a.nullable).genCode(ctx)
       if (setDefaultValue) {
         // the variables are needed even there is no matched rows

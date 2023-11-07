@@ -283,7 +283,7 @@ Project [date_add(cast(2011-11-11 as date), 1) AS date_add(2011-11-11, 1)#x]
 -- !query
 select date_add('2011-11-11', 1L)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -307,7 +307,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select date_add('2011-11-11', 1.0)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -331,7 +331,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select date_add('2011-11-11', 1E1)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -427,7 +427,7 @@ Project [date_sub(cast(2011-11-11 as date), 1) AS date_sub(2011-11-11, 1)#x]
 -- !query
 select date_sub('2011-11-11', 1L)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -451,7 +451,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select date_sub('2011-11-11', 1.0)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -475,7 +475,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select date_sub('2011-11-11', 1E1)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -543,7 +543,7 @@ Project [date_sub(cast(2011-11-11 12:12:12 as date), 1) AS date_sub(TIMESTAMP_NT
 -- !query
 select date_add('2011-11-11', int_str) from date_view
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -567,7 +567,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select date_sub('2011-11-11', int_str) from date_view
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -613,7 +613,7 @@ Project [date_sub(cast(date_str#x as date), 1) AS date_sub(date_str, 1)#x]
 -- !query
 select date '2011-11-11' + 1E1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -661,7 +661,7 @@ select date '2001-10-01' - date '2001-09-28'
 -- !query
 select date '2001-10-01' - '2001-09-28'
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -709,7 +709,7 @@ select date_str - date '2001-09-28' from date_view
 -- !query
 select date '2001-09-28' - date_str from date_view
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -733,7 +733,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select date'2011-11-11' + '1'
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -757,7 +757,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select '1' + date'2011-11-11'
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",

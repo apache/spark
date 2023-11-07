@@ -26,7 +26,7 @@ import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{array, from_json, grouping, grouping_id, lit, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, MapType, StringType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 case class StringLongClass(a: String, b: Long)
@@ -169,7 +169,7 @@ class QueryCompilationErrorsSuite
     ).toDF("CustomerName", "CustomerID")
 
     val e = intercept[AnalysisException] {
-      val pythonTestUDF = TestPythonUDF(name = "python_udf")
+      val pythonTestUDF = TestPythonUDF(name = "python_udf", Some(BooleanType))
       df1.join(
         df2, pythonTestUDF(df1("CustomerID") === df2("CustomerID")), "leftouter").collect()
     }
@@ -696,7 +696,9 @@ class QueryCompilationErrorsSuite
         Seq("""{"a":1}""").toDF("a").select(from_json($"a", IntegerType)).collect()
       },
       errorClass = "DATATYPE_MISMATCH.INVALID_JSON_SCHEMA",
-      parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""))
+      parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""),
+      context =
+        ExpectedContext(fragment = "from_json", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("WRONG_NUM_ARGS.WITHOUT_SUGGESTION: wrong args of CAST(parameter types contains DataType)") {
@@ -767,7 +769,8 @@ class QueryCompilationErrorsSuite
       },
       errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
       sqlState = "42000",
-      parameters = Map("field" -> "`firstname`", "count" -> "2")
+      parameters = Map("field" -> "`firstname`", "count" -> "2"),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -780,7 +783,9 @@ class QueryCompilationErrorsSuite
       },
       errorClass = "INVALID_EXTRACT_BASE_FIELD_TYPE",
       sqlState = "42000",
-      parameters = Map("base" -> "\"firstname\"", "other" -> "\"STRING\""))
+      parameters = Map("base" -> "\"firstname\"", "other" -> "\"STRING\""),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern)
+    )
   }
 
   test("INVALID_EXTRACT_FIELD_TYPE: extract not string literal field") {
@@ -828,7 +833,7 @@ class QueryCompilationErrorsSuite
             sql("CREATE NAMESPACE h2.test_namespace LOCATION './samplepath'")
           },
           errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND",
-          sqlState = "46110",
+          sqlState = "0A000",
           parameters = Map("cmd" -> toSQLStmt("CREATE NAMESPACE ... LOCATION ...")))
       }
     }
@@ -851,7 +856,7 @@ class QueryCompilationErrorsSuite
               sql(s"ALTER NAMESPACE h2.test_namespace SET LOCATION '/tmp/loc_test_2'")
             },
             errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND_WITH_PROPERTY",
-            sqlState = "46110",
+            sqlState = "0A000",
             parameters = Map(
               "cmd" -> toSQLStmt("SET NAMESPACE"),
               "property" -> toSQLConf("location")))
@@ -861,7 +866,7 @@ class QueryCompilationErrorsSuite
               sql(s"ALTER NAMESPACE h2.test_namespace SET PROPERTIES('a'='b')")
             },
             errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND_WITH_PROPERTY",
-            sqlState = "46110",
+            sqlState = "0A000",
             parameters = Map(
               "cmd" -> toSQLStmt("SET NAMESPACE"),
               "property" -> toSQLConf("a")))

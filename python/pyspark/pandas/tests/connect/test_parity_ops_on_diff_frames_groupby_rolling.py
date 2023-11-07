@@ -29,47 +29,7 @@ class OpsOnDiffFramesGroupByRollingParityTests(
     TestUtils,
     ReusedConnectTestCase,
 ):
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_groupby_rolling_count(self):
-        super().test_groupby_rolling_count()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_groupby_rolling_min(self):
-        super().test_groupby_rolling_min()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_groupby_rolling_max(self):
-        super().test_groupby_rolling_max()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_groupby_rolling_mean(self):
-        super().test_groupby_rolling_mean()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_groupby_rolling_sum(self):
-        super().test_groupby_rolling_sum()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_groupby_rolling_std(self):
-        super().test_groupby_rolling_std()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_groupby_rolling_var(self):
-        super().test_groupby_rolling_var()
+    pass
 
 
 if __name__ == "__main__":

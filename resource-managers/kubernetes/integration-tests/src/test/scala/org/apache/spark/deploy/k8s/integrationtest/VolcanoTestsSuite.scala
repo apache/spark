@@ -20,12 +20,12 @@ import java.io.{File, FileInputStream}
 import java.time.Instant
 import java.util.UUID
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 // scalastyle:off executioncontextglobal
 import scala.concurrent.ExecutionContext.Implicits.global
 // scalastyle:on executioncontextglobal
 import scala.concurrent.Future
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{HasMetadata, Pod, Quantity}
 import io.fabric8.volcano.client.VolcanoClient
@@ -123,7 +123,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     assert(pod.getSpec.getSchedulerName === "volcano")
   }
 
-  protected def checkAnnotaion(pod: Pod): Unit = {
+  protected def checkAnnotation(pod: Pod): Unit = {
     val appId = pod.getMetadata.getLabels.get("spark-app-selector")
     val annotations = pod.getMetadata.getAnnotations
     assert(annotations.get("scheduling.k8s.io/group-name") === s"$appId-podgroup")
@@ -218,7 +218,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       runSparkDriverSubmissionAndVerifyCompletion(
         driverPodChecker = (driverPod: Pod) => {
           checkScheduler(driverPod)
-          checkAnnotaion(driverPod)
+          checkAnnotation(driverPod)
           checkPodGroup(driverPod, queue)
         },
         customSparkConf = Option(conf),
@@ -228,12 +228,12 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       runSparkPiAndVerifyCompletion(
         driverPodChecker = (driverPod: Pod) => {
           checkScheduler(driverPod)
-          checkAnnotaion(driverPod)
+          checkAnnotation(driverPod)
           checkPodGroup(driverPod, queue)
         },
         executorPodChecker = (executorPod: Pod) => {
           checkScheduler(executorPod)
-          checkAnnotaion(executorPod)
+          checkAnnotation(executorPod)
         },
         customSparkConf = Option(conf),
         customAppLocator = Option(appLoc)
@@ -314,13 +314,13 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       driverPodChecker = (driverPod: Pod) => {
         doBasicDriverPodCheck(driverPod)
         checkScheduler(driverPod)
-        checkAnnotaion(driverPod)
+        checkAnnotation(driverPod)
         checkPodGroup(driverPod)
       },
       executorPodChecker = (executorPod: Pod) => {
         doBasicExecutorPodCheck(executorPod)
         checkScheduler(executorPod)
-        checkAnnotaion(executorPod)
+        checkAnnotation(executorPod)
       }
     )
   }

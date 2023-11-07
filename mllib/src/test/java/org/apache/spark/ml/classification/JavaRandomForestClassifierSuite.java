@@ -20,8 +20,8 @@ package org.apache.spark.ml.classification;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
@@ -73,7 +73,7 @@ public class JavaRandomForestClassifierSuite extends SharedSparkSession {
     }
     String[] invalidStrategies = {"-.1", "-.10", "-0.10", ".0", "0.0", "1.1", "0"};
     for (String strategy : invalidStrategies) {
-      Assert.assertThrows(IllegalArgumentException.class,
+      Assertions.assertThrows(IllegalArgumentException.class,
         () -> rf.setFeatureSubsetStrategy(strategy));
     }
 

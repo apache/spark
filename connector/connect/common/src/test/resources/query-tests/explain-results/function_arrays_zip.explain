@@ -1,2 +1,2 @@
-Project [arrays_zip(e#0, sequence(cast(1 as bigint), cast(20 as bigint), Some(cast(1 as bigint)), Some(America/Los_Angeles)), e, 1) AS arrays_zip(e, sequence(1, 20, 1))#0]
+Project [arrays_zip(e#0, sequence(1, 20, None, Some(America/Los_Angeles)), e, 1) AS arrays_zip(e, sequence(1, 20))#0]
 +- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

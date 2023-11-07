@@ -21,13 +21,13 @@ import scala.util.Random
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.RandomDataGenerator
-import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{SafeProjection, UnsafeProjection}
 import org.apache.spark.sql.types._
 
 class ArrayDataIndexedSeqSuite extends SparkFunSuite {
   private def compArray(arrayData: ArrayData, elementDt: DataType, array: Array[Any]): Unit = {
-    assert(arrayData.numElements == array.length)
+    assert(arrayData.numElements() == array.length)
     array.zipWithIndex.map { case (e, i) =>
       if (e != null) {
         elementDt match {
@@ -75,7 +75,7 @@ class ArrayDataIndexedSeqSuite extends SparkFunSuite {
     arrayTypes.foreach { dt =>
       val schema = StructType(StructField("col_1", dt, nullable = false) :: Nil)
       val row = RandomDataGenerator.randomRow(random, schema)
-      val toRow = RowEncoder(schema).createSerializer()
+      val toRow = ExpressionEncoder(schema).createSerializer()
       val internalRow = toRow(row)
 
       val unsafeRowConverter = UnsafeProjection.create(schema)

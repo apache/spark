@@ -26,16 +26,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_help_command(self):
         super().test_help_command()
 
-    # Spark Connect throws NotImplementedError tests expects IllegalArgumentException
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_invalid_join_method(self):
-        super().test_invalid_join_method()
-
-    # TODO(SPARK-41527): Implement DataFrame.observe
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_observe(self):
-        super().test_observe()
-
     # TODO(SPARK-41625): Support Structured Streaming
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_observe_str(self):
@@ -83,6 +73,9 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
 
     def test_to_pandas_from_mixed_dataframe(self):
         self.check_to_pandas_from_mixed_dataframe()
+
+    def test_toDF_with_string(self):
+        super().test_toDF_with_string()
 
 
 if __name__ == "__main__":

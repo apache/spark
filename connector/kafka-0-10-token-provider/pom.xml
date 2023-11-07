@@ -20,13 +20,13 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.12</artifactId>
-    <version>3.5.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.13</artifactId>
+    <version>4.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-token-provider-kafka-0-10_2.12</artifactId>
+  <artifactId>spark-token-provider-kafka-0-10_2.13</artifactId>
   <properties>
     <sbt.project.name>token-provider-kafka-0-10</sbt.project.name>
   </properties>

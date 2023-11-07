@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.{SparkConf, SparkNumberFormatException, SparkThrowable}
 import org.apache.spark.sql.catalyst.expressions.Hex
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -212,11 +213,11 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           processInsert("t1", df, overwrite = false, byName = true)
         },
-        v1ErrorClass = "_LEGACY_ERROR_TEMP_1186",
-        v2ErrorClass = "_LEGACY_ERROR_TEMP_1204",
-        v1Parameters = Map.empty[String, String],
-        v2Parameters = Map("tableName" -> "testcat.t1",
-          "errors" -> "Cannot find data for output column 'c1'")
+        v1ErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
+        v2ErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        v1Parameters = Map("tableName" -> "`spark_catalog`.`default`.`t1`",
+          "extraColumns" -> "`x1`"),
+        v2Parameters = Map("tableName" -> "`testcat`.`t1`", "colName" -> "`c1`")
       )
       val df2 = Seq((3, 2, 1, 0)).toDF(Seq("c3", "c2", "c1", "c0"): _*)
       checkV1AndV2Error(
@@ -391,7 +392,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
     withTable("t") {
       sql(s"CREATE TABLE t(i STRING, c string) USING PARQUET PARTITIONED BY (c)")
       checkError(
-        exception = intercept[AnalysisException] {
+        exception = intercept[ParseException] {
           sql("INSERT OVERWRITE t PARTITION (c='2', C='3') VALUES (1)")
         },
         sqlState = None,

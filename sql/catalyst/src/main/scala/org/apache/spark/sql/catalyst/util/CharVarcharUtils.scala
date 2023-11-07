@@ -23,11 +23,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-object CharVarcharUtils extends Logging {
+object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
   private val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
 
@@ -47,41 +46,6 @@ object CharVarcharUtils extends Logging {
         field
       }
     })
-  }
-
-  /**
-   * Returns true if the given data type is CharType/VarcharType or has nested CharType/VarcharType.
-   */
-  def hasCharVarchar(dt: DataType): Boolean = {
-    dt.existsRecursively(f => f.isInstanceOf[CharType] || f.isInstanceOf[VarcharType])
-  }
-
-  /**
-   * Validate the given [[DataType]] to fail if it is char or varchar types or contains nested ones
-   */
-  def failIfHasCharVarchar(dt: DataType): DataType = {
-    if (!SQLConf.get.charVarcharAsString && hasCharVarchar(dt)) {
-      throw QueryCompilationErrors.charOrVarcharTypeAsStringUnsupportedError()
-    } else {
-      replaceCharVarcharWithString(dt)
-    }
-  }
-
-  /**
-   * Replaces CharType/VarcharType with StringType recursively in the given data type.
-   */
-  def replaceCharVarcharWithString(dt: DataType): DataType = dt match {
-    case ArrayType(et, nullable) =>
-      ArrayType(replaceCharVarcharWithString(et), nullable)
-    case MapType(kt, vt, nullable) =>
-      MapType(replaceCharVarcharWithString(kt), replaceCharVarcharWithString(vt), nullable)
-    case StructType(fields) =>
-      StructType(fields.map { field =>
-        field.copy(dataType = replaceCharVarcharWithString(field.dataType))
-      })
-    case _: CharType => StringType
-    case _: VarcharType => StringType
-    case _ => dt
   }
 
   /**

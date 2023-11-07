@@ -46,7 +46,7 @@ abstract class XPathExtract
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "path",
+          "inputName" -> toSQLId("path"),
           "inputType" -> toSQLType(StringType),
           "inputExpr" -> toSQLExpr(path)
         )

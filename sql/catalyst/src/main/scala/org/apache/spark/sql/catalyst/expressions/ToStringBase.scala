@@ -22,7 +22,7 @@ import java.time.ZoneOffset
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, IntervalStringStyles, IntervalUtils, MapData, StringUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, IntervalStringStyles, IntervalUtils, MapData, SparkStringUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
@@ -53,7 +53,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
     case CalendarIntervalType =>
       acceptAny[CalendarInterval](i => UTF8String.fromString(i.toString))
     case BinaryType if useHexFormatForBinary =>
-      acceptAny[Array[Byte]](binary => UTF8String.fromString(StringUtils.getHexString(binary)))
+      acceptAny[Array[Byte]](binary => UTF8String.fromString(SparkStringUtils.getHexString(binary)))
     case BinaryType =>
       acceptAny[Array[Byte]](UTF8String.fromBytes)
     case DateType =>
@@ -66,7 +66,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       acceptAny[ArrayData](array => {
         val builder = new UTF8StringBuilder
         builder.append("[")
-        if (array.numElements > 0) {
+        if (array.numElements() > 0) {
           val toUTF8String = castToString(et)
           if (array.isNullAt(0)) {
             if (nullString.nonEmpty) builder.append(nullString)
@@ -74,7 +74,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
             builder.append(toUTF8String(array.get(0, et)).asInstanceOf[UTF8String])
           }
           var i = 1
-          while (i < array.numElements) {
+          while (i < array.numElements()) {
             builder.append(",")
             if (array.isNullAt(i)) {
               if (nullString.nonEmpty) builder.append(" " + nullString)
@@ -92,7 +92,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       acceptAny[MapData](map => {
         val builder = new UTF8StringBuilder
         builder.append(leftBracket)
-        if (map.numElements > 0) {
+        if (map.numElements() > 0) {
           val keyArray = map.keyArray()
           val valueArray = map.valueArray()
           val keyToUTF8String = castToString(kt)
@@ -106,7 +106,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
             builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
           }
           var i = 1
-          while (i < map.numElements) {
+          while (i < map.numElements()) {
             builder.append(", ")
             builder.append(keyToUTF8String(keyArray.get(i, kt)).asInstanceOf[UTF8String])
             builder.append(" ->")
@@ -173,7 +173,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
     from match {
       case BinaryType if useHexFormatForBinary =>
         (c, evPrim) =>
-          val utilCls = StringUtils.getClass.getName.stripSuffix("$")
+          val utilCls = SparkStringUtils.getClass.getName.stripSuffix("$")
           code"$evPrim = UTF8String.fromString($utilCls.getHexString($c));"
       case BinaryType =>
         (c, evPrim) => code"$evPrim = UTF8String.fromBytes($c);"
@@ -352,7 +352,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
        |  $buffer.append($keyToStringFunc($getMapFirstKey));
        |  $buffer.append(" ->");
        |  if ($map.valueArray().isNullAt(0)) {
-       |    ${appendNull(buffer, isFirstElement = true)}
+       |    ${appendNull(buffer, isFirstElement = false)}
        |  } else {
        |    $buffer.append(" ");
        |    $buffer.append($valueToStringFunc($getMapFirstValue));

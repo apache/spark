@@ -224,7 +224,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "accuracy",
+          "inputName" -> toSQLId("accuracy"),
           "inputType" -> toSQLType(accuracyExpression.dataType),
           "inputExpr" -> toSQLExpr(accuracyExpression)
         )
@@ -241,7 +241,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "percentage",
+          "inputName" -> toSQLId("percentage"),
           "inputType" -> toSQLType(attribute.dataType),
           "inputExpr" -> toSQLExpr(attribute)
         )

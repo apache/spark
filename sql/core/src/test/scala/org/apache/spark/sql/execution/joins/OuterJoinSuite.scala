@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.expressions.{And, Expression, LessThan}
+import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, Expression, LessThan}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
@@ -60,7 +60,7 @@ class OuterJoinSuite extends SparkPlanTest with SharedSparkSession {
     )), new StructType().add("c", IntegerType).add("d", DoubleType))
 
   private lazy val condition = {
-    And((left.col("a") === right.col("c")).expr,
+    And(EqualTo(left.col("a").expr, right.col("c").expr),
       LessThan(left.col("b").expr, right.col("d").expr))
   }
 
@@ -86,7 +86,7 @@ class OuterJoinSuite extends SparkPlanTest with SharedSparkSession {
     )), new StructType().add("c", IntegerType).add("d", DoubleType))
 
   private lazy val uniqueCondition = {
-    And((uniqueLeft.col("a") === uniqueRight.col("c")).expr,
+    And(EqualTo(uniqueLeft.col("a").expr, uniqueRight.col("c").expr),
       LessThan(uniqueLeft.col("b").expr, uniqueRight.col("d").expr))
   }
 

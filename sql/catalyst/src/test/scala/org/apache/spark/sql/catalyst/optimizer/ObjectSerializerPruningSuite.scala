@@ -22,7 +22,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -115,7 +115,7 @@ class ObjectSerializerPruningSuite extends PlanTest {
   test("SPARK-32652: Prune nested serializers: RowEncoder") {
     withSQLConf(SQLConf.SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
       val testRelation = LocalRelation($"i".struct(StructType.fromDDL("a int, b string")), $"j".int)
-      val rowEncoder = RowEncoder(new StructType()
+      val rowEncoder = ExpressionEncoder(new StructType()
         .add("i", new StructType().add("a", "int").add("b", "string"))
         .add("j", "int"))
       val serializerObject = CatalystSerde.serialize(

@@ -185,8 +185,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   @Nonnull
   public ByteBuffer getByteBuffer() {
-    if (base instanceof byte[] && offset >= BYTE_ARRAY_OFFSET) {
-      final byte[] bytes = (byte[]) base;
+    if (base instanceof byte[] bytes && offset >= BYTE_ARRAY_OFFSET) {
 
       // the offset includes an object header... this is only needed for unsafe copies
       final long arrayOffset = offset - BYTE_ARRAY_OFFSET;
@@ -1401,8 +1400,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   @Override
   public boolean equals(final Object other) {
-    if (other instanceof UTF8String) {
-      UTF8String o = (UTF8String) other;
+    if (other instanceof UTF8String o) {
       if (numBytes != o.numBytes) {
         return false;
       }

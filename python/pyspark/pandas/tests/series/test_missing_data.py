@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 import unittest
-from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
@@ -211,42 +210,26 @@ class SeriesMissingDataMixin:
         psdf = ps.from_pandas(pdf)
         pser, psser = pdf.x, psdf.x
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
-            self.assert_eq(pser.pad(), psser.pad())
+        self.assert_eq(pser.pad(), psser.pad())
 
-            # Test `inplace=True`
-            pser.pad(inplace=True)
-            psser.pad(inplace=True)
-            self.assert_eq(pser, psser)
-            self.assert_eq(pdf, psdf)
-        else:
-            expected = ps.Series([np.nan, 2, 3, 4, 4, 6], name="x")
-            self.assert_eq(expected, psser.pad())
-
-            # Test `inplace=True`
-            psser.pad(inplace=True)
-            self.assert_eq(expected, psser)
+        # Test `inplace=True`
+        pser.pad(inplace=True)
+        psser.pad(inplace=True)
+        self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
 
     def test_backfill(self):
         pdf = pd.DataFrame({"x": [np.nan, 2, 3, 4, np.nan, 6]})
         psdf = ps.from_pandas(pdf)
         pser, psser = pdf.x, psdf.x
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
-            self.assert_eq(pser.backfill(), psser.backfill())
+        self.assert_eq(pser.backfill(), psser.backfill())
 
-            # Test `inplace=True`
-            pser.backfill(inplace=True)
-            psser.backfill(inplace=True)
-            self.assert_eq(pser, psser)
-            self.assert_eq(pdf, psdf)
-        else:
-            expected = ps.Series([2.0, 2.0, 3.0, 4.0, 6.0, 6.0], name="x")
-            self.assert_eq(expected, psser.backfill())
-
-            # Test `inplace=True`
-            psser.backfill(inplace=True)
-            self.assert_eq(expected, psser)
+        # Test `inplace=True`
+        pser.backfill(inplace=True)
+        psser.backfill(inplace=True)
+        self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
 
 
 class SeriesMissingDataTests(SeriesMissingDataMixin, ComparisonTestBase, SQLTestUtils):

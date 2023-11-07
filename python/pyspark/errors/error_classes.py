@@ -164,6 +164,63 @@ ERROR_CLASSES_JSON = """
       "Remote client cannot create a SparkContext. Create SparkSession instead."
     ]
   },
+  "DIFFERENT_PANDAS_DATAFRAME" : {
+    "message" : [
+      "DataFrames are not almost equal:",
+      "Left:",
+      "<left>",
+      "<left_dtype>",
+      "Right:",
+      "<right>",
+      "<right_dtype>"
+    ]
+  },
+  "DIFFERENT_PANDAS_INDEX" : {
+    "message" : [
+      "Indices are not almost equal:",
+      "Left:",
+      "<left>",
+      "<left_dtype>",
+      "Right:",
+      "<right>",
+      "<right_dtype>"
+    ]
+  },
+  "DIFFERENT_PANDAS_MULTIINDEX" : {
+    "message" : [
+      "MultiIndices are not almost equal:",
+      "Left:",
+      "<left>",
+      "<left_dtype>",
+      "Right:",
+      "<right>",
+      "<right_dtype>"
+    ]
+  },
+  "DIFFERENT_PANDAS_SERIES" : {
+    "message" : [
+      "Series are not almost equal:",
+      "Left:",
+      "<left>",
+      "<left_dtype>",
+      "Right:",
+      "<right>",
+      "<right_dtype>"
+    ]
+  },
+  "DIFFERENT_ROWS" : {
+    "message" : [
+      "<error_msg>"
+    ]
+  },
+  "DIFFERENT_SCHEMA" : {
+    "message" : [
+      "Schemas do not match.",
+      "--- actual",
+      "+++ expected",
+      "<error_msg>"
+    ]
+  },
   "DISALLOWED_TYPE_FOR_CONTAINER" : {
     "message" : [
       "Argument `<arg_name>`(type: <arg_type>) should only contain a type in [<allowed_types>], got <return_type>"
@@ -172,11 +229,6 @@ ERROR_CLASSES_JSON = """
   "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT" : {
     "message" : [
       "Duplicated field names in Arrow Struct are not allowed, got <field_names>"
-    ]
-  },
-  "EXCEED_RETRY" : {
-    "message" : [
-      "Retries exceeded but no exception caught."
     ]
   },
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN" : {
@@ -188,6 +240,11 @@ ERROR_CLASSES_JSON = """
     "message" : [
       "`spark.python.profile` or `spark.python.profile.memory` configuration",
       " must be set to `true` to enable Python profile."
+    ]
+  },
+  "INVALID_ARROW_UDTF_RETURN_TYPE" : {
+    "message" : [
+      "The return type of the arrow-optimized Python UDTF should be of type 'pandas.DataFrame', but the '<func>' method returned a value of type <type_name> with value: <value>."
     ]
   },
   "INVALID_BROADCAST_OPERATION": {
@@ -245,9 +302,39 @@ ERROR_CLASSES_JSON = """
       "StructField does not have typeName. Use typeName on its type explicitly instead."
     ]
   },
+  "INVALID_TYPE_DF_EQUALITY_ARG" : {
+    "message" : [
+      "Expected type <expected_type> for `<arg_name>` but got type <actual_type>."
+    ]
+  },
   "INVALID_UDF_EVAL_TYPE" : {
     "message" : [
       "Eval type for UDF must be <eval_type>."
+    ]
+  },
+  "INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE" : {
+    "message" : [
+      "The UDTF '<name>' is invalid. It has both its return type and an 'analyze' attribute. Please make it have one of either the return type or the 'analyze' static method in '<name>' and try again."
+    ]
+  },
+  "INVALID_UDTF_EVAL_TYPE" : {
+    "message" : [
+      "The eval type for the UDTF '<name>' is invalid. It must be one of <eval_type>."
+    ]
+  },
+  "INVALID_UDTF_HANDLER_TYPE" : {
+    "message" : [
+      "The UDTF is invalid. The function handler must be a class, but got '<type>'. Please provide a class as the function handler."
+    ]
+  },
+  "INVALID_UDTF_NO_EVAL" : {
+    "message" : [
+      "The UDTF '<name>' is invalid. It does not implement the required 'eval' method. Please implement the 'eval' method in '<name>' and try again."
+    ]
+  },
+  "INVALID_UDTF_RETURN_TYPE" : {
+    "message" : [
+      "The UDTF '<name>' is invalid. It does not specify its return type or implement the required 'analyze' static method. Please specify the return type or implement the 'analyze' static method in '<name>' and try again."
     ]
   },
   "INVALID_WHEN_USAGE": {
@@ -267,7 +354,7 @@ ERROR_CLASSES_JSON = """
   },
   "JVM_ATTRIBUTE_NOT_SUPPORTED" : {
     "message" : [
-      "Attribute `<attr_name>` is not supported in Spark Connect as it depends on the JVM. If you need to use this attribute, do not use Spark Connect when creating your session."
+      "Attribute `<attr_name>` is not supported in Spark Connect as it depends on the JVM. If you need to use this attribute, do not use Spark Connect when creating your session. Visit https://spark.apache.org/docs/latest/sql-getting-started.html#starting-point-sparksession for creating regular Spark Session in detail."
     ]
   },
   "KEY_VALUE_PAIR_REQUIRED" : {
@@ -388,6 +475,11 @@ ERROR_CLASSES_JSON = """
   "NOT_COLUMN_OR_STR" : {
     "message" : [
       "Argument `<arg_name>` should be a Column or str, got <arg_type>."
+    ]
+  },
+  "NOT_COLUMN_OR_STR_OR_STRUCT" : {
+    "message" : [
+      "Argument `<arg_name>` should be a StructType, Column or str, got <arg_type>."
     ]
   },
   "NOT_DATAFRAME" : {
@@ -525,6 +617,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a WindowSpec, got <arg_type>."
     ]
   },
+  "NO_ACTIVE_OR_DEFAULT_SESSION" : {
+    "message" : [
+      "No active or default Spark session found. Please create a new Spark session before running the code."
+    ]
+  },
   "NO_ACTIVE_SESSION" : {
     "message" : [
       "No active Spark session found. Please create a new Spark session before running the code."
@@ -545,6 +642,21 @@ ERROR_CLASSES_JSON = """
       "Pipe function `<func_name>` exited with error code <error_code>."
     ]
   },
+  "PYTHON_DATA_SOURCE_CREATE_ERROR" : {
+    "message" : [
+        "Unable to create the Python data source <type>: <error>."
+    ]
+  },
+  "PYTHON_DATA_SOURCE_METHOD_NOT_IMPLEMENTED" : {
+    "message" : [
+        "Unable to create the Python data source <type> because the '<method>' method hasn't been implemented."
+    ]
+  },
+  "PYTHON_DATA_SOURCE_TYPE_MISMATCH" : {
+    "message" : [
+      "Expected <expected>, but got <actual>."
+    ]
+  },
   "PYTHON_HASH_SEED_NOT_SET" : {
     "message" : [
       "Randomness of hash of string should be disabled via PYTHONHASHSEED."
@@ -552,7 +664,7 @@ ERROR_CLASSES_JSON = """
   },
   "PYTHON_VERSION_MISMATCH" : {
     "message" : [
-      "Python in worker has different version <worker_version> than that in driver <driver_version>, PySpark cannot run with different minor versions.",
+      "Python in worker has different version: <worker_version> than that in driver: <driver_version>, PySpark cannot run with different minor versions.",
       "Please check environment variables PYSPARK_PYTHON and PYSPARK_DRIVER_PYTHON are correctly set."
     ]
   },
@@ -626,9 +738,54 @@ ERROR_CLASSES_JSON = """
       "pandas iterator UDF should exhaust the input iterator."
     ]
   },
+  "STREAMING_CONNECT_SERIALIZATION_ERROR" : {
+    "message" : [
+      "Cannot serialize the function `<name>`. If you accessed the Spark session, or a DataFrame defined outside of the function, or any object that contains a Spark session, please be aware that they are not allowed in Spark Connect. For `foreachBatch`, please access the Spark session using `df.sparkSession`, where `df` is the first parameter in your `foreachBatch` function. For `StreamingQueryListener`, please access the Spark session using `self.spark`. For details please check out the PySpark doc for `foreachBatch` and `StreamingQueryListener`."
+    ]
+  },
   "TOO_MANY_VALUES" : {
     "message" : [
       "Expected <expected> values for `<item>`, got <actual>."
+    ]
+  },
+  "UDF_RETURN_TYPE" : {
+    "message" : [
+      "Return type of the user-defined function should be <expected>, but is <actual>."
+    ]
+  },
+  "UDTF_ARROW_TYPE_CAST_ERROR" : {
+    "message" : [
+      "Cannot convert the output value of the column '<col_name>' with type '<col_type>' to the specified return type of the column: '<arrow_type>'. Please check if the data types match and try again."
+    ]
+  },
+  "UDTF_EXEC_ERROR" : {
+    "message" : [
+      "User defined table function encountered an error in the '<method_name>' method: <error>"
+    ]
+  },
+  "UDTF_INVALID_OUTPUT_ROW_TYPE" : {
+    "message" : [
+        "The type of an individual output row in the '<func>' method of the UDTF is invalid. Each row should be a tuple, list, or dict, but got '<type>'. Please make sure that the output rows are of the correct type."
+    ]
+  },
+  "UDTF_RETURN_NOT_ITERABLE" : {
+    "message" : [
+      "The return value of the '<func>' method of the UDTF is invalid. It should be an iterable (e.g., generator or list), but got '<type>'. Please make sure that the UDTF returns one of these types."
+    ]
+  },
+  "UDTF_RETURN_SCHEMA_MISMATCH" : {
+    "message" : [
+      "The number of columns in the result does not match the specified schema. Expected column count: <expected>, Actual column count: <actual>. Please make sure the values returned by the '<func>' method have the same number of columns as specified in the output schema."
+    ]
+  },
+  "UDTF_RETURN_TYPE_MISMATCH" : {
+    "message" : [
+      "Mismatch in return type for the UDTF '<name>'. Expected a 'StructType', but got '<return_type>'. Please ensure the return type is a correctly formatted StructType."
+    ]
+  },
+  "UDTF_SERIALIZATION_ERROR" : {
+    "message" : [
+      "Cannot serialize the UDTF '<name>': <message>"
     ]
   },
   "UNEXPECTED_RESPONSE_FROM_SERVER" : {
@@ -714,6 +871,11 @@ ERROR_CLASSES_JSON = """
   "VALUE_NOT_ACCESSIBLE": {
     "message": [
       "Value `<value>` cannot be accessed inside tasks."
+    ]
+  },
+  "VALUE_NOT_ALLOWED" : {
+    "message" : [
+      "Value for `<arg_name>` has to be amongst the following values: <allowed_values>."
     ]
   },
   "VALUE_NOT_ANY_OR_ALL" : {

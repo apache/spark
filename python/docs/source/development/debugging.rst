@@ -475,10 +475,10 @@ Example:
 
 .. code-block:: python
 
-    >>> import pyspark.sql.functions as F
+    >>> import pyspark.sql.functions as sf
     >>> from pyspark.sql.functions import udf
     >>> def f(x):
-    ...   return F.abs(x)
+    ...   return sf.abs(x)
     ...
     >>> spark.range(-1, 1).withColumn("abs", udf(f)("id")).collect()
     22/04/12 14:52:31 ERROR Executor: Exception in task 7.0 in stage 37.0 (TID 232)

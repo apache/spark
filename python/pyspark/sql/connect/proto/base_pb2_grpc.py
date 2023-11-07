@@ -60,6 +60,26 @@ class SparkConnectServiceStub(object):
             request_serializer=spark_dot_connect_dot_base__pb2.InterruptRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.InterruptResponse.FromString,
         )
+        self.ReattachExecute = channel.unary_stream(
+            "/spark.connect.SparkConnectService/ReattachExecute",
+            request_serializer=spark_dot_connect_dot_base__pb2.ReattachExecuteRequest.SerializeToString,
+            response_deserializer=spark_dot_connect_dot_base__pb2.ExecutePlanResponse.FromString,
+        )
+        self.ReleaseExecute = channel.unary_unary(
+            "/spark.connect.SparkConnectService/ReleaseExecute",
+            request_serializer=spark_dot_connect_dot_base__pb2.ReleaseExecuteRequest.SerializeToString,
+            response_deserializer=spark_dot_connect_dot_base__pb2.ReleaseExecuteResponse.FromString,
+        )
+        self.ReleaseSession = channel.unary_unary(
+            "/spark.connect.SparkConnectService/ReleaseSession",
+            request_serializer=spark_dot_connect_dot_base__pb2.ReleaseSessionRequest.SerializeToString,
+            response_deserializer=spark_dot_connect_dot_base__pb2.ReleaseSessionResponse.FromString,
+        )
+        self.FetchErrorDetails = channel.unary_unary(
+            "/spark.connect.SparkConnectService/FetchErrorDetails",
+            request_serializer=spark_dot_connect_dot_base__pb2.FetchErrorDetailsRequest.SerializeToString,
+            response_deserializer=spark_dot_connect_dot_base__pb2.FetchErrorDetailsResponse.FromString,
+        )
 
 
 class SparkConnectServiceServicer(object):
@@ -106,6 +126,42 @@ class SparkConnectServiceServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def ReattachExecute(self, request, context):
+        """Reattach to an existing reattachable execution.
+        The ExecutePlan must have been started with ReattachOptions.reattachable=true.
+        If the ExecutePlanResponse stream ends without a ResultComplete message, there is more to
+        continue. If there is a ResultComplete, the client should use ReleaseExecute with
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def ReleaseExecute(self, request, context):
+        """Release an reattachable execution, or parts thereof.
+        The ExecutePlan must have been started with ReattachOptions.reattachable=true.
+        Non reattachable executions are released automatically and immediately after the ExecutePlan
+        RPC and ReleaseExecute may not be used.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def ReleaseSession(self, request, context):
+        """Release a session.
+        All the executions in the session will be released. Any further requests for the session with
+        that session_id for the given user_id will fail. If the session didn't exist or was already
+        released, this is a noop.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def FetchErrorDetails(self, request, context):
+        """FetchErrorDetails retrieves the matched exception with details based on a provided error id."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
 
 def add_SparkConnectServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -138,6 +194,26 @@ def add_SparkConnectServiceServicer_to_server(servicer, server):
             servicer.Interrupt,
             request_deserializer=spark_dot_connect_dot_base__pb2.InterruptRequest.FromString,
             response_serializer=spark_dot_connect_dot_base__pb2.InterruptResponse.SerializeToString,
+        ),
+        "ReattachExecute": grpc.unary_stream_rpc_method_handler(
+            servicer.ReattachExecute,
+            request_deserializer=spark_dot_connect_dot_base__pb2.ReattachExecuteRequest.FromString,
+            response_serializer=spark_dot_connect_dot_base__pb2.ExecutePlanResponse.SerializeToString,
+        ),
+        "ReleaseExecute": grpc.unary_unary_rpc_method_handler(
+            servicer.ReleaseExecute,
+            request_deserializer=spark_dot_connect_dot_base__pb2.ReleaseExecuteRequest.FromString,
+            response_serializer=spark_dot_connect_dot_base__pb2.ReleaseExecuteResponse.SerializeToString,
+        ),
+        "ReleaseSession": grpc.unary_unary_rpc_method_handler(
+            servicer.ReleaseSession,
+            request_deserializer=spark_dot_connect_dot_base__pb2.ReleaseSessionRequest.FromString,
+            response_serializer=spark_dot_connect_dot_base__pb2.ReleaseSessionResponse.SerializeToString,
+        ),
+        "FetchErrorDetails": grpc.unary_unary_rpc_method_handler(
+            servicer.FetchErrorDetails,
+            request_deserializer=spark_dot_connect_dot_base__pb2.FetchErrorDetailsRequest.FromString,
+            response_serializer=spark_dot_connect_dot_base__pb2.FetchErrorDetailsResponse.SerializeToString,
         ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -314,6 +390,122 @@ class SparkConnectService(object):
             "/spark.connect.SparkConnectService/Interrupt",
             spark_dot_connect_dot_base__pb2.InterruptRequest.SerializeToString,
             spark_dot_connect_dot_base__pb2.InterruptResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+        )
+
+    @staticmethod
+    def ReattachExecute(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            "/spark.connect.SparkConnectService/ReattachExecute",
+            spark_dot_connect_dot_base__pb2.ReattachExecuteRequest.SerializeToString,
+            spark_dot_connect_dot_base__pb2.ExecutePlanResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+        )
+
+    @staticmethod
+    def ReleaseExecute(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/spark.connect.SparkConnectService/ReleaseExecute",
+            spark_dot_connect_dot_base__pb2.ReleaseExecuteRequest.SerializeToString,
+            spark_dot_connect_dot_base__pb2.ReleaseExecuteResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+        )
+
+    @staticmethod
+    def ReleaseSession(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/spark.connect.SparkConnectService/ReleaseSession",
+            spark_dot_connect_dot_base__pb2.ReleaseSessionRequest.SerializeToString,
+            spark_dot_connect_dot_base__pb2.ReleaseSessionResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+        )
+
+    @staticmethod
+    def FetchErrorDetails(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/spark.connect.SparkConnectService/FetchErrorDetails",
+            spark_dot_connect_dot_base__pb2.FetchErrorDetailsRequest.SerializeToString,
+            spark_dot_connect_dot_base__pb2.FetchErrorDetailsResponse.FromString,
             options,
             channel_credentials,
             insecure,

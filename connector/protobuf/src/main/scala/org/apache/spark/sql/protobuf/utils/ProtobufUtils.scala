@@ -22,7 +22,7 @@ import java.io.FileNotFoundException
 import java.nio.file.NoSuchFileException
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.protobuf.{DescriptorProtos, Descriptors, InvalidProtocolBufferException, Message}
@@ -75,6 +75,7 @@ private[sql] object ProtobufUtils extends Logging {
     private[this] val protoFieldArray = descriptor.getFields.asScala.toArray
     private[this] val fieldMap = descriptor.getFields.asScala
       .groupBy(_.getName.toLowerCase(Locale.ROOT))
+      .view
       .mapValues(_.toSeq) // toSeq needed for scala 2.13
 
     /** The fields which have matching equivalents in both Protobuf and Catalyst schemas. */
@@ -266,7 +267,16 @@ private[sql] object ProtobufUtils extends Logging {
     val fileDescriptorList = fileDescriptorProto.getDependencyList().asScala.map { dependency =>
       fileDescriptorProtoMap.get(dependency) match {
         case Some(dependencyProto) =>
-          buildFileDescriptor(dependencyProto, fileDescriptorProtoMap)
+          if (dependencyProto.getName == "google/protobuf/any.proto"
+            && dependencyProto.getPackage == "google.protobuf") {
+            // For Any, use the descriptor already included as part of the Java dependency.
+            // Without this, JsonFormat used for converting Any fields fails when
+            // an Any field in input is set to `Any.getDefaultInstance()`.
+            com.google.protobuf.AnyProto.getDescriptor
+            // Should we do the same for timestamp.proto and empty.proto?
+          } else {
+            buildFileDescriptor(dependencyProto, fileDescriptorProtoMap)
+          }
         case None =>
           throw QueryCompilationErrors.protobufDescriptorDependencyError(dependency)
       }

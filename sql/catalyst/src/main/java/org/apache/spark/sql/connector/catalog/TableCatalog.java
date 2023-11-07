@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
 import org.apache.spark.sql.errors.QueryCompilationErrors;
+import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.StructType;
 
 import java.util.Collections;
@@ -169,10 +170,10 @@ public interface TableCatalog extends CatalogPlugin {
   /**
    * Create a table in the catalog.
    * <p>
-   * This is deprecated. Please override
+   * @deprecated This is deprecated. Please override
    * {@link #createTable(Identifier, Column[], Transform[], Map)} instead.
    */
-  @Deprecated
+  @Deprecated(since = "3.4.0")
   Table createTable(
       Identifier ident,
       StructType schema,
@@ -256,7 +257,7 @@ public interface TableCatalog extends CatalogPlugin {
    * @since 3.1.0
    */
   default boolean purgeTable(Identifier ident) throws UnsupportedOperationException {
-    throw new UnsupportedOperationException("Purge table is not supported.");
+    throw QueryExecutionErrors.unsupportedPurgeTableError();
   }
 
   /**

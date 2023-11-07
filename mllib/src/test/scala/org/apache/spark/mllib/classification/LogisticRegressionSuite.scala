@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.classification
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 import scala.util.control.Breaks._
 
@@ -143,7 +143,7 @@ object LogisticRegressionSuite {
         for (i <- 0 until nClasses) {
           if (p < probs(i)) {
             y = i
-            break
+            break()
           }
         }
       }

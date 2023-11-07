@@ -18,6 +18,7 @@
 from typing import Dict, Optional, cast
 
 from pyspark.errors.utils import ErrorClassesReader
+from pickle import PicklingError
 
 
 class PySparkException(Exception):
@@ -225,4 +226,10 @@ class PySparkAssertionError(PySparkException, AssertionError):
 class PySparkNotImplementedError(PySparkException, NotImplementedError):
     """
     Wrapper class for NotImplementedError to support error classes.
+    """
+
+
+class PySparkPicklingError(PySparkException, PicklingError):
+    """
+    Wrapper class for pickle.PicklingError to support error classes.
     """

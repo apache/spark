@@ -23,7 +23,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.sql.catalyst.util.StringConcat
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 
 class DataTypeSuite extends SparkFunSuite {
@@ -315,6 +315,29 @@ class DataTypeSuite extends SparkFunSuite {
       DataType.fromJson("abcd")
     }.getMessage
     assert(message.contains("Unrecognized token 'abcd'"))
+  }
+
+  // SPARK-40820: fromJson with only name and type
+  test("Deserialized and serialized schema without nullable or metadata in") {
+    val schema =
+      """
+        |{
+        |    "type": "struct",
+        |    "fields": [
+        |        {
+        |            "name": "c1",
+        |            "type": "string"
+        |        }
+        |    ]
+        |}
+        |""".stripMargin
+    val dt = DataType.fromJson(schema)
+
+    dt.simpleString equals "struct<c1:string>"
+    dt.json equals
+      """
+        |{"type":"struct","fields":[{"name":"c1","type":"string","nullable":false,"metadata":{}}]}
+        |""".stripMargin
   }
 
   def checkDefaultSize(dataType: DataType, expectedDefaultSize: Int): Unit = {

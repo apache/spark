@@ -25,7 +25,6 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.encoders.{ExamplePoint, ExamplePointUDT}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.ToJsonUtil
 
 /**
  * Test suite for [[Row]] JSON serialization.
@@ -38,7 +37,7 @@ class RowJsonSuite extends SparkFunSuite {
   private def testJson(name: String, value: Any, dt: DataType, expected: JValue): Unit = {
     test(name) {
       val row = new GenericRowWithSchema(Array(value), new StructType().add("a", dt))
-      assert(ToJsonUtil.jsonValue(row) === JObject("a" -> expected))
+      assert(row.jsonValue === JObject("a" -> expected))
     }
   }
 
@@ -123,7 +122,7 @@ class RowJsonSuite extends SparkFunSuite {
 
   test("no schema") {
     val e = intercept[IllegalArgumentException] {
-      ToJsonUtil.jsonValue(Row("a"))
+      Row("a").jsonValue
     }
     assert(e.getMessage.contains("requires a non-null schema"))
   }
@@ -133,7 +132,7 @@ class RowJsonSuite extends SparkFunSuite {
       val row = new GenericRowWithSchema(
         Array((1, 2)),
         new StructType().add("a", ObjectType(classOf[(Int, Int)])))
-      ToJsonUtil.jsonValue(row)
+      row.jsonValue
     }
     assert(e.getMessage.contains("Failed to convert value"))
   }

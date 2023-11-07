@@ -20,8 +20,8 @@ import java.io.Serializable
 import java.lang.{Double => JDouble}
 import java.util.Arrays.binarySearch
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.json4s._
 import org.json4s.JsonDSL._

@@ -162,41 +162,6 @@ class DiffFramesSetItemSeriesMixin:
         ):
             psser1.iloc[[1, 2]] = -psser_another
 
-        pdf = pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}, index=["cobra", "viper", "sidewinder"])
-        psdf = ps.from_pandas(pdf)
-
-        pser = pdf.x
-        psery = pdf.y
-        psser = psdf.x
-        pssery = psdf.y
-
-        piloc = pser.iloc
-        kiloc = psser.iloc
-
-        kiloc[[0, 1, 2]] = -psser_another
-        piloc[[0, 1, 2]] = -pser_another
-        self.assert_eq(psser, pser)
-        self.assert_eq(psdf, pdf)
-        self.assert_eq(pssery, psery)
-
-        with self.assertRaisesRegex(
-            ValueError,
-            "cannot set using a list-like indexer with a different length than the value",
-        ):
-            kiloc[[1, 2]] = -psser_another
-
-        kiloc[[0, 1, 2]] = 10 * psser_another
-        piloc[[0, 1, 2]] = 10 * pser_another
-        self.assert_eq(psser, pser)
-        self.assert_eq(psdf, pdf)
-        self.assert_eq(pssery, psery)
-
-        with self.assertRaisesRegex(
-            ValueError,
-            "cannot set using a list-like indexer with a different length than the value",
-        ):
-            kiloc[[0]] = 10 * psser_another
-
 
 class DiffFramesSetItemSeriesTests(
     DiffFramesSetItemSeriesMixin, PandasOnSparkTestCase, SQLTestUtils

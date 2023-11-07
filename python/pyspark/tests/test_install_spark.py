@@ -83,7 +83,7 @@ class SparkInstallationTestCase(unittest.TestCase):
         )
 
         # Negative test cases
-        for (hadoop_version, hive_version) in UNSUPPORTED_COMBINATIONS:
+        for hadoop_version, hive_version in UNSUPPORTED_COMBINATIONS:
             with self.assertRaisesRegex(RuntimeError, "Hive.*should.*Hadoop"):
                 checked_versions(
                     spark_version=test_version,

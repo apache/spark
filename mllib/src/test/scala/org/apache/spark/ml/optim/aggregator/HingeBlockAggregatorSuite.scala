@@ -112,8 +112,8 @@ class HingeBlockAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext
   test("check sizes") {
     val rng = new scala.util.Random
     val numFeatures = instances.head.features.size
-    val coefWithIntercept = Vectors.dense(Array.fill(numFeatures + 1)(rng.nextDouble))
-    val coefWithoutIntercept = Vectors.dense(Array.fill(numFeatures)(rng.nextDouble))
+    val coefWithIntercept = Vectors.dense(Array.fill(numFeatures + 1)(rng.nextDouble()))
+    val coefWithoutIntercept = Vectors.dense(Array.fill(numFeatures)(rng.nextDouble()))
     val block = InstanceBlock.fromInstances(instances)
 
     val aggIntercept = getNewAggregator(instances, coefWithIntercept, fitIntercept = true)

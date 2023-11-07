@@ -94,7 +94,7 @@ SELECT array(1), 2
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -123,7 +123,7 @@ SELECT k, v FROM tab2
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "NUM_COLUMNS_MISMATCH",
   "sqlState" : "42826",

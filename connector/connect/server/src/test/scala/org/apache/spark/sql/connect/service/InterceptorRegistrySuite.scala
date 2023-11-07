@@ -130,7 +130,7 @@ class InterceptorRegistrySuite extends SharedSparkSession {
         "org.apache.spark.sql.connect.service.TestingInterceptorNoTrivialCtor") {
       checkError(
         exception = intercept[SparkException] {
-          SparkConnectInterceptorRegistry.createConfiguredInterceptors
+          SparkConnectInterceptorRegistry.createConfiguredInterceptors()
         },
         errorClass = "CONNECT.INTERCEPTOR_CTOR_MISSING",
         parameters =
@@ -142,7 +142,7 @@ class InterceptorRegistrySuite extends SharedSparkSession {
         "org.apache.spark.sql.connect.service.TestingInterceptorInstantiationError") {
       checkError(
         exception = intercept[SparkException] {
-          SparkConnectInterceptorRegistry.createConfiguredInterceptors
+          SparkConnectInterceptorRegistry.createConfiguredInterceptors()
         },
         errorClass = "CONNECT.INTERCEPTOR_RUNTIME_ERROR",
         parameters = Map("msg" -> "Bad Error"))
@@ -151,10 +151,10 @@ class InterceptorRegistrySuite extends SharedSparkSession {
 
   test("No configured interceptors returns empty list") {
     // Not set.
-    assert(SparkConnectInterceptorRegistry.createConfiguredInterceptors.isEmpty)
+    assert(SparkConnectInterceptorRegistry.createConfiguredInterceptors().isEmpty)
     // Set to empty string
     withSparkConf(Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES.key -> "") {
-      assert(SparkConnectInterceptorRegistry.createConfiguredInterceptors.isEmpty)
+      assert(SparkConnectInterceptorRegistry.createConfiguredInterceptors().isEmpty)
     }
   }
 
@@ -163,14 +163,14 @@ class InterceptorRegistrySuite extends SharedSparkSession {
       Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES.key ->
         (" org.apache.spark.sql.connect.service.DummyInterceptor," +
           "    org.apache.spark.sql.connect.service.DummyInterceptor   ")) {
-      assert(SparkConnectInterceptorRegistry.createConfiguredInterceptors.size == 2)
+      assert(SparkConnectInterceptorRegistry.createConfiguredInterceptors().size == 2)
     }
   }
 
   test("Configured class not found is properly thrown") {
     withSparkConf(Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES.key -> "this.class.does.not.exist") {
       assertThrows[ClassNotFoundException] {
-        SparkConnectInterceptorRegistry.createConfiguredInterceptors
+        SparkConnectInterceptorRegistry.createConfiguredInterceptors()
       }
     }
   }
@@ -182,6 +182,16 @@ class InterceptorRegistrySuite extends SharedSparkSession {
       val interceptors = SparkConnectInterceptorRegistry.createConfiguredInterceptors()
       assert(interceptors.size == 1)
       assert(interceptors.head.isInstanceOf[LoggingInterceptor])
+    }
+  }
+
+  test("LocalPropertiesCleanupInterceptor initializes when configured in spark conf") {
+    withSparkConf(
+      Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES.key ->
+        "org.apache.spark.sql.connect.service.LocalPropertiesCleanupInterceptor") {
+      val interceptors = SparkConnectInterceptorRegistry.createConfiguredInterceptors()
+      assert(interceptors.size == 1)
+      assert(interceptors.head.isInstanceOf[LocalPropertiesCleanupInterceptor])
     }
   }
 }
