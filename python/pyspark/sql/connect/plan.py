@@ -2251,7 +2251,9 @@ class CoGroupMap(LogicalPlan):
         self._input_grouping_cols = input_grouping_cols
         self._other_grouping_cols = other_grouping_cols
         self._other = cast(LogicalPlan, other)
-        self._func = function._build_common_inline_user_defined_function(*cols)
+        # The function takes entire DataFrame as inputs, no need to do
+        # column binding (no input columns).
+        self._func = function._build_common_inline_user_defined_function()
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None

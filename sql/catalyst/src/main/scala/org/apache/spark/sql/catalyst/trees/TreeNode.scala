@@ -362,10 +362,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       case s: Seq[_] =>
         s.map(mapChild)
       case m: Map[_, _] =>
-        // `map.mapValues().view.force` return `Map` in Scala 2.12 but return `IndexedSeq` in Scala
-        // 2.13, call `toMap` method manually to compatible with Scala 2.12 and Scala 2.13
-        // `mapValues` is lazy and we need to force it to materialize
-        m.view.mapValues(mapChild).view.force.toMap
+        // `mapValues` is lazy and we need to force it to materialize by converting to Map
+        m.view.mapValues(mapChild).toMap
       case arg: TreeNode[_] if containsChild(arg) => mapTreeNode(arg)
       case Some(child) => Some(mapChild(child))
       case nonChild: AnyRef => nonChild
@@ -784,13 +782,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
         arg.asInstanceOf[BaseType].clone()
       case Some(arg: TreeNode[_]) if containsChild(arg) =>
         Some(arg.asInstanceOf[BaseType].clone())
-      // `map.mapValues().view.force` return `Map` in Scala 2.12 but return `IndexedSeq` in Scala
-      // 2.13, call `toMap` method manually to compatible with Scala 2.12 and Scala 2.13
+      // `mapValues` is lazy and we need to force it to materialize by converting to Map
       case m: Map[_, _] => m.view.mapValues {
         case arg: TreeNode[_] if containsChild(arg) =>
           arg.asInstanceOf[BaseType].clone()
         case other => other
-      }.view.force.toMap // `mapValues` is lazy and we need to force it to materialize
+      }.toMap
       case d: DataType => d // Avoid unpacking Structs
       case args: LazyList[_] => args.map(mapChild).force // Force materialization on stream
       case args: Iterable[_] => args.map(mapChild)
@@ -820,7 +817,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     val redactedMap = SQLConf.get.redactOptions(map.toMap)
     // construct the redacted map as strings of the format "key=value"
     val keyValuePairs = redactedMap.toSeq.map { item =>
-      item._1 + "=" + item._2
+      s"${item._1}=${item._2}"
     }
     truncatedString(keyValuePairs, "[", ", ", "]", maxFields) :: Nil
   }
@@ -1090,7 +1087,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       // this child in all children.
       case (name, value: TreeNode[_]) if containsChild(value) =>
         name -> JInt(children.indexOf(value))
-      case (name, value: Seq[BaseType]) if value.forall(containsChild) =>
+      case (name, value: Seq[BaseType @unchecked]) if value.forall(containsChild) =>
         name -> JArray(
           value.map(v => JInt(children.indexOf(v.asInstanceOf[TreeNode[_]]))).toList
         )

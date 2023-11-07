@@ -841,12 +841,12 @@ class SparkConnectServiceSuite
     spark.sparkContext.addSparkListener(verifyEvents.listener)
     Utils.tryWithSafeFinally({
       f(verifyEvents)
-      SparkConnectService.invalidateAllSessions()
+      SparkConnectService.sessionManager.invalidateAllSessions()
       verifyEvents.onSessionClosed()
     }) {
       verifyEvents.waitUntilEmpty()
       spark.sparkContext.removeSparkListener(verifyEvents.listener)
-      SparkConnectService.invalidateAllSessions()
+      SparkConnectService.sessionManager.invalidateAllSessions()
       SparkConnectPluginRegistry.reset()
     }
   }

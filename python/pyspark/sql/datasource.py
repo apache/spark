@@ -15,18 +15,21 @@
 # limitations under the License.
 #
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterator, Tuple, Union, TYPE_CHECKING
+from typing import final, Any, Dict, Iterator, List, Optional, Tuple, Type, Union, TYPE_CHECKING
 
+from pyspark import since
 from pyspark.sql import Row
 from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType
+    from pyspark.sql.session import SparkSession
 
 
-__all__ = ["DataSource", "DataSourceReader"]
+__all__ = ["DataSource", "DataSourceReader", "DataSourceWriter", "DataSourceRegistration"]
 
 
+@since(4.0)
 class DataSource(ABC):
     """
     A base class for data sources.
@@ -41,23 +44,35 @@ class DataSource(ABC):
     ``spark.read.format(...).load()`` and save data using ``df.write.format(...).save()``.
     """
 
-    def __init__(self, options: Dict[str, "OptionalPrimitiveType"]):
+    @final
+    def __init__(
+        self,
+        paths: List[str],
+        userSpecifiedSchema: Optional[StructType],
+        options: Dict[str, "OptionalPrimitiveType"],
+    ) -> None:
         """
-        Initializes the data source with user-provided options.
+        Initializes the data source with user-provided information.
 
         Parameters
         ----------
+        paths : list
+            A list of paths to the data source.
+        userSpecifiedSchema : StructType, optional
+            The user-specified schema of the data source.
         options : dict
             A dictionary representing the options for this data source.
 
         Notes
         -----
-        This method should not contain any non-serializable objects.
+        This method should not be overridden.
         """
+        self.paths = paths
+        self.userSpecifiedSchema = userSpecifiedSchema
         self.options = options
 
-    @property
-    def name(self) -> str:
+    @classmethod
+    def name(cls) -> str:
         """
         Returns a string represents the format name of this data source.
 
@@ -66,20 +81,21 @@ class DataSource(ABC):
 
         Examples
         --------
-        >>> def name(self):
+        >>> def name(cls):
         ...     return "my_data_source"
         """
-        return self.__class__.__name__
+        return cls.__name__
 
     def schema(self) -> Union[StructType, str]:
         """
         Returns the schema of the data source.
 
-        It can reference the ``options`` field to infer the data source's schema when
-        users do not explicitly specify it. This method is invoked once when calling
-        ``spark.read.format(...).load()`` to get the schema for a data source read
-        operation. If this method is not implemented, and a user does not provide a
-        schema when reading the data source, an exception will be thrown.
+        It can refer any field initialized in the ``__init__`` method to infer the
+        data source's schema when users do not explicitly specify it. This method is
+        invoked once when calling ``spark.read.format(...).load()`` to get the schema
+        for a data source read operation. If this method is not implemented, and a
+        user does not provide a schema when reading the data source, an exception will
+        be thrown.
 
         Returns
         -------
@@ -118,7 +134,29 @@ class DataSource(ABC):
         """
         raise NotImplementedError
 
+    def writer(self, schema: StructType, saveMode: str) -> "DataSourceWriter":
+        """
+        Returns a ``DataSourceWriter`` instance for writing data.
 
+        The implementation is required for writable data sources.
+
+        Parameters
+        ----------
+        schema : StructType
+            The schema of the data to be written.
+        saveMode : str
+            A string identifies the save mode. It can be one of the following:
+            `append`, `overwrite`, `error`, `ignore`.
+
+        Returns
+        -------
+        writer : DataSourceWriter
+            A writer instance for this data source.
+        """
+        raise NotImplementedError
+
+
+@since(4.0)
 class DataSourceReader(ABC):
     """
     A base class for data source readers. Data source readers are responsible for
@@ -212,3 +250,109 @@ class DataSourceReader(ABC):
         ...     yield Row(partition=partition, value=1)
         """
         ...
+
+
+@since(4.0)
+class DataSourceWriter(ABC):
+    """
+    A base class for data source writers. Data source writers are responsible for saving
+    the data to the data source.
+    """
+
+    @abstractmethod
+    def write(self, iterator: Iterator[Row]) -> "WriterCommitMessage":
+        """
+        Writes data into the data source.
+
+        This method is called once on each executor to write data to the data source.
+        It accepts an iterator of input data and returns a single row representing a
+        commit message, or None if there is no commit message.
+
+        The driver collects commit messages, if any, from all executors and passes them
+        to the ``commit`` method if all tasks run successfully. If any task fails, the
+        ``abort`` method will be called with the collected commit messages.
+
+        Parameters
+        ----------
+        iterator : Iterator[Row]
+            An iterator of input data.
+
+        Returns
+        -------
+        WriterCommitMessage : a serializable commit message
+        """
+        ...
+
+    def commit(self, messages: List["WriterCommitMessage"]) -> None:
+        """
+        Commits this writing job with a list of commit messages.
+
+        This method is invoked on the driver when all tasks run successfully. The
+        commit messages are collected from the ``write`` method call from each task,
+        and are passed to this method. The implementation should use the commit messages
+        to commit the writing job to the data source.
+
+        Parameters
+        ----------
+        messages : List[WriterCommitMessage]
+            A list of commit messages.
+        """
+        ...
+
+    def abort(self, messages: List["WriterCommitMessage"]) -> None:
+        """
+        Aborts this writing job due to task failures.
+
+        This method is invoked on the driver when one or more tasks failed. The commit
+        messages are collected from the ``write`` method call from each task, and are
+        passed to this method. The implementation should use the commit messages to
+        abort the writing job to the data source.
+
+        Parameters
+        ----------
+        messages : List[WriterCommitMessage]
+            A list of commit messages.
+        """
+        ...
+
+
+@since(4.0)
+class WriterCommitMessage:
+    """
+    A commit message returned by the ``write`` method of ``DataSourceWriter`` and will be
+    sent back to the driver side as input parameter of ``commit`` or ``abort`` method.
+    """
+
+    ...
+
+
+@since(4.0)
+class DataSourceRegistration:
+    """
+    Wrapper for data source registration. This instance can be accessed by
+    :attr:`spark.dataSource`.
+    """
+
+    def __init__(self, sparkSession: "SparkSession"):
+        self.sparkSession = sparkSession
+
+    def register(
+        self,
+        dataSource: Type["DataSource"],
+    ) -> None:
+        """Register a Python user-defined data source.
+
+        Parameters
+        ----------
+        dataSource : type
+            The data source class to be registered. It should be a subclass of DataSource.
+        """
+        from pyspark.sql.udf import _wrap_function
+
+        name = dataSource.name()
+        sc = self.sparkSession.sparkContext
+        # Serialize the data source class.
+        wrapped = _wrap_function(sc, dataSource)
+        assert sc._jvm is not None
+        ds = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonDataSource(wrapped)
+        self.sparkSession._jsparkSession.dataSource().registerPython(name, ds)

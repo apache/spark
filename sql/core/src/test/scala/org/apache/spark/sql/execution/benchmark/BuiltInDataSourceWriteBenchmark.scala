@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution.benchmark
 
-import java.util.Locale
-
 import org.apache.parquet.column.ParquetProperties
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
@@ -56,7 +54,7 @@ object BuiltInDataSourceWriteBenchmark extends DataSourceWriteBenchmark {
     }
 
     spark.conf.set(SQLConf.PARQUET_COMPRESSION.key,
-      ParquetCompressionCodec.SNAPPY.name().toLowerCase(Locale.ROOT))
+      ParquetCompressionCodec.SNAPPY.lowerCaseName())
     spark.conf.set(SQLConf.ORC_COMPRESSION.key,
       OrcCompressionCodec.SNAPPY.lowerCaseName())
 

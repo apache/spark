@@ -254,11 +254,6 @@ class CsvTestsMixin:
             actual = ps.read_csv(fn, sep="\t")
             self.assert_eq(expected, actual, almost=True)
 
-    def test_read_csv_with_mangle_dupe_cols(self):
-        self.assertRaisesRegex(
-            ValueError, "mangle_dupe_cols", lambda: ps.read_csv("path", mangle_dupe_cols=False)
-        )
-
     def test_read_csv_with_parse_dates(self):
         self.assertRaisesRegex(
             ValueError, "parse_dates", lambda: ps.read_csv("path", parse_dates=True)

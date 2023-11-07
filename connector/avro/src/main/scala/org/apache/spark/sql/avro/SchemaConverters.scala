@@ -62,6 +62,8 @@ object SchemaConverters {
   def toSqlType(avroSchema: Schema): SchemaType = {
     toSqlType(avroSchema, false)
   }
+
+  @deprecated("using toSqlType(..., useStableIdForUnionType: Boolean) instead", "4.0.0")
   def toSqlType(avroSchema: Schema, options: Map[String, String]): SchemaType = {
     toSqlTypeHelper(avroSchema, Set.empty, AvroOptions(options).useStableIdForUnionType)
   }

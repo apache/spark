@@ -2763,6 +2763,84 @@ class ReleaseExecuteResponse(google.protobuf.message.Message):
 
 global___ReleaseExecuteResponse = ReleaseExecuteResponse
 
+class ReleaseSessionRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SESSION_ID_FIELD_NUMBER: builtins.int
+    USER_CONTEXT_FIELD_NUMBER: builtins.int
+    CLIENT_TYPE_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """(Required)
+
+    The session_id of the request to reattach to.
+    This must be an id of existing session.
+    """
+    @property
+    def user_context(self) -> global___UserContext:
+        """(Required) User context
+
+        user_context.user_id and session+id both identify a unique remote spark session on the
+        server side.
+        """
+    client_type: builtins.str
+    """Provides optional information about the client sending the request. This field
+    can be used for language or version specific information and is only intended for
+    logging purposes and will not be interpreted by the server.
+    """
+    def __init__(
+        self,
+        *,
+        session_id: builtins.str = ...,
+        user_context: global___UserContext | None = ...,
+        client_type: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_type",
+            b"_client_type",
+            "client_type",
+            b"client_type",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_type",
+            b"_client_type",
+            "client_type",
+            b"client_type",
+            "session_id",
+            b"session_id",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
+    ) -> typing_extensions.Literal["client_type"] | None: ...
+
+global___ReleaseSessionRequest = ReleaseSessionRequest
+
+class ReleaseSessionResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SESSION_ID_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """Session id of the session on which the release executed."""
+    def __init__(
+        self,
+        *,
+        session_id: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["session_id", b"session_id"]
+    ) -> None: ...
+
+global___ReleaseSessionResponse = ReleaseSessionResponse
+
 class FetchErrorDetailsRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -2885,11 +2963,35 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+        class _ContextType:
+            ValueType = typing.NewType("ValueType", builtins.int)
+            V: typing_extensions.TypeAlias = ValueType
+
+        class _ContextTypeEnumTypeWrapper(
+            google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+                FetchErrorDetailsResponse.QueryContext._ContextType.ValueType
+            ],
+            builtins.type,
+        ):  # noqa: F821
+            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+            SQL: FetchErrorDetailsResponse.QueryContext._ContextType.ValueType  # 0
+            DATAFRAME: FetchErrorDetailsResponse.QueryContext._ContextType.ValueType  # 1
+
+        class ContextType(_ContextType, metaclass=_ContextTypeEnumTypeWrapper):
+            """The type of this query context."""
+
+        SQL: FetchErrorDetailsResponse.QueryContext.ContextType.ValueType  # 0
+        DATAFRAME: FetchErrorDetailsResponse.QueryContext.ContextType.ValueType  # 1
+
+        CONTEXT_TYPE_FIELD_NUMBER: builtins.int
         OBJECT_TYPE_FIELD_NUMBER: builtins.int
         OBJECT_NAME_FIELD_NUMBER: builtins.int
         START_INDEX_FIELD_NUMBER: builtins.int
         STOP_INDEX_FIELD_NUMBER: builtins.int
         FRAGMENT_FIELD_NUMBER: builtins.int
+        CALLSITE_FIELD_NUMBER: builtins.int
+        SUMMARY_FIELD_NUMBER: builtins.int
+        context_type: global___FetchErrorDetailsResponse.QueryContext.ContextType.ValueType
         object_type: builtins.str
         """The object type of the query which throws the exception.
         If the exception is directly from the main query, it should be an empty string.
@@ -2906,18 +3008,29 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         """The stopping index in the query which throws the exception. The index starts from 0."""
         fragment: builtins.str
         """The corresponding fragment of the query which throws the exception."""
+        callSite: builtins.str
+        """The user code (call site of the API) that caused throwing the exception."""
+        summary: builtins.str
+        """Summary of the exception cause."""
         def __init__(
             self,
             *,
+            context_type: global___FetchErrorDetailsResponse.QueryContext.ContextType.ValueType = ...,
             object_type: builtins.str = ...,
             object_name: builtins.str = ...,
             start_index: builtins.int = ...,
             stop_index: builtins.int = ...,
             fragment: builtins.str = ...,
+            callSite: builtins.str = ...,
+            summary: builtins.str = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "callSite",
+                b"callSite",
+                "context_type",
+                b"context_type",
                 "fragment",
                 b"fragment",
                 "object_name",
@@ -2928,6 +3041,8 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
                 b"start_index",
                 "stop_index",
                 b"stop_index",
+                "summary",
+                b"summary",
             ],
         ) -> None: ...
 
