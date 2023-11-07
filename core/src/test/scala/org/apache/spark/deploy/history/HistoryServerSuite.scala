@@ -382,7 +382,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
 
   test("incomplete apps get refreshed") {
     implicit val webDriver: WebDriver = new HtmlUnitDriver
-    implicit val formats: Formats = org.json4s.DefaultFormats
+    implicit val formats: Formats = DefaultFormats
 
     // this test dir is explicitly deleted on successful runs; retained for diagnostics when
     // not
