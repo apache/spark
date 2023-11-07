@@ -371,7 +371,7 @@ def verify_arrow_table_schema(table, assign_cols_by_name, expected_cols_and_type
 
     # the types of the fields have to be identical to return type
     # an empty table can have no columns; if there are columns, they have to match
-    if len(table.columns) != 0 or table.num_rows != 0:
+    if table.num_columns != 0 or table.num_rows != 0:
         # columns are either mapped by name or position
         if assign_cols_by_name:
             actual_cols_and_types = {

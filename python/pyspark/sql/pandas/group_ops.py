@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 
 class PandasGroupedOpsMixin:
     """
-    Min-in for Pandas grouped operations. Currently, only :class:`GroupedData`
+    Min-in for pandas grouped operations. Currently, only :class:`GroupedData`
     can use this class.
     """
 
@@ -116,7 +116,7 @@ class PandasGroupedOpsMixin:
         self, func: "PandasGroupedMapFunction", schema: Union[StructType, str]
     ) -> DataFrame:
         """
-        Maps each group of the current :class:`DataFrame` using a Pandas udf and returns the result
+        Maps each group of the current :class:`DataFrame` using a pandas udf and returns the result
         as a `DataFrame`.
 
         The function should take a `pandas.DataFrame` and return another
@@ -376,7 +376,7 @@ class PandasGroupedOpsMixin:
         field data types by position if not strings, e.g. integer indices.
         The length of the returned `pyarrow.Table` can be arbitrary.
 
-        .. versionadded:: 3.4.0
+        .. versionadded:: 4.0.0
 
         Parameters
         ----------
@@ -419,6 +419,7 @@ class PandasGroupedOpsMixin:
         scalars types, e.g., `pyarrow.Int32Scalar` and `pyarrow.FloatScalar`. The data will still
         be passed in as a `pyarrow.Table` containing all columns from the original Spark DataFrame.
         This is useful when the user does not want to hardcode grouping key(s) in the function.
+
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
         ...     ("id", "v"))  # doctest: +SKIP
