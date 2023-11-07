@@ -238,6 +238,18 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
       case DecimalType.Fixed(precision, scale) =>
         makeDecimalWriter(precision, scale)
 
+      case VariantType =>
+        (row: SpecializedGetters, ordinal: Int) =>
+          val v = row.getVariant(ordinal)
+          consumeGroup {
+            consumeField("value", 0) {
+              recordConsumer.addBinary(Binary.fromReusedByteArray(v.getValue))
+            }
+            consumeField("metadata", 1) {
+              recordConsumer.addBinary(Binary.fromReusedByteArray(v.getMetadata))
+            }
+          }
+
       case t: StructType =>
         val fieldWriters = t.map(_.dataType).map(makeWriter).toArray[ValueWriter]
         (row: SpecializedGetters, ordinal: Int) =>

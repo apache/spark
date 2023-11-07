@@ -671,6 +671,7 @@ Below is a list of all the keywords in Spark SQL.
 |VARCHAR|non-reserved|non-reserved|reserved|
 |VAR|non-reserved|non-reserved|non-reserved|
 |VARIABLE|non-reserved|non-reserved|non-reserved|
+|VARIANT|non-reserved|non-reserved|reserved|
 |VERSION|non-reserved|non-reserved|non-reserved|
 |VIEW|non-reserved|non-reserved|non-reserved|
 |VIEWS|non-reserved|non-reserved|non-reserved|

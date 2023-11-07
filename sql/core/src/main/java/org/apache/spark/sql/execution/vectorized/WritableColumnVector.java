@@ -694,7 +694,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       putNull(elementsAppended);
       elementsAppended++;
       for (WritableColumnVector c: childColumns) {
-        if (c.type instanceof StructType) {
+        if (c.type instanceof StructType || c.type instanceof VariantType) {
           c.appendStruct(true);
         } else {
           c.appendNull();
@@ -975,6 +975,10 @@ public abstract class WritableColumnVector extends ColumnVector {
       this.childColumns[0] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[1] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[2] = reserveNewColumn(capacity, DataTypes.LongType);
+    } else if (type instanceof VariantType) {
+      this.childColumns = new WritableColumnVector[2];
+      this.childColumns[0] = reserveNewColumn(capacity, DataTypes.BinaryType);
+      this.childColumns[1] = reserveNewColumn(capacity, DataTypes.BinaryType);
     } else {
       this.childColumns = null;
     }

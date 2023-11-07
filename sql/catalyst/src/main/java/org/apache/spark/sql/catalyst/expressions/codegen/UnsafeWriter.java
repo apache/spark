@@ -25,6 +25,7 @@ import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.unsafe.types.VariantVal;
 
 /**
  * Base class for writing Unsafe* structures.
@@ -147,6 +148,16 @@ public abstract class UnsafeWriter {
     setOffsetAndSize(ordinal, 16);
     // move the cursor forward.
     increaseCursor(16);
+  }
+
+  public void write(int ordinal, VariantVal input) {
+    int totalSize = 4 + input.getValue().length + input.getMetadata().length;
+    int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(totalSize);
+    grow(roundedSize);
+    zeroOutPaddingBytes(totalSize);
+    input.writeIntoUnsafeRow(getBuffer(), cursor());
+    setOffsetAndSize(ordinal, totalSize);
+    increaseCursor(roundedSize);
   }
 
   public final void write(int ordinal, UnsafeRow row) {

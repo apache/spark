@@ -1081,6 +1081,7 @@ type
     | DECIMAL | DEC | NUMERIC
     | VOID
     | INTERVAL
+    | VARIANT
     | ARRAY | STRUCT | MAP
     | unsupportedType=identifier
     ;
@@ -1540,6 +1541,7 @@ ansiNonReserved
     | VARCHAR
     | VAR
     | VARIABLE
+    | VARIANT
     | VERSION
     | VIEW
     | VIEWS
@@ -1888,6 +1890,7 @@ nonReserved
     | VARCHAR
     | VAR
     | VARIABLE
+    | VARIANT
     | VERSION
     | VIEW
     | VIEWS
