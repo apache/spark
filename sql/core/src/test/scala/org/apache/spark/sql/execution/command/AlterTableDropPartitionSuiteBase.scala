@@ -155,7 +155,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
     }
   }
 
-  test("SPARK-33990: don not return data from dropped partition") {
+  test("SPARK-33990: do not return data from dropped partition") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
       sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
