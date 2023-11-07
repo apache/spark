@@ -1114,7 +1114,7 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
   }
 
   test("greatest/least cast") {
-    for (operator <- Seq[(Seq[Expression] => Expression)](Greatest, Least)) {
+    for (operator <- Seq[Seq[Expression] => Expression](Greatest, Least)) {
       ruleTest(TypeCoercion.FunctionArgumentConversion,
         operator(Literal(1.0)
           :: Literal(1)

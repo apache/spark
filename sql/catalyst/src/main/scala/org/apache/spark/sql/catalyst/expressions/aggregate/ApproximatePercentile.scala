@@ -215,12 +215,12 @@ case class ApproximatePercentile(
       case other: DataType =>
         throw QueryExecutionErrors.dataTypeUnexpectedError(other)
     }
-    if (result.length == 0) {
+    if (result.isEmpty) {
       null
     } else if (returnPercentileArray) {
       new GenericArrayData(result)
     } else {
-      result(0)
+      result.head
     }
   }
 

@@ -31,9 +31,9 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
   }
 
   val testRelation1 = LocalRelation($"a".double)
-  val a = testRelation1.output(0)
+  val a = testRelation1.output.head
   val testRelation2 = LocalRelation($"a".double)
-  val b = testRelation2.output(0)
+  val b = testRelation2.output.head
 
   test("normalize floating points in window function expressions") {
     val query = testRelation1.window(Seq(sum(a).as("sum")), Seq(a), Seq(a.asc))

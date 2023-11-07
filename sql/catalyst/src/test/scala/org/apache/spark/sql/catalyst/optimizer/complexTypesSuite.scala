@@ -51,8 +51,8 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
          SimplifyExtractValueOps) :: Nil
   }
 
-  private val idAtt = ($"id").long.notNull
-  private val nullableIdAtt = ($"nullable_id").long
+  private val idAtt = $"id".long.notNull
+  private val nullableIdAtt = $"nullable_id".long
 
   private val relation = LocalRelation(idAtt, nullableIdAtt)
   private val testRelation = LocalRelation($"a".int, $"b".int, $"c".int, $"d".double, $"e".int)
@@ -170,7 +170,7 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
   test("SPARK-22570: CreateArray should not create a lot of global variables") {
     val ctx = new CodegenContext
     CreateArray(Seq(Literal(1))).genCode(ctx)
-    assert(ctx.inlinedMutableStates.length == 0)
+    assert(ctx.inlinedMutableStates.isEmpty)
   }
 
   test("SPARK-23208: Test code splitting for create array related methods") {
@@ -221,20 +221,20 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     val query = relation.select(
       GetMapValue(
         CreateMap(Seq(
-          $"id", ($"id" + 1L),
-          ($"id" + 1L), ($"id" + 2L),
-          ($"id" + 2L), ($"id" + 3L),
+          $"id", $"id" + 1L,
+          $"id" + 1L, $"id" + 2L,
+          $"id" + 2L, $"id" + 3L,
           Literal(13L), $"id",
-          ($"id" + 3L), ($"id" + 4L),
-          ($"id" + 4L), ($"id" + 5L))),
+          $"id" + 3L, $"id" + 4L,
+          $"id" + 4L, $"id" + 5L)),
         13L) as "a")
 
     val expected = relation
       .select(
         CaseWhen(Seq(
-          (EqualTo(13L, $"id"), ($"id" + 1L)),
-          (EqualTo(13L, ($"id" + 1L)), ($"id" + 2L)),
-          (EqualTo(13L, ($"id" + 2L)), ($"id" + 3L)),
+          (EqualTo(13L, $"id"), $"id" + 1L),
+          (EqualTo(13L, $"id" + 1L), $"id" + 2L),
+          (EqualTo(13L, $"id" + 2L), $"id" + 3L),
           (Literal(true), $"id"))) as "a")
     checkRule(query, expected)
   }
@@ -244,19 +244,19 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
       .select(
         GetMapValue(
           CreateMap(Seq(
-            $"id", ($"id" + 1L),
-            ($"id" + 1L), ($"id" + 2L),
-            ($"id" + 2L), ($"id" + 3L),
-            ($"id" + 3L), ($"id" + 4L),
-            ($"id" + 4L), ($"id" + 5L))),
-            ($"id" + 3L)) as "a")
+            $"id", $"id" + 1L,
+            $"id" + 1L, $"id" + 2L,
+            $"id" + 2L, $"id" + 3L,
+            $"id" + 3L, $"id" + 4L,
+            $"id" + 4L, $"id" + 5L)),
+            $"id" + 3L) as "a")
     val expected = relation
       .select(
         CaseWhen(Seq(
-          (EqualTo($"id" + 3L, $"id"), ($"id" + 1L)),
-          (EqualTo($"id" + 3L, ($"id" + 1L)), ($"id" + 2L)),
-          (EqualTo($"id" + 3L, ($"id" + 2L)), ($"id" + 3L)),
-          (Literal(true), ($"id" + 4L)))) as "a")
+          (EqualTo($"id" + 3L, $"id"), $"id" + 1L),
+          (EqualTo($"id" + 3L, $"id" + 1L), $"id" + 2L),
+          (EqualTo($"id" + 3L, $"id" + 2L), $"id" + 3L),
+          (Literal(true), $"id" + 4L))) as "a")
     checkRule(query, expected)
   }
 
@@ -265,19 +265,19 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
       .select(
         GetMapValue(
           CreateMap(Seq(
-            $"id", ($"id" + 1L),
-            ($"id" + 1L), ($"id" + 2L),
-            ($"id" + 2L), ($"id" + 3L),
-            ($"id" + 3L), ($"id" + 4L),
-            ($"id" + 4L), ($"id" + 5L))),
+            $"id", $"id" + 1L,
+            $"id" + 1L, $"id" + 2L,
+            $"id" + 2L, $"id" + 3L,
+            $"id" + 3L, $"id" + 4L,
+            $"id" + 4L, $"id" + 5L)),
           $"id" + 30L) as "a")
     val expected = relation.select(
       CaseWhen(Seq(
-        (EqualTo($"id" + 30L, $"id"), ($"id" + 1L)),
-        (EqualTo($"id" + 30L, ($"id" + 1L)), ($"id" + 2L)),
-        (EqualTo($"id" + 30L, ($"id" + 2L)), ($"id" + 3L)),
-        (EqualTo($"id" + 30L, ($"id" + 3L)), ($"id" + 4L)),
-        (EqualTo($"id" + 30L, ($"id" + 4L)), ($"id" + 5L)))) as "a")
+        (EqualTo($"id" + 30L, $"id"), $"id" + 1L),
+        (EqualTo($"id" + 30L, $"id" + 1L), $"id" + 2L),
+        (EqualTo($"id" + 30L, $"id" + 2L), $"id" + 3L),
+        (EqualTo($"id" + 30L, $"id" + 3L), $"id" + 4L),
+        (EqualTo($"id" + 30L, $"id" + 4L), $"id" + 5L))) as "a")
     checkRule(rel, expected)
   }
 
@@ -286,22 +286,22 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
       .select(
         GetMapValue(
           CreateMap(Seq(
-            $"id", ($"id" + 1L),
-            ($"id" + 1L), ($"id" + 2L),
-            ($"id" + 2L), ($"id" + 3L),
+            $"id", $"id" + 1L,
+            $"id" + 1L, $"id" + 2L,
+            $"id" + 2L, $"id" + 3L,
             Literal(14L), $"id",
-            ($"id" + 3L), ($"id" + 4L),
-            ($"id" + 4L), ($"id" + 5L))),
+            $"id" + 3L, $"id" + 4L,
+            $"id" + 4L, $"id" + 5L)),
           13L) as "a")
 
     val expected = relation
       .select(
         CaseKeyWhen(13L,
-          Seq($"id", ($"id" + 1L),
-            ($"id" + 1L), ($"id" + 2L),
-            ($"id" + 2L), ($"id" + 3L),
-            ($"id" + 3L), ($"id" + 4L),
-            ($"id" + 4L), ($"id" + 5L))) as "a")
+          Seq($"id", $"id" + 1L,
+            $"id" + 1L, $"id" + 2L,
+            $"id" + 2L, $"id" + 3L,
+            $"id" + 3L, $"id" + 4L,
+            $"id" + 4L, $"id" + 5L)) as "a")
 
     checkRule(rel, expected)
   }
@@ -311,20 +311,20 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
       .select(
         GetMapValue(
           CreateMap(Seq(
-            $"id", ($"id" + 1L),
-            ($"id" + 1L), ($"id" + 2L),
-            ($"id" + 2L), Literal.create(null, LongType),
+            $"id", $"id" + 1L,
+            $"id" + 1L, $"id" + 2L,
+            $"id" + 2L, Literal.create(null, LongType),
             Literal(2L), $"id",
-            ($"id" + 3L), ($"id" + 4L),
-            ($"id" + 4L), ($"id" + 5L))),
+            $"id" + 3L, $"id" + 4L,
+            $"id" + 4L, $"id" + 5L)),
           2L ) as "a")
 
     val expected = relation
       .select(
         CaseWhen(Seq(
-          (EqualTo(2L, $"id"), ($"id" + 1L)),
+          (EqualTo(2L, $"id"), $"id" + 1L),
           // these two are possible matches, we can't tell until runtime
-          (EqualTo(2L, ($"id" + 1L)), ($"id" + 2L)),
+          (EqualTo(2L, $"id" + 1L), $"id" + 2L),
           (EqualTo(2L, $"id" + 2L), Literal.create(null, LongType)),
           // this is a definite match (two constants),
           // but it cannot override a potential match with ('id + 2L),

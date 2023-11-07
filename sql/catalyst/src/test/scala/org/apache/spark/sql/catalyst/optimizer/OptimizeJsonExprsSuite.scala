@@ -178,7 +178,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
   test("SPARK-32958: prune unnecessary columns from GetArrayStructFields + from_json") {
     val options = Map.empty[String, String]
     val schema1 = ArrayType(StructType.fromDDL("a int, b int"), containsNull = true)
-    val field1 = schema1.elementType.asInstanceOf[StructType](0)
+    val field1 = schema1.elementType.asInstanceOf[StructType].head
 
     val query1 = testRelation2
       .select(GetArrayStructFields(
@@ -219,7 +219,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     comparePlans(optimized1, query1.analyze)
 
     val schema1 = ArrayType(StructType.fromDDL("a int, b int"), containsNull = true)
-    val field1 = schema1.elementType.asInstanceOf[StructType](0)
+    val field1 = schema1.elementType.asInstanceOf[StructType].head
 
     val query2 = testRelation2
       .select(GetArrayStructFields(

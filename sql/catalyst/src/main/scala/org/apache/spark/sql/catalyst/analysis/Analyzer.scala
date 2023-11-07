@@ -2846,7 +2846,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               generatorVisited = true
 
               val newGenChildren: Seq[Expression] = generator.children.zipWithIndex.map {
-                case (e, idx) => if (e.foldable) e else Alias(e, s"_gen_input_${idx}")()
+                case (e, idx) => if (e.foldable) e else Alias(e, s"_gen_input_$idx")()
               }
               val newGenerator = {
                 val g = generator.withNewChildren(newGenChildren.map { e =>
@@ -2855,7 +2855,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 if (outer) GeneratorOuter(g) else g
               }
               val newAliasedGenerator = if (names.length == 1) {
-                Alias(newGenerator, names(0))()
+                Alias(newGenerator, names.head)()
               } else {
                 MultiAlias(newGenerator, names)
               }
@@ -3340,7 +3340,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             encOpt.map { enc =>
               val attrs = if (enc.isSerializedAsStructForTopLevel) {
                 // Value class that has been replaced with its underlying type
-                if (enc.schema.fields.size == 1 && enc.schema.fields.head.dataType == dataType) {
+                if (enc.schema.fields.length == 1 && enc.schema.fields.head.dataType == dataType) {
                   DataTypeUtils.toAttributes(enc.schema.asInstanceOf[StructType])
                 } else {
                   DataTypeUtils.toAttributes(dataType.asInstanceOf[StructType])

@@ -517,9 +517,9 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     // test for nested product encoders
     {
       val schema = ExpressionEncoder[(Int, (String, Int))]().schema
-      assert(schema(0).nullable === false)
+      assert(schema.head.nullable === false)
       assert(schema(1).nullable)
-      assert(schema(1).dataType.asInstanceOf[StructType](0).nullable)
+      assert(schema(1).dataType.asInstanceOf[StructType].head.nullable)
       assert(schema(1).dataType.asInstanceOf[StructType](1).nullable === false)
     }
 
@@ -528,9 +528,9 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       val schema = ExpressionEncoder.tuple(
         ExpressionEncoder[Int](),
         ExpressionEncoder[(String, Int)]()).schema
-      assert(schema(0).nullable === false)
+      assert(schema.head.nullable === false)
       assert(schema(1).nullable)
-      assert(schema(1).dataType.asInstanceOf[StructType](0).nullable)
+      assert(schema(1).dataType.asInstanceOf[StructType].head.nullable)
       assert(schema(1).dataType.asInstanceOf[StructType](1).nullable === false)
     }
   }

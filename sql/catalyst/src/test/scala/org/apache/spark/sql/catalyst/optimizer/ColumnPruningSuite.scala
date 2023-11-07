@@ -130,7 +130,7 @@ class ColumnPruningSuite extends PlanTest {
         val aliases = NestedColumnAliasingSuite.collectGeneratedAliases(optimized).toSeq
 
         val selectedFields = UnresolvedAttribute("a") +: aliasedExprs(aliases)
-        val finalSelectedExprs = Seq(UnresolvedAttribute("a"), $"${aliases(0)}".as("c.d")) ++
+        val finalSelectedExprs = Seq(UnresolvedAttribute("a"), $"${aliases.head}".as("c.d")) ++
           generatorOutputs
 
         val correctAnswer =
@@ -149,14 +149,14 @@ class ColumnPruningSuite extends PlanTest {
     runTest(
       Explode($"c".getField("e")),
       aliases => Explode($"${aliases(1)}".as("c.e")),
-      aliases => Seq($"c".getField("d").as(aliases(0)), $"c".getField("e").as(aliases(1))),
+      aliases => Seq($"c".getField("d").as(aliases.head), $"c".getField("e").as(aliases(1))),
       Seq(2),
       Seq("explode")
     )
     runTest(Stack(2 :: $"c".getField("f") :: $"c".getField("g") :: Nil),
       aliases => Stack(2 :: $"${aliases(1)}".as("c.f") :: $"${aliases(2)}".as("c.g") :: Nil),
       aliases => Seq(
-        $"c".getField("d").as(aliases(0)),
+        $"c".getField("d").as(aliases.head),
         $"c".getField("f").as(aliases(1)),
         $"c".getField("g").as(aliases(2))),
       Seq(2, 3),
@@ -165,14 +165,14 @@ class ColumnPruningSuite extends PlanTest {
     runTest(
       PosExplode($"c".getField("e")),
       aliases => PosExplode($"${aliases(1)}".as("c.e")),
-      aliases => Seq($"c".getField("d").as(aliases(0)), $"c".getField("e").as(aliases(1))),
+      aliases => Seq($"c".getField("d").as(aliases.head), $"c".getField("e").as(aliases(1))),
       Seq(2),
       Seq("pos", "explode")
     )
     runTest(
       Inline($"c".getField("h")),
       aliases => Inline($"${aliases(1)}".as("c.h")),
-      aliases => Seq($"c".getField("d").as(aliases(0)), $"c".getField("h").as(aliases(1))),
+      aliases => Seq($"c".getField("d").as(aliases.head), $"c".getField("h").as(aliases(1))),
       Seq(2),
       Seq("h1", "h2")
     )

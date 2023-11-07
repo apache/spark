@@ -242,7 +242,7 @@ object ToCharacterBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
     if (numArgs == 2) {
-      val (inputExpr, format) = (expressions(0), expressions(1))
+      val (inputExpr, format) = (expressions.head, expressions(1))
       inputExpr.dataType match {
         case _: DatetimeType => DateFormatClass(inputExpr, format)
         case _: BinaryType =>

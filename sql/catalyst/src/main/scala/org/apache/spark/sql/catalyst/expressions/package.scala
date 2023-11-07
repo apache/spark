@@ -205,7 +205,7 @@ package object expressions  {
             tblPart.toLowerCase(Locale.ROOT), name.toLowerCase(Locale.ROOT))
           val attributes = collectMatches(name, qualified4Part.get(key)).filter { a =>
             assert(a.qualifier.length == 3)
-            resolver(catalogPart, a.qualifier(0)) && resolver(dbPart, a.qualifier(1)) &&
+            resolver(catalogPart, a.qualifier.head) && resolver(dbPart, a.qualifier(1)) &&
               resolver(tblPart, a.qualifier(2))
           }
           (attributes, nestedFields)

@@ -40,7 +40,7 @@ class QueryPlanSuite extends SparkFunSuite {
       case _: Expression => Literal(1)
     }
 
-    val mappedOrigin = mappedQuery.expressions.apply(0).origin
+    val mappedOrigin = mappedQuery.expressions.head.origin
     assert(mappedOrigin == Origin.apply(Some(0), Some(0)))
   }
 
@@ -155,9 +155,9 @@ class QueryPlanSuite extends SparkFunSuite {
       .join(t2.select($"c", $"d"), LeftOuter, Some($"a" === $"c"))
       .select($"a" + $"d").analyze
     // The output Attribute of `plan` is nullable even though `d` is not nullable before the join.
-    assert(plan.output(0).nullable)
+    assert(plan.output.head.nullable)
     // The test rule with `transformUpWithNewOutput` should not change the nullability.
     val planAfterTestRule = testRule(plan)
-    assert(planAfterTestRule.output(0).nullable)
+    assert(planAfterTestRule.output.head.nullable)
   }
 }

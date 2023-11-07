@@ -105,7 +105,7 @@ case class UserDefinedGenerator(
   extends Generator with CodegenFallback {
 
   @transient private[this] var inputRow: InterpretedProjection = _
-  @transient private[this] var convertToScala: (InternalRow) => Row = _
+  @transient private[this] var convertToScala: InternalRow => Row = _
 
   private def initializeConverters(): Unit = {
     inputRow = new InterpretedProjection(children)
@@ -425,7 +425,7 @@ trait ExplodeGeneratorBuilderBase extends GeneratorBuilder {
     Some(FunctionSignature(Seq(InputParameter("collection"))))
   override def buildGenerator(funcName: String, expressions: Seq[Expression]): Generator = {
     assert(expressions.size == 1)
-    Explode(expressions(0))
+    Explode(expressions.head)
   }
 }
 
@@ -452,7 +452,7 @@ object ExplodeExpressionBuilder extends ExpressionBuilder {
     Some(FunctionSignature(Seq(InputParameter("collection"))))
 
   override def build(funcName: String, expressions: Seq[Expression]) : Expression =
-    Explode(expressions(0))
+    Explode(expressions.head)
 }
 
 // scalastyle:off line.size.limit

@@ -89,7 +89,7 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
 
     assert(converted.output.map(_.dataType) == Seq(LongType))
     assert(converted.data.size == 2)
-    assert(converted.data(0).getLong(0) == 1L)
+    assert(converted.data.head.getLong(0) == 1L)
     assert(converted.data(1).getLong(0) == 2L)
   }
 

@@ -241,7 +241,7 @@ object NestedColumnAliasing {
   def getAttributeToExtractValues(
       exprList: Seq[Expression],
       exclusiveAttrs: Seq[Attribute],
-      extractor: (Expression) => Seq[Expression] = collectRootReferenceAndExtractValue)
+      extractor: Expression => Seq[Expression] = collectRootReferenceAndExtractValue)
     : Map[Attribute, Seq[ExtractValue]] = {
 
     val nestedFieldReferences = new mutable.ArrayBuffer[ExtractValue]()

@@ -33,7 +33,7 @@ class TransposeWindowSuite extends PlanTest {
 
   val testRelation = LocalRelation($"a".string, $"b".string, $"c".int, $"d".string)
 
-  val a = testRelation.output(0)
+  val a = testRelation.output.head
   val b = testRelation.output(1)
   val c = testRelation.output(2)
   val d = testRelation.output(3)

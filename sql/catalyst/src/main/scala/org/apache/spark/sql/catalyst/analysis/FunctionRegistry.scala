@@ -918,7 +918,7 @@ object FunctionRegistry {
       name: String,
       builder: T,
       expressions: Seq[Expression]) : Seq[Expression] = {
-    val rearrangedExpressions = if (!builder.functionSignature.isEmpty) {
+    val rearrangedExpressions = if (builder.functionSignature.isDefined) {
       val functionSignature = builder.functionSignature.get
       builder.rearrange(functionSignature, expressions, name)
     } else {

@@ -885,7 +885,7 @@ class DDLParserSuite extends AnalysisTest {
             Seq(
               ("a", Literal(1)),
               ("b", Literal(Decimal(0.1))),
-              ("c" -> Literal(true)))),
+              "c" -> Literal(true))),
           None,
           None,
           None),

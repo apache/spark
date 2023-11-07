@@ -509,10 +509,10 @@ trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
     if (numArgs == 2) {
-      if (expressions(0).dataType == BinaryType && expressions(1).dataType == BinaryType) {
-        BinaryPredicate(funcName, expressions(0), expressions(1))
+      if (expressions.head.dataType == BinaryType && expressions(1).dataType == BinaryType) {
+        BinaryPredicate(funcName, expressions.head, expressions(1))
       } else {
-        createStringPredicate(expressions(0), expressions(1))
+        createStringPredicate(expressions.head, expressions(1))
       }
     } else {
       throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), numArgs)
@@ -1007,7 +1007,7 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evals = children.map(_.genCode(ctx))
-    val srcString = evals(0)
+    val srcString = evals.head
 
     if (evals.length == 1) {
       ev.copy(code = code"""
@@ -1501,17 +1501,17 @@ trait PadExpressionBuilderBase extends ExpressionBuilder {
     val behaviorChangeEnabled = !SQLConf.get.getConf(SQLConf.LEGACY_LPAD_RPAD_BINARY_TYPE_AS_STRING)
     val numArgs = expressions.length
     if (numArgs == 2) {
-      if (expressions(0).dataType == BinaryType && behaviorChangeEnabled) {
-        BinaryPad(funcName, expressions(0), expressions(1), Literal(Array[Byte](0)))
+      if (expressions.head.dataType == BinaryType && behaviorChangeEnabled) {
+        BinaryPad(funcName, expressions.head, expressions(1), Literal(Array[Byte](0)))
       } else {
-        createStringPad(expressions(0), expressions(1), Literal(" "))
+        createStringPad(expressions.head, expressions(1), Literal(" "))
       }
     } else if (numArgs == 3) {
-      if (expressions(0).dataType == BinaryType && expressions(2).dataType == BinaryType
+      if (expressions.head.dataType == BinaryType && expressions(2).dataType == BinaryType
         && behaviorChangeEnabled) {
-        BinaryPad(funcName, expressions(0), expressions(1), expressions(2))
+        BinaryPad(funcName, expressions.head, expressions(1), expressions(2))
       } else {
-        createStringPad(expressions(0), expressions(1), expressions(2))
+        createStringPad(expressions.head, expressions(1), expressions(2))
       }
     } else {
       throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2, 3), numArgs)
@@ -1867,7 +1867,7 @@ case class StringSpace(child: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (length) =>
+    nullSafeCodeGen(ctx, ev, length =>
       s"""${ev.value} = UTF8String.blankString(($length < 0) ? 0 : $length);""")
   }
 
@@ -2345,7 +2345,7 @@ case class Ascii(child: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (child) => {
+    nullSafeCodeGen(ctx, ev, child => {
       val firstCharStr = ctx.freshName("firstCharStr")
       s"""
         UTF8String $firstCharStr = $child.substring(0, 1);
@@ -2435,7 +2435,7 @@ case class Base64(child: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (child) => {
+    nullSafeCodeGen(ctx, ev, child => {
       s"""${ev.value} = UTF8String.fromBytes(
             ${classOf[JBase64].getName}.getMimeEncoder().encode($child));
        """})

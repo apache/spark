@@ -695,28 +695,28 @@ class CollectionExpressionsSuite
       Literal.create(Seq(Array[Byte](1.toByte, 5.toByte)), ArrayType(BinaryType))
     )
 
-    checkEvaluation(ArraysZip(Seq(literals(0), literals(1))),
+    checkEvaluation(ArraysZip(Seq(literals.head, literals(1))),
       List(Row(9001, null), Row(9002, 1L), Row(9003, null), Row(null, 4L), Row(null, 11L)))
 
-    checkEvaluation(ArraysZip(Seq(literals(0), literals(2))),
+    checkEvaluation(ArraysZip(Seq(literals.head, literals(2))),
       List(Row(9001, -1), Row(9002, -3), Row(9003, 900), Row(null, null)))
 
-    checkEvaluation(ArraysZip(Seq(literals(0), literals(3))),
+    checkEvaluation(ArraysZip(Seq(literals.head, literals(3))),
       List(Row(9001, "a"), Row(9002, null), Row(9003, "c"), Row(null, null)))
 
-    checkEvaluation(ArraysZip(Seq(literals(0), literals(4))),
+    checkEvaluation(ArraysZip(Seq(literals.head, literals(4))),
       List(Row(9001, null), Row(9002, false), Row(9003, true), Row(null, null)))
 
-    checkEvaluation(ArraysZip(Seq(literals(0), literals(5))),
+    checkEvaluation(ArraysZip(Seq(literals.head, literals(5))),
       List(Row(9001, 1.1), Row(9002, null), Row(9003, 1.3), Row(null, null)))
 
-    checkEvaluation(ArraysZip(Seq(literals(0), literals(6))),
+    checkEvaluation(ArraysZip(Seq(literals.head, literals(6))),
       List(Row(9001, null), Row(9002, null), Row(9003, null), Row(null, null)))
 
-    checkEvaluation(ArraysZip(Seq(literals(0), literals(7))),
+    checkEvaluation(ArraysZip(Seq(literals.head, literals(7))),
       List(Row(9001, null), Row(9002, null), Row(9003, null), Row(null, null)))
 
-    checkEvaluation(ArraysZip(Seq(literals(0), literals(1), literals(2), literals(3))),
+    checkEvaluation(ArraysZip(Seq(literals.head, literals(1), literals(2), literals(3))),
       List(
         Row(9001, null, -1, "a"),
         Row(9002, 1L, -3, null),
@@ -731,7 +731,7 @@ class CollectionExpressionsSuite
         Row(true, 1.3, null, null, null),
         Row(null, null, null, null, null)))
 
-    checkEvaluation(ArraysZip(Seq(literals(9), literals(0))),
+    checkEvaluation(ArraysZip(Seq(literals(9), literals.head)),
       List(
         Row(List(1, 2, 3), 9001),
         Row(null, 9002),
@@ -744,7 +744,7 @@ class CollectionExpressionsSuite
     val longLiteral =
       Literal.create((0 to 1000).toSeq, ArrayType(IntegerType))
 
-    checkEvaluation(ArraysZip(Seq(literals(0), longLiteral)),
+    checkEvaluation(ArraysZip(Seq(literals.head, longLiteral)),
       List(Row(9001, 0), Row(9002, 1), Row(9003, 2)) ++
       (3 to 1000).map { Row(null, _) }.toList)
 
@@ -757,10 +757,11 @@ class CollectionExpressionsSuite
       Row(Seq(9002) ++ (0 to 1000).map { _ => null }.toSeq: _*),
       Row(Seq(9003) ++ (0 to 1000).map { _ => null }.toSeq: _*),
       Row(Seq(null) ++ (0 to 1000).map { _ => null }.toSeq: _*))
-    checkEvaluation(ArraysZip(Seq(literals(0)) ++ manyLiterals),
-      List(numbers(0), numbers(1), numbers(2), numbers(3)))
+    checkEvaluation(ArraysZip(Seq(literals.head) ++ manyLiterals),
+      List(numbers.head, numbers(1), numbers(2), numbers(3)))
 
-    checkEvaluation(ArraysZip(Seq(literals(0), Literal.create(null, ArrayType(IntegerType)))), null)
+    checkEvaluation(
+      ArraysZip(Seq(literals.head, Literal.create(null, ArrayType(IntegerType)))), null)
     checkEvaluation(ArraysZip(Seq()), List())
   }
 

@@ -558,7 +558,7 @@ abstract class InMemoryBaseTable(
       throwsException()
 
     def throwsException[T](): T = throw new IllegalStateException("The operation " +
-      s"${operation} isn't supported for streaming query.")
+      s"$operation isn't supported for streaming query.")
   }
 
   private object StreamingAppend extends TestStreamingWrite {

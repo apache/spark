@@ -53,7 +53,7 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
   protected def argumentTypes: Seq[AbstractDataType] = inputTypes
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (!argumentTypes.isEmpty && argumentTypes.length != arguments.length) {
+    if (argumentTypes.nonEmpty && argumentTypes.length != arguments.length) {
       TypeCheckResult.DataTypeMismatch(
         errorSubClass = "WRONG_NUM_ARG_TYPES",
         messageParameters = Map(
@@ -573,7 +573,7 @@ case class NewInstance(
     childrenResolved && !needOuterPointer
   }
 
-  @transient private lazy val constructor: (Seq[AnyRef]) => Any = {
+  @transient private lazy val constructor: Seq[AnyRef] => Any = {
     val paramTypes = EncoderUtils.expressionJavaClasses(arguments)
     val getConstructor = (paramClazz: Seq[Class[_]]) => {
       ScalaReflection.findConstructor(cls, paramClazz).getOrElse {
@@ -627,7 +627,7 @@ case class NewInstance(
 
     ev.isNull = resultIsNull
 
-    val constructorCall = cls.getConstructors.size match {
+    val constructorCall = cls.getConstructors.length match {
       // If there are no constructors, the `new` method will fail. In
       // this case we can try to call the apply method constructor
       // that might be defined on the companion object.
@@ -906,7 +906,7 @@ case class MapObjects private(
     case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
       _.asInstanceOf[java.util.List[_]].asScala.toSeq
     case ObjectType(cls) if cls == classOf[Object] =>
-      (inputCollection) => {
+      inputCollection => {
         if (inputCollection.getClass.isArray) {
           inputCollection.asInstanceOf[Array[_]].toSeq
         } else {
@@ -965,7 +965,7 @@ case class MapObjects private(
         }
 
         // Specifying concrete implementations of `java.util.List`
-        (inputs) => {
+        inputs => {
           val results = executeFuncOnCollection(inputs)
           val builder = constructor(inputs.length).asInstanceOf[java.util.List[Any]]
           results.foreach(builder.add(_))
@@ -1074,7 +1074,7 @@ case class MapObjects private(
 
     // Make a copy of the data if it's unsafe-backed
     def makeCopyIfInstanceOf(clazz: Class[_ <: Any], value: String) =
-      s"$value instanceof ${clazz.getSimpleName}? ${value}.copy() : $value"
+      s"$value instanceof ${clazz.getSimpleName}? $value.copy() : $value"
     val genFunctionValue: String = lambdaFunction.dataType match {
       case StructType(_) => makeCopyIfInstanceOf(classOf[UnsafeRow], genFunction.value)
       case ArrayType(_, _) => makeCopyIfInstanceOf(classOf[UnsafeArrayData], genFunction.value)
@@ -1946,7 +1946,7 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
 
   private lazy val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
 
-  private lazy val checkType: (Any) => Boolean = expected match {
+  private lazy val checkType: Any => Boolean = expected match {
     case _: DecimalType =>
       (value: Any) => {
         value.isInstanceOf[java.math.BigDecimal] || value.isInstanceOf[scala.math.BigDecimal] ||

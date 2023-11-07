@@ -529,9 +529,9 @@ abstract class InterpretedHashFunction {
       case s: Short => hashInt(s, seed)
       case i: Int => hashInt(i, seed)
       case l: Long => hashLong(l, seed)
-      case f: Float if (f == -0.0f) => hashInt(0, seed)
+      case f: Float if f == -0.0f => hashInt(0, seed)
       case f: Float => hashInt(java.lang.Float.floatToIntBits(f), seed)
-      case d: Double if (d == -0.0d) => hashLong(0L, seed)
+      case d: Double if d == -0.0d => hashLong(0L, seed)
       case d: Double => hashLong(java.lang.Double.doubleToLongBits(d), seed)
       case d: Decimal =>
         val precision = dataType.asInstanceOf[DecimalType].precision

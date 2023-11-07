@@ -77,7 +77,7 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
   def funcName: String = name.toLowerCase(Locale.ROOT)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => s"java.lang.Math.${funcName}($c)")
+    defineCodeGen(ctx, ev, c => s"java.lang.Math.$funcName($c)")
   }
 }
 
@@ -100,7 +100,7 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
         if ($c <= $yAsymptote) {
           ${ev.isNull} = true;
         } else {
-          ${ev.value} = java.lang.StrictMath.${funcName}($c);
+          ${ev.value} = java.lang.StrictMath.$funcName($c);
         }
       """
     )
@@ -265,7 +265,7 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
       case DecimalType.Fixed(_, _) =>
         defineCodeGen(ctx, ev, c => s"$c.ceil()")
       case LongType => defineCodeGen(ctx, ev, c => s"$c")
-      case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
+      case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.$funcName($c))")
     }
   }
 
@@ -288,7 +288,7 @@ trait CeilFloorExpressionBuilderBase extends ExpressionBuilder {
       if (scale.eval() == null) {
         throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "scale", IntegerType)
       }
-      buildWithTwoParams(expressions(0), scale)
+      buildWithTwoParams(expressions.head, scale)
     } else {
       throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), numArgs)
     }
@@ -542,7 +542,7 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
       case DecimalType.Fixed(_, _) =>
         defineCodeGen(ctx, ev, c => s"$c.floor()")
       case LongType => defineCodeGen(ctx, ev, c => s"$c")
-      case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
+      case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.$funcName($c))")
     }
  }
  override protected def withNewChildInternal(newChild: Expression): Floor =
@@ -1008,7 +1008,7 @@ case class Bin(child: Expression)
     UTF8String.fromString(jl.Long.toBinaryString(input.asInstanceOf[Long]))
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c) =>
+    defineCodeGen(ctx, ev, c =>
       s"UTF8String.fromString(java.lang.Long.toBinaryString($c))")
   }
 
@@ -1119,7 +1119,7 @@ case class Hex(child: Expression)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (c) => {
+    nullSafeCodeGen(ctx, ev, c => {
       val hex = Hex.getClass.getName.stripSuffix("$")
       s"${ev.value} = " + (child.dataType match {
         case StringType => s"""$hex.hex($c.getBytes());"""
@@ -1605,13 +1605,13 @@ abstract class RoundBase(child: Expression, scale: Expression,
           val errorContext = getContextOrNullCode(ctx)
           val evalCode = s"""
             |${ev.value} = new java.math.BigDecimal(${ce.value}).
-            |setScale(${_scale}, java.math.BigDecimal.${modeStr}).${dt}ValueExact();
+            |setScale(${_scale}, java.math.BigDecimal.$modeStr).${dt}ValueExact();
             |""".stripMargin
           MathUtils.withOverflowCode(evalCode, errorContext)
         } else {
           s"""
              |${ev.value} = new java.math.BigDecimal(${ce.value}).
-             |setScale(${_scale}, java.math.BigDecimal.${modeStr}).${dt}Value();
+             |setScale(${_scale}, java.math.BigDecimal.$modeStr).${dt}Value();
              |""".stripMargin
         }
       } else {
@@ -1646,7 +1646,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
             ${ev.value} = ${ce.value};
           } else {
             ${ev.value} = java.math.BigDecimal.valueOf(${ce.value}).
-              setScale(${_scale}, java.math.BigDecimal.${modeStr}).floatValue();
+              setScale(${_scale}, java.math.BigDecimal.$modeStr).floatValue();
           }"""
       case DoubleType => // if child eval to NaN or Infinity, just return it.
         s"""
@@ -1654,7 +1654,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
             ${ev.value} = ${ce.value};
           } else {
             ${ev.value} = java.math.BigDecimal.valueOf(${ce.value}).
-              setScale(${_scale}, java.math.BigDecimal.${modeStr}).doubleValue();
+              setScale(${_scale}, java.math.BigDecimal.$modeStr).doubleValue();
           }"""
     }
 

@@ -446,7 +446,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
         case If(_, _, s: CreateNamedStruct) => s
       }.head
     val deserializer = deserializerFor[SpecialCharAsFieldData]
-    assert(serializer.dataType(0).name == "field.1")
+    assert(serializer.dataType.head.name == "field.1")
     assert(serializer.dataType(1).name == "field 2")
 
     val newInstance = deserializer.collect { case n: NewInstance => n }.head
@@ -454,7 +454,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
     val argumentsFields = newInstance.arguments.flatMap { _.collect {
       case UpCast(u: UnresolvedExtractValue, _, _) => u.extraction.toString
     }}
-    assert(argumentsFields(0) == "field.1")
+    assert(argumentsFields.head == "field.1")
     assert(argumentsFields(1) == "field 2")
   }
 

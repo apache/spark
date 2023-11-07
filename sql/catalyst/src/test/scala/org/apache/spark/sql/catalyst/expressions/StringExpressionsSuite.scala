@@ -127,7 +127,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val strings2 = (1 to N).map(x => Seq(s"s$x"))
     val inputsExpr2 = strings2.map(Literal.create(_, ArrayType(StringType)))
     checkEvaluation(
-      ConcatWs(sepExpr +: inputsExpr2), strings2.map(s => s(0)).mkString("#"))
+      ConcatWs(sepExpr +: inputsExpr2), strings2.map(s => s.head).mkString("#"))
   }
 
   test("elt") {

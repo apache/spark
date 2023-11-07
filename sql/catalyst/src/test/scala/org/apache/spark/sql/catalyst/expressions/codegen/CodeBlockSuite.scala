@@ -169,7 +169,7 @@ class CodeBlockSuite extends SparkFunSuite {
 
     val aliasedParam = JavaCode.variable("aliased", expr.javaType)
 
-    val block = code"${subBlocks(0)}\n${subBlocks(1)}\n${subBlocks(2)}"
+    val block = code"${subBlocks.head}\n${subBlocks(1)}\n${subBlocks(2)}"
     val transformedBlock = block.transform {
       case b: Block => b.transformExprValues {
         case SimpleExprValue("1 + 1", java.lang.Integer.TYPE) => aliasedParam
@@ -203,7 +203,7 @@ class CodeBlockSuite extends SparkFunSuite {
       }
     }.toSet
 
-    assert(transformedBlock.children(0).toString == expected1.toString)
+    assert(transformedBlock.children.head.toString == expected1.toString)
     assert(transformedBlock.children(1).toString == expected2.toString)
     assert(transformedBlock.children(2).toString == expected3.toString)
     assert(transformedBlock.toString == (expected1 + expected2 + expected3).toString)

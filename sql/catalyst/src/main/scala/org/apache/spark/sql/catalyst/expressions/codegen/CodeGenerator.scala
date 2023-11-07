@@ -1640,7 +1640,7 @@ object CodeGenerator extends Logging {
         case _: PhysicalMapType => s"$input.getMap($ordinal)"
         case PhysicalNullType => "null"
         case PhysicalStringType => s"$input.getUTF8String($ordinal)"
-        case t: PhysicalStructType => s"$input.getStruct($ordinal, ${t.fields.size})"
+        case t: PhysicalStructType => s"$input.getStruct($ordinal, ${t.fields.length})"
         case _ => s"($jt)$input.get($ordinal, null)"
       }
     }

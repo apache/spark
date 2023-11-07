@@ -1125,7 +1125,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     def failOnInvalidOuterReference(p: LogicalPlan): Unit = {
       p.expressions.foreach(checkMixedReferencesInsideAggregateExpr)
       val exprs = stripOuterReferences(p.expressions.filter(expr => containsOuter(expr)))
-      if (!canHostOuter(p) && !exprs.isEmpty) {
+      if (!canHostOuter(p) && exprs.nonEmpty) {
         p.failAnalysis(
           errorClass =
             "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",

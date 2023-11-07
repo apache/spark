@@ -51,10 +51,10 @@ class RemoveNoopUnionSuite extends PlanTest {
   }
 
   test("SPARK-34474: Do not remove necessary Project 1") {
-    val child1 = Project(Seq(testRelation.output(0), testRelation.output(1),
-      (testRelation.output(0) + 1).as("expr")), testRelation)
-    val child2 = Project(Seq(testRelation.output(0), testRelation.output(1),
-      (testRelation.output(0) + 2).as("expr")), testRelation)
+    val child1 = Project(Seq(testRelation.output.head, testRelation.output(1),
+      (testRelation.output.head + 1).as("expr")), testRelation)
+    val child2 = Project(Seq(testRelation.output.head, testRelation.output(1),
+      (testRelation.output.head + 2).as("expr")), testRelation)
     val union = Union(child1 :: child2 :: Nil)
     val distinct = Distinct(union)
     val optimized = Optimize.execute(distinct)
@@ -62,8 +62,8 @@ class RemoveNoopUnionSuite extends PlanTest {
   }
 
   test("SPARK-34474: Do not remove necessary Project 2") {
-    val child1 = Project(Seq(testRelation.output(0), testRelation.output(1)), testRelation)
-    val child2 = Project(Seq(testRelation.output(1), testRelation.output(0)), testRelation)
+    val child1 = Project(Seq(testRelation.output.head, testRelation.output(1)), testRelation)
+    val child2 = Project(Seq(testRelation.output(1), testRelation.output.head), testRelation)
     val union = Union(child1 :: child2 :: Nil)
     val distinct = Distinct(union)
     val optimized = Optimize.execute(distinct)

@@ -1092,7 +1092,7 @@ object TypeCoercion extends TypeCoercionBase {
     private def castExpr(expr: Expression, targetType: DataType): Expression = {
       (expr.dataType, targetType) match {
         case (NullType, dt) => Literal.create(null, targetType)
-        case (l, dt) if (l != dt) => Cast(expr, targetType)
+        case (l, dt) if l != dt => Cast(expr, targetType)
         case _ => expr
       }
     }

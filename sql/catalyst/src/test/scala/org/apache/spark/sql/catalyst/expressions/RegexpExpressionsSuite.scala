@@ -223,7 +223,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkLiteralRow(s"""$escapeChar$escapeChar${escapeChar}__""" like(_, escapeChar),
         s"""%$escapeChar$escapeChar%$escapeChar%""", false)
       checkLiteralRow(s"""_$escapeChar$escapeChar$escapeChar%""" like(_, escapeChar),
-        s"""%$escapeChar${escapeChar}""", false)
+        s"""%$escapeChar$escapeChar""", false)
 
       // unicode
       // scalastyle:off nonascii
@@ -352,7 +352,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     RegExpReplace(Literal("100"), Literal("(\\d+)"), Literal("num")).genCode(ctx)
     // four global variables (lastRegex, pattern, lastReplacement, and lastReplacementInUTF8)
     // are always required, which are allocated in type-based global array
-    assert(ctx.inlinedMutableStates.length == 0)
+    assert(ctx.inlinedMutableStates.isEmpty)
     assert(ctx.mutableStateInitCode.length == 4)
   }
 

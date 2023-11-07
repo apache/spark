@@ -100,7 +100,7 @@ case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolea
     val (allocation, assigns, arrayData) =
       GenArrayData.genCodeToCreateArrayData(ctx, et, children, "createArray")
     ev.copy(
-      code = code"${allocation}${assigns}",
+      code = code"$allocation$assigns",
       value = JavaCode.variable(arrayData, dataType),
       isNull = FalseLiteral)
   }

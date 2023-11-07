@@ -52,8 +52,8 @@ object ArrayBasedMapData {
    */
   def apply[K, V](
       javaMap: JavaMap[K, V],
-      keyConverter: (Any) => Any,
-      valueConverter: (Any) => Any): ArrayBasedMapData = {
+      keyConverter: Any => Any,
+      valueConverter: Any => Any): ArrayBasedMapData = {
 
     val keys: Array[Any] = new Array[Any](javaMap.size())
     val values: Array[Any] = new Array[Any](javaMap.size())
@@ -81,8 +81,8 @@ object ArrayBasedMapData {
    */
   def apply(
       map: scala.collection.Map[_, _],
-      keyConverter: (Any) => Any = identity,
-      valueConverter: (Any) => Any = identity): ArrayBasedMapData = {
+      keyConverter: Any => Any = identity,
+      valueConverter: Any => Any = identity): ArrayBasedMapData = {
     ArrayBasedMapData(map.iterator, map.size, keyConverter, valueConverter)
   }
 
@@ -103,8 +103,8 @@ object ArrayBasedMapData {
   def apply(
       iterator: Iterator[(_, _)],
       size: Int,
-      keyConverter: (Any) => Any,
-      valueConverter: (Any) => Any): ArrayBasedMapData = {
+      keyConverter: Any => Any,
+      valueConverter: Any => Any): ArrayBasedMapData = {
 
     val keys: Array[Any] = new Array[Any](size)
     val values: Array[Any] = new Array[Any](size)

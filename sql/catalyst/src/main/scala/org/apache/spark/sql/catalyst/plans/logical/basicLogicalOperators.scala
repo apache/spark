@@ -1267,11 +1267,11 @@ object Expand {
     // Calculate the attribute masks of selected grouping set. For example, if we have GroupBy
     // attributes (a, b, c, d), grouping set (a, c) will produce the following sequence:
     // (15, 7, 13), whose binary form is (1111, 0111, 1101)
-    val masks = (mask +: groupingSetAttrs.map(attrMap).map(index =>
+    val masks = mask +: groupingSetAttrs.map(attrMap).map(index =>
       // 0 means that the column at the given index is a grouping column, 1 means it is not,
       // so we unset the bit in bitmap.
       ~(1L << (numAttributes - 1 - index))
-    ))
+    )
     // Reduce masks to generate an bitmask for the selected grouping set.
     masks.reduce(_ & _)
   }

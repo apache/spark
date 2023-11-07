@@ -29,14 +29,14 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("simple") {
     val left = LocalRelation($"a".int, $"b".int, $"c".int)
     val right = LocalRelation($"a".int, $"b".int, $"d".int)
-    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
+    val query = AsOfJoin(left, right, left.output.head, right.output.head, None, Inner,
       tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("backward"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
 
-    val filter = OuterReference(left.output(0)) >= right.output(0)
+    val filter = OuterReference(left.output.head) >= right.output.head
     val rightStruct = CreateStruct(right.output)
-    val orderExpression = OuterReference(left.output(0)) - right.output(0)
+    val orderExpression = OuterReference(left.output.head) - right.output.head
     val nearestRight = MinBy(rightStruct, orderExpression)
       .toAggregateExpression().as("__nearest_right__")
 
@@ -57,16 +57,16 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("condition") {
     val left = LocalRelation($"a".int, $"b".int, $"c".int)
     val right = LocalRelation($"a".int, $"b".int, $"d".int)
-    val query = AsOfJoin(left, right, left.output(0), right.output(0),
+    val query = AsOfJoin(left, right, left.output.head, right.output.head,
       Some(left.output(1) === right.output(1)), Inner,
       tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("backward"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
 
     val filter = OuterReference(left.output(1)) === right.output(1) &&
-      OuterReference(left.output(0)) >= right.output(0)
+      OuterReference(left.output.head) >= right.output.head
     val rightStruct = CreateStruct(right.output)
-    val orderExpression = OuterReference(left.output(0)) - right.output(0)
+    val orderExpression = OuterReference(left.output.head) - right.output.head
     val nearestRight = MinBy(rightStruct, orderExpression)
       .toAggregateExpression().as("__nearest_right__")
 
@@ -87,14 +87,14 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("left outer") {
     val left = LocalRelation($"a".int, $"b".int, $"c".int)
     val right = LocalRelation($"a".int, $"b".int, $"d".int)
-    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
+    val query = AsOfJoin(left, right, left.output.head, right.output.head, None, Inner,
       tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("backward"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
 
-    val filter = OuterReference(left.output(0)) >= right.output(0)
+    val filter = OuterReference(left.output.head) >= right.output.head
     val rightStruct = CreateStruct(right.output)
-    val orderExpression = OuterReference(left.output(0)) - right.output(0)
+    val orderExpression = OuterReference(left.output.head) - right.output.head
     val nearestRight = MinBy(rightStruct, orderExpression)
       .toAggregateExpression().as("__nearest_right__")
 
@@ -115,15 +115,15 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("tolerance") {
     val left = LocalRelation($"a".int, $"b".int, $"c".int)
     val right = LocalRelation($"a".int, $"b".int, $"d".int)
-    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
+    val query = AsOfJoin(left, right, left.output.head, right.output.head, None, Inner,
       tolerance = Some(1), allowExactMatches = true, direction = AsOfJoinDirection("backward"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
 
-    val filter = OuterReference(left.output(0)) >= right.output(0) &&
-      right.output(0) >= OuterReference(left.output(0)) - 1
+    val filter = OuterReference(left.output.head) >= right.output.head &&
+      right.output.head >= OuterReference(left.output.head) - 1
     val rightStruct = CreateStruct(right.output)
-    val orderExpression = OuterReference(left.output(0)) - right.output(0)
+    val orderExpression = OuterReference(left.output.head) - right.output.head
     val nearestRight = MinBy(rightStruct, orderExpression)
       .toAggregateExpression().as("__nearest_right__")
 
@@ -144,14 +144,14 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("allowExactMatches = false") {
     val left = LocalRelation($"a".int, $"b".int, $"c".int)
     val right = LocalRelation($"a".int, $"b".int, $"d".int)
-    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, LeftOuter,
+    val query = AsOfJoin(left, right, left.output.head, right.output.head, None, LeftOuter,
       tolerance = None, allowExactMatches = false, direction = AsOfJoinDirection("backward"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
 
-    val filter = OuterReference(left.output(0)) > right.output(0)
+    val filter = OuterReference(left.output.head) > right.output.head
     val rightStruct = CreateStruct(right.output)
-    val orderExpression = OuterReference(left.output(0)) - right.output(0)
+    val orderExpression = OuterReference(left.output.head) - right.output.head
     val nearestRight = MinBy(rightStruct, orderExpression)
       .toAggregateExpression().as("__nearest_right__")
 
@@ -171,15 +171,15 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("tolerance & allowExactMatches = false") {
     val left = LocalRelation($"a".int, $"b".int, $"c".int)
     val right = LocalRelation($"a".int, $"b".int, $"d".int)
-    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
+    val query = AsOfJoin(left, right, left.output.head, right.output.head, None, Inner,
       tolerance = Some(1), allowExactMatches = false, direction = AsOfJoinDirection("backward"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
 
-    val filter = OuterReference(left.output(0)) > right.output(0) &&
-      right.output(0) > OuterReference(left.output(0)) - 1
+    val filter = OuterReference(left.output.head) > right.output.head &&
+      right.output.head > OuterReference(left.output.head) - 1
     val rightStruct = CreateStruct(right.output)
-    val orderExpression = OuterReference(left.output(0)) - right.output(0)
+    val orderExpression = OuterReference(left.output.head) - right.output.head
     val nearestRight = MinBy(rightStruct, orderExpression)
       .toAggregateExpression().as("__nearest_right__")
 
@@ -200,14 +200,14 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("direction = forward") {
     val left = LocalRelation($"a".int, $"b".int, $"c".int)
     val right = LocalRelation($"a".int, $"b".int, $"d".int)
-    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
+    val query = AsOfJoin(left, right, left.output.head, right.output.head, None, Inner,
       tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("forward"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
 
-    val filter = OuterReference(left.output(0)) <= right.output(0)
+    val filter = OuterReference(left.output.head) <= right.output.head
     val rightStruct = CreateStruct(right.output)
-    val orderExpression = right.output(0) - OuterReference(left.output(0))
+    val orderExpression = right.output.head - OuterReference(left.output.head)
     val nearestRight = MinBy(rightStruct, orderExpression)
       .toAggregateExpression().as("__nearest_right__")
 
@@ -228,16 +228,16 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("direction = nearest") {
     val left = LocalRelation($"a".int, $"b".int, $"c".int)
     val right = LocalRelation($"a".int, $"b".int, $"d".int)
-    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
+    val query = AsOfJoin(left, right, left.output.head, right.output.head, None, Inner,
       tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("nearest"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
 
     val filter = true
     val rightStruct = CreateStruct(right.output)
-    val orderExpression = If(OuterReference(left.output(0)) > right.output(0),
-      OuterReference(left.output(0)) - right.output(0),
-      right.output(0) - OuterReference(left.output(0)))
+    val orderExpression = If(OuterReference(left.output.head) > right.output.head,
+      OuterReference(left.output.head) - right.output.head,
+      right.output.head - OuterReference(left.output.head))
     val nearestRight = MinBy(rightStruct, orderExpression)
       .toAggregateExpression().as("__nearest_right__")
 
@@ -258,18 +258,18 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("tolerance & allowExactMatches = false & direction = nearest") {
     val left = LocalRelation($"a".int, $"b".int, $"c".int)
     val right = LocalRelation($"a".int, $"b".int, $"d".int)
-    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
+    val query = AsOfJoin(left, right, left.output.head, right.output.head, None, Inner,
       tolerance = Some(1), allowExactMatches = false, direction = AsOfJoinDirection("nearest"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
 
-    val filter = (!(OuterReference(left.output(0)) === right.output(0))) &&
-      ((right.output(0) > OuterReference(left.output(0)) - 1) &&
-        (right.output(0) < OuterReference(left.output(0)) + 1))
+    val filter = (!(OuterReference(left.output.head) === right.output.head)) &&
+      ((right.output.head > OuterReference(left.output.head) - 1) &&
+        (right.output.head < OuterReference(left.output.head) + 1))
     val rightStruct = CreateStruct(right.output)
-    val orderExpression = If(OuterReference(left.output(0)) > right.output(0),
-      OuterReference(left.output(0)) - right.output(0),
-      right.output(0) - OuterReference(left.output(0)))
+    val orderExpression = If(OuterReference(left.output.head) > right.output.head,
+      OuterReference(left.output.head) - right.output.head,
+      right.output.head - OuterReference(left.output.head))
     val nearestRight = MinBy(rightStruct, orderExpression)
       .toAggregateExpression().as("__nearest_right__")
 

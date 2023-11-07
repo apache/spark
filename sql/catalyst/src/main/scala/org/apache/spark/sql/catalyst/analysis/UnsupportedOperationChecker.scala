@@ -400,7 +400,7 @@ object UnsupportedOperationChecker extends Logging {
         case j @ Join(left, right, joinType, condition, _) =>
           if (left.isStreaming && right.isStreaming && outputMode != InternalOutputModes.Append) {
             throwError("Join between two streaming DataFrames/Datasets is not supported" +
-              s" in ${outputMode} output mode, only in Append output mode")
+              s" in $outputMode output mode, only in Append output mode")
           }
 
           joinType match {
@@ -522,9 +522,9 @@ object UnsupportedOperationChecker extends Logging {
 
     plan.foreachUp { implicit subPlan =>
       subPlan match {
-        case (_: Project | _: Filter | _: MapElements | _: MapPartitions |
+        case _: Project | _: Filter | _: MapElements | _: MapPartitions |
               _: DeserializeToObject | _: SerializeFromObject | _: SubqueryAlias |
-              _: TypedFilter) =>
+              _: TypedFilter =>
         case v: View if v.isTempViewStoringAnalyzedPlan =>
         case node if node.nodeName == "StreamingRelationV2" =>
         case node =>
@@ -533,7 +533,7 @@ object UnsupportedOperationChecker extends Logging {
 
       subPlan.expressions.foreach { e =>
         if (e.collectLeaves().exists {
-          case (_: CurrentTimestampLike | _: CurrentDate | _: LocalTimestamp) => true
+          case _: CurrentTimestampLike | _: CurrentDate | _: LocalTimestamp => true
           case _ => false
         }) {
           throwError(s"Continuous processing does not support current time operations.")

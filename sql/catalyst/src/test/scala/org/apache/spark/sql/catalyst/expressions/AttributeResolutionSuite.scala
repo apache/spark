@@ -33,7 +33,7 @@ class AttributeResolutionSuite extends SparkFunSuite {
     // Try to match attribute reference with name "a" with qualifier "ns1.ns2.t1".
     Seq(Seq("t1", "a"), Seq("ns2", "t1", "a"), Seq("ns1", "ns2", "t1", "a")).foreach { nameParts =>
       attrs.resolve(nameParts, resolver) match {
-        case Some(attr) => assert(attr.semanticEquals(attrs(0)))
+        case Some(attr) => assert(attr.semanticEquals(attrs.head))
         case _ => fail()
       }
     }
@@ -51,7 +51,7 @@ class AttributeResolutionSuite extends SparkFunSuite {
       Seq("t"), Seq("t", "t"), Seq("ns2", "t", "t"), Seq("ns1", "ns2", "t", "t")
     ).foreach { nameParts =>
       attrs.resolve(nameParts, resolver) match {
-        case Some(attr) => assert(attr.semanticEquals(attrs(0)))
+        case Some(attr) => assert(attr.semanticEquals(attrs.head))
         case _ => fail()
       }
     }
@@ -115,7 +115,7 @@ class AttributeResolutionSuite extends SparkFunSuite {
   test("attribute resolution with case insensitive resolver") {
     val attrs = Seq(AttributeReference("a", IntegerType)(qualifier = Seq("ns1", "t")))
     attrs.resolve(Seq("Ns1", "T", "A"), caseInsensitiveResolution) match {
-      case Some(attr) => assert(attr.semanticEquals(attrs(0)) && attr.name == "A")
+      case Some(attr) => assert(attr.semanticEquals(attrs.head) && attr.name == "A")
       case _ => fail()
     }
   }
@@ -125,7 +125,7 @@ class AttributeResolutionSuite extends SparkFunSuite {
     assert(attrs.resolve(Seq("Ns1", "T", "A"), caseSensitiveResolution).isEmpty)
     assert(attrs.resolve(Seq("ns1", "t", "A"), caseSensitiveResolution).isEmpty)
     attrs.resolve(Seq("ns1", "t", "a"), caseSensitiveResolution) match {
-      case Some(attr) => assert(attr.semanticEquals(attrs(0)))
+      case Some(attr) => assert(attr.semanticEquals(attrs.head))
       case _ => fail()
     }
   }

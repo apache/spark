@@ -50,7 +50,7 @@ class ResolveUnionSuite extends AnalysisTest {
     val union1 = Union(table1 :: table2 :: Nil, true, false)
     val analyzed1 = analyzer.execute(union1)
     val projected1 =
-      Project(Seq(table2.output(3), table2.output(0), table2.output(1), table2.output(2)), table2)
+      Project(Seq(table2.output(3), table2.output.head, table2.output(1), table2.output(2)), table2)
     val expected1 = Union(table1 :: projected1 :: Nil)
     comparePlans(analyzed1, expected1)
 
@@ -59,7 +59,7 @@ class ResolveUnionSuite extends AnalysisTest {
     val analyzed2 = analyzer.execute(union2)
     val nullAttr1 = Alias(Literal(null, ByteType), "b")()
     val projected2 =
-      Project(Seq(table2.output(3), table2.output(0), nullAttr1, table2.output(2)), table3)
+      Project(Seq(table2.output(3), table2.output.head, nullAttr1, table2.output(2)), table3)
     val expected2 = Union(table1 :: projected2 :: Nil)
     comparePlans(analyzed2, expected2)
 
@@ -68,7 +68,7 @@ class ResolveUnionSuite extends AnalysisTest {
     val analyzed3 = analyzer.execute(union3)
     val nullAttr2 = Alias(Literal(null, DoubleType), "d")()
     val projected3 =
-      Project(Seq(table2.output(3), table2.output(0), nullAttr1, nullAttr2), table4)
+      Project(Seq(table2.output(3), table2.output.head, nullAttr1, nullAttr2), table4)
     val expected3 = Union(Union(table1 :: projected2 :: Nil) :: projected3 :: Nil)
     comparePlans(analyzed3, expected3)
   }

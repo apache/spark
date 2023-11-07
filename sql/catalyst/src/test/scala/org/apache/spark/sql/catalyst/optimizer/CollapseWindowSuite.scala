@@ -32,7 +32,7 @@ class CollapseWindowSuite extends PlanTest {
   }
 
   val testRelation = LocalRelation($"a".double, $"b".double, $"c".string)
-  val a = testRelation.output(0)
+  val a = testRelation.output.head
   val b = testRelation.output(1)
   val c = testRelation.output(2)
   val partitionSpec1 = Seq(c)

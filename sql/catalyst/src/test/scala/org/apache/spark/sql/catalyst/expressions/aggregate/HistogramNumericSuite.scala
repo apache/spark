@@ -149,7 +149,7 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper {
     } {
       // We expect each relation under test to have exactly one output attribute.
       assert(relation.output.length == 1)
-      val relationAttributeType = relation.output(0).dataType
+      val relationAttributeType = relation.output.head.dataType
       val agg = new HistogramNumeric(UnresolvedAttribute("a"), nBins)
       val analyzed = relation.select(agg).analyze.expressions.head
       analyzed match {

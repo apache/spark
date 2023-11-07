@@ -473,7 +473,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
       case _ : AttributeReference => true
       case Alias(_: AttributeReference, _) => true
       case Alias(_: Literal, _) => true
-      case Alias(a: AggregateExpression, _) if a.aggregateFunction.defaultResult == None => true
+      case Alias(a: AggregateExpression, _) if a.aggregateFunction.defaultResult.isEmpty => true
       case _ => false
     }
   }
@@ -952,7 +952,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
               case _ => hasOuterReferences(right)
             }
             if (shouldDecorrelatePredicates && !shouldPushToLeft && !shouldPushToRight
-              && !predicates.isEmpty) {
+              && predicates.nonEmpty) {
               // Neither left nor right children of the join have correlations, but the join
               // predicate does, and the correlations can not be replaced via equivalences.
               // Introduce a domain join on the left side of the join

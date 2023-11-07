@@ -149,25 +149,25 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
   }
 
   private lazy val calcPrefix: Any => Long = child.child.dataType match {
-    case BooleanType => (raw) =>
+    case BooleanType => raw =>
       if (raw.asInstanceOf[Boolean]) 1 else 0
     case DateType | TimestampType | TimestampNTZType |
-         _: IntegralType | _: AnsiIntervalType => (raw) =>
+         _: IntegralType | _: AnsiIntervalType => raw =>
       raw.asInstanceOf[java.lang.Number].longValue()
-    case FloatType | DoubleType => (raw) => {
+    case FloatType | DoubleType => raw => {
       val dVal = raw.asInstanceOf[java.lang.Number].doubleValue()
       DoublePrefixComparator.computePrefix(dVal)
     }
-    case StringType => (raw) =>
+    case StringType => raw =>
       StringPrefixComparator.computePrefix(raw.asInstanceOf[UTF8String])
-    case BinaryType => (raw) =>
+    case BinaryType => raw =>
       BinaryPrefixComparator.computePrefix(raw.asInstanceOf[Array[Byte]])
     case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
       _.asInstanceOf[Decimal].toUnscaledLong
     case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
       val p = Decimal.MAX_LONG_DIGITS
       val s = p - (dt.precision - dt.scale)
-      (raw) => {
+      raw => {
         val value = raw.asInstanceOf[Decimal]
         if (value.changePrecision(p, s)) {
           value.toUnscaledLong
@@ -177,9 +177,9 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
           Long.MaxValue
         }
       }
-    case dt: DecimalType => (raw) =>
+    case dt: DecimalType => raw =>
       DoublePrefixComparator.computePrefix(raw.asInstanceOf[Decimal].toDouble)
-    case _ => (Any) => 0L
+    case _ => Any => 0L
   }
 
   override def eval(input: InternalRow): Any = {

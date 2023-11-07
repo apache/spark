@@ -251,7 +251,7 @@ class EncoderResolutionSuite extends PlanTest {
     checkError(exception = e1,
       errorClass = "CANNOT_UP_CAST_DATATYPE",
       parameters = Map("expression" -> "b",
-        "sourceType" -> ("\"BIGINT\""), "targetType" -> "\"INT\"",
+        "sourceType" -> "\"BIGINT\"", "targetType" -> "\"INT\"",
         "details" -> (
           s"""
           |The type path of the target object is:
@@ -268,7 +268,7 @@ class EncoderResolutionSuite extends PlanTest {
     checkError(exception = e2,
       errorClass = "CANNOT_UP_CAST_DATATYPE",
       parameters = Map("expression" -> "b.`b`",
-        "sourceType" -> ("\"DECIMAL(38,18)\""), "targetType" -> "\"BIGINT\"",
+        "sourceType" -> "\"DECIMAL(38,18)\"", "targetType" -> "\"BIGINT\"",
         "details" -> (
           s"""
           |The type path of the target object is:

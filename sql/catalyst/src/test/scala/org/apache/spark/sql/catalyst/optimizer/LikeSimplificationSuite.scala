@@ -168,8 +168,8 @@ class LikeSimplificationSuite extends PlanTest {
   test("simplify LikeAll") {
     val originalQuery =
       testRelation
-        .where(($"a" likeAll(
-    "abc%", "abc\\%", "%xyz", "abc\\%def", "abc%def", "%mn%", "%mn\\%", "", "abc")))
+        .where($"a" likeAll(
+    "abc%", "abc\\%", "%xyz", "abc\\%def", "abc%def", "%mn%", "%mn\\%", "", "abc"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
@@ -185,8 +185,8 @@ class LikeSimplificationSuite extends PlanTest {
   test("simplify NotLikeAll") {
     val originalQuery =
       testRelation
-        .where(($"a" notLikeAll(
-          "abc%", "abc\\%", "%xyz", "abc\\%def", "abc%def", "%mn%", "%mn\\%", "", "abc")))
+        .where($"a" notLikeAll(
+          "abc%", "abc\\%", "%xyz", "abc\\%def", "abc%def", "%mn%", "%mn\\%", "", "abc"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
@@ -202,15 +202,15 @@ class LikeSimplificationSuite extends PlanTest {
   test("simplify LikeAny") {
     val originalQuery =
       testRelation
-        .where(($"a" likeAny(
-          "abc%", "abc\\%", "%xyz", "abc\\%def", "abc%def", "%mn%", "%mn\\%", "", "abc")))
+        .where($"a" likeAny(
+          "abc%", "abc\\%", "%xyz", "abc\\%def", "abc%def", "%mn%", "%mn\\%", "", "abc"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where(((StartsWith($"a", "abc") || EndsWith($"a", "xyz")) ||
+      .where((StartsWith($"a", "abc") || EndsWith($"a", "xyz")) ||
         (Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")) ||
           Contains($"a", "mn")) || (($"a" === "") || ($"a" === "abc")) ||
-        ($"a" likeAny("abc\\%", "abc\\%def", "%mn\\%"))))
+        ($"a" likeAny("abc\\%", "abc\\%def", "%mn\\%")))
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -219,8 +219,8 @@ class LikeSimplificationSuite extends PlanTest {
   test("simplify NotLikeAny") {
     val originalQuery =
       testRelation
-        .where(($"a" notLikeAny(
-          "abc%", "abc\\%", "%xyz", "abc\\%def", "abc%def", "%mn%", "%mn\\%", "", "abc")))
+        .where($"a" notLikeAny(
+          "abc%", "abc\\%", "%xyz", "abc\\%def", "abc%def", "%mn%", "%mn\\%", "", "abc"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
@@ -235,19 +235,19 @@ class LikeSimplificationSuite extends PlanTest {
 
   test("SPARK-39251: Simplify MultiLike if remainPatterns is empty") {
     comparePlans(
-      Optimize.execute(testRelation.where($"a" likeAll("abc%")).analyze),
+      Optimize.execute(testRelation.where($"a" likeAll "abc%").analyze),
       testRelation.where(StartsWith($"a", "abc")).analyze)
 
     comparePlans(
-      Optimize.execute(testRelation.where($"a" notLikeAll("abc%")).analyze),
+      Optimize.execute(testRelation.where($"a" notLikeAll "abc%").analyze),
       testRelation.where(Not(StartsWith($"a", "abc"))).analyze)
 
     comparePlans(
-      Optimize.execute(testRelation.where($"a" likeAny("abc%")).analyze),
+      Optimize.execute(testRelation.where($"a" likeAny "abc%").analyze),
       testRelation.where(StartsWith($"a", "abc")).analyze)
 
     comparePlans(
-      Optimize.execute(testRelation.where($"a" notLikeAny("abc%")).analyze),
+      Optimize.execute(testRelation.where($"a" notLikeAny "abc%").analyze),
       testRelation.where(Not(StartsWith($"a", "abc"))).analyze)
   }
 

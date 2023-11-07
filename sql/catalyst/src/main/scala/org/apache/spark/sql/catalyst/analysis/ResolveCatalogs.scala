@@ -74,7 +74,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
           nameParts, Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE))
       }
     } else if (nameParts.length == 3) {
-      if (nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+      if (nameParts.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
         nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
         ResolvedIdentifier(FakeSystemCatalog, ident)
       } else {

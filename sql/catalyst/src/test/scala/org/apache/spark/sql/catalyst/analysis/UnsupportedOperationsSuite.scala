@@ -1111,7 +1111,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
             s"actual exception message:\n\t'${e.getMessage}'")
         }
       }
-      if (!errorClass.isEmpty) {
+      if (errorClass.nonEmpty) {
         assert(e.getErrorClass == errorClass)
       }
     }

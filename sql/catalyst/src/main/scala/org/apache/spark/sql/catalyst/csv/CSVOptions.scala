@@ -66,7 +66,7 @@ class CSVOptions(
     paramValue match {
       case None => default
       case Some(null) => default
-      case Some(value) if value.length == 0 => '\u0000'
+      case Some(value) if value.isEmpty => '\u0000'
       case Some(value) if value.length == 1 => value.charAt(0)
       case _ => throw QueryExecutionErrors.paramExceedOneCharError(paramName)
     }
@@ -111,7 +111,7 @@ class CSVOptions(
   val charToEscapeQuoteEscaping = parameters.get(CHAR_TO_ESCAPE_QUOTE_ESCAPING) match {
     case None => None
     case Some(null) => None
-    case Some(value) if value.length == 0 => None
+    case Some(value) if value.isEmpty => None
     case Some(value) if value.length == 1 => Some(value.charAt(0))
     case _ => throw QueryExecutionErrors.paramExceedOneCharError(CHAR_TO_ESCAPE_QUOTE_ESCAPING)
   }

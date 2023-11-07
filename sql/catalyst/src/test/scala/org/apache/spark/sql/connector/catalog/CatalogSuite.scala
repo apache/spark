@@ -933,7 +933,7 @@ class CatalogSuite extends SparkFunSuite {
       new BufferedRows("1").withRow(InternalRow(1, 1))
     ))
     assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 2)
-    assert(!partTable.rows.isEmpty)
+    assert(partTable.rows.nonEmpty)
     assert(partTable.truncateTable())
     assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 2)
     assert(partTable.rows.isEmpty)

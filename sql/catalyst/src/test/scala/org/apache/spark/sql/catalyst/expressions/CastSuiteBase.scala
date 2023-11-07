@@ -639,7 +639,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val toInner = new StructType(
       (1 to N).map(i => StructField(s"i$i", IntegerType)).toArray)
     val inputInner = Row.fromSeq((1 to N).map(i => i + 0.5))
-    val outputInner = Row.fromSeq((1 to N))
+    val outputInner = Row.fromSeq(1 to N)
     val fromOuter = new StructType(
       (1 to N).map(i => StructField(s"s$i", fromInner)).toArray)
     val toOuter = new StructType(
@@ -653,7 +653,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val ctx = new CodegenContext
     cast("1", IntegerType).genCode(ctx)
     cast("2", LongType).genCode(ctx)
-    assert(ctx.inlinedMutableStates.length == 0)
+    assert(ctx.inlinedMutableStates.isEmpty)
   }
 
   test("up-cast") {
@@ -1213,8 +1213,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
 
-    Seq(("1", DayTimeIntervalType(DAY, DAY), (86400) * MICROS_PER_SECOND),
-      ("-1", DayTimeIntervalType(DAY, DAY), -(86400) * MICROS_PER_SECOND),
+    Seq(("1", DayTimeIntervalType(DAY, DAY), 86400 * MICROS_PER_SECOND),
+      ("-1", DayTimeIntervalType(DAY, DAY), -86400 * MICROS_PER_SECOND),
       ("1 01", DayTimeIntervalType(DAY, HOUR), (86400 + 3600) * MICROS_PER_SECOND),
       ("-1 01", DayTimeIntervalType(DAY, HOUR), -(86400 + 3600) * MICROS_PER_SECOND),
       ("1 01:01", DayTimeIntervalType(DAY, MINUTE), (86400 + 3600 + 60) * MICROS_PER_SECOND),
@@ -1224,8 +1224,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       ("-1 01:01:01.12345", DayTimeIntervalType(DAY, SECOND),
         (-(86400 + 3600 + 60 + 1.12345) * MICROS_PER_SECOND).toLong),
 
-      ("01", DayTimeIntervalType(HOUR, HOUR), (3600) * MICROS_PER_SECOND),
-      ("-01", DayTimeIntervalType(HOUR, HOUR), -(3600) * MICROS_PER_SECOND),
+      ("01", DayTimeIntervalType(HOUR, HOUR), 3600 * MICROS_PER_SECOND),
+      ("-01", DayTimeIntervalType(HOUR, HOUR), -3600 * MICROS_PER_SECOND),
       ("01:01", DayTimeIntervalType(HOUR, MINUTE), (3600 + 60) * MICROS_PER_SECOND),
       ("-01:01", DayTimeIntervalType(HOUR, MINUTE), -(3600 + 60) * MICROS_PER_SECOND),
       ("01:01:01.12345", DayTimeIntervalType(HOUR, SECOND),
@@ -1233,16 +1233,16 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       ("-01:01:01.12345", DayTimeIntervalType(HOUR, SECOND),
         (-(3600 + 60 + 1.12345) * MICROS_PER_SECOND).toLong),
 
-      ("01", DayTimeIntervalType(MINUTE, MINUTE), (60) * MICROS_PER_SECOND),
-      ("-01", DayTimeIntervalType(MINUTE, MINUTE), -(60) * MICROS_PER_SECOND),
-      ("01:01", DayTimeIntervalType(MINUTE, SECOND), ((60 + 1) * MICROS_PER_SECOND)),
+      ("01", DayTimeIntervalType(MINUTE, MINUTE), 60 * MICROS_PER_SECOND),
+      ("-01", DayTimeIntervalType(MINUTE, MINUTE), -60 * MICROS_PER_SECOND),
+      ("01:01", DayTimeIntervalType(MINUTE, SECOND), (60 + 1) * MICROS_PER_SECOND),
       ("01:01.12345", DayTimeIntervalType(MINUTE, SECOND),
         ((60 + 1.12345) * MICROS_PER_SECOND).toLong),
       ("-01:01.12345", DayTimeIntervalType(MINUTE, SECOND),
         (-(60 + 1.12345) * MICROS_PER_SECOND).toLong),
 
-      ("01.12345", DayTimeIntervalType(SECOND, SECOND), ((1.12345) * MICROS_PER_SECOND).toLong),
-      ("-01.12345", DayTimeIntervalType(SECOND, SECOND), (-(1.12345) * MICROS_PER_SECOND).toLong))
+      ("01.12345", DayTimeIntervalType(SECOND, SECOND), (1.12345 * MICROS_PER_SECOND).toLong),
+      ("-01.12345", DayTimeIntervalType(SECOND, SECOND), (-1.12345 * MICROS_PER_SECOND).toLong))
       .foreach { case (str, dataType, dt) =>
         checkEvaluation(cast(Literal.create(str), dataType), dt)
         checkEvaluation(

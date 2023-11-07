@@ -196,7 +196,7 @@ class ReplaceOperatorSuite extends PlanTest {
 
   test("replace batch Deduplicate with Aggregate") {
     val input = LocalRelation($"a".int, $"b".int)
-    val attrA = input.output(0)
+    val attrA = input.output.head
     val attrB = input.output(1)
     val query = Deduplicate(Seq(attrA), input) // dropDuplicates("a")
     val optimized = Optimize.execute(query.analyze)
@@ -223,7 +223,7 @@ class ReplaceOperatorSuite extends PlanTest {
 
   test("don't replace streaming Deduplicate") {
     val input = LocalRelation(Seq($"a".int, $"b".int), isStreaming = true)
-    val attrA = input.output(0)
+    val attrA = input.output.head
     val query = Deduplicate(Seq(attrA), input) // dropDuplicates("a")
     val optimized = Optimize.execute(query.analyze)
 

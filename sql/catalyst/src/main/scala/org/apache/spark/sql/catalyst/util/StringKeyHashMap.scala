@@ -32,7 +32,7 @@ object StringKeyHashMap {
 }
 
 
-class StringKeyHashMap[T](normalizer: (String) => String) {
+class StringKeyHashMap[T](normalizer: String => String) {
   private val base = new collection.mutable.HashMap[String, T]()
 
   def apply(key: String): T = base(normalizer(key))

@@ -84,7 +84,7 @@ class QueryPlanningTrackerSuite extends SparkFunSuite {
     assert(t.topRulesByTime(0) == Seq.empty)
     val top = t.topRulesByTime(2)
     assert(top.size == 2)
-    assert(top(0)._1 == "r4")
+    assert(top.head._1 == "r4")
     assert(top(1)._1 == "r3")
 
     // k > total size

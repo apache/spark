@@ -160,7 +160,7 @@ case class CallMethodViaReflection(
   @transient private lazy val argExprs: Array[Expression] = children.drop(2).toArray
 
   /** Name of the class -- this has to be called after we verify children has at least two exprs. */
-  @transient private lazy val className = children(0).eval().asInstanceOf[UTF8String].toString
+  @transient private lazy val className = children.head.eval().asInstanceOf[UTF8String].toString
 
   /** True if the class exists and can be loaded. */
   @transient private lazy val classExists = CallMethodViaReflection.classExists(className)

@@ -136,7 +136,7 @@ class ComputeCurrentTimeSuite extends PlanTest {
   }
 
   test("No duplicate literals") {
-    def checkLiterals(f: (String) => Expression, expected: Int): Unit = {
+    def checkLiterals(f: String => Expression, expected: Int): Unit = {
       val timestamps = ZoneId.SHORT_IDS.asScala.flatMap { case (zoneId, _) =>
         // Request each timestamp multiple times.
         (1 to 5).map { _ => Alias(f(zoneId), zoneId)() }

@@ -95,7 +95,7 @@ private[sql] abstract class SingleColumnTransform(ref: NamedReference) extends R
 
   override def withReferences(newReferences: Seq[NamedReference]): Transform = {
     assert(newReferences.length == 1,
-      s"Tried rewriting a single column transform (${this}) with multiple references.")
+      s"Tried rewriting a single column transform ($this) with multiple references.")
     withNewRef(newReferences.head)
   }
 }
@@ -137,7 +137,7 @@ private[sql] object BucketTransform {
         arguments.drop(posOfLit + 1).map(_.asInstanceOf[NamedReference]))
     case NamedTransform("bucket", arguments) =>
       var numOfBucket: Int = -1
-      arguments(0) match {
+      arguments.head match {
         case Lit(value: Int, IntegerType) =>
           numOfBucket = value
         case _ => throw new SparkException("The first element in BucketTransform arguments " +

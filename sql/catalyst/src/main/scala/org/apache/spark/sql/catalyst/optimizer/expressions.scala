@@ -183,7 +183,7 @@ object ConstantPropagation extends Rule[LogicalPlan] {
         val (newLeft, _) = traverse(o.left, replaceChildren = true, nullIsFalse)
         val (newRight, _) = traverse(o.right, replaceChildren = true, nullIsFalse)
         val newSelf = if (newLeft.isDefined || newRight.isDefined) {
-          Some(Or(left = newLeft.getOrElse(o.left), right = newRight.getOrElse((o.right))))
+          Some(Or(left = newLeft.getOrElse(o.left), right = newRight.getOrElse(o.right)))
         } else {
           None
         }

@@ -160,7 +160,7 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
 
   // If the url is a constant, cache the URL object so that we don't need to convert url
   // from UTF8String to String to URL for every row.
-  @transient private lazy val cachedUrl = children(0) match {
+  @transient private lazy val cachedUrl = children.head match {
     case Literal(url: UTF8String, _) if url ne null => getUrl(url)
     case _ => null
   }
@@ -272,7 +272,7 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
     val evaluated = children.map{e => e.eval(input).asInstanceOf[UTF8String]}
     if (evaluated.contains(null)) return null
     if (evaluated.size == 2) {
-      parseUrlWithoutKey(evaluated(0), evaluated(1))
+      parseUrlWithoutKey(evaluated.head, evaluated(1))
     } else {
       // 3-arg, i.e. QUERY with key
       assert(evaluated.size == 3)
@@ -280,7 +280,7 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
         return null
       }
 
-      val query = parseUrlWithoutKey(evaluated(0), evaluated(1))
+      val query = parseUrlWithoutKey(evaluated.head, evaluated(1))
       if (query eq null) {
         return null
       }

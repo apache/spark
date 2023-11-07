@@ -37,7 +37,7 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     )
 
     // dataType must match T.
-    def testIf(convert: (Integer => Any), dataType: DataType): Unit = {
+    def testIf(convert: Integer => Any, dataType: DataType): Unit = {
       for ((predicate, trueValue, falseValue, expected) <- testcases) {
         val trueValueConverted = if (trueValue == null) null else convert(trueValue)
         val falseValueConverted = if (falseValue == null) null else convert(falseValue)

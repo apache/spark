@@ -70,7 +70,7 @@ case class CatalogStorageFormat(
     properties: Map[String, String]) {
 
   override def toString: String = {
-    toLinkedHashMap.map { case ((key, value)) =>
+    toLinkedHashMap.map { case (key, value) =>
       if (value.isEmpty) key else s"$key: $value"
     }.mkString("Storage(", ", ", ")")
   }
@@ -134,14 +134,14 @@ case class CatalogTablePartition(
   }
 
   override def toString: String = {
-    toLinkedHashMap.map { case ((key, value)) =>
+    toLinkedHashMap.map { case (key, value) =>
       if (value.isEmpty) key else s"$key: $value"
     }.mkString("CatalogPartition(\n\t", "\n\t", ")")
   }
 
   /** Readable string representation for the CatalogTablePartition. */
   def simpleString: String = {
-    toLinkedHashMap.map { case ((key, value)) =>
+    toLinkedHashMap.map { case (key, value) =>
       if (value.isEmpty) key else s"$key: $value"
     }.mkString("", "\n", "")
   }
@@ -451,14 +451,14 @@ case class CatalogTable(
   }
 
   override def toString: String = {
-    toLinkedHashMap.map { case ((key, value)) =>
+    toLinkedHashMap.map { case (key, value) =>
       if (value.isEmpty) key else s"$key: $value"
     }.mkString("CatalogTable(\n", "\n", ")")
   }
 
   /** Readable string representation for the CatalogTable. */
   def simpleString: String = {
-    toLinkedHashMap.map { case ((key, value)) =>
+    toLinkedHashMap.map { case (key, value) =>
       if (value.isEmpty) key else s"$key: $value"
     }.mkString("", "\n", "")
   }
@@ -631,17 +631,17 @@ case class CatalogColumnStat(
    */
   def toMap(colName: String): Map[String, String] = {
     val map = new scala.collection.mutable.HashMap[String, String]
-    map.put(s"${colName}.${CatalogColumnStat.KEY_VERSION}", CatalogColumnStat.VERSION.toString)
+    map.put(s"$colName.${CatalogColumnStat.KEY_VERSION}", CatalogColumnStat.VERSION.toString)
     distinctCount.foreach { v =>
-      map.put(s"${colName}.${CatalogColumnStat.KEY_DISTINCT_COUNT}", v.toString)
+      map.put(s"$colName.${CatalogColumnStat.KEY_DISTINCT_COUNT}", v.toString)
     }
     nullCount.foreach { v =>
-      map.put(s"${colName}.${CatalogColumnStat.KEY_NULL_COUNT}", v.toString)
+      map.put(s"$colName.${CatalogColumnStat.KEY_NULL_COUNT}", v.toString)
     }
-    avgLen.foreach { v => map.put(s"${colName}.${CatalogColumnStat.KEY_AVG_LEN}", v.toString) }
-    maxLen.foreach { v => map.put(s"${colName}.${CatalogColumnStat.KEY_MAX_LEN}", v.toString) }
-    min.foreach { v => map.put(s"${colName}.${CatalogColumnStat.KEY_MIN_VALUE}", v) }
-    max.foreach { v => map.put(s"${colName}.${CatalogColumnStat.KEY_MAX_VALUE}", v) }
+    avgLen.foreach { v => map.put(s"$colName.${CatalogColumnStat.KEY_AVG_LEN}", v.toString) }
+    maxLen.foreach { v => map.put(s"$colName.${CatalogColumnStat.KEY_MAX_LEN}", v.toString) }
+    min.foreach { v => map.put(s"$colName.${CatalogColumnStat.KEY_MIN_VALUE}", v) }
+    max.foreach { v => map.put(s"$colName.${CatalogColumnStat.KEY_MAX_VALUE}", v) }
     histogram.foreach { h =>
       CatalogTable.splitLargeTableProp(
         s"$colName.${CatalogColumnStat.KEY_HISTOGRAM}",
@@ -755,19 +755,19 @@ object CatalogColumnStat extends Logging {
 
     try {
       Some(CatalogColumnStat(
-        distinctCount = map.get(s"${colName}.${KEY_DISTINCT_COUNT}").map(v => BigInt(v.toLong)),
-        min = map.get(s"${colName}.${KEY_MIN_VALUE}"),
-        max = map.get(s"${colName}.${KEY_MAX_VALUE}"),
-        nullCount = map.get(s"${colName}.${KEY_NULL_COUNT}").map(v => BigInt(v.toLong)),
-        avgLen = map.get(s"${colName}.${KEY_AVG_LEN}").map(_.toLong),
-        maxLen = map.get(s"${colName}.${KEY_MAX_LEN}").map(_.toLong),
+        distinctCount = map.get(s"$colName.$KEY_DISTINCT_COUNT").map(v => BigInt(v.toLong)),
+        min = map.get(s"$colName.$KEY_MIN_VALUE"),
+        max = map.get(s"$colName.$KEY_MAX_VALUE"),
+        nullCount = map.get(s"$colName.$KEY_NULL_COUNT").map(v => BigInt(v.toLong)),
+        avgLen = map.get(s"$colName.$KEY_AVG_LEN").map(_.toLong),
+        maxLen = map.get(s"$colName.$KEY_MAX_LEN").map(_.toLong),
         histogram = CatalogTable.readLargeTableProp(map, s"$colName.$KEY_HISTOGRAM")
           .map(HistogramSerializer.deserialize),
-        version = map(s"${colName}.${KEY_VERSION}").toInt
+        version = map(s"$colName.$KEY_VERSION").toInt
       ))
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Failed to parse column statistics for column ${colName} in table $table", e)
+        logWarning(s"Failed to parse column statistics for column $colName in table $table", e)
         None
     }
   }

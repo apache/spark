@@ -243,7 +243,7 @@ class UnivocityParser(
               throw e
             }
             val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
-            DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw(e))
+            DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
         }
       }
 

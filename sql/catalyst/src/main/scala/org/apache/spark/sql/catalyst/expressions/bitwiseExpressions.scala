@@ -184,15 +184,15 @@ case class BitwiseNot(child: Expression)
 
   override def toString: String = s"~$child"
 
-  private lazy val not: (Any) => Any = dataType match {
+  private lazy val not: Any => Any = dataType match {
     case ByteType =>
-      ((evalE: Byte) => (~evalE).toByte).asInstanceOf[(Any) => Any]
+      ((evalE: Byte) => (~evalE).toByte).asInstanceOf[Any => Any]
     case ShortType =>
-      ((evalE: Short) => (~evalE).toShort).asInstanceOf[(Any) => Any]
+      ((evalE: Short) => (~evalE).toShort).asInstanceOf[Any => Any]
     case IntegerType =>
-      ((evalE: Int) => ~evalE).asInstanceOf[(Any) => Any]
+      ((evalE: Int) => ~evalE).asInstanceOf[Any => Any]
     case LongType =>
-      ((evalE: Long) => ~evalE).asInstanceOf[(Any) => Any]
+      ((evalE: Long) => ~evalE).asInstanceOf[Any => Any]
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

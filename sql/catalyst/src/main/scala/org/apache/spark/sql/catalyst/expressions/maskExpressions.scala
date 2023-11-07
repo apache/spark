@@ -92,7 +92,7 @@ object MaskExpressionBuilder extends ExpressionBuilder {
 
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     assert(expressions.size == 5)
-    new Mask(expressions(0), expressions(1), expressions(2), expressions(3), expressions(4))
+    new Mask(expressions.head, expressions(1), expressions(2), expressions(3), expressions(4))
   }
 }
 
@@ -197,7 +197,7 @@ case class Mask(
    */
   override def eval(input: InternalRow): Any = {
     Mask.transformInput(
-      children(0).eval(input),
+      children.head.eval(input),
       children(1).eval(input),
       children(2).eval(input),
       children(3).eval(input),
@@ -237,7 +237,7 @@ case class Mask(
       ctx: CodegenContext,
       ev: ExprCode,
       f: (String, String, String, String, String) => String): ExprCode = {
-    val firstGen = children(0).genCode(ctx)
+    val firstGen = children.head.genCode(ctx)
     val secondGen = children(1).genCode(ctx)
     val thirdGen = children(2).genCode(ctx)
     val fourthGen = children(3).genCode(ctx)
@@ -247,7 +247,7 @@ case class Mask(
     if (nullable) {
       // this function is somewhat like a `UnaryExpression`, in that only the first child
       // determines whether the result is null
-      val nullSafeEval = ctx.nullSafeExec(children(0).nullable, firstGen.isNull)(resultCode)
+      val nullSafeEval = ctx.nullSafeExec(children.head.nullable, firstGen.isNull)(resultCode)
       ev.copy(code = code"""
         ${firstGen.code}
         ${secondGen.code}

@@ -394,7 +394,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     val excludedRules = excludedRulesConf.filter { ruleName =>
       val nonExcludable = nonExcludableRules.contains(ruleName)
       if (nonExcludable) {
-        logWarning(s"Optimization rule '${ruleName}' was not excluded from the optimizer " +
+        logWarning(s"Optimization rule '$ruleName' was not excluded from the optimizer " +
           s"because this rule is a non-excludable rule.")
       }
       !nonExcludable
@@ -2359,7 +2359,7 @@ object RewriteIntersectAll extends Rule[LogicalPlan] {
 
       // Expressions to compute count and minimum of both the counts.
       val vCol1AggrExpr =
-        Alias(Count(unionPlan.output(0)).toAggregateExpression(), "vcol1_count")()
+        Alias(Count(unionPlan.output.head).toAggregateExpression(), "vcol1_count")()
       val vCol2AggrExpr =
         Alias(Count(unionPlan.output(1)).toAggregateExpression(), "vcol2_count")()
       val ifExpression = Alias(If(

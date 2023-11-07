@@ -258,12 +258,12 @@ object PushLeftSemiLeftAntiThroughJoin extends Rule[LogicalPlan] with PredicateH
 
       action match {
         case PushdownDirection.TO_LEFT_BRANCH
-          if (childJoinType == LeftOuter || childJoinType.isInstanceOf[InnerLike]) =>
+          if childJoinType == LeftOuter || childJoinType.isInstanceOf[InnerLike] =>
           // push down leftsemi/anti join to the left table
           val newLeft = Join(childLeft, right, joinType, joinCond, parentHint)
           Join(newLeft, childRight, childJoinType, childCondition, childHint)
         case PushdownDirection.TO_RIGHT_BRANCH
-          if (childJoinType == RightOuter || childJoinType.isInstanceOf[InnerLike]) =>
+          if childJoinType == RightOuter || childJoinType.isInstanceOf[InnerLike] =>
           // push down leftsemi/anti join to the right table
           val newRight = Join(childRight, right, joinType, joinCond, parentHint)
           Join(childLeft, newRight, childJoinType, childCondition, childHint)

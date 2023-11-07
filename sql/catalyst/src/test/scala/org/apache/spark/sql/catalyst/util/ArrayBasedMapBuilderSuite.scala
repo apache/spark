@@ -94,8 +94,8 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
       val map = builder.build()
       assert(map.numElements() == 2)
       val entries = ArrayBasedMapData.toScalaMap(map).iterator.toSeq
-      assert(entries(0)._1.asInstanceOf[Array[Byte]].toSeq == Seq(1))
-      assert(entries(0)._2 == 3)
+      assert(entries.head._1.asInstanceOf[Array[Byte]].toSeq == Seq(1))
+      assert(entries.head._2 == 3)
       assert(entries(1)._1.asInstanceOf[Array[Byte]].toSeq == Seq(2))
       assert(entries(1)._2 == 2)
     }

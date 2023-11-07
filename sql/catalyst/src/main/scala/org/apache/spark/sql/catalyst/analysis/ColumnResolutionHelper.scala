@@ -248,7 +248,7 @@ trait ColumnResolutionHelper extends Logging {
         if (nameParts.length == 2) {
           nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
         } else if (nameParts.length == 3) {
-          nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+          nameParts.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
             nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
         } else {
           false

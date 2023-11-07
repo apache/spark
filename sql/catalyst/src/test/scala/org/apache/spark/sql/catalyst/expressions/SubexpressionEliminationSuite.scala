@@ -147,7 +147,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     val equivalence = new EquivalentExpressions
     equivalence.addExprTree(add)
     // the `two` inside `fallback` should not be added
-    assert(equivalence.getAllExprStates(1).size == 0)
+    assert(equivalence.getAllExprStates(1).isEmpty)
     assert(equivalence.getAllExprStates().count(_.useCount == 1) == 3) // add, two, explode
   }
 
@@ -296,7 +296,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
           }
 
           public void initialize(int partitionIndex) {
-            ${subExprsCode}
+            $subExprsCode
           }
 
           ${ctx.declareAddedFunctions()}
@@ -490,7 +490,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     checkShortcut(Not(And(Literal(true), equal)), 0)
 
     // always eliminate subexpression for left child
-    checkShortcut((And(equal, Literal(false))), 1)
+    checkShortcut(And(equal, Literal(false)), 1)
     checkShortcut(Or(equal, Literal(true)), 1)
     checkShortcut(Not(And(equal, Literal(false))), 1)
   }

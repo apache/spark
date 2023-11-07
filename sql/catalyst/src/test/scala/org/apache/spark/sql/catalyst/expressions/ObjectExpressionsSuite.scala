@@ -486,8 +486,9 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val row = RandomDataGenerator.randomRow(random, schema)
         val toRow = ExpressionEncoder(schema).createSerializer()
         val internalRow = toRow(row)
-        val lambda = LambdaVariable("dummy", schema(0).dataType, schema(0).nullable, id = 0)
-        checkEvaluationWithoutCodegen(lambda, internalRow.get(0, schema(0).dataType), internalRow)
+        val lambda = LambdaVariable("dummy", schema.head.dataType, schema.head.nullable, id = 0)
+        checkEvaluationWithoutCodegen(
+          lambda, internalRow.get(0, schema.head.dataType), internalRow)
       }
     }
   }

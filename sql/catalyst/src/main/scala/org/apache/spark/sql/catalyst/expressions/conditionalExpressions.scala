@@ -364,9 +364,9 @@ case class CaseWhen(
     if (branches.length == 1) {
       // If we have only single branch we can use If expression and its codeGen
       If(
-        branches(0)._1,
-        branches(0)._2,
-        elseValue.getOrElse(Literal.create(null, branches(0)._2.dataType))).doGenCode(ctx, ev)
+        branches.head._1,
+        branches.head._2,
+        elseValue.getOrElse(Literal.create(null, branches.head._2.dataType))).doGenCode(ctx, ev)
     } else {
       multiBranchesCodegen(ctx, ev)
     }

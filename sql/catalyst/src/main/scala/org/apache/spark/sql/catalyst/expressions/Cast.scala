@@ -1073,7 +1073,7 @@ case class Cast(
   }
 
   private[this] def castStruct(from: StructType, to: StructType): Any => Any = {
-    val castFuncs: Array[(Any) => Any] = from.fields.zip(to.fields).map {
+    val castFuncs: Array[Any => Any] = from.fields.zip(to.fields).map {
       case (fromField, toField) => cast(fromField.dataType, toField.dataType)
     }
     // TODO: Could be faster?
@@ -1533,8 +1533,8 @@ case class Cast(
       val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       (c, evPrim, evNull) =>
         code"""$evPrim = $util.safeStringToInterval($c);
-           if(${evPrim} == null) {
-             ${evNull} = true;
+           if($evPrim == null) {
+             $evNull = true;
            }
          """.stripMargin
 

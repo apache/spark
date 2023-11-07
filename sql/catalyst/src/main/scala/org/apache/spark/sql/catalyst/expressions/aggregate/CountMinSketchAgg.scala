@@ -220,6 +220,6 @@ object CountMinSketchAggExpressionBuilder extends ExpressionBuilder {
   override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     assert(expressions.size == 4)
-    new CountMinSketchAgg(expressions(0), expressions(1), expressions(2), expressions(3))
+    new CountMinSketchAgg(expressions.head, expressions(1), expressions(2), expressions(3))
   }
 }

@@ -197,16 +197,16 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
         }
       }
       val input = inputData.map(NonFoldableLiteral.create(_, dataType))
-      val expected = if (inputData(0) == null) {
+      val expected = if (inputData.head == null) {
         null
-      } else if (inputData.slice(1, 10).contains(inputData(0))) {
+      } else if (inputData.slice(1, 10).contains(inputData.head)) {
         true
       } else if (inputData.slice(1, 10).contains(null)) {
         null
       } else {
         false
       }
-      checkInAndInSet(In(input(0), input.slice(1, 10)), expected)
+      checkInAndInSet(In(input.head, input.slice(1, 10)), expected)
     }
 
     val atomicTypes = DataTypeTestUtils.atomicTypes.filter { t =>

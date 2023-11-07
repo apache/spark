@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.internal.SQLConf
 
 class SubstituteUnresolvedOrdinalsSuite extends AnalysisTest {
-  private lazy val a = testRelation2.output(0)
+  private lazy val a = testRelation2.output.head
   private lazy val b = testRelation2.output(1)
 
   test("unresolved ordinal should not be unresolved") {

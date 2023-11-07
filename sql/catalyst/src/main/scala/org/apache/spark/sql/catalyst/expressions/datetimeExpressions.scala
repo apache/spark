@@ -1141,7 +1141,7 @@ object ParseToTimestampNTZExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
     if (numArgs == 1 || numArgs == 2) {
-      ParseToTimestamp(expressions(0), expressions.drop(1).lastOption, TimestampNTZType)
+      ParseToTimestamp(expressions.head, expressions.drop(1).lastOption, TimestampNTZType)
     } else {
       throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), numArgs)
     }
@@ -1178,7 +1178,7 @@ object ParseToTimestampLTZExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
     if (numArgs == 1 || numArgs == 2) {
-      ParseToTimestamp(expressions(0), expressions.drop(1).lastOption, TimestampType)
+      ParseToTimestamp(expressions.head, expressions.drop(1).lastOption, TimestampType)
     } else {
       throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), numArgs)
     }
@@ -1317,9 +1317,9 @@ abstract class ToTimestamp
              |try {
              |  ${ev.value} = $formatterName.$parseMethod($datetimeStr.toString()) $downScaleCode;
              |} catch (java.time.DateTimeException e) {
-             |  ${parseErrorBranch}
+             |  $parseErrorBranch
              |} catch (java.text.ParseException e) {
-             |  ${parseErrorBranch}
+             |  $parseErrorBranch
              |}
              |""".stripMargin)
       }.getOrElse {
@@ -1337,9 +1337,9 @@ abstract class ToTimestamp
              |try {
              |  ${ev.value} = $timestampFormatter.$parseMethod($string.toString()) $downScaleCode;
              |} catch (java.time.DateTimeException e) {
-             |    ${parseErrorBranch}
+             |    $parseErrorBranch
              |} catch (java.text.ParseException e) {
-             |    ${parseErrorBranch}
+             |    $parseErrorBranch
              |}
              |""".stripMargin)
       }
@@ -2513,7 +2513,7 @@ object MakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
     val numArgs = expressions.length
     if (numArgs == 6) {
       MakeTimestamp(
-        expressions(0),
+        expressions.head,
         expressions(1),
         expressions(2),
         expressions(3),
@@ -2560,7 +2560,7 @@ object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
     val numArgs = expressions.length
     if (numArgs == 6 || numArgs == 7) {
       MakeTimestamp(
-        expressions(0),
+        expressions.head,
         expressions(1),
         expressions(2),
         expressions(3),
@@ -2836,7 +2836,7 @@ object DatePartExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
     if (numArgs == 2) {
-      val field = expressions(0)
+      val field = expressions.head
       val source = expressions(1)
       Extract(field, source, Extract.createExpr(funcName, field, source))
     } else {

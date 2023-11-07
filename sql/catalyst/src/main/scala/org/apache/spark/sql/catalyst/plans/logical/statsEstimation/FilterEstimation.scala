@@ -333,7 +333,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
       }
 
       if (colStat.histogram.isEmpty) {
-        if (!colStat.distinctCount.isEmpty) {
+        if (colStat.distinctCount.isDefined) {
           // returns 1/ndv if there is no histogram
           Some(1.0 / colStat.distinctCount.get.toDouble)
         } else {

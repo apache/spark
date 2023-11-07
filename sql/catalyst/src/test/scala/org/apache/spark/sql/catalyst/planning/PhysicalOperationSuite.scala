@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.DoubleType
 
 class PhysicalOperationSuite extends SparkFunSuite {
   private val relation = TestRelations.testRelation2
-  private val colA = relation.output(0)
+  private val colA = relation.output.head
   private val colB = relation.output(1)
   private val aliasR = Alias(Rand(1), "r")()
   private val aliasId = Alias(MonotonicallyIncreasingID(), "id")()
@@ -36,7 +36,7 @@ class PhysicalOperationSuite extends SparkFunSuite {
     project1 match {
       case PhysicalOperation(projects, filters, _: LocalRelation) =>
         assert(projects.size === 2)
-        assert(projects(0) === colB)
+        assert(projects.head === colB)
         assert(projects(1) === aliasR)
         assert(filters.size === 1)
       case _ => assert(false)
@@ -48,7 +48,7 @@ class PhysicalOperationSuite extends SparkFunSuite {
     project2 match {
       case PhysicalOperation(projects, filters, _: LocalRelation) =>
         assert(projects.size === 2)
-        assert(projects(0) === colA)
+        assert(projects.head === colA)
         assert(projects(1) === colB)
         assert(filters.size === 1)
       case _ => assert(false)
@@ -60,7 +60,7 @@ class PhysicalOperationSuite extends SparkFunSuite {
     project3 match {
       case PhysicalOperation(projects, filters, _: Project) =>
         assert(projects.size === 2)
-        assert(projects(0) === colA)
+        assert(projects.head === colA)
         assert(projects(1) === colR)
         assert(filters.isEmpty)
       case _ => assert(false)
@@ -72,7 +72,7 @@ class PhysicalOperationSuite extends SparkFunSuite {
     project4 match {
       case PhysicalOperation(projects, _, _: LocalRelation) =>
         assert(projects.size === 2)
-        assert(projects(0) === colA)
+        assert(projects.head === colA)
         assert(projects(1) === aliasId)
       case _ => assert(false)
     }
@@ -94,7 +94,7 @@ class PhysicalOperationSuite extends SparkFunSuite {
     filter2 match {
       case PhysicalOperation(projects, filters, _: LocalRelation) =>
         assert(projects.size === 2)
-        assert(projects(0) === colA)
+        assert(projects.head === colA)
         assert(projects(1) === colB)
         assert(filters.size === 1)
       case _ => assert(false)

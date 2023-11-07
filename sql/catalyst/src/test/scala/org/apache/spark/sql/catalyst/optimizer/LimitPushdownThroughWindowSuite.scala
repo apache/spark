@@ -53,7 +53,7 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
     Seq("a".attr.int, "b".attr.int, "c".attr.int),
     1.to(6).map(_ => Row(1, 2, 3)))
 
-  private val a = testRelation.output(0)
+  private val a = testRelation.output.head
   private val b = testRelation.output(1)
   private val c = testRelation.output(2)
   private val windowFrame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)

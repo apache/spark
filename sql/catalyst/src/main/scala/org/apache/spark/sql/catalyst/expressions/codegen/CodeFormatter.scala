@@ -149,7 +149,7 @@ private class CodeFormatter {
       indentString
     }
     code.append(f"/* ${currentLine}%03d */")
-    if (line.trim().length > 0) {
+    if (line.trim().nonEmpty) {
       code.append(" ") // add a space after the line number comment.
       code.append(thisLineIndent)
       if (inCommentBlock && line.startsWith("*") || line.startsWith("*/")) code.append(" ")

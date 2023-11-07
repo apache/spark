@@ -141,7 +141,7 @@ class TransformExtractorSuite extends SparkFunSuite {
     bucketTransform match {
       case BucketTransform(numBuckets, cols, _) =>
         assert(numBuckets === 16)
-        assert(cols(0).fieldNames === Seq("a", "b"))
+        assert(cols.head.fieldNames === Seq("a", "b"))
       case _ =>
         fail("Did not match BucketTransform extractor")
     }

@@ -134,7 +134,7 @@ class AttributeSet private (private val baseSet: mutable.LinkedHashSet[Attribute
   def intersect(other: AttributeSet): AttributeSet =
     new AttributeSet(baseSet.intersect(other.baseSet))
 
-  override def foreach[U](f: (Attribute) => U): Unit = baseSet.map(_.a).foreach(f)
+  override def foreach[U](f: Attribute => U): Unit = baseSet.map(_.a).foreach(f)
 
   // We must force toSeq to not be strict otherwise we end up with a [[Stream]] that captures all
   // sorts of things in its closure.

@@ -183,11 +183,11 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
   }
 
   test("hash code") {
-    assert(Decimal(123).hashCode() === (123).##)
+    assert(Decimal(123).hashCode() === 123.##)
     assert(Decimal(-123).hashCode() === (-123).##)
     assert(Decimal(Int.MaxValue).hashCode() === Int.MaxValue.##)
     assert(Decimal(Long.MaxValue).hashCode() === Long.MaxValue.##)
-    assert(Decimal(BigDecimal(123)).hashCode() === (123).##)
+    assert(Decimal(BigDecimal(123)).hashCode() === 123.##)
 
     val reallyBig = BigDecimal("123182312312313232112312312123.1231231231")
     assert(Decimal(reallyBig).hashCode() === reallyBig.hashCode)

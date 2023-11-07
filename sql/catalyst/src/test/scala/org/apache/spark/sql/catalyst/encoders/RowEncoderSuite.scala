@@ -329,7 +329,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     val pythonUDT = new PythonUserDefinedType(udtSQLType, "pyUDT", "serializedPyClass")
     val schema = new StructType().add("pythonUDT", pythonUDT, true)
     val encoder = ExpressionEncoder(schema)
-    assert(encoder.serializer(0).dataType == pythonUDT.sqlType)
+    assert(encoder.serializer.head.dataType == pythonUDT.sqlType)
   }
 
   test("encoding/decoding TimestampType to/from java.time.Instant") {
@@ -442,7 +442,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
               fail(
                 s"""
                    |schema: ${schema.simpleString}
-                   |input: ${input}
+                   |input: $input
                  """.stripMargin, e)
           }
         }

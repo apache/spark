@@ -126,7 +126,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-42108: transform count(*) to count(1)") {
-    val a = testRelation.output(0)
+    val a = testRelation.output.head
 
     checkAnalysis(
       Project(
@@ -144,7 +144,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("resolve sort references - filter/limit") {
-    val a = testRelation2.output(0)
+    val a = testRelation2.output.head
     val b = testRelation2.output(1)
     val c = testRelation2.output(2)
 
@@ -174,7 +174,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("resolve sort references - join") {
-    val a = testRelation2.output(0)
+    val a = testRelation2.output.head
     val b = testRelation2.output(1)
     val c = testRelation2.output(2)
     val h = testRelation3.output(3)
@@ -191,7 +191,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("resolve sort references - aggregate") {
-    val a = testRelation2.output(0)
+    val a = testRelation2.output.head
     val b = testRelation2.output(1)
     val c = testRelation2.output(2)
     val alias_a3 = count(a).as("a3")
@@ -244,7 +244,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         $"e" / $"e" as "div5"))
     val pl = plan.asInstanceOf[Project].projectList
 
-    assert(pl(0).dataType == DoubleType)
+    assert(pl.head.dataType == DoubleType)
     if (!SQLConf.get.ansiEnabled) {
       assert(pl(1).dataType == DoubleType)
     }
@@ -288,14 +288,14 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     plan = testRelation.select(CreateStruct(Seq(a, (a + 1).as("a+1"))).as("col"))
     expected = testRelation.select(CreateNamedStruct(Seq(
       Literal(a.name), a,
-      Literal("a+1"), (a + 1))).as("col"))
+      Literal("a+1"), a + 1)).as("col"))
     checkAnalysis(plan, expected)
   }
 
   test("Analysis may leave unnecessary aliases") {
     val att1 = testRelation.output.head
     var plan = testRelation.select(
-      CreateStruct(Seq(att1, ((att1.as("aa")) + 1).as("a_plus_1"))).as("col"),
+      CreateStruct(Seq(att1, (att1.as("aa") + 1).as("a_plus_1"))).as("col"),
       att1
     )
     val prevPlan = getAnalyzer.execute(plan)
@@ -310,8 +310,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       CreateArray(Seq(
         CreateNamedStruct(Seq(
           Literal(att1.name), att1,
-          Literal("a_plus_1"), (att1 + 1))),
-          $"col".struct(prevPlan.output(0).dataType.asInstanceOf[StructType]).notNull
+          Literal("a_plus_1"), att1 + 1)),
+          $"col".struct(prevPlan.output.head.dataType.asInstanceOf[StructType]).notNull
       )).as("arr")
     )
 
@@ -319,7 +319,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-10534: resolve attribute references in order by clause") {
-    val a = testRelation2.output(0)
+    val a = testRelation2.output.head
     val c = testRelation2.output(2)
 
     val plan = testRelation2.select($"c").orderBy(Floor($"a").asc)
@@ -372,7 +372,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       AttributeReference("c", ShortType)(),
       AttributeReference("d", DoubleType, nullable = false)())
 
-    val string = testRelation.output(0)
+    val string = testRelation.output.head
     val double = testRelation.output(1)
     val short = testRelation.output(2)
     val nonNullableDouble = testRelation.output(3)
@@ -421,7 +421,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-24891 Fix HandleNullInputsForUDF rule") {
-    val a = testRelation.output(0)
+    val a = testRelation.output.head
     val func = (x: Int, y: Int) => x + y
     val udf1 = ScalaUDF(func, IntegerType, a :: a :: Nil,
       Option(ExpressionEncoder[java.lang.Integer]()) ::
@@ -434,7 +434,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-11863 mixture of aliases and real columns in order by clause - tpcds 19,55,71") {
-    val a = testRelation2.output(0)
+    val a = testRelation2.output.head
     val c = testRelation2.output(2)
     val alias1 = a.as("a1")
     val alias2 = c.as("a2")
@@ -490,7 +490,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
            |${afterAnalyze.dataType}
            |
            |Expected data type:
-           |${expectedDataType}
+           |$expectedDataType
          """.stripMargin)
     }
   }
@@ -1564,7 +1564,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       }
       // Only one CTE ref, no need to deduplicate
       assert(refs.length == 1)
-      assert(refs(0).output == testRelation.output.take(1))
+      assert(refs.head.output == testRelation.output.take(1))
     }
 
     withClue("two references") {

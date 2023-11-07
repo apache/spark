@@ -55,7 +55,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
     assert(input.size >= 2)
     if (input.size == 2) {
       val (joinConditions, others) = conditions.partition(canEvaluateWithinJoin)
-      val ((left, leftJoinType), (right, rightJoinType)) = (input(0), input(1))
+      val ((left, leftJoinType), (right, rightJoinType)) = (input.head, input(1))
       val innerJoinType = (leftJoinType, rightJoinType) match {
         case (Inner, Inner) => Inner
         case (_, _) => Cross

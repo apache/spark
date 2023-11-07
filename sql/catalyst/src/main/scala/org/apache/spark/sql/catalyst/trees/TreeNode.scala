@@ -955,8 +955,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     } else {
       number.i -= 1
       // Note that this traversal order must be the same as numberedTreeString.
-      innerChildren.map(_.getNodeNumbered(number)).find(_ != None).getOrElse {
-        children.map(_.getNodeNumbered(number)).find(_ != None).flatten
+      innerChildren.map(_.getNodeNumbered(number)).find(_.isDefined).getOrElse {
+        children.map(_.getNodeNumbered(number)).find(_.isDefined).flatten
       }
     }
   }
@@ -1122,7 +1122,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       t.forall(_.isInstanceOf[DataType]) ||
       t.forall(_.isInstanceOf[Product]) =>
       JArray(t.map(parseToJson).toList)
-    case t: Seq[_] if t.length > 0 && t.head.isInstanceOf[String] =>
+    case t: Seq[_] if t.nonEmpty && t.head.isInstanceOf[String] =>
       JString(truncatedString(t, "[", ", ", "]", SQLConf.get.maxToStringFields))
     case t: Seq[_] => JNull
     case m: Map[_, _] => JNull

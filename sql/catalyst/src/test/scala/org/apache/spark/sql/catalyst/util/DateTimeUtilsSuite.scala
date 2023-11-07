@@ -369,8 +369,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
     assert(
       stringToTimestampWithoutTimeZone(
-        UTF8String.fromString("2021-11-22 10:54:27 +08:00"), false) ==
-      None)
+        UTF8String.fromString("2021-11-22 10:54:27 +08:00"), false).isEmpty)
   }
 
   test("SPARK-15379: special invalid date string") {
@@ -634,7 +633,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   test("trailing characters while converting string to timestamp") {
     val s = UTF8String.fromString("2019-10-31T10:59:23Z:::")
     val time = DateTimeUtils.stringToTimestamp(s, defaultZoneId)
-    assert(time == None)
+    assert(time.isEmpty)
   }
 
   def testTrunc(

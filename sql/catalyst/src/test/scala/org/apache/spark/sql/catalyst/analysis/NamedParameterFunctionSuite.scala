@@ -52,7 +52,7 @@ object DummyExpressionBuilder extends ExpressionBuilder  {
     Some(defaultFunctionSignature)
 
   override def build(funcName: String, expressions: Seq[Expression]): Expression =
-    DummyExpression(expressions(0), expressions(1), expressions(2), expressions(3))
+    DummyExpression(expressions.head, expressions(1), expressions(2), expressions(3))
 }
 
 class NamedParameterFunctionSuite extends AnalysisTest {
@@ -143,7 +143,7 @@ class NamedParameterFunctionSuite extends AnalysisTest {
 
   test("INTERNAL_ERROR: Enforce optional arguments after required arguments") {
     val errorMessage = s"Function foo has an unexpected required argument for the provided" +
-      s" function signature ${illegalSignature}. All required arguments should come before" +
+      s" function signature $illegalSignature. All required arguments should come before" +
       s" optional arguments."
     checkError(
       exception = parseRearrangeException(illegalSignature, args, "foo"),
