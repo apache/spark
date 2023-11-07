@@ -23,8 +23,7 @@ import javax.xml.stream.XMLInputFactory
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, DateFormatter, DateTimeUtils, ParseMode, PermissiveMode, TimestampFormatter}
-import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, DateFormatter, DateTimeUtils, ParseMode, PermissiveMode}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 
@@ -32,7 +31,7 @@ import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
  * Options for the XML data source.
  */
 private[sql] class XmlOptions(
-    @transient val parameters: CaseInsensitiveMap[String],
+    val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String,
     rowTagRequired: Boolean)
@@ -147,6 +146,10 @@ private[sql] class XmlOptions(
       s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
     })
 
+  val timestampNTZFormatInRead: Option[String] = parameters.get(TIMESTAMP_NTZ_FORMAT)
+  val timestampNTZFormatInWrite: String =
+    parameters.getOrElse(TIMESTAMP_NTZ_FORMAT, s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
+
   val timezone = parameters.get("timezone")
 
   val zoneId: ZoneId = DateTimeUtils.getZoneId(
@@ -163,32 +166,6 @@ private[sql] class XmlOptions(
   def buildXmlFactory(): XMLInputFactory = {
     XMLInputFactory.newInstance()
   }
-
-  val timestampFormatter = TimestampFormatter(
-    timestampFormatInRead,
-    zoneId,
-    locale,
-    legacyFormat = FAST_DATE_FORMAT,
-    isParsing = true)
-
-  val timestampFormatterInWrite = TimestampFormatter(
-    timestampFormatInWrite,
-    zoneId,
-    locale,
-    legacyFormat = FAST_DATE_FORMAT,
-    isParsing = false)
-
-  val dateFormatter = DateFormatter(
-    dateFormatInRead,
-    locale,
-    legacyFormat = FAST_DATE_FORMAT,
-    isParsing = true)
-
-  val dateFormatterInWrite = DateFormatter(
-    dateFormatInWrite,
-    locale,
-    legacyFormat = FAST_DATE_FORMAT,
-    isParsing = false)
 }
 
 private[sql] object XmlOptions extends DataSourceOptions {
@@ -225,6 +202,7 @@ private[sql] object XmlOptions extends DataSourceOptions {
   val COLUMN_NAME_OF_CORRUPT_RECORD = newOption("columnNameOfCorruptRecord")
   val DATE_FORMAT = newOption("dateFormat")
   val TIMESTAMP_FORMAT = newOption("timestampFormat")
+  val TIMESTAMP_NTZ_FORMAT = newOption("timestampNTZFormat")
   val TIME_ZONE = newOption("timeZone")
   val INDENT = newOption("indent")
   // Options with alternative
