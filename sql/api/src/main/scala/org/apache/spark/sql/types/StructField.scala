@@ -161,7 +161,8 @@ case class StructField(
       case d: DataType => d.sql
     }
     val separator = if (isNested) ": " else " "
-    s"${QuotingUtils.quoteIfNeeded(name)}$separator$dataTypeDDL$nullString$getDDLDefault$getDDLComment"
+    val quotedName = QuotingUtils.quoteIfNeeded(name)
+    s"$quotedName$separator$dataTypeDDL$nullString$getDDLDefault$getDDLComment"
   }
 
   /**
