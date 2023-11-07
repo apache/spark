@@ -2483,7 +2483,7 @@ class BaseUDTFTestsMixin:
             def eval(self, _: Row):
                 self._total += 1
                 if self._total >= 4:
-                    raise SkipRestOfInputTableException("StopIteration at self._total >= 4")
+                    raise SkipRestOfInputTableException("Stop at self._total >= 4")
 
             def terminate(self):
                 yield self._total,
