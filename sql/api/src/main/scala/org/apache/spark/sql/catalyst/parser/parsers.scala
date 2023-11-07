@@ -23,7 +23,7 @@ import org.antlr.v4.runtime.atn.PredictionMode
 import org.antlr.v4.runtime.misc.{Interval, ParseCancellationException}
 import org.antlr.v4.runtime.tree.TerminalNodeImpl
 
-import org.apache.spark.{QueryContext, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{QueryContext, SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, SQLQueryContext, WithOrigin}
@@ -268,17 +268,21 @@ class ParseException private(
   }
 
   def withCommand(cmd: String): ParseException = {
-    val (cls, params) =
-      if (errorClass == Some("PARSE_SYNTAX_ERROR") && cmd.trim().isEmpty) {
-        // PARSE_EMPTY_STATEMENT error class overrides the PARSE_SYNTAX_ERROR when cmd is empty
-        (Some("PARSE_EMPTY_STATEMENT"), Map.empty[String, String])
-      } else {
-        (errorClass, messageParameters)
-      }
-    new ParseException(Option(cmd), message, start, stop, cls, params, queryContext)
+    val cl = getErrorClass
+    val (newCl, params) = if (cl == "PARSE_SYNTAX_ERROR" && cmd.trim().isEmpty) {
+      // PARSE_EMPTY_STATEMENT error class overrides the PARSE_SYNTAX_ERROR when cmd is empty
+      ("PARSE_EMPTY_STATEMENT", Map.empty[String, String])
+    } else {
+      (cl, messageParameters)
+    }
+    new ParseException(Option(cmd), start, stop, newCl, params, queryContext)
   }
 
   override def getQueryContext: Array[QueryContext] = queryContext
+
+  override def getErrorClass: String = errorClass.getOrElse {
+    throw SparkException.internalError("ParseException shall have an error class.")
+  }
 }
 
 object ParseException {
