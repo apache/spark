@@ -38,8 +38,14 @@ if TYPE_CHECKING:
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.session import SparkSession
 
-__all__ = ["AnalyzeArgument", "AnalyzeResult", "PartitioningColumn", "OrderingColumn",
-           "SkipRestOfInputTableException", "UDTFRegistration"]
+__all__ = [
+    "AnalyzeArgument",
+    "AnalyzeResult",
+    "PartitioningColumn",
+    "OrderingColumn",
+    "SkipRestOfInputTableException",
+    "UDTFRegistration",
+]
 
 
 @dataclass(frozen=True)
@@ -124,6 +130,7 @@ class AnalyzeResult:
 # runs (if any).
 class SkipRestOfInputTableException(Exception):
     pass
+
 
 def _create_udtf(
     cls: Type,
