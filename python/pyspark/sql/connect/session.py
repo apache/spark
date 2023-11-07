@@ -185,10 +185,7 @@ class SparkSession:
                         "spark.remote",
                         "spark.master",
                     ]:
-                        try:
-                            session.conf.set(k, v)
-                        except Exception as e:
-                            warnings.warn(str(e))
+                        session.conf.set(k, v)
 
         def create(self) -> "SparkSession":
             has_channel_builder = self._channel_builder is not None
