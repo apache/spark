@@ -59,9 +59,9 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
   private def createArtifactManager(): Unit = {
     channel = InProcessChannelBuilder.forName(getClass.getName).directExecutor().build()
     retryPolicy = GrpcRetryHandler.RetryPolicy()
-    state = new SparkConnectStubState()
-    bstub = new CustomSparkConnectBlockingStub(channel, retryPolicy, state)
-    stub = new CustomSparkConnectStub(channel, retryPolicy, state)
+    state = new SparkConnectStubState(channel, retryPolicy)
+    bstub = new CustomSparkConnectBlockingStub(channel, state)
+    stub = new CustomSparkConnectStub(channel, state)
     artifactManager = new ArtifactManager(Configuration(), "", bstub, stub)
   }
 
