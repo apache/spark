@@ -329,7 +329,7 @@ def wrap_cogrouped_map_arrow_udf(f, return_type, argspec, runner_conf):
             key = tuple(c[0] for c in key_table.columns)
             result = f(key, left_value_table, right_value_table)
 
-        verify_arrow_table_schema(result, _assign_cols_by_name, expected_cols_and_types)
+        verify_arrow_result(result, _assign_cols_by_name, expected_cols_and_types)
 
         return result.to_batches()
 
@@ -360,13 +360,16 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
     return lambda kl, vl, kr, vr: [(wrapped(kl, vl, kr, vr), to_arrow_type(return_type))]
 
 
-def verify_arrow_table_schema(table, assign_cols_by_name, expected_cols_and_types):
+def verify_arrow_result(table, assign_cols_by_name, expected_cols_and_types):
     import pyarrow as pa
 
     if not isinstance(table, pa.Table):
-        raise TypeError(
-            "Return type of the user-defined function should be "
-            "pyarrow.Table, but is {}".format(type(table))
+        raise PySparkTypeError(
+            error_class="UDF_RETURN_TYPE",
+            message_parameters={
+                "expected": "pyarrow.Table",
+                "actual": type(table).__name__,
+            },
         )
 
     # the types of the fields have to be identical to return type
@@ -388,9 +391,12 @@ def verify_arrow_table_schema(table, assign_cols_by_name, expected_cols_and_type
                 missing = f" Missing: {', '.join(missing)}." if missing else ""
                 extra = f" Unexpected: {', '.join(extra)}." if extra else ""
 
-                raise RuntimeError(
-                    "Column names of the returned pyarrow.Table do not match specified schema."
-                    "{}{}".format(missing, extra)
+                raise PySparkRuntimeError(
+                    error_class="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDF",
+                    message_parameters={
+                        "missing": missing,
+                        "extra": extra,
+                    },
                 )
 
             column_types = [
@@ -415,13 +421,14 @@ def verify_arrow_table_schema(table, assign_cols_by_name, expected_cols_and_type
         ]
 
         if type_mismatch:
-            raise RuntimeError(
-                "Columns do not match in their data type: {}".format(
-                    ", ".join(
+            raise PySparkRuntimeError(
+                error_class="RESULT_TYPE_MISMATCH_FOR_ARROW_UDF",
+                message_parameters={
+                    "mismatch": ", ".join(
                         "column '{}' (expected {}, actual {})".format(name, expected, actual)
                         for name, expected, actual in type_mismatch
                     )
-                )
+                },
             )
 
 
@@ -444,7 +451,7 @@ def wrap_grouped_map_arrow_udf(f, return_type, argspec, runner_conf):
             key = tuple(c[0] for c in key_table.columns)
             result = f(key, value_table)
 
-        verify_arrow_table_schema(result, _assign_cols_by_name, expected_cols_and_types)
+        verify_arrow_result(result, _assign_cols_by_name, expected_cols_and_types)
 
         return result.to_batches()
 
