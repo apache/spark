@@ -123,7 +123,7 @@ class HiveSessionStateBuilder(
    */
   override protected def planner: SparkPlanner = {
     new SparkPlanner(session, experimentalMethods) with HiveStrategies {
-      override val sparkSession: SparkSession = session
+      override val sparkSession: SparkSession = this.session
 
       override def extraPlanningStrategies: Seq[Strategy] =
         super.extraPlanningStrategies ++ customPlanningStrategies ++

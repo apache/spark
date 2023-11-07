@@ -301,7 +301,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
 
     val error = intercept[SparkException] {
       session.range(1).foreach { v =>
-        SparkSession.builder.master("local").getOrCreate()
+        SparkSession.builder().master("local").getOrCreate()
         ()
       }
     }.getMessage()
@@ -313,7 +313,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     val session = SparkSession.builder().master("local-cluster[3, 1, 1024]").getOrCreate()
 
     session.range(1).foreach { v =>
-      SparkSession.builder.master("local")
+      SparkSession.builder().master("local")
         .config(EXECUTOR_ALLOW_SPARK_CONTEXT.key, true).getOrCreate().stop()
       ()
     }

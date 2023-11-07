@@ -2654,8 +2654,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             psdf._to_internal_pandas(), self.to_latex, pd.DataFrame.to_latex, args
         )
 
-    # TODO: enable doctests once we drop Spark 2.3.x (due to type coercion logic
-    #  when creating arrays)
     def transpose(self) -> "DataFrame":
         """
         Transpose index and columns.
@@ -2707,8 +2705,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         0     1     3
         1     2     4
 
-        >>> df1_transposed = df1.T.sort_index()  # doctest: +SKIP
-        >>> df1_transposed  # doctest: +SKIP
+        >>> df1_transposed = df1.T.sort_index()
+        >>> df1_transposed
               0  1
         col1  1  2
         col2  3  4
@@ -2720,7 +2718,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         col1    int64
         col2    int64
         dtype: object
-        >>> df1_transposed.dtypes  # doctest: +SKIP
+        >>> df1_transposed.dtypes
         0    int64
         1    int64
         dtype: object
@@ -2736,8 +2734,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         0    9.5     0   12
         1    8.0     0   22
 
-        >>> df2_transposed = df2.T.sort_index()  # doctest: +SKIP
-        >>> df2_transposed  # doctest: +SKIP
+        >>> df2_transposed = df2.T.sort_index()
+        >>> df2_transposed
                   0     1
         age    12.0  22.0
         kids    0.0   0.0
@@ -2752,7 +2750,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         age        int64
         dtype: object
 
-        >>> df2_transposed.dtypes  # doctest: +SKIP
+        >>> df2_transposed.dtypes
         0    float64
         1    float64
         dtype: object
@@ -5190,7 +5188,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         read_delta
         DataFrame.to_parquet
         DataFrame.to_table
-        DataFrame.to_spark_io
 
         Examples
         --------
@@ -5280,7 +5277,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         read_parquet
         DataFrame.to_delta
         DataFrame.to_table
-        DataFrame.to_spark_io
 
         Examples
         --------
@@ -5363,7 +5359,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         DataFrame.to_delta
         DataFrame.to_parquet
         DataFrame.to_table
-        DataFrame.to_spark_io
 
         Examples
         --------
@@ -5407,26 +5402,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             index_col=index_col,
             **options,
         )
-
-    def to_spark_io(
-        self,
-        path: Optional[str] = None,
-        format: Optional[str] = None,
-        mode: str = "overwrite",
-        partition_cols: Optional[Union[str, List[str]]] = None,
-        index_col: Optional[Union[str, List[str]]] = None,
-        **options: "OptionalPrimitiveType",
-    ) -> None:
-        """An alias for :func:`DataFrame.spark.to_spark_io`.
-        See :meth:`pyspark.pandas.spark.accessors.SparkFrameMethods.to_spark_io`.
-
-        .. deprecated:: 3.2.0
-            Use :func:`DataFrame.spark.to_spark_io` instead.
-        """
-        warnings.warn("Deprecated in 3.2, Use DataFrame.spark.to_spark_io instead.", FutureWarning)
-        return self.spark.to_spark_io(path, format, mode, partition_cols, index_col, **options)
-
-    to_spark_io.__doc__ = SparkFrameMethods.to_spark_io.__doc__
 
     def to_spark(self, index_col: Optional[Union[str, List[str]]] = None) -> PySparkDataFrame:
         if index_col is None:

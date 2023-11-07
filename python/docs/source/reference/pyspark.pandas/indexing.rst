@@ -36,7 +36,6 @@ Properties
 .. autosummary::
    :toctree: api/
 
-   Index.is_monotonic
    Index.is_monotonic_increasing
    Index.is_monotonic_decreasing
    Index.is_unique
@@ -44,7 +43,6 @@ Properties
    Index.hasnans
    Index.dtype
    Index.inferred_type
-   Index.is_all_dates
    Index.shape
    Index.name
    Index.names
@@ -220,7 +218,6 @@ MultiIndex Properties
    MultiIndex.has_duplicates
    MultiIndex.hasnans
    MultiIndex.inferred_type
-   MultiIndex.is_all_dates
    MultiIndex.shape
    MultiIndex.names
    MultiIndex.ndim

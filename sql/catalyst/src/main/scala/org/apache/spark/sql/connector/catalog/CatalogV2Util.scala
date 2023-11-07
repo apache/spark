@@ -215,7 +215,7 @@ private[sql] object CatalogV2Util {
             if (update.newDefaultValue().nonEmpty) {
               Some(field.withCurrentDefaultValue(update.newDefaultValue()))
             } else {
-              Some(field.clearCurrentDefaultValue)
+              Some(field.clearCurrentDefaultValue())
             })
 
         case delete: DeleteColumn =>

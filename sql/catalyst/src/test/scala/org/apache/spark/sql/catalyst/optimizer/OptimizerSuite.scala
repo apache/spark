@@ -104,8 +104,8 @@ class OptimizerSuite extends PlanTest {
   }
 
   test("Optimizer per rule validation catches invalid grouping types") {
-    val analyzed = LocalRelation('a.map(IntegerType, IntegerType))
-      .select('a).analyze
+    val analyzed = LocalRelation(Symbol("a").map(IntegerType, IntegerType))
+      .select(Symbol("a")).analyze
 
     /**
      * A dummy optimizer rule for testing that invalid grouping types are not allowed.
@@ -128,8 +128,8 @@ class OptimizerSuite extends PlanTest {
   }
 
   test("Optimizer per rule validation catches invalid aggregation expressions") {
-    val analyzed = LocalRelation('a.long, 'b.long)
-      .select('a, 'b).analyze
+    val analyzed = LocalRelation(Symbol("a").long, Symbol("b").long)
+      .select(Symbol("a"), Symbol("b")).analyze
 
     /**
      * A dummy optimizer rule for testing that a non grouping key reference

@@ -28,8 +28,8 @@ class SparkConnectReleaseExecuteHandler(
     extends Logging {
 
   def handle(v: proto.ReleaseExecuteRequest): Unit = {
-    val sessionHolder = SparkConnectService
-      .getIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
+    val sessionHolder = SparkConnectService.sessionManager
+      .getIsolatedSession(SessionKey(v.getUserContext.getUserId, v.getSessionId))
 
     val responseBuilder = proto.ReleaseExecuteResponse
       .newBuilder()

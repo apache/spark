@@ -1252,7 +1252,8 @@ private[spark] class BlockManager(
             new EncryptedBlockData(file, blockSize, conf, key))
 
         case _ =>
-          val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
+          val transportConf = SparkTransportConf.fromSparkConf(
+            conf, "shuffle", sslOptions = Some(securityManager.getRpcSSLOptions()))
           new FileSegmentManagedBuffer(transportConf, file, 0, file.length)
       }
       Some(managedBuffer)
@@ -1315,7 +1316,7 @@ private[spark] class BlockManager(
     val taskAttemptId = taskContext.map(_.taskAttemptId())
     // SPARK-27666. When a task completes, Spark automatically releases all the blocks locked
     // by this task. We should not release any locks for a task that is already completed.
-    if (taskContext.isDefined && taskContext.get.isCompleted) {
+    if (taskContext.isDefined && taskContext.get.isCompleted()) {
       logWarning(s"Task ${taskAttemptId.get} already completed, not releasing lock for $blockId")
     } else {
       blockInfoManager.unlock(blockId, taskAttemptId)

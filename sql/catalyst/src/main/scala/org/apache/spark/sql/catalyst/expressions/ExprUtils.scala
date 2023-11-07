@@ -65,7 +65,7 @@ object ExprUtils extends QueryErrorsBase {
     case m: CreateMap =>
       throw QueryCompilationErrors.keyValueInMapNotStringError(m)
     case _ =>
-      throw QueryCompilationErrors.nonMapFunctionNotAllowedError
+      throw QueryCompilationErrors.nonMapFunctionNotAllowedError()
   }
 
   /**
@@ -78,7 +78,7 @@ object ExprUtils extends QueryErrorsBase {
     schema.getFieldIndex(columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
       val f = schema(corruptFieldIndex)
       if (f.dataType != StringType || !f.nullable) {
-        throw QueryCompilationErrors.invalidFieldTypeForCorruptRecordError
+        throw QueryCompilationErrors.invalidFieldTypeForCorruptRecordError()
       }
     }
   }
@@ -93,7 +93,7 @@ object ExprUtils extends QueryErrorsBase {
         val pos = new ParsePosition(0)
         val result = decimalFormat.parse(s, pos).asInstanceOf[java.math.BigDecimal]
         if (pos.getIndex() != s.length() || pos.getErrorIndex() != -1) {
-          throw QueryExecutionErrors.cannotParseDecimalError
+          throw QueryExecutionErrors.cannotParseDecimalError()
         } else {
           result
         }

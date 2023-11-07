@@ -48,7 +48,7 @@ class ElementwiseProductSuite extends SparkFunSuite with MLlibTestSparkContext {
     val data2 = sparseData.map(transformer.transform)
     val data2RDD = transformer.transform(dataRDD)
 
-    assert((sparseData, data2, data2RDD.collect()).zipped.forall {
+    assert(sparseData.lazyZip(data2).lazyZip(data2RDD.collect()).forall {
       case (v1: DenseVector, v2: DenseVector, v3: DenseVector) => true
       case (v1: SparseVector, v2: SparseVector, v3: SparseVector) => true
       case _ => false

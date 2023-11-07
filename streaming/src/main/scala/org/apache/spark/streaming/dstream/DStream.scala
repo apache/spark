@@ -311,7 +311,7 @@ abstract class DStream[T: ClassTag] (
   /** Checks whether the 'time' is valid wrt slideDuration for generating RDD */
   private[streaming] def isTimeValid(time: Time): Boolean = {
     if (!isInitialized) {
-      throw new SparkException (this + " has not been initialized")
+      throw new SparkException (this.toString + " has not been initialized")
     } else if (time <= zeroTime || ! (time - zeroTime).isMultipleOf(slideDuration)) {
       logInfo(s"Time $time is invalid as zeroTime is $zeroTime" +
         s" , slideDuration is $slideDuration and difference is ${time - zeroTime}")
@@ -878,7 +878,7 @@ abstract class DStream[T: ClassTag] (
    */
   def slice(fromTime: Time, toTime: Time): Seq[RDD[T]] = ssc.withScope {
     if (!isInitialized) {
-      throw new SparkException(this + " has not been initialized")
+      throw new SparkException(this.toString + " has not been initialized")
     }
 
     val alignedToTime = if ((toTime - zeroTime).isMultipleOf(slideDuration)) {

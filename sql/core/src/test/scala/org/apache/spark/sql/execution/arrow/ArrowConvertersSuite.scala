@@ -550,7 +550,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val upperCase = Seq("A", "B", "C")
     val lowerCase = Seq("a", "b", "c")
     val nullStr = Seq("ab", "CDE", null)
-    val df = (upperCase, lowerCase, nullStr).zipped.toList
+    val df = upperCase.lazyZip(lowerCase).lazyZip(nullStr).toList
       .toDF("upper_case", "lower_case", "null_str")
 
     collectAndValidate(df, json, "stringData.json")

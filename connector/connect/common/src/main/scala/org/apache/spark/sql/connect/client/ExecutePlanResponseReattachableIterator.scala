@@ -108,7 +108,7 @@ class ExecutePlanResponseReattachableIterator(
 
   override def next(): proto.ExecutePlanResponse = synchronized {
     // hasNext will trigger reattach in case the stream completed without resultComplete
-    if (!hasNext()) {
+    if (!hasNext) {
       throw new java.util.NoSuchElementException()
     }
 
@@ -133,7 +133,7 @@ class ExecutePlanResponseReattachableIterator(
     }
   }
 
-  override def hasNext(): Boolean = synchronized {
+  override def hasNext: Boolean = synchronized {
     if (resultComplete) {
       // After response complete response
       return false

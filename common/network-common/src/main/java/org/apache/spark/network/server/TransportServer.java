@@ -140,7 +140,7 @@ public class TransportServer implements Closeable {
         for (TransportServerBootstrap bootstrap : bootstraps) {
           rpcHandler = bootstrap.doBootstrap(ch, rpcHandler);
         }
-        context.initializePipeline(ch, rpcHandler);
+        context.initializePipeline(ch, rpcHandler, false);
       }
     });
 

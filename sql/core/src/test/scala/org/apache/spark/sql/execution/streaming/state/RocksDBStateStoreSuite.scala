@@ -75,7 +75,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
   test("RocksDB confs are passed correctly from SparkSession to db instance") {
     val sparkConf = new SparkConf().setMaster("local").setAppName(this.getClass.getSimpleName)
-    withSparkSession(SparkSession.builder.config(sparkConf).getOrCreate()) { spark =>
+    withSparkSession(SparkSession.builder().config(sparkConf).getOrCreate()) { spark =>
       // Set the session confs that should be passed into RocksDB
       val testConfs = Seq(
         ("spark.sql.streaming.stateStore.providerClass",
@@ -87,6 +87,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         (RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".maxWriteBufferNumber", "3"),
         (RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".writeBufferSizeMB", "16"),
         (RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".allowFAllocate", "false"),
+        (RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".compression", "zstd"),
         (SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION.key, "4")
       )
       testConfs.foreach { case (k, v) => spark.conf.set(k, v) }
@@ -117,6 +118,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       assert(rocksDBConfInTask.maxWriteBufferNumber == 3)
       assert(rocksDBConfInTask.writeBufferSizeMB == 16L)
       assert(rocksDBConfInTask.allowFAllocate == false)
+      assert(rocksDBConfInTask.compression == "zstd")
     }
   }
 

@@ -1020,6 +1020,13 @@ class BaseUDFTestsMixin(object):
         with self.assertRaisesRegex(PythonException, "StopIteration"):
             self.spark.range(10).select(test_udf(col("id"))).show()
 
+    def test_python_udf_segfault(self):
+        with self.sql_conf({"spark.sql.execution.pyspark.udf.faulthandler.enabled": True}):
+            with self.assertRaisesRegex(Exception, "Segmentation fault"):
+                import ctypes
+
+                self.spark.range(1).select(udf(lambda x: ctypes.string_at(0))("id")).collect()
+
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
     @classmethod

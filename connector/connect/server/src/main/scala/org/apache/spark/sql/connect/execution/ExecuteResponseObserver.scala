@@ -183,10 +183,10 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
       throw new SparkSQLException(
         errorClass = "INVALID_CURSOR.POSITION_NOT_AVAILABLE",
         messageParameters = Map("index" -> index.toString, "responseId" -> responseId))
-    } else if (getLastResponseIndex.exists(index > _)) {
+    } else if (getLastResponseIndex().exists(index > _)) {
       // If index > lastIndex, it's out of bounds. This is an internal error.
       throw new IllegalStateException(
-        s"Cursor position $index is beyond last index $getLastResponseIndex.")
+        s"Cursor position $index is beyond last index ${getLastResponseIndex()}.")
     }
     ret
   }

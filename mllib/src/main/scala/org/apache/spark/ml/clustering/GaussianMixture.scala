@@ -145,7 +145,7 @@ class GaussianMixtureModel private[ml] (
       this.logWarning(s"$uid: GaussianMixtureModel.transform() does nothing" +
         " because no output columns were set.")
     }
-    outputData.toDF
+    outputData.toDF()
   }
 
   @Since("2.0.0")
@@ -441,7 +441,7 @@ class GaussianMixture @Since("2.0.0") (
       instances.mapPartitions { iter =>
         if (iter.nonEmpty) {
           val agg = new ExpectationAggregator(numFeatures, bcWeights, bcGaussians)
-          while (iter.hasNext) { agg.add(iter.next) }
+          while (iter.hasNext) { agg.add(iter.next()) }
           // sum of weights in this partition
           val ws = agg.weights.sum
           if (iteration == 0) weightSumAccum.add(ws)

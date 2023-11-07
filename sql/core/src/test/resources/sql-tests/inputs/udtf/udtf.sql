@@ -104,6 +104,18 @@ SELECT * FROM
     VALUES (0), (1) AS t(col)
     JOIN LATERAL
     UDTFInvalidOrderByWithoutPartitionBy(TABLE(t2) PARTITION BY partition_col);
+-- The following UDTF calls should fail because the UDTF's 'eval' or 'terminate' method returns None
+-- to a non-nullable column, either directly or within an array/struct/map subfield.
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnScalarType(TABLE(t2));
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnArrayType(TABLE(t2));
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnArrayElementType(TABLE(t2));
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnStructType(TABLE(t2));
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnMapType(TABLE(t2));
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnScalarType(TABLE(t2));
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnArrayType(TABLE(t2));
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnArrayElementType(TABLE(t2));
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnStructType(TABLE(t2));
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnMapType(TABLE(t2));
 
 -- cleanup
 DROP VIEW t1;

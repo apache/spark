@@ -373,7 +373,10 @@ class DataFrameSetOperationsSuite extends QueryTest
       errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
       parameters = Map(
         "colName" -> "`m`",
-        "dataType" -> "\"MAP<STRING, BIGINT>\"")
+        "dataType" -> "\"MAP<STRING, BIGINT>\""),
+      context = ExpectedContext(
+        fragment = "distinct",
+        callSitePattern = getCurrentClassCallSitePattern)
     )
     withTempView("v") {
       df.createOrReplaceTempView("v")
@@ -633,7 +636,7 @@ class DataFrameSetOperationsSuite extends QueryTest
         (1, 1)
       )).toDF("a", "b").withColumn("c", newCol)
 
-      val df2 = df1.union(df1).withColumn("d", spark_partition_id).filter(filter)
+      val df2 = df1.union(df1).withColumn("d", spark_partition_id()).filter(filter)
       checkAnswer(df2, result)
     }
 

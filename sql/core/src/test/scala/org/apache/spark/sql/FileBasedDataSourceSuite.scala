@@ -284,7 +284,7 @@ class FileBasedDataSourceSuite extends QueryTest
       val textDir = new File(dir, "text").getCanonicalPath
       checkError(
         exception = intercept[AnalysisException] {
-          Seq(1).toDF.write.text(textDir)
+          Seq(1).toDF().write.text(textDir)
         },
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
@@ -295,7 +295,7 @@ class FileBasedDataSourceSuite extends QueryTest
 
       checkError(
         exception = intercept[AnalysisException] {
-          Seq(1.2).toDF.write.text(textDir)
+          Seq(1.2).toDF().write.text(textDir)
         },
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
@@ -306,7 +306,7 @@ class FileBasedDataSourceSuite extends QueryTest
 
       checkError(
         exception = intercept[AnalysisException] {
-          Seq(true).toDF.write.text(textDir)
+          Seq(true).toDF().write.text(textDir)
         },
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
@@ -350,7 +350,7 @@ class FileBasedDataSourceSuite extends QueryTest
       )
 
       // read path
-      Seq("aaa").toDF.write.mode("overwrite").text(textDir)
+      Seq("aaa").toDF().write.mode("overwrite").text(textDir)
       checkError(
         exception = intercept[AnalysisException] {
           val schema = StructType(StructField("a", IntegerType, true) :: Nil)
@@ -802,7 +802,7 @@ class FileBasedDataSourceSuite extends QueryTest
         withTempPath { dir =>
           val path = dir.getCanonicalPath
           spark.range(10).write.orc(path)
-          val row = spark.read.orc(path).select(input_file_name).first()
+          val row = spark.read.orc(path).select(input_file_name()).first()
           assert(row.getString(0).contains(path))
         }
       }

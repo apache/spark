@@ -255,7 +255,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
   private def getFieldValue(obj: AnyRef, fieldName: String): Any = {
     val field: Field = obj.getClass().getDeclaredField(fieldName)
-    if (field.isAccessible()) {
+    if (field.canAccess(obj)) {
       field.get(obj)
     } else {
       field.setAccessible(true)
@@ -352,7 +352,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
   def testOffsetBytes(isCompressed: Boolean): Unit = {
     withTempDir { tmpDir2 =>
       val suffix = getSuffix(isCompressed)
-      val f1Path = tmpDir2 + "/f1" + suffix
+      val f1Path = s"$tmpDir2/f1$suffix"
       writeLogFile(f1Path, "1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(UTF_8))
       val f1Length = Utils.getFileLength(new File(f1Path), workerConf)
 
@@ -1253,7 +1253,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(isErrorOccurred)
     // if the try, catch and finally blocks don't throw exceptions
     Utils.tryWithSafeFinallyAndFailureCallbacks {}(catchBlock = {}, finallyBlock = {})
-    TaskContext.unset
+    TaskContext.unset()
   }
 
   test("load extensions") {

@@ -72,19 +72,11 @@ public final class Platform {
         cls.getDeclaredConstructor(Long.TYPE, Integer.TYPE) :
         cls.getDeclaredConstructor(Long.TYPE, Long.TYPE);
       Field cleanerField = cls.getDeclaredField("cleaner");
-      try {
-        constructor.setAccessible(true);
-        cleanerField.setAccessible(true);
-      } catch (RuntimeException re) {
-        // This is a Java 9+ exception, so needs to be handled without importing it
-        if ("InaccessibleObjectException".equals(re.getClass().getSimpleName())) {
-          // Continue, but the constructor/field are not available
-          // See comment below for more context
-          constructor = null;
-          cleanerField = null;
-        } else {
-          throw re;
-        }
+      if (!constructor.trySetAccessible()) {
+        constructor = null;
+      }
+      if (!cleanerField.trySetAccessible()) {
+        cleanerField = null;
       }
       // Have to set these values no matter what:
       DBB_CONSTRUCTOR = constructor;

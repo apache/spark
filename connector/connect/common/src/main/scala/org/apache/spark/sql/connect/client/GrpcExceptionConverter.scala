@@ -27,7 +27,7 @@ import io.grpc.protobuf.StatusProto
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods
 
-import org.apache.spark.{QueryContext, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{QueryContext, QueryContextType, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.connect.proto.{FetchErrorDetailsRequest, FetchErrorDetailsResponse, UserContext}
 import org.apache.spark.connect.proto.SparkConnectServiceGrpc.SparkConnectServiceBlockingStub
 import org.apache.spark.internal.Logging
@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, 
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.streaming.StreamingQueryException
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * GrpcExceptionConverter handles the conversion of StatusRuntimeExceptions into Spark exceptions.
@@ -162,9 +163,9 @@ private[client] class GrpcExceptionConverter(grpcStub: SparkConnectServiceBlocki
   }
 }
 
-private object GrpcExceptionConverter {
+private[client] object GrpcExceptionConverter {
 
-  private case class ErrorParams(
+  private[client] case class ErrorParams(
       message: String,
       cause: Option[Throwable],
       // errorClass will only be set if the error is both enriched and SparkThrowable.
@@ -180,7 +181,7 @@ private object GrpcExceptionConverter {
     (className, throwableCtr)
   }
 
-  private val errorFactory = Map(
+  private[client] val errorFactory = Map(
     errorConstructor(params =>
       new StreamingQueryException(
         params.message,
@@ -203,23 +204,84 @@ private object GrpcExceptionConverter {
         errorClass = params.errorClass,
         messageParameters = params.messageParameters,
         context = params.queryContext)),
-    errorConstructor(params => new NamespaceAlreadyExistsException(params.message)),
-    errorConstructor(params => new TableAlreadyExistsException(params.message, params.cause)),
-    errorConstructor(params => new TempTableAlreadyExistsException(params.message, params.cause)),
-    errorConstructor(params => new NoSuchDatabaseException(params.message, params.cause)),
-    errorConstructor(params => new NoSuchTableException(params.message, params.cause)),
+    errorConstructor(params =>
+      new NamespaceAlreadyExistsException(
+        params.message,
+        params.errorClass,
+        params.messageParameters)),
+    errorConstructor(params =>
+      new TableAlreadyExistsException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters)),
+    errorConstructor(params =>
+      new TempTableAlreadyExistsException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters)),
+    errorConstructor(params =>
+      new NoSuchDatabaseException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters)),
+    errorConstructor(params =>
+      new NoSuchTableException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters)),
     errorConstructor[NumberFormatException](params =>
-      new SparkNumberFormatException(params.message)),
+      new SparkNumberFormatException(
+        params.message,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext)),
     errorConstructor[IllegalArgumentException](params =>
-      new SparkIllegalArgumentException(params.message, params.cause)),
-    errorConstructor[ArithmeticException](params => new SparkArithmeticException(params.message)),
+      new SparkIllegalArgumentException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext)),
+    errorConstructor[ArithmeticException](params =>
+      new SparkArithmeticException(
+        params.message,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext)),
     errorConstructor[UnsupportedOperationException](params =>
-      new SparkUnsupportedOperationException(params.message)),
+      new SparkUnsupportedOperationException(
+        params.message,
+        params.errorClass,
+        params.messageParameters)),
     errorConstructor[ArrayIndexOutOfBoundsException](params =>
-      new SparkArrayIndexOutOfBoundsException(params.message)),
-    errorConstructor[DateTimeException](params => new SparkDateTimeException(params.message)),
-    errorConstructor(params => new SparkRuntimeException(params.message, params.cause)),
-    errorConstructor(params => new SparkUpgradeException(params.message, params.cause)),
+      new SparkArrayIndexOutOfBoundsException(
+        params.message,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext)),
+    errorConstructor[DateTimeException](params =>
+      new SparkDateTimeException(
+        params.message,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext)),
+    errorConstructor(params =>
+      new SparkRuntimeException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext)),
+    errorConstructor(params =>
+      new SparkUpgradeException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters)),
     errorConstructor(params =>
       new SparkException(
         message = params.message,
@@ -262,15 +324,18 @@ private object GrpcExceptionConverter {
 
     val queryContext = error.getSparkThrowable.getQueryContextsList.asScala.map { queryCtx =>
       new QueryContext {
+        override def contextType(): QueryContextType = queryCtx.getContextType match {
+          case FetchErrorDetailsResponse.QueryContext.ContextType.DATAFRAME =>
+            QueryContextType.DataFrame
+          case _ => QueryContextType.SQL
+        }
         override def objectType(): String = queryCtx.getObjectType
-
         override def objectName(): String = queryCtx.getObjectName
-
         override def startIndex(): Int = queryCtx.getStartIndex
-
         override def stopIndex(): Int = queryCtx.getStopIndex
-
         override def fragment(): String = queryCtx.getFragment
+        override def callSite(): String = queryCtx.getCallSite
+        override def summary(): String = queryCtx.getSummary
       }
     }.toArray
 
@@ -310,7 +375,7 @@ private object GrpcExceptionConverter {
         FetchErrorDetailsResponse.Error
           .newBuilder()
           .setMessage(message)
-          .addAllErrorTypeHierarchy(classes.toIterable.asJava)
+          .addAllErrorTypeHierarchy(classes.toImmutableArraySeq.asJava)
           .build()))
   }
 }

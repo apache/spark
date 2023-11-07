@@ -36,7 +36,7 @@ import org.apache.spark.sql.SparkSession
 object OneVsRestExample {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName(s"OneVsRestExample")
       .getOrCreate()
 

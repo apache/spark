@@ -66,7 +66,7 @@ abstract class EventLogFileWritersSuite extends SparkFunSuite with LocalSparkCon
     conf.set(EVENT_LOG_DIR, testDir.toString)
 
     // default config
-    buildWriterAndVerify(conf, classOf[SingleEventLogFileWriter])
+    buildWriterAndVerify(conf, classOf[RollingEventLogFilesWriter])
 
     conf.set(EVENT_LOG_ENABLE_ROLLING, true)
     buildWriterAndVerify(conf, classOf[RollingEventLogFilesWriter])
@@ -176,7 +176,7 @@ class SingleEventLogFileWriterSuite extends EventLogFileWritersSuite {
       baseDirUri, "app1", None, None))
     // with compression
     assert(s"${baseDirUri.toString}/app1.lzf" ===
-      SingleEventLogFileWriter.getLogPath(baseDirUri, "app1", None, Some("lzf")))
+      SingleEventLogFileWriter.getLogPath(baseDirUri, "app1", None, Some(CompressionCodec.LZF)))
     // illegal characters in app ID
     assert(s"${baseDirUri.toString}/a-fine-mind_dollar_bills__1" ===
       SingleEventLogFileWriter.getLogPath(baseDirUri,
@@ -184,7 +184,7 @@ class SingleEventLogFileWriterSuite extends EventLogFileWritersSuite {
     // illegal characters in app ID with compression
     assert(s"${baseDirUri.toString}/a-fine-mind_dollar_bills__1.lz4" ===
       SingleEventLogFileWriter.getLogPath(baseDirUri,
-        "a fine:mind$dollar{bills}.1", None, Some("lz4")))
+        "a fine:mind$dollar{bills}.1", None, Some(CompressionCodec.LZ4)))
   }
 
   override protected def createWriter(
@@ -239,7 +239,7 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
     // with compression
     assert(s"$logDir/${EVENT_LOG_FILE_NAME_PREFIX}1_${appId}.lzf" ===
       RollingEventLogFilesWriter.getEventLogFilePath(logDir, appId, appAttemptId,
-        1, Some("lzf")).toString)
+        1, Some(CompressionCodec.LZF)).toString)
 
     // illegal characters in app ID
     assert(s"${baseDirUri.toString}/${EVENT_LOG_DIR_NAME_PREFIX}a-fine-mind_dollar_bills__1" ===

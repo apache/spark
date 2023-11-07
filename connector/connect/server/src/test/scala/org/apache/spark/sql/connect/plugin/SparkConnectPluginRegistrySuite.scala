@@ -226,7 +226,7 @@ class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConne
     }
   }
 
-  test("Emtpy registries are really empty and work") {
+  test("Empty registries are really empty and work") {
     assert(SparkConnectPluginRegistry.loadRelationPlugins().isEmpty)
     assert(SparkConnectPluginRegistry.loadExpressionPlugins().isEmpty)
     assert(SparkConnectPluginRegistry.loadCommandPlugins().isEmpty)

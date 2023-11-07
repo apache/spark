@@ -26,7 +26,7 @@ import org.apache.spark.sql.connector.catalog.Identifier
  * Thrown by a catalog when an item cannot be found. The analyzer will rethrow the exception
  * as an [[org.apache.spark.sql.AnalysisException]] with the correct position information.
  */
-class NoSuchDatabaseException private(
+class NoSuchDatabaseException private[sql](
   message: String,
   cause: Option[Throwable],
   errorClass: Option[String],
@@ -100,7 +100,7 @@ class NoSuchNamespaceException private(
 }
 
 // any changes to this class should be backward compatible as it may be used by external connectors
-class NoSuchTableException private(
+class NoSuchTableException private[sql](
     message: String,
     cause: Option[Throwable],
     errorClass: Option[String],

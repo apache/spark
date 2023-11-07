@@ -61,7 +61,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   val metadataPath = new Path(path)
 
   protected val fileManager =
-    CheckpointFileManager.create(metadataPath, sparkSession.sessionState.newHadoopConf)
+    CheckpointFileManager.create(metadataPath, sparkSession.sessionState.newHadoopConf())
 
   if (!fileManager.exists(metadataPath)) {
     fileManager.mkdirs(metadataPath)

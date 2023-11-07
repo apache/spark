@@ -213,7 +213,7 @@ class DecommissionWorkerSuite
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
     val executorIdToWorkerInfo = getExecutorToWorkerAssignments
-    val executorToDecom = executorIdToWorkerInfo.keysIterator.next
+    val executorToDecom = executorIdToWorkerInfo.keysIterator.next()
 
     // The task code below cannot call executorIdToWorkerInfo, so we need to pre-compute
     // the worker to decom to force it to be serialized into the task.
@@ -249,7 +249,7 @@ class DecommissionWorkerSuite
       }, preservesPartitioning = true)
         .repartition(1).mapPartitions(iter => {
         val context = TaskContext.get()
-        if (context.attemptNumber == 0 && context.stageAttemptNumber() == 0) {
+        if (context.attemptNumber() == 0 && context.stageAttemptNumber() == 0) {
           // Wait a bit for the decommissioning to be triggered in the listener
           Thread.sleep(5000)
           // MapIndex is explicitly -1 to force the entire host to be decommissioned

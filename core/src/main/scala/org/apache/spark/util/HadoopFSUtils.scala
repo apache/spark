@@ -91,7 +91,7 @@ private[spark] object HadoopFSUtils extends Logging {
       val remoteIter = path.getFileSystem(hadoopConf).listFiles(path, true)
       val statues = new Iterator[LocatedFileStatus]() {
         def next(): LocatedFileStatus = remoteIter.next
-        def hasNext(): Boolean = remoteIter.hasNext
+        def hasNext: Boolean = remoteIter.hasNext
       }.filterNot(status => shouldFilterOutPath(status.getPath.toString.substring(prefixLength)))
         .filter(f => filter.accept(f.getPath))
         .toArray
@@ -209,7 +209,7 @@ private[spark] object HadoopFSUtils extends Logging {
           val remoteIter = fs.listLocatedStatus(path)
           new Iterator[LocatedFileStatus]() {
             def next(): LocatedFileStatus = remoteIter.next
-            def hasNext(): Boolean = remoteIter.hasNext
+            def hasNext: Boolean = remoteIter.hasNext
           }.toArray
         case _ => fs.listStatus(path)
       }

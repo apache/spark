@@ -164,7 +164,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       .resource("gpu", 2, "myscript")
       .resource("myCustomResource", amount = Int.MaxValue + 1L, discoveryScript = "myscript2")
     rprofBuilder.require(taskReq).require(execReq)
-    val resourceProfile = rprofBuilder.build
+    val resourceProfile = rprofBuilder.build()
     resourceProfile.setResourceProfileId(21)
     val resourceProfileAdded = SparkListenerResourceProfileAdded(resourceProfile)
     testEvent(stageSubmitted, stageSubmittedJsonString)
@@ -626,7 +626,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     val expectedEvent: SparkListenerEnvironmentUpdate = {
       val e = JsonProtocol.environmentUpdateFromJson(environmentUpdateJsonString)
       e.copy(environmentDetails =
-        e.environmentDetails + ("Metrics Properties" -> Seq.empty[(String, String)]))
+        e.environmentDetails ++ Map("Metrics Properties" -> Seq.empty[(String, String)]))
     }
     val oldEnvironmentUpdateJson = environmentUpdateJsonString
       .removeField("Metrics Properties")

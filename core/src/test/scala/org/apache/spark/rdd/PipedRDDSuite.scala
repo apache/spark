@@ -124,7 +124,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
       (f: String => Unit) => {
         bl.value.foreach(f); f("\u0001")
       },
-      (i: Int, f: String => Unit) => f(i + "_"))
+      (i: Int, f: String => Unit) => f(s"${i}_"))
 
     val c = piped.collect()
 
@@ -164,7 +164,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
   test("pipe with empty partition") {
     val data = sc.parallelize(Seq("foo", "bing"), 8)
     val piped = data.pipe("wc -c")
-    assert(piped.count == 8)
+    assert(piped.count() == 8)
     val charCounts = piped.map(_.trim.toInt).collect().toSet
     val expected = if (Utils.isWindows) {
       // Note that newline character on Windows is \r\n which are two.

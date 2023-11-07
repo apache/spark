@@ -219,8 +219,8 @@ object CheckpointFileManager extends Logging {
   }
 
   private def generateTempPath(path: Path): Path = {
-    val tc = org.apache.spark.TaskContext.get
-    val tid = if (tc != null) ".TID" + tc.taskAttemptId else ""
+    val tc = org.apache.spark.TaskContext.get()
+    val tid = if (tc != null) ".TID" + tc.taskAttemptId() else ""
     new Path(path.getParent, s".${path.getName}.${UUID.randomUUID}${tid}.tmp")
   }
 }

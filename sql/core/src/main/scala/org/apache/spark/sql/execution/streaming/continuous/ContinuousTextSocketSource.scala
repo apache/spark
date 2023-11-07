@@ -56,8 +56,8 @@ class TextSocketContinuousStream(
 
   implicit val defaultFormats: DefaultFormats = DefaultFormats
 
-  private val encoder = ExpressionEncoder.tuple(ExpressionEncoder[String],
-    ExpressionEncoder[Timestamp])
+  private val encoder = ExpressionEncoder.tuple(ExpressionEncoder[String](),
+    ExpressionEncoder[Timestamp]())
 
   @GuardedBy("this")
   private var socket: Socket = _
@@ -144,7 +144,7 @@ class TextSocketContinuousStream(
           " for partition " + partition + ". Max valid offset: " + max)
         }
         val n = offset - startOffset.offsets(partition)
-        buckets(partition).trimStart(n)
+        buckets(partition).dropInPlace(n)
     }
     startOffset = endOffset
     recordEndpoint.setStartOffsets(startOffset.offsets)

@@ -316,7 +316,7 @@ class DefaultTimestampFormatter(
  */
 class FractionTimestampFormatter(zoneId: ZoneId)
   extends Iso8601TimestampFormatter(
-    TimestampFormatter.defaultPattern,
+    TimestampFormatter.defaultPattern(),
     zoneId,
     TimestampFormatter.defaultLocale,
     LegacyDateFormats.FAST_DATE_FORMAT,
@@ -510,7 +510,7 @@ object TimestampFormatter {
       isParsing: Boolean,
       forTimestampNTZ: Boolean = false): TimestampFormatter = {
     val formatter = if (SqlApiConf.get.legacyTimeParserPolicy == LEGACY && !forTimestampNTZ) {
-      getLegacyFormatter(format.getOrElse(defaultPattern), zoneId, locale, legacyFormat)
+      getLegacyFormatter(format.getOrElse(defaultPattern()), zoneId, locale, legacyFormat)
     } else {
       format
         .map(new Iso8601TimestampFormatter(_, zoneId, locale, legacyFormat, isParsing))

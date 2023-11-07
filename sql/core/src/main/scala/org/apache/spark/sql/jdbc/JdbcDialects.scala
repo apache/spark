@@ -194,6 +194,24 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   /**
+   * Returns an Insert SQL statement template for inserting a row into the target table via JDBC
+   * conn. Use "?" as placeholder for each value to be inserted.
+   * E.g. `INSERT INTO t ("name", "age", "gender") VALUES (?, ?, ?)`
+   *
+   * @param table The name of the table.
+   * @param fields The fields of the row that will be inserted.
+   * @return The SQL query to use for insert data into table.
+   */
+  @Since("4.0.0")
+  def insertIntoTable(
+      table: String,
+      fields: Array[StructField]): String = {
+    val placeholders = fields.map(_ => "?").mkString(",")
+    val columns = fields.map(x => quoteIdentifier(x.name)).mkString(",")
+    s"INSERT INTO $table ($columns) VALUES ($placeholders)"
+  }
+
+  /**
    * Get the SQL query that should be used to find if the given table exists. Dialects can
    * override this method to return a query that works best in a particular database.
    * @param table  The name of the table.
@@ -225,7 +243,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   @Since("2.3.0")
   def getTruncateQuery(table: String): String = {
-    getTruncateQuery(table, isCascadingTruncateTable)
+    getTruncateQuery(table, isCascadingTruncateTable())
   }
 
   /**
@@ -239,7 +257,7 @@ abstract class JdbcDialect extends Serializable with Logging {
   @Since("2.4.0")
   def getTruncateQuery(
     table: String,
-    cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+    cascade: Option[Boolean] = isCascadingTruncateTable()): String = {
       s"TRUNCATE TABLE $table"
   }
 
@@ -419,7 +437,7 @@ abstract class JdbcDialect extends Serializable with Logging {
     while (rs.next()) {
       schemaBuilder += Array(rs.getString(1))
     }
-    schemaBuilder.result
+    schemaBuilder.result()
   }
 
   /**
@@ -540,6 +558,17 @@ abstract class JdbcDialect extends Serializable with Logging {
     } else {
       s"DROP SCHEMA ${quoteIdentifier(schema)}"
     }
+  }
+
+  /**
+   * Build a SQL statement to drop the given table.
+   *
+   * @param table the table name
+   * @return The SQL statement to use for drop the table.
+   */
+  @Since("4.0.0")
+  def dropTable(table: String): String = {
+    s"DROP TABLE $table"
   }
 
   /**

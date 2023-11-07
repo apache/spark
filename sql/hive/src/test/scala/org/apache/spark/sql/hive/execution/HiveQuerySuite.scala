@@ -880,7 +880,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       """CREATE TEMPORARY FUNCTION udtf_count2 AS
         |'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
       """.stripMargin)
-    assert(sql("DESCRIBE FUNCTION udtf_count2").count > 1)
+    assert(sql("DESCRIBE FUNCTION udtf_count2").count() > 1)
     sql("DROP TEMPORARY FUNCTION udtf_count2")
   }
 
@@ -946,7 +946,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       assert(sql(s"list archive ${zipFile.getAbsolutePath}").count() === 1)
       assert(sql(s"list archives ${zipFile.getAbsolutePath} nonexistence").count() === 1)
       assert(sql(s"list archives ${zipFile.getAbsolutePath} " +
-        s"${jarFile.getAbsolutePath}").count === 2)
+        s"${jarFile.getAbsolutePath}").count() === 2)
     }
   }
 
@@ -990,7 +990,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
         filter(_.getString(0).contains(s"${xzFile.getAbsolutePath}")).count() > 0)
       assert(sql(s"list archive ${bz2File.getAbsolutePath}").count() === 1)
       assert(sql(s"list archives ${bz2File.getAbsolutePath} " +
-        s"${xzFile.getAbsolutePath}").count === 2)
+        s"${xzFile.getAbsolutePath}").count() === 2)
     }
   }
 
@@ -1010,7 +1010,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sql(s"""ADD FILES "${file3.getAbsolutePath}" ${file4.getAbsoluteFile}""")
       val listFiles = sql(s"LIST FILES ${file1.getAbsolutePath} " +
         s"'${file2.getAbsolutePath}' '${file3.getAbsolutePath}' ${file4.getAbsolutePath}")
-      assert(listFiles.count === 4)
+      assert(listFiles.count() === 4)
       assert(listFiles.filter(_.getString(0).contains(file1.getName)).count() === 1)
       assert(listFiles.filter(
         _.getString(0).contains(file2.getName.replace(" ", "%20"))).count() === 1)
@@ -1046,7 +1046,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sql(s"ADD JARS ${jarFile3.getAbsolutePath} '${jarFile4.getAbsoluteFile}'")
       val listFiles = sql(s"LIST JARS '${jarFile1.getAbsolutePath}' " +
         s"${jarFile2.getAbsolutePath} ${jarFile3.getAbsolutePath} '${jarFile4.getAbsoluteFile}'")
-      assert(listFiles.count === 4)
+      assert(listFiles.count() === 4)
       assert(listFiles.filter(
         _.getString(0).contains(jarFile1.getName.replace(" ", "%20"))).count() === 1)
       assert(listFiles.filter(_.getString(0).contains(jarFile2.getName)).count() === 1)
@@ -1082,7 +1082,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sql(s"ADD ARCHIVES ${jarFile3.getAbsolutePath} '${jarFile4.getAbsoluteFile}'")
       val listFiles = sql(s"LIST ARCHIVES ${jarFile1.getAbsolutePath} " +
         s"'${jarFile2.getAbsolutePath}' ${jarFile3.getAbsolutePath} '${jarFile4.getAbsolutePath}'")
-      assert(listFiles.count === 4)
+      assert(listFiles.count() === 4)
       assert(listFiles.filter(_.getString(0).contains(jarFile1.getName)).count() === 1)
       assert(listFiles.filter(
         _.getString(0).contains(jarFile2.getName.replace(" ", "%20"))).count() === 1)
@@ -1108,7 +1108,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       val listFiles = sql("LIST FILES " +
         s"""'${file1.getAbsolutePath}' ${file2.getAbsolutePath} "${file3.getAbsolutePath}"""")
 
-      assert(listFiles.count === 3)
+      assert(listFiles.count() === 3)
       assert(listFiles.filter(_.getString(0).contains(file1.getName)).count() === 1)
       assert(listFiles.filter(_.getString(0).contains(file2.getName)).count() === 1)
       assert(listFiles.filter(
@@ -1134,7 +1134,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       val listArchives = sql(s"LIST ARCHIVES '${jarFile1.getAbsolutePath}' " +
         s"""${jarFile2.getAbsolutePath} "${jarFile3.getAbsolutePath}"""")
 
-      assert(listArchives.count === 3)
+      assert(listArchives.count() === 3)
       assert(listArchives.filter(_.getString(0).contains(jarFile1.getName)).count() === 1)
       assert(listArchives.filter(_.getString(0).contains(jarFile2.getName)).count() === 1)
       assert(listArchives.filter(
@@ -1159,7 +1159,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sql(s"ADD JAR '${jarFile6.getAbsolutePath}'")
       val listJars = sql(s"LIST JARS '${jarFile4.getAbsolutePath}' " +
         s"""${jarFile5.getAbsolutePath} "${jarFile6.getAbsolutePath}"""")
-      assert(listJars.count === 3)
+      assert(listJars.count() === 3)
       assert(listJars.filter(_.getString(0).contains(jarFile4.getName)).count() === 1)
       assert(listJars.filter(_.getString(0).contains(jarFile5.getName)).count() === 1)
       assert(listJars.filter(

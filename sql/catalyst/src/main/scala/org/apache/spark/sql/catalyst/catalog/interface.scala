@@ -407,7 +407,7 @@ case class CatalogTable(
   def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]()
     val tableProperties =
-      SQLConf.get.redactOptions(properties.filterKeys(!_.startsWith(VIEW_PREFIX)).toMap)
+      SQLConf.get.redactOptions(properties.view.filterKeys(!_.startsWith(VIEW_PREFIX)).toMap)
         .toSeq.sortBy(_._1)
         .map(p => p._1 + "=" + p._2)
     val partitionColumns = partitionColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
@@ -561,6 +561,7 @@ object CatalogTable {
       createTime = 0L,
       lastAccessTime = 0L,
       properties = table.properties
+        .view
         .filterKeys(!nondeterministicProps.contains(_))
         .map(identity)
         .toMap,

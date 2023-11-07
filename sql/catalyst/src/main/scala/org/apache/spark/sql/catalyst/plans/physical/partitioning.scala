@@ -306,6 +306,35 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): HashPartitioning = copy(expressions = newChildren)
+
+}
+
+case class CoalescedBoundary(startReducerIndex: Int, endReducerIndex: Int)
+
+/**
+ * Represents a partitioning where partitions have been coalesced from a HashPartitioning into a
+ * fewer number of partitions.
+ */
+case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[CoalescedBoundary])
+  extends Expression with Partitioning with Unevaluable {
+
+  override def children: Seq[Expression] = from.expressions
+  override def nullable: Boolean = from.nullable
+  override def dataType: DataType = from.dataType
+
+  override def satisfies0(required: Distribution): Boolean = from.satisfies0(required)
+
+  override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
+    CoalescedHashShuffleSpec(from.createShuffleSpec(distribution), partitions)
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): CoalescedHashPartitioning =
+      copy(from = from.copy(expressions = newChildren))
+
+  override val numPartitions: Int = partitions.length
+
+  override def toString: String = from.toString
+  override def sql: String = from.sql
 }
 
 /**
@@ -706,6 +735,26 @@ case class HashShuffleSpec(
   }
 
   override def numPartitions: Int = partitioning.numPartitions
+}
+
+case class CoalescedHashShuffleSpec(
+    from: ShuffleSpec,
+    partitions: Seq[CoalescedBoundary]) extends ShuffleSpec {
+
+  override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
+    case SinglePartitionShuffleSpec =>
+      numPartitions == 1
+    case CoalescedHashShuffleSpec(otherParent, otherPartitions) =>
+      partitions == otherPartitions && from.isCompatibleWith(otherParent)
+    case ShuffleSpecCollection(specs) =>
+      specs.exists(isCompatibleWith)
+    case _ =>
+      false
+  }
+
+  override def canCreatePartitioning: Boolean = false
+
+  override def numPartitions: Int = partitions.length
 }
 
 /**

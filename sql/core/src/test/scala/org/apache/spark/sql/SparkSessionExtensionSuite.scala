@@ -824,7 +824,7 @@ class ColumnarWriteExec(
     staticPartitions: TablePartitionSpec) extends WriteFilesExec(
   child, fileFormat, partitionColumns, bucketSpec, options, staticPartitions) {
 
-  override def supportsColumnar(): Boolean = true
+  override def supportsColumnar: Boolean = true
 
   override def doExecuteWrite(writeFilesSpec: WriteFilesSpec): RDD[WriterCommitMessage] = {
     assert(child.supportsColumnar)
@@ -846,7 +846,7 @@ class BrokenColumnarAdd(
     failOnError: Boolean = false)
   extends Add(left, right, EvalMode.fromBoolean(failOnError)) with ColumnarExpression {
 
-  override def supportsColumnar(): Boolean = left.supportsColumnar && right.supportsColumnar
+  override def supportsColumnar: Boolean = left.supportsColumnar && right.supportsColumnar
 
   override def columnarEval(batch: ColumnarBatch): Any = {
     var lhs: Any = null

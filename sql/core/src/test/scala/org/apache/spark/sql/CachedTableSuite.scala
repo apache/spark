@@ -951,7 +951,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     val cachedData = checkIfNoJobTriggered {
       spark.range(1002).filter($"id" > 1000).orderBy($"id".desc).cache()
     }
-    assert(cachedData.collect === Seq(1001))
+    assert(cachedData.collect() === Seq(1001))
   }
 
   test("SPARK-24596 Non-cascading Cache Invalidation - uncache temporary view") {
@@ -1102,7 +1102,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         .agg(avg("c1").as("v1"), sum("c2").as("v2"))
     }
     // First, checks if there is no column statistic in cached query
-    val queryStats1 = query().cache.queryExecution.optimizedPlan.stats.attributeStats
+    val queryStats1 = query().cache().queryExecution.optimizedPlan.stats.attributeStats
     assert(queryStats1.map(_._1.name).isEmpty)
 
     val cacheManager = spark.sharedState.cacheManager
@@ -1596,8 +1596,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     withTempDir { dir =>
       val path1 = new File(dir, "t1").getCanonicalPath
       val path2 = new File(dir, "t2").getCanonicalPath
-      Seq(1).toDF.write.parquet(path1)
-      Seq(1).toDF.write.parquet(path2)
+      Seq(1).toDF().write.parquet(path1)
+      Seq(1).toDF().write.parquet(path2)
 
       val (tempViewStr, viewName) = if (ident.database.nonEmpty) {
         ("GLOBAL TEMPORARY VIEW", s"${ident.database.get}.${ident.table}")

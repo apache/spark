@@ -65,7 +65,7 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuo
 
           eventually(timeout(streamingTimeout)) {
             // Should read all committed messages
-            checkAnswer(spark.table(table), (1 to 5).toDF)
+            checkAnswer(spark.table(table), (1 to 5).toDF())
           }
 
           producer.beginTransaction()
@@ -75,7 +75,7 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuo
           producer.abortTransaction()
 
           // Should not read aborted messages
-          checkAnswer(spark.table(table), (1 to 5).toDF)
+          checkAnswer(spark.table(table), (1 to 5).toDF())
 
           producer.beginTransaction()
           (11 to 15).foreach { i =>
@@ -85,7 +85,7 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuo
 
           eventually(timeout(streamingTimeout)) {
             // Should skip aborted messages and read new committed ones.
-            checkAnswer(spark.table(table), ((1 to 5) ++ (11 to 15)).toDF)
+            checkAnswer(spark.table(table), ((1 to 5) ++ (11 to 15)).toDF())
           }
         } finally {
           q.stop()
@@ -126,14 +126,14 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuo
 
           eventually(timeout(streamingTimeout)) {
             // Should read uncommitted messages
-            checkAnswer(spark.table(table), (1 to 5).toDF)
+            checkAnswer(spark.table(table), (1 to 5).toDF())
           }
 
           producer.commitTransaction()
 
           eventually(timeout(streamingTimeout)) {
             // Should read all committed messages
-            checkAnswer(spark.table(table), (1 to 5).toDF)
+            checkAnswer(spark.table(table), (1 to 5).toDF())
           }
 
           producer.beginTransaction()
@@ -144,7 +144,7 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuo
 
           eventually(timeout(streamingTimeout)) {
             // Should read aborted messages
-            checkAnswer(spark.table(table), (1 to 10).toDF)
+            checkAnswer(spark.table(table), (1 to 10).toDF())
           }
 
           producer.beginTransaction()
@@ -154,14 +154,14 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuo
 
           eventually(timeout(streamingTimeout)) {
             // Should read all messages including committed, aborted and uncommitted messages
-            checkAnswer(spark.table(table), (1 to 15).toDF)
+            checkAnswer(spark.table(table), (1 to 15).toDF())
           }
 
           producer.commitTransaction()
 
           eventually(timeout(streamingTimeout)) {
             // Should read all messages including committed and aborted messages
-            checkAnswer(spark.table(table), (1 to 15).toDF)
+            checkAnswer(spark.table(table), (1 to 15).toDF())
           }
         } finally {
           q.stop()

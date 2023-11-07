@@ -61,7 +61,7 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
     withAllocationManager(numReceivers = 1, conf = conf) {
       case (receiverTracker, allocationManager) =>
 
-      when(receiverTracker.allocatedExecutors).thenReturn(Map(1 -> Some("1")))
+      when(receiverTracker.allocatedExecutors()).thenReturn(Map(1 -> Some("1")))
 
       /** Add data point for batch processing time and verify executor allocation */
       def addBatchProcTimeAndVerifyAllocation(batchProcTimeMs: Double)(body: => Unit): Unit = {
@@ -239,7 +239,7 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
 
       reset(allocationClient)
       when(allocationClient.getExecutorIds()).thenReturn(execIds)
-      when(receiverTracker.allocatedExecutors).thenReturn(receiverExecIds)
+      when(receiverTracker.allocatedExecutors()).thenReturn(receiverExecIds)
       killExecutor(allocationManager)
       if (expectedKilledExec.nonEmpty) {
         verify(allocationClient, times(1)).killExecutor(meq(expectedKilledExec.get))

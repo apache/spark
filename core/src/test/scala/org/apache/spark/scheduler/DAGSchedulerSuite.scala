@@ -457,7 +457,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
    * directly through CompletionEvents.
    */
   private val jobComputeFunc = (context: TaskContext, it: Iterator[(_)]) =>
-    it.next.asInstanceOf[Tuple2[_, _]]._1
+    it.next().asInstanceOf[Tuple2[_, _]]._1
 
   /** Send the given CompletionEvent messages for the tasks in the TaskSet. */
   private def complete(taskSet: TaskSet, taskEndInfos: Seq[(TaskEndReason, Any)]): Unit = {
@@ -3449,12 +3449,12 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("test 1 resource profile") {
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
-    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
+    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
 
     val rdd = sc.parallelize(1 to 10).map(x => (x, x)).withResources(rp1)
     val (shuffledeps, resourceprofiles) = scheduler.getShuffleDependenciesAndResourceProfiles(rdd)
     val rpMerged = scheduler.mergeResourceProfilesForStage(resourceprofiles)
-    val expectedid = Option(rdd.getResourceProfile).map(_.id)
+    val expectedid = Option(rdd.getResourceProfile()).map(_.id)
     assert(expectedid.isDefined)
     assert(expectedid.get != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     assert(rpMerged.id == expectedid.get)
@@ -3464,11 +3464,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     import org.apache.spark.resource._
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
-    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
+    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
 
     val ereqs2 = new ExecutorResourceRequests().cores(2)
     val treqs2 = new TaskResourceRequests().cpus(2)
-    val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build
+    val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build()
 
     val rdd = sc.parallelize(1 to 10).withResources(rp1).map(x => (x, x)).withResources(rp2)
     val error = intercept[IllegalArgumentException] {
@@ -3484,11 +3484,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
-    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
+    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
 
     val ereqs2 = new ExecutorResourceRequests().cores(2)
     val treqs2 = new TaskResourceRequests().cpus(2)
-    val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build
+    val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build()
 
     val rdd = sc.parallelize(1 to 10).withResources(rp1).map(x => (x, x)).withResources(rp2)
     val (shuffledeps, resourceprofiles) = scheduler.getShuffleDependenciesAndResourceProfiles(rdd)
@@ -3502,11 +3502,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
-    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
+    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
 
     val ereqs2 = new ExecutorResourceRequests().cores(2)
     val treqs2 = new TaskResourceRequests().cpus(2)
-    val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build
+    val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build()
 
     val rdd = sc.parallelize(1 to 10).withResources(rp1).map(x => (x, x)).withResources(rp2)
     val (_, resourceprofiles) = scheduler.getShuffleDependenciesAndResourceProfiles(rdd)
@@ -3642,10 +3642,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     import org.apache.spark.resource._
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
-    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
+    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
     val ereqs2 = new ExecutorResourceRequests().cores(6)
     val treqs2 = new TaskResourceRequests().cpus(2)
-    val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build
+    val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build()
 
     val rddWithRp = new MyRDD(sc, 2, Nil).withResources(rp1)
     val rddA = new MyRDD(sc, 2, Nil).withResources(rp1)

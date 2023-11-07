@@ -69,7 +69,7 @@ Generic Spark I/O
    :toctree: api/
 
    read_spark_io
-   DataFrame.to_spark_io
+   DataFrame.spark.to_spark_io
 
 Flat File / CSV
 ---------------

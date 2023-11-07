@@ -1032,7 +1032,7 @@ private[spark] class TaskSetManager(
 
   override def removeSchedulable(schedulable: Schedulable): Unit = {}
 
-  override def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager] = {
+  override def getSortedTaskSetQueue: ArrayBuffer[TaskSetManager] = {
     val sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]()
     sortedTaskSetQueue += this
     sortedTaskSetQueue
@@ -1152,7 +1152,7 @@ private[spark] class TaskSetManager(
               // config executorDecommissionKillInterval. If the task is going to finish after
               // decommissioning, then we will eagerly speculate the task.
               val taskEndTimeBasedOnMedianDuration =
-                info.launchTime + successfulTaskDurations.percentile
+                info.launchTime + successfulTaskDurations.percentile()
               val executorDecomTime = decomState.startTime + executorDecommissionKillInterval.get
               executorDecomTime < taskEndTimeBasedOnMedianDuration
             }
@@ -1195,7 +1195,7 @@ private[spark] class TaskSetManager(
     val numSuccessfulTasks = successfulTaskDurations.size()
     val timeMs = clock.getTimeMillis()
     if (numSuccessfulTasks >= minFinishedForSpeculation) {
-      val medianDuration = successfulTaskDurations.percentile
+      val medianDuration = successfulTaskDurations.percentile()
       val threshold = max(speculationMultiplier * medianDuration, minTimeToSpeculation)
       // TODO: Threshold should also look at standard deviation of task durations and have a lower
       // bound based on that.

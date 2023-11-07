@@ -903,6 +903,11 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     )
   }
 
+  test("Canonicalize CollectMetrics") {
+    assert(CollectMetrics("", Seq(Rand(10).as("rnd")), testRelation, 1).canonicalized ==
+      CollectMetrics("", Seq(Rand(10).as("rnd")), testRelation, 2).canonicalized)
+  }
+
   test("Analysis exceed max iterations") {
     // RuleExecutor only throw exception or log warning when the rule is supposed to run
     // more than once.
@@ -1466,7 +1471,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Iterator.empty
     }
 
-    implicit val intEncoder = ExpressionEncoder[Int]
+    implicit val intEncoder = ExpressionEncoder[Int]()
 
     val left = testRelation2.select($"e").analyze
     val right = testRelation3.select($"e").analyze
