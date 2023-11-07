@@ -305,26 +305,22 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
 
       Seq(true, false).foreach { allowPrecLoss =>
         withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> allowPrecLoss.toString) {
-          val mulType = Multiply(null, null).resultDecimalType(p1, s1, p2, s2)
-          val mulResult = Decimal(mulExact.setScale(mulType.scale, RoundingMode.HALF_UP))
+          val mulResult = Decimal(mulExact.setScale(s1, RoundingMode.HALF_UP))
           val mulExpected =
             if (mulResult.precision > DecimalType.MAX_PRECISION) null else mulResult
           checkEvaluation(mulActual, mulExpected)
 
-          val divType = Divide(null, null).resultDecimalType(p1, s1, p2, s2)
-          val divResult = Decimal(divExact.setScale(divType.scale, RoundingMode.HALF_UP))
+          val divResult = Decimal(divExact.setScale(s1, RoundingMode.HALF_UP))
           val divExpected =
             if (divResult.precision > DecimalType.MAX_PRECISION) null else divResult
           checkEvaluation(divActual, divExpected)
 
-          val remType = Remainder(null, null).resultDecimalType(p1, s1, p2, s2)
-          val remResult = Decimal(remExact.setScale(remType.scale, RoundingMode.HALF_UP))
+          val remResult = Decimal(remExact.setScale(s1, RoundingMode.HALF_UP))
           val remExpected =
             if (remResult.precision > DecimalType.MAX_PRECISION) null else remResult
           checkEvaluation(remActual, remExpected)
 
-          val quotType = IntegralDivide(null, null).resultDecimalType(p1, s1, p2, s2)
-          val quotResult = Decimal(quotExact.setScale(quotType.scale, RoundingMode.HALF_UP))
+          val quotResult = Decimal(quotExact.setScale(s1, RoundingMode.HALF_UP))
           val quotExpected =
             if (quotResult.precision > DecimalType.MAX_PRECISION) null else quotResult
           checkEvaluation(quotActual, quotExpected.toLong)
