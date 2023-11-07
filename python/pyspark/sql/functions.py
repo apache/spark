@@ -13670,20 +13670,7 @@ def from_xml(
 
     Examples
     --------
-    Example 1: Parsing XML with a :class:`StructType` schema
-
-    >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql.types import StructType, StructField, LongType
-    ... # Sample data with an XML column
-    >>> data = [(1, '''<p><a>1</a></p>''')]
-    >>> df = spark.createDataFrame(data, ("key", "value"))
-    ... # Define the schema using a StructType
-    >>> schema = StructType([StructField("a", LongType())])
-    ... # Parse the XML column using the specified schema
-    >>> df.select(sf.from_xml(df.value, schema).alias("xml")).collect()
-    [Row(xml=Row(a=1))]
-
-    Example 2: Parsing XML with a DDL-formatted string schema
+    Example 1: Parsing XML with a DDL-formatted string schema
 
     >>> import pyspark.sql.functions as sf
     >>> data = [(1, '''<p><a>1</a></p>''')]
@@ -13694,7 +13681,7 @@ def from_xml(
     >>> df.select(sf.from_xml(df.value, schema).alias("xml")).collect()
     [Row(xml=Row(a=1))]
 
-    Example 3: Parsing XML with :class:`ArrayType` in schema
+    Example 2: Parsing XML with :class:`ArrayType` in schema
 
     >>> import pyspark.sql.functions as sf
     >>> data = [(1, '<p><a>1</a><a>2</a></p>')]
@@ -13705,7 +13692,7 @@ def from_xml(
     >>> df.select(sf.from_xml(df.value, schema).alias("xml")).collect()
     [Row(xml=Row(a=[1, 2]))]
 
-    Example 4: Parsing XML using :meth:`pyspark.sql.functions.schema_of_xml`
+    Example 3: Parsing XML using :meth:`pyspark.sql.functions.schema_of_xml`
 
     >>> import pyspark.sql.functions as sf
     >>> # Sample data with an XML column
