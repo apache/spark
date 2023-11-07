@@ -61,10 +61,11 @@ class RetryPolicy:
         self.backoff_multiplier = backoff_multiplier
         self.jitter = jitter
         self.min_jitter_threshold = min_jitter_threshold
+        self._name = self.__class__.__name__
 
     @property
-    def name(self):
-        return self.__class__.__name__
+    def name(self) -> str:
+        return self._name
 
     def can_retry(self, exception: BaseException):
         return False
