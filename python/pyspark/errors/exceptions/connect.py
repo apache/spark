@@ -55,6 +55,8 @@ def convert_exception(
     sql_state = None
     error_class = None
 
+    stacktrace: Optional[str] = None
+
     if "classes" in info.metadata:
         classes = json.loads(info.metadata["classes"])
 
@@ -261,7 +263,7 @@ class SparkConnectGrpcException(SparkConnectException):
         self._stacktrace: Optional[str] = server_stacktrace
         self._display_stacktrace: bool = display_server_stacktrace
 
-    def getSqlState(self) -> None:
+    def getSqlState(self) -> Optional[str]:
         if self._sql_state is not None:
             return self._sql_state
         else:
@@ -270,7 +272,7 @@ class SparkConnectGrpcException(SparkConnectException):
     def getStackTrace(self) -> Optional[str]:
         return self._stacktrace
 
-    def __str__(self):
+    def __str__(self) -> str:
         desc = self.message
         if self._display_stacktrace:
             desc += "\n\nJVM stacktrace:\n%s" % self._stacktrace
