@@ -127,7 +127,7 @@ class RocksDBFileManager(
     dfsRootDir: String,
     localTempDir: File,
     hadoopConf: Configuration,
-    codecName: String = "zstd",
+    codecName: String = CompressionCodec.ZSTD,
     loggingId: String = "")
   extends Logging {
 
