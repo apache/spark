@@ -1162,15 +1162,48 @@ def count(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    Count by all columns (start), and by a column that does not count ``None``.
+    Example 1: Count all rows in a DataFrame
 
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(None,), ("a",), ("b",), ("c",)], schema=["alphabets"])
-    >>> df.select(count(expr("*")), count(df.alphabets)).show()
-    +--------+----------------+
-    |count(1)|count(alphabets)|
-    +--------+----------------+
-    |       4|               3|
-    +--------+----------------+
+    >>> df.select(sf.count(sf.expr("*"))).show()
+    +--------+
+    |count(1)|
+    +--------+
+    |       4|
+    +--------+
+
+    Example 2: Count non-null values in a specific column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df.select(sf.count(df.alphabets)).show()
+    +----------------+
+    |count(alphabets)|
+    +----------------+
+    |               3|
+    +----------------+
+
+    Example 3: Count all rows in a DataFrame with multiple columns
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [(1, "apple"), (2, "banana"), (3, None)], schema=["id", "fruit"])
+    >>> df.select(sf.count(sf.expr("*"))).show()
+    +--------+
+    |count(1)|
+    +--------+
+    |       3|
+    +--------+
+
+    Example 4: Count non-null values in multiple columns
+
+    >>> from pyspark.sql import functions as sf
+    >>> df.select(sf.count(df.id), sf.count(df.fruit)).show()
+    +---------+------------+
+    |count(id)|count(fruit)|
+    +---------+------------+
+    |        3|           2|
+    +---------+------------+
     """
     return _invoke_function_over_columns("count", col)
 
