@@ -324,7 +324,7 @@ private[spark] object JettyUtils extends Logging {
       httpConfig.setSendXPoweredBy(false)
 
       // If SSL is configured, create the secure connector first.
-      val securePort = sslOptions.createJettySslContextFactory().map { factory =>
+      val securePort = sslOptions.createJettySslContextFactoryServer().map { factory =>
 
         val securePort = sslOptions.port.getOrElse(if (port > 0) Utils.userPort(port, 400) else 0)
         val secureServerName = if (serverName.nonEmpty) s"$serverName (HTTPS)" else serverName
