@@ -18,7 +18,6 @@
 package org.apache.spark.sql.kafka010
 
 import scala.collection.mutable.HashMap
-import scala.math._
 import scala.util.control.NonFatal
 
 import org.apache.kafka.common.TopicPartition
