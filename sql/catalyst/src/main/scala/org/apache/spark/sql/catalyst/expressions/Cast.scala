@@ -344,6 +344,7 @@ object Cast extends QueryErrorsBase {
     case (StringType, _) => true
     case (_, StringType) => false
 
+    case (TimestampType, ByteType | ShortType | IntegerType) => true
     case (FloatType | DoubleType, TimestampType) => true
     case (TimestampType, DateType) => false
     case (_, DateType) => true
@@ -1664,23 +1665,28 @@ case class Cast(
       integralType: String,
       from: DataType,
       to: DataType): CastFunction = {
-    if (ansiEnabled) {
-      val longValue = ctx.freshName("longValue")
-      val fromDt = ctx.addReferenceObj("from", from, from.getClass.getName)
-      val toDt = ctx.addReferenceObj("to", to, to.getClass.getName)
-      (c, evPrim, _) =>
-        code"""
+
+    val longValue = ctx.freshName("longValue")
+    val fromDt = ctx.addReferenceObj("from", from, from.getClass.getName)
+    val toDt = ctx.addReferenceObj("to", to, to.getClass.getName)
+
+    (c, evPrim, evNull) =>
+      val overflow = if (ansiEnabled) {
+        code"""throw QueryExecutionErrors.castingCauseOverflowError($c, $fromDt, $toDt);"""
+      } else {
+        code"$evNull = true;"
+      }
+
+      code"""
           long $longValue = ${timestampToLongCode(c)};
           if ($longValue == ($integralType) $longValue) {
             $evPrim = ($integralType) $longValue;
           } else {
-            throw QueryExecutionErrors.castingCauseOverflowError($c, $fromDt, $toDt);
+            $overflow
           }
         """
-    } else {
-      (c, evPrim, _) => code"$evPrim = ($integralType) ${timestampToLongCode(c)};"
-    }
   }
+
 
   private[this] def castDayTimeIntervalToIntegralTypeCode(
       startField: Byte,
