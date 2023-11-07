@@ -27,7 +27,6 @@ import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
 import io.netty.util.internal.PlatformDependent
-import org.json4s._
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
