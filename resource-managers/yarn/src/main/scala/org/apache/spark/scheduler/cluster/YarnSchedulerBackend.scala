@@ -64,7 +64,15 @@ private[spark] abstract class YarnSchedulerBackend(
   private val yarnSchedulerEndpointRef = rpcEnv.setupEndpoint(
     YarnSchedulerBackend.ENDPOINT_NAME, yarnSchedulerEndpoint)
 
-  private implicit val askTimeout: Any = RpcUtils.askRpcTimeout(sc.conf)
+  private implicit val askTimeout = RpcUtils.askRpcTimeout(sc.conf)
+
+  /**
+   * Declare implicit single thread execution context for futures doRequestTotalExecutors and
+   * doKillExecutors below, avoiding using the global execution context that may cause conflict
+   * with user code's execution of futures.
+   */
+  private implicit val schedulerEndpointEC: ExecutionContext = ExecutionContext.fromExecutorService(
+      ThreadUtils.newDaemonSingleThreadExecutor("yarn-scheduler-endpoint"))
 
   /** Application ID. */
   protected var appId: Option[ApplicationId] = None
