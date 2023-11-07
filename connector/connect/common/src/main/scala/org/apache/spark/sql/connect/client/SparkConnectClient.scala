@@ -43,11 +43,11 @@ private[sql] class SparkConnectClient(
 
   private val userContext: UserContext = configuration.userContext
 
-  private[this] val stubState = new SparkConnectStubState
+  private[this] val stubState = new SparkConnectStubState(channel, configuration.retryPolicy)
   private[this] val bstub =
-    new CustomSparkConnectBlockingStub(channel, configuration.retryPolicy, stubState)
+    new CustomSparkConnectBlockingStub(channel, stubState)
   private[this] val stub =
-    new CustomSparkConnectStub(channel, configuration.retryPolicy, stubState)
+    new CustomSparkConnectStub(channel, stubState)
 
   private[client] def userAgent: String = configuration.userAgent
 

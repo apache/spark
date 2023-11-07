@@ -24,15 +24,14 @@ import org.apache.spark.connect.proto._
 
 private[connect] class CustomSparkConnectBlockingStub(
     channel: ManagedChannel,
-    retryPolicy: GrpcRetryHandler.RetryPolicy,
     stubState: SparkConnectStubState) {
 
   private val stub = SparkConnectServiceGrpc.newBlockingStub(channel)
 
-  private val retryHandler = new GrpcRetryHandler(retryPolicy)
+  private val retryHandler = stubState.retryHandler
 
   // GrpcExceptionConverter with a GRPC stub for fetching error details from server.
-  private val grpcExceptionConverter = new GrpcExceptionConverter(stub)
+  private val grpcExceptionConverter = stubState.exceptionConverter
 
   def executePlan(request: ExecutePlanRequest): CloseableIterator[ExecutePlanResponse] = {
     grpcExceptionConverter.convert(
@@ -63,7 +62,7 @@ private[connect] class CustomSparkConnectBlockingStub(
         request.getClientType,
         // Don't use retryHandler - own retry handling is inside.
         stubState.wrapIterator(
-          new ExecutePlanResponseReattachableIterator(request, channel, retryPolicy)))
+          new ExecutePlanResponseReattachableIterator(request, channel, stubState.retryPolicy)))
     }
   }
 

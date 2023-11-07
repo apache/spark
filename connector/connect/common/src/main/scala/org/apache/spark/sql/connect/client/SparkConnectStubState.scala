@@ -17,6 +17,7 @@
 package org.apache.spark.sql.connect.client
 
 import com.google.protobuf.GeneratedMessageV3
+import io.grpc.ManagedChannel
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.internal.Logging
@@ -24,8 +25,20 @@ import org.apache.spark.internal.Logging
 // This is common state shared between the blocking and non-blocking stubs.
 //
 // The common logic is responsible to verify the integrity of the response. The invariant is
-// that the same stub instance is used for all requests from the same client.
-class SparkConnectStubState extends Logging {
+// that the same stub instance is used for all requests from the same client. In addition,
+// this class provides access to the commonly configured retry policy and exception conversion
+// logic.
+class SparkConnectStubState(
+    channel: ManagedChannel,
+    val retryPolicy: GrpcRetryHandler.RetryPolicy)
+    extends Logging {
+
+  // Responsible to convert the GRPC Status exceptions into Spark exceptions.
+  lazy val exceptionConverter: GrpcExceptionConverter = new GrpcExceptionConverter(channel)
+
+  // Manages the retry handler logic used by the stubs.
+  lazy val retryHandler = new GrpcRetryHandler(retryPolicy)
+
   // Server side session ID, used to detect if the server side session changed. This is set upon
   // receiving the first response from the server. This value is used only for executions that
   // do not use server-side streaming.
@@ -37,14 +50,18 @@ class SparkConnectStubState extends Logging {
     // If the field does not exist, we ignore it. New / Old message might not contain it and this
     // behavior allows us to be compatible.
     if (field != null) {
-      val value = response.getField(field)
-      serverSideSessionId match {
-        case Some(id) if value != id =>
-          throw new IllegalStateException(s"Server side session ID changed from $id to $value")
-        case _ =>
-          synchronized {
-            serverSideSessionId = Some(value.toString)
-          }
+      val value = response.getField(field).asInstanceOf[String]
+      // Ignore, if the value is unset.
+      if (response.hasField(field) && value != null && value.nonEmpty) {
+        serverSideSessionId match {
+          case Some(id) if value != id && value != "" =>
+            throw new IllegalStateException(s"Server side session ID changed from $id to $value")
+          case _ if value != "" =>
+            synchronized {
+              serverSideSessionId = Some(value.toString)
+            }
+          case _ => // No-op
+        }
       }
     } else {
       logDebug("Server side session ID field not found in response - Ignoring.")

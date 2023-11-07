@@ -869,6 +869,18 @@ message FetchErrorDetailsRequest {
 // Next ID: 5
 message FetchErrorDetailsResponse {
 
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session has not changed.
+  string server_side_session_id = 3;
+
+  string session_id = 4;
+
+  // The index of the root error in errors. The field will not be set if the error is not found.
+  optional int32 root_error_idx = 1;
+
+  // A list of errors.
+  repeated Error errors = 2;
+
   message StackTraceElement {
     // The fully qualified name of the class containing the execution point.
     string declaring_class = 1;
@@ -953,18 +965,6 @@ message FetchErrorDetailsResponse {
     // The structured data of a SparkThrowable exception.
     optional SparkThrowable spark_throwable = 5;
   }
-
-  // The index of the root error in errors. The field will not be set if the error is not found.
-  optional int32 root_error_idx = 1;
-
-  // A list of errors.
-  repeated Error errors = 2;
-
-  // Server-side generated idempotency key that the client can use to assert that the server side
-  // session has not changed.
-  string server_side_session_id = 3;
-
-  string session_id = 4;
 }
 
 // Main interface for the SparkConnect service.
