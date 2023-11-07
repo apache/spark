@@ -683,7 +683,7 @@ private class FaultyStandaloneRestServer(
     }
   }
 
-  /** A faulty status servlet that explodes. */
+  /** A faulty clear servlet that explodes. */
   class ExplodingClearServlet extends StandaloneClearRequestServlet(masterEndpoint, masterConf) {
     private def explode: Int = 1 / 0
 
