@@ -98,10 +98,12 @@ package object sql {
       f
     } else {
       val st = Thread.currentThread().getStackTrace
-      var i = 3
+      var i = 0
+      // Find the beginning of Spark code traces
+      while (i < st.length && !sparkCode(st(i))) i += 1
+      // Stop at the end of the first Spark code traces
       while (i < st.length && sparkCode(st(i))) i += 1
-      val origin =
-        Origin(stackTrace = Some(Thread.currentThread().getStackTrace.slice(i - 1, i + 1)))
+      val origin = Origin(stackTrace = Some(st.slice(i - 1, i + 1)))
       CurrentOrigin.withOrigin(origin)(f)
     }
   }

@@ -160,14 +160,16 @@ case class DataFrameQueryContext(
 
 object DataFrameQueryContext {
   def apply(elements: Array[StackTraceElement]): DataFrameQueryContext = {
-    val methodName = elements(0).getMethodName
-    val code = if (methodName.length > 1 && methodName(0) == '$') {
-      methodName.substring(1)
-    } else {
-      methodName
-    }
-    val callSite = elements(1).toString
+    val fragment = elements.headOption.map { firstElem =>
+      val methodName = firstElem.getMethodName
+      if (methodName.length > 1 && methodName(0) == '$') {
+        methodName.substring(1)
+      } else {
+        methodName
+      }
+    }.getOrElse("")
+    val callSite = elements.tail.headOption.map(_.toString).getOrElse("")
 
-    DataFrameQueryContext(code, callSite)
+    DataFrameQueryContext(fragment, callSite)
   }
 }

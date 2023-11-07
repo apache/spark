@@ -31,6 +31,15 @@
     ],
     "sqlState" : "42702"
   },
+  "AMBIGUOUS_COLUMN_REFERENCE" : {
+    "message" : [
+      "Column <name> is ambiguous. It's because you joined several DataFrame together, and some of these DataFrames are the same.",
+      "This column points to one of the DataFrame but Spark is unable to figure out which one.",
+      "Please alias the DataFrames with different names via `DataFrame.alias` before joining them,",
+      "and specify the column using qualified name, e.g. `df.alias(\"a\").join(df.alias(\"b\"), col(\"a.id\") > col(\"b.id\"))`."
+    ],
+    "sqlState" : "42702"
+  },
   "AMBIGUOUS_LATERAL_COLUMN_ALIAS" : {
     "message" : [
       "Lateral column alias <name> is ambiguous and has <n> matches."
@@ -404,6 +413,29 @@
       "Cannot find a short name for the codec <codecName>."
     ],
     "sqlState" : "42704"
+  },
+  "COLLECTION_SIZE_LIMIT_EXCEEDED" : {
+    "message" : [
+      "Can't create array with <numberOfElements> elements which exceeding the array size limit <maxRoundedArrayLength>,"
+    ],
+    "subClass" : {
+      "FUNCTION" : {
+        "message" : [
+          "unsuccessful try to create arrays in the function <functionName>."
+        ]
+      },
+      "INITIALIZE" : {
+        "message" : [
+          "cannot initialize an array with specified parameters."
+        ]
+      },
+      "PARAMETER" : {
+        "message" : [
+          "the value of parameter(s) <parameter> in the function <functionName> is invalid."
+        ]
+      }
+    },
+    "sqlState" : "54000"
   },
   "COLUMN_ALIASES_IS_NOT_ALLOWED" : {
     "message" : [
@@ -3017,12 +3049,6 @@
     ],
     "sqlState" : "428EK"
   },
-  "TOO_MANY_ARRAY_ELEMENTS" : {
-    "message" : [
-      "Cannot initialize array with <numElements> elements of size <size>."
-    ],
-    "sqlState" : "54000"
-  },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [
       "The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF.",
@@ -4777,11 +4803,6 @@
       "Hive metastore does not support altering database location."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1221" : {
-    "message" : [
-      "Hive 0.12 doesn't support creating permanent functions. Please use Hive 0.13 or higher."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1222" : {
     "message" : [
       "Unknown resource type: <resourceType>."
@@ -5770,26 +5791,6 @@
       "<userClass> is not annotated with SQLUserDefinedType nor registered with UDTRegistration.}"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2159" : {
-    "message" : [
-      "Unsuccessful try to concat arrays with <numberOfElements> elements due to exceeding the array size limit <maxRoundedArrayLength>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2160" : {
-    "message" : [
-      "Unsuccessful try to flatten an array of arrays with <numberOfElements> elements due to exceeding the array size limit <maxRoundedArrayLength>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2161" : {
-    "message" : [
-      "Unsuccessful try to create array with <count> elements due to exceeding the array size limit <maxRoundedArrayLength>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2162" : {
-    "message" : [
-      "Unsuccessful try to union arrays with <length> elements due to exceeding the array size limit <maxRoundedArrayLength>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2163" : {
     "message" : [
       "Initial type <dataType> must be a <target>."
@@ -5901,16 +5902,6 @@
       "<message>, db: <dbName>, table: <tableName>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2190" : {
-    "message" : [
-      "DROP TABLE ... PURGE."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2191" : {
-    "message" : [
-      "ALTER TABLE ... DROP PARTITION ... PURGE."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2192" : {
     "message" : [
       "Partition filter cannot have both `\"` and `'` characters."
@@ -5929,11 +5920,6 @@
   "_LEGACY_ERROR_TEMP_2195" : {
     "message" : [
       "<cnf> when creating Hive client using classpath: <execJars> Please make sure that jars for your version of hive and hadoop are included in the paths passed to <key>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2197" : {
-    "message" : [
-      "LOCATION clause illegal for view partition."
     ]
   },
   "_LEGACY_ERROR_TEMP_2198" : {

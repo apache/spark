@@ -55,6 +55,15 @@ See '`<docroot>`/sql-migration-guide.html#query-engine'.
 
 Column or field `<name>` is ambiguous and has `<n>` matches.
 
+### AMBIGUOUS_COLUMN_REFERENCE
+
+[SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Column `<name>` is ambiguous. It's because you joined several DataFrame together, and some of these DataFrames are the same.
+This column points to one of the DataFrame but Spark is unable to figure out which one.
+Please alias the DataFrames with different names via `DataFrame.alias` before joining them,
+and specify the column using qualified name, e.g. `df.alias("a").join(df.alias("b"), col("a.id") > col("b.id"))`.
+
 ### AMBIGUOUS_LATERAL_COLUMN_ALIAS
 
 [SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -337,6 +346,14 @@ The codec `<codecName>` is not available. Consider to set the config `<configKey
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot find a short name for the codec `<codecName>`.
+
+### [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
+
+[SQLSTATE: 54000](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
+
+Can't create array with `<numberOfElements>` elements which exceeding the array size limit `<maxRoundedArrayLength>`,
+
+For more details see [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
 
 ### COLUMN_ALIASES_IS_NOT_ALLOWED
 
@@ -1920,12 +1937,6 @@ Choose a different name, drop or replace the existing view,  or add the IF NOT E
 [SQLSTATE: 428EK](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: `<actualName>`.
-
-### TOO_MANY_ARRAY_ELEMENTS
-
-[SQLSTATE: 54000](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
-
-Cannot initialize array with `<numElements>` elements of size `<size>`.
 
 ### UDTF_ALIAS_NUMBER_MISMATCH
 
