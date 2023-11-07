@@ -251,7 +251,7 @@ class SparkSession private[sql] (
           .addAllPosArguments(args.map(lit(_).expr).toImmutableArraySeq.asJava)))
     val plan = proto.Plan.newBuilder().setCommand(cmd)
     // .toBuffer forces that the iterator is consumed and closed
-    val responseSeq = client.execute(plan.build()).toBuffer.toSeq
+    val responseSeq = client.execute(plan.build()).toSeq
 
     val response = responseSeq
       .find(_.hasSqlCommandResult)
@@ -310,7 +310,7 @@ class SparkSession private[sql] (
             .putAllNamedArguments(args.asScala.view.mapValues(lit(_).expr).toMap.asJava)))
       val plan = proto.Plan.newBuilder().setCommand(cmd)
       // .toBuffer forces that the iterator is consumed and closed
-      val responseSeq = client.execute(plan.build()).toBuffer.toSeq
+      val responseSeq = client.execute(plan.build()).toSeq
 
       val response = responseSeq
         .find(_.hasSqlCommandResult)
@@ -544,13 +544,13 @@ class SparkSession private[sql] (
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
     // .toBuffer forces that the iterator is consumed and closed
-    client.execute(plan).toBuffer
+    client.execute(plan).foreach(_ => ())
   }
 
   private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
     // .toBuffer forces that the iterator is consumed and closed
-    client.execute(plan).toBuffer.toSeq
+    client.execute(plan).toSeq
   }
 
   private[sql] def registerUdf(udf: proto.CommonInlineUserDefinedFunction): Unit = {
