@@ -159,6 +159,16 @@ class Retrying:
     This class is a point of entry into the retry logic.
     The class accepts a list of retry policies and applies them in given order.
     The first policy accepting an exception will be used.
+
+    The usage of the class should be as follows:
+    for attempt in Retrying(...):
+        with attempt:
+            Do something that can throw exception
+
+    In case error is considered retriable, it would be retried based on policies, and
+    RetriesExceeded will be raised if the retries limit would exceed.
+
+    Exceptions not considered retriable will be passed through transparently.
     """
 
     def __init__(
@@ -195,6 +205,7 @@ class Retrying:
         exception = self._last_exception()
 
         # Attempt to find a policy to wait with
+
         for policy in self._policies:
             if not policy.can_retry(exception):
                 continue
@@ -202,7 +213,7 @@ class Retrying:
             wait_time = policy.next_attempt()
             if wait_time is not None:
                 logger.debug(
-                    f"Got error: {exception}. "
+                    f"Got error: {repr(exception)}. "
                     + f"Will retry after {wait_time} ms (policy: {policy.name})"
                 )
 
@@ -210,8 +221,8 @@ class Retrying:
                 return
 
         # Exceeded retries
-        logger.debug(f"Given up on retrying. error: {exception}")
-        raise exception
+        logger.debug(f"Given up on retrying. error: {repr(exception)}")
+        raise RetriesExceeded from exception
 
     def __iter__(self) -> Generator[AttemptManager, None, None]:
         """

@@ -34,7 +34,7 @@ from pyspark.errors import (
 )
 from pyspark.errors.exceptions.base import SessionNotSameException
 from pyspark.sql import SparkSession as PySparkSession, Row
-from pyspark.sql.connect.client.retries import RetryPolicy
+from pyspark.sql.connect.client.retries import RetryPolicy, RetriesExceeded
 from pyspark.sql.types import (
     StructType,
     StructField,
@@ -3483,7 +3483,7 @@ class TestPolicy(RetryPolicy):
         super().__init__(initial_backoff=initial_backoff, **kwargs)
 
     def can_retry(self, exception: BaseException):
-        return True
+        return isinstance(exception, TestError)
 
 
 class TestPolicySpecificError(TestPolicy):
@@ -3526,13 +3526,19 @@ class RetryTests(unittest.TestCase):
 
     def test_exceed_retries(self):
         # Exceed the retries.
-        with self.assertRaises(TestError):
+        with self.assertRaises(RetriesExceeded):
             for attempt in Retrying(TestPolicy(max_retries=2)):
                 with attempt:
                     self.stub(5, grpc.StatusCode.INTERNAL)
 
         self.assertLess(self.call_wrap["attempts"], 5)
         self.assertEqual(self.call_wrap["raised"], 3)
+
+    def test_throw_not_retriable_error(self):
+        with self.assertRaises(ValueError):
+            for attempt in Retrying(TestPolicy(max_retries=2)):
+                with attempt:
+                    raise ValueError
 
     def test_specific_exception(self):
         # Check that only specific exceptions are retried.
@@ -3549,7 +3555,7 @@ class RetryTests(unittest.TestCase):
     def test_specific_exception_exceed_retries(self):
         # Exceed the retries.
         policy = TestPolicySpecificError(max_retries=2, specific_code=grpc.StatusCode.UNAVAILABLE)
-        with self.assertRaises(TestError):
+        with self.assertRaises(RetriesExceeded):
             for attempt in Retrying(policy):
                 with attempt:
                     self.stub(5, grpc.StatusCode.UNAVAILABLE)
@@ -3589,7 +3595,7 @@ class RetryTests(unittest.TestCase):
         policy1 = TestPolicySpecificError(max_retries=2, specific_code=grpc.StatusCode.INTERNAL)
         policy2 = TestPolicySpecificError(max_retries=4, specific_code=grpc.StatusCode.INTERNAL)
 
-        with self.assertRaises(TestError):
+        with self.assertRaises(RetriesExceeded):
             for attempt in Retrying([policy1, policy2]):
                 with attempt:
                     self.stub(10, grpc.StatusCode.INTERNAL)
