@@ -116,6 +116,17 @@ class Observation(val name: String) {
       get.map { case (key, value) => (key, value.asInstanceOf[Object])}.asJava
   }
 
+  /**
+   * Get the observed metrics. This returns the metrics if they are available, otherwise an empty.
+   *
+   * @return the observed metrics as a `Map[String, Any]`
+   */
+  private[spark] def getOrEmpty: Map[String, _] = {
+    synchronized {
+      metrics.getOrElse(Map.empty)
+    }
+  }
+
   private def register(ds: Dataset[_]): Unit = {
     // makes this class thread-safe:
     // only the first thread entering this block can set sparkSession
