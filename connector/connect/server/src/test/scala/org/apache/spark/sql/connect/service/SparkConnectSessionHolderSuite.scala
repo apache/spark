@@ -169,6 +169,56 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
       accumulator = null)
   }
 
+  test("python listener process: process terminates after listener is removed") {
+    // scalastyle:off assume
+    assume(IntegratedUDFTestUtils.shouldTestPandasUDFs)
+    // scalastyle:on assume
+
+    val sessionHolder = SessionHolder.forTesting(spark)
+    try {
+      SparkConnectService.start(spark.sparkContext)
+
+      val pythonFn = dummyPythonFunction(sessionHolder)(streamingQueryListenerFunction)
+
+      val id1 = "listener_removeListener_test_1"
+      val id2 = "listener_removeListener_test_2"
+      val listener1 = new PythonStreamingQueryListener(pythonFn, sessionHolder)
+      val listener2 = new PythonStreamingQueryListener(pythonFn, sessionHolder)
+
+      sessionHolder.cacheListenerById(id1, listener1)
+      spark.streams.addListener(listener1)
+      sessionHolder.cacheListenerById(id2, listener2)
+      spark.streams.addListener(listener2)
+
+      val (runner1, runner2) = (listener1.runner, listener2.runner)
+
+      // assert both python processes are running
+      assert(!runner1.isWorkerStopped().get)
+      assert(!runner2.isWorkerStopped().get)
+
+      // remove listener1
+      spark.streams.removeListener(listener1)
+      sessionHolder.removeCachedListener(id1)
+      // assert listener1's python process is not running
+      eventually(timeout(30.seconds)) {
+        assert(runner1.isWorkerStopped().get)
+        assert(!runner2.isWorkerStopped().get)
+      }
+
+      // remove listener2
+      spark.streams.removeListener(listener2)
+      sessionHolder.removeCachedListener(id2)
+      eventually(timeout(30.seconds)) {
+        // assert listener2's python process is not running
+        assert(runner2.isWorkerStopped().get)
+        // all listeners are removed
+        assert(spark.streams.listListeners().isEmpty)
+      }
+    } finally {
+      SparkConnectService.stop()
+    }
+  }
+
   test("python foreachBatch process: process terminates after query is stopped") {
     // scalastyle:off assume
     assume(IntegratedUDFTestUtils.shouldTestPandasUDFs)
@@ -232,58 +282,10 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
       assert(spark.streams.listListeners().length == 1) // only process termination listener
     } finally {
       SparkConnectService.stop()
+      // Wait for things to calm down.
+      Thread.sleep(4.seconds.toMillis)
       // remove process termination listener
       spark.streams.listListeners().foreach(spark.streams.removeListener)
-    }
-  }
-
-  test("python listener process: process terminates after listener is removed") {
-    // scalastyle:off assume
-    assume(IntegratedUDFTestUtils.shouldTestPandasUDFs)
-    // scalastyle:on assume
-
-    val sessionHolder = SessionHolder.forTesting(spark)
-    try {
-      SparkConnectService.start(spark.sparkContext)
-
-      val pythonFn = dummyPythonFunction(sessionHolder)(streamingQueryListenerFunction)
-
-      val id1 = "listener_removeListener_test_1"
-      val id2 = "listener_removeListener_test_2"
-      val listener1 = new PythonStreamingQueryListener(pythonFn, sessionHolder)
-      val listener2 = new PythonStreamingQueryListener(pythonFn, sessionHolder)
-
-      sessionHolder.cacheListenerById(id1, listener1)
-      spark.streams.addListener(listener1)
-      sessionHolder.cacheListenerById(id2, listener2)
-      spark.streams.addListener(listener2)
-
-      val (runner1, runner2) = (listener1.runner, listener2.runner)
-
-      // assert both python processes are running
-      assert(!runner1.isWorkerStopped().get)
-      assert(!runner2.isWorkerStopped().get)
-
-      // remove listener1
-      spark.streams.removeListener(listener1)
-      sessionHolder.removeCachedListener(id1)
-      // assert listener1's python process is not running
-      eventually(timeout(30.seconds)) {
-        assert(runner1.isWorkerStopped().get)
-        assert(!runner2.isWorkerStopped().get)
-      }
-
-      // remove listener2
-      spark.streams.removeListener(listener2)
-      sessionHolder.removeCachedListener(id2)
-      eventually(timeout(30.seconds)) {
-        // assert listener2's python process is not running
-        assert(runner2.isWorkerStopped().get)
-        // all listeners are removed
-        assert(spark.streams.listListeners().isEmpty)
-      }
-    } finally {
-      SparkConnectService.stop()
     }
   }
 }
