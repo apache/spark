@@ -44,6 +44,7 @@ from pyspark.sql.functions import (
     AnalyzeResult,
     OrderingColumn,
     PartitioningColumn,
+    SkipRestOfInputTableException,
 )
 from pyspark.sql.types import (
     ArrayType,
@@ -2467,7 +2468,7 @@ class BaseUDTFTestsMixin:
             [Row(count=20, buffer="abc")],
         )
 
-    def test_udtf_with_stop_iteration_exception(self):
+    def test_udtf_with_skip_rest_of_input_table_exception(self):
         @udtf
         class TestUDTF:
             def __init__(self):
@@ -2482,7 +2483,7 @@ class BaseUDTFTestsMixin:
             def eval(self, _: Row):
                 self._total += 1
                 if self._total >= 4:
-                    raise StopIteration("StopIteration at self._total >= 4")
+                    raise SkipRestOfInputTableException("StopIteration at self._total >= 4")
 
             def terminate(self):
                 yield self._total,

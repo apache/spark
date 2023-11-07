@@ -43,6 +43,7 @@ from pyspark.serializers import (
     CPickleSerializer,
     BatchedSerializer,
 )
+from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import (
     ArrowStreamPandasUDFSerializer,
     ArrowStreamPandasUDTFSerializer,
@@ -995,7 +996,7 @@ def read_udtf(pickleSer, infile, eval_type):
             def func(*a: Any) -> Any:
                 try:
                     return f(*a)
-                except StopIteration:
+                except SkipRestOfInputTableException:
                     raise
                 except Exception as e:
                     raise PySparkRuntimeError(
@@ -1059,7 +1060,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     yield from eval(*[a[o] for o in args_kwargs_offsets])
                 if terminate is not None:
                     yield from terminate()
-            except StopIteration:
+            except SkipRestOfInputTableException:
                 if terminate is not None:
                     yield from terminate()
             finally:
@@ -1103,7 +1104,7 @@ def read_udtf(pickleSer, infile, eval_type):
             def evaluate(*a) -> tuple:
                 try:
                     res = f(*a)
-                except StopIteration:
+                except SkipRestOfInputTableException:
                     raise
                 except Exception as e:
                     raise PySparkRuntimeError(
@@ -1151,7 +1152,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     yield eval(*[a[o] for o in args_kwargs_offsets])
                 if terminate is not None:
                     yield terminate()
-            except StopIteration:
+            except SkipRestOfInputTableException:
                 if terminate is not None:
                     yield terminate()
             finally:
