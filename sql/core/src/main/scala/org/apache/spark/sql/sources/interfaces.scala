@@ -309,3 +309,22 @@ trait InsertableRelation {
 trait CatalystScan {
   def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row]
 }
+
+/**
+ * Implemented by StreamSourceProvider objects that can generate file metadata columns.
+ */
+trait SupportsStreamSourceMetadataColumns extends StreamSourceProvider {
+
+  /**
+   * Returns the metadata columns that should be added to the schema of the Stream Data Source.
+   *
+   * @param spark The SparkSession used for the operation.
+   * @param options A map of options of the Stream Data Source.
+   * @param userSpecifiedSchema An optional user-provided schema of the Stream Data Source.
+   * @return A Seq of AttributeReference representing the metadata output attributes.
+   */
+  def getMetadataOutput(
+      spark: SparkSession,
+      options: Map[String, String],
+      userSpecifiedSchema: Option[StructType]): Seq[AttributeReference]
+}
