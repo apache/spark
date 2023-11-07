@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.internal.SQLConf
@@ -193,14 +194,13 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("like escape expressions") {
-    val message = "Escape string must contain only one character."
     assertEqual("a like 'pattern%' escape '#'", $"a".like("pattern%", '#'))
     assertEqual("a like 'pattern%' escape '\"'", $"a".like("pattern%", '\"'))
 
     checkError(
       exception = parseException("a like 'pattern%' escape '##'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0017",
-      parameters = Map.empty,
+      errorClass = "INVALID_ESC",
+      parameters = Map("invalidEscape" -> "'##'"),
       context = ExpectedContext(
         fragment = "like 'pattern%' escape '##'",
         start = 2,
@@ -208,8 +208,8 @@ class ExpressionParserSuite extends AnalysisTest {
 
     checkError(
       exception = parseException("a like 'pattern%' escape ''"),
-      errorClass = "_LEGACY_ERROR_TEMP_0017",
-      parameters = Map.empty,
+      errorClass = "INVALID_ESC",
+      parameters = Map("invalidEscape" -> "''"),
       context = ExpectedContext(
         fragment = "like 'pattern%' escape ''",
         start = 2,
@@ -220,8 +220,8 @@ class ExpressionParserSuite extends AnalysisTest {
 
     checkError(
       exception = parseException("a not like 'pattern%' escape '\"/'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0017",
-      parameters = Map.empty,
+      errorClass = "INVALID_ESC",
+      parameters = Map("invalidEscape" -> "'\"/'"),
       context = ExpectedContext(
         fragment = "not like 'pattern%' escape '\"/'",
         start = 2,
@@ -229,8 +229,8 @@ class ExpressionParserSuite extends AnalysisTest {
 
     checkError(
       exception = parseException("a not like 'pattern%' escape ''"),
-      errorClass = "_LEGACY_ERROR_TEMP_0017",
-      parameters = Map.empty,
+      errorClass = "INVALID_ESC",
+      parameters = Map("invalidEscape" -> "''"),
       context = ExpectedContext(
         fragment = "not like 'pattern%' escape ''",
         start = 2,
@@ -328,6 +328,23 @@ class ExpressionParserSuite extends AnalysisTest {
       exception = parseException("foo(a x)"),
       errorClass = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'x'", "hint" -> ": extra input 'x'"))
+  }
+
+  test("function expressions with named arguments") {
+    assertEqual("encode(value => 'abc', charset => 'utf-8')",
+      $"encode".function(NamedArgumentExpression("value", Literal("abc")),
+      NamedArgumentExpression("charset", Literal("utf-8"))))
+    assertEqual("encode('abc', charset => 'utf-8')",
+      $"encode".function(Literal("abc"), NamedArgumentExpression("charset", Literal("utf-8"))))
+    assertEqual("encode(charset => 'utf-8', 'abc')",
+      $"encode".function(NamedArgumentExpression("charset", Literal("utf-8")), Literal("abc")))
+    assertEqual("encode('abc', charset => 'utf' || '-8')",
+      $"encode".function(Literal("abc"), NamedArgumentExpression("charset",
+        Concat(Literal("utf") :: Literal("-8") :: Nil))))
+    val unresolvedAlias = Project(Seq(UnresolvedAlias(Literal("1"))), OneRowRelation())
+    assertEqual("encode(value => ((select '1')), charset => 'utf-8')",
+      $"encode".function(NamedArgumentExpression("value", ScalarSubquery(plan = unresolvedAlias)),
+        NamedArgumentExpression("charset", Literal("utf-8"))))
   }
 
   private def lv(s: Symbol) = UnresolvedNamedLambdaVariable(Seq(s.name))
@@ -521,8 +538,12 @@ class ExpressionParserSuite extends AnalysisTest {
         Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
       checkError(
         exception = parseException("timestamP_LTZ '2016-33-11 20:54:00.000'"),
-        errorClass = "_LEGACY_ERROR_TEMP_0019",
-        parameters = Map("valueType" -> "TIMESTAMP_LTZ", "value" -> "2016-33-11 20:54:00.000"),
+        errorClass = "INVALID_TYPED_LITERAL",
+        sqlState = "42604",
+        parameters = Map(
+          "valueType" -> "\"TIMESTAMP_LTZ\"",
+          "value" -> "'2016-33-11 20:54:00.000'"
+        ),
         context = ExpectedContext(
           fragment = "timestamP_LTZ '2016-33-11 20:54:00.000'",
           start = 0,
@@ -533,8 +554,12 @@ class ExpressionParserSuite extends AnalysisTest {
         Literal(LocalDateTime.parse("2016-03-11T20:54:00.000")))
       checkError(
         exception = parseException("tImEstAmp_Ntz '2016-33-11 20:54:00.000'"),
-        errorClass = "_LEGACY_ERROR_TEMP_0019",
-        parameters = Map("valueType" -> "TIMESTAMP_NTZ", "value" -> "2016-33-11 20:54:00.000"),
+        errorClass = "INVALID_TYPED_LITERAL",
+        sqlState = "42604",
+        parameters = Map(
+          "valueType" -> "\"TIMESTAMP_NTZ\"",
+          "value" -> "'2016-33-11 20:54:00.000'"
+        ),
         context = ExpectedContext(
           fragment = "tImEstAmp_Ntz '2016-33-11 20:54:00.000'",
           start = 0,
@@ -545,8 +570,9 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("dAte '2016-03-11'", Literal(Date.valueOf("2016-03-11")))
     checkError(
       exception = parseException("DAtE 'mar 11 2016'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0019",
-      parameters = Map("valueType" -> "DATE", "value" -> "mar 11 2016"),
+      errorClass = "INVALID_TYPED_LITERAL",
+      sqlState = "42604",
+      parameters = Map("valueType" -> "\"DATE\"", "value" -> "'mar 11 2016'"),
       context = ExpectedContext(
         fragment = "DAtE 'mar 11 2016'",
         start = 0,
@@ -557,8 +583,9 @@ class ExpressionParserSuite extends AnalysisTest {
       Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
     checkError(
       exception = parseException("timestamP '2016-33-11 20:54:00.000'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0019",
-      parameters = Map("valueType" -> "TIMESTAMP", "value" -> "2016-33-11 20:54:00.000"),
+      errorClass = "INVALID_TYPED_LITERAL",
+      sqlState = "42604",
+      parameters = Map("valueType" -> "\"TIMESTAMP\"", "value" -> "'2016-33-11 20:54:00.000'"),
       context = ExpectedContext(
         fragment = "timestamP '2016-33-11 20:54:00.000'",
         start = 0,
@@ -571,8 +598,9 @@ class ExpressionParserSuite extends AnalysisTest {
 
       checkError(
         exception = parseException("timestamP '2016-33-11 20:54:00.000'"),
-        errorClass = "_LEGACY_ERROR_TEMP_0019",
-        parameters = Map("valueType" -> "TIMESTAMP", "value" -> "2016-33-11 20:54:00.000"),
+        errorClass = "INVALID_TYPED_LITERAL",
+        sqlState = "42604",
+        parameters = Map("valueType" -> "\"TIMESTAMP\"", "value" -> "'2016-33-11 20:54:00.000'"),
         context = ExpectedContext(
           fragment = "timestamP '2016-33-11 20:54:00.000'",
           start = 0,
@@ -591,8 +619,11 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("INTERVAL '1 year 2 month'", ymIntervalLiteral)
     checkError(
       exception = parseException("Interval 'interval 1 yearsss 2 monthsss'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0020",
-      parameters = Map("value" -> "interval 1 yearsss 2 monthsss"),
+      errorClass = "INVALID_TYPED_LITERAL",
+      parameters = Map(
+        "valueType" -> "\"INTERVAL\"",
+        "value" -> "'interval 1 yearsss 2 monthsss'"
+      ),
       context = ExpectedContext(
         fragment = "Interval 'interval 1 yearsss 2 monthsss'",
         start = 0,
@@ -605,8 +636,11 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("INTERVAL '1 day 2 hour 3 minute 4.005006 second'", dtIntervalLiteral)
     checkError(
       exception = parseException("Interval 'interval 1 daysss 2 hoursss'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0020",
-      parameters = Map("value" -> "interval 1 daysss 2 hoursss"),
+      errorClass = "INVALID_TYPED_LITERAL",
+      parameters = Map(
+        "valueType" -> "\"INTERVAL\"",
+        "value" -> "'interval 1 daysss 2 hoursss'"
+      ),
       context = ExpectedContext(
         fragment = "Interval 'interval 1 daysss 2 hoursss'",
         start = 0,
@@ -628,8 +662,11 @@ class ExpressionParserSuite extends AnalysisTest {
       assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
       checkError(
         exception = parseException("Interval 'interval 3 monthsss 1 hoursss'"),
-        errorClass = "_LEGACY_ERROR_TEMP_0020",
-        parameters = Map("value" -> "interval 3 monthsss 1 hoursss"),
+        errorClass = "INVALID_TYPED_LITERAL",
+        parameters = Map(
+          "valueType" -> "\"INTERVAL\"",
+          "value" -> "'interval 3 monthsss 1 hoursss'"
+        ),
         context = ExpectedContext(
           fragment = "Interval 'interval 3 monthsss 1 hoursss'",
           start = 0,
@@ -649,8 +686,12 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("x'A10C'", Literal(Array(0xa1, 0x0c).map(_.toByte)))
     checkError(
       exception = parseException("x'A1OC'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0022",
-      parameters = Map("msg" -> "contains illegal character for hexBinary: A1OC"),
+      errorClass = "INVALID_TYPED_LITERAL",
+      sqlState = "42604",
+      parameters = Map(
+        "valueType" -> "\"X\"",
+        "value" -> "'A1OC'"
+      ),
       context = ExpectedContext(
         fragment = "x'A1OC'",
         start = 0,
@@ -658,8 +699,11 @@ class ExpressionParserSuite extends AnalysisTest {
 
     checkError(
       exception = parseException("GEO '(10,-6)'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0021",
-      parameters = Map("valueType" -> "GEO"),
+      errorClass = "UNSUPPORTED_TYPED_LITERAL",
+      parameters = Map(
+        "unsupportedType" -> "\"GEO\"",
+        "supportedTypes" ->
+        """"DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X""""),
       context = ExpectedContext(
         fragment = "GEO '(10,-6)'",
         start = 0,
@@ -698,13 +742,13 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(".e3"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'.'", "hint" -> ": extra input '.'"))
+      parameters = Map("error" -> "'.'", "hint" -> ""))
 
     // Tiny Int Literal
     assertEqual("10Y", Literal(10.toByte))
     checkError(
       exception = parseException("1000Y"),
-      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
       parameters = Map(
         "rawStrippedQualifier" -> "1000",
         "minValue" -> Byte.MinValue.toString,
@@ -719,7 +763,7 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("10S", Literal(10.toShort))
     checkError(
       exception = parseException("40000S"),
-      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
       parameters = Map(
         "rawStrippedQualifier" -> "40000",
         "minValue" -> Short.MinValue.toString,
@@ -734,7 +778,7 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("10L", Literal(10L))
     checkError(
       exception = parseException("78732472347982492793712334L"),
-      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
       parameters = Map(
         "rawStrippedQualifier" -> "78732472347982492793712334",
         "minValue" -> Long.MinValue.toString,
@@ -749,7 +793,7 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("10.0D", Literal(10.0D))
     checkError(
       exception = parseException("-1.8E308D"),
-      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
       parameters = Map(
         "rawStrippedQualifier" -> "-1.8E308",
         "minValue" -> BigDecimal(Double.MinValue).toString,
@@ -761,7 +805,7 @@ class ExpressionParserSuite extends AnalysisTest {
         stop = 8))
     checkError(
       exception = parseException("1.8E308D"),
-      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
       parameters = Map(
         "rawStrippedQualifier" -> "1.8E308",
         "minValue" -> BigDecimal(Double.MinValue).toString,
@@ -779,8 +823,10 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("123.08BD", Literal(BigDecimal("123.08").underlying()))
     checkError(
       exception = parseException("1.20E-38BD"),
-      errorClass = "_LEGACY_ERROR_TEMP_0061",
-      parameters = Map("msg" -> "decimal can only support precision up to 38."),
+      errorClass = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+      parameters = Map(
+        "precision" -> "40",
+        "maxPrecision" -> "38"),
       context = ExpectedContext(
         fragment = "1.20E-38BD",
         start = 0,
@@ -941,16 +987,6 @@ class ExpressionParserSuite extends AnalysisTest {
         assertEqual(s"${sign}interval $intervalValue", expectedLiteral)
       }
     }
-
-    // Empty interval statement
-    checkError(
-      exception = parseException("interval"),
-      errorClass = "_LEGACY_ERROR_TEMP_0025",
-      parameters = Map.empty,
-      context = ExpectedContext(
-        fragment = "interval",
-        start = 0,
-        stop = 7))
 
     // Single Intervals.
     val forms = Seq("", "s")

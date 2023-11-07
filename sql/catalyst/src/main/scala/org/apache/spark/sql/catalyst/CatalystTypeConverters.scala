@@ -102,7 +102,7 @@ object CatalystTypeConverters {
     final def toCatalyst(@Nullable maybeScalaValue: Any): CatalystType = {
       maybeScalaValue match {
         case null | None => null.asInstanceOf[CatalystType]
-        case opt: Some[ScalaInputType] => toCatalystImpl(opt.get)
+        case opt: Some[ScalaInputType @unchecked] => toCatalystImpl(opt.get)
         case other => toCatalystImpl(other.asInstanceOf[ScalaInputType])
       }
     }

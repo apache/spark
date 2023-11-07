@@ -290,8 +290,17 @@ class TableIdentifierParserSuite extends SQLKeywordUtils {
     assert(TableIdentifier("q", Option("d")) === parseTableIdentifier("d.q"))
 
     // Illegal names.
-    Seq("", "d.q.g", "t:", "${some.var.x}", "tab:1").foreach { identifier =>
-      intercept[ParseException](parseTableIdentifier(identifier))
+    Seq(
+      "" -> ("PARSE_EMPTY_STATEMENT", Map.empty[String, String]),
+      "d.q.g" -> ("PARSE_SYNTAX_ERROR", Map("error" -> "'.'", "hint" -> "")),
+      "t:" -> ("PARSE_SYNTAX_ERROR", Map("error" -> "':'", "hint" -> ": extra input ':'")),
+      "${some.var.x}" -> ("PARSE_SYNTAX_ERROR", Map("error" -> "'$'", "hint" -> "")),
+      "tab:1" -> ("PARSE_SYNTAX_ERROR", Map("error" -> "':'", "hint" -> ""))
+    ).foreach { case (identifier, (errorClass, parameters)) =>
+      checkError(
+        exception = intercept[ParseException](parseTableIdentifier(identifier)),
+        errorClass = errorClass,
+        parameters = parameters)
     }
   }
 
@@ -307,10 +316,10 @@ class TableIdentifierParserSuite extends SQLKeywordUtils {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
       SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
       reservedKeywordsInAnsiMode.foreach { keyword =>
-        val errMsg = intercept[ParseException] {
-          parseTableIdentifier(keyword)
-        }.getMessage
-        assert(errMsg.contains("Syntax error at or near"))
+        checkError(
+          exception = intercept[ParseException](parseTableIdentifier(keyword)),
+          errorClass = "PARSE_SYNTAX_ERROR",
+          parameters = Map("error" -> s"'$keyword'", "hint" -> ""))
         assert(TableIdentifier(keyword) === parseTableIdentifier(s"`$keyword`"))
         assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.`$keyword`"))
       }
@@ -363,7 +372,10 @@ class TableIdentifierParserSuite extends SQLKeywordUtils {
     val complexName = TableIdentifier("`weird`table`name", Some("`d`b`1"))
     assert(complexName === parseTableIdentifier("```d``b``1`.```weird``table``name`"))
     assert(complexName === parseTableIdentifier(complexName.quotedString))
-    intercept[ParseException](parseTableIdentifier(complexName.unquotedString))
+    checkError(
+      exception = intercept[ParseException](parseTableIdentifier(complexName.unquotedString)),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'b'", "hint" -> ""))
     // Table identifier contains continuous backticks should be treated correctly.
     val complexName2 = TableIdentifier("x``y", Some("d``b"))
     assert(complexName2 === parseTableIdentifier(complexName2.quotedString))

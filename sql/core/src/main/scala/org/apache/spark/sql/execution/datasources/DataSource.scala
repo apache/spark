@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.{Locale, ServiceConfigurationError, ServiceLoader}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.conf.Configuration
@@ -36,7 +36,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, TypeUtils}
 import org.apache.spark.sql.connector.catalog.TableProvider
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
@@ -45,7 +44,7 @@ import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
-import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.datasources.xml.XmlFileFormat
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
 import org.apache.spark.sql.internal.SQLConf
@@ -72,7 +71,8 @@ import org.apache.spark.util.{HadoopFSUtils, ThreadUtils, Utils}
  *
  * @param paths A list of file system paths that hold data. These will be globbed before if
  *              the "__globPaths__" option is true, and will be qualified. This option only works
- *              when reading from a [[FileFormat]].
+ *              when reading from a [[FileFormat]]. These paths are expected to be hadoop [[Path]]
+ *              strings.
  * @param userSpecifiedSchema An optional specification of the schema of the data. When present
  *                            we skip attempting to infer the schema.
  * @param partitionColumns A list of column names that the relation is partitioned by. This list is
@@ -105,7 +105,7 @@ case class DataSource(
     // [[FileDataSourceV2]] will still be used if we call the load()/save() method in
     // [[DataFrameReader]]/[[DataFrameWriter]], since they use method `lookupDataSource`
     // instead of `providingClass`.
-    cls.newInstance() match {
+    cls.getDeclaredConstructor().newInstance() match {
       case f: FileDataSourceV2 => f.fallbackFileFormat
       case _ => cls
     }
@@ -130,10 +130,8 @@ case class DataSource(
   }
 
   bucketSpec.foreach { bucket =>
-    SchemaUtils.checkColumnNameDuplication(
-      bucket.bucketColumnNames, "in the bucket definition", equality)
-    SchemaUtils.checkColumnNameDuplication(
-      bucket.sortColumnNames, "in the sort definition", equality)
+    SchemaUtils.checkColumnNameDuplication(bucket.bucketColumnNames, equality)
+    SchemaUtils.checkColumnNameDuplication(bucket.sortColumnNames, equality)
   }
 
   /**
@@ -220,7 +218,6 @@ case class DataSource(
     try {
       SchemaUtils.checkColumnNameDuplication(
         (dataSchema ++ partitionSchema).map(_.name),
-        "in the data schema and the partition schema",
         equality)
     } catch {
       case e: AnalysisException => logWarning(e.getMessage)
@@ -428,17 +425,14 @@ case class DataSource(
       case hs: HadoopFsRelation =>
         SchemaUtils.checkSchemaColumnNameDuplication(
           hs.dataSchema,
-          "in the data schema",
           equality)
         SchemaUtils.checkSchemaColumnNameDuplication(
           hs.partitionSchema,
-          "in the partition schema",
           equality)
         DataSourceUtils.verifySchema(hs.fileFormat, hs.dataSchema)
       case _ =>
         SchemaUtils.checkSchemaColumnNameDuplication(
           relation.schema,
-          "in the data schema",
           equality)
     }
 
@@ -500,17 +494,11 @@ case class DataSource(
    * @param outputColumnNames The original output column names of the input query plan. The
    *                          optimizer may not preserve the output column's names' case, so we need
    *                          this parameter instead of `data.output`.
-   * @param physicalPlan The physical plan of the input query plan. We should run the writing
-   *                     command with this physical plan instead of creating a new physical plan,
-   *                     so that the metrics can be correctly linked to the given physical plan and
-   *                     shown in the web UI.
    */
   def writeAndRead(
       mode: SaveMode,
       data: LogicalPlan,
-      outputColumnNames: Seq[String],
-      physicalPlan: SparkPlan,
-      metrics: Map[String, SQLMetric]): BaseRelation = {
+      outputColumnNames: Seq[String]): BaseRelation = {
     val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(data, outputColumnNames)
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
@@ -520,13 +508,8 @@ case class DataSource(
       case format: FileFormat =>
         disallowWritingIntervals(outputColumns.map(_.dataType), forbidAnsiIntervals = false)
         val cmd = planForWritingFileFormat(format, mode, data)
-        val resolvedPartCols =
-          DataSource.resolvePartitionColumns(cmd.partitionColumns, outputColumns, data, equality)
-        val resolved = cmd.copy(
-          partitionColumns = resolvedPartCols,
-          outputColumnNames = outputColumnNames)
-        resolved.run(sparkSession, physicalPlan)
-        DataWritingCommand.propogateMetrics(sparkSession.sparkContext, resolved, metrics)
+        val qe = sparkSession.sessionState.executePlan(cmd)
+        qe.assertCommandExecuted()
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(outputColumns.toStructType.asNullable)).resolveRelation()
       case _ => throw new IllegalStateException(
@@ -544,7 +527,7 @@ case class DataSource(
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
         disallowWritingIntervals(data.schema.map(_.dataType), forbidAnsiIntervals = false)
-        DataSource.validateSchema(data.schema)
+        DataSource.validateSchema(data.schema, sparkSession.sessionState.conf)
         planForWritingFileFormat(format, mode, data)
       case _ => throw new IllegalStateException(
         s"${providingClass.getCanonicalName} does not allow create table as select.")
@@ -585,6 +568,7 @@ object DataSource extends Logging {
   private val backwardCompatibilityMap: Map[String, String] = {
     val jdbc = classOf[JdbcRelationProvider].getCanonicalName
     val json = classOf[JsonFileFormat].getCanonicalName
+    val xml = classOf[XmlFileFormat].getCanonicalName
     val parquet = classOf[ParquetFileFormat].getCanonicalName
     val csv = classOf[CSVFileFormat].getCanonicalName
     val libsvm = "org.apache.spark.ml.source.libsvm.LibSVMFileFormat"
@@ -613,6 +597,8 @@ object DataSource extends Logging {
       "org.apache.spark.ml.source.libsvm.DefaultSource" -> libsvm,
       "org.apache.spark.ml.source.libsvm" -> libsvm,
       "com.databricks.spark.csv" -> csv,
+      "com.databricks.spark.xml" -> xml,
+      "org.apache.spark.sql.execution.datasources.xml" -> xml,
       "org.apache.spark.sql.execution.streaming.TextSocketSourceProvider" -> socket,
       "org.apache.spark.sql.execution.streaming.RateSourceProvider" -> rate
     )
@@ -662,7 +648,7 @@ object DataSource extends Logging {
                 } else if (provider1.toLowerCase(Locale.ROOT) == "kafka") {
                   throw QueryCompilationErrors.failedToFindKafkaDataSourceError(provider1)
                 } else {
-                  throw QueryExecutionErrors.failedToFindDataSourceError(provider1, error)
+                  throw QueryExecutionErrors.dataSourceNotFoundError(provider1, error)
                 }
             }
           } catch {
@@ -713,7 +699,13 @@ object DataSource extends Logging {
     val useV1Sources = conf.getConf(SQLConf.USE_V1_SOURCE_LIST).toLowerCase(Locale.ROOT)
       .split(",").map(_.trim)
     val cls = lookupDataSource(provider, conf)
-    cls.newInstance() match {
+    val instance = try {
+      cls.getDeclaredConstructor().newInstance()
+    } catch {
+      // Throw the original error from the data source implementation.
+      case e: java.lang.reflect.InvocationTargetException => throw e.getCause
+    }
+    instance match {
       case d: DataSourceRegister if useV1Sources.contains(d.shortName()) => None
       case t: TableProvider
           if !useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
@@ -804,17 +796,19 @@ object DataSource extends Logging {
    */
   def buildStorageFormatFromOptions(options: Map[String, String]): CatalogStorageFormat = {
     val path = CaseInsensitiveMap(options).get("path")
-    val optionsWithoutPath = options.filterKeys(_.toLowerCase(Locale.ROOT) != "path")
+    val optionsWithoutPath = options.view.filterKeys(_.toLowerCase(Locale.ROOT) != "path")
     CatalogStorageFormat.empty.copy(
       locationUri = path.map(CatalogUtils.stringToURI), properties = optionsWithoutPath.toMap)
   }
 
   /**
-   * Called before writing into a FileFormat based data source to make sure the
-   * supplied schema is not empty.
+   * Called before writing into a FileFormat based data source to validate whether
+   * the supplied schema is not empty.
    * @param schema
+   * @param conf
    */
-  def validateSchema(schema: StructType): Unit = {
+  def validateSchema(schema: StructType, conf: SQLConf): Unit = {
+    val shouldAllowEmptySchema = conf.getConf(SQLConf.ALLOW_EMPTY_SCHEMAS_FOR_WRITES)
     def hasEmptySchema(schema: StructType): Boolean = {
       schema.size == 0 || schema.exists {
         case StructField(_, b: StructType, _, _) => hasEmptySchema(b)
@@ -823,7 +817,7 @@ object DataSource extends Logging {
     }
 
 
-    if (hasEmptySchema(schema)) {
+    if (!shouldAllowEmptySchema && hasEmptySchema(schema)) {
       throw QueryCompilationErrors.writeEmptySchemasUnsupportedByDataSourceError()
     }
   }

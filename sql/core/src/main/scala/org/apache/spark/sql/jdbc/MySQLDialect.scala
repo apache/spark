@@ -29,10 +29,10 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference, NullOrdering, SortDirection}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
-import org.apache.spark.sql.types.{BooleanType, DataType, FloatType, LongType, MetadataBuilder}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, FloatType, LongType, MetadataBuilder, StringType}
 
 private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
 
@@ -51,6 +51,20 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     supportedFunctions.contains(funcName)
 
   class MySQLSQLBuilder extends JDBCSQLBuilder {
+    override def visitSortOrder(
+        sortKey: String, sortDirection: SortDirection, nullOrdering: NullOrdering): String = {
+      (sortDirection, nullOrdering) match {
+        case (SortDirection.ASCENDING, NullOrdering.NULLS_FIRST) =>
+          s"$sortKey $sortDirection"
+        case (SortDirection.ASCENDING, NullOrdering.NULLS_LAST) =>
+          s"CASE WHEN $sortKey IS NULL THEN 1 ELSE 0 END, $sortKey $sortDirection"
+        case (SortDirection.DESCENDING, NullOrdering.NULLS_FIRST) =>
+          s"CASE WHEN $sortKey IS NULL THEN 0 ELSE 1 END, $sortKey $sortDirection"
+        case (SortDirection.DESCENDING, NullOrdering.NULLS_LAST) =>
+          s"$sortKey $sortDirection"
+      }
+    }
+
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
@@ -81,6 +95,15 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       Option(LongType)
     } else if (sqlType == Types.BIT && typeName.equals("TINYINT")) {
       Option(BooleanType)
+    } else if ("TINYTEXT".equalsIgnoreCase(typeName)) {
+      // TINYTEXT is Types.VARCHAR(63) from mysql jdbc, but keep it AS-IS for historical reason
+      Some(StringType)
+    } else if (sqlType == Types.VARCHAR && typeName.equals("JSON")) {
+      // Some MySQL JDBC drivers converts JSON type into Types.VARCHAR with a precision of -1.
+      // Explicitly converts it into StringType here.
+      Some(StringType)
+    } else if (sqlType == Types.TINYINT && typeName.equals("TINYINT")) {
+      Some(ByteType)
     } else None
   }
 
@@ -104,7 +127,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       case _: Exception =>
         logWarning("Cannot show schemas.")
     }
-    schemaBuilder.result
+    schemaBuilder.result()
   }
 
   override def getTableExistsQuery(table: String): String = {
@@ -162,15 +185,17 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     // See SPARK-35446: MySQL treats REAL as a synonym to DOUBLE by default
     // We override getJDBCType so that FloatType is mapped to FLOAT instead
     case FloatType => Option(JdbcType("FLOAT", java.sql.Types.FLOAT))
+    case StringType => Option(JdbcType("LONGTEXT", java.sql.Types.LONGVARCHAR))
+    case ByteType => Option(JdbcType("TINYINT", java.sql.Types.TINYINT))
     case _ => JdbcUtils.getCommonJDBCType(dt)
   }
 
   override def getSchemaCommentQuery(schema: String, comment: String): String = {
-    throw QueryExecutionErrors.unsupportedCreateNamespaceCommentError()
+    throw QueryExecutionErrors.unsupportedCommentNamespaceError(schema)
   }
 
   override def removeSchemaCommentQuery(schema: String): String = {
-    throw QueryExecutionErrors.unsupportedRemoveNamespaceCommentError()
+    throw QueryExecutionErrors.unsupportedRemoveNamespaceCommentError(schema)
   }
 
   // CREATE INDEX syntax
@@ -251,9 +276,18 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
         sqlException.getErrorCode match {
           // ER_DUP_KEYNAME
           case 1061 =>
-            throw new IndexAlreadyExistsException(message, cause = Some(e))
+            // The message is: Failed to create index indexName in tableName
+            val regex = "(?s)Failed to create index (.*) in (.*)".r
+            val indexName = regex.findFirstMatchIn(message).get.group(1)
+            val tableName = regex.findFirstMatchIn(message).get.group(2)
+            throw new IndexAlreadyExistsException(
+              indexName = indexName, tableName = tableName, cause = Some(e))
           case 1091 =>
-            throw new NoSuchIndexException(message, cause = Some(e))
+            // The message is: Failed to drop index indexName in tableName
+            val regex = "(?s)Failed to drop index (.*) in (.*)".r
+            val indexName = regex.findFirstMatchIn(message).get.group(1)
+            val tableName = regex.findFirstMatchIn(message).get.group(2)
+            throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
           case _ => super.classifyException(message, e)
         }
       case unsupported: UnsupportedOperationException => throw unsupported
@@ -265,7 +299,40 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     if (cascade) {
       s"DROP SCHEMA ${quoteIdentifier(schema)}"
     } else {
-      throw QueryExecutionErrors.unsupportedDropNamespaceRestrictError()
+      throw QueryExecutionErrors.unsupportedDropNamespaceError(schema)
     }
   }
+
+  class MySQLSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
+    extends JdbcSQLQueryBuilder(dialect, options) {
+
+    override def build(): String = {
+      val limitOrOffsetStmt = if (limit > 0) {
+        if (offset > 0) {
+          s"LIMIT $offset, $limit"
+        } else {
+          dialect.getLimitClause(limit)
+        }
+      } else if (offset > 0) {
+        // MySQL doesn't support OFFSET without LIMIT. According to the suggestion of MySQL
+        // official website, in order to retrieve all rows from a certain offset up to the end of
+        // the result set, you can use some large number for the second parameter. Please refer:
+        // https://dev.mysql.com/doc/refman/8.0/en/select.html
+        s"LIMIT $offset, 18446744073709551615"
+      } else {
+        ""
+      }
+
+      options.prepareQuery +
+        s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+        s" $whereClause $groupByClause $orderByClause $limitOrOffsetStmt"
+    }
+  }
+
+  override def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
+    new MySQLSQLQueryBuilder(this, options)
+
+  override def supportsLimit: Boolean = true
+
+  override def supportsOffset: Boolean = true
 }

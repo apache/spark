@@ -21,10 +21,12 @@ import java.util.Properties
 
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -81,15 +83,13 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     sql("DROP TABLE h2.test.to_drop")
     checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "people", false)))
     Seq(
-      "h2.test.not_existing_table" ->
-        "Table h2.test.not_existing_table not found",
-      "h2.bad_test.not_existing_table" ->
-        "Table h2.bad_test.not_existing_table not found"
-    ).foreach { case (table, expectedMsg) =>
-      val msg = intercept[AnalysisException] {
+      "h2.test.not_existing_table" -> "`h2`.`test`.`not_existing_table`",
+      "h2.bad_test.not_existing_table" -> "`h2`.`bad_test`.`not_existing_table`"
+    ).foreach { case (table, expected) =>
+      val e = intercept[AnalysisException] {
         sql(s"DROP TABLE $table")
-      }.getMessage
-      assert(msg.contains(expectedMsg))
+      }
+      checkErrorTableNotFound(e, expected)
     }
   }
 
@@ -110,13 +110,14 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     val exp1 = intercept[AnalysisException] {
       sql("ALTER TABLE h2.test.not_existing_table RENAME TO test.dst_table")
     }
-    assert(exp1.getMessage.contains(
-      "Table or view not found: h2.test.not_existing_table"))
+    checkErrorTableNotFound(exp1, "`h2`.`test`.`not_existing_table`",
+      ExpectedContext("h2.test.not_existing_table", 12, 11 + "h2.test.not_existing_table".length))
     val exp2 = intercept[AnalysisException] {
       sql("ALTER TABLE h2.bad_test.not_existing_table RENAME TO test.dst_table")
     }
-    assert(exp2.getMessage.contains(
-      "Table or view not found: h2.bad_test.not_existing_table"))
+    checkErrorTableNotFound(exp2, "`h2`.`bad_test`.`not_existing_table`",
+      ExpectedContext("h2.bad_test.not_existing_table", 12,
+        11 + "h2.bad_test.not_existing_table".length))
     // Rename to an existing table
     withTable("h2.test.dst_table") {
       withConnection { conn =>
@@ -129,9 +130,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         val exp = intercept[TableAlreadyExistsException] {
           sql("ALTER TABLE h2.test.src_table RENAME TO test.dst_table")
         }
-        assert(exp.getMessage.contains(
-          "Failed table renaming from test.src_table to test.dst_table"))
-        assert(exp.cause.get.getMessage.contains("Table \"dst_table\" already exists"))
+        checkErrorTableAlreadyExists(exp, "`dst_table`")
       }
     }
   }
@@ -139,14 +138,17 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("load a table") {
     val t = spark.table("h2.test.people")
     val expectedSchema = new StructType()
-      .add("NAME", StringType, true, defaultMetadata)
+      .add("NAME", VarcharType(32), true, defaultMetadata)
       .add("ID", IntegerType, true, defaultMetadata)
-    assert(t.schema === expectedSchema)
-    Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
-      val msg = intercept[AnalysisException] {
+    assert(t.schema === CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema))
+    Seq(
+      "h2.test.not_existing_table" -> "`h2`.`test`.`not_existing_table`",
+      "h2.bad_test.not_existing_table" -> "`h2`.`bad_test`.`not_existing_table`"
+    ).foreach { case (table, expected) =>
+      val e = intercept[AnalysisException] {
         spark.table(table).schema
-      }.getMessage
-      assert(msg.contains("Table or view not found"))
+      }
+      checkErrorTableNotFound(e, expected)
     }
   }
 
@@ -159,16 +161,17 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     }
     withTable("h2.test.new_table") {
       sql("CREATE TABLE h2.test.new_table(i INT, j STRING)")
-      val msg = intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         sql("CREATE TABLE h2.test.new_table(i INT, j STRING)")
-      }.getMessage
-      assert(msg.contains("Table test.new_table already exists"))
+      }
+      checkErrorTableAlreadyExists(e, "`test`.`new_table`")
     }
     val exp = intercept[NoSuchNamespaceException] {
       sql("CREATE TABLE h2.bad_test.new_table(i INT, j STRING)")
     }
-    assert(exp.getMessage.contains("Failed table creation: bad_test.new_table"))
-    assert(exp.cause.get.getMessage.contains("Schema \"bad_test\" not found"))
+    checkError(exp,
+      errorClass = "SCHEMA_NOT_FOUND",
+      parameters = Map("schemaName" -> "`bad_test`"))
   }
 
   test("ALTER TABLE ... add column") {
@@ -187,17 +190,31 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       expectedSchema = expectedSchema.add("c3", DoubleType, true, defaultMetadata)
       assert(t.schema === expectedSchema)
       // Add already existing column
-      val msg = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $tableName ADD COLUMNS (c3 DOUBLE)")
-      }.getMessage
-      assert(msg.contains("Cannot add column, because c3 already exists"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $tableName ADD COLUMNS (c3 DOUBLE)")
+        },
+        errorClass = "FIELDS_ALREADY_EXISTS",
+        parameters = Map(
+          "op" -> "add",
+          "fieldNames" -> "`c3`",
+          "struct" -> "\"STRUCT<ID: INT, C1: INT, C2: STRING, c3: DOUBLE>\""),
+        context = ExpectedContext(
+          fragment = s"ALTER TABLE $tableName ADD COLUMNS (c3 DOUBLE)",
+          start = 0,
+          stop = 52)
+      )
     }
     // Add a column to not existing table and namespace
-    Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
-      val msg = intercept[AnalysisException] {
+    Seq(
+      "h2.test.not_existing_table" -> "`h2`.`test`.`not_existing_table`",
+      "h2.bad_test.not_existing_table" -> "`h2`.`bad_test`.`not_existing_table`"
+    ).foreach { case (table, expected) =>
+      val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $table ADD COLUMNS (C4 STRING)")
-      }.getMessage
-      assert(msg.contains("Table not found"))
+      }
+      checkErrorTableNotFound(e, expected,
+        ExpectedContext(table, 12, 11 + table.length))
     }
   }
 
@@ -212,17 +229,31 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         .add("C0", IntegerType, true, defaultMetadata)
       assert(t.schema === expectedSchema)
       // Rename to already existing column
-      val msg = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $tableName RENAME COLUMN C TO C0")
-      }.getMessage
-      assert(msg.contains("Cannot rename column, because C0 already exists"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $tableName RENAME COLUMN C TO C0")
+        },
+        errorClass = "FIELDS_ALREADY_EXISTS",
+        parameters = Map(
+          "op" -> "rename",
+          "fieldNames" -> "`C0`",
+          "struct" -> "\"STRUCT<C: INT, C0: INT>\""),
+        context = ExpectedContext(
+          fragment = s"ALTER TABLE $tableName RENAME COLUMN C TO C0",
+          start = 0,
+          stop = 50)
+      )
     }
     // Rename a column in not existing table and namespace
-    Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
-      val msg = intercept[AnalysisException] {
+    Seq(
+      "h2.test.not_existing_table" -> "`h2`.`test`.`not_existing_table`",
+      "h2.bad_test.not_existing_table" -> "`h2`.`bad_test`.`not_existing_table`"
+    ).foreach { case (table, expected) =>
+      val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $table RENAME COLUMN ID TO C")
-      }.getMessage
-      assert(msg.contains("Table not found"))
+      }
+      checkErrorTableNotFound(e, expected,
+        ExpectedContext(table, 12, 11 + table.length))
     }
   }
 
@@ -242,11 +273,15 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       assert(msg.contains("Missing field bad_column in table h2.test.alt_table"))
     }
     // Drop a column to not existing table and namespace
-    Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
-      val msg = intercept[AnalysisException] {
+    Seq(
+      "h2.test.not_existing_table" -> "`h2`.`test`.`not_existing_table`",
+      "h2.bad_test.not_existing_table" -> "`h2`.`bad_test`.`not_existing_table`"
+    ).foreach { case (table, expected) =>
+      val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $table DROP COLUMN C1")
-      }.getMessage
-      assert(msg.contains("Table not found"))
+      }
+      checkErrorTableNotFound(e, expected,
+        ExpectedContext(table, 12, 11 + table.length))
     }
   }
 
@@ -267,17 +302,24 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       }.getMessage
       assert(msg1.contains("Missing field bad_column in table h2.test.alt_table"))
       // Update column to wrong type
-      val msg2 = intercept[ParseException] {
-        sql(s"ALTER TABLE $tableName ALTER COLUMN id TYPE bad_type")
-      }.getMessage
-      assert(msg2.contains("DataType bad_type is not supported"))
+      checkError(
+        exception = intercept[ParseException] {
+          sql(s"ALTER TABLE $tableName ALTER COLUMN id TYPE bad_type")
+        },
+        errorClass = "UNSUPPORTED_DATATYPE",
+        parameters = Map("typeName" -> "\"BAD_TYPE\""),
+        context = ExpectedContext("bad_type", 51, 58))
     }
     // Update column type in not existing table and namespace
-    Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
-      val msg = intercept[AnalysisException] {
+    Seq(
+      "h2.test.not_existing_table" -> "`h2`.`test`.`not_existing_table`",
+      "h2.bad_test.not_existing_table" -> "`h2`.`bad_test`.`not_existing_table`"
+    ).foreach { case (table, expected) =>
+      val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $table ALTER COLUMN id TYPE DOUBLE")
-      }.getMessage
-      assert(msg.contains("Table not found"))
+      }
+      checkErrorTableNotFound(e, expected,
+        ExpectedContext(table, 12, 11 + table.length))
     }
   }
 
@@ -299,11 +341,15 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       assert(msg.contains("Missing field bad_column in table h2.test.alt_table"))
     }
     // Update column nullability in not existing table and namespace
-    Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
-      val msg = intercept[AnalysisException] {
+    Seq(
+      "h2.test.not_existing_table" -> "`h2`.`test`.`not_existing_table`",
+      "h2.bad_test.not_existing_table" -> "`h2`.`bad_test`.`not_existing_table`"
+    ).foreach { case (table, expected) =>
+      val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $table ALTER COLUMN ID DROP NOT NULL")
-      }.getMessage
-      assert(msg.contains("Table not found"))
+      }
+      checkErrorTableNotFound(e, expected,
+        ExpectedContext(table, 12, 11 + table.length))
     }
   }
 
@@ -314,8 +360,9 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val exp = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tableName ALTER COLUMN ID COMMENT 'test'")
       }
-      assert(exp.getMessage.contains("Failed table altering: test.alt_table"))
-      assert(exp.cause.get.getMessage.contains("Unsupported TableChange"))
+      assert(exp.getErrorClass === "_LEGACY_ERROR_TEMP_1305")
+      assert("Unsupported TableChange (.*) in JDBC catalog\\.".r.pattern.matcher(exp.getMessage)
+        .matches())
       // Update comment for not existing column
       val msg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tableName ALTER COLUMN bad_column COMMENT 'test'")
@@ -323,11 +370,15 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       assert(msg.contains("Missing field bad_column in table h2.test.alt_table"))
     }
     // Update column comments in not existing table and namespace
-    Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
-      val msg = intercept[AnalysisException] {
+    Seq(
+      "h2.test.not_existing_table" -> "`h2`.`test`.`not_existing_table`",
+      "h2.bad_test.not_existing_table" -> "`h2`.`bad_test`.`not_existing_table`"
+    ).foreach { case (table, expected) =>
+      val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $table ALTER COLUMN ID COMMENT 'test'")
-      }.getMessage
-      assert(msg.contains("Table not found"))
+      }
+      checkErrorTableNotFound(e, expected,
+        ExpectedContext(table, 12, 11 + table.length))
     }
   }
 
@@ -422,6 +473,58 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
           " TBLPROPERTIES('ENGINE'='tableEngineName')")
       }.cause.get.getMessage
       assert(m.contains("\"TABLEENGINENAME\" not found"))
+    }
+  }
+
+  test("SPARK-42904: CREATE TABLE with char/varchar") {
+    withTable("h2.test.new_table") {
+      sql("CREATE TABLE h2.test.new_table(c CHAR(10), v VARCHAR(100))")
+      checkAnswer(sql("SHOW TABLES IN h2.test LIKE 'new*'"), Row("test", "new_table", false))
+    }
+  }
+
+  test("SPARK-42904: CREATE TABLE with char/varchar with invalid char length") {
+    val e = intercept[AnalysisException]{
+      sql("CREATE TABLE h2.test.new_table(c CHAR(1000000001))")
+    }
+    assert(e.getCause.getMessage.contains("1000000001"))
+  }
+
+  test("SPARK-42955: Skip classifyException and wrap AnalysisException for SparkThrowable") {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException](
+        sql("CREATE TABLE h2.test.new_table(c array<int>)")
+      ),
+      errorClass = "_LEGACY_ERROR_TEMP_2082",
+      parameters = Map("catalogString" -> "array<int>")
+    )
+  }
+
+  test("SPARK-42916: Keep Char/Varchar meta information on the read-side") {
+    val tableName = "h2.test.alt_table"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (ID CHAR(10), deptno VARCHAR(20))")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN deptno TYPE VARCHAR(30)")
+      val t = spark.table(tableName)
+      val expected = new StructType()
+        .add("ID", CharType(10), true, defaultMetadata)
+        .add("deptno", VarcharType(30), true, defaultMetadata)
+      val replaced = CharVarcharUtils.replaceCharVarcharWithStringInSchema(expected)
+      assert(t.schema === replaced)
+    }
+  }
+
+  test("SPARK-45449: Cache Invalidation Issue with JDBC Table") {
+    withTable("h2.test.cache_t") {
+      withConnection { conn =>
+        conn.prepareStatement(
+          """CREATE TABLE "test"."cache_t" (id decimal(25) PRIMARY KEY NOT NULL,
+            |name TEXT(32) NOT NULL)""".stripMargin).executeUpdate()
+      }
+      sql("INSERT OVERWRITE h2.test.cache_t SELECT 1 AS id, 'a' AS name")
+      sql("CACHE TABLE t1 SELECT id, name FROM h2.test.cache_t")
+      val plan = sql("select * from t1").queryExecution.sparkPlan
+      assert(plan.isInstanceOf[InMemoryTableScanExec])
     }
   }
 }

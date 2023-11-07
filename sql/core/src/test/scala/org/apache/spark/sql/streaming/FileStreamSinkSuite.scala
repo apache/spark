@@ -21,8 +21,8 @@ import java.io.{File, IOException}
 import java.nio.file.Files
 import java.util.Locale
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 import org.apache.hadoop.mapreduce.JobContext
@@ -30,6 +30,7 @@ import org.apache.hadoop.mapreduce.JobContext
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalyst.util.stringToFile
@@ -40,6 +41,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
 abstract class FileStreamSinkSuite extends StreamTest {
@@ -210,7 +212,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
     // with aggregations using event time windows and watermark, which allows
     // aggregation + append mode.
     val inputData = MemoryStream[Long]
-    val inputDF = inputData.toDF.toDF("time")
+    val inputDF = inputData.toDF().toDF("time")
     val outputDf = inputDF
       .selectExpr("timestamp_seconds(time) AS timestamp")
       .withWatermark("timestamp", "10 seconds")
@@ -371,10 +373,12 @@ abstract class FileStreamSinkSuite extends StreamTest {
           }
         }
 
-        val errorMsg = intercept[AnalysisException] {
-          spark.read.schema(s"$c0 INT, $c1 INT").json(outputDir).as[(Int, Int)]
-        }.getMessage
-        assert(errorMsg.contains("Found duplicate column(s) in the data schema: "))
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.read.schema(s"$c0 INT, $c1 INT").json(outputDir).as[(Int, Int)]
+          },
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c1.toLowerCase(Locale.ROOT)}`"))
       }
     }
   }
@@ -517,7 +521,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
           .filter(_.toString.endsWith(".parquet"))
           .map(_.getFileName.toString)
           .toSet
-        val trackingFileNames = tracking.map(new Path(_).getName).toSet
+        val trackingFileNames = tracking.map(SparkPath.fromUrlString(_).toPath.getName).toSet
 
         // there would be possible to have race condition:
         // - some tasks complete while abortJob is being called
@@ -567,7 +571,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
           val allFiles = sinkLog.allFiles()
           // only files from non-empty partition should be logged
           assert(allFiles.length < 10)
-          assert(allFiles.forall(file => fs.exists(new Path(file.path))))
+          assert(allFiles.forall(file => fs.exists(file.sparkPath.toPath)))
 
           // the query should be able to read all rows correctly with metadata log
           val outputDf = spark.read.format(format).load(outputDir.getCanonicalPath)
@@ -584,7 +588,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
       "fs.file.impl.disable.cache" -> "true") {
       withTempDir { tempDir =>
         val path = new File(tempDir, "text").getCanonicalPath
-        Seq("foo").toDF.write.format("text").save(path)
+        Seq("foo").toDF().write.format("text").save(path)
         spark.read.format("text").load(path)
       }
     }
@@ -596,7 +600,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
       "fs.file.impl.disable.cache" -> "true") {
       withTempDir { tempDir =>
         val path = new File(tempDir, "text").getCanonicalPath
-        Seq("foo").toDF.write.format("text").save(path)
+        Seq("foo").toDF().write.format("text").save(path)
         spark.read.format("text").load(path + "/*")
       }
     }
@@ -670,6 +674,7 @@ class PendingCommitFilesTrackingManifestFileCommitProtocol(jobId: String, path: 
   }
 }
 
+@SlowSQLTest
 class FileStreamSinkV1Suite extends FileStreamSinkSuite {
   override protected def sparkConf: SparkConf =
     super
@@ -707,19 +712,20 @@ class FileStreamSinkV1Suite extends FileStreamSinkSuite {
     // Read with pruning, should read only files in partition dir id=1
     checkFileScanPartitions(df.filter("id = 1")) { partitions =>
       val filesToBeRead = partitions.flatMap(_.files)
-      assert(filesToBeRead.map(_.filePath).forall(_.contains("/id=1/")))
+      assert(filesToBeRead.map(_.urlEncodedPath).forall(_.contains("/id=1/")))
       assert(filesToBeRead.map(_.partitionValues).distinct.size === 1)
     }
 
     // Read with pruning, should read only files in partition dir id=1 and id=2
     checkFileScanPartitions(df.filter("id in (1,2)")) { partitions =>
       val filesToBeRead = partitions.flatMap(_.files)
-      assert(!filesToBeRead.map(_.filePath).exists(_.contains("/id=3/")))
+      assert(!filesToBeRead.map(_.urlEncodedPath).exists(_.contains("/id=3/")))
       assert(filesToBeRead.map(_.partitionValues).distinct.size === 2)
     }
   }
 }
 
+@SlowSQLTest
 class FileStreamSinkV2Suite extends FileStreamSinkSuite {
   override protected def sparkConf: SparkConf =
     super

@@ -28,6 +28,7 @@ from pyspark.mllib.recommendation import Rating
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.serializers import CPickleSerializer
 from pyspark.testing.mllibutils import MLlibTestCase
+from pyspark.testing.utils import eventually
 
 
 class ListTests(MLlibTestCase):
@@ -96,6 +97,7 @@ class ListTests(MLlibTestCase):
             # TODO: Allow small numeric difference.
             self.assertTrue(array_equal(c1, c2))
 
+    @eventually(timeout=60, catch_assertions=True)
     def test_gmm(self):
         from pyspark.mllib.clustering import GaussianMixture
 
@@ -107,7 +109,13 @@ class ListTests(MLlibTestCase):
                 [-6, -7],
             ]
         )
-        clusters = GaussianMixture.train(data, 2, convergenceTol=0.001, maxIterations=10, seed=1)
+        clusters = GaussianMixture.train(
+            data,
+            2,
+            convergenceTol=0.001,
+            maxIterations=10,
+            seed=1,
+        )
         labels = clusters.predict(data).collect()
         self.assertEqual(labels[0], labels[1])
         self.assertEqual(labels[2], labels[3])
@@ -338,7 +346,7 @@ if __name__ == "__main__":
     from pyspark.mllib.tests.test_algorithms import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

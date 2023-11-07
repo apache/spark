@@ -32,13 +32,15 @@ import org.apache.spark.util.random.XORShiftRandom
  *
  * Since this expression is stateful, it cannot be a case object.
  */
-abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful
+abstract class RDG extends UnaryExpression with ExpectsInputTypes with Nondeterministic
   with ExpressionWithRandomSeed {
   /**
    * Record ID within each partition. By being transient, the Random Number Generator is
    * reset every time we serialize and deserialize and initialize it.
    */
   @transient protected var rng: XORShiftRandom = _
+
+  override def stateful: Boolean = true
 
   override protected def initializeInternal(partitionIndex: Int): Unit = {
     rng = new XORShiftRandom(seed + partitionIndex)
@@ -108,8 +110,6 @@ case class Rand(child: Expression, hideSeed: Boolean = false) extends RDG {
       isNull = FalseLiteral)
   }
 
-  override def freshCopy(): Rand = Rand(child, hideSeed)
-
   override def flatArguments: Iterator[Any] = Iterator(child)
   override def sql: String = {
     s"rand(${if (hideSeed) "" else child.sql})"
@@ -160,8 +160,6 @@ case class Randn(child: Expression, hideSeed: Boolean = false) extends RDG {
       final ${CodeGenerator.javaType(dataType)} ${ev.value} = $rngTerm.nextGaussian();""",
       isNull = FalseLiteral)
   }
-
-  override def freshCopy(): Randn = Randn(child, hideSeed)
 
   override def flatArguments: Iterator[Any] = Iterator(child)
   override def sql: String = {

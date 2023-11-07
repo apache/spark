@@ -29,31 +29,35 @@ import scala.util.Random
 
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, Uuid}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.GZIP
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.execution.{FilterExec, LogicalRDD, QueryExecution, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{FilterExec, LogicalRDD, QueryExecution, SortExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.expressions.{Aggregator, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.test.SQLTestData.{ArrayStringWrapper, ContainerStringWrapper, DecimalData, StringWrapper, TestData2}
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
+@SlowSQLTest
 class DataFrameSuite extends QueryTest
   with SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -341,10 +345,24 @@ class DataFrameSuite extends QueryTest
 
   test("Star Expansion - explode should fail with a meaningful message if it takes a star") {
     val df = Seq(("1,2"), ("4"), ("7,8,9")).toDF("csv")
-    val e = intercept[AnalysisException] {
-      df.select(explode($"*"))
-    }
-    assert(e.getMessage.contains("Invalid usage of '*' in expression 'explode'"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(explode($"*"))
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"explode(csv)\"",
+        "paramIndex" -> "1",
+        "inputSql"-> "\"csv\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "(\"ARRAY\" or \"MAP\")"),
+      context = ExpectedContext(fragment = "explode", getCurrentClassCallSitePattern)
+    )
+
+    val df2 = Seq(Array("1", "2"), Array("4"), Array("7", "8", "9")).toDF("csv")
+    checkAnswer(
+      df2.select(explode($"*")),
+      Row("1") :: Row("2") :: Row("4") :: Row("7") :: Row("8") :: Row("9") :: Nil)
   }
 
   test("explode on output of array-valued function") {
@@ -360,6 +378,20 @@ class DataFrameSuite extends QueryTest
     checkAnswer(
       df.select(explode($"a").as("a"), $"*"),
       Row("a", Seq("a"), 1) :: Nil)
+  }
+
+  test("more than one generator in SELECT clause") {
+    val df = Seq((Array("a"), 1)).toDF("a", "b")
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(explode($"a").as("a"), explode($"a").as("b"))
+      },
+      errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
+      parameters = Map(
+        "clause" -> "SELECT",
+        "num" -> "2",
+        "generators" -> "\"explode(a)\", \"explode(a)\""))
   }
 
   test("sort after generate with join=true") {
@@ -688,11 +720,13 @@ class DataFrameSuite extends QueryTest
     assert(
       err.getMessage.contains("The size of column names: 1 isn't equal to the size of columns: 2"))
 
-    val err2 = intercept[AnalysisException] {
-      testData.toDF().withColumns(Seq("newCol1", "newCOL1"),
-        Seq(col("key") + 1, col("key") + 2))
-    }
-    assert(err2.getMessage.contains("Found duplicate column(s)"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        testData.toDF().withColumns(Seq("newCol1", "newCOL1"),
+          Seq(col("key") + 1, col("key") + 2))
+      },
+      errorClass = "COLUMN_ALREADY_EXISTS",
+      parameters = Map("columnName" -> "`newcol1`"))
   }
 
   test("withColumns: internal method, case sensitive") {
@@ -706,11 +740,13 @@ class DataFrameSuite extends QueryTest
         }.toSeq)
       assert(df.schema.map(_.name) === Seq("key", "value", "newCol1", "newCOL1"))
 
-      val err = intercept[AnalysisException] {
-        testData.toDF().withColumns(Seq("newCol1", "newCol1"),
-          Seq(col("key") + 1, col("key") + 2))
-      }
-      assert(err.getMessage.contains("Found duplicate column(s)"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          testData.toDF().withColumns(Seq("newCol1", "newCol1"),
+            Seq(col("key") + 1, col("key") + 2))
+        },
+        errorClass = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`newCol1`"))
     }
   }
 
@@ -748,10 +784,13 @@ class DataFrameSuite extends QueryTest
     val df2 = df1.withMetadata("x", metadata)
     assert(df2.schema(0).metadata === metadata)
 
-    val err = intercept[AnalysisException] {
-      df1.withMetadata("x1", metadata)
-    }
-    assert(err.getMessage.contains("Cannot resolve column name"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.withMetadata("x1", metadata)
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`x1`", "proposal" -> "`x`")
+    )
   }
 
   test("replace column using withColumn") {
@@ -923,12 +962,12 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-40311: withColumnsRenamed duplicate column names simple") {
-    val e = intercept[AnalysisException] {
-      person.withColumnsRenamed(Map("id" -> "renamed", "name" -> "renamed"))
-    }
-    assert(e.getMessage.contains("Found duplicate column(s)"))
-    assert(e.getMessage.contains("in given column names for withColumnsRenamed:"))
-    assert(e.getMessage.contains("`renamed`"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        person.withColumnsRenamed(Map("id" -> "renamed", "name" -> "renamed"))
+      },
+      errorClass = "COLUMN_ALREADY_EXISTS",
+      parameters = Map("columnName" -> "`renamed`"))
   }
 
   test("SPARK-40311: withColumnsRenamed duplicate column names simple case sensitive") {
@@ -939,12 +978,12 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-40311: withColumnsRenamed duplicate column names indirect") {
-    val e = intercept[AnalysisException] {
-      person.withColumnsRenamed(Map("id" -> "renamed1", "renamed1" -> "age"))
-    }
-    assert(e.getMessage.contains("Found duplicate column(s)"))
-    assert(e.getMessage.contains("in given column names for withColumnsRenamed:"))
-    assert(e.getMessage.contains("`age`"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        person.withColumnsRenamed(Map("id" -> "renamed1", "renamed1" -> "age"))
+      },
+      errorClass = "COLUMN_ALREADY_EXISTS",
+      parameters = Map("columnName" -> "`age`"))
   }
 
   test("SPARK-20384: Value class filter") {
@@ -952,7 +991,7 @@ class DataFrameSuite extends QueryTest
       .parallelize(Seq(StringWrapper("a"), StringWrapper("b"), StringWrapper("c")))
       .toDF()
     val filtered = df.where("s = \"a\"")
-    checkAnswer(filtered, spark.sparkContext.parallelize(Seq(StringWrapper("a"))).toDF)
+    checkAnswer(filtered, spark.sparkContext.parallelize(Seq(StringWrapper("a"))).toDF())
   }
 
   test("SPARK-20384: Tuple2 of value class filter") {
@@ -963,7 +1002,7 @@ class DataFrameSuite extends QueryTest
       .toDF()
     val filtered = df.where("_2.s = \"a2\"")
     checkAnswer(filtered,
-      spark.sparkContext.parallelize(Seq((StringWrapper("a1"), StringWrapper("a2")))).toDF)
+      spark.sparkContext.parallelize(Seq((StringWrapper("a1"), StringWrapper("a2")))).toDF())
   }
 
   test("SPARK-20384: Tuple3 of value class filter") {
@@ -975,26 +1014,26 @@ class DataFrameSuite extends QueryTest
     val filtered = df.where("_3.s = \"a3\"")
     checkAnswer(filtered,
       spark.sparkContext.parallelize(
-        Seq((StringWrapper("a1"), StringWrapper("a2"), StringWrapper("a3")))).toDF)
+        Seq((StringWrapper("a1"), StringWrapper("a2"), StringWrapper("a3")))).toDF())
   }
 
   test("SPARK-20384: Array value class filter") {
     val ab = ArrayStringWrapper(Seq(StringWrapper("a"), StringWrapper("b")))
     val cd = ArrayStringWrapper(Seq(StringWrapper("c"), StringWrapper("d")))
 
-    val df = spark.sparkContext.parallelize(Seq(ab, cd)).toDF
+    val df = spark.sparkContext.parallelize(Seq(ab, cd)).toDF()
     val filtered = df.where(array_contains(col("wrappers.s"), "b"))
-    checkAnswer(filtered, spark.sparkContext.parallelize(Seq(ab)).toDF)
+    checkAnswer(filtered, spark.sparkContext.parallelize(Seq(ab)).toDF())
   }
 
   test("SPARK-20384: Nested value class filter") {
     val a = ContainerStringWrapper(StringWrapper("a"))
     val b = ContainerStringWrapper(StringWrapper("b"))
 
-    val df = spark.sparkContext.parallelize(Seq(a, b)).toDF
+    val df = spark.sparkContext.parallelize(Seq(a, b)).toDF()
     // flat value class, `s` field is not in schema
     val filtered = df.where("wrapper = \"a\"")
-    checkAnswer(filtered, spark.sparkContext.parallelize(Seq(a)).toDF)
+    checkAnswer(filtered, spark.sparkContext.parallelize(Seq(a)).toDF())
   }
 
   private lazy val person2: DataFrame = Seq(
@@ -1130,6 +1169,18 @@ class DataFrameSuite extends QueryTest
     checkAnswer(approxSummaryDF, approxSummaryResult)
   }
 
+  test("SPARK-41391: Correct the output column name of groupBy.agg(count_distinct)") {
+    withTempView("person") {
+      person.createOrReplaceTempView("person")
+      val df1 = person.groupBy("id").agg(count_distinct(col("name")))
+      val df2 = spark.sql("SELECT id, COUNT(DISTINCT name) FROM person GROUP BY id")
+      assert(df1.columns === df2.columns)
+      val df3 = person.groupBy("id").agg(count_distinct(col("*")))
+      val df4 = spark.sql("SELECT id, COUNT(DISTINCT *) FROM person GROUP BY id")
+      assert(df3.columns === df4.columns)
+    }
+  }
+
   test("summary advanced") {
     val stats = Array("count", "50.01%", "max", "mean", "min", "25%")
     val orderMatters = person2.summary(stats: _*)
@@ -1138,15 +1189,21 @@ class DataFrameSuite extends QueryTest
     val onlyPercentiles = person2.summary("0.1%", "99.9%")
     assert(onlyPercentiles.count() === 2)
 
-    val fooE = intercept[IllegalArgumentException] {
-      person2.summary("foo")
-    }
-    assert(fooE.getMessage === "foo is not a recognised statistic")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        person2.summary("foo")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2114",
+      parameters = Map("stats" -> "foo")
+    )
 
-    val parseE = intercept[IllegalArgumentException] {
-      person2.summary("foo%")
-    }
-    assert(parseE.getMessage === "Unable to parse foo% as a percentile")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        person2.summary("foo%")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2113",
+      parameters = Map("stats" -> "foo%")
+    )
   }
 
   test("apply on query results (SPARK-5462)") {
@@ -1759,24 +1816,25 @@ class DataFrameSuite extends QueryTest
 
   test("SPARK-8072: Better Exception for Duplicate Columns") {
     // only one duplicate column present
-    val e = intercept[org.apache.spark.sql.AnalysisException] {
+    val e = intercept[AnalysisException] {
       Seq((1, 2, 3), (2, 3, 4), (3, 4, 5)).toDF("column1", "column2", "column1")
         .write.format("parquet").save("temp")
     }
-    assert(e.getMessage.contains("Found duplicate column(s) when inserting into"))
-    assert(e.getMessage.contains("column1"))
-    assert(!e.getMessage.contains("column2"))
+    checkError(
+      exception = e,
+      errorClass = "COLUMN_ALREADY_EXISTS",
+      parameters = Map("columnName" -> "`column1`"))
 
     // multiple duplicate columns present
-    val f = intercept[org.apache.spark.sql.AnalysisException] {
+    val f = intercept[AnalysisException] {
       Seq((1, 2, 3, 4, 5), (2, 3, 4, 5, 6), (3, 4, 5, 6, 7))
         .toDF("column1", "column2", "column3", "column1", "column3")
         .write.format("json").save("temp")
     }
-    assert(f.getMessage.contains("Found duplicate column(s) when inserting into"))
-    assert(f.getMessage.contains("column1"))
-    assert(f.getMessage.contains("column3"))
-    assert(!f.getMessage.contains("column2"))
+    checkError(
+      exception = f,
+      errorClass = "COLUMN_ALREADY_EXISTS",
+      parameters = Map("columnName" -> "`column1`"))
   }
 
   test("SPARK-6941: Better error message for inserting into RDD-based Table") {
@@ -1803,25 +1861,34 @@ class DataFrameSuite extends QueryTest
 
         // error cases: insert into an RDD
         df.createOrReplaceTempView("rdd_base")
-        val e1 = intercept[AnalysisException] {
-          insertion.write.insertInto("rdd_base")
-        }
-        assert(e1.getMessage.contains("Inserting into an RDD-based table is not allowed."))
+        checkError(
+          exception = intercept[AnalysisException] {
+            insertion.write.insertInto("rdd_base")
+          },
+          errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
+          parameters = Map.empty
+        )
 
         // error case: insert into a logical plan that is not a LeafNode
         val indirectDS = pdf.select("_1").filter($"_1" > 5)
         indirectDS.createOrReplaceTempView("indirect_ds")
-        val e2 = intercept[AnalysisException] {
-          insertion.write.insertInto("indirect_ds")
-        }
-        assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
+        checkError(
+          exception = intercept[AnalysisException] {
+            insertion.write.insertInto("indirect_ds")
+          },
+          errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
+          parameters = Map.empty
+        )
 
         // error case: insert into an OneRowRelation
         Dataset.ofRows(spark, OneRowRelation()).createOrReplaceTempView("one_row")
-        val e3 = intercept[AnalysisException] {
-          insertion.write.insertInto("one_row")
-        }
-        assert(e3.getMessage.contains("Inserting into an RDD-based table is not allowed."))
+        checkError(
+          exception = intercept[AnalysisException] {
+            insertion.write.insertInto("one_row")
+          },
+          errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
+          parameters = Map.empty
+        )
       }
     }
   }
@@ -2116,12 +2183,25 @@ class DataFrameSuite extends QueryTest
 
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       val df = Dataset.ofRows(spark, statsPlan)
+        // add some map-like operations which optimizer will optimize away, and make a divergence
+        // for output between logical plan and optimized plan
+        // logical plan
+        // Project [cb#6 AS cbool#12, cby#7 AS cbyte#13, ci#8 AS cint#14]
+        // +- Project [cbool#0 AS cb#6, cbyte#1 AS cby#7, cint#2 AS ci#8]
+        //    +- OutputListAwareStatsTestPlan [cbool#0, cbyte#1, cint#2], 2, 16
+        // optimized plan
+        // OutputListAwareStatsTestPlan [cbool#0, cbyte#1, cint#2], 2, 16
+        .selectExpr("cbool AS cb", "cbyte AS cby", "cint AS ci")
+        .selectExpr("cb AS cbool", "cby AS cbyte", "ci AS cint")
 
       // We can't leverage LogicalRDD.fromDataset here, since it triggers physical planning and
       // there is no matching physical node for OutputListAwareStatsTestPlan.
+      val optimizedPlan = df.queryExecution.optimizedPlan
+      val rewrite = LogicalRDD.buildOutputAssocForRewrite(optimizedPlan.output,
+        df.logicalPlan.output)
       val logicalRDD = LogicalRDD(
         df.logicalPlan.output, spark.sparkContext.emptyRDD[InternalRow], isStreaming = true)(
-        spark, Some(df.queryExecution.optimizedPlan.stats), None)
+        spark, Some(LogicalRDD.rewriteStatistics(optimizedPlan.stats, rewrite.get)), None)
 
       val stats = logicalRDD.computeStats()
       val expectedStats = Statistics(sizeInBytes = expectedSize, rowCount = Some(2),
@@ -2159,12 +2239,24 @@ class DataFrameSuite extends QueryTest
     val statsPlan = OutputListAwareConstraintsTestPlan(outputList = outputList)
 
     val df = Dataset.ofRows(spark, statsPlan)
+      // add some map-like operations which optimizer will optimize away, and make a divergence
+      // for output between logical plan and optimized plan
+      // logical plan
+      // Project [cb#6 AS cbool#12, cby#7 AS cbyte#13, ci#8 AS cint#14]
+      // +- Project [cbool#0 AS cb#6, cbyte#1 AS cby#7, cint#2 AS ci#8]
+      //    +- OutputListAwareConstraintsTestPlan [cbool#0, cbyte#1, cint#2]
+      // optimized plan
+      // OutputListAwareConstraintsTestPlan [cbool#0, cbyte#1, cint#2]
+      .selectExpr("cbool AS cb", "cbyte AS cby", "cint AS ci")
+      .selectExpr("cb AS cbool", "cby AS cbyte", "ci AS cint")
 
     // We can't leverage LogicalRDD.fromDataset here, since it triggers physical planning and
     // there is no matching physical node for OutputListAwareConstraintsTestPlan.
+    val optimizedPlan = df.queryExecution.optimizedPlan
+    val rewrite = LogicalRDD.buildOutputAssocForRewrite(optimizedPlan.output, df.logicalPlan.output)
     val logicalRDD = LogicalRDD(
       df.logicalPlan.output, spark.sparkContext.emptyRDD[InternalRow], isStreaming = true)(
-      spark, None, Some(df.queryExecution.optimizedPlan.constraints))
+      spark, None, Some(LogicalRDD.rewriteConstraints(optimizedPlan.constraints, rewrite.get)))
 
     val constraints = logicalRDD.constraints
     val expectedConstraints = buildExpectedConstraints(logicalRDD.output)
@@ -2322,39 +2414,44 @@ class DataFrameSuite extends QueryTest
   test("SPARK-13774: Check error message for non existent path without globbed paths") {
     val uuid = UUID.randomUUID().toString
     val baseDir = Utils.createTempDir()
-    try {
-      val e = intercept[AnalysisException] {
+    checkError(
+      exception = intercept[AnalysisException] {
         spark.read.format("csv").load(
           new File(baseDir, "file").getAbsolutePath,
           new File(baseDir, "file2").getAbsolutePath,
           new File(uuid, "file3").getAbsolutePath,
           uuid).rdd
-      }
-      assert(e.getMessage.startsWith("Path does not exist"))
-    } finally {
-
-    }
-
+      },
+      errorClass = "PATH_NOT_FOUND",
+      parameters = Map("path" -> "file:.*"),
+      matchPVals = true
+    )
    }
 
   test("SPARK-13774: Check error message for not existent globbed paths") {
     // Non-existent initial path component:
     val nonExistentBasePath = "/" + UUID.randomUUID().toString
     assert(!new File(nonExistentBasePath).exists())
-    val e = intercept[AnalysisException] {
-      spark.read.format("text").load(s"$nonExistentBasePath/*")
-    }
-    assert(e.getMessage.startsWith("Path does not exist"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.read.format("text").load(s"$nonExistentBasePath/*")
+      },
+      errorClass = "PATH_NOT_FOUND",
+      parameters = Map("path" -> s"file:$nonExistentBasePath/*")
+    )
 
     // Existent initial path component, but no matching files:
     val baseDir = Utils.createTempDir()
     val childDir = Utils.createTempDir(baseDir.getAbsolutePath)
     assert(childDir.exists())
     try {
-      val e1 = intercept[AnalysisException] {
-        spark.read.json(s"${baseDir.getAbsolutePath}/*/*-xyz.json").rdd
-      }
-      assert(e1.getMessage.startsWith("Path does not exist"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.json(s"${baseDir.getAbsolutePath}/*/*-xyz.json").rdd
+        },
+        errorClass = "PATH_NOT_FOUND",
+        parameters = Map("path" -> s"file:${baseDir.getAbsolutePath}/*/*-xyz.json")
+      )
     } finally {
       Utils.deleteRecursively(baseDir)
     }
@@ -2379,7 +2476,7 @@ class DataFrameSuite extends QueryTest
     val rdd = sparkContext.makeRDD(Seq(Row.fromSeq(Seq.range(0, size))))
     val schemas = List.range(0, size).map(a => StructField("name" + a, LongType, true))
     val df = spark.createDataFrame(rdd, StructType(schemas))
-    assert(df.persist.take(1).apply(0).toSeq(100).asInstanceOf[Long] == 100)
+    assert(df.persist().take(1).apply(0).toSeq(100).asInstanceOf[Long] == 100)
   }
 
   test("SPARK-17409: Do Not Optimize Query in CTAS (Data source tables) More Than Once") {
@@ -2403,7 +2500,7 @@ class DataFrameSuite extends QueryTest
   test("copy results for sampling with replacement") {
     val df = Seq((1, 0), (2, 0), (3, 0)).toDF("a", "b")
     val sampleDf = df.sample(true, 2.00)
-    val d = sampleDf.withColumn("c", monotonically_increasing_id).select($"c").collect
+    val d = sampleDf.withColumn("c", monotonically_increasing_id()).select($"c").collect()
     assert(d.size == d.distinct.size)
   }
 
@@ -2506,7 +2603,7 @@ class DataFrameSuite extends QueryTest
     df1
       .join(df2, df1("x") === df2("x1"), "left_outer")
       .filter($"x1".isNotNull || !$"y".isin("a!"))
-      .count
+      .count()
   }
 
   // The fix of SPARK-21720 avoid an exception regarding JVM code size limit
@@ -2670,7 +2767,8 @@ class DataFrameSuite extends QueryTest
         // The data set has 2 partitions, so Spark will write at least 2 json files.
         // Use a non-splittable compression (gzip), to make sure the json scan RDD has at least 2
         // partitions.
-        .write.partitionBy("p").option("compression", "gzip").json(path.getCanonicalPath)
+        .write.partitionBy("p")
+        .option("compression", GZIP.lowerCaseName()).json(path.getCanonicalPath)
 
       val numJobs = new AtomicLong(0)
       sparkContext.addSparkListener(new SparkListener {
@@ -2710,6 +2808,15 @@ class DataFrameSuite extends QueryTest
     val swappedDf = df.select($"key".as("map"), $"map".as("key"))
 
     checkAnswer(swappedDf.filter($"key"($"map") > "a"), Row(2, Map(2 -> "b")))
+  }
+
+  test("SPARK-42655 Fix ambiguous column reference error") {
+    val df1 = sparkContext.parallelize(List((1, 2, 3, 4, 5))).toDF("id", "col2", "col3",
+      "col4", "col5")
+    val op_cols_mixed_case = List("id", "col2", "col3", "col4", "col5", "ID")
+    val df2 = df1.select(op_cols_mixed_case.head, op_cols_mixed_case.tail: _*)
+    // should not throw any error.
+    checkAnswer(df2.select("id"), Row(1))
   }
 
   test("SPARK-26057: attribute deduplication on already analyzed plans") {
@@ -2758,7 +2865,7 @@ class DataFrameSuite extends QueryTest
       Console.withOut(captured) {
         df.explain(extended = true)
       }
-      checkAnswer(df, spark.range(10).toDF)
+      checkAnswer(df, spark.range(10).toDF())
       val output = captured.toString
       assert(output.contains(
         """== Parsed Logical Plan ==
@@ -2794,14 +2901,14 @@ class DataFrameSuite extends QueryTest
     val df2 = Seq((1, 2, 4), (2, 3, 5)).toDF("a", "b", "c")
       .repartition($"a", $"b").sortWithinPartitions("a", "b")
 
-    implicit val valueEncoder = RowEncoder(df1.schema)
+    implicit val valueEncoder = ExpressionEncoder(df1.schema)
 
     val df3 = df1.groupBy("a", "b").as[GroupByKey, Row]
       .cogroup(df2.groupBy("a", "b").as[GroupByKey, Row]) { case (_, data1, data2) =>
         data1.zip(data2).map { p =>
           p._1.getInt(2) + p._2.getInt(2)
         }
-      }.toDF
+      }.toDF()
 
     checkAnswer(df3.sort("value"), Row(7) :: Row(9) :: Nil)
 
@@ -2818,7 +2925,7 @@ class DataFrameSuite extends QueryTest
     val df2 = Seq((1, 2, 4), (2, 3, 5)).toDF("a1", "b", "c")
       .repartition($"a1", $"b").sortWithinPartitions("a1", "b")
 
-    implicit val valueEncoder = RowEncoder(df1.schema)
+    implicit val valueEncoder = ExpressionEncoder(df1.schema)
 
     val groupedDataset1 = df1.groupBy(($"a1" + 1).as("a"), $"b").as[GroupByKey, Row]
     val groupedDataset2 = df2.groupBy(($"a1" + 1).as("a"), $"b").as[GroupByKey, Row]
@@ -2828,7 +2935,7 @@ class DataFrameSuite extends QueryTest
         data1.zip(data2).map { p =>
           p._1.getInt(2) + p._2.getInt(2)
         }
-      }.toDF
+      }.toDF()
 
     checkAnswer(df3.sort("value"), Row(7) :: Row(9) :: Nil)
   }
@@ -2836,14 +2943,15 @@ class DataFrameSuite extends QueryTest
   test("groupBy.as: throw AnalysisException for unresolved grouping expr") {
     val df = Seq((1, 2, 3), (2, 3, 4)).toDF("a", "b", "c")
 
-    implicit val valueEncoder = RowEncoder(df.schema)
+    implicit val valueEncoder = ExpressionEncoder(df.schema)
 
     checkError(
       exception = intercept[AnalysisException] {
         df.groupBy($"d", $"b").as[GroupByKey, Row]
       },
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      parameters = Map("objectName" -> "`d`", "proposal" -> "`a`, `b`, `c`"))
+      parameters = Map("objectName" -> "`d`", "proposal" -> "`a`, `b`, `c`"),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("SPARK-40601: flatMapCoGroupsInPandas should fail with different number of keys") {
@@ -2891,7 +2999,8 @@ class DataFrameSuite extends QueryTest
     val e = intercept[AnalysisException] {
       sql("WITH t AS (SELECT 1 FROM nonexist.t) SELECT * FROM t")
     }
-    assert(e.getMessage.contains("Table or view not found:"))
+    checkErrorTableNotFound(e, "`nonexist`.`t`",
+      ExpectedContext("nonexist.t", 25, 34))
   }
 
   test("SPARK-32680: Don't analyze CTAS with unresolved query") {
@@ -2899,7 +3008,9 @@ class DataFrameSuite extends QueryTest
     val e = intercept[AnalysisException] {
       sql(s"CREATE TABLE t USING $v2Source AS SELECT * from nonexist")
     }
-    assert(e.getMessage.contains("Table or view not found:"))
+    checkErrorTableNotFound(e, "`nonexist`",
+      ExpectedContext("nonexist", s"CREATE TABLE t USING $v2Source AS SELECT * from ".length,
+        s"CREATE TABLE t USING $v2Source AS SELECT * from nonexist".length - 1))
   }
 
   test("CalendarInterval reflection support") {
@@ -3269,9 +3380,9 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-36338: DataFrame.withSequenceColumn should append unique sequence IDs") {
-    val ids = spark.range(10).repartition(5)
-      .withSequenceColumn("default_index").collect().map(_.getLong(0))
-    assert(ids.toSet === Range(0, 10).toSet)
+    val ids = spark.range(10).repartition(5).withSequenceColumn("default_index")
+    assert(ids.collect().map(_.getLong(0)).toSet === Range(0, 10).toSet)
+    assert(ids.take(5).map(_.getLong(0)).toSet === Range(0, 5).toSet)
   }
 
   test("SPARK-35320: Reading JSON with key type different to String in a map should fail") {
@@ -3352,7 +3463,7 @@ class DataFrameSuite extends QueryTest
       }
     ))
 
-    assert(res.collect.length == 2)
+    assert(res.collect().length == 2)
   }
 
   test("SPARK-38285: Fix ClassCastException: GenericArrayData cannot be cast to InternalRow") {
@@ -3417,7 +3528,7 @@ class DataFrameSuite extends QueryTest
       }
 
       // UNION (distinct)
-      val df4 = df3.distinct
+      val df4 = df3.distinct()
       checkAnswer(df4, rows.distinct)
 
       val t4 = sqlQuery(cols1, cols2, true)
@@ -3439,7 +3550,7 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-39612: exceptAll with following count should work") {
-    val d1 = Seq("a").toDF
+    val d1 = Seq("a").toDF()
     assert(d1.exceptAll(d1).count() === 0)
   }
 
@@ -3508,6 +3619,86 @@ class DataFrameSuite extends QueryTest
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val df = spark.sql("select * from values(1) where 1 < rand()").repartition(2)
       assert(df.queryExecution.executedPlan.execute().getNumPartitions == 2)
+    }
+  }
+
+  test("SPARK-41048: Improve output partitioning and ordering with AQE cache") {
+    withSQLConf(
+        SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = spark.range(10).selectExpr("cast(id as string) c1")
+      val df2 = spark.range(10).selectExpr("cast(id as string) c2")
+      val cached = df1.join(df2, $"c1" === $"c2").cache()
+      cached.count()
+      val executedPlan = cached.groupBy("c1").agg(max($"c2")).queryExecution.executedPlan
+      // before is 2 sort and 1 shuffle
+      assert(collect(executedPlan) {
+        case s: ShuffleExchangeLike => s
+      }.isEmpty)
+      assert(collect(executedPlan) {
+        case s: SortExec => s
+      }.isEmpty)
+    }
+  }
+
+  test("SPARK-41049: stateful expression should be copied correctly") {
+    val df = spark.sparkContext.parallelize(1 to 5).toDF("x")
+    val v1 = (rand() * 10000).cast(IntegerType)
+    val v2 = to_csv(struct(v1.as("a"))) // to_csv is CodegenFallback
+    df.select(v1, v1, v2, v2).collect().foreach { row =>
+      assert(row.getInt(0) == row.getInt(1))
+      assert(row.getInt(0).toString == row.getString(2))
+      assert(row.getInt(0).toString == row.getString(3))
+    }
+  }
+
+  test("SPARK-45216: Non-deterministic functions with seed") {
+    val df = Seq(Array.range(0, 10)).toDF("a")
+
+    val r = rand()
+    val r2 = randn()
+    val r3 = random()
+    val r4 = uuid()
+    val r5 = shuffle(col("a"))
+    df.select(r, r, r2, r2, r3, r3, r4, r4, r5, r5).collect().foreach { row =>
+      (0 until 5).foreach(i => assert(row.get(i * 2) === row.get(i * 2 + 1)))
+    }
+  }
+
+  test("SPARK-41219: IntegralDivide use decimal(1, 0) to represent 0") {
+    val df = Seq("0.5944910").toDF("a")
+    checkAnswer(df.selectExpr("cast(a as decimal(7,7)) div 100"), Row(0))
+  }
+
+  test("SPARK-44206: Dataset.selectExpr scope Session.active") {
+    val _spark = spark.newSession()
+    _spark.conf.set("spark.sql.legacy.interval.enabled", "true")
+    val df1 = _spark.sql("select '2023-01-01'+ INTERVAL 1 YEAR as b")
+    val df2 = _spark.sql("select '2023-01-01' as a").selectExpr("a + INTERVAL 1 YEAR as b")
+    checkAnswer(df1, df2)
+  }
+
+  test("SPARK-44373: filter respects active session and it's params respects parser") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
+      checkError(
+        exception = intercept[ParseException] {
+          spark.range(1).toDF("CASE").filter("CASE").collect()
+        },
+        errorClass = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "'CASE'", "hint" -> ""))
+    }
+  }
+
+  test("SPARK-44373: createTempView respects active session and it's params respects parser") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.range(1).createTempView("AUTHORIZATION")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1321",
+        parameters = Map("viewName" -> "AUTHORIZATION"))
     }
   }
 }

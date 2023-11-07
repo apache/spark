@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.io.ByteArrayInputStream
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, JavaCode, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
@@ -59,12 +59,24 @@ case class BloomFilterMightContain(
             if !subquery.containsPattern(OUTER_REFERENCE) =>
             TypeCheckResult.TypeCheckSuccess
           case _ =>
-            TypeCheckResult.TypeCheckFailure(s"The Bloom filter binary input to $prettyName " +
-              "should be either a constant value or a scalar subquery expression")
+            DataTypeMismatch(
+              errorSubClass = "BLOOM_FILTER_BINARY_OP_WRONG_TYPE",
+              messageParameters = Map(
+                "functionName" -> toSQLId(prettyName),
+                "actual" -> toSQLExpr(bloomFilterExpression)
+              )
+            )
         }
-      case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
-        s"been ${BinaryType.simpleString} followed by a value with ${LongType.simpleString}, " +
-        s"but it's [${left.dataType.catalogString}, ${right.dataType.catalogString}].")
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "BLOOM_FILTER_WRONG_TYPE",
+          messageParameters = Map(
+            "functionName" -> toSQLId(prettyName),
+            "expectedLeft" -> toSQLType(BinaryType),
+            "expectedRight" -> toSQLType(LongType),
+            "actual" -> Seq(left.dataType, right.dataType).map(toSQLType).mkString(", ")
+          )
+        )
     }
   }
 
@@ -105,11 +117,5 @@ case class BloomFilterMightContain(
     }
   }
 
-  final def deserialize(bytes: Array[Byte]): BloomFilter = {
-    val in = new ByteArrayInputStream(bytes)
-    val bloomFilter = BloomFilter.readFrom(in)
-    in.close()
-    bloomFilter
-  }
-
+  final def deserialize(bytes: Array[Byte]): BloomFilter = BloomFilter.readFrom(bytes)
 }

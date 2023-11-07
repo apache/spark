@@ -56,8 +56,8 @@ NULL
 
 
 -- !query
-SELECT convert_timezone('Europe/Amsterdam', timestamp_ltz'2022-03-23 00:00:00 America/Los_Angeles')
+SELECT convert_timezone('Europe/Brussels', timestamp_ltz'2022-03-23 00:00:00 America/Los_Angeles')
 -- !query schema
-struct<convert_timezone(current_timezone(), Europe/Amsterdam, TIMESTAMP '2022-03-23 00:00:00'):timestamp_ntz>
+struct<convert_timezone(current_timezone(), Europe/Brussels, TIMESTAMP '2022-03-23 00:00:00'):timestamp_ntz>
 -- !query output
 2022-03-23 08:00:00

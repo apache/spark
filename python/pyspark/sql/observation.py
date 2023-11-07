@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 from typing import Any, Dict, Optional
 
 from py4j.java_gateway import JavaObject, JVMView
@@ -21,6 +22,7 @@ from py4j.java_gateway import JavaObject, JVMView
 from pyspark.sql import column
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.utils import is_remote
 
 __all__ = ["Observation"]
 
@@ -65,6 +67,13 @@ class Observation:
     >>> observation.get
     {'count': 2, 'max(age)': 5}
     """
+
+    def __new__(cls, *args: Any, **kwargs: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.sql.connect.observation import Observation as ConnectObservation
+
+            return ConnectObservation(*args, **kwargs)
+        return super().__new__(cls)
 
     def __init__(self, name: Optional[str] = None) -> None:
         """Constructs a named or unnamed Observation instance.

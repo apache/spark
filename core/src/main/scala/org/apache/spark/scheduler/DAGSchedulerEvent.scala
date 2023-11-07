@@ -39,6 +39,7 @@ private[scheduler] case class JobSubmitted(
     partitions: Array[Int],
     callSite: CallSite,
     listener: JobListener,
+    artifactSet: JobArtifactSet,
     properties: Properties = null)
   extends DAGSchedulerEvent
 
@@ -48,6 +49,7 @@ private[scheduler] case class MapStageSubmitted(
   dependency: ShuffleDependency[_, _, _],
   callSite: CallSite,
   listener: JobListener,
+  artifactSet: JobArtifactSet,
   properties: Properties = null)
   extends DAGSchedulerEvent
 
@@ -62,6 +64,8 @@ private[scheduler] case class JobCancelled(
   extends DAGSchedulerEvent
 
 private[scheduler] case class JobGroupCancelled(groupId: String) extends DAGSchedulerEvent
+
+private[scheduler] case class JobTagCancelled(tagName: String) extends DAGSchedulerEvent
 
 private[scheduler] case object AllJobsCancelled extends DAGSchedulerEvent
 
@@ -99,7 +103,7 @@ case class TaskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Thr
 private[scheduler] case object ResubmitFailedStages extends DAGSchedulerEvent
 
 private[scheduler]
-case class SpeculativeTaskSubmitted(task: Task[_]) extends DAGSchedulerEvent
+case class SpeculativeTaskSubmitted(task: Task[_], taskIndex: Int = -1) extends DAGSchedulerEvent
 
 private[scheduler]
 case class UnschedulableTaskSetAdded(stageId: Int, stageAttemptId: Int)

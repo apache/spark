@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
-import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, DeleteFromTableWithFilters, LogicalPlan, ReplaceData, RowLevelWrite}
+import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, DeleteFromTableWithFilters, LogicalPlan, ReplaceData, RowLevelWrite, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{SupportsDeleteV2, TruncatableTable}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -73,9 +73,13 @@ object OptimizeMetadataOnlyDeleteFromTable extends Rule[LogicalPlan] with Predic
     type ReturnType = (RowLevelWrite, RowLevelOperation.Command, Expression, LogicalPlan)
 
     def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-      case rd @ ReplaceData(_, cond, _, originalTable, _) =>
+      case rd @ ReplaceData(_, cond, _, originalTable, _, _) =>
         val command = rd.operation.command
         Some(rd, command, cond, originalTable)
+
+      case wd @ WriteDelta(_, cond, _, originalTable, _, _) =>
+        val command = wd.operation.command
+        Some(wd, command, cond, originalTable)
 
       case _ =>
         None

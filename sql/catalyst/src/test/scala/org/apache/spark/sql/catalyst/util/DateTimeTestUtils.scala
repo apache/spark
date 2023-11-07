@@ -21,7 +21,7 @@ import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneId, ZoneOffset}
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.getZoneId
@@ -49,9 +49,9 @@ object DateTimeTestUtils {
     CET.getId,
     "Africa/Dakar",
     LA.getId,
-    "Antarctica/Vostok",
+    "Asia/Urumqi",
     "Asia/Hong_Kong",
-    "Europe/Amsterdam")
+    "Europe/Brussels")
   val outstandingZoneIds: Seq[ZoneId] = outstandingTimezonesIds.map(getZoneId)
 
   def withDefaultTimeZone[T](newDefaultTimeZone: ZoneId)(block: => T): T = {

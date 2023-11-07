@@ -36,7 +36,6 @@ Properties
 .. autosummary::
    :toctree: api/
 
-   Index.is_monotonic
    Index.is_monotonic_increasing
    Index.is_monotonic_decreasing
    Index.is_unique
@@ -44,7 +43,6 @@ Properties
    Index.hasnans
    Index.dtype
    Index.inferred_type
-   Index.is_all_dates
    Index.shape
    Index.name
    Index.names
@@ -166,16 +164,6 @@ Selecting
    Index.asof
    Index.isin
 
-.. _api.numeric:
-
-Numeric Index
--------------
-.. autosummary::
-   :toctree: api/
-
-   Int64Index
-   Float64Index
-
 .. _api.categorical:
 
 CategoricalIndex
@@ -230,7 +218,6 @@ MultiIndex Properties
    MultiIndex.has_duplicates
    MultiIndex.hasnans
    MultiIndex.inferred_type
-   MultiIndex.is_all_dates
    MultiIndex.shape
    MultiIndex.names
    MultiIndex.ndim
@@ -348,8 +335,7 @@ Time/date components
    DatetimeIndex.minute
    DatetimeIndex.second
    DatetimeIndex.microsecond
-   DatetimeIndex.week
-   DatetimeIndex.weekofyear
+   DatetimeIndex.isocalendar
    DatetimeIndex.dayofweek
    DatetimeIndex.day_of_week
    DatetimeIndex.weekday

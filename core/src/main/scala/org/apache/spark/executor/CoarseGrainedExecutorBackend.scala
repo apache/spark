@@ -20,9 +20,9 @@ package org.apache.spark.executor
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
@@ -35,6 +35,8 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.network.netty.SparkTransportConf
+import org.apache.spark.network.util.NettyUtils
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.resource.ResourceProfile._
@@ -54,7 +56,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     env: SparkEnv,
     resourcesFileOpt: Option[String],
     resourceProfile: ResourceProfile)
-  extends IsolatedRpcEndpoint with ExecutorBackend with Logging {
+  extends IsolatedThreadSafeRpcEndpoint with ExecutorBackend with Logging {
 
   import CoarseGrainedExecutorBackend._
 
@@ -69,9 +71,12 @@ private[spark] class CoarseGrainedExecutorBackend(
   /**
    * Map each taskId to the information about the resource allocated to it, Please refer to
    * [[ResourceInformation]] for specifics.
+   * CHM is used to ensure thread-safety (https://issues.apache.org/jira/browse/SPARK-45227)
    * Exposed for testing only.
    */
-  private[executor] val taskResources = new mutable.HashMap[Long, Map[String, ResourceInformation]]
+  private[executor] val taskResources = new ConcurrentHashMap[
+    Long, Map[String, ResourceInformation]
+  ]
 
   private var decommissioned = false
 
@@ -85,7 +90,10 @@ private[spark] class CoarseGrainedExecutorBackend(
 
     logInfo("Connecting to driver: " + driverUrl)
     try {
-      if (PlatformDependent.directBufferPreferred() &&
+      val securityManager = new SecurityManager(env.conf)
+      val shuffleClientTransportConf = SparkTransportConf.fromSparkConf(
+        env.conf, "shuffle", sslOptions = Some(securityManager.getRpcSSLOptions()))
+      if (NettyUtils.preferDirectBufs(shuffleClientTransportConf) &&
           PlatformDependent.maxDirectMemory() < env.conf.get(MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)) {
         throw new SparkException(s"Netty direct memory should at least be bigger than " +
           s"'${MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM.key}', but got " +
@@ -148,13 +156,13 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   def extractLogUrls: Map[String, String] = {
     val prefix = "SPARK_LOG_URL_"
-    sys.env.filterKeys(_.startsWith(prefix))
+    sys.env.view.filterKeys(_.startsWith(prefix))
       .map(e => (e._1.substring(prefix.length).toLowerCase(Locale.ROOT), e._2)).toMap
   }
 
   def extractAttributes: Map[String, String] = {
     val prefix = "SPARK_EXECUTOR_ATTRIBUTE_"
-    sys.env.filterKeys(_.startsWith(prefix))
+    sys.env.view.filterKeys(_.startsWith(prefix))
       .map(e => (e._1.substring(prefix.length).toUpperCase(Locale.ROOT), e._2)).toMap
   }
 
@@ -174,6 +182,8 @@ private[spark] class CoarseGrainedExecutorBackend(
         case NonFatal(e) =>
           exitExecutor(1, "Unable to create executor due to " + e.getMessage, e)
       }
+    case UpdateExecutorLogLevel(newLogLevel) =>
+      Utils.setLogLevelIfNeeded(newLogLevel)
 
     case LaunchTask(data) =>
       if (executor == null) {
@@ -181,7 +191,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       } else {
         val taskDesc = TaskDescription.decode(data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
-        taskResources(taskDesc.taskId) = taskDesc.resources
+        taskResources.put(taskDesc.taskId, taskDesc.resources)
         executor.launchTask(this, taskDesc)
       }
 
@@ -244,6 +254,9 @@ private[spark] class CoarseGrainedExecutorBackend(
           decommissioned = false
       }
       context.reply(decommissioned)
+
+    case TaskThreadDump(taskId) =>
+      context.reply(executor.getTaskThreadDump(taskId))
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -258,8 +271,9 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer): Unit = {
-    val resources = taskResources.getOrElse(taskId, Map.empty[String, ResourceInformation])
-    val msg = StatusUpdate(executorId, taskId, state, data, resources)
+    val resources = taskResources.getOrDefault(taskId, Map.empty[String, ResourceInformation])
+    val cpus = executor.runningTasks.get(taskId).taskDescription.cpus
+    val msg = StatusUpdate(executorId, taskId, state, data, cpus, resources)
     if (TaskState.isFinished(state)) {
       taskResources.remove(taskId)
     }
@@ -469,6 +483,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
 
       driverConf.set(EXECUTOR_ID, arguments.executorId)
+      cfg.logLevel.foreach(logLevel => Utils.setLogLevelIfNeeded(logLevel))
+
       val env = SparkEnv.createExecutorEnv(driverConf, arguments.executorId, arguments.bindAddress,
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
       // Set the application attemptId in the BlockStoreClient if available.

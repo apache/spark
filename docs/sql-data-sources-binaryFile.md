@@ -34,6 +34,15 @@ you can use the general data source option `pathGlobFilter`.
 For example, the following code reads all PNG files from the input directory:
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+{% highlight python %}
+
+spark.read.format("binaryFile").option("pathGlobFilter", "*.png").load("/path/to/data")
+
+{% endhighlight %}
+</div>
+
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
 
@@ -49,13 +58,7 @@ spark.read().format("binaryFile").option("pathGlobFilter", "*.png").load("/path/
 
 {% endhighlight %}
 </div>
-<div data-lang="python" markdown="1">
-{% highlight python %}
 
-spark.read.format("binaryFile").option("pathGlobFilter", "*.png").load("/path/to/data")
-
-{% endhighlight %}
-</div>
 <div data-lang="r" markdown="1">
 {% highlight r %}
 
@@ -63,6 +66,7 @@ read.df("/path/to/data", source = "binaryFile", pathGlobFilter = "*.png")
 
 {% endhighlight %}
 </div>
+
 </div>
 
 Binary file data source does not support writing a DataFrame back to the original files.

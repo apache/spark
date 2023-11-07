@@ -22,7 +22,7 @@ from pyspark.ml.linalg import SparseVector
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
-class UDTOpsTest(OpsTestBase):
+class UDTOpsTestsMixin:
     @property
     def pser(self):
         sparse_values = {0: 0.1, 1: 1.1}
@@ -175,12 +175,16 @@ class UDTOpsTest(OpsTestBase):
         )
 
 
+class UDTOpsTests(UDTOpsTestsMixin, OpsTestBase):
+    pass
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.pandas.tests.data_type_ops.test_udt_ops import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

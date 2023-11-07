@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -65,7 +66,7 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
   private def shouldCastStringLiteral(to: AbstractDataType, expected: DataType): Unit = {
     val input = Literal("123")
     val castResult = AnsiTypeCoercion.implicitCast(input, to)
-    assert(DataType.equalsIgnoreCaseAndNullability(
+    assert(DataTypeUtils.equalsIgnoreCaseAndNullability(
       castResult.map(_.dataType).orNull, expected),
       s"Failed to cast String literal to $to")
   }

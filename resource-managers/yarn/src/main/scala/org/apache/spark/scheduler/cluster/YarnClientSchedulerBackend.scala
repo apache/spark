@@ -53,7 +53,7 @@ private[spark] class YarnClientSchedulerBackend(
     sc.ui.foreach { ui => conf.set(DRIVER_APP_UI_ADDRESS, ui.webUrl) }
 
     val argsArrayBuf = new ArrayBuffer[String]()
-    argsArrayBuf += ("--arg", hostport)
+    argsArrayBuf += "--arg" += hostport
 
     logDebug("ClientArguments called with: " + argsArrayBuf.mkString(" "))
     val args = new ClientArguments(argsArrayBuf.toArray)
@@ -160,9 +160,9 @@ private[spark] class YarnClientSchedulerBackend(
   /**
    * Stop the scheduler. This assumes `start()` has already been called.
    */
-  override def stop(): Unit = {
+  override def stop(exitCode: Int): Unit = {
     assert(client != null, "Attempted to stop this scheduler before starting it!")
-    yarnSchedulerEndpoint.handleClientModeDriverStop()
+    yarnSchedulerEndpoint.signalDriverStop(exitCode)
     if (monitorThread != null) {
       monitorThread.stopMonitor()
     }

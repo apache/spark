@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{HasMetadata, ServiceBuilder}
 
@@ -76,6 +76,7 @@ private[spark] class DriverServiceFeatureStep(
         .withName(resolvedServiceName)
         .addToAnnotations(kubernetesConf.serviceAnnotations.asJava)
         .addToLabels(SPARK_APP_ID_LABEL, kubernetesConf.appId)
+        .addToLabels(kubernetesConf.serviceLabels.asJava)
         .endMetadata()
       .withNewSpec()
         .withClusterIP("None")

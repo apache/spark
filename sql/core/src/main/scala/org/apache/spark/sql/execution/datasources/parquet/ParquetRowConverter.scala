@@ -21,8 +21,8 @@ import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteOrder
 import java.time.{ZoneId, ZoneOffset}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.parquet.column.Dictionary
 import org.apache.parquet.io.ColumnIOFactory
@@ -34,7 +34,8 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, FIXED_
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.types.{PhysicalByteType, PhysicalShortType}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -187,11 +188,13 @@ private[parquet] class ParquetRowConverter(
 
   private[this] val currentRow = new SpecificInternalRow(catalystType.map(_.dataType))
 
+  private[this] lazy val bitmask = ResolveDefaultColumns.existenceDefaultsBitmask(catalystType)
+
   /**
    * The [[InternalRow]] converted from an entire Parquet record.
    */
   def currentRecord: InternalRow = {
-    applyExistenceDefaultValuesToRow(catalystType, currentRow)
+    applyExistenceDefaultValuesToRow(catalystType, currentRow, bitmask)
     currentRow
   }
 
@@ -229,9 +232,10 @@ private[parquet] class ParquetRowConverter(
       }
     // If any fields in the Catalyst result schema have associated existence default values,
     // maintain a boolean array to track which fields have been explicitly assigned for each row.
-    if (catalystType.hasExistenceDefaultValues) {
-      for (i <- 0 until catalystType.existenceDefaultValues.size) {
-        catalystType.existenceDefaultsBitmask(i) =
+    if (ResolveDefaultColumns.hasExistenceDefaultValues(catalystType)) {
+      val existingValues = ResolveDefaultColumns.existenceDefaultValues(catalystType)
+      for (i <- 0 until existingValues.size) {
+       bitmask(i) =
           // Assume the schema for a Parquet file-based table contains N fields. Then if we later
           // run a command "ALTER TABLE t ADD COLUMN c DEFAULT <value>" on the Parquet table, this
           // adds one field to the Catalyst schema. Then if we query the old files with the new
@@ -239,7 +243,7 @@ private[parquet] class ParquetRowConverter(
           if (i < parquetType.getFieldCount) {
             false
           } else {
-            catalystType.existenceDefaultValues(i) != null
+            existingValues(i) != null
           }
       }
     }
@@ -307,7 +311,7 @@ private[parquet] class ParquetRowConverter(
       case LongType if isUnsignedIntTypeMatched(32) =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit =
-            updater.setLong(Integer.toUnsignedLong(value))
+            this.updater.setLong(Integer.toUnsignedLong(value))
         }
       case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType |
         _: AnsiIntervalType =>
@@ -316,13 +320,13 @@ private[parquet] class ParquetRowConverter(
       case ByteType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit =
-            updater.setByte(value.asInstanceOf[ByteType#InternalType])
+            this.updater.setByte(value.asInstanceOf[PhysicalByteType#InternalType])
         }
 
       case ShortType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit =
-            updater.setShort(value.asInstanceOf[ShortType#InternalType])
+            this.updater.setShort(value.asInstanceOf[PhysicalShortType#InternalType])
         }
 
       // For INT32 backed decimals
@@ -342,7 +346,7 @@ private[parquet] class ParquetRowConverter(
       case _: DecimalType if isUnsignedIntTypeMatched(64) =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
-            updater.set(Decimal(java.lang.Long.toUnsignedString(value)))
+            this.updater.set(Decimal(java.lang.Long.toUnsignedString(value)))
           }
         }
 
@@ -387,7 +391,7 @@ private[parquet] class ParquetRowConverter(
              .asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.MICROS =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
-            updater.setLong(timestampRebaseFunc(value))
+            this.updater.setLong(timestampRebaseFunc(value))
           }
         }
 
@@ -400,7 +404,7 @@ private[parquet] class ParquetRowConverter(
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
             val micros = DateTimeUtils.millisToMicros(value)
-            updater.setLong(timestampRebaseFunc(micros))
+            this.updater.setLong(timestampRebaseFunc(micros))
           }
         }
 
@@ -413,7 +417,7 @@ private[parquet] class ParquetRowConverter(
             val gregorianMicros = int96RebaseFunc(julianMicros)
             val adjTime = convertTz.map(DateTimeUtils.convertTz(gregorianMicros, _, ZoneOffset.UTC))
               .getOrElse(gregorianMicros)
-            updater.setLong(adjTime)
+            this.updater.setLong(adjTime)
           }
         }
 
@@ -430,14 +434,14 @@ private[parquet] class ParquetRowConverter(
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
             val micros = DateTimeUtils.millisToMicros(value)
-            updater.setLong(micros)
+            this.updater.setLong(micros)
           }
         }
 
       case DateType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit = {
-            updater.set(dateRebaseFunc(value))
+            this.updater.set(dateRebaseFunc(value))
           }
         }
 

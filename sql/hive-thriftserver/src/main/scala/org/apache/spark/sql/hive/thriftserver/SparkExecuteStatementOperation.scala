@@ -21,7 +21,7 @@ import java.security.PrivilegedExceptionAction
 import java.util.{Collections, Map => JMap}
 import java.util.concurrent.{Executors, RejectedExecutionException, TimeUnit}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.shims.Utils
@@ -32,6 +32,7 @@ import org.apache.hive.service.rpc.thrift.{TCLIServiceConstants, TColumnDesc, TP
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.HiveResult.getTimeFormatters
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
 import org.apache.spark.sql.types._
@@ -96,7 +97,7 @@ private[hive] class SparkExecuteStatementOperation(
   private def getNextRowSetInternal(
       order: FetchOrientation,
       maxRowsL: Long): TRowSet = withLocalProperties {
-    log.info(s"Received getNextRowSet request order=${order} and maxRowsL=${maxRowsL} " +
+    log.debug(s"Received getNextRowSet request order=${order} and maxRowsL=${maxRowsL} " +
       s"with ${statementId}")
     validateDefaultFetchOrientation(order)
     assertState(OperationState.FINISHED)
@@ -112,7 +113,7 @@ private[hive] class SparkExecuteStatementOperation(
     val maxRows = maxRowsL.toInt
     val offset = iter.getPosition
     val rows = iter.take(maxRows).toList
-    log.info(s"Returning result set with ${rows.length} rows from offsets " +
+    log.debug(s"Returning result set with ${rows.length} rows from offsets " +
       s"[${iter.getFetchStart}, ${offset}) with $statementId")
     RowSetUtils.toTRowSet(offset, rows, dataTypes, getProtocolVersion, getTimeFormatters)
   }
@@ -229,7 +230,7 @@ private[hive] class SparkExecuteStatementOperation(
         result.queryExecution.toString())
       iter = if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
         new IterableFetchIterator[Row](new Iterable[Row] {
-          override def iterator: Iterator[Row] = result.toLocalIterator.asScala
+          override def iterator: Iterator[Row] = result.toLocalIterator().asScala
         })
       } else {
         new ArrayFetchIterator[Row](result.collect())
@@ -333,6 +334,8 @@ object SparkExecuteStatementOperation {
     case _: ArrayType => TTypeId.ARRAY_TYPE
     case _: MapType => TTypeId.MAP_TYPE
     case _: StructType => TTypeId.STRUCT_TYPE
+    case _: CharType => TTypeId.CHAR_TYPE
+    case _: VarcharType => TTypeId.VARCHAR_TYPE
     case other =>
       throw new IllegalArgumentException(s"Unrecognized type name: ${other.catalogString}")
   }
@@ -344,6 +347,9 @@ object SparkExecuteStatementOperation {
         Map(
           TCLIServiceConstants.PRECISION -> TTypeQualifierValue.i32Value(d.precision),
           TCLIServiceConstants.SCALE -> TTypeQualifierValue.i32Value(d.scale)).asJava
+      case _: VarcharType | _: CharType =>
+        Map(TCLIServiceConstants.CHARACTER_MAXIMUM_LENGTH ->
+          TTypeQualifierValue.i32Value(typ.defaultSize)).asJava
       case _ => Collections.emptyMap[String, TTypeQualifierValue]()
     }
     ret.setQualifiers(qualifiers)
@@ -369,7 +375,7 @@ object SparkExecuteStatementOperation {
 
   def toTTableSchema(schema: StructType): TTableSchema = {
     val tTableSchema = new TTableSchema()
-    schema.zipWithIndex.foreach { case (f, i) =>
+    CharVarcharUtils.getRawSchema(schema).zipWithIndex.foreach { case (f, i) =>
       tTableSchema.addToColumns(toTColumnDesc(f, i))
     }
     tTableSchema

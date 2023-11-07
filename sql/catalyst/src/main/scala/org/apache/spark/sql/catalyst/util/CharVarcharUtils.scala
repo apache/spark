@@ -23,11 +23,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-object CharVarcharUtils extends Logging {
+object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
   private val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
 
@@ -47,41 +46,6 @@ object CharVarcharUtils extends Logging {
         field
       }
     })
-  }
-
-  /**
-   * Returns true if the given data type is CharType/VarcharType or has nested CharType/VarcharType.
-   */
-  def hasCharVarchar(dt: DataType): Boolean = {
-    dt.existsRecursively(f => f.isInstanceOf[CharType] || f.isInstanceOf[VarcharType])
-  }
-
-  /**
-   * Validate the given [[DataType]] to fail if it is char or varchar types or contains nested ones
-   */
-  def failIfHasCharVarchar(dt: DataType): DataType = {
-    if (!SQLConf.get.charVarcharAsString && hasCharVarchar(dt)) {
-      throw QueryCompilationErrors.charOrVarcharTypeAsStringUnsupportedError()
-    } else {
-      replaceCharVarcharWithString(dt)
-    }
-  }
-
-  /**
-   * Replaces CharType/VarcharType with StringType recursively in the given data type.
-   */
-  def replaceCharVarcharWithString(dt: DataType): DataType = dt match {
-    case ArrayType(et, nullable) =>
-      ArrayType(replaceCharVarcharWithString(et), nullable)
-    case MapType(kt, vt, nullable) =>
-      MapType(replaceCharVarcharWithString(kt), replaceCharVarcharWithString(vt), nullable)
-    case StructType(fields) =>
-      StructType(fields.map { field =>
-        field.copy(dataType = replaceCharVarcharWithString(field.dataType))
-      })
-    case _: CharType => StringType
-    case _: VarcharType => StringType
-    case _ => dt
   }
 
   /**
@@ -215,7 +179,10 @@ object CharVarcharUtils extends Logging {
           Seq(Literal(f.name), processStringForCharVarchar(
             GetStructField(expr, i, Some(f.name)), f.dataType, charFuncName, varcharFuncName))
         })
-        if (expr.nullable) {
+        if (struct.valExprs.forall(_.isInstanceOf[GetStructField])) {
+          // No field needs char/varchar processing, just return the original expression.
+          expr
+        } else if (expr.nullable) {
           If(IsNull(expr), Literal(null, struct.dataType), struct)
         } else {
           struct
@@ -225,11 +192,18 @@ object CharVarcharUtils extends Logging {
         processStringForCharVarcharInArray(expr, et, containsNull, charFuncName, varcharFuncName)
 
       case MapType(kt, vt, valueContainsNull) =>
+        val keys = MapKeys(expr)
         val newKeys = processStringForCharVarcharInArray(
-          MapKeys(expr), kt, containsNull = false, charFuncName, varcharFuncName)
+          keys, kt, containsNull = false, charFuncName, varcharFuncName)
+        val values = MapValues(expr)
         val newValues = processStringForCharVarcharInArray(
-          MapValues(expr), vt, valueContainsNull, charFuncName, varcharFuncName)
-        MapFromArrays(newKeys, newValues)
+          values, vt, valueContainsNull, charFuncName, varcharFuncName)
+        if (newKeys.fastEquals(keys) && newValues.fastEquals(values)) {
+          // If map key/value does not need char/varchar processing, return the original expression.
+          expr
+        } else {
+          MapFromArrays(newKeys, newValues)
+        }
 
       case _ => expr
     }
@@ -242,10 +216,13 @@ object CharVarcharUtils extends Logging {
       charFuncName: Option[String],
       varcharFuncName: Option[String]): Expression = {
     val param = NamedLambdaVariable("x", replaceCharVarcharWithString(et), containsNull)
-    val func = LambdaFunction(
-      processStringForCharVarchar(param, et, charFuncName, varcharFuncName),
-      Seq(param))
-    ArrayTransform(arr, func)
+    val funcBody = processStringForCharVarchar(param, et, charFuncName, varcharFuncName)
+    if (funcBody.fastEquals(param)) {
+      // If array element does not need char/varchar processing, return the original expression.
+      arr
+    } else {
+      ArrayTransform(arr, LambdaFunction(funcBody, Seq(param)))
+    }
   }
 
   def addPaddingForScan(attr: Attribute): Expression = {

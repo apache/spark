@@ -19,8 +19,8 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, OffsetAndTimestamp}
@@ -291,7 +291,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       }
 
       tp -> offset
-    }.toMap
+    }
   }
 
   private def fetchSpecificOffsets0(
@@ -435,11 +435,10 @@ private[kafka010] class KafkaOffsetReaderConsumer(
 
     // Calculate offset ranges
     val offsetRangesBase = untilPartitionOffsets.keySet.map { tp =>
-      val fromOffset = fromPartitionOffsets.get(tp).getOrElse {
+      val fromOffset = fromPartitionOffsets.getOrElse(tp,
         // This should not happen since topicPartitions contains all partitions not in
         // fromPartitionOffsets
-        throw new IllegalStateException(s"$tp doesn't have a from offset")
-      }
+        throw new IllegalStateException(s"$tp doesn't have a from offset"))
       val untilOffset = untilPartitionOffsets(tp)
       KafkaOffsetRange(tp, fromOffset, untilOffset, None)
     }.toSeq
@@ -536,7 +535,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       }
       KafkaOffsetRange(tp, fromOffset, untilOffset, preferredLoc = None)
     }
-    rangeCalculator.getRanges(ranges, getSortedExecutorList)
+    rangeCalculator.getRanges(ranges, getSortedExecutorList())
   }
 
   private def partitionsAssignedToConsumer(

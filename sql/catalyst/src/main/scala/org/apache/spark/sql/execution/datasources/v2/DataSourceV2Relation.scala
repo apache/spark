@@ -18,10 +18,11 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{ExposesMetadataColumns, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -54,15 +55,8 @@ case class DataSourceV2Relation(
 
   override lazy val metadataOutput: Seq[AttributeReference] = table match {
     case hasMeta: SupportsMetadataColumns =>
-      val resolve = conf.resolver
-      val outputNames = outputSet.map(_.name)
-      def isOutputColumn(col: MetadataColumn): Boolean = {
-        outputNames.exists(name => resolve(col.name, name))
-      }
-      // filter out metadata columns that have names conflicting with output columns. if the table
-      // has a column "line" and the table can produce a metadata column called "line", then the
-      // data column should be returned, not the metadata column.
-      hasMeta.metadataColumns.filterNot(isOutputColumn).toAttributes
+      metadataOutputWithOutConflicts(
+        hasMeta.metadataColumns.toAttributes, hasMeta.canRenameConflictingMetadataColumns)
     case _ =>
       Nil
   }
@@ -91,7 +85,7 @@ case class DataSourceV2Relation(
       table.asReadable.newScanBuilder(options).build() match {
         case r: SupportsReportStatistics =>
           val statistics = r.estimateStatistics()
-          DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes)
+          DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes, output)
         case _ =>
           Statistics(sizeInBytes = conf.defaultSizeInBytes)
       }
@@ -103,8 +97,9 @@ case class DataSourceV2Relation(
   }
 
   def withMetadataColumns(): DataSourceV2Relation = {
-    if (metadataOutput.nonEmpty) {
-      DataSourceV2Relation(table, output ++ metadataOutput, catalog, identifier, options)
+    val newMetadata = metadataOutput.filterNot(outputSet.contains)
+    if (newMetadata.nonEmpty) {
+      DataSourceV2Relation(table, output ++ newMetadata, catalog, identifier, options)
     } else {
       this
     }
@@ -142,7 +137,7 @@ case class DataSourceV2ScanRelation(
     scan match {
       case r: SupportsReportStatistics =>
         val statistics = r.estimateStatistics()
-        DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes)
+        DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes, output)
       case _ =>
         Statistics(sizeInBytes = conf.defaultSizeInBytes)
     }
@@ -173,7 +168,7 @@ case class StreamingDataSourceV2Relation(
   override def computeStats(): Statistics = scan match {
     case r: SupportsReportStatistics =>
       val statistics = r.estimateStatistics()
-      DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes)
+      DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes, output)
     case _ =>
       Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
@@ -196,10 +191,11 @@ object DataSourceV2Relation {
       catalog: Option[CatalogPlugin],
       identifier: Option[Identifier],
       options: CaseInsensitiveStringMap): DataSourceV2Relation = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     // The v2 source may return schema containing char/varchar type. We replace char/varchar
     // with "annotated" string type here as the query engine doesn't support char/varchar yet.
-    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.schema)
-    DataSourceV2Relation(table, schema.toAttributes, catalog, identifier, options)
+    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.columns.asSchema)
+    DataSourceV2Relation(table, toAttributes(schema), catalog, identifier, options)
   }
 
   def create(
@@ -214,14 +210,52 @@ object DataSourceV2Relation {
   def transformV2Stats(
       v2Statistics: V2Statistics,
       defaultRowCount: Option[BigInt],
-      defaultSizeInBytes: Long): Statistics = {
+      defaultSizeInBytes: Long,
+      output: Seq[Attribute] = Seq.empty): Statistics = {
     val numRows: Option[BigInt] = if (v2Statistics.numRows().isPresent) {
       Some(v2Statistics.numRows().getAsLong)
     } else {
       defaultRowCount
     }
+
+    var colStats: Seq[(Attribute, ColumnStat)] = Seq.empty[(Attribute, ColumnStat)]
+    if (!v2Statistics.columnStats().isEmpty) {
+      val v2ColumnStat = v2Statistics.columnStats()
+      val keys = v2ColumnStat.keySet()
+
+      keys.forEach(key => {
+        val colStat = v2ColumnStat.get(key)
+        val distinct: Option[BigInt] =
+          if (colStat.distinctCount().isPresent) Some(colStat.distinctCount().getAsLong) else None
+        val min: Option[Any] = if (colStat.min().isPresent) Some(colStat.min().get) else None
+        val max: Option[Any] = if (colStat.max().isPresent) Some(colStat.max().get) else None
+        val nullCount: Option[BigInt] =
+          if (colStat.nullCount().isPresent) Some(colStat.nullCount().getAsLong) else None
+        val avgLen: Option[Long] =
+          if (colStat.avgLen().isPresent) Some(colStat.avgLen().getAsLong) else None
+        val maxLen: Option[Long] =
+          if (colStat.maxLen().isPresent) Some(colStat.maxLen().getAsLong) else None
+        val histogram = if (colStat.histogram().isPresent) {
+          val v2Histogram = colStat.histogram().get()
+          val bins = v2Histogram.bins()
+          Some(Histogram(v2Histogram.height(),
+            bins.map(bin => HistogramBin(bin.lo, bin.hi, bin.ndv))))
+        } else {
+          None
+        }
+
+        val catalystColStat = ColumnStat(distinct, min, max, nullCount, avgLen, maxLen, histogram)
+
+        output.foreach(attribute => {
+          if (attribute.name.equals(key.describe())) {
+            colStats = colStats :+ (attribute -> catalystColStat)
+          }
+        })
+      })
+    }
     Statistics(
       sizeInBytes = v2Statistics.sizeInBytes().orElse(defaultSizeInBytes),
-      rowCount = numRows)
+      rowCount = numRows,
+      attributeStats = AttributeMap(colStats))
   }
 }

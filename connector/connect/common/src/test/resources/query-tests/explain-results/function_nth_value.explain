@@ -1,0 +1,5 @@
+Project [nth_value(g, 3) ignore nulls OVER (PARTITION BY a ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#0]
++- Project [g#0, a#0, id#0L, nth_value(g, 3) ignore nulls OVER (PARTITION BY a ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#0, nth_value(g, 3) ignore nulls OVER (PARTITION BY a ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#0]
+   +- Window [nth_value(g#0, 3, true) windowspecdefinition(a#0, id#0L ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS nth_value(g, 3) ignore nulls OVER (PARTITION BY a ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#0], [a#0], [id#0L ASC NULLS FIRST]
+      +- Project [g#0, a#0, id#0L]
+         +- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

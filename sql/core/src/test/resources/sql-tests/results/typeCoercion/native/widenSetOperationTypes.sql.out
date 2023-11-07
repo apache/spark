@@ -84,8 +84,26 @@ SELECT cast(1 as tinyint) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is binary type which is not compatible with tinyint at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"TINYINT\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 72,
+    "fragment" : "SELECT cast(1 as tinyint) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -93,8 +111,26 @@ SELECT cast(1 as tinyint) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is boolean type which is not compatible with tinyint at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"TINYINT\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 71,
+    "fragment" : "SELECT cast(1 as tinyint) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -102,8 +138,26 @@ SELECT cast(1 as tinyint) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as ti
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is timestamp type which is not compatible with tinyint at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"TINYINT\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 95,
+    "fragment" : "SELECT cast(1 as tinyint) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -111,8 +165,26 @@ SELECT cast(1 as tinyint) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is date type which is not compatible with tinyint at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"TINYINT\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 88,
+    "fragment" : "SELECT cast(1 as tinyint) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -192,8 +264,26 @@ SELECT cast(1 as smallint) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is binary type which is not compatible with smallint at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"SMALLINT\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 73,
+    "fragment" : "SELECT cast(1 as smallint) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -201,8 +291,26 @@ SELECT cast(1 as smallint) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is boolean type which is not compatible with smallint at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"SMALLINT\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 72,
+    "fragment" : "SELECT cast(1 as smallint) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -210,8 +318,26 @@ SELECT cast(1 as smallint) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is timestamp type which is not compatible with smallint at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"SMALLINT\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 96,
+    "fragment" : "SELECT cast(1 as smallint) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -219,8 +345,26 @@ SELECT cast(1 as smallint) FROM t UNION SELECT cast('2017-12-11 09:30:00' as dat
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is date type which is not compatible with smallint at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"SMALLINT\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 89,
+    "fragment" : "SELECT cast(1 as smallint) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -300,8 +444,26 @@ SELECT cast(1 as int) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is binary type which is not compatible with int at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"INT\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 68,
+    "fragment" : "SELECT cast(1 as int) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -309,8 +471,26 @@ SELECT cast(1 as int) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is boolean type which is not compatible with int at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"INT\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 67,
+    "fragment" : "SELECT cast(1 as int) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -318,8 +498,26 @@ SELECT cast(1 as int) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timest
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is timestamp type which is not compatible with int at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"INT\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 91,
+    "fragment" : "SELECT cast(1 as int) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -327,8 +525,26 @@ SELECT cast(1 as int) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FR
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is date type which is not compatible with int at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"INT\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 84,
+    "fragment" : "SELECT cast(1 as int) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -408,8 +624,26 @@ SELECT cast(1 as bigint) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is binary type which is not compatible with bigint at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"BIGINT\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 71,
+    "fragment" : "SELECT cast(1 as bigint) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -417,8 +651,26 @@ SELECT cast(1 as bigint) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is boolean type which is not compatible with bigint at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"BIGINT\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 70,
+    "fragment" : "SELECT cast(1 as bigint) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -426,8 +678,26 @@ SELECT cast(1 as bigint) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as tim
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is timestamp type which is not compatible with bigint at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"BIGINT\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 94,
+    "fragment" : "SELECT cast(1 as bigint) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -435,8 +705,26 @@ SELECT cast(1 as bigint) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is date type which is not compatible with bigint at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"BIGINT\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 87,
+    "fragment" : "SELECT cast(1 as bigint) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -516,8 +804,26 @@ SELECT cast(1 as float) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is binary type which is not compatible with float at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"FLOAT\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 70,
+    "fragment" : "SELECT cast(1 as float) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -525,8 +831,26 @@ SELECT cast(1 as float) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is boolean type which is not compatible with float at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"FLOAT\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 69,
+    "fragment" : "SELECT cast(1 as float) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -534,8 +858,26 @@ SELECT cast(1 as float) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as time
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is timestamp type which is not compatible with float at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"FLOAT\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 93,
+    "fragment" : "SELECT cast(1 as float) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -543,8 +885,26 @@ SELECT cast(1 as float) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is date type which is not compatible with float at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"FLOAT\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 86,
+    "fragment" : "SELECT cast(1 as float) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -624,8 +984,26 @@ SELECT cast(1 as double) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is binary type which is not compatible with double at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"DOUBLE\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 71,
+    "fragment" : "SELECT cast(1 as double) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -633,8 +1011,26 @@ SELECT cast(1 as double) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is boolean type which is not compatible with double at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"DOUBLE\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 70,
+    "fragment" : "SELECT cast(1 as double) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -642,8 +1038,26 @@ SELECT cast(1 as double) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as tim
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is timestamp type which is not compatible with double at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"DOUBLE\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 94,
+    "fragment" : "SELECT cast(1 as double) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -651,8 +1065,26 @@ SELECT cast(1 as double) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is date type which is not compatible with double at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"DOUBLE\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 87,
+    "fragment" : "SELECT cast(1 as double) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -732,8 +1164,26 @@ SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is binary type which is not compatible with decimal(10,0) at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"DECIMAL(10,0)\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 79,
+    "fragment" : "SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -741,8 +1191,26 @@ SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is boolean type which is not compatible with decimal(10,0) at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"DECIMAL(10,0)\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 78,
+    "fragment" : "SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -750,8 +1218,26 @@ SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast('2017-12-11 09:30:00.0
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is timestamp type which is not compatible with decimal(10,0) at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"DECIMAL(10,0)\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 102,
+    "fragment" : "SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -759,8 +1245,26 @@ SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast('2017-12-11 09:30:00' 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is date type which is not compatible with decimal(10,0) at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"DECIMAL(10,0)\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 95,
+    "fragment" : "SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -840,8 +1344,26 @@ SELECT cast(1 as string) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is binary type which is not compatible with string at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"STRING\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 71,
+    "fragment" : "SELECT cast(1 as string) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -849,8 +1371,26 @@ SELECT cast(1 as string) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is boolean type which is not compatible with string at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"STRING\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 70,
+    "fragment" : "SELECT cast(1 as string) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -876,8 +1416,26 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as tinyint) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is tinyint type which is not compatible with binary at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TINYINT\"",
+    "dataType2" : "\"BINARY\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 72,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as tinyint) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -885,8 +1443,26 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as smallint) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is smallint type which is not compatible with binary at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"SMALLINT\"",
+    "dataType2" : "\"BINARY\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 73,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as smallint) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -894,8 +1470,26 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as int) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is int type which is not compatible with binary at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"INT\"",
+    "dataType2" : "\"BINARY\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 68,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as int) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -903,8 +1497,26 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as bigint) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is bigint type which is not compatible with binary at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BIGINT\"",
+    "dataType2" : "\"BINARY\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 71,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as bigint) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -912,8 +1524,26 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is float type which is not compatible with binary at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"FLOAT\"",
+    "dataType2" : "\"BINARY\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 70,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as float) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -921,8 +1551,26 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as double) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is double type which is not compatible with binary at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DOUBLE\"",
+    "dataType2" : "\"BINARY\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 71,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as double) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -930,8 +1578,26 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is decimal(10,0) type which is not compatible with binary at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DECIMAL(10,0)\"",
+    "dataType2" : "\"BINARY\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 79,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -939,8 +1605,26 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is string type which is not compatible with binary at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"STRING\"",
+    "dataType2" : "\"BINARY\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 71,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as string) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -957,8 +1641,26 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is boolean type which is not compatible with binary at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"BINARY\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 72,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -966,8 +1668,26 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is timestamp type which is not compatible with binary at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"BINARY\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 96,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -975,8 +1695,26 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast('2017-12-11 09:30:00' as dat
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is date type which is not compatible with binary at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"BINARY\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 89,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -984,8 +1722,26 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as tinyint) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is tinyint type which is not compatible with boolean at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TINYINT\"",
+    "dataType2" : "\"BOOLEAN\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 71,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as tinyint) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -993,8 +1749,26 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as smallint) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is smallint type which is not compatible with boolean at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"SMALLINT\"",
+    "dataType2" : "\"BOOLEAN\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 72,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as smallint) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1002,8 +1776,26 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as int) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is int type which is not compatible with boolean at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"INT\"",
+    "dataType2" : "\"BOOLEAN\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 67,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as int) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1011,8 +1803,26 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as bigint) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is bigint type which is not compatible with boolean at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BIGINT\"",
+    "dataType2" : "\"BOOLEAN\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 70,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as bigint) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1020,8 +1830,26 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is float type which is not compatible with boolean at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"FLOAT\"",
+    "dataType2" : "\"BOOLEAN\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 69,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as float) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1029,8 +1857,26 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as double) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is double type which is not compatible with boolean at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DOUBLE\"",
+    "dataType2" : "\"BOOLEAN\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 70,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as double) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1038,8 +1884,26 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is decimal(10,0) type which is not compatible with boolean at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DECIMAL(10,0)\"",
+    "dataType2" : "\"BOOLEAN\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 78,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1047,8 +1911,26 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is string type which is not compatible with boolean at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"STRING\"",
+    "dataType2" : "\"BOOLEAN\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 70,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as string) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1056,8 +1938,26 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is binary type which is not compatible with boolean at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"BOOLEAN\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 72,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1073,8 +1973,26 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as ti
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is timestamp type which is not compatible with boolean at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"BOOLEAN\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 95,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1082,8 +2000,26 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is date type which is not compatible with boolean at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DATE\"",
+    "dataType2" : "\"BOOLEAN\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 88,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1091,8 +2027,26 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is tinyint type which is not compatible with timestamp at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TINYINT\"",
+    "dataType2" : "\"TIMESTAMP\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 95,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as tinyint) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1100,8 +2054,26 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is smallint type which is not compatible with timestamp at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"SMALLINT\"",
+    "dataType2" : "\"TIMESTAMP\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 96,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as smallint) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1109,8 +2081,26 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is int type which is not compatible with timestamp at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"INT\"",
+    "dataType2" : "\"TIMESTAMP\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 91,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as int) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1118,8 +2108,26 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is bigint type which is not compatible with timestamp at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BIGINT\"",
+    "dataType2" : "\"TIMESTAMP\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 94,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as bigint) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1127,8 +2135,26 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is float type which is not compatible with timestamp at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"FLOAT\"",
+    "dataType2" : "\"TIMESTAMP\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 93,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as float) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1136,8 +2162,26 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is double type which is not compatible with timestamp at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DOUBLE\"",
+    "dataType2" : "\"TIMESTAMP\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 94,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as double) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1145,8 +2189,26 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is decimal(10,0) type which is not compatible with timestamp at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DECIMAL(10,0)\"",
+    "dataType2" : "\"TIMESTAMP\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 102,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1163,8 +2225,26 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast('2' a
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is binary type which is not compatible with timestamp at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"TIMESTAMP\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 96,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1172,8 +2252,26 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is boolean type which is not compatible with timestamp at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"TIMESTAMP\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 95,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1199,8 +2297,26 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as tinyint
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is tinyint type which is not compatible with date at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TINYINT\"",
+    "dataType2" : "\"DATE\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 88,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as tinyint) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1208,8 +2324,26 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as smallin
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is smallint type which is not compatible with date at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"SMALLINT\"",
+    "dataType2" : "\"DATE\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 89,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as smallint) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1217,8 +2351,26 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as int) FR
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is int type which is not compatible with date at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"INT\"",
+    "dataType2" : "\"DATE\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 84,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as int) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1226,8 +2378,26 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as bigint)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is bigint type which is not compatible with date at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BIGINT\"",
+    "dataType2" : "\"DATE\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 87,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as bigint) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1235,8 +2405,26 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as float) 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is float type which is not compatible with date at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"FLOAT\"",
+    "dataType2" : "\"DATE\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 86,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as float) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1244,8 +2432,26 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as double)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is double type which is not compatible with date at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DOUBLE\"",
+    "dataType2" : "\"DATE\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 87,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as double) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1253,8 +2459,26 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as decimal
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is decimal(10,0) type which is not compatible with date at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"DECIMAL(10,0)\"",
+    "dataType2" : "\"DATE\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 95,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1271,8 +2495,26 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast('2' as binar
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is binary type which is not compatible with date at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BINARY\"",
+    "dataType2" : "\"DATE\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 89,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1280,8 +2522,26 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as boolean
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with compatible column types. The first column of the second table is boolean type which is not compatible with date at the same column of the first table
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"BOOLEAN\"",
+    "dataType2" : "\"DATE\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 88,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
+}
 
 
 -- !query

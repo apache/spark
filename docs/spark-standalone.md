@@ -8,9 +8,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -21,7 +21,7 @@ license: |
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
-In addition to running on the Mesos or YARN cluster managers, Spark also provides a simple standalone deploy mode. You can launch a standalone cluster either manually, by starting a master and workers by hand, or use our provided [launch scripts](#cluster-launch-scripts). It is also possible to run these daemons on a single machine for testing.
+In addition to running on the YARN cluster manager, Spark also provides a simple standalone deploy mode. You can launch a standalone cluster either manually, by starting a master and workers by hand, or use our provided [launch scripts](#cluster-launch-scripts). It is also possible to run these daemons on a single machine for testing.
 
 # Security
 
@@ -53,8 +53,8 @@ You should see the new node listed there, along with its number of CPUs and memo
 
 Finally, the following configuration options can be passed to the master and worker:
 
-<table class="table">
-  <tr><th style="width:21%">Argument</th><th>Meaning</th></tr>
+<table class="table table-striped">
+  <thead><tr><th style="width:21%">Argument</th><th>Meaning</th></tr></thead>
   <tr>
     <td><code>-h HOST</code>, <code>--host HOST</code></td>
     <td>Hostname to listen on</td>
@@ -104,18 +104,20 @@ Once you've set up this file, you can launch or stop your cluster with the follo
 - `sbin/start-master.sh` - Starts a master instance on the machine the script is executed on.
 - `sbin/start-workers.sh` - Starts a worker instance on each machine specified in the `conf/workers` file.
 - `sbin/start-worker.sh` - Starts a worker instance on the machine the script is executed on.
+- `sbin/start-connect-server.sh` - Starts a Spark Connect server on the machine the script is executed on.
 - `sbin/start-all.sh` - Starts both a master and a number of workers as described above.
 - `sbin/stop-master.sh` - Stops the master that was started via the `sbin/start-master.sh` script.
 - `sbin/stop-worker.sh` - Stops all worker instances on the machine the script is executed on.
 - `sbin/stop-workers.sh` - Stops all worker instances on the machines specified in the `conf/workers` file.
+- `sbin/stop-connect-server.sh` - Stops all Spark Connect server instances on the machine the script is executed on.
 - `sbin/stop-all.sh` - Stops both the master and the workers as described above.
 
 Note that these scripts must be executed on the machine you want to run the Spark master on, not your local machine.
 
 You can optionally configure the cluster further by setting environment variables in `conf/spark-env.sh`. Create this file by starting with the `conf/spark-env.sh.template`, and _copy it to all your worker machines_ for the settings to take effect. The following settings are available:
 
-<table class="table">
-  <tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr>
+<table class="table table-striped">
+  <thead><tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr></thead>
   <tr>
     <td><code>SPARK_MASTER_HOST</code></td>
     <td>Bind the master to a specific hostname or IP address, for example a public one.</td>
@@ -186,8 +188,8 @@ You can optionally configure the cluster further by setting environment variable
 
 SPARK_MASTER_OPTS supports the following system properties:
 
-<table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.deploy.retainedApplications</code></td>
   <td>200</td>
@@ -285,8 +287,8 @@ SPARK_MASTER_OPTS supports the following system properties:
 
 SPARK_WORKER_OPTS supports the following system properties:
 
-<table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.worker.cleanup.enabled</code></td>
   <td>false</td>
@@ -330,11 +332,11 @@ SPARK_WORKER_OPTS supports the following system properties:
 </tr>
 <tr>
   <td><code>spark.shuffle.service.db.backend</code></td>
-  <td>LEVELDB</td>
+  <td>ROCKSDB</td>
   <td>
-    When <code>spark.shuffle.service.db.enabled</code> is true, user can use this to specify the kind of disk-based 
-    store used in shuffle service state store. This supports `LEVELDB` and `ROCKSDB` now and `LEVELDB` as default value. 
-    The original data store in `LevelDB/RocksDB` will not be automatically convert to another kind of storage now.
+    When <code>spark.shuffle.service.db.enabled</code> is true, user can use this to specify the kind of disk-based
+    store used in shuffle service state store. This supports `ROCKSDB` and `LEVELDB` (deprecated) now and `ROCKSDB` as default value.
+    The original data store in `RocksDB/LevelDB` will not be automatically convert to another kind of storage now.
   </td>
   <td>3.4.0</td>
 </tr>
@@ -388,10 +390,10 @@ You can also pass an option `--total-executor-cores <numCores>` to control the n
 
 # Client Properties
 
-Spark applications supports the following configuration properties specific to standalone mode: 
+Spark applications supports the following configuration properties specific to standalone mode:
 
-<table class="table">
-  <tr><th style="width:21%">Property Name</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr>
+<table class="table table-striped">
+  <thead><tr><th style="width:21%">Property Name</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
   <td><code>spark.standalone.submit.waitAppCompletion</code></td>
   <td><code>false</code></td>
@@ -539,8 +541,8 @@ ZooKeeper is the best way to go for production-level high availability, but if y
 
 In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env using this configuration:
 
-<table class="table">
-  <tr><th style="width:21%">System property</th><th>Meaning</th><th>Since Version</th></tr>
+<table class="table table-striped">
+  <thead><tr><th style="width:21%">System property</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>spark.deploy.recoveryMode</code></td>
     <td>Set to FILESYSTEM to enable single-node recovery mode (default: NONE).</td>

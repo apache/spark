@@ -19,12 +19,12 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionsAlreadyExistException}
-import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference}
+import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -43,7 +43,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
         .add("id", IntegerType)
         .add("data", StringType)
         .add("dt", StringType),
-      Array(LogicalExpressions.identity(ref("dt"))),
+      Array[Transform](LogicalExpressions.identity(ref("dt"))),
       util.Collections.emptyMap[String, String])
     newCatalog
   }
@@ -89,10 +89,13 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryPartitionTable(
       table.name(), table.schema(), table.partitioning(), table.properties())
-    val errMsg = intercept[UnsupportedOperationException] {
-      partTable.purgePartition(InternalRow.apply("3"))
-    }.getMessage
-    assert(errMsg.contains("purge is not supported"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        partTable.purgePartition(InternalRow.apply("3"))
+      },
+      errorClass = "UNSUPPORTED_FEATURE.PURGE_PARTITION",
+      parameters = Map.empty
+    )
   }
 
   test("replacePartitionMetadata") {
@@ -164,7 +167,8 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
         .add("col0", IntegerType)
         .add("part0", IntegerType)
         .add("part1", StringType),
-      Array(LogicalExpressions.identity(ref("part0")), LogicalExpressions.identity(ref("part1"))),
+      Array[Transform](
+        LogicalExpressions.identity(ref("part0")), LogicalExpressions.identity(ref("part1"))),
       util.Collections.emptyMap[String, String])
 
     val partTable = table.asInstanceOf[InMemoryPartitionTable]
@@ -218,16 +222,22 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
   test("renamePartition") {
     val partTable = createMultiPartTable()
 
-    val errMsg1 = intercept[PartitionsAlreadyExistException] {
+    val e = intercept[PartitionsAlreadyExistException] {
       partTable.renamePartition(InternalRow(0, "abc"), InternalRow(1, "abc"))
-    }.getMessage
-    assert(errMsg1.contains("partitions already exist"))
+    }
+    checkError(e,
+      errorClass = "PARTITIONS_ALREADY_EXIST",
+      parameters = Map("partitionList" -> "PARTITION (`part0` = 1, `part1` = abc)",
+      "tableName" -> "`test`.`ns`.`test_table`"))
 
     val newPart = InternalRow(2, "xyz")
-    val errMsg2 = intercept[NoSuchPartitionException] {
+    val e2 = intercept[NoSuchPartitionException] {
       partTable.renamePartition(newPart, InternalRow(3, "abc"))
-    }.getMessage
-    assert(errMsg2.contains("Partition not found"))
+    }
+    checkError(e2,
+      errorClass = "PARTITIONS_NOT_FOUND",
+      parameters = Map("partitionList" -> "PARTITION (`part0` = 2, `part1` = xyz)",
+        "tableName" -> "`test`.`ns`.`test_table`"))
 
     assert(partTable.renamePartition(InternalRow(0, "abc"), newPart))
     assert(partTable.partitionExists(newPart))

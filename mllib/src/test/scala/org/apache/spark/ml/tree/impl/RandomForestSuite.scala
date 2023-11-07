@@ -96,7 +96,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         Array(6), Gini, QuantileStrategy.Sort,
         0, 0, 0.0, 0.0, 0, 0
       )
-      val featureSamples = Array.fill(10000)((1.0, math.random)).filter(_._2 != 0.0)
+      val featureSamples = Array.fill(10000)((1.0, math.random())).filter(_._2 != 0.0)
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
       assert(splits.length === 5)
       assert(fakeMetadata.numSplits(0) === 5)
@@ -183,7 +183,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         Array(6), Gini, QuantileStrategy.Sort,
         0, 0, 0.0, 0.0, 0, 0
       )
-      val featureSamplesUnitWeight = Array.fill(10)((1.0, math.random))
+      val featureSamplesUnitWeight = Array.fill(10)((1.0, math.random()))
       val featureSamplesSmallWeight = featureSamplesUnitWeight.map { case (w, x) => (w * 0.001, x)}
       val featureSamplesLargeWeight = featureSamplesUnitWeight.map { case (w, x) => (w * 1000, x)}
       val splitsUnitWeight = RandomForest

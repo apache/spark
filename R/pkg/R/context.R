@@ -170,7 +170,7 @@ parallelize <- function(sc, coll, numSlices = 1) {
   serializedSlices <- lapply(slices, serialize, connection = NULL)
 
   # The RPC backend cannot handle arguments larger than 2GB (INT_MAX)
-  # If serialized data is safely less than that threshold we send it over the PRC channel.
+  # If serialized data is safely less than that threshold we send it over the RPC channel.
   # Otherwise, we write it to a file and send the file name
   if (objectSize < sizeLimit) {
     jrdd <- callJStatic("org.apache.spark.api.r.RRDD", "createRDDFromArray", sc, serializedSlices)

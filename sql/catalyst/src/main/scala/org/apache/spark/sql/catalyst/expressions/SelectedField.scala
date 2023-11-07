@@ -96,9 +96,10 @@ object SelectedField {
         }
         val newField = StructField(field.name, newFieldDataType, field.nullable)
         selectField(child, Option(ArrayType(struct(newField), containsNull)))
-      case GetMapValue(child, _) =>
+      case GetMapValue(child, key) if key.foldable =>
         // GetMapValue does not select a field from a struct (i.e. prune the struct) so it can't be
         // the top-level extractor. However it can be part of an extractor chain.
+        // See comment on GetArrayItem regarding the need for key.foldable
         val MapType(keyType, _, valueContainsNull) = child.dataType
         val opt = dataTypeOpt.map(dt => MapType(keyType, dt, valueContainsNull))
         selectField(child, opt)
@@ -124,9 +125,11 @@ object SelectedField {
             throw QueryCompilationErrors.dataTypeUnsupportedByClassError(x, "MapKeys")
         }
         selectField(child, opt)
-      case GetArrayItem(child, _, _) =>
+      case GetArrayItem(child, index, _) if index.foldable =>
         // GetArrayItem does not select a field from a struct (i.e. prune the struct) so it can't be
         // the top-level extractor. However it can be part of an extractor chain.
+        // If index is not foldable, we'd need to also return the field selected by index, which
+        // the SelectedField interface doesn't support, so only allow a foldable index for now.
         val ArrayType(_, containsNull) = child.dataType
         val opt = dataTypeOpt.map(dt => ArrayType(dt, containsNull))
         selectField(child, opt)

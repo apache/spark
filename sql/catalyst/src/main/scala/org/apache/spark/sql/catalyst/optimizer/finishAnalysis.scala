@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import java.time.{Instant, LocalDateTime}
+import java.time.{Instant, LocalDateTime, ZoneId}
 
-import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
+import org.apache.spark.sql.catalyst.CurrentUserContext
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, instantToMicros, localDateTimeToMicros}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 
 /**
@@ -66,7 +65,8 @@ object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
       IsNotNull(
         ScalarSubquery(
           plan = Limit(Literal(1), Project(Seq(Alias(Literal(1), "col")()), exists.plan)),
-          exprId = exists.exprId))
+          exprId = exists.exprId,
+          hint = exists.hint))
   }
 }
 
@@ -79,6 +79,8 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
     val currentTimestampMicros = instantToMicros(instant)
     val currentTime = Literal.create(currentTimestampMicros, TimestampType)
     val timezone = Literal.create(conf.sessionLocalTimeZone, StringType)
+    val currentDates = collection.mutable.HashMap.empty[ZoneId, Literal]
+    val localTimestamps = collection.mutable.HashMap.empty[ZoneId, Literal]
 
     def transformCondition(treePatternbits: TreePatternBits): Boolean = {
       treePatternbits.containsPattern(CURRENT_LIKE)
@@ -88,12 +90,17 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
       case subQuery =>
         subQuery.transformAllExpressionsWithPruning(transformCondition) {
           case cd: CurrentDate =>
-            Literal.create(DateTimeUtils.microsToDays(currentTimestampMicros, cd.zoneId), DateType)
+            currentDates.getOrElseUpdate(cd.zoneId, {
+              Literal.create(
+                DateTimeUtils.microsToDays(currentTimestampMicros, cd.zoneId), DateType)
+            })
           case CurrentTimestamp() | Now() => currentTime
           case CurrentTimeZone() => timezone
           case localTimestamp: LocalTimestamp =>
-            val asDateTime = LocalDateTime.ofInstant(instant, localTimestamp.zoneId)
-            Literal.create(localDateTimeToMicros(asDateTime), TimestampNTZType)
+            localTimestamps.getOrElseUpdate(localTimestamp.zoneId, {
+              val asDateTime = LocalDateTime.ofInstant(instant, localTimestamp.zoneId)
+              Literal.create(localDateTimeToMicros(asDateTime), TimestampNTZType)
+            })
         }
     }
   }
@@ -108,7 +115,7 @@ case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[Logic
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     val currentNamespace = catalogManager.currentNamespace.quoted
     val currentCatalog = catalogManager.currentCatalog.name()
-    val currentUser = Option(CURRENT_USER.get()).getOrElse(Utils.getCurrentUserName())
+    val currentUser = CurrentUserContext.getCurrentUser
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
       case CurrentDatabase() =>

@@ -54,8 +54,8 @@ trait FlatMapGroupsWithStateExecBase
   protected val outputMode: OutputMode
   protected val timeoutConf: GroupStateTimeout
   protected val batchTimestampMs: Option[Long]
-  val eventTimeWatermark: Option[Long]
-
+  val eventTimeWatermarkForLateEvents: Option[Long]
+  val eventTimeWatermarkForEviction: Option[Long]
   protected val isTimeoutEnabled: Boolean = timeoutConf != NoTimeout
   protected val watermarkPresent: Boolean = child.output.exists {
     case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => true
@@ -90,17 +90,23 @@ trait FlatMapGroupsWithStateExecBase
 
   override def shortName: String = "flatMapGroupsWithState"
 
-  override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+  override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     timeoutConf match {
       case ProcessingTimeTimeout =>
         true  // Always run batches to process timeouts
       case EventTimeTimeout =>
         // Process another non-data batch only if the watermark has changed in this executed plan
-        eventTimeWatermark.isDefined && newMetadata.batchWatermarkMs > eventTimeWatermark.get
+        eventTimeWatermarkForEviction.isDefined &&
+          newInputWatermark > eventTimeWatermarkForEviction.get
       case _ =>
         false
     }
   }
+
+  // There is no guarantee that any of the column in the output is bound to the watermark. The
+  // user function is quite flexible. Hence Spark does not support the stateful operator(s) after
+  // (flat)MapGroupsWithState.
+  override def produceOutputWatermark(inputWatermarkMs: Long): Option[Long] = None
 
   /**
    * Process data by applying the user defined function on a per partition basis.
@@ -125,7 +131,7 @@ trait FlatMapGroupsWithStateExecBase
     var timeoutProcessingStartTimeNs = currentTimeNs
 
     // If timeout is based on event time, then filter late data based on watermark
-    val filteredIter = watermarkPredicateForData match {
+    val filteredIter = watermarkPredicateForDataForLateEvents match {
       case Some(predicate) if timeoutConf == EventTimeTimeout =>
         applyRemovingRowsOlderThanWatermark(iter, predicate)
       case _ =>
@@ -182,6 +188,7 @@ trait FlatMapGroupsWithStateExecBase
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
+    stateManager // force lazy init at driver
     metrics // force lazy init at driver
 
     // Throw errors early if parameters are not as expected
@@ -189,8 +196,12 @@ trait FlatMapGroupsWithStateExecBase
       case ProcessingTimeTimeout =>
         require(batchTimestampMs.nonEmpty)
       case EventTimeTimeout =>
-        require(eventTimeWatermark.nonEmpty) // watermark value has been populated
-        require(watermarkExpression.nonEmpty) // input schema has watermark attribute
+        // watermark value has been populated
+        require(eventTimeWatermarkForLateEvents.nonEmpty)
+        require(eventTimeWatermarkForEviction.nonEmpty)
+        // input schema has watermark attribute
+        require(watermarkExpressionForLateEvents.nonEmpty)
+        require(watermarkExpressionForEviction.nonEmpty)
       case _ =>
     }
 
@@ -310,7 +321,7 @@ trait FlatMapGroupsWithStateExecBase
       if (isTimeoutEnabled) {
         val timeoutThreshold = timeoutConf match {
           case ProcessingTimeTimeout => batchTimestampMs.get
-          case EventTimeTimeout => eventTimeWatermark.get
+          case EventTimeTimeout => eventTimeWatermarkForEviction.get
           case _ =>
             throw new IllegalStateException(
               s"Cannot filter timed out keys for $timeoutConf")
@@ -354,7 +365,8 @@ trait FlatMapGroupsWithStateExecBase
  * @param outputMode the output mode of `func`
  * @param timeoutConf used to timeout groups that have not received data in a while
  * @param batchTimestampMs processing timestamp of the current batch.
- * @param eventTimeWatermark event time watermark for the current batch
+ * @param eventTimeWatermarkForLateEvents event time watermark for filtering late events
+ * @param eventTimeWatermarkForEviction event time watermark for state eviction
  * @param initialState the user specified initial state
  * @param hasInitialState indicates whether the initial state is provided or not
  * @param child the physical plan for the underlying data
@@ -375,7 +387,8 @@ case class FlatMapGroupsWithStateExec(
     outputMode: OutputMode,
     timeoutConf: GroupStateTimeout,
     batchTimestampMs: Option[Long],
-    eventTimeWatermark: Option[Long],
+    eventTimeWatermarkForLateEvents: Option[Long],
+    eventTimeWatermarkForEviction: Option[Long],
     initialState: SparkPlan,
     hasInitialState: Boolean,
     child: SparkPlan)
@@ -410,7 +423,7 @@ case class FlatMapGroupsWithStateExec(
       val groupState = GroupStateImpl.createForStreaming(
         Option(stateData.stateObj),
         batchTimestampMs.getOrElse(NO_TIMESTAMP),
-        eventTimeWatermark.getOrElse(NO_TIMESTAMP),
+        eventTimeWatermarkForEviction.getOrElse(NO_TIMESTAMP),
         timeoutConf,
         hasTimedOut,
         watermarkPresent)
@@ -503,12 +516,12 @@ object FlatMapGroupsWithStateExec {
       }
       CoGroupExec(
         func, keyDeserializer, valueDeserializer, initialStateDeserializer, groupingAttributes,
-        initialStateGroupAttrs, dataAttributes, initialStateDataAttrs, outputObjAttr,
-        child, initialState)
+        initialStateGroupAttrs, dataAttributes, initialStateDataAttrs, Seq.empty, Seq.empty,
+        outputObjAttr, child, initialState)
     } else {
       MapGroupsExec(
         userFunc, keyDeserializer, valueDeserializer, groupingAttributes,
-        dataAttributes, outputObjAttr, timeoutConf, child)
+        dataAttributes, Seq.empty, outputObjAttr, timeoutConf, child)
     }
   }
 }

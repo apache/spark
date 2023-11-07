@@ -81,33 +81,35 @@ TakeOrderedAndProject [segment,num_customers,segment_base]
                                                           WholeStageCodegen (1)
                                                             Project [d_date_sk]
                                                               Filter [d_month_seq,d_date_sk]
-                                                                Subquery #3
-                                                                  WholeStageCodegen (2)
-                                                                    HashAggregate [(d_month_seq + 1)]
-                                                                      InputAdapter
-                                                                        Exchange [(d_month_seq + 1)] #9
-                                                                          WholeStageCodegen (1)
-                                                                            HashAggregate [(d_month_seq + 1)]
-                                                                              Project [d_month_seq]
-                                                                                Filter [d_year,d_moy]
-                                                                                  ColumnarToRow
-                                                                                    InputAdapter
-                                                                                      Scan parquet spark_catalog.default.date_dim [d_month_seq,d_year,d_moy]
-                                                                Subquery #4
-                                                                  WholeStageCodegen (2)
-                                                                    HashAggregate [(d_month_seq + 3)]
-                                                                      InputAdapter
-                                                                        Exchange [(d_month_seq + 3)] #10
-                                                                          WholeStageCodegen (1)
-                                                                            HashAggregate [(d_month_seq + 3)]
-                                                                              Project [d_month_seq]
-                                                                                Filter [d_year,d_moy]
-                                                                                  ColumnarToRow
-                                                                                    InputAdapter
-                                                                                      Scan parquet spark_catalog.default.date_dim [d_month_seq,d_year,d_moy]
+                                                                ReusedSubquery [(d_month_seq + 1)] #3
+                                                                ReusedSubquery [(d_month_seq + 3)] #4
                                                                 ColumnarToRow
                                                                   InputAdapter
                                                                     Scan parquet spark_catalog.default.date_dim [d_date_sk,d_month_seq]
+                                                                      Subquery #3
+                                                                        WholeStageCodegen (2)
+                                                                          HashAggregate [(d_month_seq + 1)]
+                                                                            InputAdapter
+                                                                              Exchange [(d_month_seq + 1)] #9
+                                                                                WholeStageCodegen (1)
+                                                                                  HashAggregate [(d_month_seq + 1)]
+                                                                                    Project [d_month_seq]
+                                                                                      Filter [d_year,d_moy]
+                                                                                        ColumnarToRow
+                                                                                          InputAdapter
+                                                                                            Scan parquet spark_catalog.default.date_dim [d_month_seq,d_year,d_moy]
+                                                                      Subquery #4
+                                                                        WholeStageCodegen (2)
+                                                                          HashAggregate [(d_month_seq + 3)]
+                                                                            InputAdapter
+                                                                              Exchange [(d_month_seq + 3)] #10
+                                                                                WholeStageCodegen (1)
+                                                                                  HashAggregate [(d_month_seq + 3)]
+                                                                                    Project [d_month_seq]
+                                                                                      Filter [d_year,d_moy]
+                                                                                        ColumnarToRow
+                                                                                          InputAdapter
+                                                                                            Scan parquet spark_catalog.default.date_dim [d_month_seq,d_year,d_moy]
                                     InputAdapter
                                       BroadcastExchange #11
                                         WholeStageCodegen (8)

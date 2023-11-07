@@ -103,7 +103,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CANNOT_DECODE_URL",
-  "sqlState" : "42000",
+  "sqlState" : "22546",
   "messageParameters" : {
     "url" : "http%3A%2F%2spark.apache.org"
   }

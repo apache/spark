@@ -23,6 +23,7 @@ import java.util.{Properties, TimeZone}
 
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkSQLException
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
@@ -40,23 +41,25 @@ import org.apache.spark.tags.DockerTest
  *    - The documentation on how to build Oracle RDBMS in a container is at
  *      https://github.com/oracle/docker-images/blob/master/OracleDatabase/SingleInstance/README.md
  *    - Official Oracle container images can be found at https://container-registry.oracle.com
- *    - A trustable and streamlined Oracle XE database image can be found on Docker Hub at
- *      https://hub.docker.com/r/gvenzl/oracle-xe see also https://github.com/gvenzl/oci-oracle-xe
+ *    - Trustable and streamlined Oracle Database Free images can be found on Docker Hub at
+ *      https://hub.docker.com/r/gvenzl/oracle-free
+ *      see also https://github.com/gvenzl/oci-oracle-free
  * 2. Run: export ORACLE_DOCKER_IMAGE_NAME=image_you_want_to_use_for_testing
- *    - Example: export ORACLE_DOCKER_IMAGE_NAME=gvenzl/oracle-xe:latest
+ *    - Example: export ORACLE_DOCKER_IMAGE_NAME=gvenzl/oracle-free:latest
  * 3. Run: export ENABLE_DOCKER_INTEGRATION_TESTS=1
  * 4. Start docker: sudo service docker start
  *    - Optionally, docker pull $ORACLE_DOCKER_IMAGE_NAME
  * 5. Run Spark integration tests for Oracle with: ./build/sbt -Pdocker-integration-tests
- *    "testOnly org.apache.spark.sql.jdbc.OracleIntegrationSuite"
+ *    "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.OracleIntegrationSuite"
  *
- * A sequence of commands to build the Oracle XE database container image:
+ * A sequence of commands to build the Oracle Database Free container image:
  *  $ git clone https://github.com/oracle/docker-images.git
  *  $ cd docker-images/OracleDatabase/SingleInstance/dockerfiles
- *  $ ./buildContainerImage.sh -v 21.3.0 -x
- *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:21.3.0-xe
+ *  $ ./buildContainerImage.sh -v 23.2.0 -f
+ *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:23.2.0-free
  *
- * This procedure has been validated with Oracle 18.4.0 and 21.3.0 Express Edition.
+ * This procedure has been validated with Oracle Databae Free version 23.2.0,
+ * and with Oracle Express Edition versions 18.4.0 and 21.3.0
  */
 @DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSparkSession {
@@ -64,16 +67,16 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
 
   override val db = new DatabaseOnDocker {
     lazy override val imageName =
-      sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "gvenzl/oracle-xe:21.3.0")
+      sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "gvenzl/oracle-free:23.3")
     val oracle_password = "Th1s1sThe0racle#Pass"
     override val env = Map(
       "ORACLE_PWD" -> oracle_password,      // oracle images uses this
-      "ORACLE_PASSWORD" -> oracle_password  // gvenzl/oracle-xe uses this
+      "ORACLE_PASSWORD" -> oracle_password  // gvenzl/oracle-free uses this
     )
     override val usesIpc = false
     override val jdbcPort: Int = 1521
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:oracle:thin:system/$oracle_password@//$ip:$port/xe"
+      s"jdbc:oracle:thin:system/$oracle_password@//$ip:$port/freepdb1"
   }
 
   override val connectionTimeout = timeout(7.minutes)
@@ -172,7 +175,8 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
   }
 
 
-  test("SPARK-12941: String datatypes to be mapped to Varchar in Oracle") {
+  // SPARK-43049: Use CLOB instead of VARCHAR(255) for StringType for Oracle jdbc-am""
+  test("SPARK-12941: String datatypes to be mapped to CLOB in Oracle") {
     // create a sample dataframe with string type
     val df1 = sparkContext.parallelize(Seq(("foo"))).toDF("x")
     // write the dataframe to the oracle table tbl
@@ -286,11 +290,12 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       if (defaultJVMTimeZone == shanghaiTimeZone) sofiaTimeZone else shanghaiTimeZone
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> localSessionTimeZone.getID) {
-      val e = intercept[java.sql.SQLException] {
-        val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
-        dfRead.collect()
-      }.getMessage
-      assert(e.contains("Unrecognized SQL type -101"))
+      checkError(
+        exception = intercept[SparkSQLException] {
+          sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties).collect()
+        },
+        errorClass = "UNRECOGNIZED_SQL_TYPE",
+        parameters = Map("typeName" -> "TIMESTAMP WITH TIME ZONE", "jdbcType" -> "-101"))
     }
   }
 
@@ -455,7 +460,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
           """"D" >= '2018-07-11' AND "D" < '2018-07-15'""",
           """"D" >= '2018-07-15'"""))
     }
-    assert(df1.collect.toSet === expectedResult)
+    assert(df1.collect().toSet === expectedResult)
 
     // TimestampType partition column
     val df2 = spark.read.format("jdbc")
@@ -477,7 +482,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
           """"T" < '2018-07-15 20:50:32.5' or "T" is null""",
           """"T" >= '2018-07-15 20:50:32.5'"""))
     }
-    assert(df2.collect.toSet === expectedResult)
+    assert(df2.collect().toSet === expectedResult)
   }
 
   test("query JDBC option") {
@@ -494,7 +499,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       .option("query", query)
       .option("oracle.jdbc.mapDateToTimestamp", "false")
       .load()
-    assert(df.collect.toSet === expectedResult)
+    assert(df.collect().toSet === expectedResult)
 
     // query option in the create table path.
     sql(
@@ -505,7 +510,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
          |   query '$query',
          |   oracle.jdbc.mapDateToTimestamp false)
        """.stripMargin.replaceAll("\n", " "))
-    assert(sql("select id, d, t from queryOption").collect.toSet == expectedResult)
+    assert(sql("select id, d, t from queryOption").collect().toSet == expectedResult)
   }
 
   test("SPARK-32992: map Oracle's ROWID type to StringType") {
@@ -517,5 +522,20 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     val types = rows(0).toSeq.map(x => x.getClass.toString)
     assert(types(0).equals("class java.lang.String"))
     assert(!rows(0).getString(0).isEmpty)
+  }
+
+  test("SPARK-44885: query row with ROWID type containing NULL value") {
+    val rows = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      // Rename column to `row_id` to prevent the following SQL error:
+      //   ORA-01446: cannot select ROWID from view with DISTINCT, GROUP BY, etc.
+      // See also https://stackoverflow.com/a/42632686/13300239
+      .option("query", "SELECT rowid as row_id from datetime where d = {d '1991-11-09'}\n" +
+        "union all\n" +
+        "select null from dual")
+      .load()
+      .collect()
+    assert(rows(0).getString(0).nonEmpty)
+    assert(rows(1).getString(0) == null)
   }
 }

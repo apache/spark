@@ -19,10 +19,9 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, EliminateLimits, OptimizeOneRowPlan}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LogicalPlanIntegrity, PlanHelper}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LogicalPlanIntegrity}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
 
 /**
@@ -69,12 +68,9 @@ class AQEOptimizer(conf: SQLConf, extendedRuntimeOptimizerRules: Seq[Rule[Logica
     }
   }
 
-  override protected def isPlanIntegral(
+  override protected def validatePlanChanges(
       previousPlan: LogicalPlan,
-      currentPlan: LogicalPlan): Boolean = {
-    !Utils.isTesting || (currentPlan.resolved &&
-      !currentPlan.exists(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty) &&
-      LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(currentPlan) &&
-      DataType.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema))
+      currentPlan: LogicalPlan): Option[String] = {
+    LogicalPlanIntegrity.validateOptimizedPlan(previousPlan, currentPlan)
   }
 }

@@ -331,7 +331,7 @@ class CountOpenLocalFileSystem extends RawLocalFileSystem {
 }
 
 object CountOpenLocalFileSystem {
-  val scheme = s"FileStreamSinkLogSuite${math.abs(Random.nextInt)}fs"
+  val scheme = s"FileStreamSinkLogSuite${math.abs(Random.nextInt())}fs"
   val pathToNumOpenCalled = new ConcurrentHashMap[String, JLong]
 
   def resetCount(): Unit = pathToNumOpenCalled.clear()

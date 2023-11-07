@@ -24,7 +24,7 @@ import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
 import org.apache.spark.deploy.ClientArguments._
 import org.apache.spark.internal.config
-import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.launcher.{JavaModuleOptions, SparkLauncher}
 import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
@@ -124,7 +124,10 @@ private[rest] class StandaloneSubmitRequestServlet(
    * fields used by python applications since python is not supported in standalone
    * cluster mode yet.
    */
-  private def buildDriverDescription(request: CreateSubmissionRequest): DriverDescription = {
+  private[rest] def buildDriverDescription(
+      request: CreateSubmissionRequest,
+      masterUrl: String,
+      masterRestPort: Int): DriverDescription = {
     // Required fields, including the main class because python is not yet supported
     val appResource = Option(request.appResource).getOrElse {
       throw new SubmitRestMissingFieldException("Application jar is missing.")
@@ -149,7 +152,6 @@ private[rest] class StandaloneSubmitRequestServlet(
     // the driver.
     val masters = sparkProperties.get("spark.master")
     val (_, masterPort) = Utils.extractHostPortFromSparkUrl(masterUrl)
-    val masterRestPort = this.conf.get(config.MASTER_REST_SERVER_PORT)
     val updatedMasters = masters.map(
       _.replace(s":$masterRestPort", s":$masterPort")).getOrElse(masterUrl)
     val appArgs = request.appArgs
@@ -167,7 +169,8 @@ private[rest] class StandaloneSubmitRequestServlet(
       .getOrElse(Seq.empty)
     val extraJavaOpts = driverExtraJavaOptions.map(Utils.splitCommandString).getOrElse(Seq.empty)
     val sparkJavaOpts = Utils.sparkJavaOpts(conf)
-    val javaOpts = sparkJavaOpts ++ defaultJavaOpts ++ extraJavaOpts
+    val javaModuleOptions = JavaModuleOptions.defaultModuleOptionArray().toSeq
+    val javaOpts = javaModuleOptions ++ sparkJavaOpts ++ defaultJavaOpts ++ extraJavaOpts
     val command = new Command(
       "org.apache.spark.deploy.worker.DriverWrapper",
       Seq("{{WORKER_URL}}", "{{USER_JAR}}", mainClass) ++ appArgs, // args to the DriverWrapper
@@ -194,7 +197,8 @@ private[rest] class StandaloneSubmitRequestServlet(
       responseServlet: HttpServletResponse): SubmitRestProtocolResponse = {
     requestMessage match {
       case submitRequest: CreateSubmissionRequest =>
-        val driverDescription = buildDriverDescription(submitRequest)
+        val driverDescription = buildDriverDescription(
+          submitRequest, masterUrl, conf.get(config.MASTER_REST_SERVER_PORT))
         val response = masterEndpoint.askSync[DeployMessages.SubmitDriverResponse](
           DeployMessages.RequestSubmitDriver(driverDescription))
         val submitResponse = new CreateSubmissionResponse

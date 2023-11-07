@@ -40,7 +40,7 @@ private[spark] class KubernetesDriverBuilder {
 
     val userFeatures = conf.get(Config.KUBERNETES_DRIVER_POD_FEATURE_STEPS)
       .map { className =>
-        val feature = Utils.classForName[Any](className).newInstance()
+        val feature = Utils.classForName[Any](className).getConstructor().newInstance()
         val initializedFeature = feature match {
           // Since 3.3, allow user to implement feature with KubernetesDriverConf
           case d: KubernetesDriverCustomFeatureConfigStep =>

@@ -21,7 +21,7 @@ import java.text.SimpleDateFormat
 import java.time.{Duration, LocalDateTime, Period}
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.functions._
@@ -41,6 +41,36 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(from_csv($"value", lit(schema), Map[String, String]().asJava)),
       Row(Row(1)) :: Nil)
+  }
+
+  test("from_csv with non struct schema") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq("1").toDS().select(from_csv($"value", lit("ARRAY<int>"), Map[String, String]().asJava))
+      },
+      errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      parameters = Map(
+        "inputSchema" -> "\"ARRAY<int>\"",
+        "dataType" -> "\"ARRAY<INT>\""
+      ),
+      context = ExpectedContext(fragment = "from_csv", getCurrentClassCallSitePattern)
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq("1").toDF("csv").selectExpr(s"from_csv(csv, 'ARRAY<int>')")
+      },
+      errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      parameters = Map(
+        "inputSchema" -> "\"ARRAY<int>\"",
+        "dataType" -> "\"ARRAY<INT>\""
+      ),
+      context = ExpectedContext(
+        fragment = "from_csv(csv, 'ARRAY<int>')",
+        start = 0,
+        stop = 26
+      )
+    )
   }
 
   test("from_csv with option (timestampFormat)") {
@@ -275,9 +305,12 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
 
       val exception1 = intercept[SparkException] {
         df.select(from_csv($"value", schema, Map("mode" -> "FAILFAST"))).collect()
-      }.getMessage
-      assert(exception1.contains(
-        "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+      }.getCause
+      checkError(
+        exception = exception1.asInstanceOf[SparkException],
+        errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map("badRecord" -> "[null,null,\"]", "failFastMode" -> "FAILFAST")
+      )
 
       val exception2 = intercept[SparkException] {
         df.select(from_csv($"value", schema, Map("mode" -> "DROPMALFORMED")))
@@ -357,16 +390,24 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq("""1,"a"""").toDS().select(from_csv($"value", schema, options)),
       Row(Row(1, "a")))
 
-    val errMsg = intercept[AnalysisException] {
-      Seq(("1", "i int")).toDF("csv", "schema")
-        .select(from_csv($"csv", $"schema", options)).collect()
-    }.getMessage
-    assert(errMsg.contains("Schema should be specified in DDL format as a string literal"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq(("1", "i int")).toDF("csv", "schema")
+          .select(from_csv($"csv", $"schema", options)).collect()
+      },
+      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
+      parameters = Map("inputSchema" -> "\"schema\""),
+      context = ExpectedContext(fragment = "from_csv", getCurrentClassCallSitePattern)
+    )
 
-    val errMsg2 = intercept[AnalysisException] {
-      Seq("1").toDF("csv").select(from_csv($"csv", lit(1), options)).collect()
-    }.getMessage
-    assert(errMsg2.contains("The expression '1' is not a valid schema string"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq("1").toDF("csv").select(from_csv($"csv", lit(1), options)).collect()
+      },
+      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
+      parameters = Map("inputSchema" -> "\"1\""),
+      context = ExpectedContext(fragment = "from_csv", getCurrentClassCallSitePattern)
+    )
   }
 
   test("schema_of_csv - infers the schema of foldable CSV string") {
@@ -411,11 +452,11 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
           .selectExpr("from_csv(csv, 'a int, b int', map('mode', 'failfast')) as parsed")
 
         val err1 = intercept[SparkException] {
-          df.selectExpr("parsed.a").collect
+          df.selectExpr("parsed.a").collect()
         }
 
         val err2 = intercept[SparkException] {
-          df.selectExpr("parsed.b").collect
+          df.selectExpr("parsed.b").collect()
         }
 
         assert(err1.getMessage.contains("Malformed records are detected in record parsing"))
@@ -437,7 +478,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-35998: Make from_csv/to_csv to handle year-month intervals properly") {
-    val ymDF = Seq(Period.of(1, 2, 0)).toDF
+    val ymDF = Seq(Period.of(1, 2, 0)).toDF()
     Seq(
       (YearMonthIntervalType(), "INTERVAL '1-2' YEAR TO MONTH", Period.of(1, 2, 0)),
       (YearMonthIntervalType(YEAR), "INTERVAL '1' YEAR", Period.of(1, 0, 0)),
@@ -464,7 +505,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-35999: Make from_csv/to_csv to handle day-time intervals properly") {
-    val dtDF = Seq(Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)).toDF
+    val dtDF = Seq(Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)).toDF()
     Seq(
       (DayTimeIntervalType(), "INTERVAL '1 02:03:04' DAY TO SECOND",
         Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)),
@@ -509,7 +550,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-36490: Make from_csv/to_csv to handle timestamp_ntz type properly") {
     val localDT = LocalDateTime.parse("2021-08-12T15:16:23")
-    val df = Seq(localDT).toDF
+    val df = Seq(localDT).toDF()
     val toCsvDF = df.select(to_csv(struct($"value")) as "csv")
     checkAnswer(toCsvDF, Row("2021-08-12T15:16:23.000"))
     val fromCsvDF = toCsvDF

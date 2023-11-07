@@ -24,19 +24,21 @@ import java.util.Arrays
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.SparkArithmeticException
-import org.apache.spark.sql.{Encoder, Encoders}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.sql.{Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, NaNvl}
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-import org.apache.spark.util.ClosureCleaner
+import org.apache.spark.util.{SparkClosureCleaner, Utils}
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
@@ -137,7 +139,8 @@ case class OptionNestedGeneric[T](list: Option[T])
 case class MapNestedGenericKey[T](list: Map[T, Int])
 case class MapNestedGenericValue[T](list: Map[Int, T])
 
-class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTest {
+class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTest
+  with QueryErrorsBase {
   OuterScopes.addOuterScope(this)
 
   implicit def encoder[T : TypeTag]: ExpressionEncoder[T] = verifyNotLeakingReflectionObjects {
@@ -387,28 +390,28 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(
     1 -> 10L,
     "tuple with 2 flat encoders")(
-    ExpressionEncoder.tuple(ExpressionEncoder[Int], ExpressionEncoder[Long]))
+    ExpressionEncoder.tuple(ExpressionEncoder[Int](), ExpressionEncoder[Long]()))
 
   encodeDecodeTest(
     (PrimitiveData(1, 1, 1, 1, 1, 1, true), (3, 30L)),
     "tuple with 2 product encoders")(
-    ExpressionEncoder.tuple(ExpressionEncoder[PrimitiveData], ExpressionEncoder[(Int, Long)]))
+    ExpressionEncoder.tuple(ExpressionEncoder[PrimitiveData](), ExpressionEncoder[(Int, Long)]()))
 
   encodeDecodeTest(
     (PrimitiveData(1, 1, 1, 1, 1, 1, true), 3),
     "tuple with flat encoder and product encoder")(
-    ExpressionEncoder.tuple(ExpressionEncoder[PrimitiveData], ExpressionEncoder[Int]))
+    ExpressionEncoder.tuple(ExpressionEncoder[PrimitiveData](), ExpressionEncoder[Int]()))
 
   encodeDecodeTest(
     (3, PrimitiveData(1, 1, 1, 1, 1, 1, true)),
     "tuple with product encoder and flat encoder")(
-    ExpressionEncoder.tuple(ExpressionEncoder[Int], ExpressionEncoder[PrimitiveData]))
+    ExpressionEncoder.tuple(ExpressionEncoder[Int](), ExpressionEncoder[PrimitiveData]()))
 
   encodeDecodeTest(
     (1, (10, 100L)),
     "nested tuple encoder") {
-    val intEnc = ExpressionEncoder[Int]
-    val longEnc = ExpressionEncoder[Long]
+    val intEnc = ExpressionEncoder[Int]()
+    val longEnc = ExpressionEncoder[Long]()
     ExpressionEncoder.tuple(intEnc, ExpressionEncoder.tuple(intEnc, longEnc))
   }
 
@@ -480,13 +483,20 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(ScroogeLikeExample(1),
     "SPARK-40385 class with only a companion object constructor")
 
+  encodeDecodeTest(Array(Set(1, 2), Set(2, 3)), "array of sets")
+
   productTest(("UDT", new ExamplePoint(0.1, 0.2)))
 
   test("AnyVal class with Any fields") {
-    val exception = intercept[UnsupportedOperationException](implicitly[ExpressionEncoder[Foo]])
-    val errorMsg = exception.getMessage
-    assert(errorMsg.contains("root class: \"org.apache.spark.sql.catalyst.encoders.Foo\""))
-    assert(errorMsg.contains("No Encoder found for Any"))
+    val exception = intercept[SparkUnsupportedOperationException](
+      implicitly[ExpressionEncoder[Foo]])
+    checkError(
+      exception = exception,
+      errorClass = "ENCODER_NOT_FOUND",
+      parameters = Map(
+        "typeName" -> "Any",
+        "docroot" -> SPARK_DOC_ROOT)
+    )
   }
 
   test("nullable of encoder schema") {
@@ -506,7 +516,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
     // test for nested product encoders
     {
-      val schema = ExpressionEncoder[(Int, (String, Int))].schema
+      val schema = ExpressionEncoder[(Int, (String, Int))]().schema
       assert(schema(0).nullable === false)
       assert(schema(1).nullable)
       assert(schema(1).dataType.asInstanceOf[StructType](0).nullable)
@@ -516,8 +526,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     // test for tupled encoders
     {
       val schema = ExpressionEncoder.tuple(
-        ExpressionEncoder[Int],
-        ExpressionEncoder[(String, Int)]).schema
+        ExpressionEncoder[Int](),
+        ExpressionEncoder[(String, Int)]()).schema
       assert(schema(0).nullable === false)
       assert(schema(1).nullable)
       assert(schema(1).dataType.asInstanceOf[StructType](0).nullable)
@@ -539,14 +549,24 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   test("null check for map key: String") {
     val toRow = ExpressionEncoder[Map[String, Int]]().createSerializer()
-    val e = intercept[RuntimeException](toRow(Map(("a", 1), (null, 2))))
-    assert(e.getMessage.contains("Cannot use null as map key"))
+    val e = intercept[SparkRuntimeException](toRow(Map(("a", 1), (null, 2))))
+    assert(e.getCause.isInstanceOf[SparkRuntimeException])
+    checkError(
+      exception = e.getCause.asInstanceOf[SparkRuntimeException],
+      errorClass = "NULL_MAP_KEY",
+      parameters = Map.empty
+    )
   }
 
   test("null check for map key: Integer") {
     val toRow = ExpressionEncoder[Map[Integer, String]]().createSerializer()
-    val e = intercept[RuntimeException](toRow(Map((1, "a"), (null, "b"))))
-    assert(e.getMessage.contains("Cannot use null as map key"))
+    val e = intercept[SparkRuntimeException](toRow(Map((1, "a"), (null, "b"))))
+    assert(e.getCause.isInstanceOf[SparkRuntimeException])
+    checkError(
+      exception = e.getCause.asInstanceOf[SparkRuntimeException],
+      errorClass = "NULL_MAP_KEY",
+      parameters = Map.empty
+    )
   }
 
   test("throw exception for tuples with more than 22 elements") {
@@ -556,6 +576,25 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       ExpressionEncoder.tuple(encoders)
     }
     assert(e.getMessage.contains("tuple with more than 22 elements are not supported"))
+  }
+
+  test("throw exception for unexpected serializer") {
+    val schema = new StructType()
+      .add("key", StringType)
+      .add("value", BinaryType)
+
+    val encoder = ExpressionEncoder(schema, lenient = true)
+    val unexpectedSerializer = NaNvl(encoder.objSerializer, encoder.objSerializer)
+    val exception = intercept[org.apache.spark.SparkRuntimeException] {
+      new ExpressionEncoder[Row](unexpectedSerializer, encoder.objDeserializer, encoder.clsTag)
+    }
+    checkError(
+      exception = exception,
+      errorClass = "UNEXPECTED_SERIALIZER_FOR_CLASS",
+      parameters = Map(
+        "className" -> Utils.getSimpleName(encoder.clsTag.runtimeClass),
+        "expr" -> toSQLExpr(unexpectedSerializer))
+    )
   }
 
   encodeDecodeTest((1, FooEnum.E1), "Tuple with Int and scala Enum")
@@ -634,7 +673,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
             val e = intercept[RuntimeException] {
               toRow(bigNumeric)
             }
-            assert(e.getMessage.contains("Error while encoding"))
+            assert(e.getMessage.contains("Failed to encode a value of the expressions:"))
             assert(e.getCause.getClass === classOf[SparkArithmeticException])
           }
         }
@@ -650,10 +689,10 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       val encoder = implicitly[ExpressionEncoder[T]]
 
       // Make sure encoder is serializable.
-      ClosureCleaner.clean((s: String) => encoder.getClass.getName)
+      SparkClosureCleaner.clean((s: String) => encoder.getClass.getName)
 
       val row = encoder.createSerializer().apply(input)
-      val schema = encoder.schema.toAttributes
+      val schema = toAttributes(encoder.schema)
       val boundEncoder = encoder.resolveAndBind()
       val convertedBack = try boundEncoder.createDeserializer().apply(row) catch {
         case e: Exception =>

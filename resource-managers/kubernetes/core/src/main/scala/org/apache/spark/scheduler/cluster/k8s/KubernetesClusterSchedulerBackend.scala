@@ -19,6 +19,7 @@ package org.apache.spark.scheduler.cluster.k8s
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.mutable.HashMap
 import scala.concurrent.Future
 
 import io.fabric8.kubernetes.api.model.Pod
@@ -34,7 +35,7 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
-import org.apache.spark.scheduler.{ExecutorDecommissionInfo, ExecutorKilled, ExecutorLossReason,
+import org.apache.spark.scheduler.{ExecutorDecommission, ExecutorDecommissionInfo, ExecutorKilled, ExecutorLossReason,
   TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
@@ -294,10 +295,15 @@ private[spark] class KubernetesClusterSchedulerBackend(
   }
 
   private class KubernetesDriverEndpoint extends DriverEndpoint {
+
+    protected val execIDRequester = new HashMap[RpcAddress, String]
+
     private def generateExecID(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case x: GenerateExecID =>
         val newId = execId.incrementAndGet().toString
         context.reply(newId)
+        val executorAddress = context.senderAddress
+        execIDRequester(executorAddress) = newId
         // Generally this should complete quickly but safer to not block in-case we're in the
         // middle of an etcd fail over or otherwise slower writes.
         val labelTask = new Runnable() {
@@ -324,11 +330,31 @@ private[spark] class KubernetesClusterSchedulerBackend(
           super.receiveAndReply(context)))
 
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
-      // Don't do anything besides disabling the executor - allow the Kubernetes API events to
-      // drive the rest of the lifecycle decisions
-      // TODO what if we disconnect from a networking issue? Probably want to mark the executor
-      // to be deleted eventually.
-      addressToExecutorId.get(rpcAddress).foreach(disableExecutor)
+      val execId = addressToExecutorId.get(rpcAddress)
+      execId match {
+        case Some(id) =>
+          executorsPendingDecommission.get(id) match {
+            case Some(host) =>
+              // We don't pass through the host because by convention the
+              // host is only populated if the entire host is going away
+              // and we don't know if that's the case or just one container.
+              removeExecutor(id, ExecutorDecommission(None))
+            case _ =>
+              // Don't do anything besides disabling the executor - allow the K8s API events to
+              // drive the rest of the lifecycle decisions.
+              // If it's disconnected due to network issues eventually heartbeat will clear it up.
+              disableExecutor(id)
+          }
+        case _ =>
+          val newExecId = execIDRequester.get(rpcAddress)
+          newExecId match {
+            case Some(id) =>
+              execIDRequester -= rpcAddress
+              // Expected, executors re-establish a connection with an ID
+            case _ =>
+              logInfo(s"No executor found for ${rpcAddress}")
+          }
+      }
     }
   }
 

@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import sys
 import unittest
 from inspect import signature
 from typing import Union, Iterator, Tuple, cast, get_type_hints
@@ -107,6 +108,29 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
         )
 
         def func(iter: Iterator[Tuple[Union[pd.DataFrame, pd.Series], ...]]) -> Iterator[pd.Series]:
+            pass
+
+        self.assertEqual(
+            infer_eval_type(signature(func), get_type_hints(func)), PandasUDFType.SCALAR_ITER
+        )
+
+    @unittest.skipIf(sys.version_info < (3, 9), "Type hinting generics require Python 3.9.")
+    def test_type_annotation_tuple_generics(self):
+        def func(iter: Iterator[tuple[pd.DataFrame, pd.Series]]) -> Iterator[pd.DataFrame]:
+            pass
+
+        self.assertEqual(
+            infer_eval_type(signature(func), get_type_hints(func)), PandasUDFType.SCALAR_ITER
+        )
+
+        def func(iter: Iterator[tuple[pd.DataFrame, ...]]) -> Iterator[pd.Series]:
+            pass
+
+        self.assertEqual(
+            infer_eval_type(signature(func), get_type_hints(func)), PandasUDFType.SCALAR_ITER
+        )
+
+        def func(iter: Iterator[tuple[Union[pd.DataFrame, pd.Series], ...]]) -> Iterator[pd.Series]:
             pass
 
         self.assertEqual(
@@ -238,7 +262,7 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
         df = self.spark.range(10).selectExpr("id", "id as v")
 
         def plus_one(v: Union[pd.Series, pd.DataFrame]) -> pd.Series:
-            return v + 1  # type: ignore[return-value]
+            return v + 1
 
         plus_one = pandas_udf("long")(plus_one)
         actual = df.select(plus_one(df.v).alias("plus_one"))
@@ -360,7 +384,7 @@ if __name__ == "__main__":
     from pyspark.sql.tests.pandas.test_pandas_udf_typehints import *  # noqa: #401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

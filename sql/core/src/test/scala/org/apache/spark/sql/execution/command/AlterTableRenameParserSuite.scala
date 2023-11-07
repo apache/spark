@@ -51,6 +51,6 @@ class AlterTableRenameParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(parsePlan)(sql2),
       errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'.'", "hint" -> ": extra input '.'"))
+      parameters = Map("error" -> "'.'", "hint" -> ""))
   }
 }

@@ -16,37 +16,36 @@
     under the License.
 
 
-===============
-Migration Guide
-===============
+================
+Migration Guides
+================
 
-This page describes the migration guide specific to PySpark.
+This page includes links to guides that will help you migrate to PySpark.
+
+If you are upgrading from an older to a newer version of PySpark, refer to
+the following page for differences between versions:
+
+- :ref:`Upgrading PySpark</migration_guide/pyspark_upgrade.rst>`
 
 .. toctree::
    :maxdepth: 2
+   :hidden:
 
-   pyspark_3.3_to_3.4
-   pyspark_3.2_to_3.3
-   pyspark_3.1_to_3.2
-   pyspark_2.4_to_3.0
-   pyspark_2.3_to_2.4
-   pyspark_2.3.0_to_2.3.1_above
-   pyspark_2.2_to_2.3
-   pyspark_1.4_to_1.5
-   pyspark_1.0_1.2_to_1.3
+   pyspark_upgrade
 
-The guide below is for those who are from `Koalas <https://koalas.readthedocs.io/en/latest>`_.
+If you are migrating code from `Koalas <https://koalas.readthedocs.io/en/latest>`_ to PySpark,
+this guide is for you:
 
 .. toctree::
    :maxdepth: 2
 
    koalas_to_pyspark
 
-Many items of other migration guides can also be applied when migrating PySpark to higher versions because PySpark internally shares other components.
-Please also refer other migration guides:
+A lot of content in other migration guides can also be helpful when migrating to newer PySpark versions because PySpark internally shares the same components.
+Please also refer to the following migration guides:
 
-- `Migration Guide: Spark Core <https://spark.apache.org/docs/latest/core-migration-guide.html>`_
 - `Migration Guide: SQL, Datasets and DataFrame <https://spark.apache.org/docs/latest/sql-migration-guide.html>`_
 - `Migration Guide: Structured Streaming <https://spark.apache.org/docs/latest/ss-migration-guide.html>`_
 - `Migration Guide: MLlib (Machine Learning) <https://spark.apache.org/docs/latest/ml-migration-guide.html>`_
+- `Migration Guide: Spark Core <https://spark.apache.org/docs/latest/core-migration-guide.html>`_
 

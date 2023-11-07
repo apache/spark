@@ -18,9 +18,10 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, InvalidFormat}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util.quoteNameParts
 import org.apache.spark.sql.errors.QueryErrorsBase
 
 /**
@@ -34,22 +35,12 @@ package object analysis {
    * Resolver should return true if the first string refers to the same entity as the second string.
    * For example, by using case insensitive equality.
    */
-  type Resolver = (String, String) => Boolean
+  type Resolver = SqlApiAnalysis.Resolver
 
   val caseInsensitiveResolution = (a: String, b: String) => a.equalsIgnoreCase(b)
   val caseSensitiveResolution = (a: String, b: String) => a == b
 
   implicit class AnalysisErrorAt(t: TreeNode[_]) extends QueryErrorsBase {
-    /** Fails the analysis at the point where a specific tree node was parsed. */
-    def failAnalysis(msg: String): Nothing = {
-      throw new AnalysisException(msg, t.origin.line, t.origin.startPosition)
-    }
-
-    /** Fails the analysis at the point where a specific tree node was parsed with a given cause. */
-    def failAnalysis(msg: String, cause: Throwable): Nothing = {
-      throw new AnalysisException(msg, t.origin.line, t.origin.startPosition, cause = Some(cause))
-    }
-
     /**
      * Fails the analysis at the point where a specific tree node was parsed using a provided
      * error class and message parameters.
@@ -61,10 +52,45 @@ package object analysis {
         origin = t.origin)
     }
 
+    /**
+     * Fails the analysis at the point where a specific tree node was parsed using a provided
+     * error class, message parameters and a given cause. */
+    def failAnalysis(
+        errorClass: String,
+        messageParameters: Map[String, String],
+        cause: Throwable): Nothing = {
+      throw new AnalysisException(
+        errorClass = errorClass,
+        messageParameters = messageParameters,
+        origin = t.origin,
+        cause = Option(cause))
+    }
+
     def dataTypeMismatch(expr: Expression, mismatch: DataTypeMismatch): Nothing = {
       throw new AnalysisException(
         errorClass = s"DATATYPE_MISMATCH.${mismatch.errorSubClass}",
         messageParameters = mismatch.messageParameters + ("sqlExpr" -> toSQLExpr(expr)),
+        origin = t.origin)
+    }
+
+    def invalidFormat(invalidFormat: InvalidFormat): Nothing = {
+      throw new AnalysisException(
+        errorClass = s"INVALID_FORMAT.${invalidFormat.errorSubClass}",
+        messageParameters = invalidFormat.messageParameters,
+        origin = t.origin)
+    }
+
+    def tableNotFound(name: Seq[String]): Nothing = {
+      throw new AnalysisException(
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        messageParameters = Map("relationName" ->  quoteNameParts(name)),
+        origin = t.origin)
+    }
+
+    def schemaNotFound(name: Seq[String]): Nothing = {
+      throw new AnalysisException(
+        errorClass = "SCHEMA_NOT_FOUND",
+        messageParameters = Map("schemaName" -> quoteNameParts(name)),
         origin = t.origin)
     }
   }

@@ -1,0 +1,43 @@
+{
+  "common": {
+    "planId": "4"
+  },
+  "setOp": {
+    "leftInput": {
+      "common": {
+        "planId": "1"
+      },
+      "drop": {
+        "input": {
+          "common": {
+            "planId": "0"
+          },
+          "localRelation": {
+            "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+          }
+        },
+        "columnNames": ["b"]
+      }
+    },
+    "rightInput": {
+      "common": {
+        "planId": "3"
+      },
+      "drop": {
+        "input": {
+          "common": {
+            "planId": "2"
+          },
+          "localRelation": {
+            "schema": "struct\u003ca:int,id:bigint,payload:binary\u003e"
+          }
+        },
+        "columnNames": ["payload"]
+      }
+    },
+    "setOpType": "SET_OP_TYPE_UNION",
+    "isAll": true,
+    "byName": true,
+    "allowMissingColumns": false
+  }
+}

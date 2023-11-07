@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.io.{File, IOException}
 import java.nio.file.Files
-import java.nio.file.attribute.PosixFilePermission
+import java.nio.file.attribute.{PosixFilePermission, PosixFilePermissions}
 import java.util.UUID
 
 import scala.collection.mutable.HashMap
@@ -27,7 +27,7 @@ import scala.collection.mutable.HashMap
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.{config, Logging}
@@ -79,9 +79,9 @@ private[spark] class DiskBlockManager(
   private val shutdownHook = addShutdownHook()
 
   // If either of these features are enabled, we must change permissions on block manager
-  // directories and files to accomodate the shuffle service deleting files in a secure environment.
-  // Parent directories are assumed to be restrictive to prevent unauthorized users from accessing
-  // or modifying world readable files.
+  // directories and files to accommodate the shuffle service deleting files in a secure
+  // environment. Parent directories are assumed to be restrictive to prevent unauthorized users
+  // from accessing or modifying world readable files.
   private val permissionChangingRequired = conf.get(config.SHUFFLE_SERVICE_ENABLED) && (
     conf.get(config.SHUFFLE_SERVICE_REMOVE_SHUFFLE_ENABLED) ||
     conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
@@ -139,15 +139,15 @@ private[spark] class DiskBlockManager(
       case mergedMetaBlockId: ShuffleMergedMetaBlockId =>
         getMergedShuffleFile(mergedMetaBlockId.name, dirs)
       case _ =>
-        throw new IllegalArgumentException(
-          s"Only merged block ID is supported, but got $blockId")
+        throw SparkException.internalError(
+          s"Only merged block ID is supported, but got $blockId", category = "STORAGE")
     }
   }
 
   private def getMergedShuffleFile(filename: String, dirs: Option[Array[String]]): File = {
     if (!dirs.exists(_.nonEmpty)) {
-      throw new IllegalArgumentException(
-        s"Cannot read $filename because merged shuffle dirs is empty")
+      throw SparkException.internalError(
+        s"Cannot read $filename because merged shuffle dirs is empty", category = "STORAGE")
     }
     new File(ExecutorDiskUtils.getFilePath(dirs.get, subDirsPerLocalDir, filename))
   }
@@ -218,18 +218,18 @@ private[spark] class DiskBlockManager(
 
   /** Produces a unique block id and File suitable for storing local intermediate results. */
   def createTempLocalBlock(): (TempLocalBlockId, File) = {
-    var blockId = new TempLocalBlockId(UUID.randomUUID())
+    var blockId = TempLocalBlockId(UUID.randomUUID())
     while (getFile(blockId).exists()) {
-      blockId = new TempLocalBlockId(UUID.randomUUID())
+      blockId = TempLocalBlockId(UUID.randomUUID())
     }
     (blockId, getFile(blockId))
   }
 
   /** Produces a unique block id and File suitable for storing shuffled intermediate results. */
   def createTempShuffleBlock(): (TempShuffleBlockId, File) = {
-    var blockId = new TempShuffleBlockId(UUID.randomUUID())
+    var blockId = TempShuffleBlockId(UUID.randomUUID())
     while (getFile(blockId).exists()) {
-      blockId = new TempShuffleBlockId(UUID.randomUUID())
+      blockId = TempShuffleBlockId(UUID.randomUUID())
     }
     val tmpFile = getFile(blockId)
     if (permissionChangingRequired) {
@@ -273,7 +273,7 @@ private[spark] class DiskBlockManager(
       Utils.getConfiguredLocalDirs(conf).foreach { rootDir =>
         try {
           val mergeDir = new File(rootDir, mergeDirName)
-          if (!mergeDir.exists()) {
+          if (!mergeDir.exists() || mergeDir.listFiles().length < subDirsPerLocalDir) {
             // This executor does not find merge_manager directory, it will try to create
             // the merge_manager directory and the sub directories.
             logDebug(s"Try to create $mergeDir and its sub dirs since the " +
@@ -301,9 +301,6 @@ private[spark] class DiskBlockManager(
    * Create a directory that is writable by the group.
    * Grant the permission 770 "rwxrwx---" to the directory so the shuffle server can
    * create subdirs/files within the merge folder.
-   * TODO: Find out why can't we create a dir using java api with permission 770
-   *  Files.createDirectories(mergeDir.toPath, PosixFilePermissions.asFileAttribute(
-   *  PosixFilePermissions.fromString("rwxrwx---")))
    */
   def createDirWithPermission770(dirToCreate: File): Unit = {
     var attempts = 0
@@ -315,16 +312,13 @@ private[spark] class DiskBlockManager(
         throw SparkCoreErrors.failToCreateDirectoryError(dirToCreate.getAbsolutePath, maxAttempts)
       }
       try {
-        val builder = new ProcessBuilder().command(
-          "mkdir", "-p", "-m770", dirToCreate.getAbsolutePath)
-        val proc = builder.start()
-        val exitCode = proc.waitFor()
+        dirToCreate.mkdirs()
+        Files.setPosixFilePermissions(
+          dirToCreate.toPath, PosixFilePermissions.fromString("rwxrwx---"))
         if (dirToCreate.exists()) {
           created = dirToCreate
         }
-        logDebug(
-          s"Created directory at ${dirToCreate.getAbsolutePath} with permission " +
-            s"770 and exitCode $exitCode")
+        logDebug(s"Created directory at ${dirToCreate.getAbsolutePath} with permission 770")
       } catch {
         case e: SecurityException =>
           logWarning(s"Failed to create directory ${dirToCreate.getAbsolutePath} " +

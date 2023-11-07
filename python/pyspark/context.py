@@ -40,6 +40,7 @@ from typing import (
     Type,
     TYPE_CHECKING,
     TypeVar,
+    Set,
 )
 
 from py4j.java_collections import JavaMap
@@ -67,7 +68,8 @@ from pyspark.rdd import RDD, _load_from_socket
 from pyspark.taskcontext import TaskContext
 from pyspark.traceback_utils import CallSite, first_spark_call
 from pyspark.status import StatusTracker
-from pyspark.profiler import ProfilerCollector, BasicProfiler, UDFBasicProfiler
+from pyspark.profiler import ProfilerCollector, BasicProfiler, UDFBasicProfiler, MemoryProfiler
+from pyspark.errors import PySparkRuntimeError
 from py4j.java_gateway import is_instance_of, JavaGateway, JavaObject, JVMView
 
 if TYPE_CHECKING:
@@ -100,7 +102,7 @@ class SparkContext:
     Parameters
     ----------
     master : str, optional
-        Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+        Cluster URL to connect to (e.g. spark://host:port, local[4]).
     appName : str, optional
         A name for your job, to display on the cluster web UI.
     sparkHome : str, optional
@@ -177,7 +179,13 @@ class SparkContext:
         jsc: Optional[JavaObject] = None,
         profiler_cls: Type[BasicProfiler] = BasicProfiler,
         udf_profiler_cls: Type[UDFBasicProfiler] = UDFBasicProfiler,
+        memory_profiler_cls: Type[MemoryProfiler] = MemoryProfiler,
     ):
+        if "SPARK_CONNECT_MODE_ENABLED" in os.environ and "SPARK_LOCAL_REMOTE" not in os.environ:
+            raise PySparkRuntimeError(
+                error_class="CONTEXT_UNAVAILABLE_FOR_REMOTE_CLIENT",
+                message_parameters={},
+            )
 
         if conf is None or conf.get("spark.executor.allowSparkContext", "false").lower() != "true":
             # In order to prevent SparkContext from being created in executors.
@@ -204,6 +212,7 @@ class SparkContext:
                 jsc,
                 profiler_cls,
                 udf_profiler_cls,
+                memory_profiler_cls,
             )
         except BaseException:
             # If an error occurs, clean up in order to allow future SparkContext creation:
@@ -223,6 +232,7 @@ class SparkContext:
         jsc: JavaObject,
         profiler_cls: Type[BasicProfiler] = BasicProfiler,
         udf_profiler_cls: Type[UDFBasicProfiler] = UDFBasicProfiler,
+        memory_profiler_cls: Type[MemoryProfiler] = MemoryProfiler,
     ) -> None:
         self.environment = environment or {}
         # java gateway must have been launched at this point.
@@ -259,9 +269,15 @@ class SparkContext:
 
         # Check that we have at least the required parameters
         if not self._conf.contains("spark.master"):
-            raise RuntimeError("A master URL must be set in your configuration")
+            raise PySparkRuntimeError(
+                error_class="MASTER_URL_NOT_SET",
+                message_parameters={},
+            )
         if not self._conf.contains("spark.app.name"):
-            raise RuntimeError("An application name must be set in your configuration")
+            raise PySparkRuntimeError(
+                error_class="APPLICATION_NAME_NOT_SET",
+                message_parameters={},
+            )
 
         # Read back our properties from the conf in case we loaded some of them from
         # the classpath or an external config file
@@ -269,7 +285,7 @@ class SparkContext:
         self.appName = self._conf.get("spark.app.name")
         self.sparkHome = self._conf.get("spark.home", None)
 
-        for (k, v) in self._conf.getAll():
+        for k, v in self._conf.getAll():
             if k.startswith("spark.executorEnv."):
                 varName = k[len("spark.executorEnv.") :]
                 self.environment[varName] = v
@@ -303,11 +319,6 @@ class SparkContext:
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", "python3")
         self.pythonVer = "%d.%d" % sys.version_info[:2]
-
-        if sys.version_info[:2] < (3, 8):
-            with warnings.catch_warnings():
-                warnings.simplefilter("once")
-                warnings.warn("Python 3.7 support is deprecated in Spark 3.4.", FutureWarning)
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
         # This allows other code to determine which Broadcast instances have
@@ -354,9 +365,14 @@ class SparkContext:
         ).getAbsolutePath()
 
         # profiling stats collected for each PythonRDD
-        if self._conf.get("spark.python.profile", "false") == "true":
+        if (
+            self._conf.get("spark.python.profile", "false") == "true"
+            or self._conf.get("spark.python.profile.memory", "false") == "true"
+        ):
             dump_path = self._conf.get("spark.python.profile.dump", None)
-            self.profiler_collector = ProfilerCollector(profiler_cls, udf_profiler_cls, dump_path)
+            self.profiler_collector = ProfilerCollector(
+                profiler_cls, udf_profiler_cls, memory_profiler_cls, dump_path
+            )
         else:
             self.profiler_collector = None  # type: ignore[assignment]
 
@@ -447,10 +463,9 @@ class SparkContext:
 
     def __getnewargs__(self) -> NoReturn:
         # This method is called when attempting to pickle SparkContext, which is always an error:
-        raise RuntimeError(
-            "It appears that you are attempting to reference SparkContext from a broadcast "
-            "variable, action, or transformation. SparkContext can only be used on the driver, "
-            "not in code that it run on workers. For more information, see SPARK-5063."
+        raise PySparkRuntimeError(
+            error_class="CONTEXT_ONLY_VALID_ON_DRIVER",
+            message_parameters={},
         )
 
     def __enter__(self) -> "SparkContext":
@@ -1788,6 +1803,7 @@ class SparkContext:
         >>> def f(x):
         ...     global acc
         ...     acc += 1
+        ...
         >>> rdd.foreach(f)
         >>> acc.value
         15
@@ -1892,7 +1908,7 @@ class SparkContext:
         :meth:`SparkContext.addFile`
         """
         return list(
-            self._jvm.scala.collection.JavaConverters.seqAsJavaList(  # type: ignore[union-attr]
+            self._jvm.scala.jdk.javaapi.CollectionConverters.asJava(  # type: ignore[union-attr]
                 self._jsc.sc().listFiles()
             )
         )
@@ -2020,7 +2036,7 @@ class SparkContext:
         :meth:`SparkContext.addArchive`
         """
         return list(
-            self._jvm.scala.collection.JavaConverters.seqAsJavaList(  # type: ignore[union-attr]
+            self._jvm.scala.jdk.javaapi.CollectionConverters.asJava(  # type: ignore[union-attr]
                 self._jsc.sc().listArchives()
             )
         )
@@ -2126,6 +2142,7 @@ class SparkContext:
         >>> def map_func(x):
         ...     sleep(100)
         ...     raise RuntimeError("Task should have been cancelled")
+        ...
         >>> def start_job(x):
         ...     global result
         ...     try:
@@ -2134,9 +2151,11 @@ class SparkContext:
         ...     except Exception as e:
         ...         result = "Cancelled"
         ...     lock.release()
+        ...
         >>> def stop_job():
         ...     sleep(5)
         ...     sc.cancelJobGroup("job_to_cancel")
+        ...
         >>> suppress = lock.acquire()
         >>> suppress = InheritableThread(target=start_job, args=(10,)).start()
         >>> suppress = InheritableThread(target=stop_job).start()
@@ -2146,10 +2165,182 @@ class SparkContext:
         """
         self._jsc.setJobGroup(groupId, description, interruptOnCancel)
 
+    def setInterruptOnCancel(self, interruptOnCancel: bool) -> None:
+        """
+        Set the behavior of job cancellation from jobs started in this thread.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        interruptOnCancel : bool
+            If true, then job cancellation will result in ``Thread.interrupt()``
+            being called on the job's executor threads. This is useful to help ensure that
+            the tasks are actually stopped in a timely manner, but is off by default due to
+            HDFS-1208, where HDFS may respond to ``Thread.interrupt()`` by marking nodes as dead.
+
+        See Also
+        --------
+        :meth:`SparkContext.addJobTag`
+        :meth:`SparkContext.removeJobTag`
+        :meth:`SparkContext.cancelAllJobs`
+        :meth:`SparkContext.cancelJobGroup`
+        :meth:`SparkContext.cancelJobsWithTag`
+        """
+        self._jsc.setInterruptOnCancel(interruptOnCancel)
+
+    def addJobTag(self, tag: str) -> None:
+        """
+        Add a tag to be assigned to all the jobs started by this thread.
+
+        Often, a unit of execution in an application consists of multiple Spark actions or jobs.
+        Application programmers can use this method to group all those jobs together and give a
+        group tag. The application can use :meth:`SparkContext.cancelJobsWithTag` to cancel all
+        running executions with this tag.
+
+        There may be multiple tags present at the same time, so different parts of application may
+        use different tags to perform cancellation at different levels of granularity.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        tag : str
+            The tag to be added. Cannot contain ',' (comma) character.
+
+        See Also
+        --------
+        :meth:`SparkContext.removeJobTag`
+        :meth:`SparkContext.getJobTags`
+        :meth:`SparkContext.clearJobTags`
+        :meth:`SparkContext.cancelJobsWithTag`
+        :meth:`SparkContext.setInterruptOnCancel`
+
+        Examples
+        --------
+        >>> import threading
+        >>> from time import sleep
+        >>> from pyspark import InheritableThread
+        >>> sc.setInterruptOnCancel(interruptOnCancel=True)
+        >>> result = "Not Set"
+        >>> lock = threading.Lock()
+        >>> def map_func(x):
+        ...     sleep(100)
+        ...     raise RuntimeError("Task should have been cancelled")
+        ...
+        >>> def start_job(x):
+        ...     global result
+        ...     try:
+        ...         sc.addJobTag("job_to_cancel")
+        ...         result = sc.parallelize(range(x)).map(map_func).collect()
+        ...     except Exception as e:
+        ...         result = "Cancelled"
+        ...     lock.release()
+        ...
+        >>> def stop_job():
+        ...     sleep(5)
+        ...     sc.cancelJobsWithTag("job_to_cancel")
+        ...
+        >>> suppress = lock.acquire()
+        >>> suppress = InheritableThread(target=start_job, args=(10,)).start()
+        >>> suppress = InheritableThread(target=stop_job).start()
+        >>> suppress = lock.acquire()
+        >>> print(result)
+        Cancelled
+        >>> sc.clearJobTags()
+        """
+        self._jsc.addJobTag(tag)
+
+    def removeJobTag(self, tag: str) -> None:
+        """
+        Remove a tag previously added to be assigned to all the jobs started by this thread.
+        Noop if such a tag was not added earlier.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        tag : str
+            The tag to be removed. Cannot contain ',' (comma) character.
+
+        See Also
+        --------
+        :meth:`SparkContext.addJobTag`
+        :meth:`SparkContext.getJobTags`
+        :meth:`SparkContext.clearJobTags`
+        :meth:`SparkContext.cancelJobsWithTag`
+        :meth:`SparkContext.setInterruptOnCancel`
+
+        Examples
+        --------
+        >>> sc.addJobTag("job_to_cancel1")
+        >>> sc.addJobTag("job_to_cancel2")
+        >>> sc.getJobTags()
+        {'job_to_cancel1', 'job_to_cancel2'}
+        >>> sc.removeJobTag("job_to_cancel1")
+        >>> sc.getJobTags()
+        {'job_to_cancel2'}
+        >>> sc.clearJobTags()
+        """
+        self._jsc.removeJobTag(tag)
+
+    def getJobTags(self) -> Set[str]:
+        """
+        Get the tags that are currently set to be assigned to all the jobs started by this thread.
+
+        .. versionadded:: 3.5.0
+
+        Returns
+        -------
+        set of str
+            the tags that are currently set to be assigned to all the jobs started by this thread.
+
+        See Also
+        --------
+        :meth:`SparkContext.addJobTag`
+        :meth:`SparkContext.removeJobTag`
+        :meth:`SparkContext.clearJobTags`
+        :meth:`SparkContext.cancelJobsWithTag`
+        :meth:`SparkContext.setInterruptOnCancel`
+
+        Examples
+        --------
+        >>> sc.addJobTag("job_to_cancel")
+        >>> sc.getJobTags()
+        {'job_to_cancel'}
+        >>> sc.clearJobTags()
+        """
+        return self._jsc.getJobTags()
+
+    def clearJobTags(self) -> None:
+        """
+        Clear the current thread's job tags.
+
+        .. versionadded:: 3.5.0
+
+        See Also
+        --------
+        :meth:`SparkContext.addJobTag`
+        :meth:`SparkContext.removeJobTag`
+        :meth:`SparkContext.getJobTags`
+        :meth:`SparkContext.cancelJobsWithTag`
+        :meth:`SparkContext.setInterruptOnCancel`
+
+        Examples
+        --------
+        >>> sc.addJobTag("job_to_cancel")
+        >>> sc.clearJobTags()
+        >>> sc.getJobTags()
+        set()
+        """
+        self._jsc.clearJobTags()
+
     def setLocalProperty(self, key: str, value: str) -> None:
         """
         Set a local property that affects jobs submitted from this thread, such as the
         Spark fair scheduler pool.
+
+        To remove/unset property simply set `value` to None e.g. sc.setLocalProperty("key", None)
 
         .. versionadded:: 1.0.0
 
@@ -2158,7 +2349,8 @@ class SparkContext:
         key : str
             The key of the local property to set.
         value : str
-            The value of the local property to set.
+            The value of the local property to set. If set to `None` then the
+            property will be removed
 
         See Also
         --------
@@ -2225,9 +2417,30 @@ class SparkContext:
         See Also
         --------
         :meth:`SparkContext.setJobGroup`
-        :meth:`SparkContext.cancelJobGroup`
         """
         self._jsc.sc().cancelJobGroup(groupId)
+
+    def cancelJobsWithTag(self, tag: str) -> None:
+        """
+        Cancel active jobs that have the specified tag. See
+        :meth:`SparkContext.addJobTag`.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        tag : str
+            The tag to be cancelled. Cannot contain ',' (comma) character.
+
+        See Also
+        --------
+        :meth:`SparkContext.addJobTag`
+        :meth:`SparkContext.removeJobTag`
+        :meth:`SparkContext.getJobTags`
+        :meth:`SparkContext.clearJobTags`
+        :meth:`SparkContext.setInterruptOnCancel`
+        """
+        return self._jsc.cancelJobsWithTag(tag)
 
     def cancelAllJobs(self) -> None:
         """
@@ -2238,6 +2451,7 @@ class SparkContext:
         See Also
         --------
         :meth:`SparkContext.cancelJobGroup`
+        :meth:`SparkContext.cancelJobsWithTag`
         :meth:`SparkContext.runJob`
         """
         self._jsc.sc().cancelAllJobs()
@@ -2319,9 +2533,9 @@ class SparkContext:
         if self.profiler_collector is not None:
             self.profiler_collector.show_profiles()
         else:
-            raise RuntimeError(
-                "'spark.python.profile' configuration must be set "
-                "to 'true' to enable Python profile."
+            raise PySparkRuntimeError(
+                error_class="INCORRECT_CONF_FOR_PROFILE",
+                message_parameters={},
             )
 
     def dump_profiles(self, path: str) -> None:
@@ -2336,9 +2550,9 @@ class SparkContext:
         if self.profiler_collector is not None:
             self.profiler_collector.dump_profiles(path)
         else:
-            raise RuntimeError(
-                "'spark.python.profile' configuration must be set "
-                "to 'true' to enable Python profile."
+            raise PySparkRuntimeError(
+                error_class="INCORRECT_CONF_FOR_PROFILE",
+                message_parameters={},
             )
 
     def getConf(self) -> SparkConf:
@@ -2375,7 +2589,10 @@ class SparkContext:
         Throws an exception if a SparkContext is about to be created in executors.
         """
         if TaskContext.get() is not None:
-            raise RuntimeError("SparkContext should only be created and accessed on the driver.")
+            raise PySparkRuntimeError(
+                error_class="CONTEXT_ONLY_VALID_ON_DRIVER",
+                message_parameters={},
+            )
 
 
 def _test() -> None:

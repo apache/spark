@@ -75,6 +75,7 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
     val executionId = idgen.incrementAndGet()
     val executionStart = SparkListenerSQLExecutionStart(
       executionId,
+      Some(executionId),
       getClass().getName(),
       getClass().getName(),
       getClass().getName(),
@@ -127,8 +128,8 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
 
         info.setAccumulables(accumulables)
 
-        val start = SparkListenerTaskStart(stageInfo.stageId, stageInfo.attemptNumber, info)
-        val end = SparkListenerTaskEnd(stageInfo.stageId, stageInfo.attemptNumber,
+        val start = SparkListenerTaskStart(stageInfo.stageId, stageInfo.attemptNumber(), info)
+        val end = SparkListenerTaskEnd(stageInfo.stageId, stageInfo.attemptNumber(),
           taskType = "",
           reason = null,
           info,

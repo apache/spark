@@ -46,11 +46,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
-    "actualNumber" : "7",
-    "expectedInfo" : "6",
-    "name" : "make_timestamp_ntz"
+    "actualNum" : "7",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "6",
+    "functionName" : "`make_timestamp_ntz`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -79,9 +81,9 @@ struct<convert_timezone(Europe/Moscow, America/Los_Angeles, TIMESTAMP_NTZ '2022-
 
 
 -- !query
-SELECT convert_timezone('Europe/Amsterdam', timestamp_ntz'2022-03-23 00:00:00')
+SELECT convert_timezone('Europe/Brussels', timestamp_ntz'2022-03-23 00:00:00')
 -- !query schema
-struct<convert_timezone(current_timezone(), Europe/Amsterdam, TIMESTAMP_NTZ '2022-03-23 00:00:00'):timestamp_ntz>
+struct<convert_timezone(current_timezone(), Europe/Brussels, TIMESTAMP_NTZ '2022-03-23 00:00:00'):timestamp_ntz>
 -- !query output
 2022-03-23 08:00:00
 

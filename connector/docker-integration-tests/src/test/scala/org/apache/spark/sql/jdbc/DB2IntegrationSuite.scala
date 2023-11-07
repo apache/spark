@@ -187,7 +187,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
       .option("url", jdbcUrl)
       .option("query", query)
       .load()
-    assert(df.collect.toSet === expectedResult)
+    assert(df.collect().toSet === expectedResult)
 
     // query option in the create table path.
     sql(
@@ -196,7 +196,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
          |USING org.apache.spark.sql.jdbc
          |OPTIONS (url '$jdbcUrl', query '$query')
        """.stripMargin.replaceAll("\n", " "))
-    assert(sql("select x, y from queryOption").collect.toSet == expectedResult)
+    assert(sql("select x, y from queryOption").collect().toSet == expectedResult)
   }
 
   test("SPARK-30062") {
@@ -210,11 +210,32 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
     for (_ <- 0 to 2) {
       df.write.mode(SaveMode.Append).jdbc(jdbcUrl, "tblcopy", new Properties)
     }
-    assert(sqlContext.read.jdbc(jdbcUrl, "tblcopy", new Properties).count === 6)
+    assert(sqlContext.read.jdbc(jdbcUrl, "tblcopy", new Properties).count() === 6)
     df.write.mode(SaveMode.Overwrite).option("truncate", true)
       .jdbc(jdbcUrl, "tblcopy", new Properties)
-    val actual = sqlContext.read.jdbc(jdbcUrl, "tblcopy", new Properties).collect
+    val actual = sqlContext.read.jdbc(jdbcUrl, "tblcopy", new Properties).collect()
     assert(actual.length === 2)
     assert(actual.toSet === expectedResult)
+  }
+
+  test("SPARK-42534: DB2 Limit pushdown test") {
+    val actual = sqlContext.read
+      .format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", "tbl")
+      .load()
+      .limit(2)
+      .select("x", "y")
+      .orderBy("x")
+      .collect()
+
+    val expected = sqlContext.read
+      .format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", "SELECT x, y FROM tbl ORDER BY x FETCH FIRST 2 ROWS ONLY")
+      .load()
+      .collect()
+
+    assert(actual === expected)
   }
 }

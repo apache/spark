@@ -17,15 +17,16 @@
 
 package org.apache.spark.sql
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException, UnresolvedIdentifier, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Days, Hours, Literal, Months, Years}
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, TableSpec}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OptionList, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, UnresolvedTableSpec}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.types.IntegerType
 
 /**
@@ -107,10 +108,10 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   override def create(): Unit = {
-    val tableSpec = TableSpec(
+    val tableSpec = UnresolvedTableSpec(
       properties = properties.toMap,
       provider = provider,
-      options = Map.empty,
+      optionExpression = OptionList(Seq.empty),
       location = None,
       comment = None,
       serde = None,
@@ -191,15 +192,15 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    * callback functions.
    */
   private def runCommand(command: LogicalPlan): Unit = {
-    val qe = sparkSession.sessionState.executePlan(command)
+    val qe = new QueryExecution(sparkSession, command, df.queryExecution.tracker)
     qe.assertCommandExecuted()
   }
 
   private def internalReplace(orCreate: Boolean): Unit = {
-    val tableSpec = TableSpec(
+    val tableSpec = UnresolvedTableSpec(
       properties = properties.toMap,
       provider = provider,
-      options = Map.empty,
+      optionExpression = OptionList(Seq.empty),
       location = None,
       comment = None,
       serde = None,

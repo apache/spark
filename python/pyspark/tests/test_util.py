@@ -20,7 +20,7 @@ import unittest
 from py4j.protocol import Py4JJavaError
 
 from pyspark import keyword_only
-from pyspark.testing.utils import PySparkTestCase
+from pyspark.testing.utils import PySparkTestCase, eventually
 from pyspark.find_spark_home import _find_spark_home
 
 
@@ -84,12 +84,33 @@ class UtilTests(PySparkTestCase):
         finally:
             os.environ["SPARK_HOME"] = origin
 
+    @eventually(timeout=180, catch_assertions=True)
+    def test_eventually_decorator(self):
+        import random
+
+        self.assertTrue(random.random() < 0.1)
+
+    def test_eventually_function(self):
+        import random
+
+        def condition():
+            self.assertTrue(random.random() < 0.1)
+
+        eventually(timeout=180, catch_assertions=True)(condition)()
+
+    def test_eventually_lambda(self):
+        import random
+
+        eventually(timeout=180, catch_assertions=True)(
+            lambda: self.assertTrue(random.random() < 0.1)
+        )()
+
 
 if __name__ == "__main__":
     from pyspark.tests.test_util import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

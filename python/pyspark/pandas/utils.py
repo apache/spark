@@ -37,15 +37,22 @@ from typing import (
 )
 import warnings
 
-from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame, SparkSession
-from pyspark.sql.types import DoubleType
 import pandas as pd
 from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 
-# For running doctests and reference resolution in PyCharm.
+from pyspark.sql import functions as F, Column, DataFrame as PySparkDataFrame, SparkSession
+from pyspark.sql.types import DoubleType
+from pyspark.sql.utils import is_remote, get_dataframe_class
+from pyspark.errors import PySparkTypeError
 from pyspark import pandas as ps  # noqa: F401
-from pyspark.pandas._typing import Axis, Label, Name, DataFrameOrSeries
+from pyspark.pandas._typing import (
+    Axis,
+    Label,
+    Name,
+    DataFrameOrSeries,
+)
 from pyspark.pandas.typedef.typehints import as_spark_type
+
 
 if TYPE_CHECKING:
     from pyspark.pandas.indexes.base import Index
@@ -368,7 +375,7 @@ def align_diff_frames(
         - full: `resolve_func` should resolve only common columns from 'this' and 'that' DataFrames.
             For instance, if 'this' has columns A, B, C and that has B, C, D, `this_columns` and
             'that_columns' in this function are B, C and B, C.
-        - left: `resolve_func` should resolve columns including that columns.
+        - left: `resolve_func` should resolve columns including `that` column.
             For instance, if 'this' has columns A, B, C and that has B, C, D, `this_columns` is
             B, C but `that_columns` are B, C, D.
         - inner: Same as 'full' mode; however, internally performs inner join instead.
@@ -391,7 +398,11 @@ def align_diff_frames(
     that_columns_to_apply: List[Label] = []
     this_columns_to_apply: List[Label] = []
     additional_that_columns: List[Label] = []
-    columns_to_keep: List[Union[Series, Column]] = []
+    if is_remote():
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        Column = ConnectColumn
+    columns_to_keep: List[Union[Series, Column]] = []  # type: ignore[valid-type]
     column_labels_to_keep: List[Label] = []
 
     for combined_label in combined_column_labels:
@@ -422,7 +433,7 @@ def align_diff_frames(
 
     # Should extract columns to apply and do it in a batch in case
     # it adds new columns for example.
-    columns_applied: List[Union[Series, Column]]
+    columns_applied: List[Union[Series, Column]]  # type: ignore[valid-type]
     column_labels_applied: List[Label]
     if len(this_columns_to_apply) > 0 or len(that_columns_to_apply) > 0:
         psser_set, column_labels_set = zip(
@@ -473,7 +484,7 @@ def default_session() -> SparkSession:
     # Turn ANSI off when testing the pandas API on Spark since
     # the behavior of pandas API on Spark follows pandas, not SQL.
     if is_testing():
-        spark.conf.set("spark.sql.ansi.enabled", False)  # type: ignore[arg-type]
+        spark.conf.set("spark.sql.ansi.enabled", False)
     if spark.conf.get("spark.sql.ansi.enabled") == "true":
         log_advice(
             "The config 'spark.sql.ansi.enabled' is set to True. "
@@ -526,7 +537,7 @@ def validate_arguments_and_invoke_function(
 
     This function validates all the arguments, removes the ones that are not supported if they
     are simply the default value (i.e. most likely the user didn't explicitly specify it). It
-    throws a TypeError if the user explicitly specify an argument that is not supported by the
+    throws a TypeError if the user explicitly specifies an argument that is not supported by the
     pandas version available.
 
     For example usage, look at DataFrame.to_html().
@@ -595,7 +606,7 @@ def lazy_property(fn: Callable[[Any], Any]) -> property:
     return wrapped_lazy_property.deleter(deleter)
 
 
-def scol_for(sdf: SparkDataFrame, column_name: str) -> Column:
+def scol_for(sdf: PySparkDataFrame, column_name: str) -> Column:
     """Return Spark Column for the given column name."""
     return sdf["`{}`".format(column_name)]
 
@@ -640,7 +651,7 @@ def name_like_string(name: Optional[Name]) -> str:
 
 def is_name_like_tuple(value: Any, allow_none: bool = True, check_type: bool = False) -> bool:
     """
-    Check the given tuple is be able to be used as a name.
+    Check the given tuple is to be able to be used as a name.
 
     Examples
     --------
@@ -792,7 +803,7 @@ def validate_mode(mode: str) -> str:
 
 
 @overload
-def verify_temp_column_name(df: SparkDataFrame, column_name_or_label: str) -> str:
+def verify_temp_column_name(df: PySparkDataFrame, column_name_or_label: str) -> str:
     ...
 
 
@@ -802,7 +813,8 @@ def verify_temp_column_name(df: "DataFrame", column_name_or_label: Name) -> Labe
 
 
 def verify_temp_column_name(
-    df: Union["DataFrame", SparkDataFrame], column_name_or_label: Union[str, Name]
+    df: Union["DataFrame", PySparkDataFrame],
+    column_name_or_label: Union[str, Name],
 ) -> Union[str, Label]:
     """
     Verify that the given column name does not exist in the given pandas-on-Spark or
@@ -900,6 +912,7 @@ def verify_temp_column_name(
         )
         column_name = column_name_or_label
 
+    SparkDataFrame = get_dataframe_class()
     assert isinstance(df, SparkDataFrame), type(df)
     assert (
         column_name not in df.columns
@@ -914,11 +927,11 @@ def spark_column_equals(left: Column, right: Column) -> bool:
     """
     Check both `left` and `right` have the same expressions.
 
-    >>> spark_column_equals(F.lit(0), F.lit(0))
+    >>> spark_column_equals(sf.lit(0), sf.lit(0))
     True
-    >>> spark_column_equals(F.lit(0) + 1, F.lit(0) + 1)
+    >>> spark_column_equals(sf.lit(0) + 1, sf.lit(0) + 1)
     True
-    >>> spark_column_equals(F.lit(0) + 1, F.lit(0) + 2)
+    >>> spark_column_equals(sf.lit(0) + 1, sf.lit(0) + 2)
     False
     >>> sdf1 = ps.DataFrame({"x": ['a', 'b', 'c']}).to_spark()
     >>> spark_column_equals(sdf1["x"] + 1, sdf1["x"] + 1)
@@ -927,13 +940,31 @@ def spark_column_equals(left: Column, right: Column) -> bool:
     >>> spark_column_equals(sdf1["x"] + 1, sdf2["x"] + 1)
     False
     """
-    return left._jc.equals(right._jc)
+    if is_remote():
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        if not isinstance(left, ConnectColumn):
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN",
+                message_parameters={"arg_name": "left", "arg_type": type(left).__name__},
+            )
+        if not isinstance(right, ConnectColumn):
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN",
+                message_parameters={"arg_name": "right", "arg_type": type(right).__name__},
+            )
+        return repr(left).replace("`", "") == repr(right).replace("`", "")
+    else:
+        return left._jc.equals(right._jc)
 
 
 def compare_null_first(
     left: Column,
     right: Column,
-    comp: Callable[[Column, Column], Column],
+    comp: Callable[
+        [Column, Column],
+        Column,
+    ],
 ) -> Column:
     return (left.isNotNull() & right.isNotNull() & comp(left, right)) | (
         left.isNull() & right.isNotNull()
@@ -943,7 +974,10 @@ def compare_null_first(
 def compare_null_last(
     left: Column,
     right: Column,
-    comp: Callable[[Column, Column], Column],
+    comp: Callable[
+        [Column, Column],
+        Column,
+    ],
 ) -> Column:
     return (left.isNotNull() & right.isNotNull() & comp(left, right)) | (
         left.isNotNull() & right.isNull()
@@ -953,7 +987,10 @@ def compare_null_last(
 def compare_disallow_null(
     left: Column,
     right: Column,
-    comp: Callable[[Column, Column], Column],
+    comp: Callable[
+        [Column, Column],
+        Column,
+    ],
 ) -> Column:
     return left.isNotNull() & right.isNotNull() & comp(left, right)
 
@@ -961,7 +998,10 @@ def compare_disallow_null(
 def compare_allow_null(
     left: Column,
     right: Column,
-    comp: Callable[[Column, Column], Column],
+    comp: Callable[
+        [Column, Column],
+        Column,
+    ],
 ) -> Column:
     return left.isNull() | right.isNull() | comp(left, right)
 
@@ -1004,6 +1044,7 @@ def _test() -> None:
 
     globs = pyspark.pandas.utils.__dict__.copy()
     globs["ps"] = pyspark.pandas
+    globs["sf"] = F
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.utils tests").getOrCreate()
     )

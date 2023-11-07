@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.mockito.ArgumentMatchers.{any, eq => meq}
@@ -53,11 +53,11 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val dataset3 = mock[DataFrame]
     val dataset4 = mock[DataFrame]
 
-    when(dataset0.toDF).thenReturn(dataset0)
-    when(dataset1.toDF).thenReturn(dataset1)
-    when(dataset2.toDF).thenReturn(dataset2)
-    when(dataset3.toDF).thenReturn(dataset3)
-    when(dataset4.toDF).thenReturn(dataset4)
+    when(dataset0.toDF()).thenReturn(dataset0)
+    when(dataset1.toDF()).thenReturn(dataset1)
+    when(dataset2.toDF()).thenReturn(dataset2)
+    when(dataset3.toDF()).thenReturn(dataset3)
+    when(dataset4.toDF()).thenReturn(dataset4)
 
     when(estimator0.copy(any[ParamMap])).thenReturn(estimator0)
     when(model0.copy(any[ParamMap])).thenReturn(model0)
@@ -247,7 +247,7 @@ class WritableStage(override val uid: String) extends Transformer with MLWritabl
 
   override def write: MLWriter = new DefaultParamsWriter(this)
 
-  override def transform(dataset: Dataset[_]): DataFrame = dataset.toDF
+  override def transform(dataset: Dataset[_]): DataFrame = dataset.toDF()
 
   override def transformSchema(schema: StructType): StructType = schema
 }
@@ -270,7 +270,7 @@ class UnWritableStage(override val uid: String) extends Transformer {
 
   override def copy(extra: ParamMap): UnWritableStage = defaultCopy(extra)
 
-  override def transform(dataset: Dataset[_]): DataFrame = dataset.toDF
+  override def transform(dataset: Dataset[_]): DataFrame = dataset.toDF()
 
   override def transformSchema(schema: StructType): StructType = schema
 }

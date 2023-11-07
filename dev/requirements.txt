@@ -7,18 +7,20 @@ pyarrow
 pandas
 scipy
 plotly
-mlflow>=1.0
-sklearn
-matplotlib<3.3.0
+mlflow>=2.3.1
+scikit-learn
+matplotlib
+memory-profiler==0.60.0
 
 # PySpark test dependencies
 unittest-xml-reporting
+openpyxl
 
 # PySpark test dependencies (optional)
 coverage
 
 # Linter
-mypy==0.920
+mypy==0.982
 pytest-mypy-plugins==1.9.3
 flake8==3.9.0
 # See SPARK-38680.
@@ -40,15 +42,29 @@ docutils<0.18.0
 markupsafe==2.0.1
 
 # Development scripts
-jira
+jira>=3.5.2
 PyGithub
 
 # pandas API on Spark Code formatter.
-black==22.6.0
+black==23.9.1
+py
 
 # Spark Connect (required)
-grpcio==1.48.1
-protobuf==4.21.6
+grpcio>=1.48,<1.57
+grpcio-status>=1.48,<1.57
+protobuf==3.20.3
+googleapis-common-protos==1.56.4
 
 # Spark Connect python proto generation plugin (optional)
-mypy-protobuf
+mypy-protobuf==3.3.0
+googleapis-common-protos-stubs==2.2.0
+grpc-stubs==1.24.11
+
+# TorchDistributor dependencies
+torch<=2.0.1
+torchvision
+torcheval
+
+# DeepspeedTorchDistributor dependencies
+deepspeed; sys_platform != 'darwin'
+

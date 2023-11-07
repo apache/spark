@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Literal, NonFoldableLiteral, RangeFrame, SortOrder, SpecifiedWindowFrame, UnaryMinus, UnspecifiedFrame}
+import org.apache.spark.sql.catalyst.plans.logical.{Window => WindowNode}
+import org.apache.spark.sql.expressions.{Window, WindowSpec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.CalendarIntervalType
 
 /**
  * Window frame testing for DataFrame API.
@@ -129,12 +132,33 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1, 3), Row(1, 4), Row(2, 2), Row(3, 2), Row(2147483650L, 1), Row(2147483650L, 1))
     )
 
-    val e = intercept[AnalysisException](
-      df.select(
-        $"key",
-        count("key").over(
-          Window.partitionBy($"value").orderBy($"key").rowsBetween(0, 2147483648L))))
-    assert(e.message.contains("Boundary end is not a valid integer: 2147483648"))
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          $"key",
+          count("key").over(
+            Window.partitionBy($"value").orderBy($"key").rowsBetween(2147483648L, 0)))),
+      errorClass = "INVALID_BOUNDARY.START",
+      parameters = Map(
+        "invalidValue" -> "2147483648L",
+        "boundary" -> "`start`",
+        "intMaxValue" -> "2147483647",
+        "intMinValue" -> "-2147483648",
+        "longMinValue" -> "-9223372036854775808L"))
+
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          $"key",
+          count("key").over(
+            Window.partitionBy($"value").orderBy($"key").rowsBetween(0, 2147483648L)))),
+      errorClass = "INVALID_BOUNDARY.END",
+      parameters = Map(
+        "invalidValue" -> "2147483648L",
+        "boundary" -> "`end`",
+        "intMaxValue" -> "2147483647",
+        "intMinValue" -> "-2147483648",
+        "longMaxValue" -> "9223372036854775807L"))
   }
 
   test("range between should accept at most one ORDER BY expression when unbounded") {
@@ -160,7 +184,9 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         "sqlExpr" -> (""""\(ORDER BY key ASC NULLS FIRST, value ASC NULLS FIRST RANGE """ +
           """BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\)"""")
       ),
-      matchPVals = true
+      matchPVals = true,
+      queryContext =
+        Array(ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern))
     )
 
     checkError(
@@ -174,7 +200,9 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         "sqlExpr" -> (""""\(ORDER BY key ASC NULLS FIRST, value ASC NULLS FIRST RANGE """ +
           """BETWEEN -1 FOLLOWING AND UNBOUNDED FOLLOWING\)"""")
       ),
-      matchPVals = true
+      matchPVals = true,
+      queryContext =
+        Array(ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern))
     )
 
     checkError(
@@ -188,7 +216,9 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         "sqlExpr" -> (""""\(ORDER BY key ASC NULLS FIRST, value ASC NULLS FIRST RANGE """ +
           """BETWEEN -1 FOLLOWING AND 1 FOLLOWING\)"""")
       ),
-      matchPVals = true
+      matchPVals = true,
+      queryContext =
+        Array(ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern))
     )
 
   }
@@ -216,7 +246,8 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         "expectedType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR " +
           "TO MONTH\" or \"INTERVAL\")"),
         "sqlExpr" -> "\"RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\""
-      )
+      ),
+      context = ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern)
     )
 
     checkError(
@@ -231,7 +262,8 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         "expectedType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR " +
           "TO MONTH\" or \"INTERVAL\")"),
         "sqlExpr" -> "\"RANGE BETWEEN -1 FOLLOWING AND UNBOUNDED FOLLOWING\""
-      )
+      ),
+      context = ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern)
     )
 
     checkError(
@@ -246,7 +278,8 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         "expectedType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR " +
           "TO MONTH\" or \"INTERVAL\")"),
         "sqlExpr" -> "\"RANGE BETWEEN -1 FOLLOWING AND 1 FOLLOWING\""
-      )
+      ),
+      context = ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -418,5 +451,77 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       ds.withColumn("m",
         lag("i", 1).over(Window.partitionBy("n").orderBy("i").rowsBetween(-1, -1))),
       res)
+  }
+
+  test("Window frame bounds lower and upper do not have the same type") {
+    val df = Seq((1L, "1"), (1L, "1")).toDF("key", "value")
+    val windowSpec = new WindowSpec(
+      Seq(Column("value").expr),
+      Seq(SortOrder(Column("key").expr, Ascending)),
+      SpecifiedWindowFrame(RangeFrame, Literal.create(null, CalendarIntervalType), Literal(2))
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select($"key", count("key").over(windowSpec)).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"RANGE BETWEEN NULL FOLLOWING AND 2 FOLLOWING\"",
+        "lower" -> "\"NULL\"",
+        "upper" -> "\"2\"",
+        "lowerType" -> "\"INTERVAL\"",
+        "upperType" -> "\"BIGINT\""
+      ),
+      context = ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern)
+    )
+  }
+
+  test("Window frame lower bound is not a literal") {
+    val df = Seq((1L, "1"), (1L, "1")).toDF("key", "value")
+    val windowSpec = new WindowSpec(
+      Seq(Column("value").expr),
+      Seq(SortOrder(Column("key").expr, Ascending)),
+      SpecifiedWindowFrame(RangeFrame, NonFoldableLiteral(1), Literal(2))
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select($"key", count("key").over(windowSpec)).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_WITHOUT_FOLDABLE",
+      parameters = Map(
+        "sqlExpr" -> "\"RANGE BETWEEN nonfoldableliteral() FOLLOWING AND 2 FOLLOWING\"",
+        "location" -> "lower",
+        "expression" -> "\"nonfoldableliteral()\""),
+      context = ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern)
+    )
+  }
+
+  test("SPARK-41805: Reuse expressions in WindowSpecDefinition") {
+    val ds = Seq((1, 1), (1, 2), (1, 3), (2, 1), (2, 2)).toDF("n", "i")
+    val sortOrder = SortOrder($"n".cast("string").expr, Ascending)
+    val window = new WindowSpec(Seq($"n".expr), Seq(sortOrder), UnspecifiedFrame)
+    val df = ds.select(sum("i").over(window), avg("i").over(window))
+    val ws = df.queryExecution.analyzed.collect { case w: WindowNode => w }
+    assert(ws.size === 1)
+    checkAnswer(df,
+      Row(3, 1.5) :: Row(3, 1.5) :: Row(6, 2.0) :: Row(6, 2.0) :: Row(6, 2.0) :: Nil)
+  }
+
+  test("SPARK-41793: Incorrect result for window frames defined by a range clause on large " +
+    "decimals") {
+    val window = new WindowSpec(Seq($"a".expr), Seq(SortOrder($"b".expr, Ascending)),
+      SpecifiedWindowFrame(RangeFrame,
+        UnaryMinus(Literal(BigDecimal(10.2345))), Literal(BigDecimal(6.7890))))
+
+    val df = Seq(
+      1 -> "11342371013783243717493546650944543.47",
+      1 -> "999999999999999999999999999999999999.99"
+    ).toDF("a", "b")
+      .select($"a", $"b".cast("decimal(38, 2)"))
+      .select(count("*").over(window))
+
+    checkAnswer(
+      df,
+      Row(1) :: Row(1) :: Nil)
   }
 }

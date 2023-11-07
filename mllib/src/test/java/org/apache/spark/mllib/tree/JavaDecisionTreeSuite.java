@@ -20,8 +20,8 @@ package org.apache.spark.mllib.tree;
 import java.util.HashMap;
 import java.util.List;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
@@ -62,7 +62,7 @@ public class JavaDecisionTreeSuite extends SharedSparkSession {
     DecisionTreeModel model = learner.run(rdd.rdd());
 
     int numCorrect = validatePrediction(arr, model);
-    Assert.assertEquals(numCorrect, rdd.count());
+    Assertions.assertEquals(numCorrect, rdd.count());
   }
 
   @Test
@@ -84,7 +84,7 @@ public class JavaDecisionTreeSuite extends SharedSparkSession {
     JavaRDD<Double> predictions = model.predict(rdd.map(LabeledPoint::features));
 
     int numCorrect = validatePrediction(arr, model);
-    Assert.assertEquals(numCorrect, rdd.count());
+    Assertions.assertEquals(numCorrect, rdd.count());
   }
 
 }

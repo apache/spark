@@ -19,16 +19,17 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.math.{max, min}
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLId, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreePattern, UNARY_POSITIVE}
+import org.apache.spark.sql.catalyst.types.{PhysicalDecimalType, PhysicalFractionalType, PhysicalIntegerType, PhysicalIntegralType, PhysicalLongType}
 import org.apache.spark.sql.catalyst.util.{IntervalMathUtils, IntervalUtils, MathUtils, TypeUtils}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -218,6 +219,12 @@ abstract class BinaryArithmetic extends BinaryOperator
 
   protected val evalMode: EvalMode.Value
 
+  private lazy val internalDataType: DataType = (left.dataType, right.dataType) match {
+    case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
+      resultDecimalType(p1, s1, p2, s2)
+    case _ => left.dataType
+  }
+
   protected def failOnError: Boolean = evalMode match {
     // The TRY mode executes as if it would fail on errors, except that it would capture the errors
     // and return null results.
@@ -233,11 +240,7 @@ abstract class BinaryArithmetic extends BinaryOperator
     case _ => super.checkInputDataTypes()
   }
 
-  override def dataType: DataType = (left.dataType, right.dataType) match {
-    case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
-      resultDecimalType(p1, s1, p2, s2)
-    case _ => left.dataType
-  }
+  override def dataType: DataType = internalDataType
 
   // When `spark.sql.decimalOperations.allowPrecisionLoss` is set to true, if the precision / scale
   // needed are out of the range of available values, the scale is reduced up to 6, in order to
@@ -263,9 +266,7 @@ abstract class BinaryArithmetic extends BinaryOperator
 
   final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_ARITHMETIC)
 
-  override lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
-
-  override def initQueryContext(): Option[SQLQueryContext] = {
+  override def initQueryContext(): Option[QueryContext] = {
     if (failOnError) {
       Some(origin.context)
     } else {
@@ -479,7 +480,18 @@ case class Add(
 
   override lazy val canonicalized: Expression = {
     // TODO: do not reorder consecutive `Add`s with different `evalMode`
-    orderCommutative({ case Add(l, r, _) => Seq(l, r) }).reduce(Add(_, _, evalMode))
+    val reorderResult = buildCanonicalizedPlan(
+      { case Add(l, r, _) => Seq(l, r) },
+      { case (l: Expression, r: Expression) => Add(l, r, evalMode)},
+      Some(evalMode)
+    )
+    if (resolved && reorderResult.resolved && reorderResult.dataType == dataType) {
+      reorderResult
+    } else {
+      // SPARK-40903: Avoid reordering decimal Add for canonicalization if the result data type is
+      // changed, which may cause data checking error within ComplexTypeMergingExpression.
+      withCanonicalizedChildren
+    }
   }
 }
 
@@ -624,7 +636,11 @@ case class Multiply(
 
   override lazy val canonicalized: Expression = {
     // TODO: do not reorder consecutive `Multiply`s with different `evalMode`
-    orderCommutative({ case Multiply(l, r, _) => Seq(l, r) }).reduce(Multiply(_, _, evalMode))
+    buildCanonicalizedPlan(
+      { case Multiply(l, r, _) => Seq(l, r) },
+      { case (l: Expression, r: Expression) => Multiply(l, r, evalMode)},
+      Some(evalMode)
+    )
   }
 }
 
@@ -805,11 +821,13 @@ case class Divide(
   }
 
   private lazy val div: (Any, Any) => Any = dataType match {
-    case d @ DecimalType.Fixed(precision, scale) => (l, r) => {
-      val value = d.fractional.asInstanceOf[Fractional[Any]].div(l, r)
+    case d @ DecimalType.Fixed(precision, scale) =>
+      val fractional = PhysicalDecimalType(precision, scale).fractional
+      (l, r) => {
+      val value = fractional.asInstanceOf[Fractional[Any]].div(l, r)
       checkDecimalOverflow(value.asInstanceOf[Decimal], precision, scale)
     }
-    case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
+    case ft: FractionalType => PhysicalFractionalType.fractional(ft).div
   }
 
   override def evalOperation(left: Any, right: Any): Any = div(left, right)
@@ -857,7 +875,9 @@ case class IntegralDivide(
     // This follows division rule
     val intDig = p1 - s1 + s2
     // No precision loss can happen as the result scale is 0.
-    DecimalType.bounded(intDig, 0)
+    // If intDig is 0 that means the result data is 0, to be safe we use decimal(1, 0)
+    // to represent 0.
+    DecimalType.bounded(if (intDig == 0) 1 else intDig, 0)
   }
 
   override def sqlOperator: String = "div"
@@ -865,13 +885,13 @@ case class IntegralDivide(
   private lazy val div: (Any, Any) => Any = {
     val integral = left.dataType match {
       case i: IntegralType =>
-        i.integral.asInstanceOf[Integral[Any]]
-      case d: DecimalType =>
-        d.asIntegral.asInstanceOf[Integral[Any]]
+        PhysicalIntegralType.integral(i)
+      case DecimalType.Fixed(p, s) =>
+        PhysicalDecimalType(p, s).asIntegral.asInstanceOf[Integral[Any]]
       case _: YearMonthIntervalType =>
-        IntegerType.integral.asInstanceOf[Integral[Any]]
+        PhysicalIntegerType.integral.asInstanceOf[Integral[Any]]
       case _: DayTimeIntervalType =>
-        LongType.integral.asInstanceOf[Integral[Any]]
+        PhysicalLongType.integral.asInstanceOf[Integral[Any]]
     }
     (x, y) => {
       val res = super.dataType match {
@@ -957,11 +977,11 @@ case class Remainder(
 
     // catch-all cases
     case i: IntegralType =>
-      val integral = i.integral.asInstanceOf[Integral[Any]]
+      val integral = PhysicalIntegralType.integral(i)
       (left, right) => integral.rem(left, right)
 
     case d @ DecimalType.Fixed(precision, scale) =>
-      val integral = d.asIntegral.asInstanceOf[Integral[Any]]
+      val integral = PhysicalDecimalType(precision, scale).asIntegral.asInstanceOf[Integral[Any]]
       (left, right) =>
         checkDecimalOverflow(integral.rem(left, right).asInstanceOf[Decimal], precision, scale)
   }
@@ -1200,9 +1220,9 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_PARAMS",
-        messageParameters = Map("actualNum" -> children.length.toString))
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("> 1"), children.length
+      )
     } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
       DataTypeMismatch(
         errorSubClass = "DATA_DIFF_TYPES",
@@ -1212,7 +1232,7 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
         )
       )
     } else {
-      TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
+      TypeUtils.checkForOrderingExpr(dataType, prettyName)
     }
   }
 
@@ -1288,9 +1308,9 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_PARAMS",
-        messageParameters = Map("actualNum" -> children.length.toString))
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("> 1"), children.length
+      )
     } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
       DataTypeMismatch(
         errorSubClass = "DATA_DIFF_TYPES",
@@ -1300,7 +1320,7 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
         )
       )
     } else {
-      TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
+      TypeUtils.checkForOrderingExpr(dataType, prettyName)
     }
   }
 

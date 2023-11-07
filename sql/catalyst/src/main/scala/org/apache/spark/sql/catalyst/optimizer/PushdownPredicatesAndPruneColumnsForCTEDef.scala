@@ -143,7 +143,7 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] {
 
     case cteRef @ CTERelationRef(cteId, _, output, _) =>
       val (cteDef, _, _, newAttrSet) = cteMap(cteId)
-      if (newAttrSet.size < output.size) {
+      if (needsPruning(cteDef.child, newAttrSet)) {
         val indices = newAttrSet.toSeq.map(cteDef.output.indexOf)
         val newOutput = indices.map(output)
         cteRef.copy(output = newOutput)

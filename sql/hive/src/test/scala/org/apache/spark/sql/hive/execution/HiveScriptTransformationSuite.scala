@@ -638,4 +638,24 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         Row("1") :: Row("2") :: Row("3") :: Nil)
     }
   }
+
+  test("SPARK-41790: Set TRANSFORM reader and writer's format correctly") {
+    withTempView("v") {
+      val df = Seq(
+        (1, 2)
+      ).toDF("a", "b")
+      df.createTempView("v")
+
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT TRANSFORM(a, b)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY ','
+             |  USING 'cat'
+             |  AS (c)
+             |FROM v
+          """.stripMargin), identity, Row("1,2") :: Nil)
+    }
+  }
 }

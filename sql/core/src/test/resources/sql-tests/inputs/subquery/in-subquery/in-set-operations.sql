@@ -470,3 +470,112 @@ HAVING   t1b NOT IN
                 FROM   t3)
 ORDER BY t1c DESC NULLS LAST, t1i;
 
+-- Correlated set ops inside IN - unsupported
+
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               UNION ALL
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               UNION DISTINCT
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               INTERSECT ALL
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               INTERSECT DISTINCT
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               EXCEPT ALL
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               EXCEPT DISTINCT
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a NOT IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               UNION ALL
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a NOT IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               UNION DISTINCT
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a NOT IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               INTERSECT ALL
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a NOT IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               INTERSECT DISTINCT
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a NOT IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               EXCEPT ALL
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a NOT IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               EXCEPT DISTINCT
+               SELECT t3a
+               FROM   t3);

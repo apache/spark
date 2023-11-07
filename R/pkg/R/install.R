@@ -29,19 +29,18 @@
 #' \code{mirrorUrl} specifies the remote path to a Spark folder. It is followed by a subfolder
 #' named after the Spark version (that corresponds to SparkR), and then the tar filename.
 #' The filename is composed of four parts, i.e. [Spark version]-bin-[Hadoop version].tgz.
-#' For example, the full path for a Spark 2.0.0 package for Hadoop 2.7 from
-#' \code{http://apache.osuosl.org} has path:
-#' \code{http://apache.osuosl.org/spark/spark-2.0.0/spark-2.0.0-bin-hadoop2.7.tgz}.
+#' For example, the full path for a Spark 3.3.1 package from
+#' \code{https://archive.apache.org} has path:
+#' \code{http://archive.apache.org/dist/spark/spark-3.3.1/spark-3.3.1-bin-hadoop3.tgz}.
 #' For \code{hadoopVersion = "without"}, [Hadoop version] in the filename is then
 #' \code{without-hadoop}.
 #'
-#' @param hadoopVersion Version of Hadoop to install. Default is \code{"2.7"}. It can take other
-#'                      version number in the format of "x.y" where x and y are integer.
+#' @param hadoopVersion Version of Hadoop to install. Default is \code{"3"}.
 #'                      If \code{hadoopVersion = "without"}, "Hadoop free" build is installed.
 #'                      See
 #'                      \href{https://spark.apache.org/docs/latest/hadoop-provided.html}{
 #'                      "Hadoop Free" Build} for more information.
-#'                      Other patched version names can also be used, e.g. \code{"cdh4"}
+#'                      Other patched version names can also be used.
 #' @param mirrorUrl base URL of the repositories to use. The directory layout should follow
 #'                  \href{https://www.apache.org/dyn/closer.lua/spark/}{Apache mirrors}.
 #' @param localDir a local directory where Spark is installed. The directory contains
@@ -65,7 +64,7 @@
 #' @note install.spark since 2.1.0
 #' @seealso See available Hadoop versions:
 #'          \href{https://spark.apache.org/downloads.html}{Apache Spark}
-install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
+install.spark <- function(hadoopVersion = "3", mirrorUrl = NULL,
                           localDir = NULL, overwrite = FALSE) {
   sparkHome <- Sys.getenv("SPARK_HOME")
   if (isSparkRShell()) {
@@ -251,7 +250,7 @@ defaultMirrorUrl <- function() {
 hadoopVersionName <- function(hadoopVersion) {
   if (hadoopVersion == "without") {
     "without-hadoop"
-  } else if (grepl("^[0-9]+\\.[0-9]+$", hadoopVersion, perl = TRUE)) {
+  } else if (grepl("^[0-9]+$", hadoopVersion, perl = TRUE)) {
     paste0("hadoop", hadoopVersion)
   } else {
     hadoopVersion

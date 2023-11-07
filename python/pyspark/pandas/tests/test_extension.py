@@ -66,7 +66,7 @@ class CustomAccessor:
                 raise ValueError(str(e))
 
 
-class ExtensionTest(ComparisonTestBase):
+class ExtensionTestsMixin:
     @property
     def pdf(self):
         return pd.DataFrame(
@@ -135,12 +135,16 @@ class ExtensionTest(ComparisonTestBase):
                 ps.Series([1, 2], dtype=object).bad
 
 
+class ExtensionTests(ExtensionTestsMixin, ComparisonTestBase):
+    pass
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.pandas.tests.test_extension import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

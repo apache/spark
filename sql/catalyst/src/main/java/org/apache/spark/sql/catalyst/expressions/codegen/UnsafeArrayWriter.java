@@ -22,6 +22,7 @@ import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
+import org.apache.spark.unsafe.types.CalendarInterval;
 
 import static org.apache.spark.sql.catalyst.expressions.UnsafeArrayData.calculateHeaderPortionInBytes;
 
@@ -61,7 +62,8 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
     long totalInitialSize = headerInBytes + fixedPartInBytesLong;
 
     if (totalInitialSize > Integer.MAX_VALUE) {
-      throw QueryExecutionErrors.tooManyArrayElementsError(numElements, elementSize);
+      throw QueryExecutionErrors.tooManyArrayElementsError(
+        fixedPartInBytesLong,  Integer.MAX_VALUE);
     }
 
     // it's now safe to cast fixedPartInBytesLong and totalInitialSize to int
@@ -189,6 +191,19 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
       }
     } else {
       setNull(ordinal);
+    }
+  }
+
+  @Override
+  public void write(int ordinal, CalendarInterval input) {
+    assertIndexIsValid(ordinal);
+    // the UnsafeWriter version of write(int, CalendarInterval) doesn't handle
+    // null intervals appropriately when the container is an array, so we handle
+    // that case here.
+    if (input == null) {
+      setNull(ordinal);
+    } else {
+      super.write(ordinal, input);
     }
   }
 }

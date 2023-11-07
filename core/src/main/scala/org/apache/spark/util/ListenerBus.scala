@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import java.util.concurrent.CopyOnWriteArrayList
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
@@ -99,7 +99,7 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    * `postToAll` in the same thread for all events.
    */
   def postToAll(event: E): Unit = {
-    // JavaConverters can create a JIterableWrapper if we use asScala.
+    // CollectionConverters can create a JIterableWrapper if we use asScala.
     // However, this method will be called frequently. To avoid the wrapper cost, here we use
     // Java Iterator directly.
     val iter = listenersPlusTimers.iterator

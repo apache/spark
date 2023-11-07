@@ -21,19 +21,20 @@ import java.io.IOException
 import java.util.{HashMap => JHashMap}
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future, TimeoutException}
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 import scala.util.control.NonFatal
 
 import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.{MapOutputTrackerMaster, SparkConf}
+import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.network.shuffle.ExternalBlockStoreClient
-import org.apache.spark.rpc.{IsolatedRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
+import org.apache.spark.internal.config.RDD_CACHE_VISIBILITY_TRACKING_ENABLED
+import org.apache.spark.network.shuffle.{ExternalBlockStoreClient, RemoteBlockPushResolver}
+import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
 import org.apache.spark.shuffle.ShuffleManager
@@ -41,8 +42,8 @@ import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
 
 /**
- * BlockManagerMasterEndpoint is an [[IsolatedRpcEndpoint]] on the master node to track statuses
- * of all the storage endpoints' block managers.
+ * BlockManagerMasterEndpoint is an [[IsolatedThreadSafeRpcEndpoint]] on the master node to
+ * track statuses of all the storage endpoints' block managers.
  */
 private[spark]
 class BlockManagerMasterEndpoint(
@@ -55,7 +56,7 @@ class BlockManagerMasterEndpoint(
     mapOutputTracker: MapOutputTrackerMaster,
     shuffleManager: ShuffleManager,
     isDriver: Boolean)
-  extends IsolatedRpcEndpoint with Logging {
+  extends IsolatedThreadSafeRpcEndpoint with Logging {
 
   // Mapping from executor id to the block manager's local disk directories.
   private val executorIdToLocalDirs =
@@ -76,6 +77,12 @@ class BlockManagerMasterEndpoint(
 
   // Mapping from block id to the set of block managers that have the block.
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
+
+  // Mapping from task id to the set of rdd blocks which are generated from the task.
+  private val tidToRddBlockIds = new mutable.HashMap[Long, mutable.HashSet[RDDBlockId]]
+  // Record the RDD blocks which are not visible yet, a block will be removed from this collection
+  // after at least one task generating the block finishes successfully.
+  private val invisibleRDDBlocks = new mutable.HashSet[RDDBlockId]
 
   // Mapping from host name to shuffle (mergers) services where the current app
   // registered an executor in the past. Older hosts are removed when the
@@ -116,9 +123,14 @@ class BlockManagerMasterEndpoint(
   private lazy val driverEndpoint =
     RpcUtils.makeDriverRef(CoarseGrainedSchedulerBackend.ENDPOINT_NAME, conf, rpcEnv)
 
+  /** Whether rdd cache visibility tracking is enabled. */
+  private val trackingCacheVisibility: Boolean = conf.get(RDD_CACHE_VISIBILITY_TRACKING_ENABLED)
+
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case RegisterBlockManager(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, endpoint) =>
-      context.reply(register(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, endpoint))
+    case RegisterBlockManager(
+      id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, endpoint, isReRegister) =>
+      context.reply(
+        register(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, endpoint, isReRegister))
 
     case _updateBlockInfo @
         UpdateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
@@ -208,6 +220,70 @@ class BlockManagerMasterEndpoint(
     case StopBlockManagerMaster =>
       context.reply(true)
       stop()
+
+    case UpdateRDDBlockTaskInfo(blockId, taskId) =>
+      // This is to report the information that a rdd block(with `blockId`) is computed
+      // and cached by task(with `taskId`). And this happens right after the task finished
+      // computing/caching the block only when the block is not visible yet. And the rdd
+      // block will be marked as visible when the corresponding task finished successfully.
+      context.reply(updateRDDBlockTaskInfo(blockId, taskId))
+
+    case GetRDDBlockVisibility(blockId) =>
+      // Get the visibility status of a specific rdd block.
+      context.reply(isRDDBlockVisible(blockId))
+
+    case UpdateRDDBlockVisibility(taskId, visible) =>
+      // This is to report the information that whether rdd blocks computed by task(with `taskId`)
+      // can be turned to be visible. This is reported by DAGScheduler right after task completes.
+      // If the task finished successfully, rdd blocks can be turned to be visible, otherwise rdd
+      // blocks' visibility status won't change.
+      context.reply(updateRDDBlockVisibility(taskId, visible))
+  }
+
+  private def isRDDBlockVisible(blockId: RDDBlockId): Boolean = {
+    if (trackingCacheVisibility) {
+      blockLocations.containsKey(blockId) &&
+        blockLocations.get(blockId).nonEmpty && !invisibleRDDBlocks.contains(blockId)
+    } else {
+      // Blocks should always be visible if the feature flag is disabled.
+      true
+    }
+  }
+
+  private def updateRDDBlockVisibility(taskId: Long, visible: Boolean): Unit = {
+    if (!trackingCacheVisibility) {
+      // Do nothing if the feature flag is disabled.
+      return
+    }
+
+    // TODO: When visible is false(the task had failed), we should be asking the block managers to
+    //  evict the block since the results can be inconsistent if there is any indeterminate
+    //  operation computing the rdd. Besides evicting the blocks here, when a rdd block is reported
+    //  we may also need to check the data with existing replicas somehow.
+    //  This will be tracked with jira: https://issues.apache.org/jira/browse/SPARK-42582
+    if (visible) {
+      tidToRddBlockIds.get(taskId).foreach { blockIds =>
+        blockIds.foreach { blockId =>
+          invisibleRDDBlocks.remove(blockId)
+          // Ask block managers to update the visibility status.
+          val msg = MarkRDDBlockAsVisible(blockId)
+          getLocations(blockId).flatMap(blockManagerInfo.get).foreach { managerInfo =>
+            managerInfo.storageEndpoint.ask[Unit](msg)
+          }
+        }
+      }
+    }
+
+    tidToRddBlockIds.remove(taskId)
+  }
+
+  private def updateRDDBlockTaskInfo(blockId: RDDBlockId, taskId: Long): Unit = {
+    if (!trackingCacheVisibility) {
+      // Do nothing if the feature flag is disabled.
+      return
+    }
+    tidToRddBlockIds.getOrElseUpdate(taskId, new mutable.HashSet[RDDBlockId])
+      .add(blockId)
   }
 
   /**
@@ -229,8 +305,10 @@ class BlockManagerMasterEndpoint(
       bmId: BlockManagerId,
       defaultValue: T): PartialFunction[Throwable, T] = {
     case e: IOException =>
-      logWarning(s"Error trying to remove $blockType $blockId" +
-        s" from block manager $bmId", e)
+      if (!SparkContext.getActive.map(_.isStopped).getOrElse(true)) {
+        logWarning(s"Error trying to remove $blockType $blockId" +
+          s" from block manager $bmId", e)
+      }
       defaultValue
 
     case t: TimeoutException =>
@@ -270,6 +348,9 @@ class BlockManagerMasterEndpoint(
 
     blocks.foreach { blockId =>
       val bms: mutable.HashSet[BlockManagerId] = blockLocations.remove(blockId)
+      if (trackingCacheVisibility) {
+        invisibleRDDBlocks.remove(blockId)
+      }
 
       val (bmIdsExtShuffle, bmIdsExecutor) = bms.partition(_.port == externalShuffleServicePort)
       val liveExecutorsForBlock = bmIdsExecutor.map(_.executorId).toSet
@@ -319,14 +400,6 @@ class BlockManagerMasterEndpoint(
   }
 
   private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {
-    val removeMsg = RemoveShuffle(shuffleId)
-    val removeShuffleFromExecutorsFutures = blockManagerInfo.values.map { bm =>
-      bm.storageEndpoint.ask[Boolean](removeMsg).recover {
-        // use false as default value means no shuffle data were removed
-        handleBlockRemovalFailure("shuffle", shuffleId.toString, bm.blockManagerId, false)
-      }
-    }.toSeq
-
     // Find all shuffle blocks on executors that are no longer running
     val blocksToDeleteByShuffleService =
       new mutable.HashMap[BlockManagerId, mutable.HashSet[BlockId]]
@@ -364,8 +437,32 @@ class BlockManagerMasterEndpoint(
         }
       }.getOrElse(Seq.empty)
 
+    val removeShuffleMergeFromShuffleServicesFutures =
+      externalBlockStoreClient.map { shuffleClient =>
+        val mergerLocations =
+          if (Utils.isPushBasedShuffleEnabled(conf, isDriver)) {
+            mapOutputTracker.getShufflePushMergerLocations(shuffleId)
+          } else {
+            Seq.empty[BlockManagerId]
+          }
+        mergerLocations.map { bmId =>
+          Future[Boolean] {
+            shuffleClient.removeShuffleMerge(bmId.host, bmId.port, shuffleId,
+              RemoteBlockPushResolver.DELETE_ALL_MERGED_SHUFFLE)
+          }
+        }
+      }.getOrElse(Seq.empty)
+
+    val removeMsg = RemoveShuffle(shuffleId)
+    val removeShuffleFromExecutorsFutures = blockManagerInfo.values.map { bm =>
+      bm.storageEndpoint.ask[Boolean](removeMsg).recover {
+        // use false as default value means no shuffle data were removed
+        handleBlockRemovalFailure("shuffle", shuffleId.toString, bm.blockManagerId, false)
+      }
+    }.toSeq
     Future.sequence(removeShuffleFromExecutorsFutures ++
-      removeShuffleFromShuffleServicesFutures)
+      removeShuffleFromShuffleServicesFutures ++
+      removeShuffleMergeFromShuffleServicesFutures)
   }
 
   /**
@@ -408,7 +505,7 @@ class BlockManagerMasterEndpoint(
       // for unit testing), we send a message to a randomly chosen executor location to replicate
       // the given block. Note that we ignore other block types (such as broadcast/shuffle blocks
       // etc.) as replication doesn't make much sense in that context.
-      if (locations.size == 0) {
+      if (locations.isEmpty) {
         blockLocations.remove(blockId)
         logWarning(s"No more replicas available for $blockId !")
       } else if (proactivelyReplicate && (blockId.isRDD || blockId.isInstanceOf[TestBlockId])) {
@@ -466,7 +563,7 @@ class BlockManagerMasterEndpoint(
       }.toSeq
     } catch {
       // If the block manager has already exited, nothing to replicate.
-      case e: java.util.NoSuchElementException =>
+      case _: java.util.NoSuchElementException =>
         Seq.empty[ReplicateBlock]
     }
   }
@@ -572,7 +669,8 @@ class BlockManagerMasterEndpoint(
       localDirs: Array[String],
       maxOnHeapMemSize: Long,
       maxOffHeapMemSize: Long,
-      storageEndpoint: RpcEndpointRef): BlockManagerId = {
+      storageEndpoint: RpcEndpointRef,
+      isReRegister: Boolean): BlockManagerId = {
     // the dummy id is not expected to contain the topology information.
     // we get that info here and respond back with a more fleshed out block manager id
     val id = BlockManagerId(
@@ -583,7 +681,12 @@ class BlockManagerMasterEndpoint(
 
     val time = System.currentTimeMillis()
     executorIdToLocalDirs.put(id.executorId, localDirs)
-    if (!blockManagerInfo.contains(id)) {
+    // SPARK-41360: For the block manager re-registration, we should only allow it when
+    // the executor is recognized as active by the scheduler backend. Otherwise, this kind
+    // of re-registration from the terminating/stopped executor is meaningless and harmful.
+    lazy val isExecutorAlive =
+      driverEndpoint.askSync[Boolean](CoarseGrainedClusterMessages.IsExecutorAlive(id.executorId))
+    if (!blockManagerInfo.contains(id) && (!isReRegister || isExecutorAlive)) {
       blockManagerIdByExecutor.get(id.executorId) match {
         case Some(oldId) =>
           // A block manager of the same executor already exists, so remove it (assumed dead)
@@ -616,10 +719,29 @@ class BlockManagerMasterEndpoint(
       if (pushBasedShuffleEnabled) {
         addMergerLocation(id)
       }
+      listenerBus.post(SparkListenerBlockManagerAdded(time, id,
+        maxOnHeapMemSize + maxOffHeapMemSize, Some(maxOnHeapMemSize), Some(maxOffHeapMemSize)))
     }
-    listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxOnHeapMemSize + maxOffHeapMemSize,
-        Some(maxOnHeapMemSize), Some(maxOffHeapMemSize)))
-    id
+    val updatedId = if (isReRegister && !isExecutorAlive) {
+      assert(!blockManagerInfo.contains(id),
+        "BlockManager re-registration shouldn't succeed when the executor is lost")
+
+      logInfo(s"BlockManager ($id) re-registration is rejected since " +
+        s"the executor (${id.executorId}) has been lost")
+
+      // Use "invalid" as the return executor id to indicate the block manager that
+      // re-registration failed. It's a bit hacky but fine since the returned block
+      // manager id won't be accessed in the case of re-registration. And we'll use
+      // this "invalid" executor id to print better logs and avoid blocks reporting.
+      BlockManagerId(
+        BlockManagerId.INVALID_EXECUTOR_ID,
+        id.host,
+        id.port,
+        id.topologyInfo)
+    } else {
+      id
+    }
+    updatedId
   }
 
  private def updateShuffleBlockInfo(blockId: BlockId, blockManagerId: BlockManagerId)
@@ -639,7 +761,7 @@ class BlockManagerMasterEndpoint(
          mapOutputTracker.updateMapOutput(shuffleId, mapId, blockManagerId)
          true
        }
-     case ShuffleDataBlockId(shuffleId: Int, mapId: Long, reduceId: Int) =>
+     case ShuffleDataBlockId(shuffleId: Int, mapId: Long, _: Int) =>
        logDebug(s"Received shuffle data block update for ${shuffleId} ${mapId}, ignore.")
        Future.successful(true)
      case _ =>
@@ -683,7 +805,22 @@ class BlockManagerMasterEndpoint(
     }
 
     if (storageLevel.isValid) {
+      val firstBlock = locations.isEmpty
       locations.add(blockManagerId)
+
+      blockId.asRDDId.foreach { rddBlockId =>
+        (trackingCacheVisibility, firstBlock) match {
+          case (true, true) =>
+            // Mark as invisible for the first block.
+            invisibleRDDBlocks.add(rddBlockId)
+          case (true, false) if !invisibleRDDBlocks.contains(rddBlockId) =>
+            // If the rdd block is already visible, ask storage manager to update the visibility
+            // status.
+            blockManagerInfo(blockManagerId).storageEndpoint
+              .ask[Unit](MarkRDDBlockAsVisible(rddBlockId))
+          case _ =>
+        }
+      }
     } else {
       locations.remove(blockManagerId)
     }
@@ -698,7 +835,7 @@ class BlockManagerMasterEndpoint(
     }
 
     // Remove the block from master tracking if it has been removed on all endpoints.
-    if (locations.size == 0) {
+    if (locations.isEmpty) {
       blockLocations.remove(blockId)
     }
     true

@@ -55,36 +55,101 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       Row(1, 2) :: Row(3, null) :: Row(1, 2) :: Row(3, null) :: Nil)
 
     // The first argument must be a positive constant integer.
-    val m = intercept[AnalysisException] {
-      df.selectExpr("stack(1.1, 1, 2, 3)")
-    }.getMessage
-    assert(m.contains("The number of rows must be a positive constant integer."))
-    val m2 = intercept[AnalysisException] {
-      df.selectExpr("stack(-1, 1, 2, 3)")
-    }.getMessage
-    assert(m2.contains("The number of rows must be a positive constant integer."))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("stack(1.1, 1, 2, 3)")
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"stack(1.1, 1, 2, 3)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"1.1\"",
+        "inputType" -> "\"DECIMAL(2,1)\"",
+        "requiredType" -> "\"INT\""),
+      context = ExpectedContext(
+        fragment = "stack(1.1, 1, 2, 3)",
+        start = 0,
+        stop = 18
+      )
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("stack(-1, 1, 2, 3)")
+      },
+      errorClass = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+      parameters = Map(
+        "sqlExpr" -> "\"stack(-1, 1, 2, 3)\"",
+        "exprName" -> "`n`",
+        "valueRange" -> "(0, 2147483647]",
+        "currentValue" -> "-1"),
+      context = ExpectedContext(
+        fragment = "stack(-1, 1, 2, 3)",
+        start = 0,
+        stop = 17
+      )
+    )
 
     // The data for the same column should have the same type.
-    val m3 = intercept[AnalysisException] {
-      df.selectExpr("stack(2, 1, '2.2')")
-    }.getMessage
-    assert(m3.contains("data type mismatch: Argument 1 (int) != Argument 2 (string)"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("stack(2, 1, '2.2')")
+      },
+      errorClass = "DATATYPE_MISMATCH.STACK_COLUMN_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"stack(2, 1, 2.2)\"",
+        "columnIndex" -> "0",
+        "leftParamIndex" -> "1",
+        "leftType" -> "\"INT\"",
+        "rightParamIndex" -> "2",
+        "rightType" -> "\"STRING\""),
+      context = ExpectedContext(
+        fragment = "stack(2, 1, '2.2')",
+        start = 0,
+        stop = 17
+      )
+    )
 
     // stack on column data
     val df2 = Seq((2, 1, 2, 3)).toDF("n", "a", "b", "c")
     checkAnswer(df2.selectExpr("stack(2, a, b, c)"), Row(1, 2) :: Row(3, null) :: Nil)
 
-    val m4 = intercept[AnalysisException] {
-      df2.selectExpr("stack(n, a, b, c)")
-    }.getMessage
-    assert(m4.contains("The number of rows must be a positive constant integer."))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df2.selectExpr("stack(n, a, b, c)")
+      },
+      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      parameters = Map(
+        "sqlExpr" -> "\"stack(n, a, b, c)\"",
+        "inputName" -> "`n`",
+        "inputType" -> "\"INT\"",
+        "inputExpr" -> "\"n\""),
+      context = ExpectedContext(
+        fragment = "stack(n, a, b, c)",
+        start = 0,
+        stop = 16
+      )
+    )
 
     val df3 = Seq((2, 1, 2.0)).toDF("n", "a", "b")
-    val m5 = intercept[AnalysisException] {
-      df3.selectExpr("stack(2, a, b)")
-    }.getMessage
-    assert(m5.contains("data type mismatch: Argument 1 (int) != Argument 2 (double)"))
-
+    checkError(
+      exception = intercept[AnalysisException] {
+        df3.selectExpr("stack(2, a, b)")
+      },
+      errorClass = "DATATYPE_MISMATCH.STACK_COLUMN_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"stack(2, a, b)\"",
+        "columnIndex" -> "0",
+        "leftParamIndex" -> "1",
+        "leftType" -> "\"INT\"",
+        "rightParamIndex" -> "2",
+        "rightType" -> "\"DOUBLE\""),
+      context = ExpectedContext(
+        fragment = "stack(2, a, b)",
+        start = 0,
+        stop = 13
+      )
+    )
   }
 
   test("single explode") {
@@ -218,10 +283,21 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("inline raises exception on array of null type") {
-    val m = intercept[AnalysisException] {
-      spark.range(2).select(inline(array()))
-    }.getMessage
-    assert(m.contains("data type mismatch"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.range(2).select(inline(array()))
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"inline(array())\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"array()\"",
+        "inputType" -> "\"ARRAY<VOID>\"",
+        "requiredType" -> "\"ARRAY<STRUCT>\""),
+      context = ExpectedContext(
+        fragment = "inline",
+        callSitePattern = getCurrentClassCallSitePattern)
+    )
   }
 
   test("inline with empty table") {
@@ -242,39 +318,56 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     val df = Seq((1, 2)).toDF("a", "b")
 
     checkAnswer(
-      df.select(inline(array(struct('a), struct('a)))),
+      df.select(inline(array(struct(Symbol("a")), struct(Symbol("a"))))),
       Row(1) :: Row(1) :: Nil)
 
     checkAnswer(
-      df.select(inline(array(struct('a, 'b), struct('a, 'b)))),
+      df.select(inline(array(struct(Symbol("a"), Symbol("b")), struct(Symbol("a"), Symbol("b"))))),
       Row(1, 2) :: Row(1, 2) :: Nil)
 
     // Spark think [struct<a:int>, struct<b:int>] is heterogeneous due to name difference.
-    val m = intercept[AnalysisException] {
-      df.select(inline(array(struct('a), struct('b))))
-    }.getMessage
-    assert(m.contains("data type mismatch"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(inline(array(struct(Symbol("a")), struct(Symbol("b")))))
+      },
+      errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"array(struct(a), struct(b))\"",
+        "functionName" -> "`array`",
+        "dataType" -> "(\"STRUCT<a: INT>\" or \"STRUCT<b: INT>\")"),
+      context = ExpectedContext(
+        fragment = "array",
+        callSitePattern = getCurrentClassCallSitePattern))
 
     checkAnswer(
-      df.select(inline(array(struct('a), struct('b.alias("a"))))),
+      df.select(inline(array(struct(Symbol("a")), struct(Symbol("b").alias("a"))))),
       Row(1) :: Row(2) :: Nil)
 
     // Spark think [struct<a:int>, struct<col1:int>] is heterogeneous due to name difference.
-    val m2 = intercept[AnalysisException] {
-      df.select(inline(array(struct('a), struct(lit(2)))))
-    }.getMessage
-    assert(m2.contains("data type mismatch"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(inline(array(struct(Symbol("a")), struct(lit(2)))))
+      },
+      errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"array(struct(a), struct(2))\"",
+        "functionName" -> "`array`",
+        "dataType" -> "(\"STRUCT<a: INT>\" or \"STRUCT<col1: INT>\")"),
+      context = ExpectedContext(
+        fragment = "array",
+        callSitePattern = getCurrentClassCallSitePattern))
 
     checkAnswer(
-      df.select(inline(array(struct('a), struct(lit(2).alias("a"))))),
+      df.select(inline(array(struct(Symbol("a")), struct(lit(2).alias("a"))))),
       Row(1) :: Row(2) :: Nil)
 
     checkAnswer(
-      df.select(struct('a)).select(inline(array("*"))),
+      df.select(struct(Symbol("a"))).select(inline(array("*"))),
       Row(1) :: Nil)
 
     checkAnswer(
-      df.select(array(struct('a), struct('b.alias("a")))).selectExpr("inline(*)"),
+      df.select(array(struct(Symbol("a")),
+        struct(Symbol("b").alias("a")))).selectExpr("inline(*)"),
       Row(1) :: Row(2) :: Nil)
   }
 
@@ -283,11 +376,11 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     val df2 = df.select(
       when($"col1" === 1, null).otherwise(array(struct($"col1", $"col2"))).as("col1"))
     checkAnswer(
-      df2.select(inline('col1)),
+      df2.select(inline(Symbol("col1"))),
       Row(3, "4") :: Row(5, "6") :: Nil
     )
     checkAnswer(
-      df2.select(inline_outer('col1)),
+      df2.select(inline_outer(Symbol("col1"))),
       Row(null, null) :: Row(3, "4") :: Row(5, "6") :: Nil
     )
   }
@@ -330,30 +423,39 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
         Row(1, 2) :: Row(1, 3) :: Nil
       )
 
-      val msg1 = intercept[AnalysisException] {
-        sql("select 1 + explode(array(min(c2), max(c2))) from t1 group by c1")
-      }.getMessage
-      assert(msg1.contains("The generator is not supported: nested in expressions"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("select 1 + explode(array(min(c2), max(c2))) from t1 group by c1")
+        },
+        errorClass = "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+        parameters = Map(
+          "expression" -> "\"(1 + explode(array(min(c2), max(c2))))\""))
 
-      val msg2 = intercept[AnalysisException] {
-        sql(
-          """select
-            |  explode(array(min(c2), max(c2))),
-            |  posexplode(array(min(c2), max(c2)))
-            |from t1 group by c1
-          """.stripMargin)
-      }.getMessage
-      assert(msg2.contains("The generator is not supported: " +
-        "only one generator allowed per aggregate clause"))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            """select
+              |  explode(array(min(c2), max(c2))),
+              |  posexplode(array(min(c2), max(c2)))
+              |from t1 group by c1""".stripMargin)
+        },
+        errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
+        parameters = Map(
+          "clause" -> "aggregate",
+          "num" -> "2",
+          "generators" -> ("\"explode(array(min(c2), max(c2)))\", " +
+            "\"posexplode(array(min(c2), max(c2)))\"")))
     }
   }
 
   test("SPARK-30998: Unsupported nested inner generators") {
-    val errMsg = intercept[AnalysisException] {
-      sql("SELECT array(array(1, 2), array(3)) v").select(explode(explode($"v"))).collect
-    }.getMessage
-    assert(errMsg.contains("The generator is not supported: " +
-      """nested in expressions "explode(explode(v))""""))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT array(array(1, 2), array(3)) v").select(explode(explode($"v"))).collect()
+      },
+      errorClass = "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+      parameters = Map("expression" -> "\"explode(explode(v))\""))
   }
 
   test("SPARK-30997: generators in aggregate expressions for dataframe") {
@@ -364,7 +466,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
   test("SPARK-38528: generator in stream of aggregate expressions") {
     val df = Seq(1, 2, 3).toDF("v")
     checkAnswer(
-      df.select(Stream(explode(array(min($"v"), max($"v"))), sum($"v")): _*),
+      df.select(LazyList(explode(array(min($"v"), max($"v"))), sum($"v")): _*),
       Row(1, 6) :: Row(3, 6) :: Nil)
   }
 
@@ -408,28 +510,54 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
          """.stripMargin)
 
     checkAnswer(
-      df.select(inline('b)),
+      df.select(inline(Symbol("b"))),
       Row(0, 1) :: Row(null, null) :: Row(2, 3) :: Row(null, null) :: Nil)
 
     checkAnswer(
-      df.select('a, inline('b)),
+      df.select(Symbol("a"), inline(Symbol("b"))),
       Row(1, 0, 1) :: Row(1, null, null) :: Row(1, 2, 3) :: Row(1, null, null) :: Nil)
   }
 
   test("SPARK-39061: inline should handle null struct") {
-    testNullStruct
+    testNullStruct()
   }
 
   test("SPARK-39496: inline eval path should handle null struct") {
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-      testNullStruct
+      testNullStruct()
+    }
+  }
+
+  test("SPARK-40963: generator output has correct nullability") {
+    // This test does not check nullability directly. Before SPARK-40963,
+    // the below query got wrong results due to incorrect nullability.
+    val df = sql(
+      """select c1, explode(c4) as c5 from (
+        |  select c1, array(c3) as c4 from (
+        |    select c1, explode_outer(c2) as c3
+        |    from values
+        |    (1, array(1, 2)),
+        |    (2, array(2, 3)),
+        |    (3, null)
+        |    as data(c1, c2)
+        |  )
+        |)
+        |""".stripMargin)
+    checkAnswer(df,
+      Row(1, 1) :: Row(1, 2) :: Row(2, 2) :: Row(2, 3) :: Row(3, null) :: Nil)
+  }
+
+  test("SPARK-45171: Handle evaluated nondeterministic expression") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      val df = sql("select explode(array(rand(0)))")
+      checkAnswer(df, Row(0.7604953758285915d))
     }
   }
 }
 
 case class EmptyGenerator() extends Generator with LeafLike[Expression] {
   override def elementSchema: StructType = new StructType().add("id", IntegerType)
-  override def eval(input: InternalRow): TraversableOnce[InternalRow] = Seq.empty
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = Seq.empty
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val iteratorClass = classOf[Iterator[_]].getName
     ev.copy(code =

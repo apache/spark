@@ -175,6 +175,8 @@ abstract class BaseSessionStateBuilder(
    */
   protected def udfRegistration: UDFRegistration = new UDFRegistration(functionRegistry)
 
+  protected def udtfRegistration: UDTFRegistration = new UDTFRegistration(tableFunctionRegistry)
+
   /**
    * Logical query plan analyzer for resolving unresolved attributes and relations.
    *
@@ -186,16 +188,17 @@ abstract class BaseSessionStateBuilder(
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:
-        new ResolveSessionCatalog(catalogManager) +:
+        new ResolveSessionCatalog(this.catalogManager) +:
         ResolveWriteToStream +:
         new EvalSubqueriesForTimeTravel +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
       DetectAmbiguousSelfJoin +:
-        PreprocessTableCreation(session) +:
+        QualifyLocationWithWarehouse(catalog) +:
+        PreprocessTableCreation(catalog) +:
         PreprocessTableInsertion +:
-        DataSourceAnalysis(this) +:
+        DataSourceAnalysis +:
         ApplyCharTypePadding +:
         ReplaceCharWithVarchar +:
         customPostHocResolutionRules
@@ -314,7 +317,12 @@ abstract class BaseSessionStateBuilder(
   protected def adaptiveRulesHolder: AdaptiveRulesHolder = {
     new AdaptiveRulesHolder(
       extensions.buildQueryStagePrepRules(session),
-      extensions.buildRuntimeOptimizerRules(session))
+      extensions.buildRuntimeOptimizerRules(session),
+      extensions.buildQueryStageOptimizerRules(session))
+  }
+
+  protected def planNormalizationRules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildPlanNormalizationRules(session)
   }
 
   /**
@@ -360,6 +368,7 @@ abstract class BaseSessionStateBuilder(
       functionRegistry,
       tableFunctionRegistry,
       udfRegistration,
+      udtfRegistration,
       () => catalog,
       sqlParser,
       () => analyzer,
@@ -371,7 +380,8 @@ abstract class BaseSessionStateBuilder(
       createQueryExecution,
       createClone,
       columnarRules,
-      adaptiveRulesHolder)
+      adaptiveRulesHolder,
+      planNormalizationRules)
   }
 }
 
@@ -413,7 +423,7 @@ class SparkUDFExpressionBuilder extends FunctionExpressionBuilder {
         udafName = Some(name))
       // Check input argument size
       if (expr.inputTypes.size != input.size) {
-        throw QueryCompilationErrors.invalidFunctionArgumentsError(
+        throw QueryCompilationErrors.wrongNumArgsError(
           name, expr.inputTypes.size.toString, input.size)
       }
       expr

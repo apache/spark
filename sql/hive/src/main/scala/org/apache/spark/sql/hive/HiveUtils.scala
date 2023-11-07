@@ -18,16 +18,17 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
-import java.net.{URL, URLClassLoader}
+import java.net.URL
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.session.SessionState
@@ -46,10 +47,11 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{ChildFirstURLClassLoader, Utils}
+import org.apache.spark.util.Utils
 
 
 private[spark] object HiveUtils extends Logging {
+  private val PATTERN_FOR_KEY_EQ_VAL = "(.+)=(.+)".r
 
   /** The version of hive used internally by Spark SQL. */
   val builtinHiveVersion: String = HiveVersionInfo.getVersion
@@ -71,7 +73,7 @@ private[spark] object HiveUtils extends Logging {
 
   val HIVE_METASTORE_VERSION = buildStaticConf("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
-        "<code>0.12.0</code> through <code>2.3.9</code> and " +
+        "<code>2.0.0</code> through <code>2.3.9</code> and " +
         "<code>3.0.0</code> through <code>3.1.3</code>.")
     .version("1.4.0")
     .stringConf
@@ -198,6 +200,15 @@ private[spark] object HiveUtils extends Logging {
     .booleanConf
     .createWithDefault(true)
 
+  val USE_DELEGATE_FOR_SYMLINK_TEXT_INPUT_FORMAT =
+    buildConf("spark.sql.hive.useDelegateForSymlinkTextInputFormat")
+      .internal()
+      .doc("When true, SymlinkTextInputFormat is replaced with a similar delegate class during " +
+        "table scan in order to fix the issue of empty splits")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * The version of the hive client that will be used to communicate with the metastore.  Note that
    * this does not necessarily need to be the same version of Hive that is used internally by
@@ -258,7 +269,7 @@ private[spark] object HiveUtils extends Logging {
     //
     // Here we enumerate all time `ConfVar`s and convert their values to numeric strings according
     // to their output time units.
-    val commonTimeVars = Seq(
+    Seq(
       ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY -> TimeUnit.SECONDS,
       ConfVars.METASTORE_CLIENT_SOCKET_TIMEOUT -> TimeUnit.SECONDS,
       ConfVars.METASTORE_CLIENT_SOCKET_LIFETIME -> TimeUnit.SECONDS,
@@ -298,18 +309,7 @@ private[spark] object HiveUtils extends Logging {
       ConfVars.SPARK_RPC_CLIENT_HANDSHAKE_TIMEOUT -> TimeUnit.MILLISECONDS
     ).map { case (confVar, unit) =>
       confVar.varname -> HiveConf.getTimeVar(hadoopConf, confVar, unit).toString
-    }
-
-    // The following configurations were removed by HIVE-12164(Hive 2.0)
-    val hardcodingTimeVars = Seq(
-      ("hive.stats.jdbc.timeout", "30s") -> TimeUnit.SECONDS,
-      ("hive.stats.retries.wait", "3000ms") -> TimeUnit.MILLISECONDS
-    ).map { case ((key, defaultValue), unit) =>
-      val value = hadoopConf.get(key, defaultValue)
-      key -> HiveConf.toTime(value, unit, unit).toString
-    }
-
-    (commonTimeVars ++ hardcodingTimeVars).toMap
+    }.toMap
   }
 
   /**
@@ -400,43 +400,15 @@ private[spark] object HiveUtils extends Logging {
             s"or change ${HIVE_METASTORE_VERSION.key} to $builtinHiveVersion.")
       }
 
-      // We recursively find all jars in the class loader chain,
-      // starting from the given classLoader.
-      def allJars(classLoader: ClassLoader): Array[URL] = classLoader match {
-        case null => Array.empty[URL]
-        case childFirst: ChildFirstURLClassLoader =>
-          childFirst.getURLs() ++ allJars(Utils.getSparkClassLoader)
-        case urlClassLoader: URLClassLoader =>
-          urlClassLoader.getURLs ++ allJars(urlClassLoader.getParent)
-        case other => allJars(other.getParent)
-      }
-
-      val classLoader = Utils.getContextOrSparkClassLoader
-      val jars: Array[URL] = if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-        // Do nothing. The system classloader is no longer a URLClassLoader in Java 9,
-        // so it won't match the case in allJars. It no longer exposes URLs of
-        // the system classpath
-        Array.empty[URL]
-      } else {
-        val loadedJars = allJars(classLoader)
-        // Verify at least one jar was found
-        if (loadedJars.length == 0) {
-          throw new IllegalArgumentException(
-            "Unable to locate hive jars to connect to metastore. " +
-              s"Please set ${HIVE_METASTORE_JARS.key}.")
-        }
-        loadedJars
-      }
-
       logInfo(
         s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using Spark classes.")
       new IsolatedClientLoader(
         version = metaVersion,
         sparkConf = conf,
         hadoopConf = hadoopConf,
-        execJars = jars.toSeq,
         config = configurations,
-        isolationOn = !isCliSessionState(),
+        isolationOn = false,
+        sessionStateIsolationOverride = Some(!isCliSessionState()),
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
     } else if (hiveMetastoreJars == "maven") {
@@ -579,7 +551,17 @@ private[spark] object HiveUtils extends Logging {
       // partition columns are part of the schema
       val partCols = hiveTable.getPartCols.asScala.map(HiveClientImpl.fromHiveColumn)
       val dataCols = hiveTable.getCols.asScala.map(HiveClientImpl.fromHiveColumn)
-      table.copy(schema = StructType((dataCols ++ partCols).toSeq))
+      table.copy(schema = StructType((dataCols ++ partCols).toArray))
+    }
+  }
+
+  /**
+   * Extract the partition values from a partition name, e.g., if a partition name is
+   * "region=US/dt=2023-02-18", then we will return an array of values ("US", "2023-02-18").
+   */
+  def partitionNameToValues(name: String): Array[String] = {
+    name.split(Path.SEPARATOR).map {
+      case PATTERN_FOR_KEY_EQ_VAL(_, v) => FileUtils.unescapePathName(v)
     }
   }
 }

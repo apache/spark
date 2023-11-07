@@ -18,12 +18,13 @@ package org.apache.spark.deploy.k8s
 
 import java.io.File
 
+import scala.jdk.CollectionConverters._
+
 import io.fabric8.kubernetes.api.model.{Config => _, _}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, never, verify, when}
-import scala.collection.JavaConverters._
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
@@ -161,7 +162,7 @@ abstract class PodBuilderSuite extends SparkFunSuite {
     val podResource = mock(classOf[PodResource])
     when(kubernetesClient.pods()).thenReturn(pods)
     when(pods.load(any(classOf[File]))).thenReturn(podResource)
-    when(podResource.get()).thenReturn(pod)
+    when(podResource.item()).thenReturn(pod)
     kubernetesClient
   }
 

@@ -63,18 +63,6 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
       .saveAsTable(table)
   }
 
-  test("show partitions of non-partitioned table") {
-    withNamespaceAndTable("ns", "not_partitioned_table") { t =>
-      sql(s"CREATE TABLE $t (col1 int) $defaultUsing")
-      val errMsg = intercept[AnalysisException] {
-        sql(s"SHOW PARTITIONS $t")
-      }.getMessage
-      assert(errMsg.contains("not allowed on a table that is not partitioned") ||
-        // V2 error message.
-        errMsg.contains(s"Table $t is not partitioned"))
-    }
-  }
-
   test("non-partitioning columns") {
     withNamespaceAndTable("ns", "dateTable") { t =>
       createDateTable(t)

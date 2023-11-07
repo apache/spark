@@ -32,13 +32,13 @@ SELECT `(a)?+.+` FROM testData2 WHERE a = 1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`(a)?+.+`",
-    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+    "proposal" : "`A`, `B`, `c`, `d`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -55,10 +55,10 @@ SELECT t.`(a)?+.+` FROM testData2 t WHERE a = 1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`t`.`(a)?+.+`",
     "proposal" : "`t`.`A`, `t`.`B`, `t`.`c`, `t`.`d`"
@@ -78,13 +78,13 @@ SELECT `(a|b)` FROM testData2 WHERE a = 2
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`(a|b)`",
-    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+    "proposal" : "`A`, `B`, `c`, `d`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -101,13 +101,13 @@ SELECT `(a|b)?+.+` FROM testData2 WHERE a = 2
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`(a|b)?+.+`",
-    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+    "proposal" : "`A`, `B`, `c`, `d`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -124,13 +124,13 @@ SELECT SUM(`(a|b)?+.+`) FROM testData2
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`(a|b)?+.+`",
-    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+    "proposal" : "`A`, `B`, `c`, `d`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -147,13 +147,13 @@ SELECT SUM(`(a)`) FROM testData2
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`(a)`",
-    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+    "proposal" : "`A`, `B`, `c`, `d`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -381,13 +381,13 @@ SELECT SUM(a) FROM testdata3 GROUP BY `(a)`
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`(a)`",
-    "proposal" : "`testdata3`.`a`, `testdata3`.`b`"
+    "proposal" : "`a`, `b`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -404,13 +404,13 @@ SELECT SUM(a) FROM testdata3 GROUP BY `(a)?+.+`
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`(a)?+.+`",
-    "proposal" : "`testdata3`.`a`, `testdata3`.`b`"
+    "proposal" : "`a`, `b`"
   },
   "queryContext" : [ {
     "objectType" : "",

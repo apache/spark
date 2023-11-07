@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-from distutils.version import LooseVersion
 import itertools
 import inspect
 
@@ -31,7 +30,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
+class NamespaceTestsMixin:
     def test_from_pandas(self):
         pdf = pd.DataFrame({"year": [2015, 2016], "month": [2, 3], "day": [4, 5]})
         psdf = ps.from_pandas(pdf)
@@ -221,14 +220,29 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
         )
 
         self.assert_eq(
-            ps.date_range(start="2017-01-01", end="2017-01-04", closed="left"),
-            pd.date_range(start="2017-01-01", end="2017-01-04", closed="left"),
+            ps.date_range(start="2017-01-01", end="2017-01-04", inclusive="left"),
+            pd.date_range(start="2017-01-01", end="2017-01-04", inclusive="left"),
         )
 
         self.assert_eq(
-            ps.date_range(start="2017-01-01", end="2017-01-04", closed="right"),
-            pd.date_range(start="2017-01-01", end="2017-01-04", closed="right"),
+            ps.date_range(start="2017-01-01", end="2017-01-04", inclusive="right"),
+            pd.date_range(start="2017-01-01", end="2017-01-04", inclusive="right"),
         )
+
+        self.assert_eq(
+            ps.date_range(start="2017-01-01", end="2017-01-04", inclusive="both"),
+            pd.date_range(start="2017-01-01", end="2017-01-04", inclusive="both"),
+        )
+
+        self.assert_eq(
+            ps.date_range(start="2017-01-01", end="2017-01-04", inclusive="neither"),
+            pd.date_range(start="2017-01-01", end="2017-01-04", inclusive="neither"),
+        )
+
+        with self.assertRaisesRegex(
+            ValueError, "Inclusive has to be either 'both', 'neither', 'left' or 'right'"
+        ):
+            ps.date_range(start="2017-01-01", end="2017-01-04", inclusive="test")
 
         self.assertRaises(
             AssertionError, lambda: ps.date_range(start="1/1/2018", periods=5, tz="Asia/Tokyo")
@@ -304,9 +318,7 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
 
         ignore_indexes = [True, False]
         joins = ["inner", "outer"]
-        sorts = [True]
-        if LooseVersion(pd.__version__) >= LooseVersion("1.4"):
-            sorts += [False]
+        sorts = [True, False]
         objs = [
             ([psdf, psdf.reset_index()], [pdf, pdf.reset_index()]),
             ([psdf.reset_index(), psdf], [pdf.reset_index(), pdf]),
@@ -340,21 +352,19 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
             ([psdf["C"], psdf["A"]], [pdf["C"], pdf["A"]]),
         ]
 
-        # See also https://github.com/pandas-dev/pandas/issues/47127
-        if LooseVersion(pd.__version__) >= LooseVersion("1.4.3"):
-            series_objs = [
-                # more than two Series
-                ([psdf, psdf["C"], psdf["A"]], [pdf, pdf["C"], pdf["A"]]),
-                # only one Series
-                ([psdf, psdf["C"]], [pdf, pdf["C"]]),
-                ([psdf["C"], psdf], [pdf["C"], pdf]),
-            ]
-            for psdfs, pdfs in series_objs:
-                for ignore_index, join, sort in itertools.product(ignore_indexes, joins, sorts):
-                    self.assert_eq(
-                        ps.concat(psdfs, ignore_index=ignore_index, join=join, sort=sort),
-                        pd.concat(pdfs, ignore_index=ignore_index, join=join, sort=sort),
-                    )
+        series_objs = [
+            # more than two Series
+            ([psdf, psdf["C"], psdf["A"]], [pdf, pdf["C"], pdf["A"]]),
+            # only one Series
+            ([psdf, psdf["C"]], [pdf, pdf["C"]]),
+            ([psdf["C"], psdf], [pdf["C"], pdf]),
+        ]
+        for psdfs, pdfs in series_objs:
+            for ignore_index, join, sort in itertools.product(ignore_indexes, joins, sorts):
+                self.assert_eq(
+                    ps.concat(psdfs, ignore_index=ignore_index, join=join, sort=sort),
+                    pd.concat(pdfs, ignore_index=ignore_index, join=join, sort=sort),
+                )
 
         for ignore_index, join, sort in itertools.product(ignore_indexes, joins, sorts):
             for i, (psdfs, pdfs) in enumerate(objs):
@@ -393,11 +403,10 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
             ([psdf3, psdf3[[("Y", "C"), ("X", "A")]]], [pdf3, pdf3[[("Y", "C"), ("X", "A")]]]),
         ]
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.4"):
-            objs += [
-                ([psdf3.reset_index(), psdf3], [pdf3.reset_index(), pdf3]),
-                ([psdf3[[("Y", "C"), ("X", "A")]], psdf3], [pdf3[[("Y", "C"), ("X", "A")]], pdf3]),
-            ]
+        objs += [
+            ([psdf3.reset_index(), psdf3], [pdf3.reset_index(), pdf3]),
+            ([psdf3[[("Y", "C"), ("X", "A")]], psdf3], [pdf3[[("Y", "C"), ("X", "A")]], pdf3]),
+        ]
 
         for ignore_index, sort in itertools.product(ignore_indexes, sorts):
             for i, (psdfs, pdfs) in enumerate(objs):
@@ -616,12 +625,16 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
                 getattr(ps, name)()
 
 
+class NamespaceTests(NamespaceTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+    pass
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.pandas.tests.test_namespace import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

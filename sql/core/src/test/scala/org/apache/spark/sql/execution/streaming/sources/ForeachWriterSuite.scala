@@ -261,7 +261,7 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
     }
   }
 
-  testQuietly("foreach with error not caused by ForeachWriter") {
+  test("foreach with error not caused by ForeachWriter") {
     withTempDir { checkpointDir =>
       val input = MemoryStream[Int]
       val query = input.toDS().repartition(1).map(_ / 0).writeStream
@@ -283,9 +283,11 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       assert(allEvents(0)(0) === ForeachWriterSuite.Open(partition = 0, version = 0))
       // `close` should be called with the error
       val errorEvent = allEvents(0)(1).asInstanceOf[ForeachWriterSuite.Close]
-      assert(errorEvent.error.get.isInstanceOf[SparkException])
-      assert(errorEvent.error.get.getMessage ===
-        "Foreach writer has been aborted due to a task failure")
+      checkError(
+        exception = errorEvent.error.get.asInstanceOf[SparkException],
+        errorClass = "_LEGACY_ERROR_TEMP_2256",
+        parameters = Map.empty
+      )
     }
   }
 }

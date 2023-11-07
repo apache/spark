@@ -21,8 +21,8 @@ import java.sql.{Date, DriverManager, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util.Properties
 
-import scala.collection.JavaConverters.propertiesAsScalaMapConverter
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.scalatest.BeforeAndAfter
 
@@ -280,7 +280,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     .options(Map("url" -> url, "dbtable" -> "TEST.SAVETEST"))
     .save()
 
-    assert(2 === sqlContext.read.jdbc(url, "TEST.SAVETEST", new Properties).count)
+    assert(2 === sqlContext.read.jdbc(url, "TEST.SAVETEST", new Properties).count())
     assert(
       2 === sqlContext.read.jdbc(url, "TEST.SAVETEST", new Properties).collect()(0).length)
   }
@@ -496,34 +496,40 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
 
   test("SPARK-10849: jdbc CreateTableColumnTypes option with invalid data type") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
-    val msg = intercept[ParseException] {
-      df.write.mode(SaveMode.Overwrite)
-        .option("createTableColumnTypes", "name CLOB(2000)")
-        .jdbc(url1, "TEST.USERDBTYPETEST", properties)
-    }.getMessage()
-    assert(msg.contains("DataType clob(2000) is not supported."))
+    checkError(
+      exception = intercept[ParseException] {
+        df.write.mode(SaveMode.Overwrite)
+          .option("createTableColumnTypes", "name CLOB(2000)")
+          .jdbc(url1, "TEST.USERDBTYPETEST", properties)
+      },
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> "\"CLOB(2000)\""))
   }
 
   test("SPARK-10849: jdbc CreateTableColumnTypes option with invalid syntax") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
-    val msg = intercept[ParseException] {
-      df.write.mode(SaveMode.Overwrite)
-        .option("createTableColumnTypes", "`name char(20)") // incorrectly quoted column
-        .jdbc(url1, "TEST.USERDBTYPETEST", properties)
-    }.getMessage()
-    assert(msg.contains("Syntax error at or near '`': extra input '`'"))
+    checkError(
+      exception = intercept[ParseException] {
+        df.write.mode(SaveMode.Overwrite)
+          .option("createTableColumnTypes", "`name char(20)") // incorrectly quoted column
+          .jdbc(url1, "TEST.USERDBTYPETEST", properties)
+      },
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'`'", "hint" -> ""))
   }
 
   test("SPARK-10849: jdbc CreateTableColumnTypes duplicate columns") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
-      val msg = intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         df.write.mode(SaveMode.Overwrite)
           .option("createTableColumnTypes", "name CHAR(20), id int, NaMe VARCHAR(100)")
           .jdbc(url1, "TEST.USERDBTYPETEST", properties)
-      }.getMessage()
-      assert(msg.contains(
-        "Found duplicate column(s) in the createTableColumnTypes option value: `name`"))
+      }
+      checkError(
+        exception = e,
+        errorClass = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`name`"))
     }
   }
 

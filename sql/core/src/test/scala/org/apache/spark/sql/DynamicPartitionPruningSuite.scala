@@ -1370,7 +1370,8 @@ abstract class DynamicPartitionPruningSuiteBase
         }
 
         assert(subqueryIds.size == 2, "Whole plan subquery reusing not working correctly")
-        assert(reusedSubqueryIds.size == 1, "Whole plan subquery reusing not working correctly")
+        assert(reusedSubqueryIds.distinct.size == 1,
+          "Whole plan subquery reusing not working correctly")
         assert(reusedSubqueryIds.forall(subqueryIds.contains(_)),
           "ReusedSubqueryExec should reuse an existing subquery")
       }
@@ -1616,6 +1617,36 @@ abstract class DynamicPartitionPruningSuiteBase
       assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1)
     }
   }
+
+  test("SPARK-39217: Makes DPP support the pruning side has Union") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      val df = sql(
+        """
+          |SELECT f.store_id,
+          |       f.date_id,
+          |       s.state_province
+          |FROM (SELECT 4 AS store_id,
+          |               date_id,
+          |               product_id
+          |      FROM   fact_sk
+          |      WHERE  date_id >= 1300
+          |      UNION ALL
+          |      SELECT   store_id,
+          |               date_id,
+          |               product_id
+          |      FROM   fact_stats
+          |      WHERE  date_id <= 1000) f
+          |JOIN dim_store s
+          |ON f.store_id = s.store_id
+          |WHERE s.country IN ('US', 'NL')
+          |""".stripMargin)
+
+      checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = true)
+      checkAnswer(df, Row(4, 1300, "California") :: Row(1, 1000, "North-Holland") :: Nil)
+      // CleanupDynamicPruningFilters should remove DPP in first child of union
+      assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1)
+    }
+  }
 }
 
 abstract class DynamicPartitionPruningDataSourceSuiteBase
@@ -1627,7 +1658,7 @@ abstract class DynamicPartitionPruningDataSourceSuiteBase
   test("no partition pruning when the build side is a stream") {
     withTable("fact") {
       val input = MemoryStream[Int]
-      val stream = input.toDF.select($"value" as "one", ($"value" * 3) as "code")
+      val stream = input.toDF().select($"value" as "one", ($"value" * 3) as "code")
       spark.range(100).select(
         $"id",
         ($"id" + 1).as("one"),
@@ -1715,7 +1746,7 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
         val allFilesNum = scan1.metrics("numFiles").value
         val allFilesSize = scan1.metrics("filesSize").value
         assert(scan1.metrics("numPartitions").value === numPartitions)
-        assert(scan1.metrics("pruningTime").value === -1)
+        assert(scan1.metrics("pruningTime").value === 0)
 
         // No dynamic partition pruning, so no static metrics
         // Only files from fid = 5 partition are scanned
@@ -1729,7 +1760,7 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
         assert(0 < partFilesNum && partFilesNum < allFilesNum)
         assert(0 < partFilesSize && partFilesSize < allFilesSize)
         assert(scan2.metrics("numPartitions").value === 1)
-        assert(scan2.metrics("pruningTime").value === -1)
+        assert(scan2.metrics("pruningTime").value === 0)
 
         // Dynamic partition pruning is used
         // Static metrics are as-if reading the whole fact table

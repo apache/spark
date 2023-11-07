@@ -20,13 +20,14 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.net.URI
 import java.util
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.catalyst.util.TypeUtils._
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableCatalogCapability, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
@@ -51,6 +52,12 @@ class V2SessionCatalog(catalog: SessionCatalog)
   // This class is instantiated by Spark, so `initialize` method will not be called.
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
 
+  override def capabilities(): util.Set[TableCatalogCapability] = {
+    Set(
+      TableCatalogCapability.SUPPORT_COLUMN_DEFAULT_VALUE
+    ).asJava
+  }
+
   override def listTables(namespace: Array[String]): Array[Identifier] = {
     namespace match {
       case Array(db) =>
@@ -64,7 +71,12 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   override def loadTable(ident: Identifier): Table = {
-    V1Table(catalog.getTableMetadata(ident.asTableIdentifier))
+    try {
+      V1Table(catalog.getTableMetadata(ident.asTableIdentifier))
+    } catch {
+      case _: NoSuchDatabaseException =>
+        throw QueryCompilationErrors.noSuchTableError(ident)
+    }
   }
 
   override def loadTable(ident: Identifier, timestamp: Long): Table = {
@@ -76,22 +88,26 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   private def failTimeTravel(ident: Identifier, t: Table): Table = {
-    t match {
-      case V1Table(catalogTable) =>
-        if (catalogTable.tableType == CatalogTableType.VIEW) {
-          throw QueryCompilationErrors.timeTravelUnsupportedError("views")
-        } else {
-          throw QueryCompilationErrors.tableNotSupportTimeTravelError(ident)
-        }
-
-      case _ => throw QueryCompilationErrors.tableNotSupportTimeTravelError(ident)
+    val nameParts = t match {
+      case V1Table(catalogTable) => catalogTable.identifier.nameParts
+      case _ => ident.asTableIdentifier.nameParts
     }
+    throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(nameParts))
   }
 
   override def invalidateTable(ident: Identifier): Unit = {
     catalog.refreshTable(ident.asTableIdentifier)
   }
 
+  override def createTable(
+      ident: Identifier,
+      columns: Array[Column],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    createTable(ident, CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties)
+  }
+
+  // TODO: remove it when no tests calling this deprecated method.
   override def createTable(
       ident: Identifier,
       schema: StructType,
@@ -134,7 +150,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   private def toOptions(properties: Map[String, String]): Map[String, String] = {
-    properties.filterKeys(_.startsWith(TableCatalog.OPTION_PREFIX)).map {
+    properties.view.filterKeys(_.startsWith(TableCatalog.OPTION_PREFIX)).map {
       case (key, value) => key.drop(TableCatalog.OPTION_PREFIX.length) -> value
     }.toMap
   }
@@ -174,16 +190,35 @@ class V2SessionCatalog(catalog: SessionCatalog)
     loadTable(ident)
   }
 
+  override def purgeTable(ident: Identifier): Boolean = {
+    dropTableInternal(ident, purge = true)
+  }
+
   override def dropTable(ident: Identifier): Boolean = {
+    dropTableInternal(ident)
+  }
+
+  private def dropTableInternal(ident: Identifier, purge: Boolean = false): Boolean = {
     try {
-      if (loadTable(ident) != null) {
-        catalog.dropTable(
-          ident.asTableIdentifier,
-          ignoreIfNotExists = true,
-          purge = true /* skip HDFS trash */)
-        true
-      } else {
-        false
+      loadTable(ident) match {
+        case V1Table(v1Table) if v1Table.tableType == CatalogTableType.VIEW =>
+          throw QueryCompilationErrors.wrongCommandForObjectTypeError(
+            operation = "DROP TABLE",
+            requiredType = s"${CatalogTableType.EXTERNAL.name} or" +
+              s" ${CatalogTableType.MANAGED.name}",
+            objectName = v1Table.qualifiedName,
+            foundType = v1Table.tableType.name,
+            alternative = "DROP VIEW"
+          )
+        case null =>
+          false
+        case _ =>
+          catalog.invalidateCachedTable(ident.asTableIdentifier)
+          catalog.dropTable(
+            ident.asTableIdentifier,
+            ignoreIfNotExists = true,
+            purge = purge)
+          true
       }
     } catch {
       case _: NoSuchTableException =>

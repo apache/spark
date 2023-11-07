@@ -93,11 +93,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
-  "sqlState" : "42000",
+  "errorClass" : "GROUP_BY_POS_AGGREGATE",
+  "sqlState" : "42903",
   "messageParameters" : {
-    "expression" : "\"a\""
-  }
+    "aggExpr" : "udaf(b#x) AS `udaf(b)`",
+    "index" : "3"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 41,
+    "stopIndex" : 41,
+    "fragment" : "3"
+  } ]
 }
 
 
@@ -108,11 +116,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
-  "sqlState" : "42000",
+  "errorClass" : "GROUP_BY_POS_AGGREGATE",
+  "sqlState" : "42903",
   "messageParameters" : {
-    "expression" : "\"a\""
-  }
+    "aggExpr" : "(udaf(b#x) + 2) AS `(udaf(b) + 2)`",
+    "index" : "3"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 45,
+    "stopIndex" : 45,
+    "fragment" : "3"
+  } ]
 }
 
 
@@ -327,7 +343,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
-  "sqlState" : "42000",
+  "sqlState" : "42805",
   "messageParameters" : {
     "index" : "-1",
     "size" : "3"
@@ -349,11 +365,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
-  "sqlState" : "42000",
+  "errorClass" : "GROUP_BY_POS_AGGREGATE",
+  "sqlState" : "42903",
   "messageParameters" : {
-    "expression" : "\"b\""
-  }
+    "aggExpr" : "udaf(1) AS `udaf(1)`",
+    "index" : "3"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 44,
+    "stopIndex" : 44,
+    "fragment" : "3"
+  } ]
 }
 
 
@@ -365,7 +389,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
-  "sqlState" : "42000",
+  "sqlState" : "42805",
   "messageParameters" : {
     "index" : "-1",
     "size" : "3"
@@ -386,7 +410,21 @@ select a, b, udaf(1) from data group by cube(1, 3)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping expressions sequence is empty, and 'data.a' is not an aggregate function. Wrap '()' in windowing function(s) or wrap 'data.a' in first() (or first_value) if you don't care which value you get.
+{
+  "errorClass" : "GROUP_BY_POS_AGGREGATE",
+  "sqlState" : "42903",
+  "messageParameters" : {
+    "aggExpr" : "udaf(1) AS `udaf(1)`",
+    "index" : "3"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 49,
+    "stopIndex" : 49,
+    "fragment" : "3"
+  } ]
+}
 
 
 -- !query

@@ -1,0 +1,5 @@
+Project [cume_dist() OVER (PARTITION BY a ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#0]
++- Project [a#0, id#0L, cume_dist() OVER (PARTITION BY a ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#0, cume_dist() OVER (PARTITION BY a ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#0]
+   +- Window [cume_dist() windowspecdefinition(a#0, id#0L ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS cume_dist() OVER (PARTITION BY a ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#0], [a#0], [id#0L ASC NULLS FIRST]
+      +- Project [a#0, id#0L]
+         +- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

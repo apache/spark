@@ -467,7 +467,9 @@ class HashedRelationSuite extends SharedSparkSession {
 
   test("LongToUnsafeRowMap: key set iterator on a contiguous array of keys") {
     val rowMap = new LongToUnsafeRowMap(mm, 1)
-    (contiguousArray, contiguousRows).zipped.map { (i, row) => rowMap.append(i, row) }
+    contiguousArray.toArray.lazyZip(contiguousRows).map {
+      (i, row) => rowMap.append(i, row)
+    }
     var keyIterator = rowMap.keys()
     // in sparse mode the keys are unsorted
     assert(keyIterator.map(key => key.getLong(0)).toArray.sortWith(_ < _) === contiguousArray)
@@ -479,7 +481,9 @@ class HashedRelationSuite extends SharedSparkSession {
 
   test("LongToUnsafeRowMap: key set iterator on a sparse array with equidistant keys") {
     val rowMap = new LongToUnsafeRowMap(mm, 1)
-    (sparseArray, sparseRows).zipped.map { (i, row) => rowMap.append(i, row) }
+    sparseArray.toArray.lazyZip(sparseRows).map {
+      (i, row) => rowMap.append(i, row)
+    }
     var keyIterator = rowMap.keys()
     assert(keyIterator.map(_.getLong(0)).toArray.sortWith(_ < _) === sparseArray)
     rowMap.optimize()
@@ -503,7 +507,9 @@ class HashedRelationSuite extends SharedSparkSession {
 
   test("LongToUnsafeRowMap: multiple hasNext calls before calling next() on the key iterator") {
     val rowMap = new LongToUnsafeRowMap(mm, 1)
-    (randomArray, randomRows).zipped.map { (i, row) => rowMap.append(i, row) }
+    randomArray.toArray.lazyZip(randomRows).map {
+      (i, row) => rowMap.append(i, row)
+    }
     val buffer = new ArrayBuffer[Long]()
     // hasNext should not change the cursor unless the key was read by a next() call
     var keyIterator = rowMap.keys()
@@ -527,7 +533,9 @@ class HashedRelationSuite extends SharedSparkSession {
 
   test("LongToUnsafeRowMap: no explicit hasNext calls on the key iterator") {
     val rowMap = new LongToUnsafeRowMap(mm, 1)
-    (randomArray, randomRows).zipped.map { (i, row) => rowMap.append(i, row) }
+    randomArray.toArray.lazyZip(randomRows).map {
+      (i, row) => rowMap.append(i, row)
+    }
     val buffer = new ArrayBuffer[Long]()
     // call next() until the buffer is filled with all keys
     var keyIterator = rowMap.keys()
@@ -535,10 +543,13 @@ class HashedRelationSuite extends SharedSparkSession {
       buffer.append(keyIterator.next().getLong(0))
     }
     // attempt an illegal next() call
-    val caught = intercept[SparkException] {
-      keyIterator.next()
-    }
-    assert(caught.getLocalizedMessage === "End of the iterator")
+    checkError(
+      exception = intercept[SparkException] {
+        keyIterator.next()
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2104",
+      parameters = Map.empty
+    )
     assert(buffer.sortWith(_ < _) === randomArray)
     buffer.clear()
 
@@ -552,7 +563,9 @@ class HashedRelationSuite extends SharedSparkSession {
 
   test("LongToUnsafeRowMap: call hasNext at the end of the iterator") {
     val rowMap = new LongToUnsafeRowMap(mm, 1)
-    (sparseArray, sparseRows).zipped.map { (i, row) => rowMap.append(i, row) }
+    sparseArray.toArray.lazyZip(sparseRows).map {
+      (i, row) => rowMap.append(i, row)
+    }
     var keyIterator = rowMap.keys()
     assert(keyIterator.map(key => key.getLong(0)).toArray.sortWith(_ < _) === sparseArray)
     assert(keyIterator.hasNext == false)
@@ -567,7 +580,9 @@ class HashedRelationSuite extends SharedSparkSession {
 
   test("LongToUnsafeRowMap: random sequence of hasNext and next() calls on the key iterator") {
     val rowMap = new LongToUnsafeRowMap(mm, 1)
-    (randomArray, randomRows).zipped.map { (i, row) => rowMap.append(i, row) }
+    randomArray.toArray.lazyZip(randomRows).map {
+      (i, row) => rowMap.append(i, row)
+    }
     val buffer = new ArrayBuffer[Long]()
     // call hasNext or next() at random
     var keyIterator = rowMap.keys()
@@ -722,6 +737,31 @@ class HashedRelationSuite extends SharedSparkSession {
         // should have same value and order as returned from getWithKeyIndex()
         val actualValues = row.map(_._2.getInt(1))
         assert(actualValues === expectedValues)
+    }
+  }
+
+  test("LongToUnsafeRowMap support ignoresDuplicatedKey") {
+    val taskMemoryManager = new TaskMemoryManager(
+      new UnifiedMemoryManager(
+        new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
+        Long.MaxValue,
+        Long.MaxValue / 2,
+        1),
+      0)
+    val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
+    val keys = Seq(1L, 1L, 1L)
+    Seq(true, false).foreach { ignoresDuplicatedKey =>
+      val map = new LongToUnsafeRowMap(taskMemoryManager, 1, ignoresDuplicatedKey)
+      keys.foreach { k =>
+        map.append(k, unsafeProj(InternalRow(k)))
+      }
+      map.optimize()
+      val res = new UnsafeRow(1)
+      val it = map.get(1L, res)
+      assert(it.hasNext)
+      assert(it.next().getLong(0) == 1)
+      assert(it.hasNext != ignoresDuplicatedKey)
+      map.free()
     }
   }
 }

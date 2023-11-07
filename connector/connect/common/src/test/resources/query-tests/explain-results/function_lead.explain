@@ -1,0 +1,5 @@
+Project [lead(g, 2, dv) OVER (PARTITION BY a ORDER BY id ASC NULLS FIRST ROWS BETWEEN 2 FOLLOWING AND 2 FOLLOWING)#0]
++- Project [g#0, a#0, id#0L, lead(g, 2, dv) OVER (PARTITION BY a ORDER BY id ASC NULLS FIRST ROWS BETWEEN 2 FOLLOWING AND 2 FOLLOWING)#0, lead(g, 2, dv) OVER (PARTITION BY a ORDER BY id ASC NULLS FIRST ROWS BETWEEN 2 FOLLOWING AND 2 FOLLOWING)#0]
+   +- Window [lead(g#0, 2, dv) windowspecdefinition(a#0, id#0L ASC NULLS FIRST, specifiedwindowframe(RowFrame, 2, 2)) AS lead(g, 2, dv) OVER (PARTITION BY a ORDER BY id ASC NULLS FIRST ROWS BETWEEN 2 FOLLOWING AND 2 FOLLOWING)#0], [a#0], [id#0L ASC NULLS FIRST]
+      +- Project [g#0, a#0, id#0L]
+         +- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

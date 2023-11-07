@@ -608,6 +608,11 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     checkEvaluation(cast(input, StringType), "1.23E-7")
   }
 
+  test("SPARK-42176: cast boolean to timestamp") {
+    checkEvaluation(cast(true, TimestampType), 1L)
+    checkEvaluation(cast(false, TimestampType), 0L)
+  }
+
   private def castOverflowErrMsg(targetType: DataType): String = {
     s"""cannot be cast to "${targetType.sql}" due to an overflow."""
   }

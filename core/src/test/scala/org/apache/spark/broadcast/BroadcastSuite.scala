@@ -315,9 +315,15 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
     if (removeFromDriver) {
       // Using this variable on the executors crashes them, which hangs the test.
       // Instead, crash the driver by directly accessing the broadcast value.
-      intercept[SparkException] { broadcast.value }
-      intercept[SparkException] { broadcast.unpersist(blocking = true) }
-      intercept[SparkException] { broadcast.destroy(blocking = true) }
+      val e1 = intercept[SparkException] { broadcast.value }
+      assert(e1.isInternalError)
+      assert(e1.getErrorClass == "INTERNAL_ERROR_BROADCAST")
+      val e2 = intercept[SparkException] { broadcast.unpersist(blocking = true) }
+      assert(e2.isInternalError)
+      assert(e2.getErrorClass == "INTERNAL_ERROR_BROADCAST")
+      val e3 = intercept[SparkException] { broadcast.destroy(blocking = true) }
+      assert(e3.isInternalError)
+      assert(e3.getErrorClass == "INTERNAL_ERROR_BROADCAST")
     } else {
       val results = sc.parallelize(1 to partitions, partitions).map(x => (x, broadcast.value.sum))
       assert(results.collect().toSet === (1 to partitions).map(x => (x, list.sum)).toSet)
@@ -332,6 +338,8 @@ package object testPackage extends Assertions {
     broadcast.destroy(blocking = true)
     val thrown = intercept[SparkException] { broadcast.value }
     assert(thrown.getMessage.contains("BroadcastSuite.scala"))
+    assert(thrown.isInternalError)
+    assert(thrown.getErrorClass == "INTERNAL_ERROR_BROADCAST")
   }
 
 }

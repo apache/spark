@@ -18,8 +18,8 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{PersistentVolumeClaim,
   PersistentVolumeClaimBuilder, PodSpec, PodSpecBuilder, PodTemplateSpec}
@@ -42,13 +42,13 @@ class StatefulSetPodsAllocator(
     snapshotsStore: ExecutorPodsSnapshotsStore,
     clock: Clock) extends AbstractPodsAllocator() with Logging {
 
-  private val rpIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]
+  protected val rpIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]
 
-  private val driverPodReadinessTimeout = conf.get(KUBERNETES_ALLOCATION_DRIVER_READINESS_TIMEOUT)
+  protected val driverPodReadinessTimeout = conf.get(KUBERNETES_ALLOCATION_DRIVER_READINESS_TIMEOUT)
 
-  private val namespace = conf.get(KUBERNETES_NAMESPACE)
+  protected val namespace = conf.get(KUBERNETES_NAMESPACE)
 
-  private val kubernetesDriverPodName = conf
+  protected val kubernetesDriverPodName = conf
     .get(KUBERNETES_DRIVER_POD_NAME)
 
   val driverPod = kubernetesDriverPodName
@@ -60,7 +60,7 @@ class StatefulSetPodsAllocator(
         s"No pod was found named $name in the cluster in the " +
           s"namespace $namespace (this was supposed to be the driver pod.).")))
 
-  private var appId: String = _
+  protected var appId: String = _
 
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     appId = applicationId
@@ -92,11 +92,11 @@ class StatefulSetPodsAllocator(
   // For now just track the sets created, in the future maybe track requested value too.
   val setsCreated = new mutable.HashSet[Int]()
 
-  private def setName(applicationId: String, rpid: Int): String = {
+  protected def setName(applicationId: String, rpid: Int): String = {
     s"spark-s-${applicationId}-${rpid}"
   }
 
-  private def setTargetExecutorsReplicaset(
+  protected def setTargetExecutorsReplicaset(
       expected: Int,
       applicationId: String,
       resourceProfileId: Int): Unit = {

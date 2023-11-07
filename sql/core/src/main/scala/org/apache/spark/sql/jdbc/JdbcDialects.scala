@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, Date, Driver, Statement, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
 
 import scala.collection.mutable.ArrayBuilder
@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{localDateTimeToMicros, toJavaTimestampNoRebase}
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
@@ -39,7 +40,7 @@ import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedRef
 import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
@@ -105,6 +106,42 @@ abstract class JdbcDialect extends Serializable with Logging {
   def getJDBCType(dt: DataType): Option[JdbcType] = None
 
   /**
+   * Converts an instance of `java.sql.Timestamp` to a custom `java.sql.Timestamp` value.
+   * @param t represents a specific instant in time based on
+   *          the hybrid calendar which combines Julian and
+   *          Gregorian calendars.
+   * @return the timestamp value to convert to
+   * @throws IllegalArgumentException if t is null
+   */
+  @Since("3.5.0")
+  def convertJavaTimestampToTimestamp(t: Timestamp): Timestamp = t
+
+  /**
+   * Convert java.sql.Timestamp to a LocalDateTime representing the same wall-clock time as the
+   * value stored in a remote database.
+   * JDBC dialects should override this function to provide implementations that suit their
+   * JDBC drivers.
+   * @param t Timestamp returned from JDBC driver getTimestamp method.
+   * @return A LocalDateTime representing the same wall clock time as the timestamp in database.
+   */
+  @Since("3.5.0")
+  def convertJavaTimestampToTimestampNTZ(t: Timestamp): LocalDateTime = {
+    DateTimeUtils.microsToLocalDateTime(DateTimeUtils.fromJavaTimestampNoRebase(t))
+  }
+
+  /**
+   * Converts a LocalDateTime representing a TimestampNTZ type to an
+   * instance of `java.sql.Timestamp`.
+   * @param ldt representing a TimestampNTZType.
+   * @return A Java Timestamp representing this LocalDateTime.
+   */
+  @Since("3.5.0")
+  def convertTimestampNTZToJavaTimestamp(ldt: LocalDateTime): Timestamp = {
+    val micros = localDateTimeToMicros(ldt)
+    toJavaTimestampNoRebase(micros)
+  }
+
+  /**
    * Returns a factory for creating connections to the given JDBC URL.
    * In general, creating a connection has nothing to do with JDBC partition id.
    * But sometimes it is needed, such as a database with multiple shard nodes.
@@ -133,6 +170,45 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   def quoteIdentifier(colName: String): String = {
     s""""$colName""""
+  }
+
+  /**
+   * Create the table if the table does not exist.
+   * To allow certain options to append when create a new table, which can be
+   * table_options or partition_options.
+   * E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
+   *
+   * @param statement The Statement object used to execute SQL statements.
+   * @param tableName The name of the table to be created.
+   * @param strSchema The schema of the table to be created.
+   * @param options The JDBC options. It contains the create table option, which can be
+   *                table_options or partition_options.
+   */
+  def createTable(
+      statement: Statement,
+      tableName: String,
+      strSchema: String,
+      options: JdbcOptionsInWrite): Unit = {
+    val createTableOptions = options.createTableOptions
+    statement.executeUpdate(s"CREATE TABLE $tableName ($strSchema) $createTableOptions")
+  }
+
+  /**
+   * Returns an Insert SQL statement template for inserting a row into the target table via JDBC
+   * conn. Use "?" as placeholder for each value to be inserted.
+   * E.g. `INSERT INTO t ("name", "age", "gender") VALUES (?, ?, ?)`
+   *
+   * @param table The name of the table.
+   * @param fields The fields of the row that will be inserted.
+   * @return The SQL query to use for insert data into table.
+   */
+  @Since("4.0.0")
+  def insertIntoTable(
+      table: String,
+      fields: Array[StructField]): String = {
+    val placeholders = fields.map(_ => "?").mkString(",")
+    val columns = fields.map(x => quoteIdentifier(x.name)).mkString(",")
+    s"INSERT INTO $table ($columns) VALUES ($placeholders)"
   }
 
   /**
@@ -167,7 +243,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   @Since("2.3.0")
   def getTruncateQuery(table: String): String = {
-    getTruncateQuery(table, isCascadingTruncateTable)
+    getTruncateQuery(table, isCascadingTruncateTable())
   }
 
   /**
@@ -181,7 +257,7 @@ abstract class JdbcDialect extends Serializable with Logging {
   @Since("2.4.0")
   def getTruncateQuery(
     table: String,
-    cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+    cascade: Option[Boolean] = isCascadingTruncateTable()): String = {
       s"TRUNCATE TABLE $table"
   }
 
@@ -361,7 +437,7 @@ abstract class JdbcDialect extends Serializable with Logging {
     while (rs.next()) {
       schemaBuilder += Array(rs.getString(1))
     }
-    schemaBuilder.result
+    schemaBuilder.result()
   }
 
   /**
@@ -379,8 +455,22 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param newTable New name of the table.
    * @return The SQL statement to use for renaming the table.
    */
+  @deprecated("Please override renameTable method with identifiers", "3.5.0")
   def renameTable(oldTable: String, newTable: String): String = {
     s"ALTER TABLE $oldTable RENAME TO $newTable"
+  }
+
+  /**
+   * Rename an existing table.
+   *
+   * @param oldTable The existing table.
+   * @param newTable New name of the table.
+   * @return The SQL statement to use for renaming the table.
+   */
+  @Since("3.5.0")
+  def renameTable(oldTable: Identifier, newTable: Identifier): String = {
+    s"ALTER TABLE ${getFullyQualifiedQuotedTableName(oldTable)} RENAME TO " +
+      s"${getFullyQualifiedQuotedTableName(newTable)}"
   }
 
   /**
@@ -471,6 +561,17 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   /**
+   * Build a SQL statement to drop the given table.
+   *
+   * @param table the table name
+   * @return The SQL statement to use for drop the table.
+   */
+  @Since("4.0.0")
+  def dropTable(table: String): String = {
+    s"DROP TABLE $table"
+  }
+
+  /**
    * Build a create index SQL statement.
    *
    * @param indexName         the name of the index to be created
@@ -511,7 +612,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    *
    * @param indexName the name of the index to be dropped.
    * @param tableIdent the table on which index to be dropped.
-  * @return the SQL statement to use for dropping the index.
+   * @return the SQL statement to use for dropping the index.
    */
   def dropIndex(indexName: String, tableIdent: Identifier): String = {
     throw new UnsupportedOperationException("dropIndex is not supported")
@@ -538,23 +639,55 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   /**
-   * returns the LIMIT clause for the SELECT statement
+   * Returns the LIMIT clause for the SELECT statement
    */
   def getLimitClause(limit: Integer): String = {
-    if (limit > 0 ) s"LIMIT $limit" else ""
+    if (limit > 0) s"LIMIT $limit" else ""
   }
 
   /**
-   * returns the OFFSET clause for the SELECT statement
+   * Returns the OFFSET clause for the SELECT statement
    */
   def getOffsetClause(offset: Integer): String = {
-    if (offset > 0 ) s"OFFSET $offset" else ""
+    if (offset > 0) s"OFFSET $offset" else ""
   }
+
+  /**
+   * Returns the SQL builder for the SELECT statement.
+   */
+  def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
+    new JdbcSQLQueryBuilder(this, options)
+
+  /**
+   * Returns ture if dialect supports LIMIT clause.
+   *
+   * Note: Some build-in dialect supports LIMIT clause with some trick, please see:
+   * {@link OracleDialect.OracleSQLQueryBuilder} and
+   * {@link MsSqlServerDialect.MsSqlServerSQLQueryBuilder}.
+   */
+  def supportsLimit: Boolean = false
+
+  /**
+   * Returns ture if dialect supports OFFSET clause.
+   *
+   * Note: Some build-in dialect supports OFFSET clause with some trick, please see:
+   * {@link OracleDialect.OracleSQLQueryBuilder} and
+   * {@link MySQLDialect.MySQLSQLQueryBuilder}.
+   */
+  def supportsOffset: Boolean = false
 
   def supportsTableSample: Boolean = false
 
   def getTableSample(sample: TableSampleInfo): String =
     throw new UnsupportedOperationException("TableSample is not supported by this data source")
+
+  /**
+   * Return the DB-specific quoted and fully qualified table name
+   */
+  @Since("3.5.0")
+  def getFullyQualifiedQuotedTableName(ident: Identifier): String = {
+    (ident.namespace() :+ ident.name()).map(quoteIdentifier).mkString(".")
+  }
 }
 
 /**
@@ -600,6 +733,8 @@ object JdbcDialects {
   registerDialect(OracleDialect)
   registerDialect(TeradataDialect)
   registerDialect(H2Dialect)
+  registerDialect(SnowflakeDialect)
+  registerDialect(DatabricksDialect)
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
@@ -617,6 +752,6 @@ object JdbcDialects {
 /**
  * NOOP dialect object, always returning the neutral element.
  */
-private object NoopDialect extends JdbcDialect {
+private[spark] object NoopDialect extends JdbcDialect {
   override def canHandle(url : String): Boolean = true
 }

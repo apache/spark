@@ -30,7 +30,7 @@ from pyspark.pandas.missing.window import (
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
+class ExpandingRollingTestsMixin:
     def test_missing(self):
         psdf = ps.DataFrame({"a": [1, 2, 3, 4, 5, 6, 7, 8, 9]})
 
@@ -448,12 +448,16 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
                 getattr(psdf.a.ewm(com=0.5), name)()  # Series
 
 
+class ExpandingRollingTests(ExpandingRollingTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.pandas.tests.test_window import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

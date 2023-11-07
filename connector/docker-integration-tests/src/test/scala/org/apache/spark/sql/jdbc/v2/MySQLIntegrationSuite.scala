@@ -21,7 +21,7 @@ import java.sql.{Connection, SQLFeatureNotSupportedException}
 
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.DatabaseOnDocker
@@ -29,17 +29,38 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., mysql:5.7.36):
+ * To run this test suite for a specific version (e.g., mysql:8.0.31):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:5.7.36
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:8.0.31
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2*MySQLIntegrationSuite"
  * }}}
  */
 @DockerTest
 class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
+
+  override def excluded: Seq[String] = Seq(
+    "scan with aggregate push-down: VAR_POP with DISTINCT",
+    "scan with aggregate push-down: VAR_SAMP with DISTINCT",
+    "scan with aggregate push-down: STDDEV_POP with DISTINCT",
+    "scan with aggregate push-down: STDDEV_SAMP with DISTINCT",
+    "scan with aggregate push-down: COVAR_POP with DISTINCT",
+    "scan with aggregate push-down: COVAR_POP without DISTINCT",
+    "scan with aggregate push-down: COVAR_SAMP with DISTINCT",
+    "scan with aggregate push-down: COVAR_SAMP without DISTINCT",
+    "scan with aggregate push-down: CORR with DISTINCT",
+    "scan with aggregate push-down: CORR without DISTINCT",
+    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT",
+    "scan with aggregate push-down: REGR_INTERCEPT without DISTINCT",
+    "scan with aggregate push-down: REGR_SLOPE with DISTINCT",
+    "scan with aggregate push-down: REGR_SLOPE without DISTINCT",
+    "scan with aggregate push-down: REGR_R2 with DISTINCT",
+    "scan with aggregate push-down: REGR_R2 without DISTINCT",
+    "scan with aggregate push-down: REGR_SXY with DISTINCT",
+    "scan with aggregate push-down: REGR_SXY without DISTINCT")
+
   override val catalogName: String = "mysql"
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:5.7.36")
+    override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:8.0.31")
     override val env = Map(
       "MYSQL_ROOT_PASSWORD" -> "rootpass"
     )
@@ -55,6 +76,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     .set("spark.sql.catalog.mysql", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.mysql.url", db.getJdbcUrl(dockerIp, externalPort))
     .set("spark.sql.catalog.mysql.pushDownAggregate", "true")
+    .set("spark.sql.catalog.mysql.pushDownLimit", "true")
+    .set("spark.sql.catalog.mysql.pushDownOffset", "true")
 
   override val connectionTimeout = timeout(7.minutes)
 
@@ -77,11 +100,20 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update column type from STRING to INTEGER
-    val msg1 = intercept[AnalysisException] {
-      sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER")
-    }.getMessage
-    assert(msg1.contains(
-      s"Cannot update $catalogName.alt_table field ID: string cannot be cast to int"))
+    val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(sql1)
+      },
+      errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
+      parameters = Map(
+        "originType" -> "\"STRING\"",
+        "newType" -> "\"INT\"",
+        "newName" -> "`ID`",
+        "originName" -> "`ID`",
+        "table" -> s"`$catalogName`.`alt_table`"),
+      context = ExpectedContext(fragment = sql1, start = 0, stop = 55)
+    )
   }
 
   override def testRenameColumn(tbl: String): Unit = {
@@ -102,11 +134,11 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
   override def testUpdateColumnNullability(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID STRING NOT NULL)")
     // Update nullability is unsupported for mysql db.
-    val msg = intercept[AnalysisException] {
-      sql(s"ALTER TABLE $tbl ALTER COLUMN ID DROP NOT NULL")
-    }.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
-
-    assert(msg.contains("UpdateColumnNullability is not supported"))
+    checkError(
+      exception = intercept[SparkSQLFeatureNotSupportedException] {
+        sql(s"ALTER TABLE $tbl ALTER COLUMN ID DROP NOT NULL")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2271")
   }
 
   override def testCreateTableWithProperty(tbl: String): Unit = {
@@ -123,8 +155,12 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
 
   override def indexOptions: String = "KEY_BLOCK_SIZE=10"
 
-  testVarPop()
-  testVarSamp()
-  testStddevPop()
-  testStddevSamp()
+  test("SPARK-42943: Use LONGTEXT instead of TEXT for StringType for effective length") {
+    val tableName = catalogName + ".t1"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(c1 string)")
+      sql(s"INSERT INTO $tableName SELECT rpad('hi', 65536, 'spark')")
+      assert(sql(s"SELECT char_length(c1) from $tableName").head().get(0) === 65536)
+    }
+  }
 }

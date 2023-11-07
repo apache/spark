@@ -48,6 +48,9 @@ class PandasGroupedOpsMixin:
 
         .. versionadded:: 2.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         udf : :func:`pyspark.sql.functions.pandas_udf`
@@ -69,6 +72,7 @@ class PandasGroupedOpsMixin:
         ... def normalize(pdf):
         ...     v = pdf.v
         ...     return pdf.assign(v=(v - v.mean()) / v.std())
+        ...
         >>> df.groupby("id").apply(normalize).show()  # doctest: +SKIP
         +---+-------------------+
         | id|                  v|
@@ -114,7 +118,9 @@ class PandasGroupedOpsMixin:
         as a `DataFrame`.
 
         The function should take a `pandas.DataFrame` and return another
-        `pandas.DataFrame`. For each group, all columns are passed together as a `pandas.DataFrame`
+        `pandas.DataFrame`. Alternatively, the user can pass a function that takes
+        a tuple of the grouping key(s) and a `pandas.DataFrame`.
+        For each group, all columns are passed together as a `pandas.DataFrame`
         to the user-function and the returned `pandas.DataFrame` are combined as a
         :class:`DataFrame`.
 
@@ -126,11 +132,15 @@ class PandasGroupedOpsMixin:
 
         .. versionadded:: 3.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         func : function
-            a Python native function that takes a `pandas.DataFrame`, and outputs a
-            `pandas.DataFrame`.
+            a Python native function that takes a `pandas.DataFrame` and outputs a
+            `pandas.DataFrame`, or that takes one tuple (grouping keys) and a
+            `pandas.DataFrame` and outputs a `pandas.DataFrame`.
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
@@ -145,6 +155,7 @@ class PandasGroupedOpsMixin:
         >>> def normalize(pdf):
         ...     v = pdf.v
         ...     return pdf.assign(v=(v - v.mean()) / v.std())
+        ...
         >>> df.groupby("id").applyInPandas(
         ...     normalize, schema="id long, v double").show()  # doctest: +SKIP
         +---+-------------------+
@@ -171,6 +182,7 @@ class PandasGroupedOpsMixin:
         ...     # key is a tuple of one numpy.int64, which is the value
         ...     # of 'id' for the current group
         ...     return pd.DataFrame([key + (pdf.v.mean(),)])
+        ...
         >>> df.groupby('id').applyInPandas(
         ...     mean_func, schema="id long, v double").show()  # doctest: +SKIP
         +---+---+
@@ -184,6 +196,7 @@ class PandasGroupedOpsMixin:
         ...     # key is a tuple of two numpy.int64s, which is the values
         ...     # of 'id' and 'ceil(df.v / 2)' for the current group
         ...     return pd.DataFrame([key + (pdf.v.sum(),)])
+        ...
         >>> df.groupby(df.id, ceil(df.v / 2)).applyInPandas(
         ...     sum_func, schema="id long, `ceil(v / 2)` long, v double").show()  # doctest: +SKIP
         +---+-----------+----+
@@ -263,6 +276,9 @@ class PandasGroupedOpsMixin:
         number of `pandas.DataFrame` in both the input and output can also be arbitrary.
 
         .. versionadded:: 3.4.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -344,6 +360,9 @@ class PandasGroupedOpsMixin:
 
         .. versionadded:: 3.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         See :class:`PandasCogroupedOps` for the operations that can be run.
         """
         from pyspark.sql import GroupedData
@@ -359,6 +378,9 @@ class PandasCogroupedOps:
     created by :func:`GroupedData.cogroup`.
 
     .. versionadded:: 3.0.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Notes
     -----
@@ -377,7 +399,9 @@ class PandasCogroupedOps:
         as a `DataFrame`.
 
         The function should take two `pandas.DataFrame`\\s and return another
-        `pandas.DataFrame`.  For each side of the cogroup, all columns are passed together as a
+        `pandas.DataFrame`. Alternatively, the user can pass a function that takes
+        a tuple of the grouping key(s) and the two `pandas.DataFrame`\\s.
+        For each side of the cogroup, all columns are passed together as a
         `pandas.DataFrame` to the user-function and the returned `pandas.DataFrame` are combined as
         a :class:`DataFrame`.
 
@@ -389,12 +413,15 @@ class PandasCogroupedOps:
 
         .. versionadded:: 3.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         func : function
             a Python native function that takes two `pandas.DataFrame`\\s, and
             outputs a `pandas.DataFrame`, or that takes one tuple (grouping keys) and two
-            pandas ``DataFrame``\\s, and outputs a pandas ``DataFrame``.
+            ``pandas.DataFrame``\\s, and outputs a ``pandas.DataFrame``.
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
@@ -410,6 +437,7 @@ class PandasCogroupedOps:
         ...     ("time", "id", "v2"))
         >>> def asof_join(l, r):
         ...     return pd.merge_asof(l, r, on="time", by="id")
+        ...
         >>> df1.groupby("id").cogroup(df2.groupby("id")).applyInPandas(
         ...     asof_join, schema="time int, id int, v1 double, v2 string"
         ... ).show()  # doctest: +SKIP
@@ -433,6 +461,7 @@ class PandasCogroupedOps:
         ...         return pd.merge_asof(l, r, on="time", by="id")
         ...     else:
         ...         return pd.DataFrame(columns=['time', 'id', 'v1', 'v2'])
+        ...
         >>> df1.groupby("id").cogroup(df2.groupby("id")).applyInPandas(
         ...     asof_join, "time int, id int, v1 double, v2 string").show()  # doctest: +SKIP
         +--------+---+---+---+

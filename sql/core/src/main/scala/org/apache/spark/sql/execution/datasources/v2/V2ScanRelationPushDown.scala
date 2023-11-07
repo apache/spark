@@ -22,9 +22,10 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -72,10 +73,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
         sHolder.builder, normalizedFiltersWithoutSubquery)
       val pushedFiltersStr = if (pushedFilters.isLeft) {
-        pushedFilters.left.get.mkString(", ")
+        pushedFilters.swap
+          .getOrElse(throw new NoSuchElementException("The left node doesn't have pushedFilters"))
+          .mkString(", ")
       } else {
-        sHolder.pushedPredicates = pushedFilters.right.get
-        pushedFilters.right.get.mkString(", ")
+        sHolder.pushedPredicates = pushedFilters
+          .getOrElse(throw new NoSuchElementException("The right node doesn't have pushedFilters"))
+        sHolder.pushedPredicates.mkString(", ")
       }
 
       val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
@@ -192,11 +196,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val groupOutputMap = normalizedGroupingExpr.zipWithIndex.map { case (e, i) =>
         AttributeReference(s"group_col_$i", e.dataType)() -> e
       }
-      val groupOutput = groupOutputMap.unzip._1
+      val groupOutput = groupOutputMap.map(_._1)
       val aggOutputMap = finalAggExprs.zipWithIndex.map { case (e, i) =>
         AttributeReference(s"agg_func_$i", e.dataType)() -> e
       }
-      val aggOutput = aggOutputMap.unzip._1
+      val aggOutput = aggOutputMap.map(_._1)
       val newOutput = groupOutput ++ aggOutput
       val groupByExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
       normalizedGroupingExpr.zipWithIndex.foreach { case (expr, ordinal) =>
@@ -330,7 +334,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // DataSourceV2ScanRelation output columns. All the other columns are not
       // included in the output.
       val scan = holder.builder.build()
-      val realOutput = scan.readSchema().toAttributes
+      val realOutput = toAttributes(scan.readSchema())
       assert(realOutput.length == holder.output.length,
         "The data source returns unexpected number of columns")
       val wrappedScan = getWrappedScan(scan, holder)
@@ -345,13 +349,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def pruneColumns(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case PhysicalOperation(project, filters, sHolder: ScanBuilderHolder) =>
+    case ScanOperation(project, filtersStayUp, filtersPushDown, sHolder: ScanBuilderHolder) =>
       // column pruning
       val normalizedProjects = DataSourceStrategy
         .normalizeExprs(project, sHolder.output)
         .asInstanceOf[Seq[NamedExpression]]
+      val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
+      val normalizedFilters = DataSourceStrategy.normalizeExprs(allFilters, sHolder.output)
       val (scan, output) = PushDownUtils.pruneColumns(
-        sHolder.builder, sHolder.relation, normalizedProjects, filters)
+        sHolder.builder, sHolder.relation, normalizedProjects, normalizedFilters)
 
       logInfo(
         s"""
@@ -368,11 +374,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         case projectionOverSchema(newExpr) => newExpr
       }
 
-      val filterCondition = filters.reduceLeftOption(And)
-      val newFilterCondition = filterCondition.map(projectionFunc)
-      val withFilter = newFilterCondition.map(Filter(_, scanRelation)).getOrElse(scanRelation)
+      val finalFilters = normalizedFilters.map(projectionFunc)
+      // bottom-most filters are put in the left of the list.
+      val withFilter = finalFilters.foldLeft[LogicalPlan](scanRelation)((plan, cond) => {
+        Filter(cond, plan)
+      })
 
-      val withProjection = if (withFilter.output != project) {
+      if (withFilter.output != project) {
         val newProjects = normalizedProjects
           .map(projectionFunc)
           .asInstanceOf[Seq[NamedExpression]]
@@ -380,12 +388,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         withFilter
       }
-      withProjection
   }
 
   def pushDownSample(plan: LogicalPlan): LogicalPlan = plan.transform {
     case sample: Sample => sample.child match {
-      case PhysicalOperation(_, filter, sHolder: ScanBuilderHolder) if filter.isEmpty =>
+      case PhysicalOperation(_, Nil, sHolder: ScanBuilderHolder) =>
         val tableSample = TableSampleInfo(
           sample.lowerBound,
           sample.upperBound,
@@ -404,7 +411,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def pushDownLimit(plan: LogicalPlan, limit: Int): (LogicalPlan, Boolean) = plan match {
-    case operation @ PhysicalOperation(_, filter, sHolder: ScanBuilderHolder) if filter.isEmpty =>
+    case operation @ PhysicalOperation(_, Nil, sHolder: ScanBuilderHolder) =>
       val (isPushed, isPartiallyPushed) = PushDownUtils.pushLimit(sHolder.builder, limit)
       if (isPushed) {
         sHolder.pushedLimit = Some(limit)
@@ -451,6 +458,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     case other => (other, false)
   }
 
+  @scala.annotation.tailrec
   private def pushDownOffset(
       plan: LogicalPlan,
       offset: Int): Boolean = plan match {

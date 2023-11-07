@@ -72,10 +72,11 @@ trait ShowTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   test("SHOW TBLPROPERTIES WITH TABLE NOT EXIST") {
-    val message = intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       sql("SHOW TBLPROPERTIES BADTABLE")
-    }.getMessage
-    assert(message.contains("Table or view not found: BADTABLE"))
+    }
+    checkErrorTableNotFound(e, "`BADTABLE`",
+      ExpectedContext("BADTABLE", 19, 18 + "BADTABLE".length))
   }
 
   test("SHOW TBLPROPERTIES(KEY) KEY NOT FOUND") {

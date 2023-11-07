@@ -6,13 +6,13 @@ WholeStageCodegen (7)
           WholeStageCodegen (6)
             Project [i_item_desc,i_category,i_class,i_current_price,itemrevenue,_w0,_we0,i_item_id]
               InputAdapter
-                Window [_w1,i_class]
+                Window [_w0,i_class]
                   WholeStageCodegen (5)
                     Sort [i_class]
                       InputAdapter
                         Exchange [i_class] #2
                           WholeStageCodegen (4)
-                            HashAggregate [i_item_id,i_item_desc,i_category,i_class,i_current_price,sum] [sum(UnscaledValue(ss_ext_sales_price)),itemrevenue,_w0,_w1,sum]
+                            HashAggregate [i_item_id,i_item_desc,i_category,i_class,i_current_price,sum] [sum(UnscaledValue(ss_ext_sales_price)),itemrevenue,_w0,sum]
                               InputAdapter
                                 Exchange [i_item_id,i_item_desc,i_category,i_class,i_current_price] #3
                                   WholeStageCodegen (3)

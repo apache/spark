@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
@@ -43,6 +44,15 @@ case class InMemoryTableScanExec(
       case _ =>
         super.nodeName
     }
+  }
+
+  override def simpleStringWithNodeId(): String = {
+    val columnarInfo = if (relation.cacheBuilder.supportsColumnarInput || supportsColumnar) {
+      s" (columnarIn=${relation.cacheBuilder.supportsColumnarInput}, columnarOut=$supportsColumnar)"
+    } else {
+      ""
+    }
+    super.simpleStringWithNodeId() + columnarInfo
   }
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
@@ -111,10 +121,15 @@ case class InMemoryTableScanExec(
 
   override def output: Seq[Attribute] = attributes
 
+  private def cachedPlan = relation.cachedPlan match {
+    case adaptive: AdaptiveSparkPlanExec if adaptive.isFinalPlan => adaptive.executedPlan
+    case other => other
+  }
+
   private def updateAttribute(expr: Expression): Expression = {
     // attributes can be pruned so using relation's output.
     // E.g., relation.output is [id, item] but this scan's output can be [item] only.
-    val attrMap = AttributeMap(relation.cachedPlan.output.zip(relation.output))
+    val attrMap = AttributeMap(cachedPlan.output.zip(relation.output))
     expr.transform {
       case attr: Attribute => attrMap.getOrElse(attr, attr)
     }
@@ -123,7 +138,7 @@ case class InMemoryTableScanExec(
   // The cached version does not change the outputPartitioning of the original SparkPlan.
   // But the cached version could alias output, so we need to replace output.
   override def outputPartitioning: Partitioning = {
-    relation.cachedPlan.outputPartitioning match {
+    cachedPlan.outputPartitioning match {
       case e: Expression => updateAttribute(e).asInstanceOf[Partitioning]
       case other => other
     }
@@ -132,7 +147,7 @@ case class InMemoryTableScanExec(
   // The cached version does not change the outputOrdering of the original SparkPlan.
   // But the cached version could alias output, so we need to replace output.
   override def outputOrdering: Seq[SortOrder] =
-    relation.cachedPlan.outputOrdering.map(updateAttribute(_).asInstanceOf[SortOrder])
+    cachedPlan.outputOrdering.map(updateAttribute(_).asInstanceOf[SortOrder])
 
   lazy val enableAccumulatorsForTest: Boolean = conf.inMemoryTableScanStatisticsEnabled
 
@@ -159,5 +174,15 @@ case class InMemoryTableScanExec(
 
   protected override def doExecuteColumnar(): RDD[ColumnarBatch] = {
     columnarInputRDD
+  }
+
+  def isMaterialized: Boolean = relation.cacheBuilder.isCachedColumnBuffersLoaded
+
+  /**
+   * This method is only used by AQE which executes the actually cached RDD that without filter and
+   * serialization of row/columnar.
+   */
+  def baseCacheRDD(): RDD[CachedBatch] = {
+    relation.cacheBuilder.cachedColumnBuffers
   }
 }

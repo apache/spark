@@ -46,17 +46,17 @@ class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with 
       val df = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
       df.createTempView("v")
 
-      val e = intercept[ParseException] {
-        sql(
-          """
-            |SELECT TRANSFORM (a)
-            |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-            |USING 'cat' AS (a)
-            |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-            |FROM v
-          """.stripMargin)
-      }.getMessage
-      assert(e.contains("TRANSFORM with SERDE is only supported in hive mode."))
+      val sqlText =
+        """SELECT TRANSFORM (a)
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+          |USING 'cat' AS (a)
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+          |FROM v""".stripMargin
+      checkError(
+        exception = intercept[ParseException](sql(sqlText)),
+        errorClass = "UNSUPPORTED_FEATURE.TRANSFORM_NON_HIVE",
+        parameters = Map.empty,
+        context = ExpectedContext(sqlText, 0, 185))
     }
   }
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import collection.mutable.ArrayBuffer
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.DeveloperApi
 

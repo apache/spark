@@ -28,10 +28,11 @@ import scala.util.control.NonFatal
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.matchers.must.Matchers
 
+import org.apache.spark.internal.config.RDD_CACHE_VISIBILITY_TRACKING_ENABLED
 import org.apache.spark.scheduler._
 import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, AccumulatorV2, LongAccumulator}
-
 
 class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContext {
   import AccumulatorSuite.createLongAccum
@@ -89,6 +90,39 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(AccumulatorContext.get(100000).isEmpty)
   }
 
+  test("SPARK-41497: accumulators should be reported in the case of task retry with rdd cache") {
+    // Set up a cluster with 2 executors
+    val conf = new SparkConf()
+      .set(RDD_CACHE_VISIBILITY_TRACKING_ENABLED, true)
+      .setMaster("local-cluster[2, 1, 1024]")
+      .setAppName("test")
+    sc = new SparkContext(conf)
+    val myAcc = sc.longAccumulator("myAcc")
+    // Initiate a rdd with only one partition so there's only one task and specify the storage level
+    // with MEMORY_ONLY_2 so that the rdd result will be cached on both two executors.
+    val rdd1 = sc.parallelize(0 until 10, 1).mapPartitions { iter =>
+      myAcc.add(100)
+      iter.map(x => x + 1)
+    }.persist(StorageLevel.MEMORY_ONLY_2)
+
+    val rdd2 = rdd1.filter { x =>
+      val context = TaskContext.get()
+      if (context.attemptNumber() == 0) {
+        throw new RuntimeException("fail the task.")
+      }
+      x >= 0
+    }
+
+    // This will pass since the second task attempt will succeed
+    assert(rdd2.count() === 10)
+    // Even though the first task attempt had cached the data, the accumulator should be reported
+    // by the second attempt.
+    assert(myAcc.value === 100)
+
+    // Should load cache and not update the accumulators since cache is visible now.
+    assert(rdd2.count() === 10)
+    assert(myAcc.value === 100)
+  }
 }
 
 private[spark] object AccumulatorSuite {

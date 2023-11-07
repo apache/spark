@@ -1,0 +1,16 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "limit": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "limit": 10
+  }
+}

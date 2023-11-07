@@ -442,7 +442,7 @@ class UISuite extends SparkFunSuite {
       sparkUI.bind()
       assert(TestUtils.httpResponseMessage(new URL(sparkUI.webUrl + "/jobs"))
         === "Spark is starting up. Please wait a while until it's ready.")
-      sparkUI.attachAllHandler()
+      sparkUI.attachAllHandlers()
       assert(TestUtils.httpResponseMessage(new URL(sparkUI.webUrl + "/jobs")).contains(sc.appName))
       sparkUI.stop()
     }

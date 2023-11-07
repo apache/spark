@@ -43,7 +43,7 @@ private[spark] class KubernetesExecutorBuilder {
 
     val userFeatures = conf.get(Config.KUBERNETES_EXECUTOR_POD_FEATURE_STEPS)
       .map { className =>
-        val feature = Utils.classForName[Any](className).newInstance()
+        val feature = Utils.classForName[Any](className).getConstructor().newInstance()
         val initializedFeature = feature match {
           // Since 3.3, allow user to implement feature with KubernetesExecutorConf
           case e: KubernetesExecutorCustomFeatureConfigStep =>
@@ -71,6 +71,7 @@ private[spark] class KubernetesExecutorBuilder {
       new MountSecretsFeatureStep(conf),
       new EnvSecretsFeatureStep(conf),
       new MountVolumesFeatureStep(conf),
+      new HadoopConfExecutorFeatureStep(conf),
       new LocalDirsFeatureStep(conf)) ++ userFeatures
 
     val spec = KubernetesExecutorSpec(

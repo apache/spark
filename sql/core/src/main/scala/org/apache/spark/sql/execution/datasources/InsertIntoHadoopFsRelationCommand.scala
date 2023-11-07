@@ -82,7 +82,6 @@ case class InsertIntoHadoopFsRelationCommand(
     // Most formats don't do well with duplicate columns, so lets not allow that
     SchemaUtils.checkColumnNameDuplication(
       outputColumnNames,
-      s"when inserting into $outputPath",
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(options)

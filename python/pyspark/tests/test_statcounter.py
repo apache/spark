@@ -14,9 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import math
+
 from pyspark.statcounter import StatCounter
 from pyspark.testing.utils import ReusedPySparkTestCase
-import math
 
 
 class StatCounterTests(ReusedPySparkTestCase):
@@ -122,7 +123,7 @@ if __name__ == "__main__":
     from pyspark.tests.test_statcounter import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

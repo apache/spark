@@ -296,6 +296,8 @@ private[spark] object JettyUtils extends Logging {
         connector.setPort(port)
         connector.setHost(hostName)
         connector.setReuseAddress(!Utils.isWindows)
+         // spark-45248: set the idle timeout to prevent slow DoS
+        connector.setIdleTimeout(8000)
 
         // Currently we only use "SelectChannelConnector"
         // Limit the max acceptor number to 8 so that we don't waste a lot of threads
@@ -590,11 +592,6 @@ private class ProxyRedirectHandler(_proxyUri: String) extends HandlerWrapper {
     override def sendRedirect(location: String): Unit = {
       val newTarget = if (location != null) {
         val target = new URI(location)
-        val path = if (target.getPath().startsWith("/")) {
-          target.getPath()
-        } else {
-          req.getRequestURI().stripSuffix("/") + "/" + target.getPath()
-        }
         // The target path should already be encoded, so don't re-encode it, just the
         // proxy address part.
         val proxyBase = UIUtils.uiRoot(req)

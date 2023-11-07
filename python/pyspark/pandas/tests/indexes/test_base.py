@@ -17,13 +17,13 @@
 
 import inspect
 import unittest
-from distutils.version import LooseVersion
 from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.missing.indexes import (
     MissingPandasLikeDatetimeIndex,
@@ -34,7 +34,7 @@ from pyspark.pandas.missing.indexes import (
 from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils, SPARK_CONF_ARROW_ENABLED
 
 
-class IndexesTest(ComparisonTestBase, TestUtils):
+class IndexesTestsMixin:
     @property
     def pdf(self):
         return pd.DataFrame(
@@ -59,15 +59,15 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         ]:
             psdf = ps.from_pandas(pdf)
             self.assert_eq(psdf.index, pdf.index)
-            self.assert_eq(type(psdf.index).__name__, type(pdf.index).__name__)
+            self.assert_eq(psdf.index.dtype, pdf.index.dtype)
 
         self.assert_eq(ps.Index([])._summary(), "Index: 0 entries")
-        with self.assertRaisesRegexp(ValueError, "The truth value of a Int64Index is ambiguous."):
+        with self.assertRaisesRegexp(ValueError, "The truth value of a Index is ambiguous."):
             bool(ps.Index([1]))
         with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
-            ps.Int64Index([1, 2, 3], name=[(1, 2, 3)])
+            ps.Index([1, 2, 3], name=[(1, 2, 3)])
         with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
-            ps.Float64Index([1.0, 2.0, 3.0], name=[(1, 2, 3)])
+            ps.Index([1.0, 2.0, 3.0], name=[(1, 2, 3)])
 
     def test_index_from_series(self):
         pser = pd.Series([1, 2, 3], name="a", index=[10, 20, 30])
@@ -77,12 +77,8 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         self.assert_eq(ps.Index(psser, dtype="float"), pd.Index(pser, dtype="float"))
         self.assert_eq(ps.Index(psser, name="x"), pd.Index(pser, name="x"))
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
-            self.assert_eq(ps.Int64Index(psser), pd.Int64Index(pser))
-            self.assert_eq(ps.Float64Index(psser), pd.Float64Index(pser))
-        else:
-            self.assert_eq(ps.Int64Index(psser), pd.Int64Index(pser).rename("a"))
-            self.assert_eq(ps.Float64Index(psser), pd.Float64Index(pser).rename("a"))
+        self.assert_eq(ps.Index(psser, dtype="int64"), pd.Index(pser, dtype="int64"))
+        self.assert_eq(ps.Index(psser, dtype="float64"), pd.Index(pser, dtype="float64"))
 
         pser = pd.Series([datetime(2021, 3, 1), datetime(2021, 3, 2)], name="x", index=[10, 20])
         psser = ps.from_pandas(pser)
@@ -99,8 +95,8 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         self.assert_eq(ps.Index(psidx, name="x"), pd.Index(pidx, name="x"))
         self.assert_eq(ps.Index(psidx, copy=True), pd.Index(pidx, copy=True))
 
-        self.assert_eq(ps.Int64Index(psidx), pd.Int64Index(pidx))
-        self.assert_eq(ps.Float64Index(psidx), pd.Float64Index(pidx))
+        self.assert_eq(ps.Index(psidx, dtype="int64"), pd.Index(pidx, dtype="int64"))
+        self.assert_eq(ps.Index(psidx, dtype="float64"), pd.Index(pidx, dtype="float64"))
 
         pidx = pd.DatetimeIndex(["2021-03-01", "2021-03-02"])
         psidx = ps.from_pandas(pidx)
@@ -284,8 +280,12 @@ class IndexesTest(ComparisonTestBase, TestUtils):
             psidx.name = ["renamed"]
         with self.assertRaisesRegex(TypeError, expected_error_message):
             psidx.name = ["0", "1"]
-        with self.assertRaisesRegex(TypeError, expected_error_message):
-            ps.Index([(1, 2), (3, 4)], names=["a", ["b"]])
+        # Specifying `names` when creating Index is no longer supported from pandas 2.0.0.
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            pass
+        else:
+            with self.assertRaisesRegex(TypeError, expected_error_message):
+                ps.Index([(1, 2), (3, 4)], names=["a", ["b"]])
 
     def test_multi_index_names(self):
         arrays = [[1, 1, 2, 2], ["red", "blue", "red", "blue"]]
@@ -455,10 +455,17 @@ class IndexesTest(ComparisonTestBase, TestUtils):
             (psidx1 + 1).symmetric_difference(psidx2).sort_values(),
             (pidx1 + 1).symmetric_difference(pidx2).sort_values(),
         )
-        self.assert_eq(
-            (psidx1 ^ psidx2).sort_values(),
-            (pidx1 ^ pidx2).sort_values(),
-        )
+        # No longer supported from pandas 2.0.0.
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            self.assert_eq(
+                (psidx1 ^ psidx2).sort_values(),
+                ps.Index([1, 5], dtype="int64"),
+            )
+        else:
+            self.assert_eq(
+                (psidx1 ^ psidx2).sort_values(),
+                (pidx1 ^ pidx2).sort_values(),
+            )
         self.assert_eq(
             psidx1.symmetric_difference(psidx2, result_name="result").sort_values(),
             pidx1.symmetric_difference(pidx2, result_name="result").sort_values(),
@@ -1064,94 +1071,6 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         with self.assertRaisesRegex(IndexError, "index -4 is out of bounds for axis 0 with size 3"):
             psidx.delete(-4)
 
-    def test_append(self):
-        # Index
-        pidx = pd.Index(range(10000))
-        psidx = ps.from_pandas(pidx)
-
-        self.assert_eq(pidx.append(pidx), psidx.append(psidx))
-
-        # Index with name
-        pidx1 = pd.Index(range(10000), name="a")
-        pidx2 = pd.Index(range(10000), name="b")
-        psidx1 = ps.from_pandas(pidx1)
-        psidx2 = ps.from_pandas(pidx2)
-
-        self.assert_eq(pidx1.append(pidx2), psidx1.append(psidx2))
-
-        self.assert_eq(pidx2.append(pidx1), psidx2.append(psidx1))
-
-        # Index from DataFrame
-        pdf1 = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, index=["a", "b", "c"])
-        pdf2 = pd.DataFrame({"a": [7, 8, 9], "d": [10, 11, None]}, index=["x", "y", "z"])
-        psdf1 = ps.from_pandas(pdf1)
-        psdf2 = ps.from_pandas(pdf2)
-
-        pidx1 = pdf1.set_index("a").index
-        pidx2 = pdf2.set_index("d").index
-        psidx1 = psdf1.set_index("a").index
-        psidx2 = psdf2.set_index("d").index
-
-        self.assert_eq(pidx1.append(pidx2), psidx1.append(psidx2))
-
-        self.assert_eq(pidx2.append(pidx1), psidx2.append(psidx1))
-
-        # Index from DataFrame with MultiIndex columns
-        pdf1 = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
-        pdf2 = pd.DataFrame({"a": [7, 8, 9], "d": [10, 11, 12]})
-        pdf1.columns = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y")])
-        pdf2.columns = pd.MultiIndex.from_tuples([("a", "x"), ("d", "y")])
-        psdf1 = ps.from_pandas(pdf1)
-        psdf2 = ps.from_pandas(pdf2)
-
-        pidx1 = pdf1.set_index(("a", "x")).index
-        pidx2 = pdf2.set_index(("d", "y")).index
-        psidx1 = psdf1.set_index(("a", "x")).index
-        psidx2 = psdf2.set_index(("d", "y")).index
-
-        self.assert_eq(pidx1.append(pidx2), psidx1.append(psidx2))
-
-        self.assert_eq(pidx2.append(pidx1), psidx2.append(psidx1))
-
-        # MultiIndex
-        pmidx = pd.MultiIndex.from_tuples([("a", "x", 1), ("b", "y", 2), ("c", "z", 3)])
-        psmidx = ps.from_pandas(pmidx)
-
-        self.assert_eq(pmidx.append(pmidx), psmidx.append(psmidx))
-
-        # MultiIndex with names
-        pmidx1 = pd.MultiIndex.from_tuples(
-            [("a", "x", 1), ("b", "y", 2), ("c", "z", 3)], names=["x", "y", "z"]
-        )
-        pmidx2 = pd.MultiIndex.from_tuples(
-            [("a", "x", 1), ("b", "y", 2), ("c", "z", 3)], names=["p", "q", "r"]
-        )
-        psmidx1 = ps.from_pandas(pmidx1)
-        psmidx2 = ps.from_pandas(pmidx2)
-
-        self.assert_eq(pmidx1.append(pmidx2), psmidx1.append(psmidx2))
-
-        self.assert_eq(pmidx2.append(pmidx1), psmidx2.append(psmidx1))
-
-        self.assert_eq(pmidx1.append(pmidx2).names, psmidx1.append(psmidx2).names)
-
-        self.assert_eq(pmidx1.append(pmidx2).names, psmidx1.append(psmidx2).names)
-
-        # Index & MultiIndex is currently not supported
-        expected_error_message = r"append\(\) between Index & MultiIndex is currently not supported"
-        with self.assertRaisesRegex(NotImplementedError, expected_error_message):
-            psidx.append(psmidx)
-        with self.assertRaisesRegex(NotImplementedError, expected_error_message):
-            psmidx.append(psidx)
-
-        # MultiIndexs with different levels is currently not supported
-        psmidx3 = ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
-        expected_error_message = (
-            r"append\(\) between MultiIndexs with different levels is currently not supported"
-        )
-        with self.assertRaisesRegex(NotImplementedError, expected_error_message):
-            psmidx.append(psmidx3)
-
     def test_argmin(self):
         pidx = pd.Index([100, 50, 10, 20, 30, 60, 0, 50, 0, 100, 100, 100, 20, 0, 0])
         psidx = ps.from_pandas(pidx)
@@ -1211,180 +1130,6 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         psidx = ps.from_pandas(pidx)
 
         self.assert_eq(pidx.max(), psidx.max())
-
-    def test_monotonic(self):
-        # test monotonic_increasing & monotonic_decreasing for MultiIndex.
-        # Since the Behavior for null value was changed in pandas >= 1.0.0,
-        # several cases are tested differently.
-        datas = []
-
-        # increasing / decreasing ordered each index level with string
-        datas.append([("w", "a"), ("x", "b"), ("y", "c"), ("z", "d")])
-        datas.append([("w", "d"), ("x", "c"), ("y", "b"), ("z", "a")])
-        datas.append([("z", "a"), ("y", "b"), ("x", "c"), ("w", "d")])
-        datas.append([("z", "d"), ("y", "c"), ("x", "b"), ("w", "a")])
-        # mixed order each index level with string
-        datas.append([("z", "a"), ("x", "b"), ("y", "c"), ("w", "d")])
-        datas.append([("z", "a"), ("y", "c"), ("x", "b"), ("w", "d")])
-
-        # increasing / decreasing ordered each index level with integer
-        datas.append([(1, 100), (2, 200), (3, 300), (4, 400), (5, 500)])
-        datas.append([(1, 500), (2, 400), (3, 300), (4, 200), (5, 100)])
-        datas.append([(5, 100), (4, 200), (3, 300), (2, 400), (1, 500)])
-        datas.append([(5, 500), (4, 400), (3, 300), (2, 200), (1, 100)])
-        # mixed order each index level with integer
-        datas.append([(1, 500), (3, 400), (2, 300), (4, 200), (5, 100)])
-        datas.append([(1, 100), (2, 300), (3, 200), (4, 400), (5, 500)])
-
-        # integer / negative mixed tests
-        datas.append([("a", -500), ("b", -400), ("c", -300), ("d", -200), ("e", -100)])
-        datas.append([("e", -500), ("d", -400), ("c", -300), ("b", -200), ("a", -100)])
-        datas.append([(-5, "a"), (-4, "b"), (-3, "c"), (-2, "d"), (-1, "e")])
-        datas.append([(-5, "e"), (-4, "d"), (-3, "c"), (-2, "b"), (-1, "a")])
-        datas.append([(-5, "e"), (-3, "d"), (-2, "c"), (-4, "b"), (-1, "a")])
-        datas.append([(-5, "e"), (-4, "c"), (-3, "b"), (-2, "d"), (-1, "a")])
-
-        # boolean type tests
-        datas.append([(True, True), (True, True)])
-        datas.append([(True, True), (True, False)])
-        datas.append([(True, False), (True, True)])
-        datas.append([(False, True), (False, True)])
-        datas.append([(False, True), (False, False)])
-        datas.append([(False, False), (False, True)])
-        datas.append([(True, True), (False, True)])
-        datas.append([(True, True), (False, False)])
-        datas.append([(True, False), (False, True)])
-        datas.append([(False, True), (True, True)])
-        datas.append([(False, True), (True, False)])
-        datas.append([(False, False), (True, True)])
-
-        # duplicated index value tests
-        datas.append([("x", "d"), ("y", "c"), ("y", "b"), ("z", "a")])
-        datas.append([("x", "d"), ("y", "b"), ("y", "c"), ("z", "a")])
-
-        # more depth tests
-        datas.append([("x", "d", "o"), ("y", "c", "p"), ("y", "c", "q"), ("z", "a", "r")])
-        datas.append([("x", "d", "o"), ("y", "c", "q"), ("y", "c", "p"), ("z", "a", "r")])
-
-        # None type tests (None type is treated as False from pandas >= 1.1.4)
-        # Refer https://github.com/pandas-dev/pandas/issues/37220
-        datas.append([(1, 100), (2, 200), (None, 300), (4, 400), (5, 500)])
-        datas.append([(1, 100), (2, 200), (None, None), (4, 400), (5, 500)])
-        datas.append([("x", "d"), ("y", "c"), ("y", None), ("z", "a")])
-        datas.append([("x", "d"), ("y", "c"), ("y", "b"), (None, "a")])
-        datas.append([("x", "d"), ("y", "b"), ("y", "c"), (None, "a")])
-        datas.append([("x", "d", "o"), ("y", "c", "p"), ("y", "c", None), ("z", "a", "r")])
-
-        for data in datas:
-            with self.subTest(data=data):
-                pmidx = pd.MultiIndex.from_tuples(data)
-                psmidx = ps.from_pandas(pmidx)
-                self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-                self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
-
-        # datas below return different result depends on pandas version.
-        # Because the behavior of handling null values is changed in pandas >= 1.1.4.
-        # Since Koalas follows latest pandas, all of them should return `False`.
-        datas = []
-        datas.append([(1, 100), (2, 200), (3, None), (4, 400), (5, 500)])
-        datas.append([(1, None), (2, 200), (3, 300), (4, 400), (5, 500)])
-        datas.append([(1, 100), (2, 200), (3, 300), (4, 400), (5, None)])
-        datas.append([(False, None), (True, True)])
-        datas.append([(None, False), (True, True)])
-        datas.append([(False, False), (True, None)])
-        datas.append([(False, False), (None, True)])
-        datas.append([("x", "d"), ("y", None), ("y", None), ("z", "a")])
-        datas.append([("x", "d", "o"), ("y", "c", None), ("y", "c", None), ("z", "a", "r")])
-        datas.append([(1, 100), (2, 200), (3, 300), (4, 400), (None, 500)])
-        datas.append([(1, 100), (2, 200), (3, 300), (4, 400), (None, None)])
-        datas.append([(5, 100), (4, 200), (3, None), (2, 400), (1, 500)])
-        datas.append([(5, None), (4, 200), (3, 300), (2, 400), (1, 500)])
-        datas.append([(5, 100), (4, 200), (3, None), (2, 400), (1, 500)])
-        datas.append([(5, 100), (4, 200), (3, 300), (2, 400), (1, None)])
-        datas.append([(True, None), (True, True)])
-        datas.append([(None, True), (True, True)])
-        datas.append([(True, True), (None, True)])
-        datas.append([(True, True), (True, None)])
-        datas.append([(None, 100), (2, 200), (3, 300), (4, 400), (5, 500)])
-        datas.append([(None, None), (2, 200), (3, 300), (4, 400), (5, 500)])
-        datas.append([("x", "d"), ("y", None), ("y", "c"), ("z", "a")])
-        datas.append([("x", "d", "o"), ("y", "c", None), ("y", "c", "q"), ("z", "a", "r")])
-
-        for data in datas:
-            with self.subTest(data=data):
-                pmidx = pd.MultiIndex.from_tuples(data)
-                psmidx = ps.from_pandas(pmidx)
-                if LooseVersion(pd.__version__) < LooseVersion("1.1.4"):
-                    self.assert_eq(psmidx.is_monotonic_increasing, False)
-                    self.assert_eq(psmidx.is_monotonic_decreasing, False)
-                else:
-                    self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-                    self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
-
-        # The datas below are tested another way since they cannot be an arguments for
-        # `MultiIndex.from_tuples` in pandas >= 1.1.0.
-        # Refer https://github.com/databricks/koalas/pull/1688#issuecomment-667156560 for detail.
-        if LooseVersion(pd.__version__) < LooseVersion("1.1.0"):
-            pmidx = pd.MultiIndex.from_tuples(
-                [(-5, None), (-4, None), (-3, None), (-2, None), (-1, None)]
-            )
-            psmidx = ps.from_pandas(pmidx)
-            self.assert_eq(psmidx.is_monotonic_increasing, False)
-            self.assert_eq(psmidx.is_monotonic_decreasing, False)
-
-            pmidx = pd.MultiIndex.from_tuples(
-                [(None, "e"), (None, "c"), (None, "b"), (None, "d"), (None, "a")]
-            )
-            psmidx = ps.from_pandas(pmidx)
-            self.assert_eq(psmidx.is_monotonic_increasing, False)
-            self.assert_eq(psmidx.is_monotonic_decreasing, False)
-
-            pmidx = pd.MultiIndex.from_tuples(
-                [(None, None), (None, None), (None, None), (None, None), (None, None)]
-            )
-            psmidx = ps.from_pandas(pmidx)
-            self.assert_eq(psmidx.is_monotonic_increasing, False)
-            self.assert_eq(psmidx.is_monotonic_decreasing, False)
-
-            pmidx = pd.MultiIndex.from_tuples([(None, None)])
-            psmidx = ps.from_pandas(pmidx)
-            self.assert_eq(psmidx.is_monotonic_increasing, False)
-            self.assert_eq(psmidx.is_monotonic_decreasing, False)
-
-        else:
-            # For [(-5, None), (-4, None), (-3, None), (-2, None), (-1, None)]
-            psdf = ps.DataFrame({"a": [-5, -4, -3, -2, -1], "b": [1, 1, 1, 1, 1]})
-            psdf["b"] = None
-            psmidx = psdf.set_index(["a", "b"]).index
-            pmidx = psmidx._to_pandas()
-            self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-            self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
-
-            # For [(None, "e"), (None, "c"), (None, "b"), (None, "d"), (None, "a")]
-            psdf = ps.DataFrame({"a": [1, 1, 1, 1, 1], "b": ["e", "c", "b", "d", "a"]})
-            psdf["a"] = None
-            psmidx = psdf.set_index(["a", "b"]).index
-            pmidx = psmidx._to_pandas()
-            self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-            self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
-
-            # For [(None, None), (None, None), (None, None), (None, None), (None, None)]
-            psdf = ps.DataFrame({"a": [1, 1, 1, 1, 1], "b": [1, 1, 1, 1, 1]})
-            psdf["a"] = None
-            psdf["b"] = None
-            psmidx = psdf.set_index(["a", "b"]).index
-            pmidx = psmidx._to_pandas()
-            self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-            self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
-
-            # For [(None, None)]
-            psdf = ps.DataFrame({"a": [1], "b": [1]})
-            psdf["a"] = None
-            psdf["b"] = None
-            psmidx = psdf.set_index(["a", "b"]).index
-            pmidx = psmidx._to_pandas()
-            self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-            self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
 
     def test_difference(self):
         # Index
@@ -1550,172 +1295,6 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         psmidx = ps.MultiIndex.from_tuples([("a", "a"), ("a", "b"), ("a", "c")])
         self.assertRaises(NotImplementedError, lambda: psmidx.asof(("a", "b")))
 
-    def test_union(self):
-        # Index
-        pidx1 = pd.Index([1, 2, 3, 4])
-        pidx2 = pd.Index([3, 4, 5, 6])
-        pidx3 = pd.Index([7.0, 8.0, 9.0, 10.0])
-        psidx1 = ps.from_pandas(pidx1)
-        psidx2 = ps.from_pandas(pidx2)
-        psidx3 = ps.from_pandas(pidx3)
-
-        self.assert_eq(psidx1.union(psidx2), pidx1.union(pidx2))
-        self.assert_eq(psidx2.union(psidx1), pidx2.union(pidx1))
-        self.assert_eq(psidx1.union(psidx3), pidx1.union(pidx3))
-        # Deprecated case, but adding to track if pandas stop supporting union
-        # as a set operation. It should work fine until stop supporting anyway.
-        self.assert_eq(pidx1 | pidx2, psidx1 | psidx2)
-
-        self.assert_eq(psidx1.union([3, 4, 5, 6]), pidx1.union([3, 4, 5, 6]), almost=True)
-        self.assert_eq(psidx2.union([1, 2, 3, 4]), pidx2.union([1, 2, 3, 4]), almost=True)
-        self.assert_eq(
-            psidx1.union(ps.Series([3, 4, 5, 6])), pidx1.union(pd.Series([3, 4, 5, 6])), almost=True
-        )
-        self.assert_eq(
-            psidx2.union(ps.Series([1, 2, 3, 4])), pidx2.union(pd.Series([1, 2, 3, 4])), almost=True
-        )
-
-        # Testing if the result is correct after sort=False.
-        self.assert_eq(
-            psidx1.union(psidx2, sort=False).sort_values(),
-            pidx1.union(pidx2, sort=False).sort_values(),
-        )
-        self.assert_eq(
-            psidx2.union(psidx1, sort=False).sort_values(),
-            pidx2.union(pidx1, sort=False).sort_values(),
-        )
-        self.assert_eq(
-            psidx1.union([3, 4, 5, 6], sort=False).sort_values(),
-            pidx1.union([3, 4, 5, 6], sort=False).sort_values(),
-            almost=True,
-        )
-        self.assert_eq(
-            psidx2.union([1, 2, 3, 4], sort=False).sort_values(),
-            pidx2.union([1, 2, 3, 4], sort=False).sort_values(),
-            almost=True,
-        )
-        self.assert_eq(
-            psidx1.union(ps.Series([3, 4, 5, 6]), sort=False).sort_values(),
-            pidx1.union(pd.Series([3, 4, 5, 6]), sort=False).sort_values(),
-            almost=True,
-        )
-        self.assert_eq(
-            psidx2.union(ps.Series([1, 2, 3, 4]), sort=False).sort_values(),
-            pidx2.union(pd.Series([1, 2, 3, 4]), sort=False).sort_values(),
-            almost=True,
-        )
-
-        pidx1 = pd.Index([1, 2, 3, 4, 3, 4, 3, 4])
-        pidx2 = pd.Index([3, 4, 3, 4, 5, 6])
-        psidx1 = ps.from_pandas(pidx1)
-        psidx2 = ps.from_pandas(pidx2)
-
-        self.assert_eq(psidx1.union(psidx2), pidx1.union(pidx2))
-        self.assert_eq(
-            psidx1.union([3, 4, 3, 3, 5, 6]), pidx1.union([3, 4, 3, 4, 5, 6]), almost=True
-        )
-        self.assert_eq(
-            psidx1.union(ps.Series([3, 4, 3, 3, 5, 6])),
-            pidx1.union(pd.Series([3, 4, 3, 4, 5, 6])),
-            almost=True,
-        )
-
-        # Manually create the expected result here since there is a bug in Index.union
-        # dropping duplicated values in pandas < 1.3.
-        expected = pd.Index([1, 2, 3, 3, 3, 4, 4, 4, 5, 6])
-        self.assert_eq(psidx2.union(psidx1), expected)
-        self.assert_eq(
-            psidx2.union([1, 2, 3, 4, 3, 4, 3, 4]),
-            expected,
-            almost=True,
-        )
-        self.assert_eq(
-            psidx2.union(ps.Series([1, 2, 3, 4, 3, 4, 3, 4])),
-            expected,
-            almost=True,
-        )
-
-        # MultiIndex
-        pmidx1 = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("x", "a"), ("x", "b")])
-        pmidx2 = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("x", "c"), ("x", "d")])
-        pmidx3 = pd.MultiIndex.from_tuples([(1, 1), (1, 2), (1, 3), (1, 4), (1, 3), (1, 4)])
-        pmidx4 = pd.MultiIndex.from_tuples([(1, 3), (1, 4), (1, 5), (1, 6)])
-        psmidx1 = ps.from_pandas(pmidx1)
-        psmidx2 = ps.from_pandas(pmidx2)
-        psmidx3 = ps.from_pandas(pmidx3)
-        psmidx4 = ps.from_pandas(pmidx4)
-
-        # Manually create the expected result here since there is a bug in MultiIndex.union
-        # dropping duplicated values in pandas < 1.3.
-        expected = pd.MultiIndex.from_tuples(
-            [("x", "a"), ("x", "a"), ("x", "b"), ("x", "b"), ("x", "c"), ("x", "d")]
-        )
-        self.assert_eq(psmidx1.union(psmidx2), expected)
-        self.assert_eq(psmidx2.union(psmidx1), expected)
-        self.assert_eq(
-            psmidx1.union([("x", "a"), ("x", "b"), ("x", "c"), ("x", "d")]),
-            expected,
-        )
-        self.assert_eq(
-            psmidx2.union([("x", "a"), ("x", "b"), ("x", "a"), ("x", "b")]),
-            expected,
-        )
-
-        expected = pd.MultiIndex.from_tuples(
-            [(1, 1), (1, 2), (1, 3), (1, 3), (1, 4), (1, 4), (1, 5), (1, 6)]
-        )
-        self.assert_eq(psmidx3.union(psmidx4), expected)
-        self.assert_eq(psmidx4.union(psmidx3), expected)
-        self.assert_eq(
-            psmidx3.union([(1, 3), (1, 4), (1, 5), (1, 6)]),
-            expected,
-        )
-        self.assert_eq(
-            psmidx4.union([(1, 1), (1, 2), (1, 3), (1, 4), (1, 3), (1, 4)]),
-            expected,
-        )
-
-        # Testing if the result is correct after sort=False.
-        # Manually create the expected result here since there is a bug in MultiIndex.union
-        # dropping duplicated values in pandas < 1.3.
-        expected = pd.MultiIndex.from_tuples(
-            [("x", "a"), ("x", "a"), ("x", "b"), ("x", "b"), ("x", "c"), ("x", "d")]
-        )
-        self.assert_eq(psmidx1.union(psmidx2, sort=False).sort_values(), expected)
-        self.assert_eq(psmidx2.union(psmidx1, sort=False).sort_values(), expected)
-        self.assert_eq(
-            psmidx1.union(
-                [("x", "a"), ("x", "b"), ("x", "c"), ("x", "d")], sort=False
-            ).sort_values(),
-            expected,
-        )
-        self.assert_eq(
-            psmidx2.union(
-                [("x", "a"), ("x", "b"), ("x", "a"), ("x", "b")], sort=False
-            ).sort_values(),
-            expected,
-        )
-
-        expected = pd.MultiIndex.from_tuples(
-            [(1, 1), (1, 2), (1, 3), (1, 3), (1, 4), (1, 4), (1, 5), (1, 6)]
-        )
-        self.assert_eq(psmidx3.union(psmidx4, sort=False).sort_values(), expected)
-        self.assert_eq(psmidx4.union(psmidx3, sort=False).sort_values(), expected)
-        self.assert_eq(
-            psmidx3.union([(1, 3), (1, 4), (1, 5), (1, 6)], sort=False).sort_values(), expected
-        )
-        self.assert_eq(
-            psmidx4.union(
-                [(1, 1), (1, 2), (1, 3), (1, 4), (1, 3), (1, 4)], sort=False
-            ).sort_values(),
-            expected,
-        )
-
-        self.assertRaises(NotImplementedError, lambda: psidx1.union(psmidx1))
-        self.assertRaises(TypeError, lambda: psmidx1.union(psidx1))
-        self.assertRaises(TypeError, lambda: psmidx1.union(["x", "a"]))
-        self.assertRaises(ValueError, lambda: psidx1.union(ps.range(2)))
-
     def test_take(self):
         # Index
         pidx = pd.Index([100, 200, 300, 400, 500], name="Koalas")
@@ -1869,170 +1448,6 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         psmidx = ps.Index([("a", 1), ("b", 2)])
         self.assertRaises(NotImplementedError, lambda: psmidx.hasnans())
 
-    def test_intersection(self):
-        pidx = pd.Index([1, 2, 3, 4], name="Koalas")
-        psidx = ps.from_pandas(pidx)
-
-        # other = Index
-        pidx_other = pd.Index([3, 4, 5, 6], name="Koalas")
-        psidx_other = ps.from_pandas(pidx_other)
-        self.assert_eq(pidx.intersection(pidx_other), psidx.intersection(psidx_other).sort_values())
-        self.assert_eq(
-            (pidx + 1).intersection(pidx_other), (psidx + 1).intersection(psidx_other).sort_values()
-        )
-        # Deprecated case, but adding to track if pandas stop supporting intersection
-        # as a set operation. It should work fine until stop supporting anyway.
-        self.assert_eq(pidx & pidx_other, (psidx & psidx_other).sort_values())
-
-        pidx_other_different_name = pd.Index([3, 4, 5, 6], name="Databricks")
-        psidx_other_different_name = ps.from_pandas(pidx_other_different_name)
-        self.assert_eq(
-            pidx.intersection(pidx_other_different_name),
-            psidx.intersection(psidx_other_different_name).sort_values(),
-        )
-        self.assert_eq(
-            (pidx + 1).intersection(pidx_other_different_name),
-            (psidx + 1).intersection(psidx_other_different_name).sort_values(),
-        )
-
-        pidx_other_from_frame = pd.DataFrame({"a": [3, 4, 5, 6]}).set_index("a").index
-        psidx_other_from_frame = ps.from_pandas(pidx_other_from_frame)
-        self.assert_eq(
-            pidx.intersection(pidx_other_from_frame),
-            psidx.intersection(psidx_other_from_frame).sort_values(),
-        )
-        self.assert_eq(
-            (pidx + 1).intersection(pidx_other_from_frame),
-            (psidx + 1).intersection(psidx_other_from_frame).sort_values(),
-        )
-
-        # other = MultiIndex
-        pmidx = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
-        psmidx = ps.from_pandas(pmidx)
-        if LooseVersion(pd.__version__) < LooseVersion("1.2.0"):
-            self.assert_eq(
-                psidx.intersection(psmidx).sort_values(),
-                psidx._psdf.head(0).index.rename(None),
-                almost=True,
-            )
-            self.assert_eq(
-                (psidx + 1).intersection(psmidx).sort_values(),
-                psidx._psdf.head(0).index.rename(None),
-                almost=True,
-            )
-        else:
-            self.assert_eq(
-                pidx.intersection(pmidx), psidx.intersection(psmidx).sort_values(), almost=True
-            )
-            self.assert_eq(
-                (pidx + 1).intersection(pmidx),
-                (psidx + 1).intersection(psmidx).sort_values(),
-                almost=True,
-            )
-
-        # other = Series
-        pser = pd.Series([3, 4, 5, 6])
-        psser = ps.from_pandas(pser)
-        if LooseVersion(pd.__version__) < LooseVersion("1.2.0"):
-            self.assert_eq(psidx.intersection(psser).sort_values(), ps.Index([3, 4], name="Koalas"))
-            self.assert_eq(
-                (psidx + 1).intersection(psser).sort_values(), ps.Index([3, 4, 5], name="Koalas")
-            )
-        else:
-            self.assert_eq(pidx.intersection(pser), psidx.intersection(psser).sort_values())
-            self.assert_eq(
-                (pidx + 1).intersection(pser), (psidx + 1).intersection(psser).sort_values()
-            )
-
-        pser_different_name = pd.Series([3, 4, 5, 6], name="Databricks")
-        psser_different_name = ps.from_pandas(pser_different_name)
-        if LooseVersion(pd.__version__) < LooseVersion("1.2.0"):
-            self.assert_eq(
-                psidx.intersection(psser_different_name).sort_values(),
-                ps.Index([3, 4], name="Koalas"),
-            )
-            self.assert_eq(
-                (psidx + 1).intersection(psser_different_name).sort_values(),
-                ps.Index([3, 4, 5], name="Koalas"),
-            )
-        else:
-            self.assert_eq(
-                pidx.intersection(pser_different_name),
-                psidx.intersection(psser_different_name).sort_values(),
-            )
-            self.assert_eq(
-                (pidx + 1).intersection(pser_different_name),
-                (psidx + 1).intersection(psser_different_name).sort_values(),
-            )
-
-        others = ([3, 4, 5, 6], (3, 4, 5, 6), {3: None, 4: None, 5: None, 6: None})
-        for other in others:
-            if LooseVersion(pd.__version__) < LooseVersion("1.2.0"):
-                self.assert_eq(
-                    psidx.intersection(other).sort_values(), ps.Index([3, 4], name="Koalas")
-                )
-                self.assert_eq(
-                    (psidx + 1).intersection(other).sort_values(),
-                    ps.Index([3, 4, 5], name="Koalas"),
-                )
-            else:
-                self.assert_eq(pidx.intersection(other), psidx.intersection(other).sort_values())
-                self.assert_eq(
-                    (pidx + 1).intersection(other), (psidx + 1).intersection(other).sort_values()
-                )
-
-        # MultiIndex / other = Index
-        self.assert_eq(
-            pmidx.intersection(pidx), psmidx.intersection(psidx).sort_values(), almost=True
-        )
-        self.assert_eq(
-            pmidx.intersection(pidx_other_from_frame),
-            psmidx.intersection(psidx_other_from_frame).sort_values(),
-            almost=True,
-        )
-
-        # MultiIndex / other = MultiIndex
-        pmidx_other = pd.MultiIndex.from_tuples([("c", "z"), ("d", "w")])
-        psmidx_other = ps.from_pandas(pmidx_other)
-        self.assert_eq(
-            pmidx.intersection(pmidx_other), psmidx.intersection(psmidx_other).sort_values()
-        )
-
-        # MultiIndex / other = list
-        other = [("c", "z"), ("d", "w")]
-        self.assert_eq(pmidx.intersection(other), psmidx.intersection(other).sort_values())
-
-        # MultiIndex / other = tuple
-        other = (("c", "z"), ("d", "w"))
-        self.assert_eq(pmidx.intersection(other), psmidx.intersection(other).sort_values())
-
-        # MultiIndex / other = dict
-        other = {("c", "z"): None, ("d", "w"): None}
-        self.assert_eq(pmidx.intersection(other), psmidx.intersection(other).sort_values())
-
-        # MultiIndex with different names.
-        pmidx1 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")], names=["X", "Y"])
-        pmidx2 = pd.MultiIndex.from_tuples([("c", "z"), ("d", "w")], names=["A", "B"])
-        psmidx1 = ps.from_pandas(pmidx1)
-        psmidx2 = ps.from_pandas(pmidx2)
-        self.assert_eq(pmidx1.intersection(pmidx2), psmidx1.intersection(psmidx2).sort_values())
-
-        with self.assertRaisesRegex(TypeError, "Input must be Index or array-like"):
-            psidx.intersection(4)
-        with self.assertRaisesRegex(TypeError, "other must be a MultiIndex or a list of tuples"):
-            psmidx.intersection(4)
-        with self.assertRaisesRegex(TypeError, "other must be a MultiIndex or a list of tuples"):
-            psmidx.intersection(ps.Series([3, 4, 5, 6]))
-        with self.assertRaisesRegex(TypeError, "other must be a MultiIndex or a list of tuples"):
-            psmidx.intersection([("c", "z"), ["d", "w"]])
-        with self.assertRaisesRegex(ValueError, "Index data must be 1-dimensional"):
-            psidx.intersection(ps.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]}))
-        with self.assertRaisesRegex(ValueError, "Index data must be 1-dimensional"):
-            psmidx.intersection(ps.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]}))
-        # other = list of tuple
-        with self.assertRaisesRegex(ValueError, "Names should be list-like for a MultiIndex"):
-            psidx.intersection([(1, 2), (3, 4)])
-
     def test_item(self):
         pidx = pd.Index([10])
         psidx = ps.from_pandas(pidx)
@@ -2098,8 +1513,15 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         self.assert_eq(pmidx, psmidx)
 
         # Specify the `names`
-        pmidx = pd.Index(tuples, names=["Hello", "Koalas"])
-        psmidx = ps.Index(tuples, names=["Hello", "Koalas"])
+        # Specify the `names` while Index creating is no longer supported from pandas 2.0.0.
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            pmidx = pd.Index(tuples)
+            pmidx.names = ["Hello", "Koalas"]
+            psmidx = ps.Index(tuples)
+            psmidx.names = ["Hello", "Koalas"]
+        else:
+            pmidx = pd.Index(tuples, names=["Hello", "Koalas"])
+            psmidx = ps.Index(tuples, names=["Hello", "Koalas"])
 
         self.assertTrue(isinstance(psmidx, ps.MultiIndex))
         self.assert_eq(pmidx, psmidx)
@@ -2158,79 +1580,6 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         pdf = pd.DataFrame([["HI", "Temp"], ["HI", "Precip"], ["NJ", "Temp"], ["NJ", "Precip"]])
         psdf = ps.from_pandas(pdf)
         self.assert_eq(ps.MultiIndex.from_frame(psdf), pd.MultiIndex.from_frame(pdf))
-
-    def test_is_type_compatible(self):
-        data_types = ["integer", "floating", "string", "boolean"]
-        # Integer
-        pidx = pd.Index([1, 2, 3])
-        psidx = ps.from_pandas(pidx)
-        for data_type in data_types:
-            self.assert_eq(pidx.is_type_compatible(data_type), psidx.is_type_compatible(data_type))
-
-        # Floating
-        pidx = pd.Index([1.0, 2.0, 3.0])
-        psidx = ps.from_pandas(pidx)
-        for data_type in data_types:
-            self.assert_eq(pidx.is_type_compatible(data_type), psidx.is_type_compatible(data_type))
-
-        # String
-        pidx = pd.Index(["a", "b", "c"])
-        psidx = ps.from_pandas(pidx)
-        for data_type in data_types:
-            self.assert_eq(pidx.is_type_compatible(data_type), psidx.is_type_compatible(data_type))
-
-        # Boolean
-        pidx = pd.Index([True, False, True, False])
-        psidx = ps.from_pandas(pidx)
-        for data_type in data_types:
-            self.assert_eq(pidx.is_type_compatible(data_type), psidx.is_type_compatible(data_type))
-
-        # MultiIndex
-        pmidx = pd.MultiIndex.from_tuples([("a", "x")])
-        psmidx = ps.from_pandas(pmidx)
-        for data_type in data_types:
-            self.assert_eq(
-                pmidx.is_type_compatible(data_type), psmidx.is_type_compatible(data_type)
-            )
-
-    def test_asi8(self):
-        # Integer
-        pidx = pd.Index([1, 2, 3])
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.asi8, psidx.asi8)
-        self.assert_eq(pidx.astype("int").asi8, psidx.astype("int").asi8)
-        self.assert_eq(pidx.astype("int16").asi8, psidx.astype("int16").asi8)
-        self.assert_eq(pidx.astype("int8").asi8, psidx.astype("int8").asi8)
-
-        # Integer with missing value
-        pidx = pd.Index([1, 2, None, 4, 5])
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.asi8, psidx.asi8)
-
-        # Datetime
-        pidx = pd.date_range(end="1/1/2018", periods=3)
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.asi8, psidx.asi8)
-
-        # Floating
-        pidx = pd.Index([1.0, 2.0, 3.0])
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.asi8, psidx.asi8)
-
-        # String
-        pidx = pd.Index(["a", "b", "c"])
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.asi8, psidx.asi8)
-
-        # Boolean
-        pidx = pd.Index([True, False, True, False])
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.asi8, psidx.asi8)
-
-        # MultiIndex
-        pmidx = pd.MultiIndex.from_tuples([(1, 2)])
-        psmidx = ps.from_pandas(pmidx)
-        self.assert_eq(pmidx.asi8, psmidx.asi8)
 
     def test_index_is_unique(self):
         indexes = [("a", "b", "c"), ("a", "a", "c"), (1, 3, 3), (1, 2, 3)]
@@ -2340,7 +1689,6 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         psidx = ps.Index(pidx)
 
         self.assert_eq(psidx.astype(int), pidx.astype(int))
-        self.assert_eq(psidx.astype(np.int), pidx.astype(np.int))
         self.assert_eq(psidx.astype(np.int8), pidx.astype(np.int8))
         self.assert_eq(psidx.astype(np.int16), pidx.astype(np.int16))
         self.assert_eq(psidx.astype(np.int32), pidx.astype(np.int32))
@@ -2356,7 +1704,6 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         self.assert_eq(psidx.astype("i"), pidx.astype("i"))
         self.assert_eq(psidx.astype("long"), pidx.astype("long"))
         self.assert_eq(psidx.astype("short"), pidx.astype("short"))
-        self.assert_eq(psidx.astype(np.float), pidx.astype(np.float))
         self.assert_eq(psidx.astype(np.float32), pidx.astype(np.float32))
         self.assert_eq(psidx.astype(np.float64), pidx.astype(np.float64))
         self.assert_eq(psidx.astype("float"), pidx.astype("float"))
@@ -2373,17 +1720,8 @@ class IndexesTest(ComparisonTestBase, TestUtils):
 
         pidx = pd.Index([10, 20, 15, 30, 45, None], name="x")
         psidx = ps.Index(pidx)
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            self.assert_eq(psidx.astype(bool), pidx.astype(bool))
-            self.assert_eq(psidx.astype(str), pidx.astype(str))
-        else:
-            self.assert_eq(
-                psidx.astype(bool), ps.Index([True, True, True, True, True, True], name="x")
-            )
-            self.assert_eq(
-                psidx.astype(str),
-                ps.Index(["10.0", "20.0", "15.0", "30.0", "45.0", "nan"], name="x"),
-            )
+        self.assert_eq(psidx.astype(bool), pidx.astype(bool))
+        self.assert_eq(psidx.astype(str), pidx.astype(str))
 
         pidx = pd.Index(["hi", "hi ", " ", " \t", "", None], name="x")
         psidx = ps.Index(pidx)
@@ -2586,11 +1924,15 @@ class IndexesTest(ComparisonTestBase, TestUtils):
             psmidx.nunique()
 
 
+class IndexesTests(IndexesTestsMixin, ComparisonTestBase, TestUtils):
+    pass
+
+
 if __name__ == "__main__":
     from pyspark.pandas.tests.indexes.test_base import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

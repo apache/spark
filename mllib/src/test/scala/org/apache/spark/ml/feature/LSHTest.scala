@@ -22,6 +22,7 @@ import org.scalatest.Assertions._
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.util.{MLTestingUtils, SchemaUtils}
 import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DataTypes
 
@@ -116,7 +117,7 @@ private[ml] object LSHTest {
     // Compute actual
     val actual = model.approxNearestNeighbors(dataset, key, k, singleProbe, "distCol")
 
-    assert(actual.schema.sameType(model
+    assert(DataTypeUtils.sameType(actual.schema, model
       .transformSchema(dataset.schema)
       .add("distCol", DataTypes.DoubleType))
     )
@@ -156,10 +157,10 @@ private[ml] object LSHTest {
     val actual = model.approxSimilarityJoin(datasetA, datasetB, threshold)
 
     SchemaUtils.checkColumnType(actual.schema, "distCol", DataTypes.DoubleType)
-    assert(actual.schema.apply("datasetA").dataType
-      .sameType(model.transformSchema(datasetA.schema)))
-    assert(actual.schema.apply("datasetB").dataType
-      .sameType(model.transformSchema(datasetB.schema)))
+    assert(DataTypeUtils.sameType(actual.schema.apply("datasetA").dataType,
+      model.transformSchema(datasetA.schema)))
+    assert(DataTypeUtils.sameType(actual.schema.apply("datasetB").dataType,
+      model.transformSchema(datasetB.schema)))
 
     // Compute precision and recall
     val correctCount = actual.filter(col("distCol") < threshold).count().toDouble

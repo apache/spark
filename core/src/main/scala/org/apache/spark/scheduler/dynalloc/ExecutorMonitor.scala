@@ -20,8 +20,8 @@ package org.apache.spark.scheduler.dynalloc
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
@@ -563,17 +563,14 @@ private[spark] class ExecutorMonitor(
     def updateTimeout(): Unit = {
       val oldDeadline = timeoutAt
       val newDeadline = if (idleStart >= 0) {
-        val timeout = if (cachedBlocks.nonEmpty || (shuffleIds != null && shuffleIds.nonEmpty)) {
-          val _cacheTimeout = if (cachedBlocks.nonEmpty) storageTimeoutNs else Long.MaxValue
-          val _shuffleTimeout = if (shuffleIds != null && shuffleIds.nonEmpty) {
-            shuffleTimeoutNs
-          } else {
-            Long.MaxValue
-          }
-          math.min(_cacheTimeout, _shuffleTimeout)
+        val _cacheTimeout = if (cachedBlocks.nonEmpty) storageTimeoutNs else 0
+        val _shuffleTimeout = if (shuffleIds != null && shuffleIds.nonEmpty) {
+          shuffleTimeoutNs
         } else {
-          idleTimeoutNs
+          0
         }
+        // timeout should be max of idleTimeout, storageTimeout and shuffleTimeout
+        val timeout = Seq(_cacheTimeout, _shuffleTimeout, idleTimeoutNs).max
         val deadline = idleStart + timeout
         if (deadline >= 0) deadline else Long.MaxValue
       } else {

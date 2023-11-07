@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.v2.avro
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
@@ -69,10 +69,6 @@ case class AvroScan(
   }
 
   override def hashCode(): Int = super.hashCode()
-
-  override def description(): String = {
-    super.description() + ", PushedFilters: " + pushedFilters.mkString("[", ", ", "]")
-  }
 
   override def getMetaData(): Map[String, String] = {
     super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters))

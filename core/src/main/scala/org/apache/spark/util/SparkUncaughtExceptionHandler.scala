@@ -28,6 +28,12 @@ import org.apache.spark.internal.Logging
 private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: Boolean = true)
   extends Thread.UncaughtExceptionHandler with Logging {
 
+  locally {
+    // eagerly load SparkExitCode class, so the System.exit and runtime.halt have a chance to be
+    // executed when the disk containing Spark jars is corrupted. See SPARK-44542 for more details.
+    val _ = SparkExitCode.OOM
+  }
+
   override def uncaughtException(thread: Thread, exception: Throwable): Unit = {
     try {
       // Make it explicit that uncaught exceptions are thrown when container is shutting down.

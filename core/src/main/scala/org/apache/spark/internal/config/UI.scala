@@ -97,6 +97,17 @@ private[spark] object UI {
     .booleanConf
     .createWithDefault(true)
 
+  val UI_FLAMEGRAPH_ENABLED = ConfigBuilder("spark.ui.threadDump.flamegraphEnabled")
+    .doc("Whether to render the Flamegraph for executor thread dumps")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
+
+  val UI_HEAP_HISTOGRAM_ENABLED = ConfigBuilder("spark.ui.heapHistogramEnabled")
+    .version("3.5.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val UI_PROMETHEUS_ENABLED = ConfigBuilder("spark.ui.prometheus.enabled")
     .internal()
     .doc("Expose executor metrics at /metrics/executors/prometheus. " +
@@ -229,4 +240,11 @@ private[spark] object UI {
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .createWithDefault("LOCAL")
+
+  val UI_SQL_GROUP_SUB_EXECUTION_ENABLED = ConfigBuilder("spark.ui.groupSQLSubExecutionEnabled")
+    .doc("Whether to group sub executions together in SQL UI when they belong to the same " +
+      "root execution")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(true)
 }

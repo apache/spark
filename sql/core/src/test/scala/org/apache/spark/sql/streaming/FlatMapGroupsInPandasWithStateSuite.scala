@@ -28,7 +28,9 @@ import org.apache.spark.sql.functions.{lit, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowSQLTest
 
+@SlowSQLTest
 class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
 
   import testImplicits._
@@ -222,7 +224,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
       name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
 
     val inputData = MemoryStream[String]
-    val inputDataDS = inputData.toDS
+    val inputDataDS = inputData.toDS()
     val outputStructType = StructType(
       Seq(
         StructField("key", StringType),
@@ -306,7 +308,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
 
     val clock = new StreamManualClock
     val inputData = MemoryStream[String]
-    val inputDataDS = inputData.toDS
+    val inputDataDS = inputData.toDS()
     val outputStructType = StructType(
       Seq(
         StructField("key", StringType),
@@ -413,7 +415,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
 
       val inputData = MemoryStream[(String, Int)]
       val inputDataDF =
-        inputData.toDF.select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
+        inputData.toDF().select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
       val outputStructType = StructType(
         Seq(
           StructField("key", StringType),
@@ -495,7 +497,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         val clock = new StreamManualClock
         val inputData = MemoryStream[(String, Long)]
         val inputDataDF = inputData
-          .toDF.toDF("key", "time")
+          .toDF().toDF("key", "time")
           .selectExpr("key", "timestamp_seconds(time) as timestamp")
         val outputStructType = StructType(
           Seq(
@@ -760,7 +762,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
 
     val clock = new StreamManualClock
     val inputData = MemoryStream[String]
-    val inputDataDS = inputData.toDS
+    val inputDataDS = inputData.toDS()
       .withColumnRenamed("value", "key1")
       // the type of columns with string literal will be non-nullable
       .withColumn("key2", lit("__FAKE__"))
@@ -801,6 +803,152 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
       CheckNewAnswer(("a", "__FAKE__", "-1"), ("b", "__FAKE__", "2")),
       assertNumStateRows(
         total = Seq(1), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(1)))
+    )
+  }
+
+  test("SPARK-41261: applyInPandasWithState - key in user function should be correct for " +
+    "timed out state despite of place for key columns") {
+    assume(shouldTestPandasUDFs)
+
+    // Function to maintain the count as state and set the proc. time timeout delay of 10 seconds.
+    // It returns the count if changed, or -1 if the state was removed by timeout.
+    val pythonScript =
+    """
+      |import pandas as pd
+      |from pyspark.sql.types import StructType, StructField, StringType
+      |
+      |tpe = StructType([
+      |    StructField("key1", StringType()),
+      |    StructField("key2", StringType()),
+      |    StructField("countAsStr", StringType())])
+      |
+      |def func(key, pdf_iter, state):
+      |    ret = None
+      |    if state.hasTimedOut:
+      |        state.remove()
+      |        yield pd.DataFrame({'key1': [key[0]], 'key2': [key[1]], 'countAsStr': [str(-1)]})
+      |    else:
+      |        count = state.getOption
+      |        if count is None:
+      |            count = 0
+      |        else:
+      |            count = count[0]
+      |
+      |        for pdf in pdf_iter:
+      |            count += len(pdf)
+      |
+      |        state.update((count, ))
+      |        state.setTimeoutDuration(10000)
+      |        yield pd.DataFrame({'key1': [key[0]], 'key2': [key[1]], 'countAsStr': [str(count)]})
+      |""".stripMargin
+    val pythonFunc = TestGroupedMapPandasUDFWithState(
+      name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
+
+    val clock = new StreamManualClock
+    val inputData = MemoryStream[String]
+    // schema: val1, key2, val2, key1, val3
+    val inputDataDS = inputData.toDS()
+      .withColumnRenamed("value", "val1")
+      .withColumn("key2", $"val1")
+      // the type of columns with string literal will be non-nullable
+      .withColumn("val2", lit("__FAKE__"))
+      .withColumn("key1", lit("__FAKE__"))
+      .withColumn("val3", lit("__FAKE__"))
+    val outputStructType = StructType(
+      Seq(
+        StructField("key1", StringType),
+        StructField("key2", StringType),
+        StructField("countAsStr", StringType)))
+    val stateStructType = StructType(Seq(StructField("count", LongType)))
+    val result =
+      inputDataDS
+        // grouping columns: key1, key2 (swapped order)
+        .groupBy("key1", "key2")
+        .applyInPandasWithState(
+          pythonFunc(
+            inputDataDS("val1"), inputDataDS("key2"), inputDataDS("val2"), inputDataDS("key1"),
+            inputDataDS("val3")
+          ).expr.asInstanceOf[PythonUDF],
+          outputStructType,
+          stateStructType,
+          "Update",
+          "ProcessingTimeTimeout")
+
+    testStream(result, Update)(
+      StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+      AddData(inputData, "a"),
+      AdvanceManualClock(1 * 1000),
+      CheckNewAnswer(("__FAKE__", "a", "1")),
+      assertNumStateRows(total = 1, updated = 1),
+
+      AddData(inputData, "b"),
+      AdvanceManualClock(11 * 1000),
+      CheckNewAnswer(("__FAKE__", "a", "-1"), ("__FAKE__", "b", "1")),
+      assertNumStateRows(
+        total = Seq(1), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(1)))
+    )
+  }
+
+  test("SPARK-41260: applyInPandasWithState - NumPy instances to JVM rows in state") {
+    assume(shouldTestPandasUDFs)
+
+    val pythonScript =
+      """
+        |import pandas as pd
+        |import numpy as np
+        |import datetime
+        |from pyspark.sql.types import StructType, StructField, StringType
+        |
+        |tpe = StructType([StructField("key", StringType())])
+        |
+        |def func(key, pdf_iter, state):
+        |    pdf = pd.DataFrame({
+        |        'int32': [np.int32(1)],
+        |        'int64': [np.int64(1)],
+        |        'float32': [np.float32(1)],
+        |        'float64': [np.float64(1)],
+        |        'bool': [True],
+        |        'datetime': [datetime.datetime(1990, 1, 1, 0, 0, 0)],
+        |        'timedelta': [datetime.timedelta(1)]
+        |    })
+        |
+        |    state.update(tuple(pdf.iloc[0]))
+        |    # Assert on Python primitive type comparison.
+        |    assert state.get == (
+        |        1, 1, 1.0, 1.0, True,
+        |        datetime.datetime(1990, 1, 1, 0, 0, 0), datetime.timedelta(1)
+        |    )
+        |    yield pd.DataFrame({'key': [key[0]]})
+        |""".stripMargin
+    val pythonFunc = TestGroupedMapPandasUDFWithState(
+      name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
+
+    val inputData = MemoryStream[String]
+    val outputStructType = StructType(Seq(StructField("key", StringType)))
+    val stateStructType = StructType(Seq(
+      StructField("int32", IntegerType),
+      StructField("int64", LongType),
+      StructField("float32", FloatType),
+      StructField("float64", DoubleType),
+      StructField("bool", BooleanType),
+      StructField("datetime", DateType),
+      StructField("timedelta", DayTimeIntervalType())
+    ))
+    val inputDataDS = inputData.toDS()
+    val result =
+      inputDataDS
+        .groupBy("value")
+        .applyInPandasWithState(
+          pythonFunc(inputDataDS("value")).expr.asInstanceOf[PythonUDF],
+          outputStructType,
+          stateStructType,
+          "Update",
+          "NoTimeout")
+
+    testStream(result, Update)(
+      AddData(inputData, "a"),
+      CheckNewAnswer("a"),
+      assertNumStateRows(total = 1, updated = 1)
     )
   }
 }

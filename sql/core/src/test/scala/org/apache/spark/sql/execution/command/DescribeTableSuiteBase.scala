@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType, StructType}
 
 /**
@@ -37,10 +39,13 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("DESCRIBE TABLE in a catalog when table does not exist") {
     withNamespaceAndTable("ns", "table") { tbl =>
+      val parsed = CatalystSqlParser.parseMultipartIdentifier(s"${tbl}_non_existence")
+        .map(part => quoteIdentifier(part)).mkString(".")
       val e = intercept[AnalysisException] {
         sql(s"DESCRIBE TABLE ${tbl}_non_existence")
       }
-      assert(e.getMessage.contains(s"Table or view not found: ${tbl}_non_existence"))
+      checkErrorTableNotFound(e, parsed,
+        ExpectedContext(s"${tbl}_non_existence", 15, 14 + s"${tbl}_non_existence".length))
     }
   }
 

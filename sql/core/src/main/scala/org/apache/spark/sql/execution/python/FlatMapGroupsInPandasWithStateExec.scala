@@ -16,14 +16,15 @@
  */
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{JobArtifactSet, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, ProcessingTimeTimeout}
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.python.PandasGroupUtils.resolveArgOffsets
 import org.apache.spark.sql.execution.streaming._
@@ -32,7 +33,6 @@ import org.apache.spark.sql.execution.streaming.state.FlatMapGroupsWithStateExec
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.CompletionIterator
 
 /**
@@ -48,7 +48,8 @@ import org.apache.spark.util.CompletionIterator
  * @param outputMode the output mode of `functionExpr`
  * @param timeoutConf used to timeout groups that have not received data in a while
  * @param batchTimestampMs processing timestamp of the current batch.
- * @param eventTimeWatermark event time watermark for the current batch
+ * @param eventTimeWatermarkForLateEvents event time watermark for filtering late events
+ * @param eventTimeWatermarkForEviction event time watermark for state eviction
  * @param child logical plan of the underlying data
  */
 case class FlatMapGroupsInPandasWithStateExec(
@@ -61,7 +62,8 @@ case class FlatMapGroupsInPandasWithStateExec(
     outputMode: OutputMode,
     timeoutConf: GroupStateTimeout,
     batchTimestampMs: Option[Long],
-    eventTimeWatermark: Option[Long],
+    eventTimeWatermarkForLateEvents: Option[Long],
+    eventTimeWatermarkForEviction: Option[Long],
     child: SparkPlan) extends UnaryExecNode with FlatMapGroupsWithStateExecBase {
 
   // TODO(SPARK-40444): Add the support of initial state.
@@ -70,14 +72,15 @@ case class FlatMapGroupsInPandasWithStateExec(
   override protected val initialStateDataAttrs: Seq[Attribute] = null
   override protected val initialState: SparkPlan = null
   override protected val hasInitialState: Boolean = false
+  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
   override protected val stateEncoder: ExpressionEncoder[Any] =
-    RowEncoder(stateType).resolveAndBind().asInstanceOf[ExpressionEncoder[Any]]
+    ExpressionEncoder(stateType).resolveAndBind().asInstanceOf[ExpressionEncoder[Any]]
 
   override def output: Seq[Attribute] = outAttributes
 
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
-  private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
+  private val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
 
   private val pythonFunction = functionExpr.asInstanceOf[PythonUDF].func
   private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pythonFunction)))
@@ -94,6 +97,15 @@ case class FlatMapGroupsInPandasWithStateExec(
   private lazy val childOutputWithNull = child.output.map(_.withNullability(newNullability = true))
   private lazy val unsafeProj = UnsafeProjection.create(dedupAttributesWithNull,
     childOutputWithNull)
+
+  // See processTimedOutState: we create a row which contains the actual values for grouping key,
+  // but all nulls for value side by intention. The schema for this row is different from
+  // child.output, hence we should create another projection to deal with such schema.
+  private lazy val valueAttributesWithNull = childOutputWithNull.filterNot { attr =>
+    groupingAttributes.exists(_.withNullability(newNullability = true) == attr)
+  }
+  private lazy val unsafeProjForTimedOut = UnsafeProjection.create(dedupAttributesWithNull,
+    groupingAttributes ++ valueAttributesWithNull)
 
   override def requiredChildDistribution: Seq[Distribution] =
     StatefulOperatorPartitioning.getCompatibleDistribution(
@@ -131,7 +143,7 @@ case class FlatMapGroupsInPandasWithStateExec(
       if (isTimeoutEnabled) {
         val timeoutThreshold = timeoutConf match {
           case ProcessingTimeTimeout => batchTimestampMs.get
-          case EventTimeTimeout => eventTimeWatermark.get
+          case EventTimeTimeout => eventTimeWatermarkForEviction.get
           case _ =>
             throw new IllegalStateException(
               s"Cannot filter timed out keys for $timeoutConf")
@@ -140,12 +152,10 @@ case class FlatMapGroupsInPandasWithStateExec(
           state.timeoutTimestamp != NO_TIMESTAMP && state.timeoutTimestamp < timeoutThreshold
         }
 
+        val emptyValueRow = new GenericInternalRow(
+          Array.fill(valueAttributesWithNull.length)(null: Any))
         val processIter = timingOutPairs.map { stateData =>
-          val joinedKeyRow = unsafeProj(
-            new JoinedRow(
-              stateData.keyRow,
-              new GenericInternalRow(Array.fill(dedupAttributesWithNull.length)(null: Any))))
-
+          val joinedKeyRow = unsafeProjForTimedOut(new JoinedRow(stateData.keyRow, emptyValueRow))
           (stateData.keyRow, stateData, Iterator.single(joinedKeyRow))
         }
 
@@ -160,13 +170,15 @@ case class FlatMapGroupsInPandasWithStateExec(
         chainedFunc,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
         Array(argOffsets),
-        StructType.fromAttributes(dedupAttributesWithNull),
+        DataTypeUtils.fromAttributes(dedupAttributesWithNull),
         sessionLocalTimeZone,
         pythonRunnerConf,
         stateEncoder.asInstanceOf[ExpressionEncoder[Row]],
         groupingAttributes.toStructType,
         outAttributes.toStructType,
-        stateType)
+        stateType,
+        pythonMetrics,
+        jobArtifactUUID)
 
       val context = TaskContext.get()
 
@@ -174,7 +186,7 @@ case class FlatMapGroupsInPandasWithStateExec(
         val groupedState = GroupStateImpl.createForStreaming(
           Option(stateData.stateObj).map { r => assert(r.isInstanceOf[Row]); r },
           batchTimestampMs.getOrElse(NO_TIMESTAMP),
-          eventTimeWatermark.getOrElse(NO_TIMESTAMP),
+          eventTimeWatermarkForEviction.getOrElse(NO_TIMESTAMP),
           timeoutConf,
           hasTimedOut = hasTimedOut,
           watermarkPresent).asInstanceOf[GroupStateImpl[Row]]

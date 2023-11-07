@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.tree
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 import org.apache.spark.annotation.Since

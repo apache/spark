@@ -23,19 +23,23 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.types.{BinaryType, DataType}
 
-private[protobuf] case class CatalystDataToProtobuf(
+private[sql] case class CatalystDataToProtobuf(
     child: Expression,
-    descFilePath: String,
-    messageName: String)
+    messageName: String,
+    binaryFileDescriptorSet: Option[Array[Byte]] = None,
+    options: Map[String, String] = Map.empty)
     extends UnaryExpression {
+
+  // TODO(SPARK-43578): binaryFileDescriptorSet could be very large in some cases. It is better
+  //                    to broadcast it so that it is not transferred with each task.
 
   override def dataType: DataType = BinaryType
 
-  @transient private lazy val protoType =
-    ProtobufUtils.buildDescriptor(descFilePath, messageName)
+  @transient private lazy val protoDescriptor =
+    ProtobufUtils.buildDescriptor(messageName, binaryFileDescriptorSet)
 
   @transient private lazy val serializer =
-    new ProtobufSerializer(child.dataType, protoType, child.nullable)
+    new ProtobufSerializer(child.dataType, protoDescriptor, child.nullable)
 
   override def nullSafeEval(input: Any): Any = {
     val dynamicMessage = serializer.serialize(input).asInstanceOf[DynamicMessage]

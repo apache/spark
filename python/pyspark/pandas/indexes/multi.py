@@ -21,10 +21,9 @@ from typing import Any, Callable, Iterator, List, Optional, Tuple, Union, cast, 
 import pandas as pd
 from pandas.api.types import is_hashable, is_list_like  # type: ignore[attr-defined]
 
-from pyspark.sql import functions as F, Column, Window
+from pyspark.sql import functions as F, Column as PySparkColumn, Window
 from pyspark.sql.types import DataType
-
-# For running doctests and reference resolution in PyCharm.
+from pyspark.sql.utils import get_column_class
 from pyspark import pandas as ps
 from pyspark.pandas._typing import Label, Name, Scalar
 from pyspark.pandas.exceptions import PandasNotImplementedError
@@ -136,7 +135,7 @@ class MultiIndex(Index):
         raise TypeError("TypeError: cannot perform __abs__ with this index type: MultiIndex")
 
     def _with_new_scol(
-        self, scol: Column, *, field: Optional[InternalField] = None
+        self, scol: PySparkColumn, *, field: Optional[InternalField] = None
     ) -> "MultiIndex":
         raise NotImplementedError("Not supported for type MultiIndex")
 
@@ -290,7 +289,7 @@ class MultiIndex(Index):
             DataFrame to be converted to MultiIndex.
         names : list-like, optional
             If no names are provided, use the column names, or tuple of column
-            names if the columns is a MultiIndex. If a sequence, overwrite
+            names if the column is a MultiIndex. If a sequence, overwrite
             names with the given sequence.
 
         Returns
@@ -411,10 +410,10 @@ class MultiIndex(Index):
         ----------
         i : int, str, default -2
             First level of index to be swapped. Can pass level name as string.
-            Type of parameters can be mixed.
+            Parameter types can be mixed.
         j : int, str, default -1
             Second level of index to be swapped. Can pass level name as string.
-            Type of parameters can be mixed.
+            Parameter types can be mixed.
 
         Returns
         -------
@@ -497,7 +496,10 @@ class MultiIndex(Index):
     @staticmethod
     def _comparator_for_monotonic_increasing(
         data_type: DataType,
-    ) -> Callable[[Column, Column, Callable[[Column, Column], Column]], Column]:
+    ) -> Callable[
+        [PySparkColumn, PySparkColumn, Callable[[PySparkColumn, PySparkColumn], PySparkColumn]],
+        PySparkColumn,
+    ]:
         return compare_disallow_null
 
     def _is_monotonic(self, order: str) -> bool:
@@ -511,12 +513,13 @@ class MultiIndex(Index):
 
         cond = F.lit(True)
         has_not_null = F.lit(True)
+        Column = get_column_class()
         for scol in self._internal.index_spark_columns[::-1]:
             data_type = self._internal.spark_type_for(scol)
             prev = F.lag(scol, 1).over(window)
             compare = MultiIndex._comparator_for_monotonic_increasing(data_type)
             # Since pandas 1.1.4, null value is not allowed at any levels of MultiIndex.
-            # Therefore, we should check `has_not_null` over the all levels.
+            # Therefore, we should check `has_not_null` over all levels.
             has_not_null = has_not_null & scol.isNotNull()
             cond = F.when(scol.eqNullSafe(prev), cond).otherwise(compare(scol, prev, Column.__gt__))
 
@@ -545,7 +548,10 @@ class MultiIndex(Index):
     @staticmethod
     def _comparator_for_monotonic_decreasing(
         data_type: DataType,
-    ) -> Callable[[Column, Column, Callable[[Column, Column], Column]], Column]:
+    ) -> Callable[
+        [PySparkColumn, PySparkColumn, Callable[[PySparkColumn, PySparkColumn], PySparkColumn]],
+        PySparkColumn,
+    ]:
         return compare_disallow_null
 
     def _is_monotonic_decreasing(self) -> Series:
@@ -553,12 +559,13 @@ class MultiIndex(Index):
 
         cond = F.lit(True)
         has_not_null = F.lit(True)
+        Column = get_column_class()
         for scol in self._internal.index_spark_columns[::-1]:
             data_type = self._internal.spark_type_for(scol)
             prev = F.lag(scol, 1).over(window)
             compare = MultiIndex._comparator_for_monotonic_increasing(data_type)
             # Since pandas 1.1.4, null value is not allowed at any levels of MultiIndex.
-            # Therefore, we should check `has_not_null` over the all levels.
+            # Therefore, we should check `has_not_null` over all levels.
             has_not_null = has_not_null & scol.isNotNull()
             cond = F.when(scol.eqNullSafe(prev), cond).otherwise(compare(scol, prev, Column.__lt__))
 
@@ -680,7 +687,7 @@ class MultiIndex(Index):
         """
         # TODO: We might need to handle internal state change.
         # So far, we don't have any functions to change the internal state of MultiIndex except for
-        # series-like operations. In that case, it creates new Index object instead of MultiIndex.
+        # series-like operations. In that case, it creates a new Index object instead of MultiIndex.
         return cast(pd.MultiIndex, super().to_pandas())
 
     def _to_pandas(self) -> pd.MultiIndex:
@@ -745,7 +752,7 @@ class MultiIndex(Index):
 
         Returns
         -------
-        symmetric_difference : MiltiIndex
+        symmetric_difference : MultiIndex
 
         Notes
         -----
@@ -774,7 +781,7 @@ class MultiIndex(Index):
                     (  'lama', 'speed')],
                    )
 
-        You can set names of result Index.
+        You can set names of the result Index.
 
         >>> s1.index.symmetric_difference(s2.index, result_name=['a', 'b'])  # doctest: +SKIP
         MultiIndex([('pandas-on-Spark', 'speed'),
@@ -967,28 +974,6 @@ class MultiIndex(Index):
         raise NotImplementedError(
             "only the default get_loc method is currently supported for MultiIndex"
         )
-
-    @property
-    def is_all_dates(self) -> bool:
-        """
-        is_all_dates always returns False for MultiIndex
-
-        Examples
-        --------
-        >>> from datetime import datetime
-
-        >>> idx = ps.MultiIndex.from_tuples(
-        ...     [(datetime(2019, 1, 1, 0, 0, 0), datetime(2019, 1, 1, 0, 0, 0)),
-        ...      (datetime(2019, 1, 1, 0, 0, 0), datetime(2019, 1, 1, 0, 0, 0))])
-        >>> idx  # doctest: +SKIP
-        MultiIndex([('2019-01-01', '2019-01-01'),
-                    ('2019-01-01', '2019-01-01')],
-                   )
-
-        >>> idx.is_all_dates
-        False
-        """
-        return False
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeMultiIndex, item):
@@ -1257,14 +1242,6 @@ class MultiIndex(Index):
         """
         # Always returns "mixed" for MultiIndex
         return "mixed"
-
-    @property
-    def asi8(self) -> None:
-        """
-        Integer representation of the values.
-        """
-        # Always returns None for MultiIndex
-        return None
 
     def factorize(
         self, sort: bool = True, na_sentinel: Optional[int] = -1

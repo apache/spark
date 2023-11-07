@@ -18,10 +18,10 @@
 import _string  # type: ignore[import]
 from typing import Any, Dict, Optional, Union, List
 import inspect
+
 import pandas as pd
 
 from pyspark.sql import SparkSession, DataFrame as SDataFrame
-
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.utils import default_session
 from pyspark.pandas.frame import DataFrame
@@ -73,7 +73,7 @@ def sql(
         in pandas-on-Spark is ignored. By default, the index is always lost.
 
         .. note:: If you want to preserve the index, explicitly use :func:`DataFrame.reset_index`,
-            and pass it to the sql statement with `index_col` parameter.
+            and pass it to the SQL statement with `index_col` parameter.
 
             For example,
 
@@ -207,8 +207,8 @@ def _get_local_scope() -> Dict[str, Any]:
     try:
         return inspect.stack()[_CAPTURE_SCOPES][0].f_locals
     except Exception:
-        # TODO (rxin, thunterdb): use a more narrow scope exception.
-        # See https://github.com/pyspark.pandas/pull/448
+        # TODO (rxin, thunterdb): use a narrower scope exception.
+        # See https://github.com/databricks/koalas/pull/448
         return {}
 
 
@@ -218,13 +218,13 @@ def _get_ipython_scope() -> Dict[str, Any]:
     in an IPython notebook environment.
     """
     try:
-        from IPython import get_ipython  # type: ignore[import]
+        from IPython import get_ipython
 
         shell = get_ipython()
         return shell.user_ns
     except Exception:
-        # TODO (rxin, thunterdb): use a more narrow scope exception.
-        # See https://github.com/pyspark.pandas/pull/448
+        # TODO (rxin, thunterdb): use a narrower scope exception.
+        # See https://github.com/databricks/koalas/pull/448
         return None
 
 
@@ -300,7 +300,7 @@ class SQLProcessor:
         # TODO: use a string builder
         res = ""
         try:
-            for (pre, inner, _, _) in blocks:
+            for pre, inner, _, _ in blocks:
                 var_next = "" if inner is None else self._convert(inner)
                 res = res + pre + var_next
             self._normalized_statement = res

@@ -259,7 +259,7 @@ NULL
 #' @param finish an unary \code{function} \code{(Column) -> Column} used to
 #'          apply final transformation on the accumulated data in \code{array_aggregate}.
 #' @param comparator an optional binary (\code{(Column, Column) -> Column}) \code{function}
-#'          which is used to compare the elemnts of the array.
+#'          which is used to compare the elements of the array.
 #'          The comparator will take two
 #'          arguments representing two elements of the array. It returns a negative integer,
 #'          0, or a positive integer as the first element is less than, equal to,
@@ -453,7 +453,7 @@ setMethod("lit", signature("ANY"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "lit",
-                              if (class(x) == "Column") { x@jc } else { x })
+                              if (inherits(x, "Column")) { x@jc } else { x })
             column(jc)
           })
 
@@ -1390,6 +1390,18 @@ setMethod("log",
           })
 
 #' @details
+#' \code{ln}: Alias for \code{log}.
+#'
+#' @rdname column_math_functions
+#' @aliases ln ln,Column-method
+#' @note ln since 3.5.0
+setMethod("ln",
+          signature(x = "Column"),
+          function(x) {
+            log(x)
+          })
+
+#' @details
 #' \code{log10}: Computes the logarithm of the given value in base 10.
 #'
 #' @rdname column_math_functions
@@ -1674,6 +1686,54 @@ setMethod("negate",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "negate", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{negative}: Alias for \code{negate}.
+#'
+#' @rdname column_nonaggregate_functions
+#' @aliases negative negative,Column-method
+#' @note negative since 3.5.0
+setMethod("negative",
+          signature(x = "Column"),
+          function(x) {
+            negate(x)
+          })
+
+#' @details
+#' \code{positive}: Unary plus, i.e. return the expression.
+#'
+#' @rdname column_nonaggregate_functions
+#' @aliases positive positive,Column-method
+#' @note positive since 3.5.0
+setMethod("positive",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "positive", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{width_bucket} Returns the bucket number into which the value of this expression would
+#' fall after being evaluated. Note that input arguments must follow conditions listed below;
+#' otherwise, the method will return null.
+#'
+#' @param v value to compute a bucket number in the histogram.
+#' @param min minimum value of the histogram
+#' @param max maximum value of the histogram
+#' @param numBucket the number of buckets
+#'
+#' @rdname column_math_functions
+#' @aliases width_bucket width_bucket,Column-method
+#' @note width_bucket since 3.5.0
+setMethod("width_bucket",
+          signature(v = "Column", min = "Column", max = "Column", numBucket = "Column"),
+          function(v, min, max, numBucket) {
+            jc <- callJStatic(
+              "org.apache.spark.sql.functions", "width_bucket",
+              v@jc, min@jc, max@jc, numBucket@jc
+            )
             column(jc)
           })
 
@@ -2029,6 +2089,18 @@ setMethod("stddev",
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "stddev", x@jc)
             column(jc)
+          })
+
+#' @details
+#' \code{std}: Alias for \code{stddev}.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases std std,Column-method
+#' @note std since 3.5.0
+setMethod("std",
+          signature(x = "Column"),
+          function(x) {
+            stddev(x)
           })
 
 #' @details
@@ -2822,6 +2894,8 @@ setMethod("from_json", signature(x = "Column", schema = "characterOrstructTypeOr
               # treated as struct or element type of array in order to make it more
               # R-friendly.
               if (class(schema) == "Column") {
+                df <- createDataFrame(list(list(0)))
+                jschema <- collect(select(df, schema))[[1]][[1]]
                 jschema <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
                                        "createArrayType",
                                        jschema)
@@ -3595,7 +3669,7 @@ setMethod("unix_timestamp", signature(x = "Column", format = "character"),
 setMethod("when", signature(condition = "Column", value = "ANY"),
           function(condition, value) {
               condition <- condition@jc
-              value <- if (class(value) == "Column") { value@jc } else { value }
+              value <- if (inherits(value, "Column")) { value@jc } else { value }
               jc <- callJStatic("org.apache.spark.sql.functions", "when", condition, value)
               column(jc)
           })
@@ -3614,8 +3688,8 @@ setMethod("ifelse",
           signature(test = "Column", yes = "ANY", no = "ANY"),
           function(test, yes, no) {
               test <- test@jc
-              yes <- if (class(yes) == "Column") { yes@jc } else { yes }
-              no <- if (class(no) == "Column") { no@jc } else { no }
+              yes <- if (inherits(yes, "Column")) { yes@jc } else { yes }
+              no <- if (inherits(no, "Column")) { no@jc } else { no }
               jc <- callJMethod(callJStatic("org.apache.spark.sql.functions",
                                             "when",
                                             test, yes),

@@ -22,10 +22,12 @@ import java.util.Properties
 
 import scala.util.control.NonFatal
 
+import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
+
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, IndexAlreadyExistsException, NoSuchIndexException}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sort}
 import org.apache.spark.sql.connector.{IntegralAverage, StrLen}
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
@@ -38,6 +40,7 @@ import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, 
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHelper {
@@ -51,12 +54,20 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   val testH2Dialect = new JdbcDialect {
     override def canHandle(url: String): Boolean = H2Dialect.canHandle(url)
 
+    override def supportsLimit: Boolean = false
+
+    override def supportsOffset: Boolean = false
+
     class H2SQLBuilder extends JDBCSQLBuilder {
       override def visitUserDefinedScalarFunction(
           funcName: String, canonicalName: String, inputs: Array[String]): String = {
         canonicalName match {
           case "h2.char_length" =>
             s"$funcName(${inputs.mkString(", ")})"
+          case "h2.char_length_magic" =>
+            s"CHAR_LENGTH(${inputs.mkString(", ")})"
+          case "strlen" =>
+            s"CHAR_LENGTH(${inputs.mkString(", ")})"
           case _ => super.visitUserDefinedScalarFunction(funcName, canonicalName, inputs)
         }
       }
@@ -99,6 +110,18 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     override def name(): String = "CHAR_LENGTH"
     override def canonicalName(): String = "h2.char_length"
 
+    override def produceResult(input: InternalRow): Int = {
+      val s = input.getString(0)
+      s.length
+    }
+  }
+
+  case object CharLengthWithMagicMethod extends ScalarFunction[Int] {
+    def invoke(str: UTF8String): Int = str.toString.length
+    override def inputTypes(): Array[DataType] = Array(StringType)
+    override def resultType(): DataType = IntegerType
+    override def name(): String = "CHAR_LENGTH_MAGIC"
+    override def canonicalName(): String = "h2.char_length_magic"
     override def produceResult(input: InternalRow): Int = {
       val s = input.getString(0)
       s.length
@@ -190,6 +213,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
     H2Dialect.registerFunction("my_avg", IntegralAverage)
     H2Dialect.registerFunction("my_strlen", StrLen(CharLength))
+    H2Dialect.registerFunction("my_strlen_magic", StrLen(CharLengthWithMagicMethod))
+    H2Dialect.registerFunction(
+      "my_strlen_static_magic", StrLen(new JavaStrLenStaticMagic()))
   }
 
   override def afterAll(): Unit = {
@@ -299,6 +325,19 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     // LIMIT is pushed down only if all the filters are pushed down
     checkPushedInfo(df5, "PushedFilters: []")
     checkAnswer(df5, Seq(Row(10000.00, 1000.0, "amy")))
+
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      val df6 = spark.read.table("h2.test.employee")
+        .where($"dept" === 1).limit(1)
+      checkLimitRemoved(df6, false)
+      checkPushedInfo(df6, "PushedFilters: [DEPT IS NOT NULL, DEPT = 1]")
+      checkAnswer(df6, Seq(Row(1, "amy", 10000.00, 1000.0, true)))
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(H2Dialect)
+    }
   }
 
   private def checkOffsetRemoved(df: DataFrame, removed: Boolean = true): Unit = {
@@ -383,6 +422,22 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     // OFFSET is pushed down only if all the filters are pushed down
     checkPushedInfo(df6, "PushedFilters: []")
     checkAnswer(df6, Seq(Row(10000.00, 1300.0, "dav"), Row(9000.00, 1200.0, "cat")))
+
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      val df7 = spark.read
+        .table("h2.test.employee")
+        .where($"dept" === 1)
+        .offset(1)
+      checkOffsetRemoved(df7, false)
+      checkPushedInfo(df7,
+        "PushedFilters: [DEPT IS NOT NULL, DEPT = 1]")
+      checkAnswer(df7, Seq(Row(1, "cathy", 9000.00, 1200.0, false)))
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(H2Dialect)
+    }
   }
 
   test("simple scan with LIMIT and OFFSET") {
@@ -1449,6 +1504,58 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       checkFiltersRemoved(df2)
       checkPushedInfo(df2,
         "PushedFilters: [CHAR_LENGTH(CASE WHEN NAME = 'fred' THEN NAME ELSE 'abc' END) > 2],")
+      checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(H2Dialect)
+    }
+  }
+
+  test("scan with filter push-down with UDF that has magic method") {
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      val df1 = sql("SELECT * FROM h2.test.people where h2.my_strlen_magic(name) > 2")
+      checkFiltersRemoved(df1)
+      checkPushedInfo(df1, "PushedFilters: [CHAR_LENGTH_MAGIC(NAME) > 2],")
+      checkAnswer(df1, Seq(Row("fred", 1), Row("mary", 2)))
+
+      val df2 = sql(
+        """
+          |SELECT *
+          |FROM h2.test.people
+          |WHERE h2.my_strlen_magic(CASE WHEN NAME = 'fred' THEN NAME ELSE "abc" END) > 2
+          """.stripMargin)
+      checkFiltersRemoved(df2)
+      checkPushedInfo(df2,
+        "PushedFilters: [CHAR_LENGTH_MAGIC(CASE WHEN NAME = 'fred' " +
+          "THEN NAME ELSE 'abc' END) > 2],")
+      checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(H2Dialect)
+    }
+  }
+
+  test("scan with filter push-down with UDF that has static magic method") {
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      val df1 = sql("SELECT * FROM h2.test.people where h2.my_strlen_static_magic(name) > 2")
+      checkFiltersRemoved(df1)
+      checkPushedInfo(df1, "PushedFilters: [strlen(NAME) > 2],")
+      checkAnswer(df1, Seq(Row("fred", 1), Row("mary", 2)))
+
+      val df2 = sql(
+        """
+          |SELECT *
+          |FROM h2.test.people
+          |WHERE h2.my_strlen_static_magic(CASE WHEN NAME = 'fred' THEN NAME ELSE "abc" END) > 2
+          """.stripMargin)
+      checkFiltersRemoved(df2)
+      checkPushedInfo(df2,
+        "PushedFilters: [strlen(CASE WHEN NAME = 'fred' " +
+          "THEN NAME ELSE 'abc' END) > 2],")
       checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
@@ -2549,14 +2656,30 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       val df = sql("SELECT h2.my_avg(id) FROM h2.test.people")
       checkAggregateRemoved(df)
       checkAnswer(df, Row(1) :: Nil)
-      val e1 = intercept[AnalysisException] {
-        checkAnswer(sql("SELECT h2.test.my_avg2(id) FROM h2.test.people"), Seq.empty)
-      }
-      assert(e1.getMessage.contains("Undefined function: h2.test.my_avg2"))
-      val e2 = intercept[AnalysisException] {
-        checkAnswer(sql("SELECT h2.my_avg2(id) FROM h2.test.people"), Seq.empty)
-      }
-      assert(e2.getMessage.contains("Undefined function: h2.my_avg2"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          checkAnswer(sql("SELECT h2.test.my_avg2(id) FROM h2.test.people"), Seq.empty)
+        },
+        errorClass = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> "`h2`.`test`.`my_avg2`",
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`.`default`]"),
+        context = ExpectedContext(
+          fragment = "h2.test.my_avg2(id)",
+          start = 7,
+          stop = 25))
+      checkError(
+        exception = intercept[AnalysisException] {
+          checkAnswer(sql("SELECT h2.my_avg2(id) FROM h2.test.people"), Seq.empty)
+        },
+        errorClass = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> "`h2`.`my_avg2`",
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`.`default`]"),
+        context = ExpectedContext(
+          fragment = "h2.my_avg2(id)",
+          start = 7,
+          stop = 20))
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
       JdbcDialects.registerDialect(H2Dialect)
@@ -2628,6 +2751,16 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     assert(indexes1.isEmpty)
 
     sql(s"CREATE INDEX people_index ON TABLE h2.test.people (id)")
+    checkError(
+      exception = intercept[IndexAlreadyExistsException] {
+        sql(s"CREATE INDEX people_index ON TABLE h2.test.people (id)")
+      },
+      errorClass = "INDEX_ALREADY_EXISTS",
+      parameters = Map(
+        "indexName" -> "people_index",
+        "tableName" -> "test.people"
+      )
+    )
     assert(jdbcTable.indexExists("people_index"))
     val indexes2 = jdbcTable.listIndexes()
     assert(!indexes2.isEmpty)
@@ -2636,8 +2769,34 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     assert(tableIndex.indexName() == "people_index")
 
     sql(s"DROP INDEX people_index ON TABLE h2.test.people")
+    checkError(
+      exception = intercept[NoSuchIndexException] {
+        sql(s"DROP INDEX people_index ON TABLE h2.test.people")
+      },
+      errorClass = "INDEX_NOT_FOUND",
+      parameters = Map("indexName" -> "people_index", "tableName" -> "test.people")
+    )
     assert(jdbcTable.indexExists("people_index") == false)
     val indexes3 = jdbcTable.listIndexes()
     assert(indexes3.isEmpty)
+  }
+
+  test("IDENTIFIER_TOO_MANY_NAME_PARTS: " +
+    "jdbc function doesn't support identifiers consisting of more than 2 parts") {
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM h2.test.people where h2.db_name.schema_name.function_name()")
+        },
+        errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+        sqlState = "42601",
+        parameters = Map("identifier" -> "`db_name`.`schema_name`.`function_name`")
+      )
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(H2Dialect)
+    }
   }
 }

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.json4s.NoTypeHints
@@ -33,8 +33,7 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -73,7 +72,8 @@ object DataSourceUtils extends PredicateHelper {
   def checkFieldNames(format: FileFormat, schema: StructType): Unit = {
     schema.foreach { field =>
       if (!format.supportFieldName(field.name)) {
-        throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(field.name)
+        throw QueryCompilationErrors.invalidColumnNameAsPathError(
+          format.getClass.getSimpleName, field.name)
       }
       field.dataType match {
         case s: StructType => checkFieldNames(format, s)
@@ -273,7 +273,7 @@ object DataSourceUtils extends PredicateHelper {
     }
     val partitionSet = AttributeSet(partitionColumns)
     val (partitionFilters, dataFilters) = normalizedFilters.partition(f =>
-      f.references.subsetOf(partitionSet)
+      f.references.nonEmpty && f.references.subsetOf(partitionSet)
     )
     val extraPartitionFilter =
       dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))

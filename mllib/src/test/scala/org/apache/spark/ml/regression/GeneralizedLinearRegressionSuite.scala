@@ -129,47 +129,47 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
    */
   ignore("export test data into CSV format") {
     datasetGaussianIdentity.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetGaussianIdentity")
     datasetGaussianLog.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetGaussianLog")
     datasetGaussianInverse.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetGaussianInverse")
     datasetBinomial.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetBinomial")
     datasetPoissonLog.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetPoissonLog")
     datasetPoissonLogWithZero.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetPoissonLogWithZero")
     datasetPoissonIdentity.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetPoissonIdentity")
     datasetPoissonSqrt.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetPoissonSqrt")
     datasetGammaInverse.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetGammaInverse")
     datasetGammaIdentity.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetGammaIdentity")
     datasetGammaLog.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetGammaLog")
   }
@@ -1686,7 +1686,7 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
         .setFeaturesCol("features")
       val model = trainer.fit(dataset)
       val actual = model.summary.aic
-      assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with regParam = $regParam.")
+      assert(actual ~= expected(idx) absTol 1e-4, s"Model mismatch: GLM with regParam = $regParam.")
       idx += 1
     }
   }
@@ -1719,7 +1719,7 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
     val conf = new SparkConf(false)
     val ser = new KryoSerializer(conf).newInstance()
     val trainer = new GeneralizedLinearRegression()
-    val model = trainer.fit(Seq(Instance(1.0, 1.0, Vectors.dense(1.0, 7.0))).toDF)
+    val model = trainer.fit(Seq(Instance(1.0, 1.0, Vectors.dense(1.0, 7.0))).toDF())
     ser.serialize[GeneralizedLinearRegressionModel](model)
   }
 }

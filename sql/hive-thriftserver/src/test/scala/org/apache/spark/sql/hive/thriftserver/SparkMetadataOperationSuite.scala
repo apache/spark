@@ -36,7 +36,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
     def checkResult(rs: ResultSet, dbNames: Seq[String]): Unit = {
       val expected = dbNames.iterator
       while(rs.next() || expected.hasNext) {
-        assert(rs.getString("TABLE_SCHEM") === expected.next)
+        assert(rs.getString("TABLE_SCHEM") === expected.next())
         assert(rs.getString("TABLE_CATALOG").isEmpty)
       }
       // Make sure there are no more elements

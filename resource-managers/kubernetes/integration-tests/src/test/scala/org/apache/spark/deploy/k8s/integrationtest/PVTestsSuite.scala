@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.api.model.storage.StorageClassBuilder
@@ -41,6 +41,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
       kubernetesTestComponents
         .kubernetesClient
         .storage()
+        .v1()
         .storageClasses()
         .create(scBuilder.build())
     } catch {
@@ -98,6 +99,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
     kubernetesTestComponents
       .kubernetesClient
       .persistentVolumeClaims()
+      .inNamespace(kubernetesTestComponents.namespace)
       .create(pvcBuilder.build())
   }
 
@@ -105,6 +107,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
     kubernetesTestComponents
       .kubernetesClient
       .persistentVolumeClaims()
+      .inNamespace(kubernetesTestComponents.namespace)
       .withName(PVC_NAME)
       .delete()
 
@@ -117,6 +120,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
     kubernetesTestComponents
       .kubernetesClient
       .storage()
+      .v1()
       .storageClasses()
       .withName(STORAGE_NAME)
       .delete()

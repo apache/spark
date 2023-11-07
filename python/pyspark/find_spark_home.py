@@ -42,10 +42,14 @@ def _find_spark_home():
     spark_dist_dir = "spark-distribution"
     paths = [
         "../",  # When we're in spark/python.
-        # Two case belows are valid when the current script is called as a library.
-        os.path.join(os.path.dirname(os.path.realpath(__file__)), spark_dist_dir),
-        os.path.dirname(os.path.realpath(__file__)),
     ]
+
+    if "__file__" in globals():
+        paths += [
+            # Two case belows are valid when the current script is called as a library.
+            os.path.join(os.path.dirname(os.path.realpath(__file__)), spark_dist_dir),
+            os.path.dirname(os.path.realpath(__file__)),
+        ]
 
     # Add the path of the PySpark module if it exists
     import_error_raised = False

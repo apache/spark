@@ -1,0 +1,20 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "filter": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "condition": {
+      "expressionString": {
+        "expression": "a + id \u003c 1000"
+      }
+    }
+  }
+}

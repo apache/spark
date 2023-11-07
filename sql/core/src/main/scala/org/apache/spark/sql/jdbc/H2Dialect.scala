@@ -22,13 +22,14 @@ import java.util
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.util.quoteNameParts
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
@@ -186,19 +187,40 @@ private[sql] object H2Dialect extends JdbcDialect {
         exception.getErrorCode match {
           // TABLE_OR_VIEW_ALREADY_EXISTS_1
           case 42101 =>
-            throw new TableAlreadyExistsException(message, cause = Some(e))
+            // The message is: Table "identifier" already exists
+            val regex = """"((?:[^"\\]|\\[\\"ntbrf])+)"""".r
+            val name = regex.findFirstMatchIn(e.getMessage).get.group(1)
+            val quotedName = org.apache.spark.sql.catalyst.util.quoteIdentifier(name)
+            throw new TableAlreadyExistsException(errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+              messageParameters = Map("relationName" -> quotedName),
+              cause = Some(e))
           // TABLE_OR_VIEW_NOT_FOUND_1
           case 42102 =>
-            throw NoSuchTableException(message, cause = Some(e))
+            val quotedName = quoteNameParts(UnresolvedAttribute.parseAttributeName(message))
+            throw new NoSuchTableException(errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+              messageParameters = Map("relationName" -> quotedName))
           // SCHEMA_NOT_FOUND_1
           case 90079 =>
-            throw NoSuchNamespaceException(message, cause = Some(e))
+            val regex = """"((?:[^"\\]|\\[\\"ntbrf])+)"""".r
+            val name = regex.findFirstMatchIn(e.getMessage).get.group(1)
+            val quotedName = org.apache.spark.sql.catalyst.util.quoteIdentifier(name)
+            throw new NoSuchNamespaceException(errorClass = "SCHEMA_NOT_FOUND",
+              messageParameters = Map("schemaName" -> quotedName))
           // INDEX_ALREADY_EXISTS_1
           case 42111 =>
-            throw new IndexAlreadyExistsException(message, cause = Some(e))
+            // The message is: Failed to create index indexName in tableName
+            val regex = "(?s)Failed to create index (.*) in (.*)".r
+            val indexName = regex.findFirstMatchIn(message).get.group(1)
+            val tableName = regex.findFirstMatchIn(message).get.group(2)
+            throw new IndexAlreadyExistsException(
+              indexName = indexName, tableName = tableName, cause = Some(e))
           // INDEX_NOT_FOUND_1
           case 42112 =>
-            throw new NoSuchIndexException(message, cause = Some(e))
+            // The message is: Failed to drop index indexName in tableName
+            val regex = "(?s)Failed to drop index (.*) in (.*)".r
+            val indexName = regex.findFirstMatchIn(message).get.group(1)
+            val tableName = regex.findFirstMatchIn(message).get.group(2)
+            throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
           case _ => // do nothing
         }
       case _ => // do nothing
@@ -254,4 +276,8 @@ private[sql] object H2Dialect extends JdbcDialect {
       }
     }
   }
+
+  override def supportsLimit: Boolean = true
+
+  override def supportsOffset: Boolean = true
 }

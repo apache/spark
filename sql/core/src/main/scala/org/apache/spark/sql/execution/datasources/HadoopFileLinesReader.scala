@@ -18,10 +18,8 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.Closeable
-import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileSplit, LineRecordReader}
@@ -48,7 +46,7 @@ class HadoopFileLinesReader(
 
   private val _iterator = {
     val fileSplit = new FileSplit(
-      new Path(new URI(file.filePath)),
+      file.toPath,
       file.start,
       file.length,
       // The locality is decided by `getPreferredLocations` in `FileScanRDD`.

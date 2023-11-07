@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
@@ -58,7 +58,7 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
   }
 
   protected def getOptionsWithoutPaths(map: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
-    val withoutPath = map.asCaseSensitiveMap().asScala.filterKeys { k =>
+    val withoutPath = map.asCaseSensitiveMap().asScala.view.filterKeys { k =>
       !k.equalsIgnoreCase("path") && !k.equalsIgnoreCase("paths")
     }
     new CaseInsensitiveStringMap(withoutPath.toMap.asJava)
@@ -90,8 +90,9 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
   private var t: Table = null
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     if (t == null) t = getTable(options)
-    t.schema()
+    t.columns.asSchema
   }
 
   // TODO: implement a light-weight partition inference which only looks at the path of one leaf

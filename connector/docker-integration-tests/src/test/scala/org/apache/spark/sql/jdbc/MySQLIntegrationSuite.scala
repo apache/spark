@@ -26,9 +26,9 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., mysql:5.7.36):
+ * To run this test suite for a specific version (e.g., mysql:8.0.31):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:5.7.36
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:8.0.31
  *     ./build/sbt -Pdocker-integration-tests
  *     "testOnly org.apache.spark.sql.jdbc.MySQLIntegrationSuite"
  * }}}
@@ -36,7 +36,7 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:5.7.36")
+    override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:8.0.31")
     override val env = Map(
       "MYSQL_ROOT_PASSWORD" -> "rootpass"
     )
@@ -56,10 +56,10 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
 
     conn.prepareStatement("CREATE TABLE numbers (onebit BIT(1), tenbits BIT(10), "
       + "small SMALLINT, med MEDIUMINT, nor INT, big BIGINT, deci DECIMAL(40,20), flt FLOAT, "
-      + "dbl DOUBLE)").executeUpdate()
+      + "dbl DOUBLE, tiny TINYINT)").executeUpdate()
     conn.prepareStatement("INSERT INTO numbers VALUES (b'0', b'1000100101', "
       + "17, 77777, 123456789, 123456789012345, 123456789012345.123456789012345, "
-      + "42.75, 1.0000000000000002)").executeUpdate()
+      + "42.75, 1.0000000000000002, -128)").executeUpdate()
 
     conn.prepareStatement("CREATE TABLE dates (d DATE, t TIME, dt DATETIME, ts TIMESTAMP, "
       + "yr YEAR)").executeUpdate()
@@ -68,10 +68,10 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
 
     // TODO: Test locale conversion for strings.
     conn.prepareStatement("CREATE TABLE strings (a CHAR(10), b VARCHAR(10), c TINYTEXT, "
-      + "d TEXT, e MEDIUMTEXT, f LONGTEXT, g BINARY(4), h VARBINARY(10), i BLOB)"
+      + "d TEXT, e MEDIUMTEXT, f LONGTEXT, g BINARY(4), h VARBINARY(10), i BLOB, j JSON)"
     ).executeUpdate()
     conn.prepareStatement("INSERT INTO strings VALUES ('the', 'quick', 'brown', 'fox', " +
-      "'jumps', 'over', 'the', 'lazy', 'dog')").executeUpdate()
+      "'jumps', 'over', 'the', 'lazy', 'dog', '{\"status\": \"merrily\"}')").executeUpdate()
   }
 
   test("Basic test") {
@@ -89,7 +89,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
-    assert(types.length == 9)
+    assert(types.length == 10)
     assert(types(0).equals("class java.lang.Boolean"))
     assert(types(1).equals("class java.lang.Long"))
     assert(types(2).equals("class java.lang.Integer"))
@@ -99,6 +99,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(6).equals("class java.math.BigDecimal"))
     assert(types(7).equals("class java.lang.Double"))
     assert(types(8).equals("class java.lang.Double"))
+    assert(types(9).equals("class java.lang.Byte"))
     assert(rows(0).getBoolean(0) == false)
     assert(rows(0).getLong(1) == 0x225)
     assert(rows(0).getInt(2) == 17)
@@ -109,6 +110,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getAs[BigDecimal](6).equals(bd))
     assert(rows(0).getDouble(7) == 42.75)
     assert(rows(0).getDouble(8) == 1.0000000000000002)
+    assert(rows(0).getByte(9) == 0x80.toByte)
   }
 
   test("Date types") {
@@ -137,7 +139,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
-    assert(types.length == 9)
+    assert(types.length == 10)
     assert(types(0).equals("class java.lang.String"))
     assert(types(1).equals("class java.lang.String"))
     assert(types(2).equals("class java.lang.String"))
@@ -147,7 +149,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(6).equals("class [B"))
     assert(types(7).equals("class [B"))
     assert(types(8).equals("class [B"))
-    assert(rows(0).getString(0).equals("the"))
+    assert(types(9).equals("class java.lang.String"))
+    assert(rows(0).getString(0).equals("the".padTo(10, ' ')))
     assert(rows(0).getString(1).equals("quick"))
     assert(rows(0).getString(2).equals("brown"))
     assert(rows(0).getString(3).equals("fox"))
@@ -156,6 +159,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(java.util.Arrays.equals(rows(0).getAs[Array[Byte]](6), Array[Byte](116, 104, 101, 0)))
     assert(java.util.Arrays.equals(rows(0).getAs[Array[Byte]](7), Array[Byte](108, 97, 122, 121)))
     assert(java.util.Arrays.equals(rows(0).getAs[Array[Byte]](8), Array[Byte](100, 111, 103)))
+    assert(rows(0).getString(9).equals("{\"status\": \"merrily\"}"))
   }
 
   test("Basic write test") {
@@ -181,7 +185,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
       .option("url", jdbcUrl)
       .option("query", query)
       .load()
-    assert(df.collect.toSet === expectedResult)
+    assert(df.collect().toSet === expectedResult)
 
     // query option in the create table path.
     sql(
@@ -190,6 +194,6 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
          |USING org.apache.spark.sql.jdbc
          |OPTIONS (url '$jdbcUrl', query '$query')
        """.stripMargin.replaceAll("\n", " "))
-    assert(sql("select x, y from queryOption").collect.toSet == expectedResult)
+    assert(sql("select x, y from queryOption").collect().toSet == expectedResult)
   }
 }

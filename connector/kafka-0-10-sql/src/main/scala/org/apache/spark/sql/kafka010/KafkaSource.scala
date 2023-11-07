@@ -177,7 +177,7 @@ private[kafka010] class KafkaSource(
       kafkaReader.fetchLatestOffsets(currentOffsets)
     }
 
-    latestPartitionOffsets = Some(latest)
+    latestPartitionOffsets = if (latest.isEmpty) None else Some(latest)
 
     val limits: Seq[ReadLimit] = limit match {
       case rows: CompositeReadLimit => rows.getReadLimits
@@ -213,7 +213,7 @@ private[kafka010] class KafkaSource(
     }
     currentPartitionOffsets = Some(offsets)
     logDebug(s"GetOffset: ${offsets.toSeq.map(_.toString).sorted}")
-    KafkaSourceOffset(offsets)
+    Option(KafkaSourceOffset(offsets)).filterNot(_.partitionToOffsets.isEmpty).orNull
   }
 
   /** Checks if we need to skip this trigger based on minOffsetsPerTrigger & maxTriggerDelay */
@@ -293,6 +293,11 @@ private[kafka010] class KafkaSource(
 
     logInfo(s"GetBatch called with start = $start, end = $end")
     val untilPartitionOffsets = KafkaSourceOffset.getPartitionOffsets(end)
+
+    if (allDataForTriggerAvailableNow != null) {
+      verifyEndOffsetForTriggerAvailableNow(untilPartitionOffsets)
+    }
+
     // On recovery, getBatch will get called before getOffset
     if (currentPartitionOffsets.isEmpty) {
       currentPartitionOffsets = Some(untilPartitionOffsets)
@@ -346,6 +351,50 @@ private[kafka010] class KafkaSource(
       throw new IllegalStateException(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE")
     } else {
       logWarning(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE")
+    }
+  }
+
+  private def verifyEndOffsetForTriggerAvailableNow(
+      endPartitionOffsets: Map[TopicPartition, Long]): Unit = {
+    val tpsForPrefetched = allDataForTriggerAvailableNow.keySet
+    val tpsForEndOffset = endPartitionOffsets.keySet
+
+    if (tpsForPrefetched != tpsForEndOffset) {
+      throw KafkaExceptions.mismatchedTopicPartitionsBetweenEndOffsetAndPrefetched(
+        tpsForPrefetched, tpsForEndOffset)
+    }
+
+    val endOffsetHasGreaterThanPrefetched = {
+      allDataForTriggerAvailableNow.keySet.exists { tp =>
+        val offsetFromPrefetched = allDataForTriggerAvailableNow(tp)
+        val offsetFromEndOffset = endPartitionOffsets(tp)
+        offsetFromEndOffset > offsetFromPrefetched
+      }
+    }
+    if (endOffsetHasGreaterThanPrefetched) {
+      throw KafkaExceptions.endOffsetHasGreaterOffsetForTopicPartitionThanPrefetched(
+        allDataForTriggerAvailableNow, endPartitionOffsets)
+    }
+
+    val latestOffsets = kafkaReader.fetchLatestOffsets(Some(endPartitionOffsets))
+    val tpsForLatestOffsets = latestOffsets.keySet
+
+    if (!tpsForEndOffset.subsetOf(tpsForLatestOffsets)) {
+      throw KafkaExceptions.lostTopicPartitionsInEndOffsetWithTriggerAvailableNow(
+        tpsForLatestOffsets, tpsForEndOffset)
+    }
+
+    val endOffsetHasGreaterThenLatest = {
+      tpsForEndOffset.exists { tp =>
+        val offsetFromLatest = latestOffsets(tp)
+        val offsetFromEndOffset = endPartitionOffsets(tp)
+        offsetFromEndOffset > offsetFromLatest
+      }
+    }
+    if (endOffsetHasGreaterThenLatest) {
+      throw KafkaExceptions
+        .endOffsetHasGreaterOffsetForTopicPartitionThanLatestWithTriggerAvailableNow(
+          latestOffsets, endPartitionOffsets)
     }
   }
 

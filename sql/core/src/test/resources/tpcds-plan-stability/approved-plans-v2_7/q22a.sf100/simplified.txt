@@ -1,7 +1,7 @@
 TakeOrderedAndProject [qoh,i_product_name,i_brand,i_class,i_category]
   Union
     WholeStageCodegen (8)
-      HashAggregate [i_product_name,i_brand,i_class,i_category,sum,count] [avg(qoh),qoh,sum,count]
+      HashAggregate [i_product_name,i_brand,i_class,i_category,sum,count] [avg(qoh),i_product_name,i_brand,i_class,i_category,qoh,sum,count]
         HashAggregate [i_product_name,i_brand,i_class,i_category,qoh] [sum,count,sum,count]
           HashAggregate [i_product_name,i_brand,i_class,i_category,sum,count] [avg(inv_quantity_on_hand),qoh,sum,count]
             InputAdapter

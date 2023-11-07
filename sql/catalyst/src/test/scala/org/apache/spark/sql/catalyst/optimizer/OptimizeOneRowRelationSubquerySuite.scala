@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.CleanupAliases
+import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.ScalarSubquery
+import org.apache.spark.sql.catalyst.expressions.{Explode, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, LocalRelation, LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, Generate, LocalRelation, LogicalPlan, OneRowRelation, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.IntegerType
 
 class OptimizeOneRowRelationSubquerySuite extends PlanTest {
 
@@ -62,6 +63,7 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
   val b = $"b".int
   val t1 = LocalRelation(a, b)
   val t2 = LocalRelation($"c".int, $"d".int)
+  val t3 = LocalRelation(a, b, $"arr".array(IntegerType))
 
   test("Optimize scalar subquery with a single project") {
     // SELECT (SELECT a) FROM t1
@@ -161,6 +163,42 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
       .select(ScalarSubquery(inner).as("s")).select($"s" + 1)
     val query = t1.select(ScalarSubquery(subquery).as("sub"))
     val optimized = Optimize.execute(query.analyze)
+    assertHasDomainJoin(optimized)
+  }
+
+  test("SPARK-41441: optimize lateral subquery with Generate") {
+    val query1 = t3.lateralJoin(t0.generate(Explode($"arr")))
+    comparePlans(
+      Optimize.execute(query1.analyze),
+      t3.generate(Explode($"arr")).analyze)
+
+    // Should not optimize when the lateral subquery plan is more complex.
+    val query2 = t3.lateralJoin(t0.generate(Explode($"arr")).where($"col" > 0))
+    val optimized = Optimize.execute(query2.analyze)
+    assertHasDomainJoin(optimized)
+  }
+
+  test("SPARK-41961: optimize lateral subquery with table-valued functions") {
+    // SELECT * FROM t3 JOIN LATERAL EXPLODE(arr)
+    val query1 = t3.lateralJoin(UnresolvedTableValuedFunction("explode", $"arr" :: Nil))
+    comparePlans(
+      Optimize.execute(query1.analyze),
+      t3.generate(Explode($"arr")).analyze)
+
+    // SELECT * FROM t3 JOIN LATERAL EXPLODE(arr) t(v)
+    val query2 = t3.lateralJoin(
+      SubqueryAlias("t",
+        UnresolvedTVFAliases("explode" :: Nil,
+          UnresolvedTableValuedFunction("explode", $"arr" :: Nil), "v" :: Nil)))
+    comparePlans(
+      Optimize.execute(query2.analyze),
+      t3.generate(Explode($"arr")).select($"a", $"b", $"arr", $"col".as("v")).analyze)
+
+    // SELECT col FROM t3 JOIN LATERAL (SELECT * FROM EXPLODE(arr) WHERE col > 0)
+    val query3 = t3.lateralJoin(
+      UnresolvedTableValuedFunction("explode", $"arr" :: Nil).where($"col" > 0))
+    val optimized = Optimize.execute(query3.analyze)
+    optimized.exists(_.isInstanceOf[Generate])
     assertHasDomainJoin(optimized)
   }
 }

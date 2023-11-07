@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import java.io.{File, InterruptedIOException, IOException, UncheckedIOException}
+import java.io.{File, InterruptedIOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
 import java.time.ZoneId
 import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
@@ -36,19 +36,23 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.{Range, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{LocalLimitExec, SimpleMode, SparkPlan}
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemoryStream, MemorySink}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.streaming.util.{BlockOnStopSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
+@SlowSQLTest
 class StreamSuite extends StreamTest {
 
   import testImplicits._
@@ -90,7 +94,7 @@ class StreamSuite extends StreamTest {
       }
       assert(streamingRelation.nonEmpty, "cannot find StreamingRelation")
       assert(
-        streamingRelation.head.computeStats.sizeInBytes ==
+        streamingRelation.head.computeStats().sizeInBytes ==
           spark.sessionState.conf.defaultSizeInBytes)
     }
   }
@@ -101,15 +105,17 @@ class StreamSuite extends StreamTest {
     }
     assert(streamingRelation.nonEmpty, "cannot find StreamingRelationV2")
     assert(
-      streamingRelation.head.computeStats.sizeInBytes == spark.sessionState.conf.defaultSizeInBytes)
+      streamingRelation.head.computeStats().sizeInBytes ==
+        spark.sessionState.conf.defaultSizeInBytes)
   }
 
   test("StreamingExecutionRelation.computeStats") {
     val memoryStream = MemoryStream[Int]
     val executionRelation = StreamingExecutionRelation(
-      memoryStream, memoryStream.encoder.schema.toAttributes, None)(
+      memoryStream, toAttributes(memoryStream.encoder.schema), None)(
       memoryStream.sqlContext.sparkSession)
-    assert(executionRelation.computeStats.sizeInBytes == spark.sessionState.conf.defaultSizeInBytes)
+    assert(executionRelation.computeStats().sizeInBytes ==
+      spark.sessionState.conf.defaultSizeInBytes)
   }
 
   test("explain join with a normal source") {
@@ -142,7 +148,7 @@ class StreamSuite extends StreamTest {
       val smallTable3 = Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word")
 
       // Join the input stream with a table.
-      val df = MemoryStream[Int].toDF
+      val df = MemoryStream[Int].toDF()
       val joined = df.join(smallTable, smallTable("number") === $"value")
         .join(smallTable2, smallTable2("number") === $"value")
         .join(smallTable3, smallTable3("number") === $"value")
@@ -168,7 +174,7 @@ class StreamSuite extends StreamTest {
         try {
           query.processAllAvailable()
           val outputDf = spark.read.parquet(outputDir.getAbsolutePath).as[Long]
-          checkDatasetUnorderly[Long](outputDf, (0L to 10L).union((0L to 10L)).toArray: _*)
+          checkDatasetUnorderly[Long](outputDf, (0L to 10L).concat(0L to 10L): _*)
         } finally {
           query.stop()
         }
@@ -275,7 +281,7 @@ class StreamSuite extends StreamTest {
 
     // Running streaming plan as a batch query
     assertError("start" :: Nil) {
-      streamInput.toDS.map { i => i }.count()
+      streamInput.toDS().map { i => i }.count()
     }
 
     // Running non-streaming plan with as a streaming query
@@ -286,7 +292,7 @@ class StreamSuite extends StreamTest {
 
     // Running streaming plan that cannot be incrementalized
     assertError("not supported" :: "streaming" :: Nil) {
-      val ds = streamInput.toDS.map { i => i }.sort()
+      val ds = streamInput.toDS().map { i => i }.sort()
       testStream(ds)()
     }
   }
@@ -643,7 +649,7 @@ class StreamSuite extends StreamTest {
   test("SPARK-19065: dropDuplicates should not create expressions using the same id") {
     withTempPath { testPath =>
       val data = Seq((1, 2), (2, 3), (3, 4))
-      data.toDS.write.mode("overwrite").json(testPath.getCanonicalPath)
+      data.toDS().write.mode("overwrite").json(testPath.getCanonicalPath)
       val schema = spark.read.json(testPath.getCanonicalPath).schema
       val query = spark
         .readStream
@@ -666,26 +672,8 @@ class StreamSuite extends StreamTest {
     }
   }
 
-  test("handle IOException when the streaming thread is interrupted (pre Hadoop 2.8)") {
-    // This test uses a fake source to throw the same IOException as pre Hadoop 2.8 when the
-    // streaming thread is interrupted. We should handle it properly by not failing the query.
-    ThrowingIOExceptionLikeHadoop12074.createSourceLatch = new CountDownLatch(1)
-    val query = spark
-      .readStream
-      .format(classOf[ThrowingIOExceptionLikeHadoop12074].getName)
-      .load()
-      .writeStream
-      .format("console")
-      .start()
-    assert(ThrowingIOExceptionLikeHadoop12074.createSourceLatch
-      .await(streamingTimeout.toMillis, TimeUnit.MILLISECONDS),
-      "ThrowingIOExceptionLikeHadoop12074.createSource wasn't called before timeout")
-    query.stop()
-    assert(query.exception.isEmpty)
-  }
-
-  test("handle InterruptedIOException when the streaming thread is interrupted (Hadoop 2.8+)") {
-    // This test uses a fake source to throw the same InterruptedIOException as Hadoop 2.8+ when the
+  test("handle InterruptedIOException when the streaming thread is interrupted") {
+    // This test uses a fake source to throw the same InterruptedIOException as Hadoop when the
     // streaming thread is interrupted. We should handle it properly by not failing the query.
     ThrowingInterruptedIOException.createSourceLatch = new CountDownLatch(1)
     val query = spark
@@ -701,6 +689,35 @@ class StreamSuite extends StreamTest {
     query.stop()
     assert(query.exception.isEmpty)
   }
+
+  test("SPARK-44044: non-time-window") {
+    val inputData = MemoryStream[(Int, Int)]
+    val e = intercept[AnalysisException] {
+      val agg = inputData
+        .toDF()
+        .selectExpr("CAST(_1 AS timestamp) AS col1", "_2 AS col2")
+        .withWatermark("col1", "10 seconds")
+        .withColumn("rn_col", row_number().over(Window
+          .partitionBy("col1")
+          .orderBy(col("col2"))))
+        .select("rn_col", "col1", "col2")
+        .writeStream
+        .format("console")
+        .start()
+    }
+    checkError(
+      e,
+      "NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING",
+      parameters = Map(
+        "windowFunc" -> "ROW_NUMBER()",
+        "columnName" -> "`rn_col`",
+        "windowSpec" ->
+          ("(PARTITION BY COL1 ORDER BY COL2 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING " +
+          "AND CURRENT ROW)")),
+      queryContext = Array(
+        ExpectedContext(fragment = "withColumn", callSitePattern = getCurrentClassCallSitePattern)))
+  }
+
 
   test("SPARK-19873: streaming aggregation with change in number of partitions") {
     val inputData = MemoryStream[(Int, Int)]
@@ -862,7 +879,7 @@ class StreamSuite extends StreamTest {
     withTempDir { dir =>
       val checkpointLocation = dir.getCanonicalPath
       assert(!checkpointLocation.startsWith("file:/"))
-      val query = MemoryStream[Int].toDF
+      val query = MemoryStream[Int].toDF()
         .writeStream
         .option("checkpointLocation", checkpointLocation)
         .format("console")
@@ -1363,36 +1380,7 @@ class FakeDefaultSource extends FakeSource {
   }
 }
 
-/** A fake source that throws the same IOException like pre Hadoop 2.8 when it's interrupted. */
-class ThrowingIOExceptionLikeHadoop12074 extends FakeSource {
-  import ThrowingIOExceptionLikeHadoop12074._
-
-  override def createSource(
-      spark: SQLContext,
-      metadataPath: String,
-      schema: Option[StructType],
-      providerName: String,
-      parameters: Map[String, String]): Source = {
-    createSourceLatch.countDown()
-    try {
-      Thread.sleep(30000)
-      throw new TimeoutException("sleep was not interrupted in 30 seconds")
-    } catch {
-      case ie: InterruptedException =>
-        throw new IOException(ie.toString)
-    }
-  }
-}
-
-object ThrowingIOExceptionLikeHadoop12074 {
-  /**
-   * A latch to allow the user to wait until `ThrowingIOExceptionLikeHadoop12074.createSource` is
-   * called.
-   */
-  @volatile var createSourceLatch: CountDownLatch = null
-}
-
-/** A fake source that throws InterruptedIOException like Hadoop 2.8+ when it's interrupted. */
+/** A fake source that throws InterruptedIOException like Hadoop when it's interrupted. */
 class ThrowingInterruptedIOException extends FakeSource {
   import ThrowingInterruptedIOException._
 

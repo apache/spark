@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 private[sql] object PythonSQLUtils extends Logging {
   private def withInternalRowPickler(f: Pickler => Array[Byte]): Array[Byte] = {
@@ -126,12 +127,23 @@ private[sql] object PythonSQLUtils extends Logging {
     deserializer(internalRow)
   }
 
+  /**
+   * Internal-only helper for Spark Connect's local mode. This is only used for
+   * local development, not for production. This method should not be used in
+   * production code path.
+   */
+  def addJarToCurrentClassLoader(path: String): Unit = {
+    Utils.getContextOrSparkClassLoader match {
+      case cl: MutableURLClassLoader => cl.addURL(Utils.resolveURI(path).toURL)
+      case cl => logWarning(
+        s"Unsupported class loader $cl will not update jars in the thread class loader.")
+    }
+  }
+
   def castTimestampNTZToLong(c: Column): Column = Column(CastTimestampNTZToLong(c.expr))
 
   def ewm(e: Column, alpha: Double, ignoreNA: Boolean): Column =
     Column(EWM(e.expr, alpha, ignoreNA))
-
-  def lastNonNull(e: Column): Column = Column(LastNonNull(e.expr))
 
   def nullIndex(e: Column): Column = Column(NullIndex(e.expr))
 

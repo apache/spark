@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 import java.sql.{Driver, DriverManager}
 import javax.security.auth.login.Configuration
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.scalatest.BeforeAndAfterEach
 

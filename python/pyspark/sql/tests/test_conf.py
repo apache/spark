@@ -14,11 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from decimal import Decimal
 
+from pyspark.errors import IllegalArgumentException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class ConfTests(ReusedSQLTestCase):
+class ConfTestsMixin:
     def test_conf(self):
         spark = self.spark
         spark.conf.set("bogo", "sipeo")
@@ -42,13 +44,38 @@ class ConfTests(ReusedSQLTestCase):
         # `defaultValue` in `spark.conf.get` is set to None.
         self.assertEqual(spark.conf.get("spark.sql.sources.partitionOverwriteMode", None), None)
 
+        self.assertTrue(spark.conf.isModifiable("spark.sql.execution.arrow.maxRecordsPerBatch"))
+        self.assertFalse(spark.conf.isModifiable("spark.sql.warehouse.dir"))
+
+    def test_conf_with_python_objects(self):
+        spark = self.spark
+
+        for value, expected in [(True, "true"), (False, "false")]:
+            spark.conf.set("foo", value)
+            self.assertEqual(spark.conf.get("foo"), expected)
+
+        spark.conf.set("foo", 1)
+        self.assertEqual(spark.conf.get("foo"), "1")
+
+        with self.assertRaises(IllegalArgumentException):
+            spark.conf.set("foo", None)
+
+        with self.assertRaises(Exception):
+            spark.conf.set("foo", Decimal(1))
+
+        spark.conf.unset("foo")
+
+
+class ConfTests(ConfTestsMixin, ReusedSQLTestCase):
+    pass
+
 
 if __name__ == "__main__":
     import unittest
     from pyspark.sql.tests.test_conf import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

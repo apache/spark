@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.util.Properties
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
@@ -72,7 +72,7 @@ class HadoopTableReader(
 
   // Hadoop honors "mapreduce.job.maps" as hint,
   // but will ignore when mapreduce.jobtracker.address is "local".
-  // https://hadoop.apache.org/docs/r2.7.6/hadoop-mapreduce-client/hadoop-mapreduce-client-core/
+  // https://hadoop.apache.org/docs/stable/hadoop-mapreduce-client/hadoop-mapreduce-client-core/
   // mapred-default.xml
   //
   // In order keep consistency with Hive, we will let it be 0 in local mode also.
@@ -160,46 +160,7 @@ class HadoopTableReader(
   def makeRDDForPartitionedTable(
       partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]],
       filterOpt: Option[PathFilter]): RDD[InternalRow] = {
-
-    // SPARK-5068:get FileStatus and do the filtering locally when the path is not exists
-    def verifyPartitionPath(
-        partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]]):
-        Map[HivePartition, Class[_ <: Deserializer]] = {
-      if (!conf.verifyPartitionPath) {
-        partitionToDeserializer
-      } else {
-        val existPathSet = collection.mutable.Set[String]()
-        val pathPatternSet = collection.mutable.Set[String]()
-        partitionToDeserializer.filter {
-          case (partition, partDeserializer) =>
-            def updateExistPathSetByPathPattern(pathPatternStr: String): Unit = {
-              val pathPattern = new Path(pathPatternStr)
-              val fs = pathPattern.getFileSystem(hadoopConf)
-              val matches = fs.globStatus(pathPattern)
-              matches.foreach(fileStatus => existPathSet += fileStatus.getPath.toString)
-            }
-            // convert  /demo/data/year/month/day  to  /demo/data/*/*/*/
-            def getPathPatternByPath(parNum: Int, tempPath: Path): String = {
-              var path = tempPath
-              for (i <- (1 to parNum)) path = path.getParent
-              val tails = (1 to parNum).map(_ => "*").mkString("/", "/", "/")
-              path.toString + tails
-            }
-
-            val partPath = partition.getDataLocation
-            val partNum = Utilities.getPartitionDesc(partition).getPartSpec.size()
-            val pathPatternStr = getPathPatternByPath(partNum, partPath)
-            if (!pathPatternSet.contains(pathPatternStr)) {
-              pathPatternSet += pathPatternStr
-              updateExistPathSetByPathPattern(pathPatternStr)
-            }
-            existPathSet.contains(partPath.toString)
-        }
-      }
-    }
-
-    val hivePartitionRDDs = verifyPartitionPath(partitionToDeserializer)
-      .map { case (partition, partDeserializer) =>
+    val hivePartitionRDDs = partitionToDeserializer.map { case (partition, partDeserializer) =>
       val partDesc = Utilities.getPartitionDescFromTableDesc(tableDesc, partition, true)
       val partPath = partition.getDataLocation
       val inputPathStr = applyFilterIfNeeded(partPath, filterOpt)
@@ -300,6 +261,16 @@ class HadoopTableReader(
   }
 
   /**
+   * True if the new org.apache.hadoop.mapreduce.InputFormat is implemented (except
+   * HiveHBaseTableInputFormat where although the new interface is implemented by base HBase class
+   * the table inicialization in the Hive layer only happens via the old interface methods -
+   * for more details see SPARK-32380).
+   */
+  private def compatibleWithNewHadoopRDD(inputClass: Class[_ <: oldInputClass[_, _]]): Boolean =
+    classOf[newInputClass[_, _]].isAssignableFrom(inputClass) &&
+      !inputClass.getName.equalsIgnoreCase("org.apache.hadoop.hive.hbase.HiveHBaseTableInputFormat")
+
+  /**
    * The entry of creating a RDD.
    * [SPARK-26630] Using which HadoopRDD will be decided by the input format of tables.
    * The input format of NewHadoopRDD is from `org.apache.hadoop.mapreduce` package while
@@ -307,7 +278,7 @@ class HadoopTableReader(
    */
   private def createHadoopRDD(localTableDesc: TableDesc, inputPathStr: String): RDD[Writable] = {
     val inputFormatClazz = localTableDesc.getInputFileFormatClass
-    if (classOf[newInputClass[_, _]].isAssignableFrom(inputFormatClazz)) {
+    if (compatibleWithNewHadoopRDD(inputFormatClazz)) {
       createNewHadoopRDD(localTableDesc, inputPathStr)
     } else {
       createOldHadoopRDD(localTableDesc, inputPathStr)
@@ -316,7 +287,7 @@ class HadoopTableReader(
 
   private def createHadoopRDD(partitionDesc: PartitionDesc, inputPathStr: String): RDD[Writable] = {
     val inputFormatClazz = partitionDesc.getInputFileFormatClass
-    if (classOf[newInputClass[_, _]].isAssignableFrom(inputFormatClazz)) {
+    if (compatibleWithNewHadoopRDD(inputFormatClazz)) {
       createNewHadoopRDD(partitionDesc, inputPathStr)
     } else {
       createOldHadoopRDD(partitionDesc, inputPathStr)
@@ -356,7 +327,9 @@ class HadoopTableReader(
       inputFormatClass,
       classOf[Writable],
       classOf[Writable],
-      _minSplitsPerRDD)
+      _minSplitsPerRDD,
+      ignoreCorruptFiles = conf.ignoreCorruptFiles,
+      ignoreMissingFiles = conf.ignoreMissingFiles)
 
     // Only take the value (skip the key) because Hive works only with values.
     rdd.map(_._2)
@@ -390,8 +363,9 @@ class HadoopTableReader(
       inputFormatClass,
       classOf[Writable],
       classOf[Writable],
-      jobConf
-    )
+      jobConf,
+      ignoreCorruptFiles = conf.ignoreCorruptFiles,
+      ignoreMissingFiles = conf.ignoreMissingFiles)
 
     // Only take the value (skip the key) because Hive works only with values.
     rdd.map(_._2)

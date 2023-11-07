@@ -18,6 +18,7 @@ import os
 import time
 import unittest
 
+from pyspark.sql.utils import PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -25,6 +26,7 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
+from pyspark.testing.utils import QuietTest
 
 if have_pyarrow:
     import pyarrow as pa
@@ -35,30 +37,9 @@ if have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message,  # type: ignore[arg-type]
+    pandas_requirement_message or pyarrow_requirement_message,
 )
-class MapInArrowTests(ReusedSQLTestCase):
-    @classmethod
-    def setUpClass(cls):
-        ReusedSQLTestCase.setUpClass()
-
-        # Synchronize default timezone between Python and Java
-        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
-        tz = "America/Los_Angeles"
-        os.environ["TZ"] = tz
-        time.tzset()
-
-        cls.sc.environment["TZ"] = tz
-        cls.spark.conf.set("spark.sql.session.timeZone", tz)
-
-    @classmethod
-    def tearDownClass(cls):
-        del os.environ["TZ"]
-        if cls.tz_prev is not None:
-            os.environ["TZ"] = cls.tz_prev
-        time.tzset()
-        ReusedSQLTestCase.tearDownClass()
-
+class MapInArrowTestsMixin(object):
     def test_map_in_arrow(self):
         def func(iterator):
             for batch in iterator:
@@ -85,6 +66,21 @@ class MapInArrowTests(ReusedSQLTestCase):
         expected = df.collect()
         self.assertEqual(actual, expected)
 
+    def test_large_variable_width_types(self):
+        with self.sql_conf({"spark.sql.execution.arrow.useLargeVarTypes": True}):
+            data = [("foo", b"foo"), (None, None), ("bar", b"bar")]
+            df = self.spark.createDataFrame(data, "a string, b binary")
+
+            def func(iterator):
+                for batch in iterator:
+                    assert isinstance(batch, pa.RecordBatch)
+                    assert batch.schema.types == [pa.large_string(), pa.large_binary()]
+                    yield batch
+
+            actual = df.mapInArrow(func, df.schema).collect()
+            expected = df.collect()
+            self.assertEqual(actual, expected)
+
     def test_different_output_length(self):
         def func(iterator):
             for _ in iterator:
@@ -93,6 +89,31 @@ class MapInArrowTests(ReusedSQLTestCase):
         df = self.spark.range(10)
         actual = df.repartition(1).mapInArrow(func, "a long").collect()
         self.assertEqual(set((r.a for r in actual)), set(range(100)))
+
+    def test_other_than_recordbatch_iter(self):
+        with QuietTest(self.sc):
+            self.check_other_than_recordbatch_iter()
+
+    def check_other_than_recordbatch_iter(self):
+        def not_iter(_):
+            return 1
+
+        def bad_iter_elem(_):
+            return iter([1])
+
+        with self.assertRaisesRegex(
+            PythonException,
+            "Return type of the user-defined function should be iterator "
+            "of pyarrow.RecordBatch, but is int.",
+        ):
+            (self.spark.range(10, numPartitions=3).mapInArrow(not_iter, "a int").count())
+
+        with self.assertRaisesRegex(
+            PythonException,
+            "Return type of the user-defined function should be iterator "
+            "of pyarrow.RecordBatch, but is iterator of int.",
+        ):
+            (self.spark.range(10, numPartitions=3).mapInArrow(bad_iter_elem, "a int").count())
 
     def test_empty_iterator(self):
         def empty_iter(_):
@@ -126,11 +147,34 @@ class MapInArrowTests(ReusedSQLTestCase):
         self.assertEqual(sorted(actual), sorted(expected))
 
 
+class MapInArrowTests(MapInArrowTestsMixin, ReusedSQLTestCase):
+    @classmethod
+    def setUpClass(cls):
+        ReusedSQLTestCase.setUpClass()
+
+        # Synchronize default timezone between Python and Java
+        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
+        tz = "America/Los_Angeles"
+        os.environ["TZ"] = tz
+        time.tzset()
+
+        cls.sc.environment["TZ"] = tz
+        cls.spark.conf.set("spark.sql.session.timeZone", tz)
+
+    @classmethod
+    def tearDownClass(cls):
+        del os.environ["TZ"]
+        if cls.tz_prev is not None:
+            os.environ["TZ"] = cls.tz_prev
+        time.tzset()
+        ReusedSQLTestCase.tearDownClass()
+
+
 if __name__ == "__main__":
     from pyspark.sql.tests.test_arrow_map import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

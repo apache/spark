@@ -21,7 +21,7 @@ from pyspark.pandas.config import Option, DictWrapper
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class ConfigTest(PandasOnSparkTestCase):
+class ConfigTestsMixin:
     def setUp(self):
         config._options_dict["test.config"] = Option(key="test.config", doc="", default="default")
 
@@ -143,12 +143,16 @@ class ConfigTest(PandasOnSparkTestCase):
         self.assertTrue("sample_ratio" in dir(ps.options.plotting))
 
 
+class ConfigTests(ConfigTestsMixin, PandasOnSparkTestCase):
+    pass
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.pandas.tests.test_config import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

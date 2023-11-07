@@ -27,7 +27,7 @@ import scala.util.matching.Regex
 import org.apache.hadoop.hive.common.StatsSetupConst
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.sql._
+import org.apache.spark.sql.{AnalysisException, _}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, HiveTableRelation}
@@ -42,7 +42,6 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
-
 
 class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {
 
@@ -78,12 +77,12 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       withTable("csv_table") {
         withTempDir { tempDir =>
           // EXTERNAL OpenCSVSerde table pointing to LOCATION
-          val file1 = new File(tempDir + "/data1")
+          val file1 = new File(s"$tempDir/data1")
           Utils.tryWithResource(new PrintWriter(file1)) { writer =>
             writer.write("1,2")
           }
 
-          val file2 = new File(tempDir + "/data2")
+          val file2 = new File(s"$tempDir/data2")
           Utils.tryWithResource(new PrintWriter(file2)) { writer =>
             writer.write("1,2")
           }
@@ -537,7 +536,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         }.getMessage
         assert(message.contains(
           "DS is not a valid partition column in table " +
-            s"`$SESSION_CATALOG_NAME`.`default`.`${tableName.toLowerCase(Locale.ROOT)}`"))
+            s"`$SESSION_CATALOG_NAME`.`default`.`$tableName`"))
       }
     }
   }
@@ -579,6 +578,24 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       assertAnalysisException("PARTITION (a, b, c='c1')")
       assertAnalysisException("PARTITION (a='a1', c='c1')")
       assertAnalysisException("PARTITION (a='a1', b, c='c1')")
+    }
+  }
+
+  test("analyze not found column") {
+    val tableName = "analyzeTable"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS fakeColumn")
+        },
+        errorClass = "COLUMN_NOT_FOUND",
+        parameters = Map(
+          "colName" -> "`fakeColumn`",
+          "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""
+        )
+      )
     }
   }
 
@@ -745,7 +762,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     val e2 = intercept[IllegalArgumentException] {
       AnalyzeColumnCommand(TableIdentifier("test"), None, false).run(spark)
     }
-    assert(e1.getMessage.contains("Parameter `columnNames` or `allColumns` are" +
+    assert(e2.getMessage.contains("Parameter `columnNames` or `allColumns` are" +
       " mutually exclusive"))
   }
 
@@ -875,7 +892,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
    */
   private def getStatsProperties(tableName: String): Map[String, String] = {
     val hTable = hiveClient.getTable(spark.sessionState.catalog.getCurrentDatabase, tableName)
-    hTable.properties.filterKeys(_.startsWith(STATISTICS_PREFIX)).toMap
+    hTable.properties.view.filterKeys(_.startsWith(STATISTICS_PREFIX)).toMap
   }
 
   test("change stats after insert command for hive table") {
@@ -920,7 +937,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
           withTempDir { loadPath =>
             // load data command
-            val file = new File(loadPath + "/data")
+            val file = new File(s"$loadPath/data")
             Utils.tryWithResource(new PrintWriter(file)) { writer =>
               writer.write("2,xyz")
             }
@@ -1113,7 +1130,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     def checkColStatsProps(expected: Map[String, String]): Unit = {
       sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS " + stats.keys.mkString(", "))
       val table = hiveClient.getTable("default", tableName)
-      val props = table.properties.filterKeys(_.startsWith("spark.sql.statistics.colStats")).toMap
+      val props =
+        table.properties.view.filterKeys(_.startsWith("spark.sql.statistics.colStats")).toMap
       assert(props == expected)
     }
 
@@ -1137,7 +1155,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     val tableName = "column_stats_test_de"
     // (data.head.productArity - 1) because the last column does not support stats collection.
     assert(stats.size == data.head.productArity - 1)
-    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
+    // Hive can't parse data type "timestamp_ntz"
+    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*).drop("ctimestamp_ntz")
 
     withTable(tableName) {
       df.write.saveAsTable(tableName)
@@ -1181,11 +1200,11 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS cint, ctimestamp")
         val table = hiveClient.getTable("default", tableName)
         val intHistogramProps = table.properties
-          .filterKeys(_.startsWith("spark.sql.statistics.colStats.cint.histogram"))
+          .view.filterKeys(_.startsWith("spark.sql.statistics.colStats.cint.histogram"))
         assert(intHistogramProps.size == 1)
 
         val tsHistogramProps = table.properties
-          .filterKeys(_.startsWith("spark.sql.statistics.colStats.ctimestamp.histogram"))
+          .view.filterKeys(_.startsWith("spark.sql.statistics.colStats.ctimestamp.histogram"))
         assert(tsHistogramProps.size == 1)
 
         // Validate histogram after deserialization.
@@ -1442,7 +1461,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     withTempDir { tempDir =>
       withTable("t1") {
         spark.range(5).write.mode(SaveMode.Overwrite).parquet(tempDir.getCanonicalPath)
-        Utils.tryWithResource(new PrintWriter(new File(tempDir + "/temp.crc"))) { writer =>
+        Utils.tryWithResource(new PrintWriter(new File(s"$tempDir/temp.crc"))) { writer =>
           writer.write("1,2")
         }
 
@@ -1609,6 +1628,25 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           assert(partStats5.sizeInBytes == 0)
         }
       }
+    }
+  }
+
+  test("Don't support MapType") {
+    val tableName = "analyzeTable_column"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value MAP<STRING, STRING>) " +
+        s"PARTITIONED BY (ds STRING)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS value")
+        },
+        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNSUPPORTED_COLUMN_TYPE",
+        parameters = Map(
+          "columnType" -> "\"MAP<STRING, STRING>\"",
+          "columnName" -> "`value`",
+          "tableName" -> "`spark_catalog`.`default`.`analyzetable_column`"
+        )
+      )
     }
   }
 }

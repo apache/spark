@@ -249,7 +249,7 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
     // inferField should infer a column as string type if it contains mixing dates and timestamps
     assert(inferSchema.inferField(DateType, "2003|01|01") == StringType)
     // SQL configuration must be set to default to TimestampNTZ
-    withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+    withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
       assert(inferSchema.inferField(DateType, "2003/02/05") == StringType)
     }
     assert(inferSchema.inferField(TimestampNTZType, "2012_12_12") == StringType)
@@ -262,5 +262,15 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
       defaultTimeZoneId = "UTC")
     inferSchema = new CSVInferSchema(options)
     assert(inferSchema.inferField(DateType, "2012_12_12") == DateType)
+  }
+
+  test("SPARK-45433: inferring the schema when timestamps do not match specified timestampFormat" +
+    " with only one row") {
+    val options = new CSVOptions(
+      Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss"),
+      columnPruning = false,
+      defaultTimeZoneId = "UTC")
+    val inferSchema = new CSVInferSchema(options)
+    assert(inferSchema.inferField(NullType, "2884-06-24T02:45:51.138") == StringType)
   }
 }

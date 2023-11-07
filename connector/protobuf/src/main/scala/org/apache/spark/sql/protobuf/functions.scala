@@ -16,10 +16,11 @@
  */
 package org.apache.spark.sql.protobuf
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 
 // scalastyle:off: object.name
 object functions {
@@ -27,60 +28,266 @@ object functions {
 
   /**
    * Converts a binary column of Protobuf format into its corresponding catalyst value. The
-   * specified schema must match actual schema of the read data, otherwise the behavior is
-   * undefined: it may fail or return arbitrary result. To deserialize the data with a compatible
-   * and evolved schema, the expected Protobuf schema can be set via the option protoSchema.
+   * Protobuf definition is provided through Protobuf <i>descriptor file</i>.
    *
    * @param data
    *   the binary column.
-   * @param descFilePath
-   *   the protobuf descriptor in Message GeneratedMessageV3 format.
    * @param messageName
-   *   the protobuf message name to look for in descriptorFile.
+   *   the protobuf message name to look for in descriptor file.
+   * @param descFilePath
+   *   The Protobuf descriptor file. This file is usually created using `protoc` with
+   *   `--descriptor_set_out` and `--include_imports` options.
+   * @param options
    * @since 3.4.0
    */
   @Experimental
   def from_protobuf(
       data: Column,
-      descFilePath: String,
       messageName: String,
+      descFilePath: String,
       options: java.util.Map[String, String]): Column = {
+    val descriptorFileContent = ProtobufUtils.readDescriptorFileContent(descFilePath)
+    from_protobuf(data, messageName, descriptorFileContent, options)
+  }
+
+  /**
+   * Converts a binary column of Protobuf format into its corresponding catalyst value.The
+   * Protobuf definition is provided through Protobuf `FileDescriptorSet`.
+   *
+   * @param data
+   *   the binary column.
+   * @param messageName
+   *   the protobuf MessageName to look for in the descriptor set.
+   * @param binaryFileDescriptorSet
+   *   Serialized Protobuf descriptor (`FileDescriptorSet`). Typically contents of file created
+   *   using `protoc` with `--descriptor_set_out` and `--include_imports` options.
+   *   @param options
+   * @since 3.5.0
+   */
+  @Experimental
+  def from_protobuf(
+    data: Column,
+    messageName: String,
+    binaryFileDescriptorSet: Array[Byte],
+    options: java.util.Map[String, String]): Column = {
     new Column(
-      ProtobufDataToCatalyst(data.expr, descFilePath, messageName, options.asScala.toMap))
+      ProtobufDataToCatalyst(
+        data.expr, messageName, Some(binaryFileDescriptorSet), options.asScala.toMap
+      )
+    )
   }
 
   /**
    * Converts a binary column of Protobuf format into its corresponding catalyst value. The
-   * specified schema must match actual schema of the read data, otherwise the behavior is
-   * undefined: it may fail or return arbitrary result. To deserialize the data with a compatible
-   * and evolved schema, the expected Protobuf schema can be set via the option protoSchema.
+   * Protobuf definition is provided through Protobuf <i>descriptor file</i>.
    *
    * @param data
    *   the binary column.
-   * @param descFilePath
-   *   the protobuf descriptor in Message GeneratedMessageV3 format.
    * @param messageName
-   *   the protobuf MessageName to look for in descriptorFile.
+   *   the protobuf MessageName to look for in descriptor file.
+   * @param descFilePath
+   *   The Protobuf descriptor file. This file is usually created using `protoc` with
+   *   `--descriptor_set_out` and `--include_imports` options.
    * @since 3.4.0
    */
   @Experimental
-  def from_protobuf(data: Column, descFilePath: String, messageName: String): Column = {
-    new Column(ProtobufDataToCatalyst(data.expr, descFilePath, messageName, Map.empty))
+  def from_protobuf(data: Column, messageName: String, descFilePath: String): Column = {
+    val fileContent = ProtobufUtils.readDescriptorFileContent(descFilePath)
+    new Column(ProtobufDataToCatalyst(data.expr, messageName, Some(fileContent)))
+  }
+
+  /**
+   * Converts a binary column of Protobuf format into its corresponding catalyst value.The
+   * Protobuf definition is provided through Protobuf `FileDescriptorSet`.
+   *
+   * @param data
+   *   the binary column.
+   * @param messageName
+   *   the protobuf MessageName to look for in the descriptor set.
+   * @param binaryFileDescriptorSet
+   *   Serialized Protobuf descriptor (`FileDescriptorSet`). Typically contents of file created
+   *   using `protoc` with `--descriptor_set_out` and `--include_imports` options.
+   * @since 3.5.0
+   */
+  @Experimental
+  def from_protobuf(data: Column, messageName: String, binaryFileDescriptorSet: Array[Byte])
+  : Column = {
+    new Column(ProtobufDataToCatalyst(data.expr, messageName, Some(binaryFileDescriptorSet)))
+  }
+
+  /**
+   * Converts a binary column of Protobuf format into its corresponding catalyst value.
+   * `messageClassName` points to Protobuf Java class. The jar containing Java class should be
+   * shaded. Specifically, `com.google.protobuf.*` should be shaded to
+   * `org.sparkproject.spark_protobuf.protobuf.*`.
+   * https://github.com/rangadi/shaded-protobuf-classes is useful to create shaded jar from
+   * Protobuf files.
+   *
+   * @param data
+   *   the binary column.
+   * @param messageClassName
+   *   The full name for Protobuf Java class. E.g. <code>com.example.protos.ExampleEvent</code>.
+   *   The jar with these classes needs to be shaded as described above.
+   * @since 3.4.0
+   */
+  @Experimental
+  def from_protobuf(data: Column, messageClassName: String): Column = {
+    new Column(ProtobufDataToCatalyst(data.expr, messageClassName))
+  }
+
+  /**
+   * Converts a binary column of Protobuf format into its corresponding catalyst value.
+   * `messageClassName` points to Protobuf Java class. The jar containing Java class should be
+   * shaded. Specifically, `com.google.protobuf.*` should be shaded to
+   * `org.sparkproject.spark_protobuf.protobuf.*`.
+   * https://github.com/rangadi/shaded-protobuf-classes is useful to create shaded jar from
+   * Protobuf files.
+   *
+   * @param data
+   *   the binary column.
+   * @param messageClassName
+   *   The full name for Protobuf Java class. E.g. <code>com.example.protos.ExampleEvent</code>.
+   *   The jar with these classes needs to be shaded as described above.
+   * @param options
+   * @since 3.4.0
+   */
+  @Experimental
+  def from_protobuf(
+    data: Column,
+    messageClassName: String,
+    options: java.util.Map[String, String]): Column = {
+    new Column(ProtobufDataToCatalyst(data.expr, messageClassName, None, options.asScala.toMap))
+  }
+
+  /**
+   * Converts a column into binary of protobuf format. The Protobuf definition is provided
+   * through Protobuf <i>descriptor file</i>.
+   *
+   * @param data
+   *   the data column.
+   * @param messageName
+   *   the protobuf MessageName to look for in descriptor file.
+   * @param descFilePath
+   *   The Protobuf descriptor file. This file is usually created using `protoc` with
+   *   `--descriptor_set_out` and `--include_imports` options.
+   * @since 3.4.0
+   */
+  @Experimental
+  def to_protobuf(data: Column, messageName: String, descFilePath: String): Column = {
+    to_protobuf(data, messageName, descFilePath, Map.empty[String, String].asJava)
+  }
+
+  /**
+   * Converts a column into binary of protobuf format.The Protobuf definition is provided
+   * through Protobuf `FileDescriptorSet`.
+   *
+   * @param data
+   *   the binary column.
+   * @param messageName
+   *   the protobuf MessageName to look for in the descriptor set.
+   * @param binaryFileDescriptorSet
+   *   Serialized Protobuf descriptor (`FileDescriptorSet`). Typically contents of file created
+   *   using `protoc` with `--descriptor_set_out` and `--include_imports` options.
+   *
+   * @since 3.5.0
+   */
+  @Experimental
+  def to_protobuf(data: Column, messageName: String, binaryFileDescriptorSet: Array[Byte])
+  : Column = {
+    new Column(CatalystDataToProtobuf(data.expr, messageName, Some(binaryFileDescriptorSet)))
+  }
+  /**
+   * Converts a column into binary of protobuf format. The Protobuf definition is provided
+   * through Protobuf <i>descriptor file</i>.
+   *
+   * @param data
+   *   the data column.
+   * @param messageName
+   *   the protobuf MessageName to look for in descriptor file.
+   * @param descFilePath
+   *   the protobuf descriptor file.
+   * @param options
+   * @since 3.4.0
+   */
+  @Experimental
+  def to_protobuf(
+    data: Column,
+    messageName: String,
+    descFilePath: String,
+    options: java.util.Map[String, String]): Column = {
+    val fileContent = ProtobufUtils.readDescriptorFileContent(descFilePath)
+    new Column(
+      CatalystDataToProtobuf(data.expr, messageName, Some(fileContent), options.asScala.toMap)
+    )
+  }
+
+  /**
+   * Converts a column into binary of protobuf format.The Protobuf definition is provided
+   * through Protobuf `FileDescriptorSet`.
+   *
+   * @param data
+   *   the binary column.
+   * @param messageName
+   *   the protobuf MessageName to look for in the descriptor set.
+   * @param binaryFileDescriptorSet
+   *   Serialized Protobuf descriptor (`FileDescriptorSet`). Typically contents of file created
+   *   using `protoc` with `--descriptor_set_out` and `--include_imports` options.
+   * @param options
+   * @since 3.5.0
+   */
+  @Experimental
+  def to_protobuf(
+    data: Column,
+    messageName: String,
+    binaryFileDescriptorSet: Array[Byte],
+    options: java.util.Map[String, String]
+  ): Column = {
+    new Column(
+      CatalystDataToProtobuf(
+        data.expr, messageName, Some(binaryFileDescriptorSet), options.asScala.toMap
+      )
+    )
   }
 
   /**
    * Converts a column into binary of protobuf format.
+   * `messageClassName` points to Protobuf Java class. The jar containing Java class should be
+   * shaded. Specifically, `com.google.protobuf.*` should be shaded to
+   * `org.sparkproject.spark_protobuf.protobuf.*`.
+   * https://github.com/rangadi/shaded-protobuf-classes is useful to create shaded jar from
+   * Protobuf files.
    *
    * @param data
    *   the data column.
-   * @param descFilePath
-   *   the protobuf descriptor in Message GeneratedMessageV3 format.
-   * @param messageName
-   *   the protobuf MessageName to look for in descriptorFile.
+   * @param messageClassName
+   *   The full name for Protobuf Java class. E.g. <code>com.example.protos.ExampleEvent</code>.
+   *   The jar with these classes needs to be shaded as described above.
    * @since 3.4.0
    */
   @Experimental
-  def to_protobuf(data: Column, descFilePath: String, messageName: String): Column = {
-    new Column(CatalystDataToProtobuf(data.expr, descFilePath, messageName))
+  def to_protobuf(data: Column, messageClassName: String): Column = {
+    new Column(CatalystDataToProtobuf(data.expr, messageClassName))
+  }
+
+  /**
+   * Converts a column into binary of protobuf format.
+   * `messageClassName` points to Protobuf Java class. The jar containing Java class should be
+   * shaded. Specifically, `com.google.protobuf.*` should be shaded to
+   * `org.sparkproject.spark_protobuf.protobuf.*`.
+   * https://github.com/rangadi/shaded-protobuf-classes is useful to create shaded jar from
+   * Protobuf files.
+   *
+   * @param data
+   *   the data column.
+   * @param messageClassName
+   *   The full name for Protobuf Java class. E.g. <code>com.example.protos.ExampleEvent</code>.
+   *   The jar with these classes needs to be shaded as described above.
+   * @param options
+   * @since 3.4.0
+   */
+  @Experimental
+  def to_protobuf(data: Column, messageClassName: String, options: java.util.Map[String, String])
+  : Column = {
+    new Column(CatalystDataToProtobuf(data.expr, messageClassName, None, options.asScala.toMap))
   }
 }

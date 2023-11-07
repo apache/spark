@@ -49,7 +49,7 @@ trait TimeZoneAwareExpression extends Expression {
     childrenResolved && checkInputDataTypes().isSuccess && timeZoneId.isDefined
 
   final override val nodePatterns: Seq[TreePattern] =
-    Seq(TIME_ZONE_AWARE_EXPRESSION) ++ nodePatternsInternal
+    Seq(TIME_ZONE_AWARE_EXPRESSION) ++ nodePatternsInternal()
 
   // Subclasses can override this function to provide more TreePatterns.
   def nodePatternsInternal(): Seq[TreePattern] = Seq()
@@ -171,8 +171,8 @@ object CurDateExpressionBuilder extends ExpressionBuilder {
     if (expressions.isEmpty) {
       CurrentDate()
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-        Seq.empty, funcName, expressions.length)
+      throw QueryCompilationErrors.wrongNumArgsError(
+        funcName, Seq(0), expressions.length)
     }
   }
 }
@@ -1017,7 +1017,7 @@ case class ToUnixTimestamp(
     copy(timeZoneId = Option(timeZoneId))
 
   def this(time: Expression) = {
-    this(time, Literal(TimestampFormatter.defaultPattern))
+    this(time, Literal(TimestampFormatter.defaultPattern()))
   }
 
   override def prettyName: String = "to_unix_timestamp"
@@ -1073,7 +1073,7 @@ case class UnixTimestamp(
     copy(timeZoneId = Option(timeZoneId))
 
   def this(time: Expression) = {
-    this(time, Literal(TimestampFormatter.defaultPattern))
+    this(time, Literal(TimestampFormatter.defaultPattern()))
   }
 
   def this() = {
@@ -1143,7 +1143,7 @@ object ParseToTimestampNTZExpressionBuilder extends ExpressionBuilder {
     if (numArgs == 1 || numArgs == 2) {
       ParseToTimestamp(expressions(0), expressions.drop(1).lastOption, TimestampNTZType)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(1, 2), funcName, numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), numArgs)
     }
   }
 }
@@ -1180,7 +1180,7 @@ object ParseToTimestampLTZExpressionBuilder extends ExpressionBuilder {
     if (numArgs == 1 || numArgs == 2) {
       ParseToTimestamp(expressions(0), expressions.drop(1).lastOption, TimestampType)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(1, 2), funcName, numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), numArgs)
     }
   }
 }
@@ -1224,7 +1224,7 @@ object TryToTimestampExpressionBuilder extends ExpressionBuilder {
         SQLConf.get.timestampType,
         failOnError = false)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(1, 2), funcName, numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), numArgs)
     }
   }
 }
@@ -1409,7 +1409,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   override def prettyName: String = "from_unixtime"
 
   def this(unix: Expression) = {
-    this(unix, Literal(TimestampFormatter.defaultPattern))
+    this(unix, Literal(TimestampFormatter.defaultPattern()))
   }
 
   override def dataType: DataType = StringType
@@ -2044,12 +2044,15 @@ case class MonthsBetween(
 case class ParseToDate(
     left: Expression,
     format: Option[Expression],
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String] = None,
+    ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
   extends RuntimeReplaceable with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
   override lazy val replacement: Expression = format.map { f =>
-    Cast(GetTimestamp(left, f, TimestampType, timeZoneId), DateType, timeZoneId)
-  }.getOrElse(Cast(left, DateType, timeZoneId)) // backwards compatibility
+    Cast(GetTimestamp(left, f, TimestampType, timeZoneId, ansiEnabled), DateType, timeZoneId,
+      EvalMode.fromBoolean(ansiEnabled))
+  }.getOrElse(Cast(left, DateType, timeZoneId,
+    EvalMode.fromBoolean(ansiEnabled))) // backwards compatibility
 
   def this(left: Expression, format: Expression) = {
     this(left, Option(format))
@@ -2518,7 +2521,7 @@ object MakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
         expressions(5),
         dataType = TimestampNTZType)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(6), funcName, numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(6), numArgs)
     }
   }
 }
@@ -2566,7 +2569,7 @@ object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
         expressions.drop(6).lastOption,
         dataType = TimestampType)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(6), funcName, numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(6), numArgs)
     }
   }
 }
@@ -2837,7 +2840,7 @@ object DatePartExpressionBuilder extends ExpressionBuilder {
       val source = expressions(1)
       Extract(field, source, Extract.createExpr(funcName, field, source))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2), funcName, numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), numArgs)
     }
   }
 }
@@ -2931,7 +2934,7 @@ object Extract {
         }
       }
     } else {
-      throw QueryCompilationErrors.requireLiteralParameter(funcName, "field", "string")
+      throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "field", StringType)
     }
   }
 }
@@ -3072,9 +3075,9 @@ object SubtractDates {
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_('Europe/Amsterdam', 'America/Los_Angeles', timestamp_ntz'2021-12-06 00:00:00');
+      > SELECT _FUNC_('Europe/Brussels', 'America/Los_Angeles', timestamp_ntz'2021-12-06 00:00:00');
        2021-12-05 15:00:00
-      > SELECT _FUNC_('Europe/Amsterdam', timestamp_ntz'2021-12-05 15:00:00');
+      > SELECT _FUNC_('Europe/Brussels', timestamp_ntz'2021-12-05 15:00:00');
        2021-12-06 00:00:00
   """,
   group = "datetime_funcs",

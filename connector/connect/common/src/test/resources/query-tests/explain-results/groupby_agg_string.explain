@@ -1,0 +1,2 @@
+Aggregate [id#0L, b#0], [id#0L, b#0, max(a#0) AS max(a)#0, count(a#0) AS count(a)#0L]
++- LocalRelation <empty>, [id#0L, a#0, b#0]

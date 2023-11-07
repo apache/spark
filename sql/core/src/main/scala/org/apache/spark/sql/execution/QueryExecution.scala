@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableU
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
-import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata, WatermarkPropagator}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.Utils
@@ -63,7 +63,17 @@ class QueryExecution(
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
 
-  def assertAnalyzed(): Unit = analyzed
+  def assertAnalyzed(): Unit = {
+    try {
+      analyzed
+    } catch {
+      case e: AnalysisException =>
+        // Because we do eager analysis for Dataframe, there will be no execution created after
+        // AnalysisException occurs. So we need to explicitly create a new execution to post
+        // start/end events to notify the listener and UI components.
+        SQLExecution.withNewExecutionIdOnError(this, Some("analyze"))(e)
+    }
+  }
 
   def assertSupported(): Unit = {
     if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
@@ -71,9 +81,13 @@ class QueryExecution(
     }
   }
 
-  lazy val analyzed: LogicalPlan = executePhase(QueryPlanningTracker.ANALYSIS) {
-    // We can't clone `logical` here, which will reset the `_analyzed` flag.
-    sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
+  lazy val analyzed: LogicalPlan = {
+    val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
+      // We can't clone `logical` here, which will reset the `_analyzed` flag.
+      sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
+    }
+    tracker.setAnalyzed(plan)
+    plan
   }
 
   lazy val commandExecuted: LogicalPlan = mode match {
@@ -93,6 +107,11 @@ class QueryExecution(
 
   private def eagerlyExecuteCommands(p: LogicalPlan) = p transformDown {
     case c: Command =>
+      // Since Command execution will eagerly take place here,
+      // and in most cases be the bulk of time and effort,
+      // with the rest of processing of the root plan being just outputting command results,
+      // for eagerly executed commands we mark this place as beginning of execution.
+      tracker.setReadyForExecution()
       val qe = sparkSession.sessionState.executePlan(c, CommandExecutionMode.NON_ROOT)
       val result = SQLExecution.withNewExecutionId(qe, Some(commandExecutionName(c))) {
         qe.executedPlan.executeCollect()
@@ -105,12 +124,29 @@ class QueryExecution(
     case other => other
   }
 
+  // The plan that has been normalized by custom rules, so that it's more likely to hit cache.
+  lazy val normalized: LogicalPlan = {
+    val normalizationRules = sparkSession.sessionState.planNormalizationRules
+    if (normalizationRules.isEmpty) {
+      commandExecuted
+    } else {
+      val planChangeLogger = new PlanChangeLogger[LogicalPlan]()
+      val normalized = normalizationRules.foldLeft(commandExecuted) { (p, rule) =>
+        val result = rule.apply(p)
+        planChangeLogger.logRule(rule.ruleName, p, result)
+        result
+      }
+      planChangeLogger.logBatch("Plan Normalization", commandExecuted, normalized)
+      normalized
+    }
+  }
+
   lazy val withCachedData: LogicalPlan = sparkSession.withActive {
     assertAnalyzed()
     assertSupported()
     // clone the plan to avoid sharing the plan instance between different stages like analyzing,
     // optimizing and planning.
-    sparkSession.sharedState.cacheManager.useCachedData(commandExecuted.clone())
+    sparkSession.sharedState.cacheManager.useCachedData(normalized.clone())
   }
 
   def assertCommandExecuted(): Unit = commandExecuted
@@ -133,7 +169,7 @@ class QueryExecution(
     }
   }
 
-  private def assertOptimized(): Unit = optimizedPlan
+  def assertOptimized(): Unit = optimizedPlan
 
   lazy val sparkPlan: SparkPlan = {
     // We need to materialize the optimizedPlan here because sparkPlan is also tracked under
@@ -146,18 +182,26 @@ class QueryExecution(
     }
   }
 
+  def assertSparkPlanPrepared(): Unit = sparkPlan
+
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
   lazy val executedPlan: SparkPlan = {
     // We need to materialize the optimizedPlan here, before tracking the planning phase, to ensure
     // that the optimization time is not counted as part of the planning phase.
     assertOptimized()
-    executePhase(QueryPlanningTracker.PLANNING) {
+    val plan = executePhase(QueryPlanningTracker.PLANNING) {
       // clone the plan to avoid sharing the plan instance between different stages like analyzing,
       // optimizing and planning.
       QueryExecution.prepareForExecution(preparations, sparkPlan.clone())
     }
+    // Note: For eagerly executed command it might have already been called in
+    // `eagerlyExecutedCommand` and is a noop here.
+    tracker.setReadyForExecution()
+    plan
   }
+
+  def assertExecutedPlanPrepared(): Unit = executedPlan
 
   /**
    * Internal version of the RDD. Avoids copies and has no schema.
@@ -213,11 +257,9 @@ class QueryExecution(
     append("\n")
   }
 
-  def explainString(
-      mode: ExplainMode,
-      maxFields: Int = SQLConf.get.maxToStringFields): String = {
+  def explainString(mode: ExplainMode): String = {
     val concat = new PlanStringConcat()
-    explainString(mode, maxFields, concat.append)
+    explainString(mode, SQLConf.get.maxToStringFields, concat.append)
     withRedaction {
       concat.toString
     }
@@ -229,7 +271,8 @@ class QueryExecution(
       // output mode does not matter since there is no `Sink`.
       new IncrementalExecution(
         sparkSession, logical, OutputMode.Append(), "<unknown>",
-        UUID.randomUUID, UUID.randomUUID, 0, OffsetSeqMetadata(0, 0))
+        UUID.randomUUID, UUID.randomUUID, 0, None, OffsetSeqMetadata(0, 0),
+        WatermarkPropagator.noop(), false)
     } else {
       this
     }
@@ -396,7 +439,7 @@ object QueryExecution {
 
   /**
    * Construct a sequence of rules that are used to prepare a planned [[SparkPlan]] for execution.
-   * These rules will make sure subqueries are planned, make use the data partitioning and ordering
+   * These rules will make sure subqueries are planned, make sure the data partitioning and ordering
    * are correct, insert whole stage code gen, and try to reduce the work done by reusing exchanges
    * and subqueries.
    */
@@ -416,9 +459,11 @@ object QueryExecution {
       // `ReplaceHashWithSortAgg` needs to be added after `EnsureRequirements` to guarantee the
       // sort order of each node is checked to be valid.
       ReplaceHashWithSortAgg,
-      // `RemoveRedundantSorts` needs to be added after `EnsureRequirements` to guarantee the same
-      // number of partitions when instantiating PartitioningCollection.
+      // `RemoveRedundantSorts` and `RemoveRedundantWindowGroupLimits` needs to be added after
+      // `EnsureRequirements` to guarantee the same number of partitions when instantiating
+      // PartitioningCollection.
       RemoveRedundantSorts,
+      RemoveRedundantWindowGroupLimits,
       DisableUnnecessaryBucketedScan,
       ApplyColumnarRulesAndInsertTransitions(
         sparkSession.sessionState.columnarRules, outputsColumnar = false),
@@ -495,11 +540,10 @@ object QueryExecution {
    */
   private[sql] def toInternalError(msg: String, e: Throwable): Throwable = e match {
     case e @ (_: java.lang.NullPointerException | _: java.lang.AssertionError) =>
-      new SparkException(
-        errorClass = "INTERNAL_ERROR",
-        messageParameters = Map("message" -> (msg +
-          " Please, fill a bug report in, and provide the full stack trace.")),
-        cause = e)
+      SparkException.internalError(
+        msg + " You hit a bug in Spark or the Spark plugins you use. Please, report this bug " +
+          "to the corresponding communities or vendors, and provide the full stack trace.",
+        e)
     case e: Throwable =>
       e
   }

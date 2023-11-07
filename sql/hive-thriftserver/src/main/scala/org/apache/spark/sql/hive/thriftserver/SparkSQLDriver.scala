@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.util.{ArrayList => JArrayList, Arrays, List => JList}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Schema}
@@ -29,6 +29,7 @@ import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.plans.logical.CommandResult
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
@@ -65,8 +66,15 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
       }
       context.sparkContext.setJobDescription(substitutorCommand)
       val execution = context.sessionState.executePlan(context.sql(command).logicalPlan)
-      hiveResponse = SQLExecution.withNewExecutionId(execution, Some("cli")) {
-        hiveResultString(execution.executedPlan)
+      // The SQL command has been executed above via `executePlan`, therefore we don't need to
+      // wrap it again with a new execution ID when getting Hive result.
+      execution.logical match {
+        case _: CommandResult =>
+          hiveResponse = hiveResultString(execution.executedPlan)
+        case _ =>
+          hiveResponse = SQLExecution.withNewExecutionId(execution, Some("cli")) {
+            hiveResultString(execution.executedPlan)
+          }
       }
       tableSchema = getResultSetSchema(execution)
       new CommandProcessorResponse(0)

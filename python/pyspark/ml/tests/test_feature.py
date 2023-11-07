@@ -367,7 +367,6 @@ class FeatureTests(SparkSessionTestCase):
 
 class HashingTFTest(SparkSessionTestCase):
     def test_apply_binary_term_freqs(self):
-
         df = self.spark.createDataFrame([(0, ["a", "a", "b", "c", "c", "c"])], ["id", "words"])
         n = 10
         hashingTF = HashingTF()
@@ -393,7 +392,7 @@ if __name__ == "__main__":
     from pyspark.ml.tests.test_feature import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

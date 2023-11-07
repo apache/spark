@@ -25,15 +25,22 @@ import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkConf
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.Utils
 
+@ExtendedSQLTest
 class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvider]
+  with AlsoTestWithChangelogCheckpointingEnabled
+  with SharedSparkSession
   with BeforeAndAfter {
 
   before {
@@ -68,14 +75,19 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
   test("RocksDB confs are passed correctly from SparkSession to db instance") {
     val sparkConf = new SparkConf().setMaster("local").setAppName(this.getClass.getSimpleName)
-    withSparkSession(SparkSession.builder.config(sparkConf).getOrCreate()) { spark =>
+    withSparkSession(SparkSession.builder().config(sparkConf).getOrCreate()) { spark =>
       // Set the session confs that should be passed into RocksDB
       val testConfs = Seq(
         ("spark.sql.streaming.stateStore.providerClass",
           classOf[RocksDBStateStoreProvider].getName),
-        (RocksDBConf.ROCKSDB_CONF_NAME_PREFIX + ".compactOnCommit", "true"),
-        (RocksDBConf.ROCKSDB_CONF_NAME_PREFIX + ".lockAcquireTimeoutMs", "10"),
-        (RocksDBConf.ROCKSDB_CONF_NAME_PREFIX + ".maxOpenFiles", "1000"),
+        (RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".compactOnCommit", "true"),
+        (RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled", "true"),
+        (RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".lockAcquireTimeoutMs", "10"),
+        (RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".maxOpenFiles", "1000"),
+        (RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".maxWriteBufferNumber", "3"),
+        (RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".writeBufferSizeMB", "16"),
+        (RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".allowFAllocate", "false"),
+        (RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".compression", "zstd"),
         (SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION.key, "4")
       )
       testConfs.foreach { case (k, v) => spark.conf.set(k, v) }
@@ -99,9 +111,14 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
       // Verify the confs are same as those configured in the session conf
       assert(rocksDBConfInTask.compactOnCommit == true)
+      assert(rocksDBConfInTask.enableChangelogCheckpointing == true)
       assert(rocksDBConfInTask.lockAcquireTimeoutMs == 10L)
       assert(rocksDBConfInTask.formatVersion == 4)
       assert(rocksDBConfInTask.maxOpenFiles == 1000)
+      assert(rocksDBConfInTask.maxWriteBufferNumber == 3)
+      assert(rocksDBConfInTask.writeBufferSizeMB == 16L)
+      assert(rocksDBConfInTask.allowFAllocate == false)
+      assert(rocksDBConfInTask.compression == "zstd")
     }
   }
 
@@ -112,20 +129,22 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       assert(metricPair.isDefined)
       metricPair.get._2
     }
-
-    tryWithProviderResource(newStoreProvider()) { provider =>
-      val store = provider.getStore(0)
-      // Verify state after updating
-      put(store, "a", 0, 1)
-      assert(get(store, "a", 0) === Some(1))
-      assert(store.commit() === 1)
-      assert(store.hasCommitted)
-      val storeMetrics = store.metrics
-      assert(storeMetrics.numKeys === 1)
-      assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_COPIED) > 0L)
-      assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_REUSED) == 0L)
-      assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_BYTES_COPIED) > 0L)
-      assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED) > 0L)
+    withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
+      tryWithProviderResource(newStoreProvider()) { provider =>
+          val store = provider.getStore(0)
+          // Verify state after updating
+          put(store, "a", 0, 1)
+          assert(get(store, "a", 0) === Some(1))
+          assert(store.commit() === 1)
+          provider.doMaintenance()
+          assert(store.hasCommitted)
+          val storeMetrics = store.metrics
+          assert(storeMetrics.numKeys === 1)
+          assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_COPIED) > 0L)
+          assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_REUSED) == 0L)
+          assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_BYTES_COPIED) > 0L)
+          assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED) > 0L)
+      }
     }
   }
 
@@ -137,17 +156,23 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     newStoreProvider(storeId, numColsPrefixKey = 0)
   }
 
+  def newStoreProvider(storeId: StateStoreId, conf: Configuration): RocksDBStateStoreProvider = {
+    newStoreProvider(storeId, numColsPrefixKey = -1, conf = conf)
+  }
+
   override def newStoreProvider(numPrefixCols: Int): RocksDBStateStoreProvider = {
     newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0), numColsPrefixKey = numPrefixCols)
   }
 
   def newStoreProvider(
       storeId: StateStoreId,
-      numColsPrefixKey: Int): RocksDBStateStoreProvider = {
+      numColsPrefixKey: Int,
+      sqlConf: Option[SQLConf] = None,
+      conf: Configuration = new Configuration): RocksDBStateStoreProvider = {
     val provider = new RocksDBStateStoreProvider()
     provider.init(
       storeId, keySchema, valueSchema, numColsPrefixKey = numColsPrefixKey,
-      new StateStoreConf, new Configuration)
+      new StateStoreConf(sqlConf.getOrElse(SQLConf.get)), conf)
     provider
   }
 
@@ -167,10 +192,44 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
   override def newStoreProvider(
     minDeltasForSnapshot: Int,
-    numOfVersToRetainInMemory: Int): RocksDBStateStoreProvider = newStoreProvider()
+    numOfVersToRetainInMemory: Int): RocksDBStateStoreProvider = {
+    newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0), 0,
+      Some(getDefaultSQLConf(minDeltasForSnapshot, numOfVersToRetainInMemory)))
+  }
 
   override def getDefaultSQLConf(
     minDeltasForSnapshot: Int,
-    numOfVersToRetainInMemory: Int): SQLConf = new SQLConf()
+    numOfVersToRetainInMemory: Int): SQLConf = {
+    val sqlConf = SQLConf.get.clone()
+    sqlConf.setConfString(
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key, minDeltasForSnapshot.toString)
+    sqlConf
+  }
+
+  override def testQuietly(name: String)(f: => Unit): Unit = {
+    test(name) {
+      quietly {
+        f
+      }
+    }
+  }
+
+  override def testWithAllCodec(name: String)(func: => Any): Unit = {
+    codecsInShortName.foreach { codecName =>
+      super.test(s"$name - with codec $codecName") {
+        withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecName) {
+          func
+        }
+      }
+    }
+
+    CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codecName =>
+      super.test(s"$name - with codec $codecName") {
+        withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecName) {
+          func
+        }
+      }
+    }
+  }
 }
 

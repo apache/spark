@@ -45,10 +45,12 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
 
   test("Namespace does not exist") {
     val ns = "not_exist"
-    val message = intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       sql(s"ALTER DATABASE $catalog.$ns SET PROPERTIES ('d'='d')")
-    }.getMessage
-    assert(message.contains(s"$notFoundMsgPrefix '$ns' not found"))
+    }
+    checkError(e,
+      errorClass = "SCHEMA_NOT_FOUND",
+      parameters = Map("schemaName" -> s"`$ns`"))
   }
 
   test("basic test") {

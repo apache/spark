@@ -26,6 +26,8 @@ from pyspark.streaming.dstream import DStream
 from pyspark.streaming.listener import StreamingListener
 from pyspark.streaming.util import TransformFunction, TransformFunctionSerializer
 
+import warnings
+
 __all__ = ["StreamingContext"]
 
 T = TypeVar("T")
@@ -40,6 +42,12 @@ class StreamingContext:
     be started and stopped using `context.start()` and `context.stop()`,
     respectively. `context.awaitTermination()` allows the current thread
     to wait for the termination of the context by `stop()` or by an exception.
+
+    .. deprecated:: Spark 3.4.0
+       This is deprecated as of Spark 3.4.0.
+       There are no longer updates to DStream and it's a legacy project.
+       There is a newer and easier to use streaming engine in Spark called Structured Streaming.
+       You should use Spark Structured Streaming for your streaming applications.
 
     Parameters
     ----------
@@ -61,6 +69,10 @@ class StreamingContext:
         batchDuration: Optional[int] = None,
         jssc: Optional[JavaObject] = None,
     ):
+        warnings.warn(
+            "DStream is deprecated as of Spark 3.4.0. Migrate to Structured Streaming.",
+            FutureWarning,
+        )
         self._sc = sparkContext
         self._jvm = self._sc._jvm
         self._jssc = jssc or self._initialize_context(self._sc, batchDuration)
@@ -369,13 +381,13 @@ class StreamingContext:
         Changes to the queue after the stream is created will not be recognized.
         """
         if default and not isinstance(default, RDD):
-            default = self._sc.parallelize(default)  # type: ignore[arg-type]
+            default = self._sc.parallelize(default)
 
         if not rdds and default:
             rdds = [rdds]  # type: ignore[list-item]
 
         if rdds and not isinstance(rdds[0], RDD):
-            rdds = [self._sc.parallelize(input) for input in rdds]  # type: ignore[arg-type]
+            rdds = [self._sc.parallelize(input) for input in rdds]
         self._check_serializers(rdds)
 
         assert self._jvm is not None

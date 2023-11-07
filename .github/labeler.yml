@@ -42,12 +42,11 @@ INFRA:
   - ".asf.yaml"
   - ".gitattributes"
   - ".gitignore"
-  - "dev/github_jira_sync.py"
   - "dev/merge_spark_pr.py"
   - "dev/run-tests-jenkins*"
 BUILD:
  # Can be supported when a stable release with correct all/any is released
- #- any: ['dev/**/*', '!dev/github_jira_sync.py', '!dev/merge_spark_pr.py', '!dev/.rat-excludes']
+ #- any: ['dev/**/*', '!dev/merge_spark_pr.py', '!dev/.rat-excludes']
  - "dev/**/*"
  - "build/**/*"
  - "project/**/*"
@@ -58,7 +57,6 @@ BUILD:
  - "scalastyle-config.xml"
  # These can be added in the above `any` clause (and the /dev/**/* glob removed) when
  # `any`/`all` support is released
- # - "!dev/github_jira_sync.py"
  # - "!dev/merge_spark_pr.py"
  # - "!dev/run-tests-jenkins*"
  # - "!dev/.rat-excludes"
@@ -76,7 +74,7 @@ CORE:
   - "common/kvstore/**/*"
   - "common/network-common/**/*"
   - "common/network-shuffle/**/*"
-  - "python/pyspark/**/*.py"
+  - "python/pyspark/*.py"
   - "python/pyspark/tests/**/*.py"
 SPARK SUBMIT:
   - "bin/spark-submit*"
@@ -108,8 +106,8 @@ AVRO:
 DSTREAM:
   - "streaming/**/*"
   - "data/streaming/**/*"
-  - "external/kinesis*"
-  - "external/kafka*"
+  - "connector/kinesis*"
+  - "connector/kafka*"
   - "python/pyspark/streaming/**/*"
 GRAPHX:
   - "graphx/**/*"
@@ -138,9 +136,6 @@ R:
   - "bin/sparkR*"
 YARN:
   - "resource-managers/yarn/**/*"
-MESOS:
-  - "resource-managers/mesos/**/*"
-  - "sbin/*mesos*.sh"
 KUBERNETES:
   - "resource-managers/kubernetes/**/*"
 WINDOWS:
@@ -155,6 +150,7 @@ CONNECT:
   - "connector/connect/**/*"
   - "**/sql/sparkconnect/**/*"
   - "python/pyspark/sql/**/connect/**/*"
+  - "python/pyspark/ml/**/connect/**/*"
 PROTOBUF:
   - "connector/protobuf/**/*"
   - "python/pyspark/sql/protobuf/**/*"

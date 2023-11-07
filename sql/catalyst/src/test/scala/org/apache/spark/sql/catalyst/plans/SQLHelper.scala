@@ -45,7 +45,7 @@ trait SQLHelper {
         None
       }
     }
-    (keys, values).zipped.foreach { (k, v) =>
+    keys.lazyZip(values).foreach { (k, v) =>
       if (SQLConf.isStaticConfigKey(k)) {
         throw new AnalysisException(s"Cannot modify the value of a static config: $k")
       }

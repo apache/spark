@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalog
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
@@ -54,6 +54,14 @@ abstract class Catalog {
   def listDatabases(): Dataset[Database]
 
   /**
+   * Returns a list of databases (namespaces) which name match the specify pattern and
+   * available within the current catalog.
+   *
+   * @since 3.5.0
+   */
+  def listDatabases(pattern: String): Dataset[Database]
+
+  /**
    * Returns a list of tables/views in the current database (namespace).
    * This includes all temporary views.
    *
@@ -72,6 +80,16 @@ abstract class Catalog {
   def listTables(dbName: String): Dataset[Table]
 
   /**
+   * Returns a list of tables/views in the specified database (namespace)
+   * which name match the specify pattern (the name can be qualified with catalog).
+   * This includes all temporary views.
+   *
+   * @since 3.5.0
+   */
+  @throws[AnalysisException]("database does not exist")
+  def listTables(dbName: String, pattern: String): Dataset[Table]
+
+  /**
    * Returns a list of functions registered in the current database (namespace).
    * This includes all temporary functions.
    *
@@ -88,6 +106,16 @@ abstract class Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   def listFunctions(dbName: String): Dataset[Function]
+
+  /**
+   * Returns a list of functions registered in the specified database (namespace)
+   * which name match the specify pattern (the name can be qualified with catalog).
+   * This includes all built-in and temporary functions.
+   *
+   * @since 3.5.0
+   */
+  @throws[AnalysisException]("database does not exist")
+  def listFunctions(dbName: String, pattern: String): Dataset[Function]
 
   /**
    * Returns a list of columns for the given table/view or temporary view.
@@ -604,8 +632,9 @@ abstract class Catalog {
 
   /**
    * Invalidates and refreshes all the cached data (and the associated metadata) for any `Dataset`
-   * that contains the given data source path. Path matching is by prefix, i.e. "/" would invalidate
-   * everything that is cached.
+   * that contains the given data source path. Path matching is by checking for sub-directories,
+   * i.e. "/" would invalidate everything that is cached and "/test/parent" would invalidate
+   * everything that is a subdirectory of "/test/parent".
    *
    * @since 2.0.0
    */
@@ -631,4 +660,11 @@ abstract class Catalog {
    * @since 3.4.0
    */
   def listCatalogs(): Dataset[CatalogMetadata]
+
+  /**
+   * Returns a list of catalogs which name match the specify pattern and available in this session.
+   *
+   * @since 3.5.0
+   */
+  def listCatalogs(pattern: String): Dataset[CatalogMetadata]
 }

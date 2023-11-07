@@ -20,7 +20,7 @@ import java.io.File
 import java.net.URL
 import java.nio.file.Files
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.amazonaws.auth.BasicAWSCredentials
 import com.amazonaws.services.s3.AmazonS3Client
@@ -32,7 +32,7 @@ import org.scalatest.time.{Minutes, Span}
 
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.integrationtest.DepsTestsSuite.{DEPS_TIMEOUT, FILE_CONTENTS, HOST_PATH}
-import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, MinikubeTag, TIMEOUT}
+import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, MinikubeTag, SPARK_PI_MAIN_CLASS, TIMEOUT}
 import org.apache.spark.deploy.k8s.integrationtest.Utils.getExamplesJarName
 import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.Minikube
 import org.apache.spark.internal.config.{ARCHIVES, PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
@@ -129,6 +129,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     Eventually.eventually(TIMEOUT, INTERVAL) (kubernetesTestComponents
       .kubernetesClient
       .services()
+      .inNamespace(kubernetesTestComponents.namespace)
       .create(minioService))
 
     // try until the stateful set of a previous test is deleted
@@ -136,6 +137,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       .kubernetesClient
       .apps()
       .statefulSets()
+      .inNamespace(kubernetesTestComponents.namespace)
       .create(minioStatefulSet))
   }
 
@@ -144,6 +146,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       .kubernetesClient
       .apps()
       .statefulSets()
+      .inNamespace(kubernetesTestComponents.namespace)
       .withName(cName)
       .withGracePeriod(0)
       .delete()
@@ -151,6 +154,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     kubernetesTestComponents
       .kubernetesClient
       .services()
+      .inNamespace(kubernetesTestComponents.namespace)
       .withName(svcName)
       .withGracePeriod(0)
       .delete()
@@ -164,6 +168,42 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       runSparkRemoteCheckAndVerifyCompletion(appResource = examplesJar,
         appArgs = Array(fileName),
         timeout = Option(DEPS_TIMEOUT))
+    })
+  }
+
+  test(
+    "SPARK-40817: Check that remote files do not get discarded in spark.files",
+    k8sTestTag,
+    MinikubeTag) {
+    tryDepsTest({
+      // Create a local file
+      val localFileName = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
+
+      // Create a remote file on S3
+      val remoteFileName = "some-remote-file.txt"
+      val remoteFileKey = s"some-path/${remoteFileName}"
+      createS3Object(remoteFileKey, "Some Content")
+      val remoteFileFullPath = s"s3a://${BUCKET}/${remoteFileKey}"
+
+      // Put both file paths in spark.files
+      sparkAppConf.set("spark.files", s"$HOST_PATH/$localFileName,${remoteFileFullPath}")
+      // Allows to properly read executor logs once the job is finished
+      sparkAppConf.set("spark.kubernetes.executor.deleteOnTermination", "false")
+
+      // Run SparkPi and make sure that both files have been properly downloaded on running pods
+      val examplesJar = Utils.getTestFileAbsolutePath(getExamplesJarName(), sparkHomeDir)
+      runSparkApplicationAndVerifyCompletion(
+        appResource = examplesJar,
+        mainClass = SPARK_PI_MAIN_CLASS,
+        appArgs = Array(),
+        expectedDriverLogOnCompletion = Seq("Pi is roughly 3"),
+        // We can check whether the Executor pod has successfully
+        // downloaded both the local and the remote file
+        expectedExecutorLogOnCompletion = Seq(localFileName, remoteFileName),
+        driverPodChecker = doBasicDriverPodCheck,
+        executorPodChecker = doBasicExecutorPodCheck,
+        isJVM = true
+      )
     })
   }
 
@@ -245,7 +285,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       depsFile: Option[String] = None,
       env: Map[String, String] = Map.empty[String, String]): Unit = {
     tryDepsTest {
-      setPythonSparkConfProperties(sparkAppConf)
+      sparkAppConf.set("spark.kubernetes.container.image", pyImage)
       runSparkApplicationAndVerifyCompletion(
         appResource = pySparkFiles,
         mainClass = "",
@@ -259,16 +299,39 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
+  private def getS3Client(
+      endPoint: String,
+      accessKey: String = ACCESS_KEY,
+      secretKey: String = SECRET_KEY): AmazonS3Client = {
+    val credentials = new BasicAWSCredentials(accessKey, secretKey)
+    val s3client = new AmazonS3Client(credentials)
+    s3client.setEndpoint(endPoint)
+    s3client
+  }
+
   private def createS3Bucket(accessKey: String, secretKey: String, endPoint: String): Unit = {
     Eventually.eventually(TIMEOUT, INTERVAL) {
       try {
-        val credentials = new BasicAWSCredentials(accessKey, secretKey)
-        val s3client = new AmazonS3Client(credentials)
-        s3client.setEndpoint(endPoint)
+        val s3client = getS3Client(endPoint, accessKey, secretKey)
         s3client.createBucket(BUCKET)
       } catch {
         case e: Exception =>
           throw new SparkException(s"Failed to create bucket $BUCKET.", e)
+      }
+    }
+  }
+
+  private def createS3Object(
+      objectKey: String,
+      objectContent: String,
+      endPoint: String = getServiceUrl(svcName)): Unit = {
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      try {
+        val s3client = getS3Client(endPoint)
+        s3client.putObject(BUCKET, objectKey, objectContent)
+      } catch {
+        case e: Exception =>
+          throw new SparkException(s"Failed to create object $BUCKET/$objectKey.", e)
       }
     }
   }
@@ -300,11 +363,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       conf: SparkAppConf,
       minioUrlStr: String): Unit = {
     val (minioHost, minioPort) = getServiceHostAndPort(minioUrlStr)
-    val packages = if (Utils.isHadoop3) {
-      s"org.apache.hadoop:hadoop-aws:${VersionInfo.getVersion}"
-    } else {
-      "com.amazonaws:aws-java-sdk:1.7.4,org.apache.hadoop:hadoop-aws:2.7.6"
-    }
+    val packages = s"org.apache.hadoop:hadoop-aws:${VersionInfo.getVersion}"
     conf.set("spark.hadoop.fs.s3a.access.key", ACCESS_KEY)
       .set("spark.hadoop.fs.s3a.secret.key", SECRET_KEY)
       .set("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
@@ -313,10 +372,6 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       .set("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
       .set("spark.jars.packages", packages)
       .set("spark.driver.extraJavaOptions", "-Divy.cache.dir=/tmp -Divy.home=/tmp")
-  }
-
-  private def setPythonSparkConfProperties(conf: SparkAppConf): Unit = {
-    sparkAppConf.set("spark.kubernetes.container.image", pyImage)
   }
 
   private def tryDepsTest(runTest: => Unit): Unit = {

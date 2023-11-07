@@ -90,8 +90,21 @@ SHOW COLUMNS IN badtable FROM showdb
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: showdb.badtable; line 1 pos 16
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`showdb`.`badtable`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 17,
+    "stopIndex" : 24,
+    "fragment" : "badtable"
+  } ]
+}
 
 
 -- !query
@@ -132,8 +145,21 @@ SHOW COLUMNS IN showdb.showcolumn3
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: showdb.showcolumn3; line 1 pos 16
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`showdb`.`showcolumn3`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 17,
+    "stopIndex" : 34,
+    "fragment" : "showdb.showcolumn3"
+  } ]
+}
 
 
 -- !query
@@ -141,8 +167,21 @@ SHOW COLUMNS IN showcolumn3 FROM showdb
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: showdb.showcolumn3; line 1 pos 16
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`showdb`.`showcolumn3`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 17,
+    "stopIndex" : 27,
+    "fragment" : "showcolumn3"
+  } ]
+}
 
 
 -- !query
@@ -150,8 +189,21 @@ SHOW COLUMNS IN showcolumn4
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: showcolumn4; line 1 pos 16
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`showcolumn4`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 17,
+    "stopIndex" : 27,
+    "fragment" : "showcolumn4"
+  } ]
+}
 
 
 -- !query

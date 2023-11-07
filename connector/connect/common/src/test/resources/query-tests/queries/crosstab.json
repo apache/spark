@@ -1,0 +1,17 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "crosstab": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "col1": "a",
+    "col2": "b"
+  }
+}

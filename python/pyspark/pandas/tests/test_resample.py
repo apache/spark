@@ -19,11 +19,13 @@
 import unittest
 import inspect
 import datetime
+import os
+
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.exceptions import PandasNotImplementedError, DataError
+from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.missing.resample import (
     MissingPandasLikeDataFrameResampler,
     MissingPandasLikeSeriesResampler,
@@ -31,7 +33,7 @@ from pyspark.pandas.missing.resample import (
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class ResampleTest(PandasOnSparkTestCase, TestUtils):
+class ResampleTestsMixin:
     @property
     def pdf1(self):
         np.random.seed(11)
@@ -234,40 +236,6 @@ class ResampleTest(PandasOnSparkTestCase, TestUtils):
             ):
                 getattr(pser_r, name)
 
-    def _test_resample(self, pobj, psobj, rules, funcs):
-        for rule in rules:
-            for func in funcs:
-                for closed in [None, "left", "right"]:
-                    for label in [None, "left", "right"]:
-                        p_resample = pobj.resample(rule=rule, closed=closed, label=label)
-                        ps_resample = psobj.resample(rule=rule, closed=closed, label=label)
-                        self.assert_eq(
-                            getattr(p_resample, func)().sort_index(),
-                            getattr(ps_resample, func)().sort_index(),
-                            almost=True,
-                        )
-
-    def test_dataframe_resample(self):
-        self._test_resample(
-            self.pdf1,
-            self.psdf1,
-            ["3Y", "9M", "17D"],
-            ["min", "max", "sum", "mean", "std", "var"],
-        )
-        self._test_resample(self.pdf2, self.psdf2, ["3A", "11M", "D"], ["sum"])
-        self._test_resample(self.pdf3, self.psdf3, ["2D", "1M"], ["sum"])
-        self._test_resample(self.pdf4, self.psdf4, ["1H", "2D"], ["sum"])
-        self._test_resample(self.pdf5, self.psdf5, ["11T", "55MIN", "2H", "D"], ["sum"])
-        self._test_resample(self.pdf6, self.psdf6, ["29S", "10MIN", "3H"], ["sum"])
-
-    def test_series_resample(self):
-        self._test_resample(self.pdf1.A, self.psdf1.A, ["4Y"], ["sum"])
-        self._test_resample(self.pdf2.A, self.psdf2.A, ["13M"], ["sum"])
-        self._test_resample(self.pdf3.A, self.psdf3.A, ["18H"], ["sum"])
-        self._test_resample(self.pdf4.A, self.psdf4.A, ["6D"], ["sum"])
-        self._test_resample(self.pdf5.A, self.psdf5.A, ["47T"], ["sum"])
-        self._test_resample(self.pdf6.A, self.psdf6.A, ["111S"], ["sum"])
-
     def test_resample_on(self):
         np.random.seed(77)
         dates = [
@@ -291,11 +259,60 @@ class ResampleTest(PandasOnSparkTestCase, TestUtils):
         )
 
 
+class ResampleWithTimezoneMixin:
+    timezone = None
+
+    @classmethod
+    def setUpClass(cls):
+        cls.timezone = os.environ.get("TZ", None)
+        os.environ["TZ"] = "America/New_York"
+        super(ResampleWithTimezoneMixin, cls).setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        super(ResampleWithTimezoneMixin, cls).tearDownClass()
+        if cls.timezone is not None:
+            os.environ["TZ"] = cls.timezone
+
+    @property
+    def pdf(self):
+        np.random.seed(22)
+        index = pd.date_range(start="2011-01-02", end="2022-05-01", freq="1D")
+        return pd.DataFrame(np.random.rand(len(index), 2), index=index, columns=list("AB"))
+
+    @property
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
+
+    def test_series_resample_with_timezone(self):
+        with self.sql_conf(
+            {
+                "spark.sql.session.timeZone": "Asia/Seoul",
+                "spark.sql.timestampType": "TIMESTAMP_NTZ",
+            }
+        ):
+            p_resample = self.pdf.resample(rule="1001H", closed="right", label="right")
+            ps_resample = self.psdf.resample(rule="1001H", closed="right", label="right")
+            self.assert_eq(
+                p_resample.sum().sort_index(),
+                ps_resample.sum().sort_index(),
+                almost=True,
+            )
+
+
+class ResampleTests(ResampleTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
+
+
+class ResampleWithTimezoneTests(ResampleWithTimezoneMixin, PandasOnSparkTestCase, TestUtils):
+    pass
+
+
 if __name__ == "__main__":
     from pyspark.pandas.tests.test_resample import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

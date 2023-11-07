@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
-import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTRACT_VALUE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -64,7 +64,7 @@ object ExtractValue {
 
       case (_: ArrayType, _) => GetArrayItem(child, extraction)
 
-      case (MapType(kt, _, _), _) => GetMapValue(child, extraction)
+      case (MapType(_, _, _), _) => GetMapValue(child, extraction)
 
       case (otherType, _) =>
         throw QueryCompilationErrors.dataTypeUnsupportedByExtractValueError(
@@ -82,8 +82,8 @@ object ExtractValue {
     if (ordinal == -1) {
       throw QueryCompilationErrors.noSuchStructFieldInGivenFieldsError(fieldName, fields)
     } else if (fields.indexWhere(checkField, ordinal + 1) != -1) {
-      throw QueryCompilationErrors.ambiguousReferenceToFieldsError(
-        fields.filter(checkField).mkString(", "))
+      val numberOfAppearance = fields.count(checkField)
+      throw QueryCompilationErrors.ambiguousReferenceToFieldsError(fieldName, numberOfAppearance)
     } else {
       ordinal
     }
@@ -268,7 +268,7 @@ case class GetArrayItem(
     if (index >= baseValue.numElements() || index < 0) {
       if (failOnError) {
         throw QueryExecutionErrors.invalidArrayIndexError(
-          index, baseValue.numElements, getContextOrNull())
+          index, baseValue.numElements(), getContextOrNull())
       } else {
         null
       }
@@ -316,7 +316,7 @@ case class GetArrayItem(
       newLeft: Expression, newRight: Expression): GetArrayItem =
     copy(child = newLeft, ordinal = newRight)
 
-  override def initQueryContext(): Option[SQLQueryContext] = if (failOnError) {
+  override def initQueryContext(): Option[QueryContext] = if (failOnError) {
     Some(origin.context)
   } else {
     None
@@ -444,7 +444,7 @@ case class GetMapValue(child: Expression, key: Expression)
     super.checkInputDataTypes() match {
       case f if f.isFailure => f
       case TypeCheckResult.TypeCheckSuccess =>
-        TypeUtils.checkForOrderingExpr(keyType, s"function $prettyName")
+        TypeUtils.checkForOrderingExpr(keyType, prettyName)
     }
   }
 

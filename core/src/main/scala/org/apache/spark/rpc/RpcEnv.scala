@@ -186,6 +186,17 @@ private[spark] trait RpcEnvFileServer {
    */
   def addDirectory(baseUri: String, path: File): String
 
+    /**
+   * Adds a local directory to be served via this file server.
+   * If the directory is already registered with the file server, it will result in a no-op.
+   *
+   * @param baseUri Leading URI path (files can be retrieved by appending their relative
+   *                path to this base URI). This cannot be "files" nor "jars".
+   * @param path Path to the local directory.
+   * @return URI for the root of the directory in the file server.
+   */
+  def addDirectoryIfAbsent(baseUri: String, path: File): String
+
   /** Validates and normalizes the base URI for directories. */
   protected def validateDirectoryUri(baseUri: String): String = {
     val baseCanonicalUri = new URI(baseUri).normalize().getPath
@@ -195,6 +206,19 @@ private[spark] trait RpcEnvFileServer {
     fixedBaseUri
   }
 
+  /**
+   * Removes a file from this RpcEnv.
+   *
+   * @param key Local file to remove.
+   */
+  def removeFile(key: String): Unit
+
+  /**
+   * Removes a jar to from this RpcEnv.
+   *
+   * @param key Local jar to remove.
+   */
+  def removeJar(key: String): Unit
 }
 
 private[spark] case class RpcEnvConfig(

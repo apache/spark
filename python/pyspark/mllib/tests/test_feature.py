@@ -118,7 +118,6 @@ class HashingTFTest(MLlibTestCase):
 
 
 class DimensionalityReductionTests(MLlibTestCase):
-
     denseData = [
         Vectors.dense([0.0, 1.0, 2.0]),
         Vectors.dense([3.0, 4.0, 5.0]),
@@ -184,7 +183,7 @@ if __name__ == "__main__":
     from pyspark.mllib.tests.test_feature import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

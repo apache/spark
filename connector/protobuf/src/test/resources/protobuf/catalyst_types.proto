@@ -19,7 +19,7 @@
 
 syntax = "proto3";
 
-package org.apache.spark.sql.protobuf;
+package org.apache.spark.sql.protobuf.protos;
 option java_outer_classname = "CatalystTypes";
 
 message BooleanMsg {

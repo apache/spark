@@ -144,11 +144,6 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   }
 
   @Override
-  public void remove() {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public List<T> next(int max) {
     List<T> list = new ArrayList<>(max);
     while (hasNext() && list.size() < max) {

@@ -22,9 +22,11 @@ import java.util.TimeZone
 import org.apache.hadoop.fs.Path
 import org.apache.logging.log4j.Level
 
+import org.apache.spark.{SPARK_DOC_ROOT, SparkNoSuchElementException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.MIT
+import org.apache.spark.sql.execution.datasources.parquet.ParquetCompressionCodec.{GZIP, LZO}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.util.Utils
@@ -204,9 +206,11 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     sql("RESET spark.app.id")
     assert(spark.conf.get("spark.app.id") === appId, "Should not change spark core ones")
     // spark core conf w/ entry registered
-    val e1 = intercept[AnalysisException](sql("RESET spark.executor.cores"))
-    val str_match = "Cannot modify the value of a Spark config: spark.executor.cores"
-    assert(e1.getMessage.contains(str_match))
+    checkError(
+      exception = intercept[AnalysisException](sql("RESET spark.executor.cores")),
+      errorClass = "CANNOT_MODIFY_CONFIG",
+      parameters = Map("key" -> "\"spark.executor.cores\"", "docroot" -> SPARK_DOC_ROOT)
+    )
 
     // user defined settings
     sql("SET spark.abc=xyz")
@@ -365,7 +369,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
 
     assert(spark.conf.get(fallback.key) ===
       SQLConf.PARQUET_COMPRESSION.defaultValue.get)
-    assert(spark.conf.get(fallback.key, "lzo") === "lzo")
+    assert(spark.conf.get(fallback.key, LZO.lowerCaseName()) === LZO.lowerCaseName())
 
     val displayValue = spark.sessionState.conf.getAllDefinedConfs
       .find { case (key, _, _, _) => key == fallback.key }
@@ -373,17 +377,17 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       .get
     assert(displayValue === fallback.defaultValueString)
 
-    spark.conf.set(SQLConf.PARQUET_COMPRESSION, "gzip")
-    assert(spark.conf.get(fallback.key) === "gzip")
+    spark.conf.set(SQLConf.PARQUET_COMPRESSION, GZIP.lowerCaseName())
+    assert(spark.conf.get(fallback.key) === GZIP.lowerCaseName())
 
-    spark.conf.set(fallback, "lzo")
-    assert(spark.conf.get(fallback.key) === "lzo")
+    spark.conf.set(fallback, LZO.lowerCaseName())
+    assert(spark.conf.get(fallback.key) === LZO.lowerCaseName())
 
     val newDisplayValue = spark.sessionState.conf.getAllDefinedConfs
       .find { case (key, _, _, _) => key == fallback.key }
       .map { case (_, v, _, _) => v }
       .get
-    assert(newDisplayValue === "lzo")
+    assert(newDisplayValue === LZO.lowerCaseName())
 
     SQLConf.unregister(fallback)
   }
@@ -419,9 +423,9 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
         e.getMessage.getFormattedMessage.contains(config)))
     }
 
-    val config1 = SQLConf.HIVE_VERIFY_PARTITION_PATH.key
+    val config1 = SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key
     withLogAppender(logAppender) {
-      spark.conf.set(config1, true)
+      spark.conf.set(config1, 1)
     }
     check(config1)
 
@@ -473,8 +477,12 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
         assert(zone === String.format("%+03d:00", Integer.valueOf(i)))
       }
     }
-    val e2 = intercept[ParseException](sql("set time zone interval 19 hours"))
-    assert(e2.getMessage contains "The interval value must be in the range of [-18, +18] hours")
+    val sqlText = "set time zone interval 19 hours"
+    checkError(
+      exception = intercept[ParseException](sql(sqlText)),
+      errorClass = "_LEGACY_ERROR_TEMP_0044",
+      parameters = Map.empty,
+      context = ExpectedContext(sqlText, 0, 30))
   }
 
   test("SPARK-34454: configs from the legacy namespace should be internal") {
@@ -485,5 +493,12 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
          |Non internal legacy SQL configs:
          |${nonInternalLegacyConfigs.map(_._1).mkString("\n")}
          |""".stripMargin)
+  }
+
+  test("SPARK-43028: config not found error") {
+    checkError(
+      exception = intercept[SparkNoSuchElementException](spark.conf.get("some.conf")),
+      errorClass = "SQL_CONF_NOT_FOUND",
+      parameters = Map("sqlConf" -> "\"some.conf\""))
   }
 }

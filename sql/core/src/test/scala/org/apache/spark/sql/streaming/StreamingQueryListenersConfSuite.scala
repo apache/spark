@@ -38,7 +38,7 @@ class StreamingQueryListenersConfSuite extends StreamTest with BeforeAndAfter {
       .set("spark.bbb", "bbb")
 
   test("test if the configured query listener is loaded") {
-    testStream(MemoryStream[Int].toDS)(
+    testStream(MemoryStream[Int].toDS())(
       StartStream(),
       StopStream
     )
@@ -64,6 +64,8 @@ class TestListener(sparkConf: SparkConf) extends StreamingQueryListener {
 
   override def onQueryProgress(event: QueryProgressEvent): Unit = {}
 
+  override def onQueryIdle(event: QueryIdleEvent): Unit = {}
+
   override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {
     TestListener.queryTerminatedEvent = event
   }
@@ -79,6 +81,8 @@ class TestSQLConfStreamingQueryListener extends StreamingQueryListener {
   override def onQueryStarted(event: QueryStartedEvent): Unit = {}
 
   override def onQueryProgress(event: QueryProgressEvent): Unit = {}
+
+  override def onQueryIdle(event: QueryIdleEvent): Unit = {}
 
   override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
 }

@@ -26,7 +26,7 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.UpdateFieldsBenchmark._
 import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingTimezonesIds, outstandingZoneIds}
@@ -161,7 +161,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("star qualified by data frame object") {
-    val df = testData.toDF
+    val df = testData.toDF()
     val goldAnswer = df.collect().toSeq
     checkAnswer(df.select(df("*")), goldAnswer)
 
@@ -260,7 +260,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("isNull") {
     checkAnswer(
-      nullStrings.toDF.where($"s".isNull),
+      nullStrings.toDF().where($"s".isNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) eq null))
 
     checkAnswer(
@@ -270,7 +270,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("isNotNull") {
     checkAnswer(
-      nullStrings.toDF.where($"s".isNotNull),
+      nullStrings.toDF().where($"s".isNotNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) ne null))
 
     checkAnswer(
@@ -450,14 +450,17 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
 
     val df2 = Seq((1, Seq(1)), (2, Seq(2)), (3, Seq(3))).toDF("a", "b")
-
-    val e = intercept[AnalysisException] {
-      df2.filter($"a".isin($"b"))
-    }
-    Seq("cannot resolve", "due to data type mismatch: Arguments must be same type but were")
-      .foreach { s =>
-        assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
-      }
+    checkError(
+      exception = intercept[AnalysisException] {
+        df2.filter($"a".isin($"b"))
+      },
+      errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+      parameters = Map(
+        "functionName" -> "`in`",
+        "dataType" -> "[\"INT\", \"ARRAY<INT>\"]",
+        "sqlExpr" -> "\"(a IN (b))\""),
+      context = ExpectedContext(fragment = "isin", callSitePattern = getCurrentClassCallSitePattern)
+    )
   }
 
   test("IN/INSET with bytes, shorts, ints, dates") {
@@ -515,14 +518,19 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
 
           val df2 = Seq((1, Seq(1)), (2, Seq(2)), (3, Seq(3))).toDF("a", "b")
-
-          val e = intercept[AnalysisException] {
-            df2.filter($"a".isInCollection(Seq($"b")))
-          }
-          Seq("cannot resolve", "due to data type mismatch: Arguments must be same type but were")
-            .foreach { s =>
-              assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
-            }
+          checkError(
+            exception = intercept[AnalysisException] {
+              df2.filter($"a".isInCollection(Seq($"b")))
+            },
+            errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+            parameters = Map(
+              "functionName" -> "`in`",
+              "dataType" -> "[\"INT\", \"ARRAY<INT>\"]",
+              "sqlExpr" -> "\"(a IN (b))\""),
+            context = ExpectedContext(
+              fragment = "isInCollection",
+              callSitePattern = getCurrentClassCallSitePattern)
+          )
         }
       }
     }
@@ -535,41 +543,41 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         withSQLConf(
           SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> optThreshold.toString,
           SQLConf.OPTIMIZER_INSET_SWITCH_THRESHOLD.key -> switchThreshold.toString) {
-          checkAnswer(Seq(0).toDS.select($"value".isInCollection(Seq(null))), Seq(Row(null)))
+          checkAnswer(Seq(0).toDS().select($"value".isInCollection(Seq(null))), Seq(Row(null)))
           checkAnswer(
-            Seq(true).toDS.select($"value".isInCollection(Seq(true, false))),
+            Seq(true).toDS().select($"value".isInCollection(Seq(true, false))),
             Seq(Row(true)))
           checkAnswer(
-            Seq(0.toByte, 1.toByte).toDS.select($"value".isInCollection(Seq(0.toByte, 2.toByte))),
+            Seq(0.toByte, 1.toByte).toDS().select($"value".isInCollection(Seq(0.toByte, 2.toByte))),
             expected)
           checkAnswer(
-            Seq(0.toShort, 1.toShort).toDS
+            Seq(0.toShort, 1.toShort).toDS()
               .select($"value".isInCollection(Seq(0.toShort, 2.toShort))),
             expected)
-          checkAnswer(Seq(0, 1).toDS.select($"value".isInCollection(Seq(0, 2))), expected)
-          checkAnswer(Seq(0L, 1L).toDS.select($"value".isInCollection(Seq(0L, 2L))), expected)
-          checkAnswer(Seq(0.0f, 1.0f).toDS
+          checkAnswer(Seq(0, 1).toDS().select($"value".isInCollection(Seq(0, 2))), expected)
+          checkAnswer(Seq(0L, 1L).toDS().select($"value".isInCollection(Seq(0L, 2L))), expected)
+          checkAnswer(Seq(0.0f, 1.0f).toDS()
             .select($"value".isInCollection(Seq(0.0f, 2.0f))), expected)
-          checkAnswer(Seq(0.0D, 1.0D).toDS
+          checkAnswer(Seq(0.0D, 1.0D).toDS()
             .select($"value".isInCollection(Seq(0.0D, 2.0D))), expected)
           checkAnswer(
-            Seq(BigDecimal(0), BigDecimal(2)).toDS
+            Seq(BigDecimal(0), BigDecimal(2)).toDS()
               .select($"value".isInCollection(Seq(BigDecimal(0), BigDecimal(1)))),
             expected)
           checkAnswer(
-            Seq("abc", "def").toDS.select($"value".isInCollection(Seq("abc", "xyz"))),
+            Seq("abc", "def").toDS().select($"value".isInCollection(Seq("abc", "xyz"))),
             expected)
           checkAnswer(
-            Seq(Date.valueOf("2020-04-29"), Date.valueOf("2020-05-01")).toDS
+            Seq(Date.valueOf("2020-04-29"), Date.valueOf("2020-05-01")).toDS()
               .select($"value".isInCollection(
                 Seq(Date.valueOf("2020-04-29"), Date.valueOf("2020-04-30")))),
             expected)
           checkAnswer(
-            Seq(new Timestamp(0), new Timestamp(2)).toDS
+            Seq(new Timestamp(0), new Timestamp(2)).toDS()
               .select($"value".isInCollection(Seq(new Timestamp(0), new Timestamp(1)))),
             expected)
           checkAnswer(
-            Seq(Array("a", "b"), Array("c", "d")).toDS
+            Seq(Array("a", "b"), Array("c", "d")).toDS()
               .select($"value".isInCollection(Seq(Array("a", "b"), Array("x", "z")))),
             expected)
         }
@@ -717,11 +725,21 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         data.write.saveAsTable("tab1")
         data.write.saveAsTable("tab2")
         data.createOrReplaceTempView("tempView1")
-        Seq("input_file_name", "input_file_block_start", "input_file_block_length").foreach { f =>
-          val e = intercept[AnalysisException] {
-            sql(s"SELECT *, $f() FROM tab1 JOIN tab2 ON tab1.id = tab2.id")
-          }.getMessage
-          assert(e.contains(s"'$f' does not support more than one source"))
+        Seq(
+          ("input_file_name", 26),
+          ("input_file_block_start", 33),
+          ("input_file_block_length", 34)).foreach { case (f, e) =>
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"SELECT *, $f() FROM tab1 JOIN tab2 ON tab1.id = tab2.id")
+            },
+            errorClass = "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION",
+            parameters = Map("expr" -> s""""$f()""""),
+            context = ExpectedContext(
+              fragment = s"$f()",
+              start = 10,
+              stop = e)
+          )
         }
 
         def checkResult(
@@ -730,8 +748,17 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             numExpectedRows: Int = 0): Unit = {
           val stmt = s"SELECT *, input_file_name() FROM ($fromClause)"
           if (exceptionExpected) {
-            val e = intercept[AnalysisException](sql(stmt)).getMessage
-            assert(e.contains("'input_file_name' does not support more than one source"))
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql(stmt)
+              },
+              errorClass = "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION",
+              parameters = Map("expr" -> """"input_file_name()""""),
+              context = ExpectedContext(
+                fragment = s"input_file_name()",
+                start = 10,
+                stop = 26)
+            )
           } else {
             assert(sql(stmt).count() == numExpectedRows)
           }
@@ -1023,9 +1050,21 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         nullable = false))))
 
   test("withField should throw an exception if called on a non-StructType column") {
-    intercept[AnalysisException] {
-      testData.withColumn("key", $"key".withField("a", lit(2)))
-    }.getMessage should include("struct argument should be struct type, got: int")
+    checkError(
+      exception = intercept[AnalysisException] {
+        testData.withColumn("key", $"key".withField("a", lit(2)))
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"update_fields(key, WithField(2))\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"key\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"STRUCT\""),
+      context = ExpectedContext(
+        fragment = "withField",
+        callSitePattern = getCurrentClassCallSitePattern)
+    )
   }
 
   test("withField should throw an exception if either fieldName or col argument are null") {
@@ -1043,33 +1082,56 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should throw an exception if any intermediate structs don't exist") {
-    intercept[AnalysisException] {
-      structLevel2.withColumn("a", $"a".withField("x.b", lit(2)))
-    }.getMessage should include("No such struct field x in a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        structLevel2.withColumn("a", $"a".withField("x.b", lit(2)))
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`x`", "fields" -> "`a`"))
 
-    intercept[AnalysisException] {
-      structLevel3.withColumn("a", $"a".withField("a.x.b", lit(2)))
-    }.getMessage should include("No such struct field x in a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        structLevel3.withColumn("a", $"a".withField("a.x.b", lit(2)))
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`x`", "fields" -> "`a`"))
   }
 
   test("withField should throw an exception if intermediate field is not a struct") {
-    intercept[AnalysisException] {
-      structLevel1.withColumn("a", $"a".withField("b.a", lit(2)))
-    }.getMessage should include("struct argument should be struct type, got: int")
+    checkError(
+      exception = intercept[AnalysisException] {
+        structLevel1.withColumn("a", $"a".withField("b.a", lit(2)))
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"update_fields(a.b, WithField(2))\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"a.b\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"STRUCT\""),
+      context = ExpectedContext(
+        fragment = "withField",
+        callSitePattern = getCurrentClassCallSitePattern)
+    )
   }
 
   test("withField should throw an exception if intermediate field reference is ambiguous") {
-    intercept[AnalysisException] {
-      val structLevel2: DataFrame = spark.createDataFrame(
-        sparkContext.parallelize(Row(Row(Row(1, null, 3), 4)) :: Nil),
-        StructType(Seq(
-          StructField("a", StructType(Seq(
-            StructField("a", structType, nullable = false),
-            StructField("a", structType, nullable = false))),
-            nullable = false))))
+    checkError(
+      exception = intercept[AnalysisException] {
+        val structLevel2: DataFrame = spark.createDataFrame(
+          sparkContext.parallelize(Row(Row(Row(1, null, 3), 4)) :: Nil),
+          StructType(Seq(
+            StructField("a", StructType(Seq(
+              StructField("a", structType, nullable = false),
+              StructField("a", structType, nullable = false))),
+              nullable = false))))
 
-      structLevel2.withColumn("a", $"a".withField("a.b", lit(2)))
-    }.getMessage should include("Ambiguous reference to fields")
+        structLevel2.withColumn("a", $"a".withField("a.b", lit(2)))
+      },
+      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+      sqlState = "42000",
+      parameters = Map("field" -> "`a`", "count" -> "2")
+    )
   }
 
   test("withField should add field with no name") {
@@ -1465,9 +1527,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             nullable = false))),
           nullable = false))))
 
-    intercept[AnalysisException] {
-      df.withColumn("a", $"a".withField("a.b.e.f", lit(2)))
-    }.getMessage should include("No such struct field a in a.b")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.withColumn("a", $"a".withField("a.b.e.f", lit(2)))
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`a`", "fields" -> "`a`.`b`"))
   }
 
   private lazy val mixedCaseStructLevel1: DataFrame = spark.createDataFrame(
@@ -1574,13 +1639,19 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("withField should throw an exception because casing is different") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      intercept[AnalysisException] {
-        mixedCaseStructLevel2.withColumn("a", $"a".withField("A.a", lit(2)))
-      }.getMessage should include("No such struct field A in a, B")
+      checkError(
+        exception = intercept[AnalysisException] {
+          mixedCaseStructLevel2.withColumn("a", $"a".withField("A.a", lit(2)))
+        },
+        errorClass = "FIELD_NOT_FOUND",
+        parameters = Map("fieldName" -> "`A`", "fields" -> "`a`, `B`"))
 
-      intercept[AnalysisException] {
-        mixedCaseStructLevel2.withColumn("a", $"a".withField("b.a", lit(2)))
-      }.getMessage should include("No such struct field b in a, B")
+      checkError(
+        exception = intercept[AnalysisException] {
+          mixedCaseStructLevel2.withColumn("a", $"a".withField("b.a", lit(2)))
+        },
+        errorClass = "FIELD_NOT_FOUND",
+        parameters = Map("fieldName" -> "`b`", "fields" -> "`a`, `B`"))
     }
   }
 
@@ -1610,10 +1681,15 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         .select($"struct_col".withField("a.c", lit(3))),
       Row(Row(Row(1, 2, 3))))
 
-    intercept[AnalysisException] {
-      sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
-        .select($"struct_col".withField("a.c", lit(3)))
-    }.getMessage should include("Ambiguous reference to fields")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
+          .select($"struct_col".withField("a.c", lit(3)))
+      },
+      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+      sqlState = "42000",
+      parameters = Map("field" -> "`a`", "count" -> "2")
+    )
 
     checkAnswer(
       sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
@@ -1773,9 +1849,21 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("dropFields should throw an exception if called on a non-StructType column") {
-    intercept[AnalysisException] {
-      testData.withColumn("key", $"key".dropFields("a"))
-    }.getMessage should include("struct argument should be struct type, got: int")
+    checkError(
+      exception = intercept[AnalysisException] {
+        testData.withColumn("key", $"key".dropFields("a"))
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"update_fields(key, dropfield())\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"key\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"STRUCT\""),
+      context = ExpectedContext(
+        fragment = "dropFields",
+        callSitePattern = getCurrentClassCallSitePattern)
+    )
   }
 
   test("dropFields should throw an exception if fieldName argument is null") {
@@ -1785,33 +1873,56 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("dropFields should throw an exception if any intermediate structs don't exist") {
-    intercept[AnalysisException] {
-      structLevel2.withColumn("a", $"a".dropFields("x.b"))
-    }.getMessage should include("No such struct field x in a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        structLevel2.withColumn("a", $"a".dropFields("x.b"))
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`x`", "fields" -> "`a`"))
 
-    intercept[AnalysisException] {
-      structLevel3.withColumn("a", $"a".dropFields("a.x.b"))
-    }.getMessage should include("No such struct field x in a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        structLevel3.withColumn("a", $"a".dropFields("a.x.b"))
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`x`", "fields" -> "`a`"))
   }
 
   test("dropFields should throw an exception if intermediate field is not a struct") {
-    intercept[AnalysisException] {
-      structLevel1.withColumn("a", $"a".dropFields("b.a"))
-    }.getMessage should include("struct argument should be struct type, got: int")
+    checkError(
+      exception = intercept[AnalysisException] {
+        structLevel1.withColumn("a", $"a".dropFields("b.a"))
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"update_fields(a.b, dropfield())\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"a.b\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"STRUCT\""),
+      context = ExpectedContext(
+        fragment = "dropFields",
+        callSitePattern = getCurrentClassCallSitePattern)
+    )
   }
 
   test("dropFields should throw an exception if intermediate field reference is ambiguous") {
-    intercept[AnalysisException] {
-      val structLevel2: DataFrame = spark.createDataFrame(
-        sparkContext.parallelize(Row(Row(Row(1, null, 3), 4)) :: Nil),
-        StructType(Seq(
-          StructField("a", StructType(Seq(
-            StructField("a", structType, nullable = false),
-            StructField("a", structType, nullable = false))),
-            nullable = false))))
+    checkError(
+      exception = intercept[AnalysisException] {
+        val structLevel2: DataFrame = spark.createDataFrame(
+          sparkContext.parallelize(Row(Row(Row(1, null, 3), 4)) :: Nil),
+          StructType(Seq(
+            StructField("a", StructType(Seq(
+              StructField("a", structType, nullable = false),
+              StructField("a", structType, nullable = false))),
+              nullable = false))))
 
-      structLevel2.withColumn("a", $"a".dropFields("a.b"))
-    }.getMessage should include("Ambiguous reference to fields")
+        structLevel2.withColumn("a", $"a".dropFields("a.b"))
+      },
+      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+      sqlState = "42000",
+      parameters = Map("field" -> "`a`", "count" -> "2")
+    )
   }
 
   test("dropFields should drop field in struct") {
@@ -1852,9 +1963,16 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("dropFields should throw an exception if no fields will be left in struct") {
-    intercept[AnalysisException] {
-      structLevel1.withColumn("a", $"a".dropFields("a", "b", "c"))
-    }.getMessage should include("cannot drop all fields in struct")
+    checkError(
+      exception = intercept[AnalysisException] {
+        structLevel1.withColumn("a", $"a".dropFields("a", "b", "c"))
+      },
+      errorClass = "DATATYPE_MISMATCH.CANNOT_DROP_ALL_FIELDS",
+      parameters = Map("sqlExpr" -> "\"update_fields(a, dropfield(), dropfield(), dropfield())\""),
+      context = ExpectedContext(
+        fragment = "dropFields",
+        callSitePattern = getCurrentClassCallSitePattern)
+    )
   }
 
   test("dropFields should drop field with no name in struct") {
@@ -2035,13 +2153,19 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("dropFields should throw an exception because casing is different") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      intercept[AnalysisException] {
-        mixedCaseStructLevel2.withColumn("a", $"a".dropFields("A.a"))
-      }.getMessage should include("No such struct field A in a, B")
+      checkError(
+        exception = intercept[AnalysisException] {
+          mixedCaseStructLevel2.withColumn("a", $"a".dropFields("A.a"))
+        },
+        errorClass = "FIELD_NOT_FOUND",
+        parameters = Map("fieldName" -> "`A`", "fields" -> "`a`, `B`"))
 
-      intercept[AnalysisException] {
-        mixedCaseStructLevel2.withColumn("a", $"a".dropFields("b.a"))
-      }.getMessage should include("No such struct field b in a, B")
+      checkError(
+        exception = intercept[AnalysisException] {
+          mixedCaseStructLevel2.withColumn("a", $"a".dropFields("b.a"))
+        },
+        errorClass = "FIELD_NOT_FOUND",
+        parameters = Map("fieldName" -> "`b`", "fields" -> "`a`, `B`"))
     }
   }
 
@@ -2113,10 +2237,17 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         .select($"struct_col".dropFields("b", "c")),
       Row(Row(1)))
 
-    intercept[AnalysisException] {
-      sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
-        .select($"struct_col".dropFields("a", "b"))
-    }.getMessage should include("cannot drop all fields in struct")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+          .select($"struct_col".dropFields("a", "b"))
+      },
+      errorClass = "DATATYPE_MISMATCH.CANNOT_DROP_ALL_FIELDS",
+      parameters = Map("sqlExpr" -> "\"update_fields(struct_col, dropfield(), dropfield())\""),
+      context = ExpectedContext(
+        fragment = "dropFields",
+        callSitePattern = getCurrentClassCallSitePattern)
+    )
 
     checkAnswer(
       sql("SELECT CAST(NULL AS struct<a:int,b:int>) struct_col")
@@ -2133,10 +2264,15 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         .select($"struct_col".dropFields("a.b")),
       Row(Row(Row(1))))
 
-    intercept[AnalysisException] {
-      sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
-        .select($"struct_col".dropFields("a.c"))
-    }.getMessage should include("Ambiguous reference to fields")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
+          .select($"struct_col".dropFields("a.c"))
+      },
+      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+      sqlState = "42000",
+      parameters = Map("field" -> "`a`", "count" -> "2")
+    )
 
     checkAnswer(
       sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2, 'c', 3)) struct_col")
@@ -2279,9 +2415,15 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("should be able to refer to newly added nested column") {
-    intercept[AnalysisException] {
-      structLevel1.select($"a".withField("d", lit(4)).withField("e", $"a.d" + 1).as("a"))
-    }.getMessage should include("No such struct field d in a, b, c")
+    checkError(
+      exception = intercept[AnalysisException] {
+        structLevel1.select($"a".withField("d", lit(4)).withField("e", $"a.d" + 1).as("a"))
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`d`", "fields" -> "`a`, `b`, `c`"),
+      context = ExpectedContext(
+        fragment = "$",
+        callSitePattern = getCurrentClassCallSitePattern))
 
     checkAnswer(
       structLevel1
@@ -2327,11 +2469,17 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
     // we can't access the nested column in subsequent select statement after dropping it in a
     // previous select statement
-    intercept[AnalysisException]{
-      structLevel1
-        .select($"a".dropFields("c").as("a"))
-        .select($"a".withField("z", $"a.c")).as("a")
-    }.getMessage should include("No such struct field c in a, b")
+    checkError(
+      exception = intercept[AnalysisException]{
+        structLevel1
+          .select($"a".dropFields("c").as("a"))
+          .select($"a".withField("z", $"a.c")).as("a")
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`c`", "fields" -> "`a`, `b`"),
+      context = ExpectedContext(
+        fragment = "$",
+        callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("nestedDf should generate nested DataFrames") {
@@ -2425,8 +2573,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     val e1 = intercept[SparkException] {
       booleanDf.select(assert_true($"cond", lit(null.asInstanceOf[String]))).collect()
     }
-    assert(e1.getCause.isInstanceOf[RuntimeException])
-    assert(e1.getCause.getMessage == null)
+    checkError(e1.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "USER_RAISED_EXCEPTION",
+      parameters = Map("errorMessage" -> "null"))
 
     val nullDf = Seq(("first row", None), ("second row", Some(true))).toDF("n", "cond")
     checkAnswer(
@@ -2436,8 +2585,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     val e2 = intercept[SparkException] {
       nullDf.select(assert_true($"cond", $"n")).collect()
     }
-    assert(e2.getCause.isInstanceOf[RuntimeException])
-    assert(e2.getCause.getMessage == "first row")
+    checkError(e2.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "USER_RAISED_EXCEPTION",
+      parameters = Map("errorMessage" -> "first row"))
 
     // assert_true(condition)
     val intDf = Seq((0, 1)).toDF("a", "b")
@@ -2445,8 +2595,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     val e3 = intercept[SparkException] {
       intDf.select(assert_true($"a" > $"b")).collect()
     }
+
     assert(e3.getCause.isInstanceOf[RuntimeException])
-    assert(e3.getCause.getMessage == "'('a > 'b)' is not true!")
+    assert(e3.getCause.getMessage.matches(
+      "\\[USER_RAISED_EXCEPTION\\] '\\(a#\\d+ > b#\\d+\\)' is not true! SQLSTATE: P0001"))
   }
 
   test("raise_error") {
@@ -2455,14 +2607,16 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     val e1 = intercept[SparkException] {
       strDf.select(raise_error(lit(null.asInstanceOf[String]))).collect()
     }
-    assert(e1.getCause.isInstanceOf[RuntimeException])
-    assert(e1.getCause.getMessage == null)
+    checkError(e1.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "USER_RAISED_EXCEPTION",
+      parameters = Map("errorMessage" -> "null"))
 
     val e2 = intercept[SparkException] {
       strDf.select(raise_error($"a")).collect()
     }
-    assert(e2.getCause.isInstanceOf[RuntimeException])
-    assert(e2.getCause.getMessage == "hello")
+    checkError(e2.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "USER_RAISED_EXCEPTION",
+      parameters = Map("errorMessage" -> "hello"))
   }
 
   test("SPARK-34677: negate/add/subtract year-month and day-time intervals") {
@@ -2992,12 +3146,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   test("SPARK-39093: divide period by integral expression") {
     val df = Seq(((Period.ofMonths(10)), 2)).toDF("pd", "num")
     checkAnswer(df.select($"pd" / ($"num" + 3)),
-      Seq((Period.ofMonths(2))).toDF)
+      Seq((Period.ofMonths(2))).toDF())
   }
 
   test("SPARK-39093: divide duration by integral expression") {
     val df = Seq(((Duration.ofDays(10)), 2)).toDF("dd", "num")
     checkAnswer(df.select($"dd" / ($"num" + 3)),
-      Seq((Duration.ofDays(2))).toDF)
+      Seq((Duration.ofDays(2))).toDF())
   }
 }

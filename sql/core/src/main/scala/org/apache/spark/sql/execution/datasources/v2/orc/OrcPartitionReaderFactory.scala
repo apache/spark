@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.orc
 
-import java.net.URI
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobID, TaskAttemptID, TaskID, TaskType}
@@ -86,7 +84,7 @@ case class OrcPartitionReaderFactory(
     if (aggregation.nonEmpty) {
       return buildReaderWithAggregates(file, conf)
     }
-    val filePath = new Path(new URI(file.filePath))
+    val filePath = file.toPath
 
     val orcSchema = Utils.tryWithResource(createORCReader(filePath, conf))(_.getSchema)
     val resultedColPruneInfo = OrcUtils.requestedColumnIds(
@@ -127,7 +125,7 @@ case class OrcPartitionReaderFactory(
     if (aggregation.nonEmpty) {
       return buildColumnarReaderWithAggregates(file, conf)
     }
-    val filePath = new Path(new URI(file.filePath))
+    val filePath = file.toPath
 
     val orcSchema = Utils.tryWithResource(createORCReader(filePath, conf))(_.getSchema)
     val resultedColPruneInfo = OrcUtils.requestedColumnIds(
@@ -181,7 +179,7 @@ case class OrcPartitionReaderFactory(
   private def buildReaderWithAggregates(
       file: PartitionedFile,
       conf: Configuration): PartitionReader[InternalRow] = {
-    val filePath = new Path(new URI(file.filePath))
+    val filePath = file.toPath
     new PartitionReader[InternalRow] {
       private var hasNext = true
       private lazy val row: InternalRow = {
@@ -209,7 +207,7 @@ case class OrcPartitionReaderFactory(
   private def buildColumnarReaderWithAggregates(
       file: PartitionedFile,
       conf: Configuration): PartitionReader[ColumnarBatch] = {
-    val filePath = new Path(new URI(file.filePath))
+    val filePath = file.toPath
     new PartitionReader[ColumnarBatch] {
       private var hasNext = true
       private lazy val batch: ColumnarBatch = {

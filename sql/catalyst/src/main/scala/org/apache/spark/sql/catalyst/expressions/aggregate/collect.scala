@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import scala.collection.generic.Growable
 import scala.collection.mutable
+import scala.collection.mutable.Growable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types._
 import org.apache.spark.util.BoundedPriorityQueue
 
@@ -145,7 +147,8 @@ case class CollectList(
 case class CollectSet(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends Collect[mutable.HashSet[Any]] {
+    inputAggBufferOffset: Int = 0)
+  extends Collect[mutable.HashSet[Any]] with QueryErrorsBase {
 
   def this(child: Expression) = this(child, 0, 0)
 
@@ -167,7 +170,7 @@ case class CollectSet(
   override def eval(buffer: mutable.HashSet[Any]): Any = {
     val array = child.dataType match {
       case BinaryType =>
-        buffer.iterator.map(_.asInstanceOf[ArrayData].toByteArray).toArray
+        buffer.iterator.map(_.asInstanceOf[ArrayData].toByteArray()).toArray
       case _ => buffer.toArray
     }
     new GenericArrayData(array)
@@ -177,7 +180,13 @@ case class CollectSet(
     if (!child.dataType.existsRecursively(_.isInstanceOf[MapType])) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure("collect_set() cannot have map type data")
+      DataTypeMismatch(
+        errorSubClass = "UNSUPPORTED_INPUT_TYPE",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> toSQLType(MapType)
+        )
+      )
     }
   }
 

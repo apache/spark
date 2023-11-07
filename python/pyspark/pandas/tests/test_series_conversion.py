@@ -25,7 +25,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class SeriesConversionTest(PandasOnSparkTestCase, SQLTestUtils):
+class SeriesConversionTestsMixin:
     @property
     def pser(self):
         return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
@@ -53,7 +53,6 @@ class SeriesConversionTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = self.psser
 
         self.assert_eq(psser.to_latex(), pser.to_latex())
-        self.assert_eq(psser.to_latex(col_space=2), pser.to_latex(col_space=2))
         self.assert_eq(psser.to_latex(header=True), pser.to_latex(header=True))
         self.assert_eq(psser.to_latex(index=False), pser.to_latex(index=False))
         self.assert_eq(psser.to_latex(na_rep="-"), pser.to_latex(na_rep="-"))
@@ -64,11 +63,15 @@ class SeriesConversionTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.to_latex(decimal=","), pser.to_latex(decimal=","))
 
 
+class SeriesConversionTests(SeriesConversionTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+    pass
+
+
 if __name__ == "__main__":
     from pyspark.pandas.tests.test_series_conversion import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

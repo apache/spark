@@ -164,7 +164,6 @@ SELECT interval 'interval 2 weeks 2 days 1 hour 3 minutes 2 seconds 100 millisec
 SELECT interval '2 weeks 2 days 1 hour 3 minutes 2 seconds 100 millisecond 200 microseconds';
 
 -- malformed interval literal
-select interval;
 select interval 1 fake_unit;
 select interval 1 year to month;
 select interval '1' year to second;

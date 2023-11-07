@@ -21,6 +21,19 @@ license: |
 
 <div class="codetabs">
 
+<div data-lang="python"  markdown="1">
+Spark SQL can automatically infer the schema of a JSON dataset and load it as a DataFrame.
+This conversion can be done using `SparkSession.read.json` on a JSON file.
+
+Note that the file that is offered as _a json file_ is not a typical JSON file. Each
+line must contain a separate, self-contained valid JSON object. For more information, please see
+[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/).
+
+For a regular multi-line JSON file, set the `multiLine` parameter to `True`.
+
+{% include_example json_dataset python/sql/datasource.py %}
+</div>
+
 <div data-lang="scala"  markdown="1">
 Spark SQL can automatically infer the schema of a JSON dataset and load it as a `Dataset[Row]`.
 This conversion can be done using `SparkSession.read.json()` on either a `Dataset[String]`,
@@ -47,19 +60,6 @@ line must contain a separate, self-contained valid JSON object. For more informa
 For a regular multi-line JSON file, set the `multiLine` option to `true`.
 
 {% include_example json_dataset java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
-</div>
-
-<div data-lang="python"  markdown="1">
-Spark SQL can automatically infer the schema of a JSON dataset and load it as a DataFrame.
-This conversion can be done using `SparkSession.read.json` on a JSON file.
-
-Note that the file that is offered as _a json file_ is not a typical JSON file. Each
-line must contain a separate, self-contained valid JSON object. For more information, please see
-[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/).
-
-For a regular multi-line JSON file, set the `multiLine` parameter to `True`.
-
-{% include_example json_dataset python/sql/datasource.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -109,8 +109,8 @@ Data source options of JSON can be set via:
   * `schema_of_json`
 * `OPTIONS` clause at [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
 
-<table class="table">
-  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
+<table class="table table-striped">
+  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr></thead>
   <tr>
     <!-- TODO(SPARK-35433): Add timeZone to Data Source Option for CSV, too. -->
     <td><code>timeZone</code></td>

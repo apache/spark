@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.getPartitionValueString
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
@@ -364,7 +365,7 @@ object PartitioningUtils extends SQLConfHelper {
     }
 
   def getPathFragment(spec: TablePartitionSpec, partitionColumns: Seq[Attribute]): String = {
-    getPathFragment(spec, StructType.fromAttributes(partitionColumns))
+    getPathFragment(spec, DataTypeUtils.fromAttributes(partitionColumns))
   }
 
   /**
@@ -405,7 +406,7 @@ object PartitioningUtils extends SQLConfHelper {
     val distinctPartColNames = pathWithPartitionValues.map(_._2.columnNames).distinct
 
     def groupByKey[K, V](seq: Seq[(K, V)]): Map[K, Iterable[V]] =
-      seq.groupBy { case (key, _) => key }.mapValues(_.map { case (_, value) => value }).toMap
+      seq.groupBy { case (key, _) => key }.view.mapValues(_.map { case (_, value) => value }).toMap
 
     val partColNamesToPaths = groupByKey(pathWithPartitionValues.map {
       case (path, partValues) => partValues.columnNames -> path
@@ -488,10 +489,10 @@ object PartitioningUtils extends SQLConfHelper {
 
     val timestampTry = Try {
       val unescapedRaw = unescapePathName(raw)
-      // the inferred data type is consistent with the default timestamp type
-      val timestampType = conf.timestampType
       // try and parse the date, if no exception occurs this is a candidate to be resolved as
-      // TimestampType or TimestampNTZType
+      // TimestampType or TimestampNTZType. The inference timestamp typ is controlled by the conf
+      // "spark.sql.timestampType".
+      val timestampType = conf.timestampType
       timestampType match {
         case TimestampType => timestampFormatter.parse(unescapedRaw)
         case TimestampNTZType => timestampFormatter.parseWithoutTimeZone(unescapedRaw)
@@ -558,8 +559,7 @@ object PartitioningUtils extends SQLConfHelper {
       partitionColumns: Seq[String],
       caseSensitive: Boolean): Unit = {
 
-    SchemaUtils.checkColumnNameDuplication(
-      partitionColumns, partitionColumns.mkString(", "), caseSensitive)
+    SchemaUtils.checkColumnNameDuplication(partitionColumns, caseSensitive)
 
     partitionColumnsSchema(schema, partitionColumns).foreach {
       field => field.dataType match {

@@ -27,8 +27,8 @@ license: |
 ## Apache Maven
 
 The Maven-based build is the build of reference for Apache Spark.
-Building Spark using Maven requires Maven 3.8.6 and Java 8.
-Spark requires Scala 2.12/2.13; support for Scala 2.11 was removed in Spark 3.0.0.
+Building Spark using Maven requires Maven 3.9.5 and Java 17/21.
+Spark requires Scala 2.13; support for Scala 2.12 was removed in Spark 4.0.0.
 
 ### Setting up Maven's Memory Usage
 
@@ -47,7 +47,7 @@ You can fix these problems by setting the `MAVEN_OPTS` variable as discussed bef
 **Note:**
 
 * If using `build/mvn` with no `MAVEN_OPTS` set, the script will automatically add the above options to the `MAVEN_OPTS` environment variable.
-* The `test` phase of the Spark build will automatically add these options to `MAVEN_OPTS`, even when not using `build/mvn`.    
+* The `test` phase of the Spark build will automatically add these options to `MAVEN_OPTS`, even when not using `build/mvn`.
 
 ### build/mvn
 
@@ -64,7 +64,7 @@ To create a Spark distribution like those distributed by the
 to be runnable, use `./dev/make-distribution.sh` in the project root directory. It can be configured
 with Maven profile settings and so on like the direct Maven build. Example:
 
-    ./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phive -Phive-thriftserver -Pmesos -Pyarn -Pkubernetes
+    ./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phive -Phive-thriftserver -Pyarn -Pkubernetes
 
 This will build Spark distribution along with Python pip and R packages. For more information on usage, run `./dev/make-distribution.sh --help`
 
@@ -78,10 +78,6 @@ from `hadoop.version`.
 Example:
 
     ./build/mvn -Pyarn -Dhadoop.version=3.3.0 -DskipTests clean package
-
-If you want to build with Hadoop 2.x, enable `hadoop-2` profile:
-
-    ./build/mvn -Phadoop-2 -Pyarn -Dhadoop.version=2.8.5 -DskipTests clean package
 
 ## Building With Hive and JDBC Support
 
@@ -101,10 +97,6 @@ the Spark assembly and the version on each node, included with `yarn.application
 The `hadoop-provided` profile builds the assembly without including Hadoop-ecosystem projects,
 like ZooKeeper and Hadoop itself.
 
-## Building with Mesos support
-
-    ./build/mvn -Pmesos -DskipTests clean package
-
 ## Building with Kubernetes support
 
     ./build/mvn -Pkubernetes -DskipTests clean package
@@ -118,6 +110,10 @@ For instance, you can build the Spark Streaming module using:
     ./build/mvn -pl :spark-streaming_{{site.SCALA_BINARY_VERSION}} clean install
 
 where `spark-streaming_{{site.SCALA_BINARY_VERSION}}` is the `artifactId` as defined in `streaming/pom.xml` file.
+
+## Building with Spark Connect support
+
+    ./build/mvn -Pconnect -DskipTests clean package
 
 ## Continuous Compilation
 
@@ -261,6 +257,7 @@ or
 
     ./build/sbt docker-integration-tests/test
 
+<!---
 ## Change Scala Version
 
 When other versions of Scala like 2.13 are supported, it will be possible to build for that version.
@@ -275,6 +272,7 @@ Enable the profile (e.g. 2.13):
 
     # For sbt
     ./build/sbt -Pscala-2.13 compile
+-->
 
 ## Running Jenkins tests with GitHub Enterprise
 
@@ -286,8 +284,8 @@ If use an individual repository or a repository on GitHub Enterprise, export bel
 
 ### Related environment variables
 
-<table class="table">
-<tr><th>Variable Name</th><th>Default</th><th>Meaning</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Variable Name</th><th>Default</th><th>Meaning</th></tr></thead>
 <tr>
   <td><code>SPARK_PROJECT_URL</code></td>
   <td>https://github.com/apache/spark</td>
@@ -317,3 +315,21 @@ To build and run tests on IPv6-only environment, the following configurations ar
     export MAVEN_OPTS="-Djava.net.preferIPv6Addresses=true"
     export SBT_OPTS="-Djava.net.preferIPv6Addresses=true"
     export SERIAL_SBT_TESTS=1
+
+### Building with user-defined `protoc`
+
+When the user cannot use the official `protoc` binary files to build the `core` module in the compilation environment, for example, compiling `core` module on CentOS 6 or CentOS 7 which the default `glibc` version is less than 2.14, we can try to compile and test by specifying the user-defined `protoc` binary files as follows:
+
+```bash
+export SPARK_PROTOC_EXEC_PATH=/path-to-protoc-exe
+./build/mvn -Puser-defined-protoc -DskipDefaultProtoc clean package
+```
+
+or
+
+```bash
+export SPARK_PROTOC_EXEC_PATH=/path-to-protoc-exe
+./build/sbt -Puser-defined-protoc clean package
+```
+
+The user-defined `protoc` binary files can be produced in the user's compilation environment by source code compilation, for compilation steps, please refer to [protobuf](https://github.com/protocolbuffers/protobuf).

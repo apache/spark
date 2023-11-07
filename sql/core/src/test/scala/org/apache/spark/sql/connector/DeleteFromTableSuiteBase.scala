@@ -17,47 +17,12 @@
 
 package org.apache.spark.sql.connector
 
-import java.util.Collections
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, ReplaceDataExec, WriteDeltaExec}
 
-import org.scalatest.BeforeAndAfter
+abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, Encoders, QueryTest, Row}
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog}
-import org.apache.spark.sql.connector.expressions.LogicalExpressions._
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, ReplaceDataExec}
-import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.QueryExecutionListener
-
-abstract class DeleteFromTableSuiteBase
-  extends QueryTest with SharedSparkSession with BeforeAndAfter with AdaptiveSparkPlanHelper {
-
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import testImplicits._
-
-  before {
-    spark.conf.set("spark.sql.catalog.cat", classOf[InMemoryRowLevelOperationTableCatalog].getName)
-  }
-
-  after {
-    spark.sessionState.catalogManager.reset()
-    spark.sessionState.conf.unsetConf("spark.sql.catalog.cat")
-  }
-
-  protected val namespace: Array[String] = Array("ns1")
-  protected val ident: Identifier = Identifier.of(namespace, "test_table")
-  protected val tableNameAsString: String = "cat." + ident.toString
-
-  protected def catalog: InMemoryRowLevelOperationTableCatalog = {
-    val catalog = spark.sessionState.catalogManager.catalog("cat")
-    catalog.asTableCatalog.asInstanceOf[InMemoryRowLevelOperationTableCatalog]
-  }
-
-  protected def table: InMemoryRowLevelOperationTable = {
-    catalog.loadTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
-  }
 
   test("EXPLAIN only delete") {
     createAndInitTable("id INT, dep STRING", """{ "id": 1, "dep": "hr" }""")
@@ -70,7 +35,7 @@ abstract class DeleteFromTableSuiteBase
   }
 
   test("delete from empty tables") {
-    createTable("id INT, dep STRING")
+    createTable("pk INT NOT NULL, id INT, dep STRING")
 
     sql(s"DELETE FROM $tableNameAsString WHERE id <= 1")
 
@@ -78,76 +43,76 @@ abstract class DeleteFromTableSuiteBase
   }
 
   test("delete with basic filters") {
-    createAndInitTable("id INT, dep STRING",
-      """{ "id": 1, "dep": "hr" }
-        |{ "id": 2, "dep": "software" }
-        |{ "id": 3, "dep": "hr" }
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
         |""".stripMargin)
 
     sql(s"DELETE FROM $tableNameAsString WHERE id <= 1")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
-      Row(2, "software") :: Row(3, "hr") :: Nil)
+      Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
   }
 
   test("delete with aliases") {
-    createAndInitTable("id INT, dep STRING",
-      """{ "id": 1, "dep": "hr" }
-        |{ "id": 2, "dep": "software" }
-        |{ "id": 3, "dep": "hr" }
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
         |""".stripMargin)
 
     sql(s"DELETE FROM $tableNameAsString AS t WHERE t.id <= 1 OR t.dep = 'hr'")
 
-    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(2, "software") :: Nil)
+    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(2, 2, "software") :: Nil)
   }
 
   test("delete with IN predicates") {
-    createAndInitTable("id INT, dep STRING",
-      """{ "id": 1, "dep": "hr" }
-        |{ "id": 2, "dep": "software" }
-        |{ "id": null, "dep": "hr" }
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": null, "dep": "hr" }
         |""".stripMargin)
 
     sql(s"DELETE FROM $tableNameAsString WHERE id IN (1, null)")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
-      Row(2, "software") :: Row(null, "hr") :: Nil)
+      Row(2, 2, "software") :: Row(3, null, "hr") :: Nil)
   }
 
   test("delete with NOT IN predicates") {
-    createAndInitTable("id INT, dep STRING",
-      """{ "id": 1, "dep": "hr" }
-        |{ "id": 2, "dep": "software" }
-        |{ "id": null, "dep": "hr" }
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": null, "dep": "hr" }
         |""".stripMargin)
 
     sql(s"DELETE FROM $tableNameAsString WHERE id NOT IN (null, 1)")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
-      Row(1, "hr") :: Row(2, "software") :: Row(null, "hr") :: Nil)
+      Row(1, 1, "hr") :: Row(2, 2, "software") :: Row(3, null, "hr") :: Nil)
 
     sql(s"DELETE FROM $tableNameAsString WHERE id NOT IN (1, 10)")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
-      Row(1, "hr") :: Row(null, "hr") :: Nil)
+      Row(1, 1, "hr") :: Row(3, null, "hr") :: Nil)
   }
 
   test("delete with conditions on nested columns") {
-    createAndInitTable("id INT, complex STRUCT<c1:INT,c2:STRING>, dep STRING",
-      """{ "id": 1, "complex": { "c1": 3, "c2": "v1" }, "dep": "hr" }
-        |{ "id": 2, "complex": { "c1": 2, "c2": "v2" }, "dep": "software" }
+    createAndInitTable("pk INT NOT NULL, id INT, complex STRUCT<c1:INT,c2:STRING>, dep STRING",
+      """{ "pk": 1, "id": 1, "complex": { "c1": 3, "c2": "v1" }, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "complex": { "c1": 2, "c2": "v2" }, "dep": "software" }
         |""".stripMargin)
 
     sql(s"DELETE FROM $tableNameAsString WHERE complex.c1 = id + 2")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
-      Row(2, Row(2, "v2"), "software") :: Nil)
+      Row(2, 2, Row(2, "v2"), "software") :: Nil)
 
     sql(s"DELETE FROM $tableNameAsString t WHERE t.complex.c1 = id")
 
@@ -156,10 +121,10 @@ abstract class DeleteFromTableSuiteBase
 
   test("delete with IN subqueries") {
     withTempView("deleted_id", "deleted_dep") {
-      createAndInitTable("id INT, dep STRING",
-        """{ "id": 1, "dep": "hr" }
-          |{ "id": 2, "dep": "hardware" }
-          |{ "id": null, "dep": "hr" }
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+        """{ "pk": 1, "id": 1, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "dep": "hardware" }
+          |{ "pk": 3, "id": null, "dep": "hr" }
           |""".stripMargin)
 
       val deletedIdDF = Seq(Some(0), Some(1), None).toDF()
@@ -178,16 +143,16 @@ abstract class DeleteFromTableSuiteBase
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
-        Row(2, "hardware") :: Row(null, "hr") :: Nil)
+        Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
 
-      append("id INT, dep STRING",
-        """{ "id": 1, "dep": "hr" }
-          |{ "id": -1, "dep": "hr" }
+      append("pk INT NOT NULL, id INT, dep STRING",
+        """{ "pk": 4, "id": 1, "dep": "hr" }
+          |{ "pk": 5, "id": -1, "dep": "hr" }
           |""".stripMargin)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
-        Row(-1, "hr") :: Row(1, "hr") :: Row(2, "hardware") :: Row(null, "hr") :: Nil)
+        Row(5, -1, "hr") :: Row(4, 1, "hr") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
 
       sql(
         s"""DELETE FROM $tableNameAsString
@@ -199,16 +164,16 @@ abstract class DeleteFromTableSuiteBase
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
-        Row(-1, "hr") :: Row(1, "hr") :: Nil)
+        Row(5, -1, "hr") :: Row(4, 1, "hr") :: Nil)
 
-      append("id INT, dep STRING",
-        """{ "id": null, "dep": "hr" }
-          |{ "id": 2, "dep": "hr" }
+      append("pk INT NOT NULL, id INT, dep STRING",
+        """{ "pk": 6, "id": null, "dep": "hr" }
+          |{ "pk": 7, "id": 2, "dep": "hr" }
           |""".stripMargin)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
-        Row(-1, "hr") :: Row(1, "hr") :: Row(2, "hr") :: Row(null, "hr") :: Nil)
+        Row(5, -1, "hr") :: Row(4, 1, "hr") :: Row(7, 2, "hr") :: Row(6, null, "hr") :: Nil)
 
       sql(
         s"""DELETE FROM $tableNameAsString
@@ -220,16 +185,16 @@ abstract class DeleteFromTableSuiteBase
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
-        Row(-1, "hr") :: Row(1, "hr") :: Row(null, "hr") :: Nil)
+        Row(5, -1, "hr") :: Row(4, 1, "hr") :: Row(6, null, "hr") :: Nil)
     }
   }
 
   test("delete with multi-column IN subqueries") {
     withTempView("deleted_employee") {
-      createAndInitTable("id INT, dep STRING",
-        """{ "id": 1, "dep": "hr" }
-          |{ "id": 2, "dep": "hardware" }
-          |{ "id": null, "dep": "hr" }
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+        """{ "pk": 1, "id": 1, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "dep": "hardware" }
+          |{ "pk": 3, "id": null, "dep": "hr" }
           |""".stripMargin)
 
       val deletedEmployeeDF = Seq((None, "hr"), (Some(1), "hr")).toDF()
@@ -243,16 +208,16 @@ abstract class DeleteFromTableSuiteBase
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
-        Row(2, "hardware") :: Row(null, "hr") :: Nil)
+        Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
     }
   }
 
   test("delete with NOT IN subqueries") {
     withTempView("deleted_id", "deleted_dep") {
-      createAndInitTable("id INT, dep STRING",
-        """{ "id": 1, "dep": "hr" }
-          |{ "id": 2, "dep": "hardware" }
-          |{ "id": null, "dep": "hr" }
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+        """{ "pk": 1, "id": 1, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "dep": "hardware" }
+          |{ "pk": 3, "id": null, "dep": "hr" }
           |""".stripMargin)
 
       val deletedIdDF = Seq(Some(-1), Some(-2), None).toDF()
@@ -269,7 +234,7 @@ abstract class DeleteFromTableSuiteBase
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
-        Row(1, "hr") :: Row(2, "hardware") :: Row(null, "hr") :: Nil)
+        Row(1, 1, "hr") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
 
       sql(
         s"""DELETE FROM $tableNameAsString
@@ -277,17 +242,17 @@ abstract class DeleteFromTableSuiteBase
            | id NOT IN (SELECT * FROM deleted_id WHERE value IS NOT NULL)
            |""".stripMargin)
 
-      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(null, "hr") :: Nil)
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(3, null, "hr") :: Nil)
 
-      append("id INT, dep STRING",
-        """{ "id": 1, "dep": "hr" }
-          |{ "id": 2, "dep": "hardware" }
-          |{ "id": null, "dep": "hr" }
+      append("pk INT NOT NULL, id INT, dep STRING",
+        """{ "pk": 4, "id": 1, "dep": "hr" }
+          |{ "pk": 5, "id": 2, "dep": "hardware" }
+          |{ "pk": 6, "id": null, "dep": "hr" }
           |""".stripMargin)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
-        Row(1, "hr") :: Row(2, "hardware") :: Row(null, "hr") :: Row(null, "hr") :: Nil)
+        Row(4, 1, "hr") :: Row(5, 2, "hardware") :: Row(3, null, "hr") :: Row(6, null, "hr") :: Nil)
 
       sql(
         s"""DELETE FROM $tableNameAsString
@@ -297,7 +262,7 @@ abstract class DeleteFromTableSuiteBase
            | dep IN ('software', 'hr')
            |""".stripMargin)
 
-      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(2, "hardware") :: Nil)
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(5, 2, "hardware") :: Nil)
 
       sql(
         s"""DELETE FROM $tableNameAsString
@@ -307,7 +272,7 @@ abstract class DeleteFromTableSuiteBase
            | EXISTS (SELECT 1 FROM FROM deleted_dep WHERE dep = deleted_dep.value)
            |""".stripMargin)
 
-      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(2, "hardware") :: Nil)
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(5, 2, "hardware") :: Nil)
 
       sql(
         s"""DELETE FROM $tableNameAsString t
@@ -323,10 +288,10 @@ abstract class DeleteFromTableSuiteBase
 
   test("delete with EXISTS subquery") {
     withTempView("deleted_id", "deleted_dep") {
-      createAndInitTable("id INT, dep STRING",
-        """{ "id": 1, "dep": "hr" }
-          |{ "id": 2, "dep": "hardware" }
-          |{ "id": null, "dep": "hr" }
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+        """{ "pk": 1, "id": 1, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "dep": "hardware" }
+          |{ "pk": 3, "id": null, "dep": "hr" }
           |""".stripMargin)
 
       val deletedIdDF = Seq(Some(-1), Some(-2), None).toDF()
@@ -343,7 +308,7 @@ abstract class DeleteFromTableSuiteBase
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
-        Row(1, "hr") :: Row(2, "hardware") :: Row(null, "hr") :: Nil)
+        Row(1, 1, "hr") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
 
       sql(
         s"""DELETE FROM $tableNameAsString t
@@ -353,7 +318,7 @@ abstract class DeleteFromTableSuiteBase
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
-        Row(2, "hardware") :: Row(null, "hr") :: Nil)
+        Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
 
       sql(
         s"""DELETE FROM $tableNameAsString t
@@ -363,7 +328,7 @@ abstract class DeleteFromTableSuiteBase
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
-        Row(2, "hardware") :: Nil)
+        Row(2, 2, "hardware") :: Nil)
 
       sql(
         s"""DELETE FROM $tableNameAsString t
@@ -375,16 +340,16 @@ abstract class DeleteFromTableSuiteBase
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
-        Row(2, "hardware") :: Nil)
+        Row(2, 2, "hardware") :: Nil)
     }
   }
 
   test("delete with NOT EXISTS subquery") {
     withTempView("deleted_id", "deleted_dep") {
-      createAndInitTable("id INT, dep STRING",
-        """{ "id": 1, "dep": "hr" }
-          |{ "id": 2, "dep": "hardware" }
-          |{ "id": null, "dep": "hr" }
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+        """{ "pk": 1, "id": 1, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "dep": "hardware" }
+          |{ "pk": 3, "id": null, "dep": "hr" }
           |""".stripMargin)
 
       val deletedIdDF = Seq(Some(-1), Some(-2), None).toDF()
@@ -403,7 +368,7 @@ abstract class DeleteFromTableSuiteBase
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
-        Row(1, "hr") :: Row(null, "hr") :: Nil)
+        Row(1, 1, "hr") :: Row(3, null, "hr") :: Nil)
 
       sql(
         s"""DELETE FROM $tableNameAsString t
@@ -411,7 +376,7 @@ abstract class DeleteFromTableSuiteBase
            | NOT EXISTS (SELECT 1 FROM deleted_id d WHERE t.id = d.value + 2)
            |""".stripMargin)
 
-      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, "hr") :: Nil)
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, 1, "hr") :: Nil)
 
       sql(
         s"""DELETE FROM $tableNameAsString t
@@ -427,10 +392,10 @@ abstract class DeleteFromTableSuiteBase
 
   test("delete with a scalar subquery") {
     withTempView("deleted_id") {
-      createAndInitTable("id INT, dep STRING",
-        """{ "id": 1, "dep": "hr" }
-          |{ "id": 2, "dep": "hardware" }
-          |{ "id": null, "dep": "hr" }
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+        """{ "pk": 1, "id": 1, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "dep": "hardware" }
+          |{ "pk": 3, "id": null, "dep": "hr" }
           |""".stripMargin)
 
       val deletedIdDF = Seq(Some(1), Some(100), None).toDF()
@@ -444,18 +409,18 @@ abstract class DeleteFromTableSuiteBase
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
-        Row(2, "hardware") :: Row(null, "hr") :: Nil)
+        Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
     }
   }
 
   test("delete refreshes relation cache") {
     withTempView("temp") {
       withCache("temp") {
-        createAndInitTable("id INT, dep STRING",
-          """{ "id": 1, "dep": "hr" }
-            |{ "id": 1, "dep": "hardware" }
-            |{ "id": 2, "dep": "hardware" }
-            |{ "id": 3, "dep": "hr" }
+        createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+          """{ "pk": 1, "id": 1, "dep": "hr" }
+            |{ "pk": 2, "id": 1, "dep": "hardware" }
+            |{ "pk": 3, "id": 2, "dep": "hardware" }
+            |{ "pk": 4, "id": 3, "dep": "hr" }
             |""".stripMargin)
 
         // define a view on top of the table
@@ -468,7 +433,7 @@ abstract class DeleteFromTableSuiteBase
         // verify the view returns expected results
         checkAnswer(
           sql("SELECT * FROM temp"),
-          Row(1, "hr") :: Row(1, "hardware") :: Nil)
+          Row(1, 1, "hr") :: Row(2, 1, "hardware") :: Nil)
 
         // delete some records from the table
         sql(s"DELETE FROM $tableNameAsString WHERE id <= 1")
@@ -476,7 +441,7 @@ abstract class DeleteFromTableSuiteBase
         // verify the delete was successful
         checkAnswer(
           sql(s"SELECT * FROM $tableNameAsString"),
-          Row(2, "hardware") :: Row(3, "hr") :: Nil)
+          Row(3, 2, "hardware") :: Row(4, 3, "hr") :: Nil)
 
         // verify the view reflects the changes in the table
         checkAnswer(sql("SELECT * FROM temp"), Nil)
@@ -484,24 +449,11 @@ abstract class DeleteFromTableSuiteBase
     }
   }
 
-  test("delete with nondeterministic conditions") {
-    createAndInitTable("id INT, dep STRING",
-      """{ "id": 1, "dep": "hr" }
-        |{ "id": 2, "dep": "software" }
-        |{ "id": 3, "dep": "hr" }
-        |""".stripMargin)
-
-    val e = intercept[AnalysisException] {
-      sql(s"DELETE FROM $tableNameAsString WHERE id <= 1 AND rand() > 0.5")
-    }
-    assert(e.message.contains("nondeterministic expressions are only allowed"))
-  }
-
   test("delete without condition executed as delete with filters") {
-    createAndInitTable("id INT, dep INT",
-      """{ "id": 1, "dep": 100 }
-        |{ "id": 2, "dep": 200 }
-        |{ "id": 3, "dep": 100 }
+    createAndInitTable("pk INT NOT NULL, id INT, dep INT",
+      """{ "pk": 1, "id": 1, "dep": 100 }
+        |{ "pk": 2, "id": 2, "dep": 200 }
+        |{ "pk": 3, "id": 3, "dep": 100 }
         |""".stripMargin)
 
     executeDeleteWithFilters(s"DELETE FROM $tableNameAsString")
@@ -510,39 +462,39 @@ abstract class DeleteFromTableSuiteBase
   }
 
   test("delete with supported predicates gets converted into delete with filters") {
-    createAndInitTable("id INT, dep INT",
-      """{ "id": 1, "dep": 100 }
-        |{ "id": 2, "dep": 200 }
-        |{ "id": 3, "dep": 100 }
+    createAndInitTable("pk INT NOT NULL, id INT, dep INT",
+      """{ "pk": 1, "id": 1, "dep": 100 }
+        |{ "pk": 2, "id": 2, "dep": 200 }
+        |{ "pk": 3, "id": 3, "dep": 100 }
         |""".stripMargin)
 
     executeDeleteWithFilters(s"DELETE FROM $tableNameAsString WHERE dep = 100")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
-      Row(2, 200) :: Nil)
+      Row(2, 2, 200) :: Nil)
   }
 
   test("delete with unsupported predicates cannot be converted into delete with filters") {
-    createAndInitTable("id INT, dep INT",
-      """{ "id": 1, "dep": 100 }
-        |{ "id": 2, "dep": 200 }
-        |{ "id": 3, "dep": 100 }
+    createAndInitTable("pk INT NOT NULL, id INT, dep INT",
+      """{ "pk": 1, "id": 1, "dep": 100 }
+        |{ "pk": 2, "id": 2, "dep": 200 }
+        |{ "pk": 3, "id": 3, "dep": 100 }
         |""".stripMargin)
 
     executeDeleteWithRewrite(s"DELETE FROM $tableNameAsString WHERE dep = 100 OR dep < 200")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
-      Row(2, 200) :: Nil)
+      Row(2, 2, 200) :: Nil)
   }
 
   test("delete with subquery cannot be converted into delete with filters") {
     withTempView("deleted_id") {
-      createAndInitTable("id INT, dep INT",
-        """{ "id": 1, "dep": 100 }
-          |{ "id": 2, "dep": 200 }
-          |{ "id": 3, "dep": 100 }
+      createAndInitTable("pk INT NOT NULL, id INT, dep INT",
+        """{ "pk": 1, "id": 1, "dep": 100 }
+          |{ "pk": 2, "id": 2, "dep": 200 }
+          |{ "pk": 3, "id": 3, "dep": 100 }
           |""".stripMargin)
 
       val deletedIdDF = Seq(Some(1), Some(100), None).toDF()
@@ -553,33 +505,7 @@ abstract class DeleteFromTableSuiteBase
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
-        Row(2, 200) :: Row(3, 100) :: Nil)
-    }
-  }
-
-  protected def createTable(schemaString: String): Unit = {
-    val schema = StructType.fromDDL(schemaString)
-    val tableProps = Collections.emptyMap[String, String]
-    catalog.createTable(ident, schema, Array(identity(reference(Seq("dep")))), tableProps)
-  }
-
-  protected def createAndInitTable(schemaString: String, jsonData: String): Unit = {
-    createTable(schemaString)
-    append(schemaString, jsonData)
-  }
-
-  private def append(schemaString: String, jsonData: String): Unit = {
-    val df = toDF(jsonData, schemaString)
-    df.coalesce(1).writeTo(tableNameAsString).append()
-  }
-
-  private def toDF(jsonData: String, schemaString: String = null): DataFrame = {
-    val jsonRows = jsonData.split("\\n").filter(str => str.trim.nonEmpty)
-    val jsonDS = spark.createDataset(jsonRows)(Encoders.STRING)
-    if (schemaString == null) {
-      spark.read.json(jsonDS)
-    } else {
-      spark.read.schema(schemaString).json(jsonDS)
+        Row(2, 2, 200) :: Row(3, 3, 100) :: Nil)
     }
   }
 
@@ -604,28 +530,10 @@ abstract class DeleteFromTableSuiteBase
     executedPlan match {
       case _: ReplaceDataExec =>
         // OK
+      case _: WriteDeltaExec =>
+        // OK
       case other =>
         fail("unexpected executed plan: " + other)
     }
-  }
-
-  // executes an operation and keeps the executed plan
-  protected def executeAndKeepPlan(func: => Unit): SparkPlan = {
-    var executedPlan: SparkPlan = null
-
-    val listener = new QueryExecutionListener {
-      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
-        executedPlan = qe.executedPlan
-      }
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
-      }
-    }
-    spark.listenerManager.register(listener)
-
-    func
-
-    sparkContext.listenerBus.waitUntilEmpty()
-
-    stripAQEPlan(executedPlan)
   }
 }

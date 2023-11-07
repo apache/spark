@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import platform
 from decimal import Decimal
 import os
 import pydoc
@@ -23,10 +23,12 @@ import tempfile
 import time
 import unittest
 from typing import cast
+import io
+from contextlib import redirect_stdout
 
-from pyspark.sql import SparkSession, Row
+from pyspark import StorageLevel
+from pyspark.sql import SparkSession, Row, functions
 from pyspark.sql.functions import col, lit, count, sum, mean, struct
-from pyspark.sql.pandas.utils import pyarrow_version_less_than_minimum
 from pyspark.sql.types import (
     StringType,
     IntegerType,
@@ -41,7 +43,13 @@ from pyspark.sql.types import (
     FloatType,
     DayTimeIntervalType,
 )
-from pyspark.sql.utils import AnalysisException, IllegalArgumentException
+from pyspark.storagelevel import StorageLevel
+from pyspark.errors import (
+    AnalysisException,
+    IllegalArgumentException,
+    PySparkTypeError,
+    PySparkValueError,
+)
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     SQLTestUtils,
@@ -53,7 +61,7 @@ from pyspark.testing.sqlutils import (
 from pyspark.testing.utils import QuietTest
 
 
-class DataFrameTests(ReusedSQLTestCase):
+class DataFrameTestsMixin:
     def test_range(self):
         self.assertEqual(self.spark.range(1, 1).count(), 0)
         self.assertEqual(self.spark.range(1, 0, -1).count(), 1)
@@ -74,7 +82,7 @@ class DataFrameTests(ReusedSQLTestCase):
 
     def test_freqItems(self):
         vals = [Row(a=1, b=-2.0) if i % 2 == 0 else Row(a=i, b=i * 1.0) for i in range(100)]
-        df = self.sc.parallelize(vals).toDF()
+        df = self.spark.createDataFrame(vals)
         items = df.stat.freqItems(("a", "b"), 0.4).collect()[0]
         self.assertTrue(1 in items[0])
         self.assertTrue(-2.0 in items[1])
@@ -109,9 +117,14 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(renamed_df2.columns, ["naam", "age"])
 
         # negative test for incorrect type
-        type_error_msg = "colsMap must be dict of existing column name and new column name."
-        with self.assertRaisesRegex(TypeError, type_error_msg):
+        with self.assertRaises(PySparkTypeError) as pe:
             df.withColumnsRenamed(("name", "x"))
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_DICT",
+            message_parameters={"arg_name": "colsMap", "arg_type": "tuple"},
+        )
 
     def test_drop_duplicates(self):
         # SPARK-36034 test that drop duplicates throws a type error when in correct type provided
@@ -124,9 +137,47 @@ class DataFrameTests(ReusedSQLTestCase):
 
         self.assertEqual(df.dropDuplicates(["name", "age"]).count(), 2)
 
-        type_error_msg = "Parameter 'subset' must be a list of columns"
-        with self.assertRaisesRegex(TypeError, type_error_msg):
+        with self.assertRaises(PySparkTypeError) as pe:
             df.dropDuplicates("name")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OR_TUPLE",
+            message_parameters={"arg_name": "subset", "arg_type": "str"},
+        )
+
+    def test_drop_duplicates_with_ambiguous_reference(self):
+        df1 = self.spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        df2 = self.spark.createDataFrame([Row(height=80, name="Tom"), Row(height=85, name="Bob")])
+        df3 = df1.join(df2, df1.name == df2.name, "inner")
+
+        self.assertEqual(df3.drop("name", "age").columns, ["height"])
+        self.assertEqual(df3.drop("name", df3.age, "unknown").columns, ["height"])
+        self.assertEqual(df3.drop("name", "age", df3.height).columns, [])
+
+    def test_drop_empty_column(self):
+        df = self.spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+
+        self.assertEqual(df.drop().columns, ["age", "name"])
+        self.assertEqual(df.drop(*[]).columns, ["age", "name"])
+
+    def test_drop_column_name_with_dot(self):
+        df = (
+            self.spark.range(1, 3)
+            .withColumn("first.name", lit("Peter"))
+            .withColumn("city.name", lit("raleigh"))
+            .withColumn("state", lit("nc"))
+        )
+
+        self.assertEqual(df.drop("first.name").columns, ["id", "city.name", "state"])
+        self.assertEqual(df.drop("city.name").columns, ["id", "first.name", "state"])
+        self.assertEqual(df.drop("first.name", "city.name").columns, ["id", "state"])
+        self.assertEqual(
+            df.drop("first.name", "city.name", "unknown.unknown").columns, ["id", "state"]
+        )
+        self.assertEqual(
+            df.drop("unknown.unknown").columns, ["id", "first.name", "city.name", "state"]
+        )
 
     def test_dropna(self):
         schema = StructType(
@@ -202,6 +253,15 @@ class DataFrameTests(ReusedSQLTestCase):
             1,
         )
 
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame([("Alice", 50, None)], schema).dropna(subset=10)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OR_STR_OR_TUPLE",
+            message_parameters={"arg_name": "subset", "arg_type": "int"},
+        )
+
     def test_fillna(self):
         schema = StructType(
             [
@@ -273,6 +333,24 @@ class DataFrameTests(ReusedSQLTestCase):
         row = self.spark.createDataFrame([Row(a=None), Row(a=True)]).fillna({"a": True}).first()
         self.assertEqual(row.a, True)
 
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame([Row(a=None), Row(a=True)]).fillna(["a", True])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_STR",
+            message_parameters={"arg_name": "value", "arg_type": "list"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame([Row(a=None), Row(a=True)]).fillna(50, subset=10)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OR_TUPLE",
+            message_parameters={"arg_name": "subset", "arg_type": "int"},
+        )
+
     def test_repartitionByRange_dataframe(self):
         schema = StructType(
             [
@@ -305,6 +383,15 @@ class DataFrameTests(ReusedSQLTestCase):
         df5 = df1.repartitionByRange(5, "name", "age")
         self.assertEqual(df5.rdd.first(), df2.rdd.first())
         self.assertEqual(df5.rdd.take(3), df2.rdd.take(3))
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df1.repartitionByRange([10], "name", "age")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_INT_OR_STR",
+            message_parameters={"arg_name": "numPartitions", "arg_type": "list"},
+        )
 
     def test_replace(self):
         schema = StructType(
@@ -487,12 +574,23 @@ class DataFrameTests(ReusedSQLTestCase):
                 {"Alice": "Bob", 10: 20}
             ).first()
 
-        with self.assertRaisesRegex(
-            TypeError, "value argument is required when to_replace is not a dictionary."
-        ):
-            self.spark.createDataFrame([("Alice", 10, 80.0)], schema).replace(
-                ["Alice", "Bob"]
-            ).first()
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame([("Alice", 10, 80.0)], schema).replace(["Alice", "Bob"])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="ARGUMENT_REQUIRED",
+            message_parameters={"arg_name": "value", "condition": "`to_replace` is dict"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame([("Alice", 10, 80.0)], schema).replace(lambda x: x + 1, 10)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
+            message_parameters={"arg_name": "to_replace", "arg_type": "function"},
+        )
 
     def test_with_column_with_existing_name(self):
         keys = self.df.withColumn("key", self.df.key).select("key").collect()
@@ -531,34 +629,73 @@ class DataFrameTests(ReusedSQLTestCase):
 
         # Type check
         self.assertRaises(TypeError, self.df.withColumns, ["key"])
-        self.assertRaises(AssertionError, self.df.withColumns)
+        self.assertRaises(Exception, self.df.withColumns)
 
     def test_generic_hints(self):
-        from pyspark.sql import DataFrame
-
         df1 = self.spark.range(10e10).toDF("id")
         df2 = self.spark.range(10e10).toDF("id")
 
-        self.assertIsInstance(df1.hint("broadcast"), DataFrame)
-        self.assertIsInstance(df1.hint("broadcast", []), DataFrame)
+        self.assertIsInstance(df1.hint("broadcast"), type(df1))
 
         # Dummy rules
-        self.assertIsInstance(df1.hint("broadcast", "foo", "bar"), DataFrame)
-        self.assertIsInstance(df1.hint("broadcast", ["foo", "bar"]), DataFrame)
+        self.assertIsInstance(df1.hint("broadcast", "foo", "bar"), type(df1))
 
-        plan = df1.join(df2.hint("broadcast"), "id")._jdf.queryExecution().executedPlan()
-        self.assertEqual(1, plan.toString().count("BroadcastHashJoin"))
+        with io.StringIO() as buf, redirect_stdout(buf):
+            df1.join(df2.hint("broadcast"), "id").explain(True)
+            self.assertEqual(1, buf.getvalue().count("BroadcastHashJoin"))
+
+    def test_coalesce_hints_with_string_parameter(self):
+        with self.sql_conf({"spark.sql.adaptive.coalescePartitions.enabled": False}):
+            df = self.spark.createDataFrame(
+                zip(["A", "B"] * 2**9, range(2**10)),
+                StructType([StructField("a", StringType()), StructField("n", IntegerType())]),
+            )
+            with io.StringIO() as buf, redirect_stdout(buf):
+                # COALESCE
+                coalesce = df.hint("coalesce", 2)
+                coalesce.explain(True)
+                output = buf.getvalue()
+                self.assertGreaterEqual(output.count("Coalesce 2"), 1)
+                buf.truncate(0)
+                buf.seek(0)
+
+                # REPARTITION_BY_RANGE
+                range_partitioned = df.hint("REPARTITION_BY_RANGE", 2, "a")
+                range_partitioned.explain(True)
+                output = buf.getvalue()
+                self.assertGreaterEqual(output.count("REPARTITION_BY_NUM"), 1)
+                buf.truncate(0)
+                buf.seek(0)
+
+                # REBALANCE
+                rebalanced1 = df.hint("REBALANCE", "a")  # just check this doesn't error
+                rebalanced1.explain(True)
+                rebalanced2 = df.hint("REBALANCE", 2)
+                rebalanced2.explain(True)
+                rebalanced3 = df.hint("REBALANCE", 2, "a")
+                rebalanced3.explain(True)
+                rebalanced4 = df.hint("REBALANCE", functions.col("a"))
+                rebalanced4.explain(True)
+                output = buf.getvalue()
+                self.assertGreaterEqual(output.count("REBALANCE_PARTITIONS_BY_NONE"), 1)
+                self.assertGreaterEqual(output.count("REBALANCE_PARTITIONS_BY_COL"), 3)
 
     # add tests for SPARK-23647 (test more types for hint)
     def test_extended_hint_types(self):
         df = self.spark.range(10e10).toDF("id")
         such_a_nice_list = ["itworks1", "itworks2", "itworks3"]
-        hinted_df = df.hint("my awesome hint", 1.2345, "what", such_a_nice_list)
-        logical_plan = hinted_df._jdf.queryExecution().logical()
+        int_list = [1, 2, 3]
+        hinted_df = df.hint("my awesome hint", 1.2345, "what", such_a_nice_list, int_list)
 
-        self.assertEqual(1, logical_plan.toString().count("1.2345"))
-        self.assertEqual(1, logical_plan.toString().count("what"))
-        self.assertEqual(3, logical_plan.toString().count("itworks"))
+        self.assertIsInstance(df.hint("broadcast", []), type(df))
+        self.assertIsInstance(df.hint("broadcast", ["foo", "bar"]), type(df))
+
+        with io.StringIO() as buf, redirect_stdout(buf):
+            hinted_df.explain(True)
+            explain_output = buf.getvalue()
+            self.assertGreaterEqual(explain_output.count("1.2345"), 1)
+            self.assertGreaterEqual(explain_output.count("what"), 1)
+            self.assertGreaterEqual(explain_output.count("itworks"), 1)
 
     def test_unpivot(self):
         # SPARK-39877: test the DataFrame.unpivot method
@@ -691,16 +828,6 @@ class DataFrameTests(ReusedSQLTestCase):
                         ],
                     )
 
-        with self.subTest(desc="with no value columns"):
-            for values in [[], ()]:
-                with self.subTest(values=values):
-                    with self.assertRaisesRegex(
-                        AnalysisException,
-                        r"\[UNPIVOT_REQUIRES_VALUE_COLUMNS] At least one value column "
-                        r"needs to be specified for UNPIVOT, all columns specified as ids.*",
-                    ):
-                        df.unpivot("id", values, "var", "val")
-
         with self.subTest(desc="with single value column"):
             for values in ["int", ["int"], ("int",)]:
                 with self.subTest(values=values):
@@ -736,14 +863,6 @@ class DataFrameTests(ReusedSQLTestCase):
                         ],
                     )
 
-        with self.subTest(desc="with value columns without common data type"):
-            with self.assertRaisesRegex(
-                AnalysisException,
-                r"\[UNPIVOT_VALUE_DATA_TYPE_MISMATCH\] Unpivot value columns must share "
-                r"a least common type, some types do not: .*",
-            ):
-                df.unpivot("id", ["int", "str"], "var", "val")
-
         with self.subTest(desc="with columns"):
             for id in [df.id, [df.id], (df.id,)]:
                 for values in [[df.int, df.double], (df.int, df.double)]:
@@ -767,6 +886,35 @@ class DataFrameTests(ReusedSQLTestCase):
                 df.unpivot("id", ["int", "double"], "var", "val").collect(),
                 df.melt("id", ["int", "double"], "var", "val").collect(),
             )
+
+    def test_unpivot_negative(self):
+        # SPARK-39877: test the DataFrame.unpivot method
+        df = self.spark.createDataFrame(
+            [
+                (1, 10, 1.0, "one"),
+                (2, 20, 2.0, "two"),
+                (3, 30, 3.0, "three"),
+            ],
+            ["id", "int", "double", "str"],
+        )
+
+        with self.subTest(desc="with no value columns"):
+            for values in [[], ()]:
+                with self.subTest(values=values):
+                    with self.assertRaisesRegex(
+                        AnalysisException,
+                        r"\[UNPIVOT_REQUIRES_VALUE_COLUMNS] At least one value column "
+                        r"needs to be specified for UNPIVOT, all columns specified as ids.*",
+                    ):
+                        df.unpivot("id", values, "var", "val").collect()
+
+        with self.subTest(desc="with value columns without common data type"):
+            with self.assertRaisesRegex(
+                AnalysisException,
+                r"\[UNPIVOT_VALUE_DATA_TYPE_MISMATCH\] Unpivot value columns must share "
+                r"a least common type, some types do not: .*",
+            ):
+                df.unpivot("id", ["int", "str"], "var", "val").collect()
 
     def test_observe(self):
         # SPARK-36263: tests the DataFrame.observe(Observation, *Column) method
@@ -816,14 +964,26 @@ class DataFrameTests(ReusedSQLTestCase):
             Observation("")
 
         # dataframe.observe requires at least one expr
-        with self.assertRaisesRegex(ValueError, "'exprs' should not be empty"):
+        with self.assertRaises(PySparkValueError) as pe:
             df.observe(Observation())
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_BE_EMPTY",
+            message_parameters={"item": "exprs"},
+        )
 
         # dataframe.observe requires non-None Columns
         for args in [(None,), ("id",), (lit(1), None), (lit(1), "id")]:
             with self.subTest(args=args):
-                with self.assertRaisesRegex(ValueError, "all 'exprs' should be Column"):
+                with self.assertRaises(PySparkTypeError) as pe:
                     df.observe(Observation(), *args)
+
+                self.check_error(
+                    exception=pe.exception,
+                    error_class="NOT_LIST_OF_COLUMN",
+                    message_parameters={"arg_name": "exprs"},
+                )
 
     def test_observe_str(self):
         # SPARK-38760: tests the DataFrame.observe(str, *Column) method
@@ -838,6 +998,9 @@ class DataFrameTests(ReusedSQLTestCase):
             def onQueryProgress(self, event):
                 nonlocal observed_metrics
                 observed_metrics = event.progress.observedMetrics
+
+            def onQueryIdle(self, event):
+                pass
 
             def onQueryTerminated(self, event):
                 pass
@@ -860,16 +1023,61 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertGreaterEqual(row.cnt, 0)
         self.assertGreaterEqual(row.sum, 0)
 
+    def test_observe_with_same_name_on_different_dataframe(self):
+        # SPARK-45656: named observations with the same name on different datasets
+        from pyspark.sql import Observation
+
+        observation1 = Observation("named")
+        df1 = self.spark.range(50)
+        observed_df1 = df1.observe(observation1, count(lit(1)).alias("cnt"))
+
+        observation2 = Observation("named")
+        df2 = self.spark.range(100)
+        observed_df2 = df2.observe(observation2, count(lit(1)).alias("cnt"))
+
+        observed_df1.collect()
+        observed_df2.collect()
+
+        self.assertEqual(observation1.get, dict(cnt=50))
+        self.assertEqual(observation2.get, dict(cnt=100))
+
     def test_sample(self):
-        self.assertRaisesRegex(
-            TypeError, "should be a bool, float and number", lambda: self.spark.range(1).sample()
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.range(1).sample()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_BOOL_OR_FLOAT_OR_INT",
+            message_parameters={
+                "arg_name": "withReplacement (optional), fraction (required) and seed (optional)",
+                "arg_type": "NoneType, NoneType, NoneType",
+            },
         )
 
         self.assertRaises(TypeError, lambda: self.spark.range(1).sample("a"))
 
         self.assertRaises(TypeError, lambda: self.spark.range(1).sample(seed="abc"))
 
-        self.assertRaises(IllegalArgumentException, lambda: self.spark.range(1).sample(-1.0))
+        self.assertRaises(
+            IllegalArgumentException, lambda: self.spark.range(1).sample(-1.0).count()
+        )
+
+    def test_toDF_with_string(self):
+        df = self.spark.createDataFrame([("John", 30), ("Alice", 25), ("Bob", 28)])
+        data = [("John", 30), ("Alice", 25), ("Bob", 28)]
+
+        result = df.toDF("key", "value")
+        self.assertEqual(result.schema.simpleString(), "struct<key:string,value:bigint>")
+        self.assertEqual(result.collect(), data)
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.toDF("key", None)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OF_STR",
+            message_parameters={"arg_name": "cols", "arg_type": "NoneType"},
+        )
 
     def test_toDF_with_schema_string(self):
         data = [Row(key=i, value=str(i)) for i in range(100)]
@@ -891,13 +1099,13 @@ class DataFrameTests(ReusedSQLTestCase):
 
         # number of fields must match.
         self.assertRaisesRegex(
-            Exception, "Length of object", lambda: rdd.toDF("key: int").collect()
+            Exception, "LENGTH_SHOULD_BE_THE_SAME", lambda: rdd.toDF("key: int").collect()
         )
 
         # field types mismatch will cause exception at runtime.
         self.assertRaisesRegex(
             Exception,
-            "FloatType\\(\\) can not accept",
+            "CANNOT_ACCEPT_OBJECT_IN_TYPE",
             lambda: rdd.toDF("key: float, value: string").collect(),
         )
 
@@ -910,6 +1118,23 @@ class DataFrameTests(ReusedSQLTestCase):
         df = rdd.map(lambda row: row.key).toDF(IntegerType())
         self.assertEqual(df.schema.simpleString(), "struct<value:int>")
         self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
+
+    def test_print_schema(self):
+        df = self.spark.createDataFrame([(1, (2, 2))], ["a", "b"])
+
+        with io.StringIO() as buf, redirect_stdout(buf):
+            df.printSchema(1)
+            self.assertEqual(1, buf.getvalue().count("long"))
+            self.assertEqual(0, buf.getvalue().count("_1"))
+            self.assertEqual(0, buf.getvalue().count("_2"))
+
+            buf.truncate(0)
+            buf.seek(0)
+
+            df.printSchema(2)
+            self.assertEqual(3, buf.getvalue().count("long"))
+            self.assertEqual(1, buf.getvalue().count("_1"))
+            self.assertEqual(1, buf.getvalue().count("_2"))
 
     def test_join_without_on(self):
         df1 = self.spark.range(1).toDF("a")
@@ -931,7 +1156,6 @@ class DataFrameTests(ReusedSQLTestCase):
 
     # Cartesian products require cross join syntax
     def test_require_cross(self):
-
         df1 = self.spark.createDataFrame([(1, "1")], ("key", "value"))
         df2 = self.spark.createDataFrame([(1, "1")], ("key", "value"))
 
@@ -942,23 +1166,51 @@ class DataFrameTests(ReusedSQLTestCase):
             # works with crossJoin
             self.assertEqual(1, df1.crossJoin(df2).count())
 
-    def test_cache(self):
+    def test_cache_dataframe(self):
+        df = self.spark.createDataFrame([(2, 2), (3, 3)])
+        try:
+            self.assertEqual(df.storageLevel, StorageLevel.NONE)
+
+            df.cache()
+            self.assertEqual(df.storageLevel, StorageLevel.MEMORY_AND_DISK_DESER)
+
+            df.unpersist()
+            self.assertEqual(df.storageLevel, StorageLevel.NONE)
+
+            df.persist()
+            self.assertEqual(df.storageLevel, StorageLevel.MEMORY_AND_DISK_DESER)
+
+            df.unpersist(blocking=True)
+            self.assertEqual(df.storageLevel, StorageLevel.NONE)
+
+            df.persist(StorageLevel.DISK_ONLY)
+            self.assertEqual(df.storageLevel, StorageLevel.DISK_ONLY)
+        finally:
+            df.unpersist()
+            self.assertEqual(df.storageLevel, StorageLevel.NONE)
+
+    def test_cache_table(self):
         spark = self.spark
-        with self.tempView("tab1", "tab2"):
-            spark.createDataFrame([(2, 2), (3, 3)]).createOrReplaceTempView("tab1")
-            spark.createDataFrame([(2, 2), (3, 3)]).createOrReplaceTempView("tab2")
-            self.assertFalse(spark.catalog.isCached("tab1"))
-            self.assertFalse(spark.catalog.isCached("tab2"))
+        tables = ["tab1", "tab2", "tab3"]
+        with self.tempView(*tables):
+            for i, tab in enumerate(tables):
+                spark.createDataFrame([(2, i), (3, i)]).createOrReplaceTempView(tab)
+                self.assertFalse(spark.catalog.isCached(tab))
             spark.catalog.cacheTable("tab1")
+            spark.catalog.cacheTable("tab3", StorageLevel.OFF_HEAP)
             self.assertTrue(spark.catalog.isCached("tab1"))
             self.assertFalse(spark.catalog.isCached("tab2"))
+            self.assertTrue(spark.catalog.isCached("tab3"))
             spark.catalog.cacheTable("tab2")
             spark.catalog.uncacheTable("tab1")
+            spark.catalog.uncacheTable("tab3")
             self.assertFalse(spark.catalog.isCached("tab1"))
             self.assertTrue(spark.catalog.isCached("tab2"))
+            self.assertFalse(spark.catalog.isCached("tab3"))
             spark.catalog.clearCache()
             self.assertFalse(spark.catalog.isCached("tab1"))
             self.assertFalse(spark.catalog.isCached("tab2"))
+            self.assertFalse(spark.catalog.isCached("tab3"))
             self.assertRaisesRegex(
                 AnalysisException,
                 "does_not_exist",
@@ -1032,29 +1284,37 @@ class DataFrameTests(ReusedSQLTestCase):
         pdf = self._to_pandas()
         types = pdf.dtypes
         self.assertEqual(types[0], np.int32)
-        self.assertEqual(types[1], np.object)
-        self.assertEqual(types[2], np.bool)
+        self.assertEqual(types[1], object)
+        self.assertEqual(types[2], bool)
         self.assertEqual(types[3], np.float32)
-        self.assertEqual(types[4], np.object)  # datetime.date
+        self.assertEqual(types[4], object)  # datetime.date
         self.assertEqual(types[5], "datetime64[ns]")
         self.assertEqual(types[6], "datetime64[ns]")
         self.assertEqual(types[7], "timedelta64[ns]")
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_with_duplicated_column_names(self):
+        for arrow_enabled in [False, True]:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+                self.check_to_pandas_with_duplicated_column_names()
+
+    def check_to_pandas_with_duplicated_column_names(self):
         import numpy as np
 
         sql = "select 1 v, 1 v"
-        for arrowEnabled in [False, True]:
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrowEnabled}):
-                df = self.spark.sql(sql)
-                pdf = df.toPandas()
-                types = pdf.dtypes
-                self.assertEqual(types.iloc[0], np.int32)
-                self.assertEqual(types.iloc[1], np.int32)
+        df = self.spark.sql(sql)
+        pdf = df.toPandas()
+        types = pdf.dtypes
+        self.assertEqual(types.iloc[0], np.int32)
+        self.assertEqual(types.iloc[1], np.int32)
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_on_cross_join(self):
+        for arrow_enabled in [False, True]:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+                self.check_to_pandas_on_cross_join()
+
+    def check_to_pandas_on_cross_join(self):
         import numpy as np
 
         sql = """
@@ -1064,18 +1324,12 @@ class DataFrameTests(ReusedSQLTestCase):
           select explode(sequence(1, 3)) v
         ) t2
         """
-        for arrowEnabled in [False, True]:
-            with self.sql_conf(
-                {
-                    "spark.sql.crossJoin.enabled": True,
-                    "spark.sql.execution.arrow.pyspark.enabled": arrowEnabled,
-                }
-            ):
-                df = self.spark.sql(sql)
-                pdf = df.toPandas()
-                types = pdf.dtypes
-                self.assertEqual(types.iloc[0], np.int32)
-                self.assertEqual(types.iloc[1], np.int32)
+        with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
+            df = self.spark.sql(sql)
+            pdf = df.toPandas()
+            types = pdf.dtypes
+            self.assertEqual(types.iloc[0], np.int32)
+            self.assertEqual(types.iloc[1], np.int32)
 
     @unittest.skipIf(have_pandas, "Required Pandas was found.")
     def test_to_pandas_required_pandas_not_found(self):
@@ -1092,11 +1346,17 @@ class DataFrameTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(data, schema)
         types = df.toPandas().dtypes
         self.assertEqual(types[0], np.float64)  # doesn't convert to np.int32 due to NaN value.
-        self.assertEqual(types[1], np.object)
+        self.assertEqual(types[1], object)
         self.assertEqual(types[2], np.float64)
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_from_empty_dataframe(self):
+        is_arrow_enabled = [True, False]
+        for value in is_arrow_enabled:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
+                self.check_to_pandas_from_empty_dataframe()
+
+    def check_to_pandas_from_empty_dataframe(self):
         # SPARK-29188 test that toPandas() on an empty dataframe has the correct dtypes
         # SPARK-30537 test that toPandas() on an empty dataframe has the correct dtypes
         # when arrow is enabled
@@ -1115,15 +1375,18 @@ class DataFrameTests(ReusedSQLTestCase):
             CAST('2019-01-01' AS TIMESTAMP_NTZ) AS timestamp_ntz,
             INTERVAL '1563:04' MINUTE TO SECOND AS day_time_interval
             """
-        is_arrow_enabled = [True, False]
-        for value in is_arrow_enabled:
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
-                dtypes_when_nonempty_df = self.spark.sql(sql).toPandas().dtypes
-                dtypes_when_empty_df = self.spark.sql(sql).filter("False").toPandas().dtypes
-                self.assertTrue(np.all(dtypes_when_empty_df == dtypes_when_nonempty_df))
+        dtypes_when_nonempty_df = self.spark.sql(sql).toPandas().dtypes
+        dtypes_when_empty_df = self.spark.sql(sql).filter("False").toPandas().dtypes
+        self.assertTrue(np.all(dtypes_when_empty_df == dtypes_when_nonempty_df))
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_from_null_dataframe(self):
+        is_arrow_enabled = [True, False]
+        for value in is_arrow_enabled:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
+                self.check_to_pandas_from_null_dataframe()
+
+    def check_to_pandas_from_null_dataframe(self):
         # SPARK-29188 test that toPandas() on a dataframe with only nulls has correct dtypes
         # SPARK-30537 test that toPandas() on a dataframe with only nulls has correct dtypes
         # using arrow
@@ -1142,25 +1405,28 @@ class DataFrameTests(ReusedSQLTestCase):
             CAST(NULL AS TIMESTAMP_NTZ) AS timestamp_ntz,
             INTERVAL '1563:04' MINUTE TO SECOND AS day_time_interval
             """
-        is_arrow_enabled = [True, False]
-        for value in is_arrow_enabled:
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
-                pdf = self.spark.sql(sql).toPandas()
-                types = pdf.dtypes
-                self.assertEqual(types[0], np.float64)
-                self.assertEqual(types[1], np.float64)
-                self.assertEqual(types[2], np.float64)
-                self.assertEqual(types[3], np.float64)
-                self.assertEqual(types[4], np.float32)
-                self.assertEqual(types[5], np.float64)
-                self.assertEqual(types[6], np.object)
-                self.assertEqual(types[7], np.object)
-                self.assertTrue(np.can_cast(np.datetime64, types[8]))
-                self.assertTrue(np.can_cast(np.datetime64, types[9]))
-                self.assertTrue(np.can_cast(np.timedelta64, types[10]))
+        pdf = self.spark.sql(sql).toPandas()
+        types = pdf.dtypes
+        self.assertEqual(types[0], np.float64)
+        self.assertEqual(types[1], np.float64)
+        self.assertEqual(types[2], np.float64)
+        self.assertEqual(types[3], np.float64)
+        self.assertEqual(types[4], np.float32)
+        self.assertEqual(types[5], np.float64)
+        self.assertEqual(types[6], object)
+        self.assertEqual(types[7], object)
+        self.assertTrue(np.can_cast(np.datetime64, types[8]))
+        self.assertTrue(np.can_cast(np.datetime64, types[9]))
+        self.assertTrue(np.can_cast(np.timedelta64, types[10]))
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_from_mixed_dataframe(self):
+        is_arrow_enabled = [True, False]
+        for value in is_arrow_enabled:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
+                self.check_to_pandas_from_mixed_dataframe()
+
+    def check_to_pandas_from_mixed_dataframe(self):
         # SPARK-29188 test that toPandas() on a dataframe with some nulls has correct dtypes
         # SPARK-30537 test that toPandas() on a dataframe with some nulls has correct dtypes
         # using arrow
@@ -1181,20 +1447,20 @@ class DataFrameTests(ReusedSQLTestCase):
         FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
                     (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
         """
-        is_arrow_enabled = [True, False]
-        for value in is_arrow_enabled:
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
-                pdf_with_some_nulls = self.spark.sql(sql).toPandas()
-                pdf_with_only_nulls = self.spark.sql(sql).filter("tinyint is null").toPandas()
-                self.assertTrue(np.all(pdf_with_only_nulls.dtypes == pdf_with_some_nulls.dtypes))
+        pdf_with_some_nulls = self.spark.sql(sql).toPandas()
+        pdf_with_only_nulls = self.spark.sql(sql).filter("tinyint is null").toPandas()
+        self.assertTrue(np.all(pdf_with_only_nulls.dtypes == pdf_with_some_nulls.dtypes))
 
     @unittest.skipIf(
-        not have_pandas or not have_pyarrow or pyarrow_version_less_than_minimum("2.0.0"),
-        pandas_requirement_message
-        or pyarrow_requirement_message
-        or "Pyarrow version must be 2.0.0 or higher",
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_to_pandas_for_array_of_struct(self):
+        for is_arrow_enabled in [True, False]:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": is_arrow_enabled}):
+                self.check_to_pandas_for_array_of_struct(is_arrow_enabled)
+
+    def check_to_pandas_for_array_of_struct(self, is_arrow_enabled):
         # SPARK-38098: Support Array of Struct for Pandas UDFs and toPandas
         import numpy as np
         import pandas as pd
@@ -1203,15 +1469,14 @@ class DataFrameTests(ReusedSQLTestCase):
             [[[("a", 2, 3.0), ("a", 2, 3.0)]], [[("b", 5, 6.0), ("b", 5, 6.0)]]],
             "array_struct_col Array<struct<col1:string, col2:long, col3:double>>",
         )
-        for is_arrow_enabled in [True, False]:
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": is_arrow_enabled}):
-                pdf = df.toPandas()
-                self.assertEqual(type(pdf), pd.DataFrame)
-                self.assertEqual(type(pdf["array_struct_col"]), pd.Series)
-                if is_arrow_enabled:
-                    self.assertEqual(type(pdf["array_struct_col"][0]), np.ndarray)
-                else:
-                    self.assertEqual(type(pdf["array_struct_col"][0]), list)
+
+        pdf = df.toPandas()
+        self.assertEqual(type(pdf), pd.DataFrame)
+        self.assertEqual(type(pdf["array_struct_col"]), pd.Series)
+        if is_arrow_enabled:
+            self.assertEqual(type(pdf["array_struct_col"][0]), np.ndarray)
+        else:
+            self.assertEqual(type(pdf["array_struct_col"][0]), list)
 
     def test_create_dataframe_from_array_of_long(self):
         import array
@@ -1231,15 +1496,15 @@ class DataFrameTests(ReusedSQLTestCase):
         )
         # test types are inferred correctly without specifying schema
         df = self.spark.createDataFrame(pdf)
-        self.assertTrue(isinstance(df.schema["ts"].dataType, TimestampType))
-        self.assertTrue(isinstance(df.schema["d"].dataType, DateType))
+        self.assertIsInstance(df.schema["ts"].dataType, TimestampType)
+        self.assertIsInstance(df.schema["d"].dataType, DateType)
         # test with schema will accept pdf as input
         df = self.spark.createDataFrame(pdf, schema="d date, ts timestamp")
-        self.assertTrue(isinstance(df.schema["ts"].dataType, TimestampType))
-        self.assertTrue(isinstance(df.schema["d"].dataType, DateType))
+        self.assertIsInstance(df.schema["ts"].dataType, TimestampType)
+        self.assertIsInstance(df.schema["d"].dataType, DateType)
         df = self.spark.createDataFrame(pdf, schema="d date, ts timestamp_ntz")
-        self.assertTrue(isinstance(df.schema["ts"].dataType, TimestampNTZType))
-        self.assertTrue(isinstance(df.schema["d"].dataType, DateType))
+        self.assertIsInstance(df.schema["ts"].dataType, TimestampNTZType)
+        self.assertIsInstance(df.schema["d"].dataType, DateType)
 
     @unittest.skipIf(have_pandas, "Required Pandas was found.")
     def test_create_dataframe_required_pandas_not_found(self):
@@ -1281,7 +1546,11 @@ class DataFrameTests(ReusedSQLTestCase):
                 os.environ["TZ"] = orig_env_tz
             time.tzset()
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    # TODO(SPARK-43354): Re-enable test_create_dataframe_from_pandas_with_day_time_interval
+    @unittest.skipIf(
+        "pypy" in platform.python_implementation().lower(),
+        "Fails in PyPy Python 3.8, should enable.",
+    )
     def test_create_dataframe_from_pandas_with_day_time_interval(self):
         # SPARK-37277: Test DayTimeIntervalType in createDataFrame without Arrow.
         import pandas as pd
@@ -1382,25 +1651,34 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(expected, list(it))
 
     def test_to_local_iterator_not_fully_consumed(self):
+        with QuietTest(self.sc):
+            self.check_to_local_iterator_not_fully_consumed()
+
+    def check_to_local_iterator_not_fully_consumed(self):
         # SPARK-23961: toLocalIterator throws exception when not fully consumed
         # Create a DataFrame large enough so that write to socket will eventually block
         df = self.spark.range(1 << 20, numPartitions=2)
         it = df.toLocalIterator()
         self.assertEqual(df.take(1)[0], next(it))
-        with QuietTest(self.sc):
-            it = None  # remove iterator from scope, socket is closed when cleaned up
-            # Make sure normal df operations still work
-            result = []
-            for i, row in enumerate(df.toLocalIterator()):
-                result.append(row)
-                if i == 7:
-                    break
-            self.assertEqual(df.take(8), result)
+        it = None  # remove iterator from scope, socket is closed when cleaned up
+        # Make sure normal df operations still work
+        result = []
+        for i, row in enumerate(df.toLocalIterator()):
+            result.append(row)
+            if i == 7:
+                break
+        self.assertEqual(df.take(8), result)
 
     def test_same_semantics_error(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(TypeError, "should be of DataFrame.*int"):
+            with self.assertRaises(PySparkTypeError) as pe:
                 self.spark.range(10).sameSemantics(1)
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "other", "arg_type": "int"},
+            )
 
     def test_input_files(self):
         tpath = tempfile.mkdtemp()
@@ -1429,12 +1707,32 @@ class DataFrameTests(ReusedSQLTestCase):
         df.show(n=5, truncate="1", vertical=False)
         df.show(n=5, truncate=1.5, vertical=False)
 
-        with self.assertRaisesRegex(TypeError, "Parameter 'n'"):
+        with self.assertRaises(PySparkTypeError) as pe:
             df.show(True)
-        with self.assertRaisesRegex(TypeError, "Parameter 'vertical'"):
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_INT",
+            message_parameters={"arg_name": "n", "arg_type": "bool"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
             df.show(vertical="foo")
-        with self.assertRaisesRegex(TypeError, "Parameter 'truncate=foo'"):
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_BOOL",
+            message_parameters={"arg_name": "vertical", "arg_type": "str"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
             df.show(truncate="foo")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_BOOL",
+            message_parameters={"arg_name": "truncate", "arg_type": "str"},
+        )
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -1484,14 +1782,69 @@ class DataFrameTests(ReusedSQLTestCase):
         # incompatible field nullability
         schema4 = StructType([StructField("j", LongType(), False)])
         self.assertRaisesRegex(
-            AnalysisException, "NULLABLE_COLUMN_OR_FIELD", lambda: df.to(schema4)
+            AnalysisException, "NULLABLE_COLUMN_OR_FIELD", lambda: df.to(schema4).count()
         )
 
         # field cannot upcast
         schema5 = StructType([StructField("i", LongType())])
         self.assertRaisesRegex(
-            AnalysisException, "INVALID_COLUMN_OR_FIELD_DATA_TYPE", lambda: df.to(schema5)
+            AnalysisException, "INVALID_COLUMN_OR_FIELD_DATA_TYPE", lambda: df.to(schema5).count()
         )
+
+    def test_repartition(self):
+        df = self.spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.repartition([10], "name", "age").rdd.getNumPartitions()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={"arg_name": "numPartitions", "arg_type": "list"},
+        )
+
+    def test_colregex(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.range(10).colRegex(10)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_STR",
+            message_parameters={"arg_name": "colName", "arg_type": "int"},
+        )
+
+    def test_where(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.range(10).where(10)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={"arg_name": "condition", "arg_type": "int"},
+        )
+
+    def test_duplicate_field_names(self):
+        data = [
+            Row(Row("a", 1), Row(2, 3, "b", 4, "c", "d")),
+            Row(Row("w", 6), Row(7, 8, "x", 9, "y", "z")),
+        ]
+        schema = (
+            StructType()
+            .add("struct", StructType().add("x", StringType()).add("x", IntegerType()))
+            .add(
+                "struct",
+                StructType()
+                .add("a", IntegerType())
+                .add("x", IntegerType())
+                .add("x", StringType())
+                .add("y", IntegerType())
+                .add("y", StringType())
+                .add("x", StringType()),
+            )
+        )
+        df = self.spark.createDataFrame(data, schema=schema)
+
+        self.assertEqual(df.schema, schema)
+        self.assertEqual(df.collect(), data)
 
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
@@ -1566,6 +1919,10 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
                 self.spark._jvm.OnSuccessCall.isCalled(),
                 "The callback from the query execution listener should be called after 'toPandas'",
             )
+
+
+class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

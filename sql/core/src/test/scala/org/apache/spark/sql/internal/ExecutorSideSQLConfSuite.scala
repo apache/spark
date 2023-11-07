@@ -32,7 +32,9 @@ import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.debug.codegenStringSeq
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.tags.ExtendedSQLTest
 
+@ExtendedSQLTest
 class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
   import testImplicits._
 
@@ -139,7 +141,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
           Seq(true)
             .toDF()
             .mapPartitions { _ =>
-              if (TaskContext.get.getLocalProperty(confKey) == confValue) {
+              if (TaskContext.get().getLocalProperty(confKey) == confValue) {
                 Iterator(true)
               } else {
                 Iterator.empty
@@ -171,7 +173,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
 
       def generateBroadcastDataFrame(confKey: String, confValue: String): Dataset[Boolean] = {
         val df = spark.range(1).mapPartitions { _ =>
-          Iterator(TaskContext.get.getLocalProperty(confKey) == confValue)
+          Iterator(TaskContext.get().getLocalProperty(confKey) == confValue)
         }
         df.hint("broadcast")
       }

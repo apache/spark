@@ -21,7 +21,7 @@ import java.net.URI
 import java.security.SecureRandom
 import java.util.{Collections, UUID}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, HasMetadata, OwnerReferenceBuilder, Pod, PodBuilder, Quantity}
 import io.fabric8.kubernetes.client.KubernetesClient
@@ -102,7 +102,7 @@ object KubernetesUtils extends Logging {
       val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
       val localFile = downloadFile(templateFileName, Utils.createTempDir(), conf, hadoopConf)
       val templateFile = new File(new java.net.URI(localFile).getPath)
-      val pod = kubernetesClient.pods().load(templateFile).get()
+      val pod = kubernetesClient.pods().load(templateFile).item()
       selectSparkContainer(pod, containerName)
     } catch {
       case e: Exception =>

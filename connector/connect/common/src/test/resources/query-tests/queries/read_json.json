@@ -1,0 +1,11 @@
+{
+  "common": {
+    "planId": "0"
+  },
+  "read": {
+    "dataSource": {
+      "format": "json",
+      "paths": ["../common/src/test/resources/query-tests/test-data/people.json"]
+    }
+  }
+}

@@ -21,8 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
-import org.apache.spark.internal.config.ConfigBuilder
+import org.apache.spark.internal.config.{ConfigBuilder, PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
 
 private[spark] object Config extends Logging {
 
@@ -50,7 +49,8 @@ private[spark] object Config extends Logging {
   val KUBERNETES_DRIVER_MASTER_URL =
     ConfigBuilder("spark.kubernetes.driver.master")
       .doc("The internal Kubernetes master (API server) address " +
-        "to be used for driver to request executors.")
+        "to be used for driver to request executors or " +
+        "'local[*]' for driver-only mode.")
       .version("3.0.0")
       .stringConf
       .createWithDefault(KUBERNETES_MASTER_INTERNAL_URL)
@@ -100,6 +100,16 @@ private[spark] object Config extends Logging {
       .version("3.2.0")
       .booleanConf
       .createWithDefault(true)
+
+  val KUBERNETES_DRIVER_WAIT_TO_REUSE_PVC =
+    ConfigBuilder("spark.kubernetes.driver.waitToReusePersistentVolumeClaim")
+      .doc("If true, driver pod counts the number of created on-demand persistent volume claims " +
+        "and wait if the number is greater than or equal to the total number of volumes which " +
+        "the Spark job is able to have. This config requires both " +
+        s"${KUBERNETES_DRIVER_OWN_PVC.key}=true and ${KUBERNETES_DRIVER_REUSE_PVC.key}=true.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
@@ -152,7 +162,8 @@ private[spark] object Config extends Logging {
         " https://etcd.io/docs/v3.4.0/dev-guide/limit/ on k8s server end.")
       .version("3.1.0")
       .longConf
-      .createWithDefault(1572864) // 1.5 MiB
+      .checkValue(_ <= 1048576, "Must have at most 1048576 bytes")
+      .createWithDefault(1048576) // 1.0 MiB
 
   val EXECUTOR_ROLL_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.rollInterval")
@@ -164,7 +175,8 @@ private[spark] object Config extends Logging {
 
   object ExecutorRollPolicy extends Enumeration {
     val ID, ADD_TIME, TOTAL_GC_TIME, TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS,
-      PEAK_JVM_ONHEAP_MEMORY, PEAK_JVM_OFFHEAP_MEMORY, OUTLIER, OUTLIER_NO_FALLBACK = Value
+      PEAK_JVM_ONHEAP_MEMORY, PEAK_JVM_OFFHEAP_MEMORY, TOTAL_SHUFFLE_WRITE, DISK_USED,
+      OUTLIER, OUTLIER_NO_FALLBACK = Value
   }
 
   val EXECUTOR_ROLL_POLICY =
@@ -183,6 +195,8 @@ private[spark] object Config extends Logging {
         "PEAK_JVM_ONHEAP_MEMORY policy chooses an executor with the biggest peak JVM on-heap " +
         "memory. PEAK_JVM_OFFHEAP_MEMORY policy chooses an executor with the biggest peak JVM " +
         "off-heap memory. " +
+        "TOTAL_SHUFFLE_WRITE policy chooses an executor with the biggest total shuffle write. " +
+        "DISK_USED policy chooses an executor with the biggest used disk size. " +
         "OUTLIER policy chooses an executor with outstanding statistics which is bigger than" +
         "at least two standard deviation from the mean in average task time, " +
         "total task time, total task GC time, and the number of failed tasks if exists. " +
@@ -457,16 +471,6 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Allocation executor timeout must be a positive time value.")
       .createWithDefaultString("600s")
 
-  val KUBERNETES_EXECUTOR_LOST_REASON_CHECK_MAX_ATTEMPTS =
-    ConfigBuilder("spark.kubernetes.executor.lostCheck.maxAttempts")
-      .doc("Maximum number of attempts allowed for checking the reason of an executor loss " +
-        "before it is assumed that the executor failed.")
-      .version("2.3.0")
-      .intConf
-      .checkValue(value => value > 0, "Maximum attempts of checks of executor lost reason " +
-        "must be a positive integer")
-      .createWithDefault(10)
-
   val WAIT_FOR_APP_COMPLETION =
     ConfigBuilder("spark.kubernetes.submission.waitAppCompletion")
       .doc("In cluster mode, whether to wait for the application to finish before exiting the " +
@@ -723,8 +727,22 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Maximum number of pending pods should be a positive integer")
       .createWithDefault(Int.MaxValue)
 
+  val KUBERNETES_EXECUTOR_SNAPSHOTS_SUBSCRIBERS_GRACE_PERIOD =
+    ConfigBuilder("spark.kubernetes.executorSnapshotsSubscribersShutdownGracePeriod")
+      .doc("Time to wait for graceful shutdown kubernetes-executor-snapshots-subscribers " +
+        "thread pool. Since it may be called by ShutdownHookManager, where timeout is " +
+        "controlled by hadoop configuration `hadoop.service.shutdown.timeout` " +
+        "(default is 30s). As the whole Spark shutdown procedure shares the above timeout, " +
+        "this value should be short than that to prevent blocking the following shutdown " +
+        "procedures.")
+      .version("3.4.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(value => value > 0, "Gracefully shutdown period must be a positive time value")
+      .createWithDefaultString("20s")
+
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
+  val KUBERNETES_DRIVER_SERVICE_LABEL_PREFIX = "spark.kubernetes.driver.service.label."
   val KUBERNETES_DRIVER_SERVICE_ANNOTATION_PREFIX = "spark.kubernetes.driver.service.annotation."
   val KUBERNETES_DRIVER_SECRETS_PREFIX = "spark.kubernetes.driver.secrets."
   val KUBERNETES_DRIVER_SECRET_KEY_REF_PREFIX = "spark.kubernetes.driver.secretKeyRef."

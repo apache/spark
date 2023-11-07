@@ -26,6 +26,8 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, Buffer, HashMap, HashSet}
 import scala.util.Random
 
+import com.google.common.cache.CacheBuilder
+
 import org.apache.spark._
 import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
@@ -145,8 +147,15 @@ private[spark] class TaskSchedulerImpl(
   // continue to run even after being asked to decommission, but they will eventually exit.
   val executorsPendingDecommission = new HashMap[String, ExecutorDecommissionState]
 
+  // Keep removed executors due to decommission, so getExecutorDecommissionState
+  // still return correct value even after executor is lost
+  val executorsRemovedByDecom =
+    CacheBuilder.newBuilder()
+      .maximumSize(conf.get(SCHEDULER_MAX_RETAINED_REMOVED_EXECUTORS))
+      .build[String, ExecutorDecommissionState]()
+
   def runningTasksByExecutors: Map[String, Int] = synchronized {
-    executorIdToRunningTaskIds.toMap.mapValues(_.size).toMap
+    executorIdToRunningTaskIds.toMap.view.mapValues(_.size).toMap
   }
 
   // The set of executors we have on each host; this is used to compute hostsAlive, which
@@ -287,10 +296,13 @@ private[spark] class TaskSchedulerImpl(
     new TaskSetManager(this, taskSet, maxTaskFailures, healthTrackerOpt, clock)
   }
 
-  override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
+  override def cancelTasks(
+      stageId: Int,
+      interruptThread: Boolean,
+      reason: String): Unit = synchronized {
     logInfo("Cancelling stage " + stageId)
     // Kill all running tasks for the stage.
-    killAllTaskAttempts(stageId, interruptThread, reason = "Stage cancelled")
+    killAllTaskAttempts(stageId, interruptThread, reason = "Stage cancelled: " + reason)
     // Cancel all attempts for the stage.
     taskSetsByStageIdAndAttempt.get(stageId).foreach { attempts =>
       attempts.foreach { case (_, tsm) =>
@@ -463,7 +475,7 @@ private[spark] class TaskSchedulerImpl(
     val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(taskSetProf, conf)
     // check if the ResourceProfile has cpus first since that is common case
     if (availCpus < taskCpus) return None
-    // only look at the resource other then cpus
+    // only look at the resource other than cpus
     val tsResources = taskSetProf.getCustomTaskResources()
     if (tsResources.isEmpty) return Some(Map.empty)
     val localTaskReqAssign = HashMap[String, ResourceInformation]()
@@ -641,7 +653,7 @@ private[spark] class TaskSchedulerImpl(
                     if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
                       logInfo("Notifying ExecutorAllocationManager to allocate more executors to" +
                         " schedule the unschedulable task before aborting" +
-                        " stage ${taskSet.stageId}.")
+                        s" stage ${taskSet.stageId}.")
                       dagScheduler.unschedulableTaskSetAdded(taskSet.taskSet.stageId,
                         taskSet.taskSet.stageAttemptId)
                       updateUnschedulableTaskSetTimeoutAndStartAbortTimer(taskSet, taskIndex)
@@ -971,13 +983,13 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  override def stop(): Unit = {
+  override def stop(exitCode: Int = 0): Unit = {
     Utils.tryLogNonFatalError {
       speculationScheduler.shutdown()
     }
     if (backend != null) {
       Utils.tryLogNonFatalError {
-        backend.stop()
+        backend.stop(exitCode)
       }
     }
     if (taskResultGetter != null) {
@@ -1022,7 +1034,8 @@ private[spark] class TaskSchedulerImpl(
 
   override def getExecutorDecommissionState(executorId: String)
     : Option[ExecutorDecommissionState] = synchronized {
-    executorsPendingDecommission.get(executorId)
+    executorsPendingDecommission.get(executorId).orElse(
+      Option(executorsRemovedByDecom.getIfPresent(executorId)))
   }
 
   override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {
@@ -1046,7 +1059,7 @@ private[spark] class TaskSchedulerImpl(
           case None =>
             // We may get multiple executorLost() calls with different loss reasons. For example,
             // one may be triggered by a dropped connection from the worker while another may be a
-            // report of executor termination from Mesos. We produce log messages for both so we
+            // report of executor termination. We produce log messages for both so we
             // eventually report the termination reason.
             logError(s"Lost an executor $executorId (already removed): $reason")
         }
@@ -1073,9 +1086,17 @@ private[spark] class TaskSchedulerImpl(
     case ExecutorKilled =>
       logInfo(s"Executor $executorId on $hostPort killed by driver.")
     case _: ExecutorDecommission =>
-      logInfo(s"Executor $executorId on $hostPort is decommissioned.")
+      logInfo(s"Executor $executorId on $hostPort is decommissioned" +
+        s"${getDecommissionDuration(executorId)}.")
     case _ =>
       logError(s"Lost executor $executorId on $hostPort: $reason")
+  }
+
+  // return decommission duration in string or "" if decommission startTime not exists
+  private def getDecommissionDuration(executorId: String): String = {
+    executorsPendingDecommission.get(executorId)
+      .map(s => s" after ${Utils.msDurationToString(clock.getTimeMillis() - s.startTime)}")
+      .getOrElse("")
   }
 
   /**
@@ -1118,6 +1139,7 @@ private[spark] class TaskSchedulerImpl(
     }
 
     executorsPendingDecommission.remove(executorId)
+      .foreach(executorsRemovedByDecom.put(executorId, _))
 
     if (reason != LossReasonPending) {
       executorIdToHost -= executorId
@@ -1192,10 +1214,10 @@ private[spark] class TaskSchedulerImpl(
   }
 
   private def waitBackendReady(): Unit = {
-    if (backend.isReady) {
+    if (backend.isReady()) {
       return
     }
-    while (!backend.isReady) {
+    while (!backend.isReady()) {
       // Might take a while for backend to be ready if it is waiting on resources.
       if (sc.stopped.get) {
         // For example: the master removes the application for some reason

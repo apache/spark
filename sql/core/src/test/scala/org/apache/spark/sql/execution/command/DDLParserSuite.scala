@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, UnresolvedAttribute, UnresolvedFunc, UnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
@@ -556,8 +556,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val v3 = "CREATE TEMPORARY VIEW a.b AS SELECT 1"
     checkError(
       exception = parseException(v3),
-      errorClass = "_LEGACY_ERROR_TEMP_0054",
-      parameters = Map("database" -> "a"),
+      errorClass = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
+      parameters = Map("actualName" -> "`a`.`b`"),
       context = ExpectedContext(
         fragment = v3,
         start = 0,
@@ -630,7 +630,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = createViewStatement("COMMENT 'BLABLA'")
     checkError(
       exception = parseException(sql1),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "COMMENT"),
       context = ExpectedContext(
         fragment = sql1,
@@ -640,7 +640,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = createViewStatement("TBLPROPERTIES('prop1Key'=\"prop1Val\")")
     checkError(
       exception = parseException(sql2),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "TBLPROPERTIES"),
       context = ExpectedContext(
         fragment = sql2,
@@ -695,8 +695,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("DROP FUNCTION") {
-    def createFuncPlan(name: Seq[String]): UnresolvedFunc = {
-      UnresolvedFunc(name, "DROP FUNCTION", true,
+    def createFuncPlan(name: Seq[String]): UnresolvedFunctionName = {
+      UnresolvedFunctionName(name, "DROP FUNCTION", true,
         Some("Please use fully qualified identifier to drop the persistent function."))
     }
     comparePlans(
@@ -718,9 +718,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "DROP TEMPORARY FUNCTION a.b"
     checkError(
       exception = parseException(sql1),
-      errorClass = "INVALID_SQL_SYNTAX",
-      parameters = Map(
-        "inputString" -> "DROP TEMPORARY FUNCTION requires a single part name but got: `a`.`b`"),
+      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
+      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "funcName" -> "`a`.`b`"),
       context = ExpectedContext(
         fragment = sql1,
         start = 0,
@@ -729,9 +728,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "DROP TEMPORARY FUNCTION IF EXISTS a.b"
     checkError(
       exception = parseException(sql2),
-      errorClass = "INVALID_SQL_SYNTAX",
-      parameters = Map(
-        "inputString" -> "DROP TEMPORARY FUNCTION requires a single part name but got: `a`.`b`"),
+      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
+      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "funcName" -> "`a`.`b`"),
       context = ExpectedContext(
         fragment = sql2,
         start = 0,

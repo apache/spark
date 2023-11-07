@@ -54,11 +54,13 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
 
           val zeroPath = new Path(path, "zero.orc")
           zeroPath.getFileSystem(spark.sessionState.newHadoopConf()).create(zeroPath)
-          val errorMessage = intercept[AnalysisException] {
-            spark.read.orc(path)
-          }.getMessage
-
-          assert(errorMessage.contains("Unable to infer schema for ORC"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              spark.read.orc(path)
+            },
+            errorClass = "UNABLE_TO_INFER_SCHEMA",
+            parameters = Map("format" -> "ORC")
+          )
 
           val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
           singleRowDF.createOrReplaceTempView("single")

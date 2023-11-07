@@ -128,8 +128,7 @@ public class ExternalBlockHandler extends RpcHandler
       ByteBuffer messageHeader,
       RpcResponseCallback callback) {
     BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(messageHeader);
-    if (msgObj instanceof PushBlockStream) {
-      PushBlockStream message = (PushBlockStream) msgObj;
+    if (msgObj instanceof PushBlockStream message) {
       checkAuth(client, message.appId);
       return mergeManager.receiveBlockDataAsStream(message);
     } else {
@@ -224,6 +223,12 @@ public class ExternalBlockHandler extends RpcHandler
       } finally {
         responseDelayContext.stop();
       }
+    } else if (msgObj instanceof RemoveShuffleMerge) {
+      RemoveShuffleMerge msg = (RemoveShuffleMerge) msgObj;
+      checkAuth(client, msg.appId);
+      logger.info("Removing shuffle merge data for application {} shuffle {} shuffleMerge {}",
+          msg.appId, msg.shuffleId, msg.shuffleMergeId);
+      mergeManager.removeShuffleMerge(msg);
     } else if (msgObj instanceof DiagnoseCorruption) {
       DiagnoseCorruption msg = (DiagnoseCorruption) msgObj;
       checkAuth(client, msg.appId);

@@ -179,11 +179,6 @@ public class ColumnBasedSet implements RowSet {
         index++;
         return convey;
       }
-
-      @Override
-      public void remove() {
-        throw new UnsupportedOperationException("remove");
-      }
     };
   }
 

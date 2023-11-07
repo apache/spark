@@ -148,7 +148,8 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       if (exitCode != 0 && exitCode > 2) {
         val cmd = builder.command().toArray.mkString(" ")
         logWarning(s"Process $cmd exited with code $exitCode and stderr: $errorString")
-        throw new SparkException(s"Process $cmd exited with code $exitCode")
+        throw SparkException.internalError(msg = s"Process $cmd exited with code $exitCode",
+          category = "EXECUTOR")
       }
       childPidsInInt
     } catch {
@@ -170,10 +171,10 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
     try {
       val pidDir = new File(procfsDir, pid.toString)
       def openReader(): BufferedReader = {
-        val f = new File(new File(procfsDir, pid.toString), procfsStatFile)
+        val f = new File(pidDir, procfsStatFile)
         new BufferedReader(new InputStreamReader(new FileInputStream(f), UTF_8))
       }
-      Utils.tryWithResource(openReader) { in =>
+      Utils.tryWithResource(openReader()) { in =>
         val procInfo = in.readLine
         val procInfoSplit = procInfo.split(" ")
         val vmem = procInfoSplit(22).toLong
@@ -209,7 +210,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
     if (!isAvailable) {
       return ProcfsMetrics(0, 0, 0, 0, 0, 0)
     }
-    val pids = computeProcessTree
+    val pids = computeProcessTree()
     var allMetrics = ProcfsMetrics(0, 0, 0, 0, 0, 0)
     for (p <- pids) {
       try {

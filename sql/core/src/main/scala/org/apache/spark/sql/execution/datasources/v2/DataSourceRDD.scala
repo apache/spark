@@ -169,7 +169,7 @@ private abstract class MetricsIterator[I](iter: Iterator[I]) extends Iterator[I]
 private class MetricsRowIterator(
     iter: Iterator[InternalRow]) extends MetricsIterator[InternalRow](iter) {
   override def next(): InternalRow = {
-    val item = iter.next
+    val item = iter.next()
     metricsHandler.updateMetrics(1)
     item
   }
@@ -178,7 +178,7 @@ private class MetricsRowIterator(
 private class MetricsBatchIterator(
     iter: Iterator[ColumnarBatch]) extends MetricsIterator[ColumnarBatch](iter) {
   override def next(): ColumnarBatch = {
-    val batch: ColumnarBatch = iter.next
+    val batch: ColumnarBatch = iter.next()
     metricsHandler.updateMetrics(batch.numRows)
     batch
   }

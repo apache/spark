@@ -21,6 +21,7 @@ from typing import Any, Tuple, TypeVar, Union, TYPE_CHECKING
 import numpy as np
 from pandas.api.extensions import ExtensionDtype
 
+
 if TYPE_CHECKING:
     from pyspark.pandas.base import IndexOpsMixin
     from pyspark.pandas.frame import DataFrame

@@ -26,6 +26,7 @@ import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
+import org.apache.spark.network.shuffle.protocol.RemoveShuffleMerge;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -83,5 +84,10 @@ public class NoOpMergedShuffleFileManager implements MergedShuffleFileManager {
   @Override
   public String[] getMergedBlockDirs(String appId) {
     throw new UnsupportedOperationException("Cannot handle shuffle block merge");
+  }
+
+  @Override
+  public void removeShuffleMerge(RemoveShuffleMerge removeShuffleMerge) {
+    throw new UnsupportedOperationException("Cannot handle merged shuffle remove");
   }
 }

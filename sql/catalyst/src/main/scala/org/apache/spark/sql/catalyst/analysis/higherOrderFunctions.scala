@@ -21,6 +21,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.util.TypeUtils.{toSQLConf, toSQLId}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -72,14 +74,18 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
     case LambdaFunction(function, names, _) =>
       if (names.size != argInfo.size) {
         e.failAnalysis(
-          s"The number of lambda function arguments '${names.size}' does not " +
-            "match the number of arguments expected by the higher order function " +
-            s"'${argInfo.size}'.")
+          errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NUM_ARGS_MISMATCH",
+          messageParameters = Map(
+            "expectedNumArgs" -> names.size.toString,
+            "actualNumArgs" -> argInfo.size.toString))
       }
 
       if (names.map(a => canonicalizer(a.name)).distinct.size < names.size) {
         e.failAnalysis(
-          "Lambda function arguments should not have names that are semantically the same.")
+          errorClass = "INVALID_LAMBDA_FUNCTION_CALL.DUPLICATE_ARG_NAMES",
+          messageParameters = Map(
+            "args" -> names.map(a => canonicalizer(a.name)).map(toSQLId(_)).mkString(", "),
+            "caseSensitiveConfig" -> toSQLConf(SQLConf.CASE_SENSITIVE.key)))
       }
 
       val arguments = argInfo.zip(names).map {

@@ -215,8 +215,21 @@ SELECT * FROM outermost ORDER BY 1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: outermost; line 4 pos 23
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`outermost`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 96,
+    "stopIndex" : 104,
+    "fragment" : "outermost"
+  } ]
+}
 
 
 -- !query
@@ -347,9 +360,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0030",
+  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "dataType" : "baz"
+    "typeName" : "\"BAZ\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -368,9 +382,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0030",
+  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "dataType" : "ordinality"
+    "typeName" : "\"ORDINALITY\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -395,8 +410,21 @@ WITH test AS (SELECT 42) INSERT INTO test VALUES (1)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: test; line 1 pos 37
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`test`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 38,
+    "stopIndex" : 41,
+    "fragment" : "test"
+  } ]
+}
 
 
 -- !query

@@ -88,7 +88,7 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writerFactory: StreamingDat
         if (dataWriter != null) dataWriter.abort()
         logError(s"Writer for partition ${context.partitionId()} aborted.")
       }, finallyBlock = {
-        dataWriter.close()
+        if (dataWriter != null) dataWriter.close()
       })
     }
 

@@ -17,21 +17,21 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{InterruptedIOException, IOException, UncheckedIOException}
+import java.io.{InterruptedIOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
 import java.util.UUID
 import java.util.concurrent.{CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{Map => MutableMap}
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{JobArtifactSet, SparkContext, SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -39,7 +39,6 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit, SparkDataStream}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate, Write}
-import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.execution.datasources.v2.StreamWriterCommitProgress
 import org.apache.spark.sql.internal.SQLConf
@@ -187,6 +186,9 @@ abstract class StreamExecution(
   /* Get the call site in the caller thread; will pass this into the micro batch thread */
   private val callSite = Utils.getCallSite()
 
+  /* Make sure we propagate the ArtifactSet to the micro batch thread. */
+  private val jobArtifactState = JobArtifactSet.getCurrentJobArtifactState.orNull
+
   /** Used to report metrics to coda-hale. This uses id for easier tracking across restarts. */
   lazy val streamMetrics = new MetricsReporter(
     this, s"spark.streaming.${Option(name).getOrElse(id)}")
@@ -205,7 +207,9 @@ abstract class StreamExecution(
         // To fix call site like "run at <unknown>:0", we bridge the call site from the caller
         // thread to this micro batch thread
         sparkSession.sparkContext.setCallSite(callSite)
-        runStream()
+        JobArtifactSet.withActiveJobArtifactState(jobArtifactState) {
+          runStream()
+        }
       }
     }
 
@@ -239,7 +243,7 @@ abstract class StreamExecution(
 
   /** All checkpoint file operations should be performed through `CheckpointFileManager`. */
   private val fileManager = CheckpointFileManager.create(new Path(resolvedCheckpointRoot),
-      sparkSession.sessionState.newHadoopConf)
+      sparkSession.sessionState.newHadoopConf())
 
   /**
    * Starts the execution. This returns only after the thread has started and [[QueryStartedEvent]]
@@ -314,22 +318,20 @@ abstract class StreamExecution(
       case e if isInterruptedByStop(e, sparkSession.sparkContext) =>
         // interrupted by stop()
         updateStatusMessage("Stopped")
-      case e: IOException if e.getMessage != null
-        && e.getMessage.startsWith(classOf[InterruptedException].getName)
-        && state.get == TERMINATED =>
-        // This is a workaround for HADOOP-12074: `Shell.runCommand` converts `InterruptedException`
-        // to `new IOException(ie.toString())` before Hadoop 2.8.
-        updateStatusMessage("Stopped")
-      case t: Throwable =>
-        val e = QueryExecution.toInternalError(msg = s"Execution of the stream $name failed.", t)
+      case e: Throwable =>
+        val message = if (e.getMessage == null) "" else e.getMessage
         streamDeathCause = new StreamingQueryException(
           toDebugString(includeLogicalPlan = isInitialized),
-          s"Query $prettyIdString terminated with exception: ${e.getMessage}",
-          e,
+          cause = e,
           committedOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString,
-          availableOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString)
+          availableOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString,
+          errorClass = "STREAM_FAILED",
+          messageParameters = Map(
+            "id" -> id.toString,
+            "runId" -> runId.toString,
+            "message" -> message))
         logError(s"Query $prettyIdString terminated with error", e)
-        updateStatusMessage(s"Terminated with exception: ${e.getMessage}")
+        updateStatusMessage(s"Terminated with exception: $message")
         // Rethrow the fatal errors to allow the user using `Thread.UncaughtExceptionHandler` to
         // handle them
         if (!NonFatal(e)) {
@@ -347,6 +349,7 @@ abstract class StreamExecution(
 
       try {
         stopSources()
+        cleanup()
         state.set(TERMINATED)
         currentStatus = status.copy(isTriggerActive = false, isDataAvailable = false)
 
@@ -355,8 +358,15 @@ abstract class StreamExecution(
 
         // Notify others
         sparkSession.streams.notifyQueryTermination(StreamExecution.this)
+        val errorClassOpt = exception.flatMap {
+          _.cause match {
+            case t: SparkThrowable => Some(t.getErrorClass)
+            case _ => None
+          }
+        }
         postEvent(
-          new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString)))
+          new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString),
+            errorClassOpt))
 
         // Delete the temp checkpoint when either force delete enabled or the query didn't fail
         if (deleteCheckpointOnStop &&
@@ -409,6 +419,12 @@ abstract class StreamExecution(
       }
     }
   }
+
+
+  /**
+   * Any clean up that needs to happen when the query is stopped or exits
+   */
+  protected def cleanup(): Unit = {}
 
   /**
    * Interrupts the query execution thread and awaits its termination until until it exceeds the

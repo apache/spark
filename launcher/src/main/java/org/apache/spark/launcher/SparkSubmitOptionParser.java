@@ -49,6 +49,7 @@ class SparkSubmitOptionParser {
   protected final String JARS = "--jars";
   protected final String KILL_SUBMISSION = "--kill";
   protected final String MASTER = "--master";
+  protected final String REMOTE = "--remote";
   protected final String NAME = "--name";
   protected final String PACKAGES = "--packages";
   protected final String PACKAGES_EXCLUDE = "--exclude-packages";
@@ -103,6 +104,7 @@ class SparkSubmitOptionParser {
     { KEYTAB },
     { KILL_SUBMISSION },
     { MASTER },
+    { REMOTE },
     { NAME },
     { NUM_EXECUTORS },
     { PACKAGES },

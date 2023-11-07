@@ -84,17 +84,22 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
     val table = "people"
     withTable(s"$catalog.$table") {
       sql(s"CREATE TABLE $catalog.$table (name STRING, id INT) $defaultUsing")
-      val errMsg = intercept[AnalysisException] {
-        sql(s"SHOW TABLE EXTENDED FROM $catalog LIKE '*$table*'").collect()
-      }.getMessage
-      assert(errMsg.contains("SHOW TABLE EXTENDED is not supported for v2 tables"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SHOW TABLE EXTENDED FROM $catalog LIKE '*$table*'").collect()
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1200",
+        parameters = Map("name" -> "SHOW TABLE EXTENDED")
+      )
     }
   }
 
   test("show table in a not existing namespace") {
-    val msg = intercept[NoSuchNamespaceException] {
+    val e = intercept[NoSuchNamespaceException] {
       runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
-    }.getMessage
-    assert(msg.matches("(Database|Namespace) 'unknown' not found"))
+    }
+    checkError(e,
+      errorClass = "SCHEMA_NOT_FOUND",
+      parameters = Map("schemaName" -> "`unknown`"))
   }
 }

@@ -20,8 +20,8 @@ package org.apache.spark.storage
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark._
@@ -43,6 +43,8 @@ private[storage] class BlockManagerDecommissioner(
   private val fallbackStorage = FallbackStorage.getFallbackStorage(conf)
   private val maxReplicationFailuresForDecommission =
     conf.get(config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK)
+  private val blockSavedOnDecommissionedBlockManagerException =
+    classOf[BlockSavedOnDecommissionedBlockManagerException].getSimpleName
 
   // Used for tracking if our migrations are complete. Readable for testing
   @volatile private[storage] var lastRDDMigrationTime: Long = 0
@@ -101,6 +103,7 @@ private[storage] class BlockManagerDecommissioner(
         try {
           val (shuffleBlockInfo, retryCount) = nextShuffleBlockToMigrate()
           val blocks = bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo)
+          var isTargetDecommissioned = false
           // We only migrate a shuffle block when both index file and data file exist.
           if (blocks.isEmpty) {
             logInfo(s"Ignore deleted shuffle block $shuffleBlockInfo")
@@ -109,6 +112,7 @@ private[storage] class BlockManagerDecommissioner(
               s"to $peer ($retryCount / $maxReplicationFailuresForDecommission)")
             // Migrate the components of the blocks.
             try {
+              val startTime = System.currentTimeMillis()
               if (fallbackStorage.isDefined && peer == FallbackStorage.FALLBACK_BLOCK_MANAGER_ID) {
                 fallbackStorage.foreach(_.copy(shuffleBlockInfo, bm))
               } else {
@@ -125,7 +129,9 @@ private[storage] class BlockManagerDecommissioner(
                   logDebug(s"Migrated sub-block $blockId")
                 }
               }
-              logInfo(s"Migrated $shuffleBlockInfo to $peer")
+              logInfo(s"Migrated $shuffleBlockInfo (" +
+                s"size: ${Utils.bytesToString(blocks.map(b => b._2.size()).sum)}) to $peer " +
+                s"in ${System.currentTimeMillis() - startTime} ms")
             } catch {
               case e @ ( _ : IOException | _ : SparkException) =>
                 // If a block got deleted before netty opened the file handle, then trying to
@@ -140,6 +146,11 @@ private[storage] class BlockManagerDecommissioner(
                     // have been used in the try-block above so there's no point trying again
                     && peer != FallbackStorage.FALLBACK_BLOCK_MANAGER_ID) {
                   fallbackStorage.foreach(_.copy(shuffleBlockInfo, bm))
+                } else if (e.getCause != null && e.getCause.getMessage != null
+                  && e.getCause.getMessage
+                  .contains(blockSavedOnDecommissionedBlockManagerException)) {
+                  isTargetDecommissioned = true
+                  keepRunning = false
                 } else {
                   logError(s"Error occurred during migrating $shuffleBlockInfo", e)
                   keepRunning = false
@@ -153,8 +164,14 @@ private[storage] class BlockManagerDecommissioner(
             numMigratedShuffles.incrementAndGet()
           } else {
             logWarning(s"Stop migrating shuffle blocks to $peer")
+
+            val newRetryCount = if (isTargetDecommissioned) {
+              retryCount
+            } else {
+              retryCount + 1
+            }
             // Do not mark the block as migrated if it still needs retry
-            if (!allowRetry(shuffleBlockInfo, retryCount + 1)) {
+            if (!allowRetry(shuffleBlockInfo, newRetryCount)) {
               numMigratedShuffles.incrementAndGet()
             }
           }
@@ -184,7 +201,7 @@ private[storage] class BlockManagerDecommissioner(
 
   // Set if we encounter an error attempting to migrate and stop.
   @volatile private var stopped = false
-  @volatile private var stoppedRDD =
+  @volatile private[storage] var stoppedRDD =
     !conf.get(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED)
   @volatile private var stoppedShuffle =
     !conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)
@@ -204,7 +221,7 @@ private[storage] class BlockManagerDecommissioner(
       logInfo("Attempting to migrate all RDD blocks")
       while (!stopped && !stoppedRDD) {
         // Validate if we have peers to migrate to. Otherwise, give up migration.
-        if (bm.getPeers(false).isEmpty) {
+        if (!bm.getPeers(false).exists(_ != FallbackStorage.FALLBACK_BLOCK_MANAGER_ID)) {
           logWarning("No available peers to receive RDD blocks, stop migration.")
           stoppedRDD = true
         } else {

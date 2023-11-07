@@ -20,8 +20,8 @@ package org.apache.spark.ml.util
 import java.io.IOException
 import java.util.{Locale, ServiceLoader}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.fs.Path
@@ -563,7 +563,7 @@ private[ml] object DefaultParamsReader {
               val param = instance.getParam(paramName)
               val value = param.jsonDecode(compact(render(jsonValue)))
               if (isDefault) {
-                Params.setDefault(instance, param, value)
+                instance.setDefault(param, value)
               } else {
                 instance.set(param, value)
               }

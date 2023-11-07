@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Replaces [[ResolvedHint]] operators from the plan. Move the [[HintInfo]] to associated [[Join]]
@@ -31,17 +34,32 @@ object EliminateResolvedHint extends Rule[LogicalPlan] {
   // This is also called in the beginning of the optimization phase, and as a result
   // is using transformUp rather than resolveOperators.
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val pulledUp = plan transformUp {
+    val joinsWithHints = plan transformUp {
       case j: Join if j.hint == JoinHint.NONE =>
         val (newLeft, leftHints) = extractHintsFromPlan(j.left)
         val (newRight, rightHints) = extractHintsFromPlan(j.right)
         val newJoinHint = JoinHint(mergeHints(leftHints), mergeHints(rightHints))
         j.copy(left = newLeft, right = newRight, hint = newJoinHint)
     }
-    pulledUp.transformUp {
+    val shouldPullHintsIntoSubqueries = SQLConf.get.getConf(SQLConf.PULL_HINTS_INTO_SUBQUERIES)
+    val joinsAndSubqueriesWithHints = if (shouldPullHintsIntoSubqueries) {
+      pullHintsIntoSubqueries(joinsWithHints)
+    } else {
+      joinsWithHints
+    }
+    joinsAndSubqueriesWithHints.transformUp {
       case h: ResolvedHint =>
         hintErrorHandler.joinNotFoundForJoinHint(h.hints)
         h.child
+    }
+  }
+
+  def pullHintsIntoSubqueries(plan: LogicalPlan): LogicalPlan = {
+    plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
+      case s: SubqueryExpression if s.hint.isEmpty =>
+        val (newPlan, subqueryHints) = extractHintsFromPlan(s.plan)
+        val newHint = mergeHints(subqueryHints)
+        s.withNewPlan(newPlan).withNewHint(newHint)
     }
   }
 

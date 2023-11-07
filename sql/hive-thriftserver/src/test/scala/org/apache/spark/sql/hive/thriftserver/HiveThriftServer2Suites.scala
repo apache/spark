@@ -23,12 +23,12 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, DriverManager, SQLException, Statement}
 import java.util.{Locale, UUID}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.concurrent.duration._
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 import com.google.common.io.Files
@@ -1189,7 +1189,7 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
   protected val startScript = "../../sbin/start-thriftserver.sh".split("/").mkString(File.separator)
   protected val stopScript = "../../sbin/stop-thriftserver.sh".split("/").mkString(File.separator)
 
-  val localhost = Utils.localCanonicalHostName
+  val localhost = Utils.localCanonicalHostName()
   private var listeningPort: Int = _
   protected def serverPort: Int = listeningPort
 
@@ -1229,7 +1229,7 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
           |appender.console.name = console
           |appender.console.target = SYSTEM_ERR
           |appender.console.layout.type = PatternLayout
-          |appender.console.layout.pattern = %d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n%ex
+          |appender.console.layout.pattern = %d{HH:mm:ss.SSS} %p %c: %maxLen{%m}{512}%n%ex{8}%n
         """.stripMargin,
         new File(s"$tempLog4jConf/log4j2.properties"),
         StandardCharsets.UTF_8)

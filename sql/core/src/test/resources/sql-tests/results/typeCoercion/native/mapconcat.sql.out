@@ -40,6 +40,7 @@ struct<>
 -- !query output
 
 
+
 -- !query
 SELECT
     map_concat(boolean_map1, boolean_map2) boolean_map,
@@ -89,12 +90,13 @@ FROM various_maps
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "(\"MAP<TINYINT, TINYINT>\" or \"MAP<ARRAY<STRING>, ARRAY<STRING>>\")",
-    "functionName" : "function map_concat",
+    "functionName" : "`map_concat`",
     "sqlExpr" : "\"map_concat(tinyint_map1, array_map1)\""
   },
   "queryContext" : [ {
@@ -114,12 +116,13 @@ FROM various_maps
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "(\"MAP<BOOLEAN, BOOLEAN>\" or \"MAP<INT, INT>\")",
-    "functionName" : "function map_concat",
+    "functionName" : "`map_concat`",
     "sqlExpr" : "\"map_concat(boolean_map1, int_map2)\""
   },
   "queryContext" : [ {
@@ -139,12 +142,13 @@ FROM various_maps
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "(\"MAP<INT, INT>\" or \"MAP<STRUCT<col1: STRING, col2: INT>, STRUCT<col1: STRING, col2: INT>>\")",
-    "functionName" : "function map_concat",
+    "functionName" : "`map_concat`",
     "sqlExpr" : "\"map_concat(int_map1, struct_map2)\""
   },
   "queryContext" : [ {
@@ -164,12 +168,13 @@ FROM various_maps
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "(\"MAP<STRUCT<col1: STRING, col2: INT>, STRUCT<col1: STRING, col2: INT>>\" or \"MAP<ARRAY<STRING>, ARRAY<STRING>>\")",
-    "functionName" : "function map_concat",
+    "functionName" : "`map_concat`",
     "sqlExpr" : "\"map_concat(struct_map1, array_map2)\""
   },
   "queryContext" : [ {
@@ -189,12 +194,13 @@ FROM various_maps
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "(\"MAP<INT, INT>\" or \"MAP<ARRAY<STRING>, ARRAY<STRING>>\")",
-    "functionName" : "function map_concat",
+    "functionName" : "`map_concat`",
     "sqlExpr" : "\"map_concat(int_map1, array_map2)\""
   },
   "queryContext" : [ {

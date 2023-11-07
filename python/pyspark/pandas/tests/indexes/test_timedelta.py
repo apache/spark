@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import unittest
 from datetime import timedelta
 
 import pandas as pd
@@ -23,7 +24,7 @@ import pyspark.pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class TimedeltaIndexTest(PandasOnSparkTestCase, TestUtils):
+class TimedeltaIndexTestsMixin:
     @property
     def pidx(self):
         return pd.TimedeltaIndex(
@@ -105,12 +106,16 @@ class TimedeltaIndexTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(self.neg_psidx.microseconds, self.neg_pidx.microseconds)
 
 
+class TimedeltaIndexTests(TimedeltaIndexTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.pandas.tests.indexes.test_timedelta import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

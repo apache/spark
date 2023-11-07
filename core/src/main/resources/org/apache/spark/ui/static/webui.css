@@ -187,6 +187,18 @@ pre {
   display: none;
 }
 
+.sub-execution-list {
+  font-size: 0.9rem;
+}
+
+.sub-execution-list.collapsed {
+  display: none;
+}
+
+.table-striped .sub-execution-list table tr {
+  background-color: inherit;
+}
+
 .description-input {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -274,6 +286,12 @@ span.expand-dag-viz, .collapse-table {
 
 a.expandbutton {
   cursor: pointer;
+  margin-right: 10px;
+}
+
+a.downloadbutton {
+  cursor: pointer;
+  margin-right: 10px;
 }
 
 .threaddump-td-mouseover {

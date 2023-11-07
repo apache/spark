@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.parquet.ParquetCompressionCodec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
@@ -51,14 +52,16 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark with Logging {
     val conf = new SparkConf()
       .setMaster(System.getProperty("spark.sql.test.master", "local[1]"))
       .setAppName("test-sql-context")
-      .set("spark.sql.parquet.compression.codec", "snappy")
+      .set("spark.sql.parquet.compression.codec", ParquetCompressionCodec.SNAPPY.lowerCaseName())
       .set("spark.sql.shuffle.partitions", System.getProperty("spark.sql.shuffle.partitions", "4"))
       .set("spark.driver.memory", "3g")
       .set("spark.executor.memory", "3g")
       .set("spark.sql.autoBroadcastJoinThreshold", (20 * 1024 * 1024).toString)
       .set("spark.sql.crossJoin.enabled", "true")
+      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+      .set("spark.kryo.registrationRequired", "true")
 
-    SparkSession.builder.config(conf).getOrCreate()
+    SparkSession.builder().config(conf).getOrCreate()
   }
 
   val tables = Seq("catalog_page", "catalog_returns", "customer", "customer_address",
@@ -93,6 +96,7 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark with Logging {
       // This is an indirect hack to estimate the size of each query's input by traversing the
       // logical plan and adding up the sizes of all tables that appear in the plan.
       val queryRelations = scala.collection.mutable.HashSet[String]()
+      spark.sparkContext.setJobGroup(name, s"$name:\n$queryString", true)
       spark.sql(queryString).queryExecution.analyzed.foreach {
         case SubqueryAlias(alias, _: LogicalRelation) =>
           queryRelations.add(alias.name)

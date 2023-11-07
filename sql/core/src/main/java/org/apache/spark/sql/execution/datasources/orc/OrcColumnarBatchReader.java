@@ -32,6 +32,7 @@ import org.apache.orc.TypeDescription;
 import org.apache.orc.mapred.OrcInputFormat;
 
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns;
 import org.apache.spark.sql.execution.datasources.orc.OrcShimUtils.VectorizedRowBatchWrap;
 import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils;
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector;
@@ -179,7 +180,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
           OnHeapColumnVector missingCol = new OnHeapColumnVector(capacity, dt);
           // Check if the missing column has an associated default value in the schema metadata.
           // If so, fill the corresponding column vector with the value.
-          Object defaultValue = requiredSchema.existenceDefaultValues()[i];
+          Object defaultValue = ResolveDefaultColumns.existenceDefaultValues(requiredSchema)[i];
           if (defaultValue == null) {
             missingCol.putNulls(0, capacity);
           } else if (!missingCol.appendObjects(capacity, defaultValue).isPresent()) {

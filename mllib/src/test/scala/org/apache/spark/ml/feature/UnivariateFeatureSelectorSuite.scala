@@ -506,8 +506,8 @@ class UnivariateFeatureSelectorSuite extends MLTest with DefaultReadWriteTest {
     val dataset_f_classification2 =
       spark.createDataFrame(data_f_classif2).toDF("label", "features", "topFeature")
 
-    val resultDF1 = ANOVATest.test(dataset_f_classification1.toDF, "features", "label", true)
-    val resultDF2 = ANOVATest.test(dataset_f_classification2.toDF, "features", "label", true)
+    val resultDF1 = ANOVATest.test(dataset_f_classification1.toDF(), "features", "label", true)
+    val resultDF2 = ANOVATest.test(dataset_f_classification2.toDF(), "features", "label", true)
     val selector = new UnivariateFeatureSelector()
       .setOutputCol("filtered")
       .setFeatureType("continuous")
@@ -632,8 +632,8 @@ class UnivariateFeatureSelectorSuite extends MLTest with DefaultReadWriteTest {
     val dataset_f_regression2 =
       spark.createDataFrame(data_f_regression2).toDF("label", "features", "topFeature")
 
-    val resultDF1 = FValueTest.test(dataset_f_regression1.toDF, "features", "label", true)
-    val resultDF2 = FValueTest.test(dataset_f_regression2.toDF, "features", "label", true)
+    val resultDF1 = FValueTest.test(dataset_f_regression1.toDF(), "features", "label", true)
+    val resultDF2 = FValueTest.test(dataset_f_regression2.toDF(), "features", "label", true)
     val selector = new UnivariateFeatureSelector()
       .setOutputCol("filtered")
       .setFeatureType("continuous")

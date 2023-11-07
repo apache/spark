@@ -52,12 +52,13 @@ CREATE VIEW key_dependent_view AS
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
-  "sqlState" : "42000",
+  "errorClass" : "MISSING_AGGREGATION",
+  "sqlState" : "42803",
   "messageParameters" : {
-    "expression" : "\"data\""
+    "expression" : "\"data\"",
+    "expressionAnyValue" : "\"any_value(data)\""
   }
 }
 
@@ -68,10 +69,10 @@ CREATE VIEW key_dependent_view_no_cols AS
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`FROM`"
   },
@@ -277,10 +278,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v1_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v1_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -339,10 +343,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v3_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v3_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -394,10 +401,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v4_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v4_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -412,10 +422,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v5_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v5_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -577,10 +590,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v6_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v6_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -592,10 +608,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v7_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v7_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -607,10 +626,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v8_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v8_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -622,10 +644,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v9_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v9_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -635,8 +660,21 @@ CREATE VIEW v10_temp AS SELECT * FROM v7_temp
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: v7_temp; line 1 pos 38
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`v7_temp`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 45,
+    "fragment" : "v7_temp"
+  } ]
+}
 
 
 -- !query
@@ -644,8 +682,21 @@ CREATE VIEW v11_temp AS SELECT t1.id, t2.a FROM base_table t1, v10_temp t2
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: v10_temp; line 1 pos 63
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`v10_temp`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 64,
+    "stopIndex" : 71,
+    "fragment" : "v10_temp"
+  } ]
+}
 
 
 -- !query
@@ -653,8 +704,21 @@ CREATE VIEW v12_temp AS SELECT true FROM v11_temp
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: v11_temp; line 1 pos 41
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`v11_temp`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 42,
+    "stopIndex" : 49,
+    "fragment" : "v11_temp"
+  } ]
+}
 
 
 -- !query
@@ -737,10 +801,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`testviewschm2`.`temporal1`",
-    "nameParts" : "tt"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`testviewschm2`.`temporal1`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`tt`"
   }
 }
 
@@ -784,10 +851,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`testviewschm2`.`temporal2`",
-    "nameParts" : "tt"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`testviewschm2`.`temporal2`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`tt`"
   }
 }
 
@@ -831,10 +901,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`testviewschm2`.`temporal3`",
-    "nameParts" : "tt"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`testviewschm2`.`temporal3`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`tt`"
   }
 }
 
@@ -878,10 +951,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`testviewschm2`.`temporal4`",
-    "nameParts" : "tt"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`testviewschm2`.`temporal4`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`tt`"
   }
 }
 
@@ -893,10 +969,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`testviewschm2`.`temporal5`",
-    "nameParts" : "tt"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`testviewschm2`.`temporal5`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`tt`"
   }
 }
 

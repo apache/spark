@@ -29,12 +29,14 @@ import org.json4s.JsonAST.{JArray, JString}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{CurrentUserContext, FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedLeafNode}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -239,7 +241,7 @@ case class CatalogTable(
     provider: Option[String] = None,
     partitionColumnNames: Seq[String] = Seq.empty,
     bucketSpec: Option[BucketSpec] = None,
-    owner: String = "",
+    owner: String = CurrentUserContext.getCurrentUserOrEmpty,
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = -1,
     createVersion: String = "",
@@ -369,6 +371,26 @@ case class CatalogTable(
     }
   }
 
+  /**
+   * Return temporary variable names the current view was referred. should be empty if the
+   * CatalogTable is not a Temporary View or created by older versions of Spark(before 3.4.0).
+   */
+  def viewReferredTempVariableNames: Seq[Seq[String]] = {
+    try {
+      properties.get(VIEW_REFERRED_TEMP_VARIABLE_NAMES).map { json =>
+        parse(json).asInstanceOf[JArray].arr.map { namePartsJson =>
+          namePartsJson.asInstanceOf[JArray].arr.map(_.asInstanceOf[JString].s)
+        }
+      }.getOrElse(Seq.empty)
+    } catch {
+      case e: Exception =>
+        throw new AnalysisException(
+          errorClass = "INTERNAL_ERROR_METADATA_CATALOG.TEMP_VARIABLE_REFERENCE",
+          messageParameters = Map.empty,
+          cause = Some(e))
+    }
+  }
+
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
       locationUri: Option[URI] = storage.locationUri,
@@ -385,7 +407,7 @@ case class CatalogTable(
   def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]()
     val tableProperties =
-      SQLConf.get.redactOptions(properties.filterKeys(!_.startsWith(VIEW_PREFIX)).toMap)
+      SQLConf.get.redactOptions(properties.view.filterKeys(!_.startsWith(VIEW_PREFIX)).toMap)
         .toSeq.sortBy(_._1)
         .map(p => p._1 + "=" + p._2)
     val partitionColumns = partitionColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
@@ -473,6 +495,7 @@ object CatalogTable {
 
   val VIEW_REFERRED_TEMP_VIEW_NAMES = VIEW_PREFIX + "referredTempViewNames"
   val VIEW_REFERRED_TEMP_FUNCTION_NAMES = VIEW_PREFIX + "referredTempFunctionsNames"
+  val VIEW_REFERRED_TEMP_VARIABLE_NAMES = VIEW_PREFIX + "referredTempVariablesNames"
 
   val VIEW_STORING_ANALYZED_PLAN = VIEW_PREFIX + "storingAnalyzedPlan"
 
@@ -496,21 +519,20 @@ object CatalogTable {
 
   def readLargeTableProp(props: Map[String, String], key: String): Option[String] = {
     props.get(key).orElse {
-      if (props.filterKeys(_.startsWith(key)).isEmpty) {
-        None
-      } else {
-        val numParts = props.get(s"$key.numParts")
-        if (numParts.isEmpty) {
-          throw QueryCompilationErrors.cannotReadCorruptedTablePropertyError(key)
-        } else {
-          val parts = (0 until numParts.get.toInt).map { index =>
-            props.getOrElse(s"$key.part.$index", {
-              throw QueryCompilationErrors.cannotReadCorruptedTablePropertyError(
-                key, s"Missing part $index, $numParts parts are expected.")
-            })
-          }
-          Some(parts.mkString)
+      if (props.exists { case (mapKey, _) => mapKey.startsWith(key) }) {
+        props.get(s"$key.numParts") match {
+          case None => throw QueryCompilationErrors.insufficientTablePropertyError(key)
+          case Some(numParts) =>
+            val parts = (0 until numParts.toInt).map { index =>
+              val keyPart = s"$key.part.$index"
+              props.getOrElse(keyPart, {
+                throw QueryCompilationErrors.insufficientTablePropertyPartError(keyPart, numParts)
+              })
+            }
+            Some(parts.mkString)
         }
+      } else {
+        None
       }
     }
   }
@@ -539,6 +561,7 @@ object CatalogTable {
       createTime = 0L,
       lastAccessTime = 0L,
       properties = table.properties
+        .view
         .filterKeys(!nondeterministicProps.contains(_))
         .map(identity)
         .toMap,
@@ -661,11 +684,13 @@ object CatalogColumnStat extends Logging {
   def getTimestampFormatter(
       isParsing: Boolean,
       format: String = "yyyy-MM-dd HH:mm:ss.SSSSSS",
-      zoneId: ZoneId = ZoneOffset.UTC): TimestampFormatter = {
+      zoneId: ZoneId = ZoneOffset.UTC,
+      forTimestampNTZ: Boolean = false): TimestampFormatter = {
     TimestampFormatter(
       format = format,
       zoneId = zoneId,
-      isParsing = isParsing)
+      isParsing = isParsing,
+      forTimestampNTZ = forTimestampNTZ)
   }
 
   /**
@@ -679,6 +704,8 @@ object CatalogColumnStat extends Logging {
       case TimestampType if version == 1 =>
         DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf(s))
       case TimestampType => getTimestampFormatter(isParsing = true).parse(s)
+      case TimestampNTZType =>
+        getTimestampFormatter(isParsing = true, forTimestampNTZ = true).parse(s)
       case ByteType => s.toByte
       case ShortType => s.toShort
       case IntegerType => s.toInt
@@ -702,6 +729,9 @@ object CatalogColumnStat extends Logging {
     val externalValue = dataType match {
       case DateType => DateFormatter().format(v.asInstanceOf[Int])
       case TimestampType => getTimestampFormatter(isParsing = false).format(v.asInstanceOf[Long])
+      case TimestampNTZType =>
+        getTimestampFormatter(isParsing = false, forTimestampNTZ = true)
+          .format(v.asInstanceOf[Long])
       case BooleanType | _: IntegralType | FloatType | DoubleType => v
       case _: DecimalType => v.asInstanceOf[Decimal].toJavaBigDecimal
       // This version of Spark does not use min/max for binary/string types so we ignore it.
@@ -783,10 +813,8 @@ object CatalogTypes {
 case class UnresolvedCatalogRelation(
     tableMeta: CatalogTable,
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
-    override val isStreaming: Boolean = false) extends LeafNode {
+    override val isStreaming: Boolean = false) extends UnresolvedLeafNode {
   assert(tableMeta.identifier.database.isDefined)
-  override lazy val resolved: Boolean = false
-  override def output: Seq[Attribute] = Nil
 }
 
 /**
@@ -796,12 +824,9 @@ case class UnresolvedCatalogRelation(
  */
 case class TemporaryViewRelation(
     tableMeta: CatalogTable,
-    plan: Option[LogicalPlan] = None) extends LeafNode {
+    plan: Option[LogicalPlan] = None) extends UnresolvedLeafNode {
   require(plan.isEmpty ||
     (plan.get.resolved && tableMeta.properties.contains(VIEW_STORING_ANALYZED_PLAN)))
-
-  override lazy val resolved: Boolean = false
-  override def output: Seq[Attribute] = Nil
 }
 
 /**
@@ -817,8 +842,8 @@ case class HiveTableRelation(
     @transient prunedPartitions: Option[Seq[CatalogTablePartition]] = None)
   extends LeafNode with MultiInstanceRelation {
   assert(tableMeta.identifier.database.isDefined)
-  assert(tableMeta.partitionSchema.sameType(partitionCols.toStructType))
-  assert(tableMeta.dataSchema.sameType(dataCols.toStructType))
+  assert(DataTypeUtils.sameType(tableMeta.partitionSchema, partitionCols.toStructType))
+  assert(DataTypeUtils.sameType(tableMeta.dataSchema, dataCols.toStructType))
 
   // The partition column should always appear after data columns.
   override def output: Seq[AttributeReference] = dataCols ++ partitionCols

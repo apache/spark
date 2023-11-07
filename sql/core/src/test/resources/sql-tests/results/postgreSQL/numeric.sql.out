@@ -3580,12 +3580,13 @@ INSERT INTO num_exp_power_10_ln VALUES (7,1716699575118597095.423308199106402476
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1229",
+  "errorClass" : "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+  "sqlState" : "22003",
   "messageParameters" : {
-    "decimalType" : "decimal",
-    "precision" : "38"
+    "maxPrecision" : "38",
+    "precision" : "39"
   }
 }
 
@@ -3831,12 +3832,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1168",
+  "errorClass" : "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+  "sqlState" : "21S01",
   "messageParameters" : {
-    "insertedColumns" : "5",
-    "staticPartCols" : "0",
-    "tableName" : "`spark_catalog`.`default`.`num_result`",
-    "targetColumns" : "3"
+    "dataColumns" : "`id`, `id`, `val`, `val`, `(val * val)`",
+    "tableColumns" : "`id1`, `id2`, `result`",
+    "tableName" : "`spark_catalog`.`default`.`num_result`"
   }
 }
 
@@ -4694,8 +4695,16 @@ SELECT '' AS to_number_1,  to_number('-34,338,492', '99G999G999')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-The input string '-34,338,492' does not match the given number format: '99G999G999'
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_FORMAT.MISMATCH_INPUT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "format" : "99G999G999",
+    "input" : "-34,338,492",
+    "inputType" : "\"STRING\""
+  }
+}
 
 
 -- !query
@@ -4703,8 +4712,21 @@ SELECT '' AS to_number_2,  to_number('-34,338,492.654,878', '99G999G999D999G999'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'to_number('-34,338,492.654,878', '99G999G999D999G999')' due to data type mismatch: Thousands separators (, or G) may not appear after the decimal point in the number format: '99G999G999D999G999'; line 1 pos 27
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_FORMAT.THOUSANDS_SEPS_MUST_BEFORE_DEC",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "format" : "'99G999G999D999G999'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 81,
+    "fragment" : "to_number('-34,338,492.654,878', '99G999G999D999G999')"
+  } ]
+}
 
 
 -- !query
@@ -4752,8 +4774,21 @@ SELECT '' AS to_number_15, to_number('123,000','999G')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'to_number('123,000', '999G')' due to data type mismatch: Thousands separators (, or G) must have digits in between them in the number format: '999G'; line 1 pos 27
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_FORMAT.CONT_THOUSANDS_SEPS",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "format" : "'999G'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 54,
+    "fragment" : "to_number('123,000','999G')"
+  } ]
+}
 
 
 -- !query
@@ -4761,8 +4796,16 @@ SELECT '' AS to_number_16, to_number('123456','999G999')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-The input string '123456' does not match the given number format: '999G999'
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_FORMAT.MISMATCH_INPUT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "format" : "999G999",
+    "input" : "123456",
+    "inputType" : "\"STRING\""
+  }
+}
 
 
 -- !query

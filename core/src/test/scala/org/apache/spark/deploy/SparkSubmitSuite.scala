@@ -38,13 +38,13 @@ import org.apache.spark.TestUtils
 import org.apache.spark.TestUtils.JavaSourceFromString
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.SparkSubmit._
-import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 import org.apache.spark.deploy.history.EventLogFileReader
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
-import org.apache.spark.util.{CommandLineUtils, DependencyUtils, ResetSystemProperties, Utils}
+import org.apache.spark.util.{CommandLineUtils, DependencyUtils, IvyTestUtils, ResetSystemProperties, Utils}
+import org.apache.spark.util.MavenUtils.MavenCoordinate
 
 trait TestPrematureExit {
   suite: SparkFunSuite =>
@@ -435,28 +435,6 @@ class SparkSubmitSuite
     conf.get(UI_ENABLED) should be (false)
   }
 
-  test("handles mesos client mode") {
-    val clArgs = Seq(
-      "--deploy-mode", "client",
-      "--master", "mesos://h:p",
-      "--executor-memory", "5g",
-      "--total-executor-cores", "5",
-      "--class", "org.SomeClass",
-      "--driver-memory", "4g",
-      "--conf", "spark.ui.enabled=false",
-      "thejar.jar",
-      "arg1", "arg2")
-    val appArgs = new SparkSubmitArguments(clArgs)
-    val (childArgs, classpath, conf, mainClass) = submit.prepareSubmitEnvironment(appArgs)
-    childArgs.mkString(" ") should be ("arg1 arg2")
-    mainClass should be ("org.SomeClass")
-    classpath should have length (1)
-    classpath(0) should endWith ("thejar.jar")
-    conf.get("spark.executor.memory") should be ("5g")
-    conf.get("spark.cores.max") should be ("5")
-    conf.get(UI_ENABLED) should be (false)
-  }
-
   test("handles k8s cluster mode") {
     val clArgs = Seq(
       "--deploy-mode", "cluster",
@@ -484,6 +462,119 @@ class SparkSubmitSuite
     conf.get("spark.driver.memory") should be ("4g")
     conf.get("spark.kubernetes.namespace") should be ("spark")
     conf.get("spark.kubernetes.driver.container.image") should be ("bar")
+  }
+
+  test("SPARK-35084: include jars of the --packages" +
+    " in k8s client mode & driver runs inside a POD") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
+    val dep = MavenCoordinate("my.great.dep", "mylib", "0.1")
+    IvyTestUtils.withRepository(main, Some(dep.toString), None) { repo =>
+      val clArgs = Seq(
+        "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
+        "--name", "testApp",
+        "--deploy-mode", "client",
+        "--proxy-user", "test.user",
+        "--class", "org.SomeClass",
+        "--master", "k8s://host:port",
+        "--packages", Seq(main, dep).mkString(","),
+        "--repositories", repo,
+        "--conf", "spark.ui.enabled=false",
+        "--conf", "spark.master.rest.enabled=false",
+        "--conf", "spark.kubernetes.namespace=spark",
+        "--conf", "spark.kubernetes.submitInDriver=true",
+        "--conf", s"spark.jars.ivySettings=${emptyIvySettings.getAbsolutePath()}",
+        unusedJar.toString,
+        "my.great.lib.MyLib", "my.great.dep.MyLib")
+
+      val appArgs = new SparkSubmitArguments(clArgs)
+      try {
+        val (_, _, sparkConf, _) = submit.prepareSubmitEnvironment(appArgs)
+        sparkConf.get("spark.jars").contains("mylib") shouldBe true
+      } finally {
+        val mainJarPath = Paths.get("my.great.dep_mylib-0.1.jar")
+        val depJarPath = Paths.get("my.great.lib_mylib-0.1.jar")
+        if (Files.exists(mainJarPath)) {
+          Files.delete(mainJarPath)
+        }
+        if (Files.exists(depJarPath)) {
+          Files.delete(depJarPath)
+        }
+      }
+    }
+  }
+
+  test("SPARK-33782: handles k8s files download to current directory") {
+    val clArgs = Seq(
+      "--deploy-mode", "client",
+      "--proxy-user", "test.user",
+      "--master", "k8s://host:port",
+      "--executor-memory", "5g",
+      "--class", "org.SomeClass",
+      "--driver-memory", "4g",
+      "--conf", "spark.kubernetes.namespace=spark",
+      "--conf", "spark.kubernetes.driver.container.image=bar",
+      "--conf", "spark.kubernetes.submitInDriver=true",
+      "--files", "src/test/resources/test_metrics_config.properties",
+      "--py-files", "src/test/resources/test_metrics_system.properties",
+      "--archives", "src/test/resources/log4j2.properties",
+      "--jars", "src/test/resources/TestUDTF.jar",
+      "/home/thejar.jar",
+      "arg1")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (childArgs, classpath, conf, mainClass) = submit.prepareSubmitEnvironment(appArgs)
+    conf.get("spark.master") should be ("k8s://https://host:port")
+    conf.get("spark.executor.memory") should be ("5g")
+    conf.get("spark.driver.memory") should be ("4g")
+    conf.get("spark.kubernetes.namespace") should be ("spark")
+    conf.get("spark.kubernetes.driver.container.image") should be ("bar")
+
+    Files.exists(Paths.get("test_metrics_config.properties")) should be (true)
+    Files.exists(Paths.get("test_metrics_system.properties")) should be (true)
+    Files.exists(Paths.get("log4j2.properties")) should be (true)
+    Files.exists(Paths.get("TestUDTF.jar")) should be (true)
+    Files.delete(Paths.get("test_metrics_config.properties"))
+    Files.delete(Paths.get("test_metrics_system.properties"))
+    Files.delete(Paths.get("log4j2.properties"))
+    Files.delete(Paths.get("TestUDTF.jar"))
+  }
+
+  test("SPARK-43014: Set `spark.app.submitTime` if missing ") {
+    val clArgs1 = Seq(
+      "--deploy-mode", "client",
+      "--master", "k8s://host:port",
+      "--class", "org.SomeClass",
+      "/home/thejar.jar")
+    val appArgs1 = new SparkSubmitArguments(clArgs1)
+    val (_, _, conf1, _) = submit.prepareSubmitEnvironment(appArgs1)
+    conf1.getOption("spark.app.submitTime").isDefined should be(true)
+
+    val submitTime = "1234567"
+    val clArgs2 = Seq(
+      "--deploy-mode", "client",
+      "--master", "k8s://host:port",
+      "--class", "org.SomeClass",
+      "--conf", "spark.app.submitTime=" + submitTime,
+      "/home/thejar.jar")
+    val appArgs2 = new SparkSubmitArguments(clArgs2)
+    val (_, _, conf2, _) = submit.prepareSubmitEnvironment(appArgs2)
+    conf2.get("spark.app.submitTime") should be (submitTime)
+  }
+
+  test("SPARK-43014: Do not overwrite `spark.app.submitTime` in k8s cluster mode driver " +
+    "when `spark.kubernetes.setSubmitTimeInDriver` is false") {
+    val submitTime = System.currentTimeMillis() - 1000
+    val clArgs = Seq(
+      "--deploy-mode", "client",
+      "--master", "k8s://host:port",
+      "--class", "org.SomeClass",
+      "--conf", "spark.app.submitTime=" + submitTime,
+      "--conf", "spark.kubernetes.submitInDriver=true",
+      "--conf", "spark.kubernetes.setSubmitTimeInDriver=false",
+      "/home/thejar.jar")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
+    conf.getLong("spark.app.submitTime", -1) should be (submitTime)
   }
 
   /**
@@ -640,6 +731,7 @@ class SparkSubmitSuite
         "--conf", "spark.master.rest.enabled=false",
         "--conf", "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD=secret_password",
         "--conf", "spark.eventLog.enabled=true",
+        "--conf", "spark.eventLog.rolling.enabled=false",
         "--conf", "spark.eventLog.testing=true",
         "--conf", s"spark.eventLog.dir=${testDirPath.toUri.toString}",
         "--conf", "spark.hadoop.fs.defaultFS=unsupported://example.com",
@@ -1516,6 +1608,18 @@ class SparkSubmitSuite
       conf.get(k) should be (v)
     }
   }
+
+  test("SPARK-43540: Add working directory into classpath on the driver in K8S cluster mode") {
+    val clArgs = Seq(
+      "--deploy-mode", "client",
+      "--master", "k8s://host:port",
+      "--class", "org.SomeClass",
+      "--conf", "spark.kubernetes.submitInDriver=true",
+      "/home/thejar.jar")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (_, classpath, _, _) = submit.prepareSubmitEnvironment(appArgs)
+    assert(classpath.contains("."))
+  }
 }
 
 object JarCreationTest extends Logging {
@@ -1530,7 +1634,7 @@ object JarCreationTest extends Logging {
         Utils.classForName(args(1))
       } catch {
         case t: Throwable =>
-          exception = t + "\n" + Utils.exceptionString(t)
+          exception = t.toString + "\n" + Utils.exceptionString(t)
           exception = exception.replaceAll("\n", "\n\t")
       }
       Option(exception).toSeq.iterator

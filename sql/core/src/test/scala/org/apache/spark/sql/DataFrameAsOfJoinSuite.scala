@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowSQLTest
 
+@SlowSQLTest
 class DataFrameAsOfJoinSuite extends QueryTest
   with SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -98,22 +100,27 @@ class DataFrameAsOfJoinSuite extends QueryTest
 
   test("as-of join - tolerance should be a constant") {
     val (df1, df2) = prepareForAsOfJoin()
-    val errMsg = intercept[AnalysisException] {
-      df1.joinAsOf(
-        df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
-        joinType = "inner", tolerance = df1.col("b"), allowExactMatches = true,
-        direction = "backward")
-    }.getMessage
-    assert(errMsg.contains("Input argument tolerance must be a constant."))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.joinAsOf(
+          df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
+          joinType = "inner", tolerance = df1.col("b"), allowExactMatches = true,
+          direction = "backward")
+      },
+      errorClass = "AS_OF_JOIN.TOLERANCE_IS_UNFOLDABLE",
+      parameters = Map.empty)
   }
 
   test("as-of join - tolerance should be non-negative") {
     val (df1, df2) = prepareForAsOfJoin()
-    val errMsg = intercept[AnalysisException] {
-      df1.joinAsOf(df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
-        joinType = "inner", tolerance = lit(-1), allowExactMatches = true, direction = "backward")
-    }.getMessage
-    assert(errMsg.contains("Input argument tolerance must be non-negative."))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.joinAsOf(df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
+          joinType = "inner", tolerance = lit(-1), allowExactMatches = true,
+          direction = "backward")
+      },
+      errorClass = "AS_OF_JOIN.TOLERANCE_IS_NON_NEGATIVE",
+      parameters = Map.empty)
   }
 
   test("as-of join - allowExactMatches = false") {

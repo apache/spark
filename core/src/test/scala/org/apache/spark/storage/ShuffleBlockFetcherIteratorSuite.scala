@@ -130,14 +130,13 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       hostLocalDirs: Map[String, Array[String]]): Unit = {
     val mockExternalBlockStoreClient = mock(classOf[ExternalBlockStoreClient])
     val hostLocalDirManager = new HostLocalDirManager(
-      futureExecutionContext = global,
       cacheSize = 1,
       blockStoreClient = mockExternalBlockStoreClient)
 
     when(blockManager.hostLocalDirManager).thenReturn(Some(hostLocalDirManager))
     when(mockExternalBlockStoreClient.getHostLocalDirs(any(), any(), any(), any()))
       .thenAnswer { invocation =>
-        import scala.collection.JavaConverters._
+        import scala.jdk.CollectionConverters._
         invocation.getArgument[CompletableFuture[java.util.Map[String, Array[String]]]](3)
           .complete(hostLocalDirs.asJava)
       }
@@ -183,6 +182,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       blocksByAddress: Map[BlockManagerId, Seq[(BlockId, Long, Int)]],
       taskContext: Option[TaskContext] = None,
       streamWrapperLimitSize: Option[Long] = None,
+      corruptAtAvailableReset: Boolean = false,
       blockManager: Option[BlockManager] = None,
       maxBytesInFlight: Long = Long.MaxValue,
       maxReqsInFlight: Int = Int.MaxValue,
@@ -202,7 +202,14 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       blockManager.getOrElse(createMockBlockManager()),
       mapOutputTracker,
       blocksByAddress.iterator,
-      (_, in) => streamWrapperLimitSize.map(new LimitedInputStream(in, _)).getOrElse(in),
+      (_, in) => {
+        val limited = streamWrapperLimitSize.map(new LimitedInputStream(in, _)).getOrElse(in)
+        if (corruptAtAvailableReset) {
+          new CorruptAvailableResetStream(limited)
+        } else {
+          limited
+        }
+      },
       maxBytesInFlight,
       maxReqsInFlight,
       maxBlocksInFlightPerAddress,
@@ -222,7 +229,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
    * same size and index.
    */
   private def toBlockList(
-      blockIds: Traversable[BlockId],
+      blockIds: Iterable[BlockId],
       blockSize: Long,
       blockMapIndex: Int): Seq[(BlockId, Long, Int)] = {
     blockIds.map(blockId => (blockId, blockSize, blockMapIndex)).toSeq
@@ -371,7 +378,6 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
     val mockExternalBlockStoreClient = mock(classOf[ExternalBlockStoreClient])
     val hostLocalDirManager = new HostLocalDirManager(
-      futureExecutionContext = global,
       cacheSize = 1,
       blockStoreClient = mockExternalBlockStoreClient)
 
@@ -714,6 +720,16 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     corruptBuffer
   }
 
+  private class CorruptAvailableResetStream(in: InputStream) extends InputStream {
+    override def read(): Int = in.read()
+
+    override def read(dest: Array[Byte], off: Int, len: Int): Int = in.read(dest, off, len)
+
+    override def available(): Int = throw new IOException("corrupt at available")
+
+    override def reset(): Unit = throw new IOException("corrupt at reset")
+  }
+
   private class CorruptStream(corruptAt: Long = 0L) extends InputStream {
     var pos = 0
     var closed = false
@@ -972,7 +988,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer()
     )
 
-    configureMockTransfer(blocks.mapValues(_ => createMockManagedBuffer(0)).toMap)
+    configureMockTransfer(blocks.view.mapValues(_ => createMockManagedBuffer(0)).toMap)
 
     val iterator = createShuffleBlockIteratorWithDefaults(
       Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0))
@@ -1219,7 +1235,12 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
             new RuntimeException("forced error"))
         }
       })
-    val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress)
+    val taskContext = TaskContext.empty()
+    val shuffleMetrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      blocksByAddress,
+      taskContext = Some(taskContext),
+      shuffleMetrics = Some(shuffleMetrics))
     blocksSem.acquire(2)
     val (id1, _) = iterator.next()
     assert(id1 === ShuffleBlockId(0, 0, 2))
@@ -1231,6 +1252,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val (id4, _) = iterator.next()
     assert(id4 === ShuffleBlockId(0, 2, 2))
     assert(!iterator.hasNext)
+    assert(shuffleMetrics.mergedFetchFallbackCount === 1)
   }
 
   test("SPARK-32922: iterator has just 1 push-merged block and fails to fetch the meta") {
@@ -1260,13 +1282,19 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
             new RuntimeException("forced error"))
         }
       })
-    val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress)
+    val taskContext = TaskContext.empty()
+    val shuffleMetrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      blocksByAddress,
+      taskContext = Some(taskContext),
+      shuffleMetrics = Some(shuffleMetrics))
     val (id1, _) = iterator.next()
     blocksSem.acquire(2)
     assert(id1 === ShuffleBlockId(0, 0, 2))
     val (id2, _) = iterator.next()
     assert(id2 === ShuffleBlockId(0, 1, 2))
     assert(!iterator.hasNext)
+    assert(shuffleMetrics.mergedFetchFallbackCount === 1)
   }
 
   private def createMockPushMergedBlockMeta(
@@ -1369,9 +1397,15 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val blocksByAddress = prepareForFallbackToLocalBlocks(
       blockManager, Map(SHUFFLE_MERGER_IDENTIFIER -> localDirs),
       failReadingLocalChunksMeta = true)
-    val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress,
-      blockManager = Some(blockManager), streamWrapperLimitSize = Some(100))
+    val taskContext = TaskContext.empty()
+    val shuffleMetrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      blocksByAddress,
+      blockManager = Some(blockManager), streamWrapperLimitSize = Some(100),
+      taskContext = Some(taskContext),
+      shuffleMetrics = Some(shuffleMetrics))
     verifyLocalBlocksFromFallback(iterator)
+    assert(shuffleMetrics.mergedFetchFallbackCount === 1)
   }
 
   test("SPARK-32922: failure to fetch push-merged-local data should fallback to fetch " +
@@ -1382,9 +1416,15 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       blockManager, Map(SHUFFLE_MERGER_IDENTIFIER -> localDirs))
     doThrow(new RuntimeException("Forced error")).when(blockManager)
       .getLocalMergedBlockData(ShuffleMergedBlockId(0, 0, 2), localDirs)
-    val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress,
-      blockManager = Some(blockManager))
+    val taskContext = TaskContext.empty()
+    val shuffleMetrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      blocksByAddress,
+      blockManager = Some(blockManager),
+      taskContext = Some(taskContext),
+      shuffleMetrics = Some(shuffleMetrics))
     verifyLocalBlocksFromFallback(iterator)
+    assert(shuffleMetrics.mergedFetchFallbackCount === 1)
   }
 
   test("SPARK-32922: failure to fetch push-merged-local meta of a single merged block " +
@@ -1410,8 +1450,13 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     // Return valid buffer for chunk in partition 3
     doReturn(Seq(createMockManagedBuffer(2))).when(blockManager)
       .getLocalMergedBlockData(ShuffleMergedBlockId(0, 0, 3), localDirs)
-    val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress,
-      blockManager = Some(blockManager))
+    val taskContext = TaskContext.empty()
+    val shuffleMetrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      blocksByAddress,
+      blockManager = Some(blockManager),
+      taskContext = Some(taskContext),
+      shuffleMetrics = Some(shuffleMetrics))
     val (id1, _) = iterator.next()
     assert(id1 === ShuffleBlockId(0, 0, 2))
     val (id2, _) = iterator.next()
@@ -1423,6 +1468,12 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val (id5, _) = iterator.next()
     assert(id5 === ShuffleBlockChunkId(0, 0, 3, 0))
     assert(!iterator.hasNext)
+    assert(shuffleMetrics.localBlocksFetched === 5)
+    assert(shuffleMetrics.localBytesRead === 6)
+    assert(shuffleMetrics.mergedFetchFallbackCount === 1)
+    assert(shuffleMetrics.localMergedBlocksFetched === 1)
+    assert(shuffleMetrics.localMergedChunksFetched === 1)
+    assert(shuffleMetrics.localMergedBytesRead === 2)
   }
 
   test("SPARK-32922: failure to fetch push-merged block as well as fallback block should throw " +
@@ -1539,9 +1590,17 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       new FileSegmentManagedBuffer(null, new File("non-existent"), 0, 100)
       })).when(blockManager).getLocalMergedBlockData(
       ShuffleMergedBlockId(0, 0, 2), localDirs)
-    val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress,
-      blockManager = Some(blockManager))
+    val taskContext = TaskContext.empty()
+    val shuffleMetrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      blocksByAddress,
+      blockManager = Some(blockManager),
+      taskContext = Some(taskContext),
+      shuffleMetrics = Some(shuffleMetrics))
     verifyLocalBlocksFromFallback(iterator)
+    assert(shuffleMetrics.mergedFetchFallbackCount === 1)
+    assert(shuffleMetrics.localMergedBlocksFetched === 2)
+    assert(shuffleMetrics.localMergedChunksFetched === 1)
   }
 
   test("SPARK-32922: fallback to original shuffle block when a push-merged shuffle chunk " +
@@ -1556,9 +1615,20 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val corruptStream = mock(classOf[InputStream])
     when(corruptStream.read(any(), any(), any())).thenThrow(new IOException("corrupt"))
     doReturn(corruptStream).when(corruptBuffer).createInputStream()
-    val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress,
-      blockManager = Some(blockManager), streamWrapperLimitSize = Some(100))
+    val taskContext = TaskContext.empty()
+    val shuffleMetrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      blocksByAddress,
+      blockManager = Some(blockManager),
+      taskContext = Some(taskContext),
+      shuffleMetrics = Some(shuffleMetrics),
+      streamWrapperLimitSize = Some(100))
     verifyLocalBlocksFromFallback(iterator)
+    assert(shuffleMetrics.mergedFetchFallbackCount === 1)
+    assert(shuffleMetrics.localBlocksFetched === 6)
+    assert(shuffleMetrics.localMergedChunksFetched === 1)
+    assert(shuffleMetrics.corruptMergedBlockChunks === 1)
+    assert(shuffleMetrics.localMergedBytesRead === 2)
   }
 
   test("SPARK-32922: fallback to original blocks when failed to fetch remote shuffle chunk") {
@@ -1814,4 +1884,61 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     intercept[FetchFailedException] { iterator.next() }
   }
 
+  test("SPARK-40872: fallback to original shuffle block when a push-merged shuffle chunk " +
+    "is zero-size") {
+    val blockManager = mock(classOf[BlockManager])
+    val localDirs = Array("local-dir")
+    val blocksByAddress = prepareForFallbackToLocalBlocks(
+      blockManager, Map(SHUFFLE_MERGER_IDENTIFIER -> localDirs))
+    val zeroSizeBuffer = createMockManagedBuffer(0)
+    doReturn(Seq({zeroSizeBuffer})).when(blockManager)
+      .getLocalMergedBlockData(ShuffleMergedBlockId(0, 0, 2), localDirs)
+    val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress,
+      blockManager = Some(blockManager), streamWrapperLimitSize = Some(100))
+    verifyLocalBlocksFromFallback(iterator)
+  }
+
+  test("SPARK-45678: retry corrupt blocks on available() and reset()") {
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
+    val blocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer()
+    )
+
+    // Semaphore to coordinate event sequence in two different threads.
+    val sem = new Semaphore(0)
+
+    answerFetchBlocks { invocation =>
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+      Future {
+        listener.onBlockFetchSuccess(
+          ShuffleBlockId(0, 0, 0).toString, createMockManagedBuffer())
+        sem.release()
+      }
+    }
+
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0)),
+      streamWrapperLimitSize = Some(100),
+      detectCorruptUseExtraMemory = false, // Don't use `ChunkedByteBufferInputStream`.
+      corruptAtAvailableReset = true,
+      checksumEnabled = false
+    )
+
+    sem.acquire()
+
+    val (id1, stream) = iterator.next()
+    assert(id1 === ShuffleBlockId(0, 0, 0))
+
+    val err1 = intercept[FetchFailedException] {
+      stream.available()
+    }
+
+    assert(err1.getMessage.contains("corrupt at available"))
+
+    val err2 = intercept[FetchFailedException] {
+      stream.reset()
+    }
+
+    assert(err2.getMessage.contains("corrupt at reset"))
+  }
 }

@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.types._
 
-private[avro] case class AvroDataToCatalyst(
+private[sql] case class AvroDataToCatalyst(
     child: Expression,
     jsonFormatSchema: String,
     options: Map[String, String])
@@ -39,7 +39,8 @@ private[avro] case class AvroDataToCatalyst(
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
 
   override lazy val dataType: DataType = {
-    val dt = SchemaConverters.toSqlType(expectedSchema).dataType
+    val dt = SchemaConverters.toSqlType(
+      expectedSchema, avroOptions.useStableIdForUnionType).dataType
     parseMode match {
       // With PermissiveMode, the output Catalyst row might contain columns of null values for
       // corrupt records, even if some of the columns are not nullable in the user-provided schema.
@@ -61,7 +62,8 @@ private[avro] case class AvroDataToCatalyst(
   @transient private lazy val reader = new GenericDatumReader[Any](actualSchema, expectedSchema)
 
   @transient private lazy val deserializer =
-    new AvroDeserializer(expectedSchema, dataType, avroOptions.datetimeRebaseModeInRead)
+    new AvroDeserializer(expectedSchema, dataType,
+      avroOptions.datetimeRebaseModeInRead, avroOptions.useStableIdForUnionType)
 
   @transient private var decoder: BinaryDecoder = _
 

@@ -24,7 +24,6 @@ from pyspark.testing.streamingutils import PySparkStreamingTestCase
 
 
 class StreamingContextTests(PySparkStreamingTestCase):
-
     duration = 0.1
     setupCalled = False
 
@@ -176,7 +175,7 @@ if __name__ == "__main__":
     from pyspark.streaming.tests.test_context import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

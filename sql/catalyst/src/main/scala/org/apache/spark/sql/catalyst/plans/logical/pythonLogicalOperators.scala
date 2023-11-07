@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, PythonUDF}
+import org.apache.spark.api.python.PythonFunction
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, PythonUDF, PythonUDTF}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{BinaryType, StructType}
 
 /**
  * FlatMap groups using a udf: pandas.Dataframe -> pandas.DataFrame.
@@ -52,7 +55,8 @@ case class FlatMapGroupsInPandas(
 case class MapInPandas(
     functionExpr: Expression,
     output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    isBarrier: Boolean) extends UnaryNode {
 
   override val producedAttributes = AttributeSet(output)
 
@@ -67,12 +71,49 @@ case class MapInPandas(
 case class PythonMapInArrow(
     functionExpr: Expression,
     output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    isBarrier: Boolean) extends UnaryNode {
 
   override val producedAttributes = AttributeSet(output)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): PythonMapInArrow =
     copy(child = newChild)
+}
+
+/**
+ * Represents a Python data source.
+ */
+case class PythonDataSource(
+    dataSource: PythonFunction,
+    outputSchema: StructType,
+    override val output: Seq[Attribute]) extends LeafNode {
+  require(output.forall(_.resolved),
+    "Unresolved attributes found when constructing PythonDataSource.")
+  override protected def stringArgs: Iterator[Any] = {
+    Iterator(output)
+  }
+  final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_DATA_SOURCE)
+}
+
+/**
+ * Represents a list of Python data source partitions.
+ */
+case class PythonDataSourcePartitions(
+    output: Seq[Attribute],
+    partitions: Seq[Array[Byte]]) extends LeafNode {
+  override protected def stringArgs: Iterator[Any] = {
+    if (partitions.isEmpty) {
+      Iterator("<empty>", output)
+    } else {
+      Iterator(output)
+    }
+  }
+}
+
+object PythonDataSourcePartitions {
+  def getOutputAttrs: Seq[Attribute] = {
+    toAttributes(new StructType().add("partition", BinaryType))
+  }
 }
 
 /**
@@ -141,6 +182,23 @@ trait BaseEvalPython extends UnaryNode {
   override def output: Seq[Attribute] = child.output ++ resultAttrs
 
   override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(EVAL_PYTHON_UDF)
+}
+
+trait BaseEvalPythonUDTF extends UnaryNode {
+
+  def udtf: PythonUDTF
+
+  def requiredChildOutput: Seq[Attribute]
+
+  def resultAttrs: Seq[Attribute]
+
+  override def output: Seq[Attribute] = requiredChildOutput ++ resultAttrs
+
+  override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(EVAL_PYTHON_UDTF)
 }
 
 /**
@@ -163,6 +221,43 @@ case class ArrowEvalPython(
     child: LogicalPlan,
     evalType: Int) extends BaseEvalPython {
   override protected def withNewChildInternal(newChild: LogicalPlan): ArrowEvalPython =
+    copy(child = newChild)
+}
+
+/**
+ * A logical plan that evaluates a [[PythonUDTF]].
+ *
+ * @param udtf the user-defined Python function
+ * @param requiredChildOutput the required output of the child plan. It's used for omitting data
+ *                            generation that will be discarded next by a projection.
+ * @param resultAttrs the output schema of the Python UDTF.
+ * @param child the child plan
+ */
+case class BatchEvalPythonUDTF(
+    udtf: PythonUDTF,
+    requiredChildOutput: Seq[Attribute],
+    resultAttrs: Seq[Attribute],
+    child: LogicalPlan) extends BaseEvalPythonUDTF {
+  override protected def withNewChildInternal(newChild: LogicalPlan): BatchEvalPythonUDTF =
+    copy(child = newChild)
+}
+
+/**
+ * A logical plan that evaluates a [[PythonUDTF]] using Apache Arrow.
+ *
+ * @param udtf the user-defined Python function
+ * @param requiredChildOutput the required output of the child plan. It's used for omitting data
+ *                            generation that will be discarded next by a projection.
+ * @param resultAttrs the output schema of the Python UDTF.
+ * @param child the child plan
+ */
+case class ArrowEvalPythonUDTF(
+    udtf: PythonUDTF,
+    requiredChildOutput: Seq[Attribute],
+    resultAttrs: Seq[Attribute],
+    child: LogicalPlan,
+    evalType: Int) extends BaseEvalPythonUDTF {
+  override protected def withNewChildInternal(newChild: LogicalPlan): ArrowEvalPythonUDTF =
     copy(child = newChild)
 }
 

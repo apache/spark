@@ -59,7 +59,7 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refu
                                                               Project [wr_item_sk,wr_refunded_cdemo_sk,wr_refunded_addr_sk,wr_returning_cdemo_sk,wr_reason_sk,wr_order_number,wr_fee,wr_refunded_cash]
                                                                 Filter [wr_item_sk,wr_order_number,wr_refunded_cdemo_sk,wr_returning_cdemo_sk,wr_refunded_addr_sk,wr_reason_sk]
                                                                   Subquery #2
-                                                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(cd_demo_sk, 42), 159981, 1279848, 0, 0),bloomFilter,buf]
+                                                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(cd_demo_sk, 42), 159981, 2239471, 0, 0),bloomFilter,buf]
                                                                       Exchange #7
                                                                         ObjectHashAggregate [cd_demo_sk] [buf,buf]
                                                                           WholeStageCodegen (1)
@@ -69,7 +69,7 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refu
                                                                                   InputAdapter
                                                                                     Scan parquet spark_catalog.default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
                                                                   Subquery #3
-                                                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(ca_address_sk, 42), 152837, 1222696, 0, 0),bloomFilter,buf]
+                                                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(ca_address_sk, 42), 152837, 2153999, 0, 0),bloomFilter,buf]
                                                                       Exchange #8
                                                                         ObjectHashAggregate [ca_address_sk] [buf,buf]
                                                                           WholeStageCodegen (1)

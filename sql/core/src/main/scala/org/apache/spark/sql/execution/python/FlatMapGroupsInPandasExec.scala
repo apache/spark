@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.execution.python
 
+import org.apache.spark.JobArtifactSet
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.python.PandasGroupUtils._
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.ArrowUtils
 
 
 /**
@@ -50,12 +50,14 @@ case class FlatMapGroupsInPandasExec(
     func: Expression,
     output: Seq[Attribute],
     child: SparkPlan)
-  extends SparkPlan with UnaryExecNode {
+  extends SparkPlan with UnaryExecNode with PythonSQLMetrics {
 
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
-  private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
+  private val largeVarTypes = conf.arrowUseLargeVarTypes
+  private val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
   private val pandasFunction = func.asInstanceOf[PythonUDF].func
   private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
+  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
   override def producedAttributes: AttributeSet = AttributeSet(output)
 
@@ -87,9 +89,12 @@ case class FlatMapGroupsInPandasExec(
         chainedFunc,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         Array(argOffsets),
-        StructType.fromAttributes(dedupAttributes),
+        DataTypeUtils.fromAttributes(dedupAttributes),
         sessionLocalTimeZone,
-        pythonRunnerConf)
+        largeVarTypes,
+        pythonRunnerConf,
+        pythonMetrics,
+        jobArtifactUUID)
 
       executePython(data, output, runner)
     }}

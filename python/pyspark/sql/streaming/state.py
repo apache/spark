@@ -19,6 +19,8 @@ import json
 from typing import Tuple, Optional
 
 from pyspark.sql.types import DateType, Row, StructType
+from pyspark.sql.utils import has_numpy
+from pyspark.errors import PySparkTypeError, PySparkValueError
 
 __all__ = ["GroupState", "GroupStateTimeout"]
 
@@ -97,7 +99,10 @@ class GroupState:
         if self.exists:
             return tuple(self._value)
         else:
-            raise ValueError("State is either not defined or has already been removed")
+            raise PySparkValueError(
+                error_class="STATE_NOT_EXISTS",
+                message_parameters={},
+            )
 
     @property
     def getOption(self) -> Optional[Tuple]:
@@ -128,9 +133,30 @@ class GroupState:
         Update the value of the state. The value of the state cannot be null.
         """
         if newValue is None:
-            raise ValueError("'None' is not a valid state value")
+            raise PySparkTypeError(
+                error_class="CANNOT_BE_NONE",
+                message_parameters={"arg_name": "newValue"},
+            )
 
-        self._value = Row(*newValue)
+        converted = []
+        if has_numpy:
+            import numpy as np
+
+            # In order to convert NumPy types to Python primitive types.
+            for v in newValue:
+                if isinstance(v, np.generic):
+                    converted.append(v.tolist())
+                # Address a couple of pandas dtypes too.
+                elif hasattr(v, "to_pytimedelta"):
+                    converted.append(v.to_pytimedelta())
+                elif hasattr(v, "to_pydatetime"):
+                    converted.append(v.to_pydatetime())
+                else:
+                    converted.append(v)
+        else:
+            converted = list(newValue)
+
+        self._value = Row(*converted)
         self._defined = True
         self._updated = True
         self._removed = False
@@ -150,7 +176,13 @@ class GroupState:
         """
         if isinstance(durationMs, str):
             # TODO(SPARK-40437): Support string representation of durationMs.
-            raise ValueError("durationMs should be int but get :%s" % type(durationMs))
+            raise PySparkTypeError(
+                error_class="NOT_INT",
+                message_parameters={
+                    "arg_name": "durationMs",
+                    "arg_type": type(durationMs).__name__,
+                },
+            )
 
         if self._timeout_conf != GroupStateTimeout.ProcessingTimeTimeout:
             raise RuntimeError(
@@ -159,7 +191,13 @@ class GroupState:
             )
 
         if durationMs <= 0:
-            raise ValueError("Timeout duration must be positive")
+            raise PySparkValueError(
+                error_class="VALUE_NOT_POSITIVE",
+                message_parameters={
+                    "arg_name": "durationMs",
+                    "arg_type": type(durationMs).__name__,
+                },
+            )
         self._timeout_timestamp = durationMs + self._batch_processing_time_ms
 
     # TODO(SPARK-40438): Implement additionalDuration parameter.
@@ -179,15 +217,24 @@ class GroupState:
             timestampMs = DateType().toInternal(timestampMs)
 
         if timestampMs <= 0:
-            raise ValueError("Timeout timestamp must be positive")
+            raise PySparkValueError(
+                error_class="VALUE_NOT_POSITIVE",
+                message_parameters={
+                    "arg_name": "timestampMs",
+                    "arg_type": type(timestampMs).__name__,
+                },
+            )
 
         if (
             self._event_time_watermark_ms != GroupState.NO_TIMESTAMP
             and timestampMs < self._event_time_watermark_ms
         ):
-            raise ValueError(
-                "Timeout timestamp (%s) cannot be earlier than the "
-                "current watermark (%s)" % (timestampMs, self._event_time_watermark_ms)
+            raise PySparkValueError(
+                error_class="INVALID_TIMEOUT_TIMESTAMP",
+                message_parameters={
+                    "timestamp": str(timestampMs),
+                    "watermark": str(self._event_time_watermark_ms),
+                },
             )
 
         self._timeout_timestamp = timestampMs

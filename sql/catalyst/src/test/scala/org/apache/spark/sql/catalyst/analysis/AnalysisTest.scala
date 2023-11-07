@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import java.net.URI
 import java.util.Locale
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TemporaryViewRelation}
@@ -174,30 +175,19 @@ trait AnalysisTest extends PlanTest {
       inputPlan: LogicalPlan,
       expectedErrorClass: String,
       expectedMessageParameters: Map[String, String],
-      caseSensitive: Boolean): Unit = {
+      queryContext: Array[ExpectedContext] = Array.empty,
+      caseSensitive: Boolean = true): Unit = {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
       val analyzer = getAnalyzer
       val e = intercept[AnalysisException] {
         analyzer.checkAnalysis(analyzer.execute(inputPlan))
       }
-
-      if (e.getErrorClass != expectedErrorClass ||
-        !e.messageParameters.sameElements(expectedMessageParameters)) {
-        var failMsg = ""
-        if (e.getErrorClass != expectedErrorClass) {
-          failMsg +=
-            s"""Error class should be: ${expectedErrorClass}
-               |Actual error class: ${e.getErrorClass}
-             """.stripMargin
-        }
-        if (!e.messageParameters.sameElements(expectedMessageParameters)) {
-          failMsg +=
-            s"""Message parameters should be: ${expectedMessageParameters.mkString("\n  ")}
-               |Actual message parameters: ${e.messageParameters.mkString("\n  ")}
-             """.stripMargin
-        }
-        fail(failMsg)
-      }
+      checkError(
+        exception = e,
+        errorClass = expectedErrorClass,
+        parameters = expectedMessageParameters,
+        queryContext = queryContext
+      )
     }
   }
 
@@ -213,8 +203,11 @@ trait AnalysisTest extends PlanTest {
     }
   }
 
-  protected def parseException(parser: String => Any)(
-    sqlText: String): ParseException = {
+  protected def parseException(parser: String => Any)(sqlText: String): ParseException = {
     intercept[ParseException](parser(sqlText))
+  }
+
+  protected def internalException(parser: String => Any)(sqlText: String): SparkException = {
+    intercept[SparkException](parser(sqlText))
   }
 }

@@ -66,7 +66,7 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-15285 Generated SpecificSafeProjection.apply method grows beyond 64KB") {
     val ds100_5 = Seq(S100_5()).toDS()
-    ds100_5.rdd.count
+    ds100_5.rdd.count()
   }
 
   test("SPARK-29503 nest unsafe struct inside safe array") {

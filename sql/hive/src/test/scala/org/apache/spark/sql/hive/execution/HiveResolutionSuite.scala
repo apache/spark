@@ -44,10 +44,14 @@ class HiveResolutionSuite extends HiveComparisonTest {
       .createOrReplaceTempView("nested")
 
     // there are 2 filed matching field name "b", we should report Ambiguous reference error
-    val exception = intercept[AnalysisException] {
-      sql("SELECT a[0].b from nested").queryExecution.analyzed
-    }
-    assert(exception.getMessage.contains("Ambiguous reference to fields"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT a[0].b from nested").queryExecution.analyzed
+      },
+      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+      sqlState = "42000",
+      parameters = Map("field" -> "`b`", "count" -> "2")
+    )
   }
 
   createQueryTest("table.attr",

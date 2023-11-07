@@ -37,7 +37,7 @@ if have_plotly:
 
 
 @unittest.skipIf(not have_plotly, plotly_requirement_message)
-class SeriesPlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
+class SeriesPlotPlotlyTestsMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -231,11 +231,15 @@ class SeriesPlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
         self.assertEqual(pprint.pformat(actual.to_dict()), pprint.pformat(expected.to_dict()))
 
 
+class SeriesPlotPlotlyTests(SeriesPlotPlotlyTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
+
+
 if __name__ == "__main__":
     from pyspark.pandas.tests.plot.test_series_plot_plotly import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

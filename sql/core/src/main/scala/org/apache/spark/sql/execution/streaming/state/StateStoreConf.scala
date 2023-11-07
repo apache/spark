@@ -22,10 +22,15 @@ import org.apache.spark.sql.internal.SQLConf
 /** A class that contains configuration parameters for [[StateStore]]s. */
 class StateStoreConf(
     @transient private val sqlConf: SQLConf,
-    extraOptions: Map[String, String] = Map.empty)
+    val extraOptions: Map[String, String] = Map.empty)
   extends Serializable {
 
   def this() = this(new SQLConf)
+
+  /**
+   * Size of MaintenanceThreadPool to perform maintenance tasks for StateStore
+   */
+  val numStateStoreMaintenanceThreads: Int = sqlConf.numStateStoreMaintenanceThreads
 
   /**
    * Minimum number of delta files in a chain after which HDFSBackedStateStore will
@@ -71,11 +76,10 @@ class StateStoreConf(
 
   /**
    * Additional configurations related to state store. This will capture all configs in
-   * SQLConf that start with `spark.sql.streaming.stateStore.` and extraOptions for a specific
-   * operator.
+   * SQLConf that start with `spark.sql.streaming.stateStore.`
    */
-  val confs: Map[String, String] =
-    sqlConf.getAllConfs.filter(_._1.startsWith("spark.sql.streaming.stateStore.")) ++ extraOptions
+  val sqlConfs: Map[String, String] =
+    sqlConf.getAllConfs.filter(_._1.startsWith("spark.sql.streaming.stateStore."))
 }
 
 object StateStoreConf {

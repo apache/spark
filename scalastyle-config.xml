@@ -135,9 +135,9 @@ This file is divided into 3 sections:
   <!-- ??? usually shouldn't be checked into the code base. -->
   <check level="error" class="org.scalastyle.scalariform.NotImplementedErrorUsage" enabled="true"></check>
 
-  <!-- As of SPARK-7558, all tests in Spark should extend o.a.s.SparkFunSuite instead of FunSuite directly -->
+  <!-- As of SPARK-7558, all tests in Spark should extend o.a.s.SparkFunSuite instead of AnyFunSuite directly -->
   <check customId="funsuite" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
-    <parameters><parameter name="regex">^FunSuite[A-Za-z]*$</parameter></parameters>
+    <parameters><parameter name="regex">^AnyFunSuite[A-Za-z]*$</parameter></parameters>
     <customMessage>Tests must extend org.apache.spark.SparkFunSuite instead.</customMessage>
   </check>
 
@@ -227,6 +227,18 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
+  <check customId="parvector" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">new.*ParVector</parameter></parameters>
+    <customMessage><![CDATA[
+      Are you sure you want to create a ParVector? It will not automatically propagate Spark ThreadLocals or the
+      active SparkSession for the submitted tasks. In most cases, you should use ThreadUtils.parmap instead.
+      If you must use ParVector, then wrap your creation of the ParVector with
+      // scalastyle:off parvector
+      ...ParVector...
+      // scalastyle:on parvector
+    ]]></customMessage>
+  </check>
+
   <check customId="caselocale" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">(\.toUpperCase|\.toLowerCase)(?!(\(|\(Locale.ROOT\)))</parameter></parameters>
     <customMessage><![CDATA[
@@ -251,11 +263,18 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
-  <!-- As of SPARK-9613 JavaConversions should be replaced with JavaConverters -->
+  <!-- As of SPARK-45338 JavaConversions should be replaced with CollectionConverters -->
   <check customId="javaconversions" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
     <parameters><parameter name="regex">JavaConversions</parameter></parameters>
     <customMessage>Instead of importing implicits in scala.collection.JavaConversions._, import
-    scala.collection.JavaConverters._ and use .asScala / .asJava methods</customMessage>
+      scala.jdk.CollectionConverters._ and use .asScala / .asJava methods</customMessage>
+  </check>
+
+  <!-- As of SPARK-45338 JavaConverters should be replaced with CollectionConverters -->
+  <check customId="javaconverters" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
+    <parameters><parameter name="regex">JavaConverters</parameter></parameters>
+    <customMessage>Instead of importing implicits in scala.collection.JavaConverters._, import
+      scala.jdk.CollectionConverters._ and use .asScala / .asJava methods</customMessage>
   </check>
 
   <check customId="commonslang2" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
@@ -295,7 +314,7 @@ This file is divided into 3 sections:
       <parameter name="groups">java,scala,3rdParty,spark</parameter>
       <parameter name="group.java">javax?\..*</parameter>
       <parameter name="group.scala">scala\..*</parameter>
-      <parameter name="group.3rdParty">(?!org\.apache\.spark\.).*</parameter>
+      <parameter name="group.3rdParty">(?!(javax?\.|scala\.|org\.apache\.spark\.)).*</parameter>
       <parameter name="group.spark">org\.apache\.spark\..*</parameter>
     </parameters>
   </check>
@@ -344,6 +363,11 @@ This file is divided into 3 sections:
 
       If you really need to use scala.collection.Seq or scala.collection.IndexedSeq, please use the fully-qualified name instead.
     ]]></customMessage>
+  </check>
+
+  <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="true">
+    <parameters><parameter name="illegalImports"><![CDATA[collection]]></parameter></parameters>
+    <customMessage>Please use scala.collection instead.</customMessage>
   </check>
 
   <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="true">
@@ -436,5 +460,13 @@ This file is divided into 3 sections:
     <customMessage>Avoid using com.google.common.io.Files.createTempDir due to CVE-2020-8908.
       Use org.apache.spark.util.Utils.createTempDir instead.
     </customMessage>
+  </check>
+
+  <check customId="pathfromuri" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">new Path\(new URI\(</parameter></parameters>
+    <customMessage><![CDATA[
+      Are you sure that this string is uri encoded? Please be careful when converting hadoop Paths
+      and URIs to and from String. If possible, please use SparkPath.
+    ]]></customMessage>
   </check>
 </scalastyle>

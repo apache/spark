@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.execution.{AliasAwareOutputOrdering, SparkPlan}
+import org.apache.spark.sql.execution.{OrderPreservingUnaryExecNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 
@@ -41,7 +41,7 @@ case class SortAggregateExec(
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
   extends AggregateCodegenSupport
-  with AliasAwareOutputOrdering {
+  with OrderPreservingUnaryExecNode {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))

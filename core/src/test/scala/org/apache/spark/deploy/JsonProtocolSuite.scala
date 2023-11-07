@@ -76,6 +76,22 @@ class JsonProtocolSuite extends SparkFunSuite with JsonTestUtils {
     assertValidDataInJson(output, JsonMethods.parse(JsonConstants.masterStateJsonStr))
   }
 
+  test("SPARK-45474: filtered writeMasterState") {
+    val workers = Array(createWorkerInfo(), createWorkerInfo())
+    val activeApps = Array(createAppInfo())
+    val completedApps = Array.empty[ApplicationInfo]
+    val activeDrivers = Array(createDriverInfo())
+    val completedDrivers = Array(createDriverInfo())
+    val stateResponse = new MasterStateResponse(
+      "host", 8080, None, workers, activeApps, completedApps,
+      activeDrivers, completedDrivers, RecoveryState.ALIVE)
+    val output = JsonProtocol.writeMasterState(stateResponse, Some("activedrivers"))
+    assertValidJson(output)
+
+    val expected = """{"activedrivers":[%s]}""".format(JsonConstants.driverInfoJsonStr).stripMargin
+    assertValidDataInJson(output, JsonMethods.parse(expected))
+  }
+
   test("writeWorkerState") {
     val executors = List[ExecutorRunner]()
     val finishedExecutors = List[ExecutorRunner](createExecutorRunner(123, true),

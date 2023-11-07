@@ -19,10 +19,11 @@ package org.apache.spark.ml.linalg
 
 import java.util.Random
 
+import scala.collection.mutable.{Map => MutableMap}
+
 import breeze.linalg.{CSCMatrix, Matrix => BM}
 import org.mockito.Mockito.when
 import org.scalatestplus.mockito.MockitoSugar._
-import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.ml.SparkMLFunSuite
 import org.apache.spark.ml.util.TestingUtils._

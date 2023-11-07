@@ -546,7 +546,21 @@ SELECT '' AS `xxx`, i, k, t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 'i' is ambiguous, could be: spark_catalog.default.j1_tbl.i, spark_catalog.default.j2_tbl.i.; line 1 pos 20
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`i`",
+    "referenceNames" : "[`spark_catalog`.`default`.`j1_tbl`.`i`, `spark_catalog`.`default`.`j2_tbl`.`i`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 21,
+    "stopIndex" : 21,
+    "fragment" : "i"
+  } ]
+}
 
 
 -- !query
@@ -3074,6 +3088,88 @@ doh!	123	456	hi de ho neighbor	NULL
 
 -- !query
 select * from
+   text_tbl t1
+   left join int8_tbl i8
+   on i8.q2 = 123,
+   lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss
+where t1.f1 = ss.f1
+-- !query schema
+struct<f1:string,q1:bigint,q2:bigint,q1:bigint,f1:string>
+-- !query output
+doh!	4567890123456789	123	4567890123456789	doh!
+
+
+-- !query
+select * from
+  text_tbl t1
+  left join int8_tbl i8
+  on i8.q2 = 123,
+  lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss
+where t1.f1 = ss.f1
+-- !query schema
+struct<f1:string,q1:bigint,q2:bigint,q1:bigint,f1:string>
+-- !query output
+doh!	4567890123456789	123	4567890123456789	doh!
+
+
+-- !query
+select * from
+  text_tbl t1
+  left join int8_tbl i8
+  on i8.q2 = 123,
+  lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss1,
+  lateral (select ss1.* from text_tbl t3 limit 1) as ss2
+where t1.f1 = ss2.f1
+-- !query schema
+struct<f1:string,q1:bigint,q2:bigint,q1:bigint,f1:string,q1:bigint,f1:string>
+-- !query output
+doh!	4567890123456789	123	4567890123456789	doh!	4567890123456789	doh!
+
+
+-- !query
+select * from
+  text_tbl t1
+  left join int8_tbl i8
+  on i8.q2 = 123,
+  lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss1,
+  lateral (select ss1.* from text_tbl t3 limit 1) as ss2
+where t1.f1 = ss2.f1
+-- !query schema
+struct<f1:string,q1:bigint,q2:bigint,q1:bigint,f1:string,q1:bigint,f1:string>
+-- !query output
+doh!	4567890123456789	123	4567890123456789	doh!	4567890123456789	doh!
+
+
+-- !query
+select 1 from
+  text_tbl as tt1
+  inner join text_tbl as tt2 on (tt1.f1 = 'foo')
+  left join text_tbl as tt3 on (tt3.f1 = 'foo')
+  left join text_tbl as tt4 on (tt3.f1 = tt4.f1),
+  lateral (select tt4.f1 as c0 from text_tbl as tt5 limit 1) as ss1
+where tt1.f1 = ss1.c0
+-- !query schema
+struct<1:int>
+-- !query output
+
+
+
+-- !query
+select 1 from
+  text_tbl as tt1
+  inner join text_tbl as tt2 on (tt1.f1 = 'foo')
+  left join text_tbl as tt3 on (tt3.f1 = 'foo')
+  left join text_tbl as tt4 on (tt3.f1 = tt4.f1),
+  lateral (select tt4.f1 as c0 from text_tbl as tt5 limit 1) as ss1
+where tt1.f1 = ss1.c0
+-- !query schema
+struct<1:int>
+-- !query output
+
+
+
+-- !query
+select * from
   (select 1 as id) as xx
   left join
     (tenk1 as a1 full join (select 1 as id) as yy on (a1.unique1 = yy.id))
@@ -3235,7 +3331,21 @@ select * from
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 'f1' is ambiguous, could be: j.f1, j.f1.; line 2 pos 63
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`f1`",
+    "referenceNames" : "[`j`.`f1`, `j`.`f1`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 78,
+    "stopIndex" : 79,
+    "fragment" : "f1"
+  } ]
+}
 
 
 -- !query
@@ -3244,10 +3354,10 @@ select * from
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`y`.`f1`",
     "proposal" : "`j`.`f1`, `j`.`f1`, `x`.`q1`, `x`.`q2`"
@@ -3277,13 +3387,13 @@ select t1.uunique1 from
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`t1`.`uunique1`",
-    "proposal" : "`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`hundred`"
+    "proposal" : "`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`four`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3301,13 +3411,13 @@ select t2.uunique1 from
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`t2`.`uunique1`",
-    "proposal" : "`t2`.`unique1`, `t1`.`unique1`, `t2`.`unique2`, `t1`.`unique2`, `t2`.`hundred`"
+    "proposal" : "`t2`.`unique1`, `t1`.`unique1`, `t2`.`unique2`, `t1`.`unique2`, `t2`.`four`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3325,13 +3435,13 @@ select uunique1 from
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`uunique1`",
-    "proposal" : "`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`even`"
+    "proposal" : "`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`ten`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3539,10 +3649,10 @@ select f1,g from int4_tbl a, (select f1 as g) ss
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`f1`"
   },
@@ -3561,10 +3671,10 @@ select f1,g from int4_tbl a, (select a.f1 as g) ss
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`a`.`f1`"
   },
@@ -3583,10 +3693,10 @@ select f1,g from int4_tbl a cross join (select f1 as g) ss
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`f1`"
   },
@@ -3605,10 +3715,10 @@ select f1,g from int4_tbl a cross join (select a.f1 as g) ss
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42000",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`a`.`f1`"
   },

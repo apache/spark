@@ -276,13 +276,13 @@ case class TakeOrderedAndProjectExec(
     sortOrder: Seq[SortOrder],
     projectList: Seq[NamedExpression],
     child: SparkPlan,
-    offset: Int = 0) extends AliasAwareOutputOrdering {
+    offset: Int = 0) extends OrderPreservingUnaryExecNode {
 
   override def output: Seq[Attribute] = {
     projectList.map(_.toAttribute)
   }
 
-  override def executeCollect(): Array[InternalRow] = {
+  override def executeCollect(): Array[InternalRow] = executeQuery {
     val orderingSatisfies = SortOrder.orderingSatisfies(child.outputOrdering, sortOrder)
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
     val limited = if (orderingSatisfies) {

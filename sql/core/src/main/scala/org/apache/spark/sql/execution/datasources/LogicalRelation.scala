@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ExposesMetadataColumns, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.sources.BaseRelation
 
@@ -70,21 +71,16 @@ case class LogicalRelation(
 
   override lazy val metadataOutput: Seq[AttributeReference] = relation match {
     case relation: HadoopFsRelation =>
-      val resolve = conf.resolver
-      val outputNames = outputSet.map(_.name)
-      def isOutputColumn(col: AttributeReference): Boolean = {
-        outputNames.exists(name => resolve(col.name, name))
-      }
-      // filter out the metadata struct column if it has the name conflicting with output columns.
-      // if the file has a column "_metadata",
-      // then the data column should be returned not the metadata struct column
-      Seq(FileFormat.createFileMetadataCol(relation.fileFormat)).filterNot(isOutputColumn)
+      metadataOutputWithOutConflicts(Seq(relation.fileFormat.createFileMetadataCol()))
     case _ => Nil
   }
 
   override def withMetadataColumns(): LogicalRelation = {
-    if (metadataOutput.nonEmpty) {
-      this.copy(output = output ++ metadataOutput)
+    val newMetadata = metadataOutput.filterNot(outputSet.contains)
+    if (newMetadata.nonEmpty) {
+      val newRelation = this.copy(output = output ++ newMetadata)
+      newRelation.copyTagsFrom(this)
+      newRelation
     } else {
       this
     }
@@ -96,13 +92,13 @@ object LogicalRelation {
     // The v1 source may return schema containing char/varchar type. We replace char/varchar
     // with "annotated" string type here as the query engine doesn't support char/varchar yet.
     val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(relation.schema)
-    LogicalRelation(relation, schema.toAttributes, None, isStreaming)
+    LogicalRelation(relation, toAttributes(schema), None, isStreaming)
   }
 
   def apply(relation: BaseRelation, table: CatalogTable): LogicalRelation = {
     // The v1 source may return schema containing char/varchar type. We replace char/varchar
     // with "annotated" string type here as the query engine doesn't support char/varchar yet.
     val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(relation.schema)
-    LogicalRelation(relation, schema.toAttributes, Some(table), false)
+    LogicalRelation(relation, toAttributes(schema), Some(table), false)
   }
 }

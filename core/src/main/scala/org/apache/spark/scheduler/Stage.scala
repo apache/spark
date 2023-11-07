@@ -70,6 +70,7 @@ private[scheduler] abstract class Stage(
 
   /** The ID to use for the next new attempt for this stage. */
   private var nextAttemptId: Int = 0
+  private[scheduler] def getNextAttemptId: Int = nextAttemptId
 
   val name: String = callSite.shortForm
   val details: String = callSite.longForm

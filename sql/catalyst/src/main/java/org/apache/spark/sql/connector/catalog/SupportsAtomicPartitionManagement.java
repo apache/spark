@@ -23,6 +23,7 @@ import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException;
 import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException;
+import org.apache.spark.sql.errors.QueryExecutionErrors;
 
 /**
  * An atomic partition interface of {@link Table} to operate multiple partitions atomically.
@@ -54,7 +55,8 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
     try {
       createPartitions(new InternalRow[]{ident}, new Map[]{properties});
     } catch (PartitionsAlreadyExistException e) {
-      throw new PartitionsAlreadyExistException(e.getMessage());
+      throw new PartitionsAlreadyExistException("PARTITIONS_ALREADY_EXIST",
+              e.messageParameters());
     }
   }
 
@@ -106,7 +108,7 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
    */
   default boolean purgePartitions(InternalRow[] idents)
     throws NoSuchPartitionException, UnsupportedOperationException {
-    throw new UnsupportedOperationException("Partition purge is not supported");
+    throw QueryExecutionErrors.unsupportedPurgePartitionError();
   }
 
   /**

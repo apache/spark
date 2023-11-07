@@ -44,6 +44,26 @@ class SQLShuffleReadMetricsReporter(
     metrics(SQLShuffleReadMetricsReporter.FETCH_WAIT_TIME)
   private[this] val _recordsRead =
     metrics(SQLShuffleReadMetricsReporter.RECORDS_READ)
+  private[this] val _corruptMergedBlockChunks =
+    metrics(SQLShuffleReadMetricsReporter.CORRUPT_MERGED_BLOCK_CHUNKS)
+  private[this] val _mergedFetchFallbackCount =
+    metrics(SQLShuffleReadMetricsReporter.MERGED_FETCH_FALLBACK_COUNT)
+  private[this] val _remoteMergedBlocksFetched =
+    metrics(SQLShuffleReadMetricsReporter.REMOTE_MERGED_BLOCKS_FETCHED)
+  private[this] val _localMergedBlocksFetched =
+    metrics(SQLShuffleReadMetricsReporter.LOCAL_MERGED_BLOCKS_FETCHED)
+  private[this] val _remoteMergedChunksFetched =
+    metrics(SQLShuffleReadMetricsReporter.REMOTE_MERGED_CHUNKS_FETCHED)
+  private[this] val _localMergedChunksFetched =
+    metrics(SQLShuffleReadMetricsReporter.LOCAL_MERGED_CHUNKS_FETCHED)
+  private[this] val _remoteMergedBytesRead =
+    metrics(SQLShuffleReadMetricsReporter.REMOTE_MERGED_BYTES_READ)
+  private[this] val _localMergedBytesRead =
+    metrics(SQLShuffleReadMetricsReporter.LOCAL_MERGED_BYTES_READ)
+  private[this] val _remoteReqsDuration =
+    metrics(SQLShuffleReadMetricsReporter.REMOTE_REQS_DURATION)
+  private[this] val _remoteMergedReqsDuration =
+    metrics(SQLShuffleReadMetricsReporter.REMOTE_MERGED_REQS_DURATION)
 
   override def incRemoteBlocksFetched(v: Long): Unit = {
     _remoteBlocksFetched.add(v)
@@ -73,6 +93,46 @@ class SQLShuffleReadMetricsReporter(
     _recordsRead.add(v)
     tempMetrics.incRecordsRead(v)
   }
+  override def incCorruptMergedBlockChunks(v: Long): Unit = {
+    _corruptMergedBlockChunks.add(v)
+    tempMetrics.incCorruptMergedBlockChunks(v)
+  }
+  override def incMergedFetchFallbackCount(v: Long): Unit = {
+    _mergedFetchFallbackCount.add(v)
+    tempMetrics.incMergedFetchFallbackCount(v)
+  }
+  override def incRemoteMergedBlocksFetched(v: Long): Unit = {
+    _remoteMergedBlocksFetched.add(v)
+    tempMetrics.incRemoteMergedBlocksFetched(v)
+  }
+  override def incLocalMergedBlocksFetched(v: Long): Unit = {
+    _localMergedBlocksFetched.add(v)
+    tempMetrics.incLocalMergedBlocksFetched(v)
+  }
+  override def incRemoteMergedChunksFetched(v: Long): Unit = {
+    _remoteMergedChunksFetched.add(v)
+    tempMetrics.incRemoteMergedChunksFetched(v)
+  }
+  override def incLocalMergedChunksFetched(v: Long): Unit = {
+    _localMergedChunksFetched.add(v)
+    tempMetrics.incLocalMergedChunksFetched(v)
+  }
+  override def incRemoteMergedBytesRead(v: Long): Unit = {
+    _remoteMergedBytesRead.add(v)
+    tempMetrics.incRemoteMergedBytesRead(v)
+  }
+  override def incLocalMergedBytesRead(v: Long): Unit = {
+    _localMergedBytesRead.add(v)
+    tempMetrics.incLocalMergedBytesRead(v)
+  }
+  override def incRemoteReqsDuration(v: Long): Unit = {
+    _remoteReqsDuration.add(v)
+    tempMetrics.incRemoteReqsDuration(v)
+  }
+  override def incRemoteMergedReqsDuration(v: Long): Unit = {
+    _remoteMergedReqsDuration.add(v)
+    tempMetrics.incRemoteMergedReqsDuration(v)
+  }
 }
 
 object SQLShuffleReadMetricsReporter {
@@ -83,6 +143,16 @@ object SQLShuffleReadMetricsReporter {
   val LOCAL_BYTES_READ = "localBytesRead"
   val FETCH_WAIT_TIME = "fetchWaitTime"
   val RECORDS_READ = "recordsRead"
+  val CORRUPT_MERGED_BLOCK_CHUNKS = "corruptMergedBlockChunks"
+  val MERGED_FETCH_FALLBACK_COUNT = "mergedFetchFallbackCount"
+  val REMOTE_MERGED_BLOCKS_FETCHED = "remoteMergedBlocksFetched"
+  val LOCAL_MERGED_BLOCKS_FETCHED = "localMergedBlocksFetched"
+  val REMOTE_MERGED_CHUNKS_FETCHED = "remoteMergedChunksFetched"
+  val LOCAL_MERGED_CHUNKS_FETCHED = "localMergedChunksFetched"
+  val REMOTE_MERGED_BYTES_READ = "remoteMergedBytesRead"
+  val LOCAL_MERGED_BYTES_READ = "localMergedBytesRead"
+  val REMOTE_REQS_DURATION = "remoteReqsDuration"
+  val REMOTE_MERGED_REQS_DURATION = "remoteMergedReqsDuration"
 
   /**
    * Create all shuffle read relative metrics and return the Map.
@@ -94,7 +164,19 @@ object SQLShuffleReadMetricsReporter {
     REMOTE_BYTES_READ_TO_DISK -> SQLMetrics.createSizeMetric(sc, "remote bytes read to disk"),
     LOCAL_BYTES_READ -> SQLMetrics.createSizeMetric(sc, "local bytes read"),
     FETCH_WAIT_TIME -> SQLMetrics.createTimingMetric(sc, "fetch wait time"),
-    RECORDS_READ -> SQLMetrics.createMetric(sc, "records read"))
+    RECORDS_READ -> SQLMetrics.createMetric(sc, "records read"),
+    CORRUPT_MERGED_BLOCK_CHUNKS -> SQLMetrics.createMetric(sc, "corrupt merged block chunks"),
+    MERGED_FETCH_FALLBACK_COUNT -> SQLMetrics.createMetric(sc, "merged fetch fallback count"),
+    REMOTE_MERGED_BLOCKS_FETCHED -> SQLMetrics.createMetric(sc, "remote merged blocks fetched"),
+    LOCAL_MERGED_BLOCKS_FETCHED -> SQLMetrics.createMetric(sc, "local merged blocks fetched"),
+    REMOTE_MERGED_CHUNKS_FETCHED -> SQLMetrics.createMetric(sc, "remote merged chunks fetched"),
+    LOCAL_MERGED_CHUNKS_FETCHED -> SQLMetrics.createMetric(sc, "local merged chunks fetched"),
+    REMOTE_MERGED_BYTES_READ -> SQLMetrics.createSizeMetric(sc,
+      "remote merged bytes read"),
+    LOCAL_MERGED_BYTES_READ -> SQLMetrics.createSizeMetric(sc,
+      "local merged bytes read"),
+    REMOTE_REQS_DURATION -> SQLMetrics.createTimingMetric(sc, "remote reqs duration"),
+    REMOTE_MERGED_REQS_DURATION -> SQLMetrics.createTimingMetric(sc, "remote merged reqs duration"))
 }
 
 /**
@@ -117,7 +199,7 @@ class SQLShuffleWriteMetricsReporter(
     _bytesWritten.add(v)
   }
   override def decRecordsWritten(v: Long): Unit = {
-    metricsReporter.decBytesWritten(v)
+    metricsReporter.decRecordsWritten(v)
     _recordsWritten.set(_recordsWritten.value - v)
   }
   override def incRecordsWritten(v: Long): Unit = {

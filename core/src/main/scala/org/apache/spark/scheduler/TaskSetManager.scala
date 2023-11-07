@@ -36,7 +36,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.util.{AccumulatorV2, Clock, LongAccumulator, SystemClock, Utils}
-import org.apache.spark.util.collection.MedianHeap
+import org.apache.spark.util.collection.PercentileHeap
 
 /**
  * Schedules the tasks within a single TaskSet in the TaskSchedulerImpl. This class keeps track of
@@ -63,11 +63,6 @@ private[spark] class TaskSetManager(
 
   private val conf = sched.sc.conf
 
-  // SPARK-21563 make a copy of the jars/files so they are consistent across the TaskSet
-  private val addedJars = HashMap[String, Long](sched.sc.addedJars.toSeq: _*)
-  private val addedFiles = HashMap[String, Long](sched.sc.addedFiles.toSeq: _*)
-  private val addedArchives = HashMap[String, Long](sched.sc.addedArchives.toSeq: _*)
-
   val maxResultSize = conf.get(config.MAX_RESULT_SIZE)
 
   // Serializer for closures and tasks.
@@ -76,6 +71,8 @@ private[spark] class TaskSetManager(
 
   val tasks = taskSet.tasks
   private val isShuffleMapTasks = tasks(0).isInstanceOf[ShuffleMapTask]
+  // shuffleId is only available when isShuffleMapTasks=true
+  private val shuffleId = taskSet.shuffleId
   private[scheduler] val partitionToIndex = tasks.zipWithIndex
     .map { case (t, idx) => t.partitionId -> idx }.toMap
   val numTasks = tasks.length
@@ -197,7 +194,7 @@ private[spark] class TaskSetManager(
   // Use a MedianHeap to record durations of successful tasks so we know when to launch
   // speculative tasks. This is only used when speculation is enabled, to avoid the overhead
   // of inserting into the heap when the heap won't be used.
-  val successfulTaskDurations = new MedianHeap()
+  val successfulTaskDurations = new PercentileHeap()
 
   // How frequently to reprint duplicate exceptions in full, in milliseconds
   val EXCEPTION_PRINT_INTERVAL =
@@ -566,9 +563,7 @@ private[spark] class TaskSetManager(
       tName,
       index,
       task.partitionId,
-      addedFiles,
-      addedJars,
-      addedArchives,
+      task.artifacts,
       task.localProperties,
       taskCpus,
       taskResourceAssignments,
@@ -1004,7 +999,6 @@ private[spark] class TaskSetManager(
   }
 
   def abort(message: String, exception: Option[Throwable] = None): Unit = sched.synchronized {
-    // TODO: Kill running tasks if we were not terminated due to a Mesos error
     sched.dagScheduler.taskSetFailed(taskSet, message, exception)
     isZombie = true
     maybeFinishTaskSet()
@@ -1038,7 +1032,7 @@ private[spark] class TaskSetManager(
 
   override def removeSchedulable(schedulable: Schedulable): Unit = {}
 
-  override def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager] = {
+  override def getSortedTaskSetQueue: ArrayBuffer[TaskSetManager] = {
     val sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]()
     sortedTaskSetQueue += this
     sortedTaskSetQueue
@@ -1046,17 +1040,46 @@ private[spark] class TaskSetManager(
 
   /** Called by TaskScheduler when an executor is lost so we can re-enqueue our tasks */
   override def executorLost(execId: String, host: String, reason: ExecutorLossReason): Unit = {
-    // Re-enqueue any tasks that ran on the failed executor if this is a shuffle map stage,
-    // and we are not using an external shuffle server which could serve the shuffle outputs.
-    // The reason is the next stage wouldn't be able to fetch the data from this dead executor
-    // so we would need to rerun these tasks on other executors.
-    if (isShuffleMapTasks && !env.blockManager.externalShuffleServiceEnabled && !isZombie) {
+    // Re-enqueue any tasks with potential shuffle data loss that ran on the failed executor
+    // if this is a shuffle map stage, and we are not using an external shuffle server which
+    // could serve the shuffle outputs or the executor lost is caused by decommission (which
+    // can destroy the whole host). The reason is the next stage wouldn't be able to fetch the
+    // data from this dead executor so we would need to rerun these tasks on other executors.
+    val maybeShuffleMapOutputLoss = isShuffleMapTasks &&
+      !sched.sc.shuffleDriverComponents.supportsReliableStorage() &&
+      (reason.isInstanceOf[ExecutorDecommission] || !env.blockManager.externalShuffleServiceEnabled)
+    if (maybeShuffleMapOutputLoss && !isZombie) {
       for ((tid, info) <- taskInfos if info.executorId == execId) {
         val index = info.index
+        lazy val isShuffleMapOutputAvailable = reason match {
+          case ExecutorDecommission(_, _) =>
+            val mapId = if (conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
+              info.partitionId
+            } else {
+              tid
+            }
+            val locationOpt = env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+              .getMapOutputLocation(shuffleId.get, mapId)
+            // There are 3 cases of locationOpt:
+            // 1) locationOpt.isDefined && locationOpt.get.host == host:
+            //    this case implies that the shuffle map output is still on the lost executor. The
+            //    map output file is supposed to lose so we should rerun this task;
+            // 2) locationOpt.isDefined && locationOpt.get.host != host:
+            //    this case implies that the shuffle map output has been migrated to another
+            //    host. The task doesn't need to rerun;
+            // 3) locationOpt.isEmpty:
+            //    This shouldn't not happen ideally since TaskSetManager handles executor lost first
+            //    before DAGScheduler. So the map statues for the successful task must be available
+            //    at this moment. keep it here in case the handling order changes.
+            locationOpt.exists(_.host != host)
+
+          case _ => false
+        }
         // We may have a running task whose partition has been marked as successful,
         // this partition has another task completed in another stage attempt.
         // We treat it as a running task and will call handleFailedTask later.
-        if (successful(index) && !info.running && !killedByOtherAttempt.contains(tid)) {
+        if (successful(index) && !info.running && !killedByOtherAttempt.contains(tid) &&
+            !isShuffleMapOutputAvailable) {
           successful(index) = false
           copiesRunning(index) -= 1
           tasksSuccessful -= 1
@@ -1129,7 +1152,7 @@ private[spark] class TaskSetManager(
               // config executorDecommissionKillInterval. If the task is going to finish after
               // decommissioning, then we will eagerly speculate the task.
               val taskEndTimeBasedOnMedianDuration =
-                info.launchTime + successfulTaskDurations.median
+                info.launchTime + successfulTaskDurations.percentile()
               val executorDecomTime = decomState.startTime + executorDecommissionKillInterval.get
               executorDecomTime < taskEndTimeBasedOnMedianDuration
             }
@@ -1143,7 +1166,7 @@ private[spark] class TaskSetManager(
               " than %.0f ms(%d speculatable tasks in this taskset now)")
               .format(index, taskSet.id, info.host, threshold, speculatableTasks.size + 1))
           speculatableTasks += index
-          sched.dagScheduler.speculativeTaskSubmitted(tasks(index))
+          sched.dagScheduler.speculativeTaskSubmitted(tasks(index), index)
         }
         foundTasksResult |= speculated
       }
@@ -1172,7 +1195,7 @@ private[spark] class TaskSetManager(
     val numSuccessfulTasks = successfulTaskDurations.size()
     val timeMs = clock.getTimeMillis()
     if (numSuccessfulTasks >= minFinishedForSpeculation) {
-      val medianDuration = successfulTaskDurations.median
+      val medianDuration = successfulTaskDurations.percentile()
       val threshold = max(speculationMultiplier * medianDuration, minTimeToSpeculation)
       // TODO: Threshold should also look at standard deviation of task durations and have a lower
       // bound based on that.

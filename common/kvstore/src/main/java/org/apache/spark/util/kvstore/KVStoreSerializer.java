@@ -49,7 +49,7 @@ public class KVStoreSerializer {
     this.mapper = new ObjectMapper();
   }
 
-  public final byte[] serialize(Object o) throws Exception {
+  public byte[] serialize(Object o) throws Exception {
     if (o instanceof String) {
       return ((String) o).getBytes(UTF_8);
     } else {
@@ -62,7 +62,7 @@ public class KVStoreSerializer {
   }
 
   @SuppressWarnings("unchecked")
-  public final <T> T deserialize(byte[] data, Class<T> klass) throws Exception {
+  public <T> T deserialize(byte[] data, Class<T> klass) throws Exception {
     if (klass.equals(String.class)) {
       return (T) new String(data, UTF_8);
     } else {

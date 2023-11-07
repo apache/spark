@@ -19,14 +19,14 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.scalatest.Assertions._
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Count, Max}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.{Cross, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Cross, Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
@@ -94,10 +94,29 @@ case class TestFunction(
     copy(children = newChildren)
 }
 
-case class UnresolvedTestPlan() extends LeafNode {
-  override lazy val resolved = false
-  override def output: Seq[Attribute] = Nil
+case class TestFunctionWithTypeCheckFailure(
+    children: Seq[Expression],
+    inputTypes: Seq[AbstractDataType])
+  extends Expression with Unevaluable {
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    for ((child, idx) <- children.zipWithIndex) {
+      val expectedDataType = inputTypes(idx)
+      if (child.dataType != expectedDataType) {
+        return TypeCheckResult.TypeCheckFailure(
+          s"Expression must be a ${expectedDataType.simpleString}")
+      }
+    }
+    TypeCheckResult.TypeCheckSuccess
+  }
+
+  override def nullable: Boolean = true
+  override def dataType: DataType = StringType
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(children = newChildren)
 }
+
+case class UnresolvedTestPlan() extends UnresolvedLeafNode
 
 class AnalysisErrorSuite extends AnalysisTest {
   import TestRelations._
@@ -119,7 +138,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       messageParameters: Map[String, String],
       caseSensitive: Boolean = true): Unit = {
     test(name) {
-      assertAnalysisErrorClass(plan, errorClass, messageParameters, caseSensitive)
+      assertAnalysisErrorClass(plan, errorClass, messageParameters, caseSensitive = caseSensitive)
     }
   }
 
@@ -171,7 +190,17 @@ class AnalysisErrorSuite extends AnalysisTest {
       "inputType" -> "\"DATE\"",
       "requiredType" -> "\"INT\""))
 
-  errorTest(
+  errorClassTest(
+    "SPARK-44477: type check failure",
+    testRelation.select(
+      TestFunctionWithTypeCheckFailure(dateLit :: Nil, BinaryType :: Nil).as("a")),
+    errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+    messageParameters = Map(
+      "sqlExpr" -> "\"testfunctionwithtypecheckfailure(NULL)\"",
+      "msg" -> "Expression must be a binary",
+      "hint" -> ""))
+
+  errorClassTest(
     "invalid window function",
     testRelation2.select(
       WindowExpression(
@@ -180,9 +209,10 @@ class AnalysisErrorSuite extends AnalysisTest {
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           UnspecifiedFrame)).as("window")),
-    "not supported within a window function" :: Nil)
+    errorClass = "UNSUPPORTED_EXPR_FOR_WINDOW",
+    messageParameters = Map("sqlExpr" -> "\"0\""))
 
-  errorTest(
+  errorClassTest(
     "distinct aggregate function in window",
     testRelation2.select(
       WindowExpression(
@@ -191,7 +221,12 @@ class AnalysisErrorSuite extends AnalysisTest {
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           UnspecifiedFrame)).as("window")),
-    "Distinct window functions are not supported" :: Nil)
+    errorClass = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
+    messageParameters = Map("windowExpr" ->
+      s"""
+         |"count(DISTINCT b) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST
+         | RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)"
+         |""".stripMargin.replaceAll("\n", "")))
 
   errorTest(
     "window aggregate function with filter predicate",
@@ -257,11 +292,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     CatalystSqlParser.parsePlan("SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) " +
       "IGNORE NULLS"), "Function aggregate does not support IGNORE NULLS" :: Nil)
 
-  errorTest(
-    "nested aggregate functions",
+  errorClassTest(
+    name = "nested aggregate functions",
     testRelation.groupBy($"a")(
       Max(Count(Literal(1)).toAggregateExpression()).toAggregateExpression()),
-    "not allowed to use an aggregate function in the argument of another aggregate function." :: Nil
+    errorClass = "NESTED_AGGREGATE_FUNCTION",
+    messageParameters = Map.empty
   )
 
   errorTest(
@@ -275,7 +311,7 @@ class AnalysisErrorSuite extends AnalysisTest {
           SpecifiedWindowFrame(RangeFrame, Literal(1), Literal(2)))).as("window")),
     "Cannot specify window frame for lead function" :: Nil)
 
-  errorTest(
+  errorClassTest(
     "the offset of nth_value window function is negative or zero",
     testRelation2.select(
       WindowExpression(
@@ -284,7 +320,12 @@ class AnalysisErrorSuite extends AnalysisTest {
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           SpecifiedWindowFrame(RowFrame, Literal(0), Literal(0)))).as("window")),
-    "The 'offset' argument of nth_value must be greater than zero but it is 0." :: Nil)
+    errorClass = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+    messageParameters = Map(
+      "sqlExpr" -> "\"nth_value(b, 0)\"",
+      "exprName" -> "offset",
+      "valueRange" -> "(0, 9223372036854775807]",
+      "currentValue" -> "0L"))
 
   errorClassTest(
     "the offset of nth_value window function is not int literal",
@@ -322,15 +363,21 @@ class AnalysisErrorSuite extends AnalysisTest {
     "UNRESOLVED_COLUMN.WITH_SUGGESTION",
     Map("objectName" -> "`havingCondition`", "proposal" -> "`max(b)`"))
 
-  errorTest(
+  errorClassTest(
     "unresolved star expansion in max",
     testRelation2.groupBy($"a")(sum(UnresolvedStar(None))),
-    "Invalid usage of '*' in expression 'sum'." :: Nil)
+    errorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+    messageParameters = Map("elem" -> "'*'", "prettyName" -> "expression `sum`")
+  )
 
-  errorTest(
+  errorClassTest(
     "sorting by unsupported column types",
     mapRelation.orderBy($"map".asc),
-    "sort" :: "type" :: "map<int,int>" :: Nil)
+    errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+    messageParameters = Map(
+      "sqlExpr" -> "\"map ASC NULLS FIRST\"",
+      "functionName" -> "`sortorder`",
+      "dataType" -> "\"MAP<INT, INT>\""))
 
   errorClassTest(
     "sorting by attributes are not from grouping expressions",
@@ -338,44 +385,61 @@ class AnalysisErrorSuite extends AnalysisTest {
     "UNRESOLVED_COLUMN.WITH_SUGGESTION",
     Map("objectName" -> "`b`", "proposal" -> "`a`, `c`, `a3`"))
 
-  errorTest(
+  errorClassTest(
     "non-boolean filters",
     testRelation.where(Literal(1)),
-    "filter" :: "'1'" :: "not a boolean" :: Literal(1).dataType.simpleString :: Nil)
+    errorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
+    messageParameters = Map("sqlExpr" -> "\"1\"", "filter" -> "\"1\"", "type" -> "\"INT\""))
 
-  errorTest(
+  errorClassTest(
     "non-boolean join conditions",
     testRelation.join(testRelation, condition = Some(Literal(1))),
-    "condition" :: "'1'" :: "not a boolean" :: Literal(1).dataType.simpleString :: Nil)
+    errorClass = "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE",
+    messageParameters = Map("joinCondition" -> "\"1\"", "conditionType" -> "\"INT\""))
 
-  errorTest(
+  errorClassTest(
     "missing group by",
     testRelation2.groupBy($"a")($"b"),
-    "\"b\"" :: "COLUMN_NOT_IN_GROUP_BY_CLAUSE" :: Nil
+    "MISSING_AGGREGATION",
+    messageParameters = Map(
+      "expression" -> "\"b\"",
+      "expressionAnyValue" -> "\"any_value(b)\"")
   )
 
-  errorTest(
+  errorClassTest(
     "ambiguous field",
     nestedRelation.select($"top.duplicateField"),
-    "Ambiguous reference to fields" :: "duplicateField" :: Nil,
-    caseSensitive = false)
+    errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+    messageParameters = Map(
+      "field" -> "`duplicateField`",
+      "count" -> "2"),
+    caseSensitive = false
+  )
 
-  errorTest(
+  errorClassTest(
     "ambiguous field due to case insensitivity",
     nestedRelation.select($"top.differentCase"),
-    "Ambiguous reference to fields" :: "differentCase" :: "differentcase" :: Nil,
-    caseSensitive = false)
+    errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+    messageParameters = Map(
+      "field" -> "`differentCase`",
+      "count" -> "2"),
+    caseSensitive = false
+  )
 
-  errorTest(
+  errorClassTest(
     "missing field",
     nestedRelation2.select($"top.c"),
-    "No such struct field" :: "aField" :: "bField" :: "cField" :: Nil,
+    "FIELD_NOT_FOUND",
+    Map("fieldName" -> "`c`", "fields" -> "`aField`, `bField`, `cField`"),
     caseSensitive = false)
 
-  errorTest(
-    "catch all unresolved plan",
-    UnresolvedTestPlan(),
-    "unresolved" :: Nil)
+  checkError(
+    exception = intercept[SparkException] {
+      val analyzer = getAnalyzer
+      analyzer.checkAnalysis(analyzer.execute(UnresolvedTestPlan()))
+    },
+    errorClass = "INTERNAL_ERROR",
+    parameters = Map("message" -> "Found the unresolved operator: 'UnresolvedTestPlan"))
 
   errorTest(
     "union with unequal number of columns",
@@ -430,69 +494,133 @@ class AnalysisErrorSuite extends AnalysisTest {
     // When parse SQL string, we will wrap aggregate expressions with UnresolvedAlias.
     testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
     "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-    Map("objectName" -> "`bad_column`", "proposal" -> "`a`, `b`, `c`, `d`, `e`"))
+    Map("objectName" -> "`bad_column`", "proposal" -> "`a`, `c`, `d`, `b`, `e`"))
 
-  errorTest(
+  errorClassTest(
     "slide duration greater than window in time window",
     testRelation2.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "2 second", "0 second").as("window")),
-      s"The slide duration " :: " must be less than or equal to the windowDuration " :: Nil
+    "DATATYPE_MISMATCH.PARAMETER_CONSTRAINT_VIOLATION",
+    Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 2000000, 0)\"",
+      "leftExprName" -> "`slide_duration`",
+      "leftExprValue" -> "2000000L",
+      "constraint" -> "<=",
+      "rightExprName" -> "`window_duration`",
+      "rightExprValue" -> "1000000L"
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "start time greater than slide duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "1 minute").as("window")),
-      "The absolute value of start time " :: " must be less than the slideDuration " :: Nil
+    "DATATYPE_MISMATCH.PARAMETER_CONSTRAINT_VIOLATION",
+    Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 1000000, 60000000)\"",
+      "leftExprName" -> "`abs(start_time)`",
+      "leftExprValue" -> "60000000L",
+      "constraint" -> "<",
+      "rightExprName" -> "`slide_duration`",
+      "rightExprValue" -> "1000000L"
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "start time equal to slide duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "1 second").as("window")),
-      "The absolute value of start time " :: " must be less than the slideDuration " :: Nil
+    "DATATYPE_MISMATCH.PARAMETER_CONSTRAINT_VIOLATION",
+    Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 1000000, 1000000)\"",
+      "leftExprName" -> "`abs(start_time)`",
+      "leftExprValue" -> "1000000L",
+      "constraint" -> "<",
+      "rightExprName" -> "`slide_duration`",
+      "rightExprValue" -> "1000000L"
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "SPARK-21590: absolute value of start time greater than slide duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "-1 minute").as("window")),
-    "The absolute value of start time " :: " must be less than the slideDuration " :: Nil
+    "DATATYPE_MISMATCH.PARAMETER_CONSTRAINT_VIOLATION",
+    Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 1000000, -60000000)\"",
+      "leftExprName" -> "`abs(start_time)`",
+      "leftExprValue" -> "60000000L",
+      "constraint" -> "<",
+      "rightExprName" -> "`slide_duration`",
+      "rightExprValue" -> "1000000L"
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "SPARK-21590: absolute value of start time equal to slide duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "-1 second").as("window")),
-    "The absolute value of start time " :: " must be less than the slideDuration " :: Nil
+    "DATATYPE_MISMATCH.PARAMETER_CONSTRAINT_VIOLATION",
+    Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 1000000, -1000000)\"",
+      "leftExprName" -> "`abs(start_time)`",
+      "leftExprValue" -> "1000000L",
+      "constraint" -> "<",
+      "rightExprName" -> "`slide_duration`",
+      "rightExprValue" -> "1000000L"
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "negative window duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "-1 second", "1 second", "0 second").as("window")),
-      "The window duration " :: " must be greater than 0." :: Nil
+      "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+    Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, -1000000, 1000000, 0)\"",
+      "exprName" -> "`window_duration`",
+      "valueRange" -> s"(0, 9223372036854775807]",
+      "currentValue" -> "-1000000L"
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "zero window duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "0 second", "1 second", "0 second").as("window")),
-      "The window duration " :: " must be greater than 0." :: Nil
+    "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+    Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 0, 1000000, 0)\"",
+      "exprName" -> "`window_duration`",
+      "valueRange" -> "(0, 9223372036854775807]",
+      "currentValue" -> "0L"
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "negative slide duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "-1 second", "0 second").as("window")),
-      "The slide duration " :: " must be greater than 0." :: Nil
+    "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+    Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, -1000000, 0)\"",
+      "exprName" -> "`slide_duration`",
+      "valueRange" -> "(0, 9223372036854775807]",
+      "currentValue" -> "-1000000L"
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "zero slide duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "0 second", "0 second").as("window")),
-      "The slide duration" :: " must be greater than 0." :: Nil
+    "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+    Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 0, 0)\"",
+      "exprName" -> "`slide_duration`",
+      "valueRange" -> "(0, 9223372036854775807]",
+      "currentValue" -> "0L"
+    )
   )
 
   errorTest(
@@ -534,49 +662,97 @@ class AnalysisErrorSuite extends AnalysisTest {
     "The generator is not supported: outside the SELECT clause, found: Sort" :: Nil
   )
 
-  errorTest(
+  errorClassTest(
+    "an evaluated limit class must not be string",
+    testRelation.limit(Literal(UTF8String.fromString("abc"), StringType)),
+    "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
+    Map(
+      "name" -> "limit",
+      "expr" -> "\"abc\"",
+      "dataType" -> "\"STRING\""
+    )
+  )
+
+  errorClassTest(
+    "an evaluated limit class must not be long",
+    testRelation.limit(Literal(10L, LongType)),
+    "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
+    Map(
+      "name" -> "limit",
+      "expr" -> "\"10\"",
+      "dataType" -> "\"BIGINT\""
+    )
+  )
+
+  errorClassTest(
     "an evaluated limit class must not be null",
     testRelation.limit(Literal(null, IntegerType)),
-    "The evaluated limit expression must not be null, but got " :: Nil
+    "INVALID_LIMIT_LIKE_EXPRESSION.IS_NULL",
+    Map(
+      "name" -> "limit",
+      "expr" -> "\"NULL\""
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "num_rows in limit clause must be equal to or greater than 0",
     listRelation.limit(-1),
-    "The limit expression must be equal to or greater than 0, but got -1" :: Nil
+    "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
+    Map(
+      "name" -> "limit",
+      "expr" -> "\"-1\"",
+      "v" -> "-1"
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "an evaluated offset class must not be string",
     testRelation.offset(Literal(UTF8String.fromString("abc"), StringType)),
-    "The offset expression must be integer type, but got string" :: Nil
+    "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
+    Map(
+      "name" -> "offset",
+      "expr" -> "\"abc\"",
+      "dataType" -> "\"STRING\""
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "an evaluated offset class must not be long",
     testRelation.offset(Literal(10L, LongType)),
-    "The offset expression must be integer type, but got bigint" :: Nil
+    "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
+    Map(
+      "name" -> "offset",
+      "expr" -> "\"10\"",
+      "dataType" -> "\"BIGINT\""
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "an evaluated offset class must not be null",
     testRelation.offset(Literal(null, IntegerType)),
-    "The evaluated offset expression must not be null, but got " :: Nil
+    "INVALID_LIMIT_LIKE_EXPRESSION.IS_NULL",
+    Map(
+      "name" -> "offset",
+      "expr" -> "\"NULL\""
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "num_rows in offset clause must be equal to or greater than 0",
     testRelation.offset(-1),
-    "The offset expression must be equal to or greater than 0, but got -1" :: Nil
+    "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
+    Map(
+      "name" -> "offset",
+      "expr" -> "\"-1\"",
+      "v" -> "-1"
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "the sum of num_rows in limit clause and num_rows in offset clause less than Int.MaxValue",
     testRelation.offset(Literal(2000000000, IntegerType)).limit(Literal(1000000000, IntegerType)),
-    "The sum of the LIMIT clause and the OFFSET clause must not be greater than" +
-      " the maximum 32-bit integer value (2,147,483,647)," +
-      " but found limit = 1000000000, offset = 2000000000." :: Nil
-  )
+    "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT",
+    Map("limit" -> "1000000000", "offset" -> "2000000000"))
 
   errorTest(
     "more than one generators in SELECT",
@@ -624,27 +800,92 @@ class AnalysisErrorSuite extends AnalysisTest {
 
     assert(plan.resolved)
 
-    val resolved = s"${attrA.toString},${attrC.toString}"
-
-    val errorMsg = s"Resolved attribute(s) $resolved missing from ${otherA.toString} " +
-                     s"in operator !Aggregate [${aliases.mkString(", ")}]. " +
-                     s"Attribute(s) with the same name appear in the operation: a. " +
-                     "Please check if the right attribute(s) are used."
-
-    assertAnalysisError(plan, errorMsg :: Nil)
+    assertAnalysisErrorClass(
+      inputPlan = plan,
+      expectedErrorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
+      expectedMessageParameters = Map(
+        "missingAttributes" -> "\"a\", \"c\"",
+        "input" -> "\"a\"",
+        "operator" -> s"!Aggregate [${aliases.mkString(", ")}]",
+        "operation" -> "\"a\""
+      )
+    )
   }
 
   test("error test for self-join") {
     val join = Join(testRelation, testRelation, Cross, None, JoinHint.NONE)
-    val error = intercept[AnalysisException] {
-      SimpleAnalyzer.checkAnalysis(join)
-    }
-    assert(error.message.contains("Failure when resolving conflicting references in Join"))
-    assert(error.message.contains("Conflicting attributes"))
+    checkError(
+      exception = intercept[SparkException] {
+        SimpleAnalyzer.checkAnalysis(join)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        """
+          |Failure when resolving conflicting references in Join:
+          |'Join Cross
+          |:- LocalRelation <empty>, [a#x]
+          |+- LocalRelation <empty>, [a#x]
+          |
+          |Conflicting attributes: "a".""".stripMargin))
+  }
+
+  test("error test for self-intersect") {
+    val intersect = Intersect(testRelation, testRelation, true)
+    checkError(
+      exception = intercept[SparkException] {
+        SimpleAnalyzer.checkAnalysis(intersect)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        """
+          |Failure when resolving conflicting references in Intersect All:
+          |'Intersect All true
+          |:- LocalRelation <empty>, [a#x]
+          |+- LocalRelation <empty>, [a#x]
+          |
+          |Conflicting attributes: "a".""".stripMargin))
+  }
+
+  test("error test for self-except") {
+    val except = Except(testRelation, testRelation, true)
+    checkError(
+      exception = intercept[SparkException] {
+        SimpleAnalyzer.checkAnalysis(except)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        """
+          |Failure when resolving conflicting references in Except All:
+          |'Except All true
+          |:- LocalRelation <empty>, [a#x]
+          |+- LocalRelation <empty>, [a#x]
+          |
+          |Conflicting attributes: "a".""".stripMargin))
+  }
+
+  test("error test for self-asOfJoin") {
+    val asOfJoin =
+      AsOfJoin(testRelation, testRelation, testRelation.output(0), testRelation.output(0),
+      None, Inner, tolerance = None, allowExactMatches = true,
+      direction = AsOfJoinDirection("backward"))
+    checkError(
+      exception = intercept[SparkException] {
+        SimpleAnalyzer.checkAnalysis(asOfJoin)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        """
+          |Failure when resolving conflicting references in AsOfJoin:
+          |'AsOfJoin (a#x >= a#x), Inner
+          |:- LocalRelation <empty>, [a#x]
+          |+- LocalRelation <empty>, [a#x]
+          |
+          |Conflicting attributes: "a".""".stripMargin))
   }
 
   test("check grouping expression data types") {
-    def checkDataType(dataType: DataType, shouldSuccess: Boolean): Unit = {
+    def checkDataType(
+        dataType: DataType, shouldSuccess: Boolean, dataTypeMsg: String = ""): Unit = {
       val plan =
         Aggregate(
           AttributeReference("a", dataType)(exprId = ExprId(2)) :: Nil,
@@ -656,7 +897,14 @@ class AnalysisErrorSuite extends AnalysisTest {
       if (shouldSuccess) {
         assertAnalysisSuccess(plan, true)
       } else {
-        assertAnalysisError(plan, "expression a cannot be used as a grouping expression" :: Nil)
+        assertAnalysisErrorClass(
+          inputPlan = plan,
+          expectedErrorClass = "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE",
+          expectedMessageParameters = Map(
+            "sqlExpr" -> "\"a\"",
+            "dataType" -> dataTypeMsg
+          )
+        )
       }
     }
 
@@ -684,8 +932,11 @@ class AnalysisErrorSuite extends AnalysisTest {
         .add("f1", FloatType, nullable = true)
         .add("f2", MapType(StringType, LongType), nullable = true),
       new UngroupableUDT())
-    unsupportedDataTypes.foreach { dataType =>
-      checkDataType(dataType, shouldSuccess = false)
+    val expectedDataTypeParameters =
+      Seq("\"MAP<STRING, BIGINT>\"", "\"STRUCT<f1: FLOAT, f2: MAP<STRING, BIGINT>>\"")
+    unsupportedDataTypes.zip(expectedDataTypeParameters).foreach {
+      case (dataType, dataTypeMsg) =>
+        checkDataType(dataType, shouldSuccess = false, dataTypeMsg)
     }
   }
 
@@ -698,10 +949,11 @@ class AnalysisErrorSuite extends AnalysisTest {
           AttributeReference("a", IntegerType)(exprId = ExprId(2)),
           AttributeReference("b", IntegerType)(exprId = ExprId(1))))
 
-    assertAnalysisError(
-      plan,
-      "It is not allowed to use an aggregate function in the argument of " +
-        "another aggregate function." :: Nil)
+    assertAnalysisErrorClass(
+      inputPlan = plan,
+      expectedErrorClass = "NESTED_AGGREGATE_FUNCTION",
+      expectedMessageParameters = Map.empty
+    )
   }
 
   test("Join can work on binary types but can't work on map types") {
@@ -724,7 +976,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       inputPlan = plan2,
       expectedErrorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
       expectedMessageParameters = Map(
-        "functionName" -> "EqualTo",
+        "functionName" -> "`=`",
         "dataType" -> "\"MAP<STRING, STRING>\"",
         "sqlExpr" -> "\"(b = d)\""
       ),
@@ -770,26 +1022,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     assertAnalysisError(plan2, "Accessing outer query column is not allowed in" :: Nil)
 
     val plan3 = Filter(
-      Exists(Union(LocalRelation(b),
-        Filter(EqualTo(UnresolvedAttribute("a"), c), LocalRelation(c)))),
-      LocalRelation(a))
-    assertAnalysisError(plan3, "Accessing outer query column is not allowed in" :: Nil)
-
-    val plan4 = Filter(
-      Exists(
-        Limit(1,
-          Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b)))
-      ),
-      LocalRelation(a))
-    assertAnalysisError(plan4, "Accessing outer query column is not allowed in" :: Nil)
-
-    val plan5 = Filter(
       Exists(
         Sample(0.0, 0.5, false, 1L,
           Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b))).select("b")
       ),
       LocalRelation(a))
-    assertAnalysisError(plan5,
+    assertAnalysisError(plan3,
                         "Accessing outer query column is not allowed in" :: Nil)
   }
 
@@ -797,8 +1035,11 @@ class AnalysisErrorSuite extends AnalysisTest {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
     val plan = Filter($"a" === UnresolvedFunction("max", Seq(b), true), LocalRelation(a, b))
-    assertAnalysisError(plan,
-      "Aggregate/Window/Generate expressions are not valid in where clause of the query" :: Nil)
+    assertAnalysisErrorClass(plan,
+      expectedErrorClass = "INVALID_WHERE_CONDITION",
+      expectedMessageParameters = Map(
+        "condition" -> "\"(a = max(DISTINCT b))\"",
+        "expressionList" -> "max(DISTINCT b)"))
   }
 
   test("SPARK-30811: CTE should not cause stack overflow when " +
@@ -809,14 +1050,23 @@ class AnalysisErrorSuite extends AnalysisTest {
         Project(
           Alias(Literal(1), "x")() :: Nil,
           UnresolvedRelation(TableIdentifier("t", Option("nonexist")))))))
-    assertAnalysisError(plan, "Table or view not found:" :: Nil)
+    assertAnalysisErrorClass(plan,
+      expectedErrorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      Map("relationName" -> "`nonexist`.`t`"))
   }
 
-  test("SPARK-33909: Check rand functions seed is legal at analyer side") {
-    Seq(Rand("a".attr), Randn("a".attr)).foreach { r =>
-      val plan = Project(Seq(r.as("r")), testRelation)
-      assertAnalysisError(plan,
-        s"Input argument to ${r.prettyName} must be a constant." :: Nil)
+  test("SPARK-33909: Check rand functions seed is legal at analyzer side") {
+    Seq((Rand("a".attr), "\"rand(a)\""),
+      (Randn("a".attr), "\"randn(a)\"")).foreach {
+      case (r, expectedArg) =>
+        val plan = Project(Seq(r.as("r")), testRelation)
+        assertAnalysisErrorClass(plan,
+          expectedErrorClass = "SEED_EXPRESSION_IS_UNFOLDABLE",
+          expectedMessageParameters = Map(
+            "seedExpr" -> "\"a\"",
+            "exprWithSeed" -> expectedArg),
+          caseSensitive = false
+        )
     }
     Seq(
       Rand(1.0) -> ("\"rand(1.0)\"", "\"1.0\"", "\"DOUBLE\""),
@@ -832,7 +1082,8 @@ class AnalysisErrorSuite extends AnalysisTest {
           "inputSql" -> inputSql,
           "inputType" -> inputType,
           "requiredType" -> "(\"INT\" or \"BIGINT\")"),
-        caseSensitive = false)
+        caseSensitive = false
+      )
     }
   }
 
@@ -847,8 +1098,11 @@ class AnalysisErrorSuite extends AnalysisTest {
             t.as("t2")))
       ) :: Nil,
       sum($"c2").as("sum") :: Nil, t.as("t1"))
-    assertAnalysisError(plan, "Correlated scalar subqueries in the group by clause must also be " +
-      "in the aggregate expressions" :: Nil)
+    assertAnalysisErrorClass(
+      plan,
+      expectedErrorClass =
+        "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
+      expectedMessageParameters = Map.empty)
   }
 
   test("SPARK-34946: correlated scalar subquery in aggregate expressions only") {
@@ -862,44 +1116,40 @@ class AnalysisErrorSuite extends AnalysisTest {
           Filter($"t1.c1" === $"t2.c1",
             t.as("t2")))
       ).as("sub") :: Nil, t.as("t1"))
-    assertAnalysisError(plan, "Correlated scalar subquery 'scalarsubquery(t1.c1)' is " +
-      "neither present in the group by, nor in an aggregate function. Add it to group by " +
-      "using ordinal position or wrap it in first() (or first_value) if you don't care " +
-      "which value you get." :: Nil)
+    assertAnalysisErrorClass(
+      plan,
+      expectedErrorClass =
+        "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
+      expectedMessageParameters = Map("sqlExpr" -> "\"scalarsubquery(c1)\""))
   }
 
-  errorTest(
+  errorClassTest(
     "SPARK-34920: error code to error message",
     testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
-    "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with name " +
-      "`bad_column` cannot be resolved. Did you mean one of the following? " +
-      "[`a`, `b`, `c`, `d`, `e`]"
-      :: Nil)
+    errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+    messageParameters = Map(
+      "objectName" -> "`bad_column`",
+      "proposal" -> "`a`, `c`, `d`, `b`, `e`"))
 
-  test("SPARK-35080: Unsupported correlated equality predicates in subquery") {
-    val a = AttributeReference("a", IntegerType)()
-    val b = AttributeReference("b", IntegerType)()
-    val c = AttributeReference("c", IntegerType)()
-    val d = AttributeReference("d", DoubleType)()
-    val t1 = LocalRelation(a, b, d)
-    val t2 = LocalRelation(c)
-    val conditions = Seq(
-      (abs($"a") === $"c", "abs(a#x) = outer(c#x)"),
-      (abs($"a") <=> $"c", "abs(a#x) <=> outer(c#x)"),
-      ($"a" + 1 === $"c", "(a#x + 1) = outer(c#x)"),
-      ($"a" + $"b" === $"c", "(a#x + b#x) = outer(c#x)"),
-      ($"a" + $"c" === $"b", "(a#x + outer(c#x)) = b#x"),
-      (And($"a" === $"c", Cast($"d", IntegerType) === $"c"), "CAST(d#x AS INT) = outer(c#x)"))
-    conditions.foreach { case (cond, msg) =>
-      val plan = Project(
-        ScalarSubquery(
-          Aggregate(Nil, count(Literal(1)).as("cnt") :: Nil,
-            Filter(cond, t1))
-        ).as("sub") :: Nil,
-        t2)
-      assertAnalysisError(plan, s"Correlated column is not allowed in predicate: ($msg)" :: Nil)
-    }
-  }
+  errorClassTest(
+    "SPARK-39783: backticks in error message for candidate column with dots",
+    // This selects a column that does not exist,
+    // the error message suggest the existing column with correct backticks
+    testRelation6.select($"`the`.`id`"),
+    errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+    messageParameters = Map(
+      "objectName" -> "`the`.`id`",
+      "proposal" -> "`the.id`"))
+
+  errorClassTest(
+    "SPARK-39783: backticks in error message for candidate struct column",
+    // This selects a column that does not exist,
+    // the error message suggest the existing column with correct backticks
+    nestedRelation2.select($"`top.aField`"),
+    errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+    messageParameters = Map(
+      "objectName" -> "`top.aField`",
+      "proposal" -> "`top`"))
 
   test("SPARK-35673: fail if the plan still contains UnresolvedHint after analysis") {
     val hintName = "some_random_hint_that_does_not_exist"
@@ -908,10 +1158,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     )
     assert(plan.resolved)
 
-    val error = intercept[AnalysisException] {
-      SimpleAnalyzer.checkAnalysis(plan)
-    }
-    assert(error.message.contains(s"Hint not found: ${hintName}"))
+    checkError(
+      exception = intercept[SparkException] {
+        SimpleAnalyzer.checkAnalysis(plan)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Hint not found: `some_random_hint_that_does_not_exist`"))
 
     // UnresolvedHint be removed by batch `Remove Unresolved Hints`
     assertAnalysisSuccess(plan, true)
@@ -929,9 +1181,10 @@ class AnalysisErrorSuite extends AnalysisTest {
       "Scalar subquery must return only one column, but got 2" :: Nil)
 
     // t2.* cannot be resolved and the error should be the initial analysis exception.
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       Project(ScalarSubquery(t0.select(star("t2"))).as("sub") :: Nil, t1),
-      "cannot resolve 't2.*' given input columns ''" :: Nil
+      expectedErrorClass = "CANNOT_RESOLVE_STAR_EXPAND",
+      expectedMessageParameters = Map("targetString" -> "`t2`", "columns" -> "")
     )
   }
 
@@ -943,38 +1196,74 @@ class AnalysisErrorSuite extends AnalysisTest {
     val t2 = LocalRelation(b, c).as("t2")
 
     // SELECT * FROM t1 WHERE a = (SELECT sum(c) FROM t2 WHERE t1.* = t2.b)
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       Filter(EqualTo(a, ScalarSubquery(t2.select(sum(c)).where(star("t1") === b))), t1),
-      "Invalid usage of '*' in Filter" :: Nil
+      expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+      expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "Filter")
     )
 
     // SELECT * FROM t1 JOIN t2 ON (EXISTS (SELECT 1 FROM t2 WHERE t1.* = b))
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       t1.join(t2, condition = Some(Exists(t2.select(1).where(star("t1") === b)))),
-      "Invalid usage of '*' in Filter" :: Nil
+      expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+      expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "Filter")
     )
   }
 
   test("SPARK-36488: Regular expression expansion should fail with a meaningful message") {
     withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
-      assertAnalysisError(testRelation.select(Divide(UnresolvedRegex(".?", None, false), "a")),
-        s"Invalid usage of regular expression '.?' in" :: Nil)
-      assertAnalysisError(testRelation.select(
-        Divide(UnresolvedRegex(".?", None, false), UnresolvedRegex(".*", None, false))),
-        s"Invalid usage of regular expressions '.?', '.*' in" :: Nil)
-      assertAnalysisError(testRelation.select(
-        Divide(UnresolvedRegex(".?", None, false), UnresolvedRegex(".?", None, false))),
-        s"Invalid usage of regular expression '.?' in" :: Nil)
-      assertAnalysisError(testRelation.select(Divide(UnresolvedStar(None), "a")),
-        "Invalid usage of '*' in" :: Nil)
-      assertAnalysisError(testRelation.select(Divide(UnresolvedStar(None), UnresolvedStar(None))),
-        "Invalid usage of '*' in" :: Nil)
-      assertAnalysisError(testRelation.select(Divide(UnresolvedStar(None),
-        UnresolvedRegex(".?", None, false))),
-        "Invalid usage of '*' and regular expression '.?' in" :: Nil)
-      assertAnalysisError(testRelation.select(Least(Seq(UnresolvedStar(None),
-        UnresolvedRegex(".*", None, false), UnresolvedRegex(".?", None, false)))),
-        "Invalid usage of '*' and regular expressions '.*', '.?' in" :: Nil)
+      assertAnalysisErrorClass(
+        testRelation.select(Divide(UnresolvedRegex(".?", None, false), "a")),
+        expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+        expectedMessageParameters = Map(
+          "elem" -> "regular expression '.?'",
+          "prettyName" -> "expression `divide`")
+      )
+      assertAnalysisErrorClass(
+        testRelation.select(
+          Divide(UnresolvedRegex(".?", None, false), UnresolvedRegex(".*", None, false))),
+        expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+        expectedMessageParameters = Map(
+          "elem" -> "regular expressions '.?', '.*'",
+          "prettyName" -> "expression `divide`")
+      )
+      assertAnalysisErrorClass(
+        testRelation.select(
+          Divide(UnresolvedRegex(".?", None, false), UnresolvedRegex(".?", None, false))),
+        expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+        expectedMessageParameters = Map(
+          "elem" -> "regular expression '.?'",
+          "prettyName" -> "expression `divide`")
+      )
+      assertAnalysisErrorClass(
+        testRelation.select(Divide(UnresolvedStar(None), "a")),
+        expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+        expectedMessageParameters = Map(
+          "elem" -> "'*'",
+          "prettyName" -> "expression `divide`")
+      )
+      assertAnalysisErrorClass(
+        testRelation.select(Divide(UnresolvedStar(None), UnresolvedStar(None))),
+        expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+        expectedMessageParameters = Map(
+          "elem" -> "'*'",
+          "prettyName" -> "expression `divide`")
+      )
+      assertAnalysisErrorClass(
+        testRelation.select(Divide(UnresolvedStar(None), UnresolvedRegex(".?", None, false))),
+        expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+        expectedMessageParameters = Map(
+          "elem" -> "'*' and regular expression '.?'",
+          "prettyName" -> "expression `divide`")
+      )
+      assertAnalysisErrorClass(
+        testRelation.select(Least(Seq(UnresolvedStar(None),
+          UnresolvedRegex(".*", None, false), UnresolvedRegex(".?", None, false)))),
+        expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+        expectedMessageParameters = Map(
+          "elem" -> "'*' and regular expressions '.*', '.?'",
+          "prettyName" -> "expression `least`")
+      )
     }
   }
 }

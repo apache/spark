@@ -22,7 +22,7 @@ import java.lang.{Boolean => JBoolean}
 import java.util.{List => JList, Map => JMap}
 
 import scala.annotation.varargs
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
@@ -50,7 +50,13 @@ import org.apache.spark.streaming.scheduler.StreamingListener
  * computation can be started and stopped using `context.start()` and `context.stop()`,
  * respectively. `context.awaitTermination()` allows the current thread to wait for the
  * termination of a context by `stop()` or by an exception.
+ * @deprecated This is deprecated as of Spark 3.4.0.
+ *             There are no longer updates to DStream and it's a legacy project.
+ *             There is a newer and easier to use streaming engine
+ *             in Spark called Structured Streaming.
+ *             You should use Spark Structured Streaming for your streaming applications.
  */
+@deprecated("DStream is deprecated. Migrate to Structured Streaming.", "Spark 3.4.0")
 class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
 
   /**

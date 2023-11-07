@@ -45,13 +45,13 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[Sp
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.dynamicPartitionPruningEnabled && !conf.runtimeRowLevelOperationGroupFilterEnabled) {
+    if (!conf.dynamicPartitionPruningEnabled) {
       return plan
     }
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
       case DynamicPruningSubquery(
-          value, buildPlan, buildKeys, broadcastKeyIndex, onlyInBroadcast, exprId) =>
+          value, buildPlan, buildKeys, broadcastKeyIndex, onlyInBroadcast, exprId, _) =>
         val sparkPlan = QueryExecution.createSparkPlan(
           sparkSession, sparkSession.sessionState.planner, buildPlan)
         // Using `sparkPlan` is a little hacky as it is based on the assumption that this rule is
@@ -83,7 +83,7 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[Sp
           val alias = Alias(buildKeys(broadcastKeyIndex), buildKeys(broadcastKeyIndex).toString)()
           val aggregate = Aggregate(Seq(alias), Seq(alias), buildPlan)
           DynamicPruningExpression(expressions.InSubquery(
-            Seq(value), ListQuery(aggregate, childOutputs = aggregate.output)))
+            Seq(value), ListQuery(aggregate, numCols = aggregate.output.length)))
         }
     }
   }

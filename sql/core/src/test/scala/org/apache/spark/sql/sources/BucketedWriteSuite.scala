@@ -29,7 +29,9 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.tags.SlowSQLTest
 
+@SlowSQLTest
 class BucketedWriteWithoutHiveSupportSuite extends BucketedWriteSuite with SharedSparkSession {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -89,7 +91,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
       exception = intercept[AnalysisException] {
         df.write.sortBy("j").saveAsTable("tt")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1311",
+      errorClass = "SORT_BY_WITHOUT_BUCKETING",
       parameters = Map.empty)
   }
 

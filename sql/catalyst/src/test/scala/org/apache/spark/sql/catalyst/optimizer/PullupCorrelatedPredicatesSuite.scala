@@ -157,7 +157,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       testRelation2,
       cond,
       Seq(DeleteAction(None)),
-      Seq(InsertAction(None, Seq(Assignment($"a", $"c"), Assignment($"b", $"d")))))
+      Seq(InsertAction(None, Seq(Assignment($"a", $"c"), Assignment($"b", $"d")))),
+      Seq(DeleteAction(None)))
     val analyzedMergePlan = mergePlan.analyze
     assert(analyzedMergePlan.resolved)
 
@@ -165,7 +166,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     assert(optimized.resolved)
 
     optimized match {
-      case MergeIntoTable(_, _, s: InSubquery, _, _) =>
+      case MergeIntoTable(_, _, s: InSubquery, _, _, _) =>
         val outerRefs = SubExprUtils.getOuterReferences(s.query.plan)
         assert(outerRefs.isEmpty, "should be no outer refs")
       case other =>

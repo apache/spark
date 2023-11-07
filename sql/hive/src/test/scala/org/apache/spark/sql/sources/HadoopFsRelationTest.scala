@@ -30,8 +30,8 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
@@ -240,9 +240,15 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   test("save()/load() - non-partitioned table - ErrorIfExists") {
     withTempDir { file =>
-      intercept[AnalysisException] {
-        testDF.write.format(dataSourceName).mode(SaveMode.ErrorIfExists).save(file.getCanonicalPath)
-      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          testDF.write.format(dataSourceName)
+            .mode(SaveMode.ErrorIfExists).save(file.getCanonicalPath)
+        },
+        errorClass = "PATH_ALREADY_EXISTS",
+        parameters = Map("outputPath" -> "file:.*"),
+        matchPVals = true
+      )
     }
   }
 
@@ -339,13 +345,18 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   test("save()/load() - partitioned table - ErrorIfExists") {
     withTempDir { file =>
-      intercept[AnalysisException] {
-        partitionedTestDF.write
-          .format(dataSourceName)
-          .mode(SaveMode.ErrorIfExists)
-          .partitionBy("p1", "p2")
-          .save(file.getCanonicalPath)
-      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          partitionedTestDF.write
+            .format(dataSourceName)
+            .mode(SaveMode.ErrorIfExists)
+            .partitionBy("p1", "p2")
+            .save(file.getCanonicalPath)
+        },
+        errorClass = "PATH_ALREADY_EXISTS",
+        parameters = Map("outputPath" -> "file:.*"),
+        matchPVals = true
+      )
     }
   }
 
@@ -382,10 +393,10 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   test("saveAsTable()/load() - non-partitioned table - ErrorIfExists") {
     withTable("t") {
       sql(s"CREATE TABLE t(i INT) USING $dataSourceName")
-      val msg = intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         testDF.write.format(dataSourceName).mode(SaveMode.ErrorIfExists).saveAsTable("t")
-      }.getMessage
-      assert(msg.contains(s"Table `$SESSION_CATALOG_NAME`.`default`.`t` already exists"))
+      }
+      checkErrorTableAlreadyExists(e, s"`$SESSION_CATALOG_NAME`.`default`.`t`")
     }
   }
 
@@ -702,7 +713,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
             .format(dataSourceName)
             .load(path)
           assert(expectedResult.isLeft, s"Error was expected with $path but result found")
-          checkAnswer(testDf, expectedResult.left.get)
+          checkAnswer(testDf, expectedResult.swap.getOrElse(fail()))
         } catch {
           case e: java.util.NoSuchElementException if e.getMessage.contains("dataSchema") =>
             // Ignore error, the source format requires schema to be provided by user
@@ -711,7 +722,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
           case e: Throwable =>
             assert(expectedResult.isRight, s"Was not expecting error with $path: " + e)
             assert(
-              e.getMessage.contains(expectedResult.right.get),
+              e.getMessage.contains(expectedResult.getOrElse(fail())),
               s"Did not find expected error message with $path")
         }
       }

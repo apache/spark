@@ -42,18 +42,18 @@ object TableCapabilityCheck extends (LogicalPlan => Unit) {
         throw QueryCompilationErrors.unsupportedBatchReadError(r.table)
 
       case r: StreamingRelationV2 if !r.table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
-        throw QueryCompilationErrors.unsupportedMicroBatchOrContinuousScanError(r.table)
+        throw QueryCompilationErrors.unsupportedStreamingScanError(r.table)
 
       // TODO: check STREAMING_WRITE capability. It's not doable now because we don't have a
       //       a logical plan for streaming write.
-      case AppendData(r: DataSourceV2Relation, _, _, _, _) if !supportsBatchWrite(r.table) =>
+      case AppendData(r: DataSourceV2Relation, _, _, _, _, _) if !supportsBatchWrite(r.table) =>
         throw QueryCompilationErrors.unsupportedAppendInBatchModeError(r.table)
 
       case OverwritePartitionsDynamic(r: DataSourceV2Relation, _, _, _, _)
         if !r.table.supports(BATCH_WRITE) || !r.table.supports(OVERWRITE_DYNAMIC) =>
         throw QueryCompilationErrors.unsupportedDynamicOverwriteInBatchModeError(r.table)
 
-      case OverwriteByExpression(r: DataSourceV2Relation, expr, _, _, _, _) =>
+      case OverwriteByExpression(r: DataSourceV2Relation, expr, _, _, _, _, _) =>
         expr match {
           case Literal(true, BooleanType) =>
             if (!supportsBatchWrite(r.table) ||

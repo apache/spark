@@ -72,7 +72,7 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
     val model = discretizer.fit(df)
     testTransformerByGlobalCheckFunc[(Double)](df, model, "result") { rows =>
       val result = rows.map { r => Tuple1(r.getDouble(0)) }.toDF("result")
-      val observedNumBuckets = result.select("result").distinct.count
+      val observedNumBuckets = result.select("result").distinct().count()
       assert(observedNumBuckets == expectedNumBuckets,
         s"Observed number of buckets are not correct." +
           s" Expected $expectedNumBuckets but found $observedNumBuckets")
@@ -130,8 +130,8 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
     val model = discretizer.fit(trainDF)
     testTransformerByGlobalCheckFunc[(Double)](testDF, model, "result") { rows =>
       val result = rows.map { r => Tuple1(r.getDouble(0)) }.toDF("result")
-      val firstBucketSize = result.filter(result("result") === 0.0).count
-      val lastBucketSize = result.filter(result("result") === 4.0).count
+      val firstBucketSize = result.filter(result("result") === 0.0).count()
+      val lastBucketSize = result.filter(result("result") === 4.0).count()
 
       assert(firstBucketSize === 30L,
         s"Size of first bucket ${firstBucketSize} did not equal expected value of 30.")
@@ -221,7 +221,7 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
       val result =
         rows.map { r => Tuple2(r.getDouble(0), r.getDouble(1)) }.toDF("result1", "result2")
       for (i <- 1 to 2) {
-        val observedNumBuckets = result.select("result" + i).distinct.count
+        val observedNumBuckets = result.select("result" + i).distinct().count()
         assert(observedNumBuckets == expectedNumBucket,
           s"Observed number of buckets are not correct." +
             s" Expected $expectedNumBucket but found ($observedNumBuckets")
@@ -508,7 +508,7 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
     val model = discretizer.fit(df)
     val result = model.transform(df)
 
-    val observedNumBuckets = result.select(discretizer.getOutputCol).distinct.count
+    val observedNumBuckets = result.select(discretizer.getOutputCol).distinct().count()
     assert(observedNumBuckets === numBuckets,
       "Observed number of buckets does not equal expected number of buckets.")
   }
@@ -517,7 +517,7 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
     import scala.util.Random
     val rng = new Random(3)
 
-    val a1 = Array.tabulate(200)(_ => rng.nextDouble * 2.0 - 1.0) ++
+    val a1 = Array.tabulate(200)(_ => rng.nextDouble() * 2.0 - 1.0) ++
       Array.fill(20)(0.0) ++ Array.fill(20)(-0.0)
 
     val df1 = sc.parallelize(a1, 2).toDF("id")

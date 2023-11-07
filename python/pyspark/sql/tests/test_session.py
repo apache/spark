@@ -33,7 +33,6 @@ class SparkSessionTests(ReusedSQLTestCase):
 
 
 class SparkSessionTests1(ReusedSQLTestCase):
-
     # We can't include this test into SQLTests because we will stop class's SparkContext and cause
     # other tests failed.
     def test_sparksession_with_stopped_sparkcontext(self):
@@ -49,7 +48,6 @@ class SparkSessionTests1(ReusedSQLTestCase):
 
 
 class SparkSessionTests2(PySparkTestCase):
-
     # This test is separate because it's closely related with session's start and stop.
     # See SPARK-23228.
     def test_set_jvm_default_session(self):
@@ -327,6 +325,27 @@ class SparkSessionBuilderTests(unittest.TestCase):
             if sc is not None:
                 sc.stop()
 
+    def test_create_spark_context_with_initial_session_options_bool(self):
+        session = None
+        # Test if `True` is set as "true".
+        try:
+            session = SparkSession.builder.config(
+                "spark.sql.pyspark.jvmStacktrace.enabled", True
+            ).getOrCreate()
+            self.assertEqual(session.conf.get("spark.sql.pyspark.jvmStacktrace.enabled"), "true")
+        finally:
+            if session is not None:
+                session.stop()
+        # Test if `False` is set as "false".
+        try:
+            session = SparkSession.builder.config(
+                "spark.sql.pyspark.jvmStacktrace.enabled", False
+            ).getOrCreate()
+            self.assertEqual(session.conf.get("spark.sql.pyspark.jvmStacktrace.enabled"), "false")
+        finally:
+            if session is not None:
+                session.stop()
+
 
 class SparkExtensionsTest(unittest.TestCase):
     # These tests are separate because it uses 'spark.sql.extensions' which is
@@ -383,7 +402,7 @@ if __name__ == "__main__":
     from pyspark.sql.tests.test_session import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

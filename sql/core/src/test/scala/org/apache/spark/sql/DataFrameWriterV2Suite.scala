@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.sql.Timestamp
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.scalatest.BeforeAndAfter
 
@@ -32,6 +32,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.FakeSourceOne
 import org.apache.spark.sql.test.SharedSparkSession
@@ -140,12 +141,13 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     checkAnswer(spark.table("testcat.table_name"), Seq.empty)
 
-    val exc = intercept[AnalysisException] {
-      spark.table("source").withColumnRenamed("data", "d").writeTo("testcat.table_name").append()
-    }
-
-    assert(exc.getMessage.contains("Cannot find data for output column"))
-    assert(exc.getMessage.contains("'data'"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").withColumnRenamed("data", "d").writeTo("testcat.table_name").append()
+      },
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      parameters = Map("tableName" -> "`testcat`.`table_name`", "colName" -> "`data`")
+    )
 
     checkAnswer(
       spark.table("testcat.table_name"),
@@ -157,7 +159,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       spark.table("source").writeTo("testcat.table_name").append()
     }
 
-    assert(exc.getMessage.contains("Table or view not found: testcat.table_name"))
+    checkErrorTableNotFound(exc, "`testcat`.`table_name`")
   }
 
   test("Append: fail if it writes to a temp view that is not v2 relation") {
@@ -243,13 +245,14 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     checkAnswer(spark.table("testcat.table_name"), Seq.empty)
 
-    val exc = intercept[AnalysisException] {
-      spark.table("source").withColumnRenamed("data", "d")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").withColumnRenamed("data", "d")
           .writeTo("testcat.table_name").overwrite(lit(true))
-    }
-
-    assert(exc.getMessage.contains("Cannot find data for output column"))
-    assert(exc.getMessage.contains("'data'"))
+      },
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      parameters = Map("tableName" -> "`testcat`.`table_name`", "colName" -> "`data`")
+    )
 
     checkAnswer(
       spark.table("testcat.table_name"),
@@ -261,7 +264,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       spark.table("source").writeTo("testcat.table_name").overwrite(lit(true))
     }
 
-    assert(exc.getMessage.contains("Table or view not found: testcat.table_name"))
+    checkErrorTableNotFound(exc, "`testcat`.`table_name`")
   }
 
   test("Overwrite: fail if it writes to a temp view that is not v2 relation") {
@@ -347,13 +350,14 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     checkAnswer(spark.table("testcat.table_name"), Seq.empty)
 
-    val exc = intercept[AnalysisException] {
-      spark.table("source").withColumnRenamed("data", "d")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").withColumnRenamed("data", "d")
           .writeTo("testcat.table_name").overwritePartitions()
-    }
-
-    assert(exc.getMessage.contains("Cannot find data for output column"))
-    assert(exc.getMessage.contains("'data'"))
+      },
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      parameters = Map("tableName" -> "`testcat`.`table_name`", "colName" -> "`data`")
+    )
 
     checkAnswer(
       spark.table("testcat.table_name"),
@@ -365,8 +369,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       spark.table("source").writeTo("testcat.table_name").overwritePartitions()
     }
 
-    assert(exc.getMessage.contains("Table or view not found: testcat.table_name"))
-  }
+    checkErrorTableNotFound(exc, "`testcat`.`table_name`")
+   }
 
   test("OverwritePartitions: fail if it writes to a temp view that is not v2 relation") {
     spark.range(10).createOrReplaceTempView("temp_view")
@@ -634,7 +638,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       spark.table("source").writeTo("testcat.table_name").replace()
     }
 
-    assert(exc.getMessage.contains("table_name"))
+    checkErrorTableNotFound(exc, "`table_name`")
   }
 
   test("CreateOrReplace: table does not exist") {
@@ -716,8 +720,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     assert(table.partitioning === Seq(IdentityTransform(FieldReference(Array("ts", "timezone")))))
     checkAnswer(spark.table(table.name), data)
     assert(table.dataMap.toArray.length == 2)
-    assert(table.dataMap(Seq(UTF8String.fromString("America/Los_Angeles"))).rows.size == 2)
-    assert(table.dataMap(Seq(UTF8String.fromString("America/New_York"))).rows.size == 1)
+    assert(table.dataMap(Seq(UTF8String.fromString("America/Los_Angeles"))).head.rows.size == 2)
+    assert(table.dataMap(Seq(UTF8String.fromString("America/New_York"))).head.rows.size == 1)
 
     // TODO: `DataSourceV2Strategy` can not translate nested fields into source filter yet
     // so the following sql will fail.
@@ -766,5 +770,23 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     assert(table.name === "testcat.table_name")
     assert(table.partitioning === Seq(BucketTransform(LiteralValue(4, IntegerType),
       Seq(FieldReference(Seq("ts", "timezone"))))))
+  }
+
+  test("can not be called on streaming Dataset/DataFrame") {
+    val ds = MemoryStream[Int].toDS()
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        ds.write
+      },
+      errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
+      parameters = Map("methodName" -> "`write`"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        ds.writeTo("testcat.table_name")
+      },
+      errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
+      parameters = Map("methodName" -> "`writeTo`"))
   }
 }

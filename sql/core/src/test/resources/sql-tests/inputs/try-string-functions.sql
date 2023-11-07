@@ -27,6 +27,8 @@ select try_to_binary('737472696E67', 'hex');
 select try_to_binary('');
 select try_to_binary('1', 'hex');
 select try_to_binary('FF');
+select try_to_binary('123');
+select try_to_binary('12345');
 -- hex invalid
 select try_to_binary('GG');
 select try_to_binary('01 AF', 'hex');

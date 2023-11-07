@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{ExposesMetadataColumns, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.LeafExecNode
@@ -32,7 +33,7 @@ import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat}
 object StreamingRelation {
   def apply(dataSource: DataSource): StreamingRelation = {
     StreamingRelation(
-      dataSource, dataSource.sourceInfo.name, dataSource.sourceInfo.schema.toAttributes)
+      dataSource, dataSource.sourceInfo.name, toAttributes(dataSource.sourceInfo.schema))
   }
 }
 
@@ -62,23 +63,16 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
     dataSource.providingClass match {
       // If the dataSource provided class is a same or subclass of FileFormat class
       case f if classOf[FileFormat].isAssignableFrom(f) =>
-        val resolve = conf.resolver
-        val outputNames = outputSet.map(_.name)
-        def isOutputColumn(col: AttributeReference): Boolean = {
-          outputNames.exists(name => resolve(col.name, name))
-        }
-        // filter out the metadata struct column if it has the name conflicting with output columns.
-        // if the file has a column "_metadata",
-        // then the data column should be returned not the metadata struct column
-        Seq(FileFormat.createFileMetadataCol(
-          dataSource.providingInstance().asInstanceOf[FileFormat])).filterNot(isOutputColumn)
+        metadataOutputWithOutConflicts(
+          Seq(dataSource.providingInstance().asInstanceOf[FileFormat].createFileMetadataCol()))
       case _ => Nil
     }
   }
 
   override def withMetadataColumns(): LogicalPlan = {
-    if (metadataOutput.nonEmpty) {
-      this.copy(output = output ++ metadataOutput)
+    val newMetadata = metadataOutput.filterNot(outputSet.contains)
+    if (newMetadata.nonEmpty) {
+      this.copy(output = output ++ newMetadata)
     } else {
       this
     }
@@ -126,13 +120,13 @@ case class StreamingRelationExec(
 
 object StreamingExecutionRelation {
   def apply(source: Source, session: SparkSession): StreamingExecutionRelation = {
-    StreamingExecutionRelation(source, source.schema.toAttributes, None)(session)
+    StreamingExecutionRelation(source, toAttributes(source.schema), None)(session)
   }
 
   def apply(
       source: Source,
       session: SparkSession,
       catalogTable: CatalogTable): StreamingExecutionRelation = {
-    StreamingExecutionRelation(source, source.schema.toAttributes, Some(catalogTable))(session)
+    StreamingExecutionRelation(source, toAttributes(source.schema), Some(catalogTable))(session)
   }
 }

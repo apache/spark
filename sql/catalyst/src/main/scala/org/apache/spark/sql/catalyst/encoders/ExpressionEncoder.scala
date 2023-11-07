@@ -18,16 +18,17 @@
 package org.apache.spark.sql.catalyst.encoders
 
 import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.{typeTag, TypeTag}
+import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.sql.Encoder
-import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection}
+import org.apache.spark.sql.{Encoder, Row}
+import org.apache.spark.sql.catalyst.{DeserializerBuildHelper, InternalRow, JavaTypeInference, ScalaReflection, SerializerBuildHelper}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.{Deserializer, Serializer}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, InitializeJavaBean, Invoke, NewInstance}
 import org.apache.spark.sql.catalyst.optimizer.{ReassignLambdaVariableID, SimplifyCasts}
 import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LeafNode, LocalRelation}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{ObjectType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -47,31 +48,25 @@ import org.apache.spark.util.Utils
 object ExpressionEncoder {
 
   def apply[T : TypeTag](): ExpressionEncoder[T] = {
-    val mirror = ScalaReflection.mirror
-    val tpe = typeTag[T].in(mirror).tpe
+    apply(ScalaReflection.encoderFor[T])
+  }
 
-    val cls = mirror.runtimeClass(tpe)
-    val serializer = ScalaReflection.serializerForType(tpe)
-    val deserializer = ScalaReflection.deserializerForType(tpe)
-
+  def apply[T](enc: AgnosticEncoder[T]): ExpressionEncoder[T] = {
     new ExpressionEncoder[T](
-      serializer,
-      deserializer,
-      ClassTag[T](cls))
+      SerializerBuildHelper.createSerializer(enc),
+      DeserializerBuildHelper.createDeserializer(enc),
+      enc.clsTag)
+  }
+
+  def apply(schema: StructType): ExpressionEncoder[Row] = apply(schema, lenient = false)
+
+  def apply(schema: StructType, lenient: Boolean): ExpressionEncoder[Row] = {
+    apply(RowEncoder.encoderFor(schema, lenient))
   }
 
   // TODO: improve error message for java bean encoder.
   def javaBean[T](beanClass: Class[T]): ExpressionEncoder[T] = {
-    val schema = JavaTypeInference.inferDataType(beanClass)._1
-    assert(schema.isInstanceOf[StructType])
-
-    val objSerializer = JavaTypeInference.serializerFor(beanClass)
-    val objDeserializer = JavaTypeInference.deserializerFor(beanClass)
-
-    new ExpressionEncoder[T](
-      objSerializer,
-      objDeserializer,
-      ClassTag[T](beanClass))
+     apply(JavaTypeInference.encoderFor(beanClass))
   }
 
   /**
@@ -109,22 +104,29 @@ object ExpressionEncoder {
     }
     val newSerializer = CreateStruct(serializers)
 
+    def nullSafe(input: Expression, result: Expression): Expression = {
+      If(IsNull(input), Literal.create(null, result.dataType), result)
+    }
+
     val newDeserializerInput = GetColumnByOrdinal(0, newSerializer.dataType)
-    val deserializers = encoders.zipWithIndex.map { case (enc, index) =>
+    val childrenDeserializers = encoders.zipWithIndex.map { case (enc, index) =>
       val getColExprs = enc.objDeserializer.collect { case c: GetColumnByOrdinal => c }.distinct
       assert(getColExprs.size == 1, "object deserializer should have only one " +
         s"`GetColumnByOrdinal`, but there are ${getColExprs.size}")
 
       val input = GetStructField(newDeserializerInput, index)
-      enc.objDeserializer.transformUp {
+      val childDeserializer = enc.objDeserializer.transformUp {
         case GetColumnByOrdinal(0, _) => input
       }
-    }
-    val newDeserializer = NewInstance(cls, deserializers, ObjectType(cls), propagateNull = false)
 
-    def nullSafe(input: Expression, result: Expression): Expression = {
-      If(IsNull(input), Literal.create(null, result.dataType), result)
+      if (enc.objSerializer.nullable) {
+        nullSafe(input, childDeserializer)
+      } else {
+        childDeserializer
+      }
     }
+    val newDeserializer =
+      NewInstance(cls, childrenDeserializers, ObjectType(cls), propagateNull = false)
 
     new ExpressionEncoder[Any](
       nullSafe(newSerializerInput, newSerializer),
@@ -168,7 +170,7 @@ object ExpressionEncoder {
    * Function that deserializes an [[InternalRow]] into an object of type `T`. This class is not
    * thread-safe.
    */
-  class Deserializer[T](private val expressions: Seq[Expression])
+  class Deserializer[T](val expressions: Seq[Expression])
     extends (InternalRow => T) with Serializable {
     @transient
     private[this] var constructProjection: Projection = _
@@ -338,7 +340,7 @@ case class ExpressionEncoder[T](
    * this method to do resolution and binding outside of query framework.
    */
   def resolveAndBind(
-      attrs: Seq[Attribute] = schema.toAttributes,
+      attrs: Seq[Attribute] = DataTypeUtils.toAttributes(schema),
       analyzer: Analyzer = SimpleAnalyzer): ExpressionEncoder[T] = {
     val dummyPlan = CatalystSerde.deserialize(LocalRelation(attrs))(this)
     val analyzedPlan = analyzer.execute(dummyPlan)

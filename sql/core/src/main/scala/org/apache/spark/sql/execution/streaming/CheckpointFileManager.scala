@@ -158,6 +158,13 @@ object CheckpointFileManager extends Logging {
               s"Failed to rename temp file $tempPath to $finalPath because file exists", fe)
             if (!overwriteIfPossible) throw fe
         }
+
+        // Optionally, check if the renamed file exists
+        if (SQLConf.get.checkpointRenamedFileCheck && !fm.exists(finalPath)) {
+          throw new IllegalStateException(s"Renamed temp file $tempPath to $finalPath. " +
+            s"But $finalPath does not exist.")
+        }
+
         logInfo(s"Renamed temp file $tempPath to $finalPath")
       } finally {
         terminated = true
@@ -212,8 +219,8 @@ object CheckpointFileManager extends Logging {
   }
 
   private def generateTempPath(path: Path): Path = {
-    val tc = org.apache.spark.TaskContext.get
-    val tid = if (tc != null) ".TID" + tc.taskAttemptId else ""
+    val tc = org.apache.spark.TaskContext.get()
+    val tid = if (tc != null) ".TID" + tc.taskAttemptId() else ""
     new Path(path.getParent, s".${path.getName}.${UUID.randomUUID}${tid}.tmp")
   }
 }
@@ -249,12 +256,7 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
     fs.open(path)
   }
 
-  override def exists(path: Path): Boolean =
-    try {
-      fs.getFileStatus(path) != null
-    } catch {
-      case _: FileNotFoundException => false
-    }
+  override def exists(path: Path): Boolean = fs.exists(path)
 
   override def renameTempFile(srcPath: Path, dstPath: Path, overwriteIfPossible: Boolean): Unit = {
     if (!overwriteIfPossible && fs.exists(dstPath)) {
@@ -368,20 +370,6 @@ class FileContextBasedCheckpointFileManager(path: Path, hadoopConf: Configuratio
   override def renameTempFile(srcPath: Path, dstPath: Path, overwriteIfPossible: Boolean): Unit = {
     import Options.Rename._
     fc.rename(srcPath, dstPath, if (overwriteIfPossible) OVERWRITE else NONE)
-    // TODO: this is a workaround of HADOOP-16255 - remove this when HADOOP-16255 is resolved
-    mayRemoveCrcFile(srcPath)
-  }
-
-  private def mayRemoveCrcFile(path: Path): Unit = {
-    try {
-      val checksumFile = new Path(path.getParent, s".${path.getName}.crc")
-      if (exists(checksumFile)) {
-        // checksum file exists, deleting it
-        delete(checksumFile)
-      }
-    } catch {
-      case NonFatal(_) => // ignore, we are removing crc file as "best-effort"
-    }
   }
 }
 

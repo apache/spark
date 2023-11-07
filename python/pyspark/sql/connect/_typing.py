@@ -14,6 +14,79 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Union
 
-PrimitiveType = Union[str, int, bool, float]
+import sys
+
+if sys.version_info >= (3, 8):
+    from typing import Protocol
+else:
+    from typing_extensions import Protocol
+
+from types import FunctionType
+from typing import Any, Callable, Iterable, Union, Optional, NewType
+import datetime
+import decimal
+
+import pyarrow
+from pandas.core.frame import DataFrame as PandasDataFrame
+
+from pyspark.sql.connect.column import Column
+from pyspark.sql.connect.types import DataType
+from pyspark.sql.streaming.state import GroupState
+
+
+ColumnOrName = Union[Column, str]
+
+ColumnOrNameOrOrdinal = Union[Column, str, int]
+
+PrimitiveType = Union[bool, float, int, str]
+
+OptionalPrimitiveType = Optional[PrimitiveType]
+
+LiteralType = PrimitiveType
+
+DecimalLiteral = decimal.Decimal
+
+DateTimeLiteral = Union[datetime.datetime, datetime.date]
+
+DataTypeOrString = Union[DataType, str]
+
+DataFrameLike = PandasDataFrame
+
+PandasMapIterFunction = Callable[[Iterable[DataFrameLike]], Iterable[DataFrameLike]]
+
+ArrowMapIterFunction = Callable[[Iterable[pyarrow.RecordBatch]], Iterable[pyarrow.RecordBatch]]
+
+PandasGroupedMapFunction = Union[
+    Callable[[DataFrameLike], DataFrameLike],
+    Callable[[Any, DataFrameLike], DataFrameLike],
+]
+
+GroupedMapPandasUserDefinedFunction = NewType("GroupedMapPandasUserDefinedFunction", FunctionType)
+
+PandasCogroupedMapFunction = Callable[[DataFrameLike, DataFrameLike], DataFrameLike]
+
+PandasGroupedMapFunctionWithState = Callable[
+    [Any, Iterable[DataFrameLike], GroupState], Iterable[DataFrameLike]
+]
+
+
+class UserDefinedFunctionLike(Protocol):
+    func: Callable[..., Any]
+    evalType: int
+    deterministic: bool
+
+    @property
+    def returnType(self) -> DataType:
+        ...
+
+    def __call__(self, *args: ColumnOrName) -> Column:
+        ...
+
+    def asNondeterministic(self) -> "UserDefinedFunctionLike":
+        ...
+
+
+class UserDefinedFunctionCallable(Protocol):
+    def __call__(self, *_: ColumnOrName) -> Column:
+        ...

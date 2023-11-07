@@ -128,7 +128,7 @@ struct<>
 org.apache.spark.SparkNumberFormatException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'a'",
@@ -153,7 +153,7 @@ struct<>
 org.apache.spark.SparkNumberFormatException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'a'",
@@ -178,7 +178,7 @@ struct<>
 org.apache.spark.SparkNumberFormatException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'a'",
@@ -203,7 +203,7 @@ struct<>
 org.apache.spark.SparkNumberFormatException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'a'",
@@ -244,7 +244,7 @@ struct<>
 org.apache.spark.SparkNumberFormatException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'a'",
@@ -269,7 +269,7 @@ struct<>
 org.apache.spark.SparkNumberFormatException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'a'",
@@ -291,9 +291,10 @@ select '2' / interval 2 second
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"STRING\"",
     "right" : "\"INTERVAL SECOND\"",
@@ -314,9 +315,10 @@ select '2' / interval 2 year
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"STRING\"",
     "right" : "\"INTERVAL YEAR\"",
@@ -423,9 +425,10 @@ select 2 / interval '2' year
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INT\"",
     "right" : "\"INTERVAL YEAR\"",
@@ -446,9 +449,10 @@ select 2 / interval '2' hour
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INT\"",
     "right" : "\"INTERVAL HOUR\"",
@@ -469,9 +473,10 @@ select null / interval '2' year
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"VOID\"",
     "right" : "\"INTERVAL YEAR\"",
@@ -492,9 +497,10 @@ select null / interval '2' hour
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"VOID\"",
     "right" : "\"INTERVAL HOUR\"",
@@ -874,7 +880,7 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
-  "sqlState" : "22005",
+  "sqlState" : "22003",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "18",
@@ -1476,41 +1482,18 @@ struct<INTERVAL '16 01:03:02.1002' DAY TO SECOND:interval day to second>
 
 
 -- !query
-select interval
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_0025",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 15,
-    "fragment" : "interval"
-  } ]
-}
-
-
--- !query
 select interval 1 fake_unit
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0062",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "msg" : "Error parsing ' 1 fake_unit' to interval, invalid unit 'fake_unit'"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 17,
-    "stopIndex" : 27,
-    "fragment" : "1 fake_unit"
-  } ]
+    "error" : "'fake_unit'",
+    "hint" : ""
+  }
 }
 
 
@@ -1687,10 +1670,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
   "messageParameters" : {
-    "fullName" : "spark_catalog.default.interval",
-    "rawName" : "interval"
+    "routineName" : "`interval`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1709,10 +1693,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
   "messageParameters" : {
-    "fullName" : "spark_catalog.default.interval",
-    "rawName" : "interval"
+    "routineName" : "`interval`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1732,7 +1717,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'day'",
     "hint" : ": extra input 'day'"
@@ -1747,10 +1732,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
   "messageParameters" : {
-    "fullName" : "spark_catalog.default.interval",
-    "rawName" : "interval"
+    "routineName" : "`interval`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1769,10 +1755,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
   "messageParameters" : {
-    "fullName" : "spark_catalog.default.interval",
-    "rawName" : "interval"
+    "routineName" : "`interval`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1792,7 +1779,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'days'",
     "hint" : ": extra input 'days'"
@@ -1870,9 +1857,10 @@ select
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
     "right" : "\"STRING\"",
@@ -1909,9 +1897,10 @@ select interval '2' year + '3-3'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
     "right" : "\"STRING\"",
@@ -1932,9 +1921,10 @@ select interval '2' year - '4'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
     "right" : "\"STRING\"",
@@ -1958,7 +1948,7 @@ struct<>
 org.apache.spark.SparkDateTimeException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'4 11:11'",
@@ -1983,7 +1973,7 @@ struct<>
 org.apache.spark.SparkDateTimeException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'4 12:12:12'",
@@ -2013,9 +2003,10 @@ select interval '2' year + str from interval_view
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
     "right" : "\"STRING\"",
@@ -2036,9 +2027,10 @@ select interval '2' year - str from interval_view
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
     "right" : "\"STRING\"",
@@ -2062,7 +2054,7 @@ struct<>
 org.apache.spark.SparkDateTimeException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1'",
@@ -2087,7 +2079,7 @@ struct<>
 org.apache.spark.SparkDateTimeException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1'",
@@ -2109,9 +2101,10 @@ select interval '2-2' year to month + interval '3' day
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"INTERVAL '2-2' YEAR TO MONTH\"",
     "inputType" : "\"INTERVAL YEAR TO MONTH\"",
@@ -2134,9 +2127,10 @@ select interval '3' day + interval '2-2' year to month
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"INTERVAL '2-2' YEAR TO MONTH\"",
     "inputType" : "\"INTERVAL YEAR TO MONTH\"",
@@ -2159,9 +2153,10 @@ select interval '2-2' year to month - interval '3' day
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"INTERVAL '2-2' YEAR TO MONTH\"",
     "inputType" : "\"INTERVAL YEAR TO MONTH\"",
@@ -2184,9 +2179,10 @@ select interval '3' day - interval '2-2' year to month
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL DAY\"",
     "right" : "\"INTERVAL YEAR TO MONTH\"",
@@ -2207,9 +2203,10 @@ select 1 - interval '2' second
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"INT\"",
@@ -2232,9 +2229,10 @@ select 1 + interval '2' month
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INT\"",
     "right" : "\"INTERVAL MONTH\"",
@@ -2255,9 +2253,10 @@ select interval '2' second + 1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"INT\"",
@@ -2280,9 +2279,10 @@ select interval '2' month - 1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL MONTH\"",
     "right" : "\"INT\"",
@@ -2403,9 +2403,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
   "messageParameters" : {
-    "value" : "中文 interval 1 day"
+    "value" : "'中文 interval 1 day'",
+    "valueType" : "\"INTERVAL\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2424,9 +2426,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
   "messageParameters" : {
-    "value" : "interval中文 1 day"
+    "value" : "'interval中文 1 day'",
+    "valueType" : "\"INTERVAL\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2445,9 +2449,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
   "messageParameters" : {
-    "value" : "interval 1中文day"
+    "value" : "'interval 1中文day'",
+    "valueType" : "\"INTERVAL\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2467,7 +2473,7 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
-  "sqlState" : "22003",
+  "sqlState" : "22015",
   "messageParameters" : {
     "alternative" : "",
     "message" : "integer overflow"
@@ -2483,7 +2489,7 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
-  "sqlState" : "22003",
+  "sqlState" : "22015",
   "messageParameters" : {
     "alternative" : " Use 'try_subtract' to tolerate overflow and return NULL instead.",
     "message" : "integer overflow"
@@ -2499,7 +2505,7 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
-  "sqlState" : "22003",
+  "sqlState" : "22015",
   "messageParameters" : {
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
     "message" : "integer overflow"
@@ -2584,9 +2590,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
   "messageParameters" : {
-    "value" : "+"
+    "value" : "'+'",
+    "valueType" : "\"INTERVAL\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2605,9 +2613,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
   "messageParameters" : {
-    "value" : "+."
+    "value" : "'+.'",
+    "valueType" : "\"INTERVAL\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2626,9 +2636,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
   "messageParameters" : {
-    "value" : "1"
+    "value" : "'1'",
+    "valueType" : "\"INTERVAL\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2647,9 +2659,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
   "messageParameters" : {
-    "value" : "1.2"
+    "value" : "'1.2'",
+    "valueType" : "\"INTERVAL\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2668,9 +2682,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
   "messageParameters" : {
-    "value" : "- 2"
+    "value" : "'- 2'",
+    "valueType" : "\"INTERVAL\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2689,9 +2705,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
   "messageParameters" : {
-    "value" : "1 day -"
+    "value" : "'1 day -'",
+    "valueType" : "\"INTERVAL\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2710,9 +2728,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
   "messageParameters" : {
-    "value" : "1 day 1"
+    "value" : "'1 day 1'",
+    "valueType" : "\"INTERVAL\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2798,7 +2818,7 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
-  "sqlState" : "22003",
+  "sqlState" : "22015",
   "messageParameters" : {
     "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead.",
     "message" : "Interval value overflows after being divided by -1"
@@ -2821,7 +2841,7 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
-  "sqlState" : "22003",
+  "sqlState" : "22015",
   "messageParameters" : {
     "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead.",
     "message" : "Interval value overflows after being divided by -1"
@@ -2878,7 +2898,7 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
-  "sqlState" : "22003",
+  "sqlState" : "22015",
   "messageParameters" : {
     "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead.",
     "message" : "Interval value overflows after being divided by -1"
@@ -2901,7 +2921,7 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
-  "sqlState" : "22003",
+  "sqlState" : "22015",
   "messageParameters" : {
     "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead.",
     "message" : "Interval value overflows after being divided by -1"
@@ -3289,9 +3309,10 @@ SELECT INTERVAL 1 MONTH > INTERVAL 20 DAYS
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL MONTH\"",
     "right" : "\"INTERVAL DAY\"",
@@ -3312,9 +3333,10 @@ SELECT INTERVAL '1' DAY < '1'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL DAY\"",
     "right" : "\"STRING\"",
@@ -3335,9 +3357,10 @@ SELECT INTERVAL '1' DAY = '1'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL DAY\"",
     "right" : "\"STRING\"",
@@ -3358,9 +3381,10 @@ SELECT INTERVAL '1' DAY > '1'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL DAY\"",
     "right" : "\"STRING\"",
@@ -3381,9 +3405,10 @@ SELECT '1' < INTERVAL '1' DAY
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"STRING\"",
     "right" : "\"INTERVAL DAY\"",
@@ -3404,9 +3429,10 @@ SELECT '1' = INTERVAL '1' DAY
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"STRING\"",
     "right" : "\"INTERVAL DAY\"",
@@ -3427,9 +3453,10 @@ SELECT '1' > INTERVAL '1' DAY
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"STRING\"",
     "right" : "\"INTERVAL DAY\"",
@@ -3450,9 +3477,10 @@ SELECT INTERVAL '1' YEAR < '1'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
     "right" : "\"STRING\"",
@@ -3473,9 +3501,10 @@ SELECT INTERVAL '1' YEAR = '1'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
     "right" : "\"STRING\"",
@@ -3496,9 +3525,10 @@ SELECT INTERVAL '1' YEAR > '1'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL YEAR\"",
     "right" : "\"STRING\"",
@@ -3519,9 +3549,10 @@ SELECT '1' < INTERVAL '1' YEAR
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"STRING\"",
     "right" : "\"INTERVAL YEAR\"",
@@ -3542,9 +3573,10 @@ SELECT '1' = INTERVAL '1' YEAR
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"STRING\"",
     "right" : "\"INTERVAL YEAR\"",
@@ -3565,9 +3597,10 @@ SELECT '1' > INTERVAL '1' YEAR
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"STRING\"",
     "right" : "\"INTERVAL YEAR\"",
@@ -3604,12 +3637,13 @@ SELECT array(INTERVAL 1 MONTH, INTERVAL 20 DAYS)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "(\"INTERVAL MONTH\" or \"INTERVAL DAY\")",
-    "functionName" : "function array",
+    "functionName" : "`array`",
     "sqlExpr" : "\"array(INTERVAL '1' MONTH, INTERVAL '20' DAY)\""
   },
   "queryContext" : [ {
@@ -3643,12 +3677,13 @@ SELECT coalesce(INTERVAL 1 MONTH, INTERVAL 20 DAYS)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "(\"INTERVAL MONTH\" or \"INTERVAL DAY\")",
-    "functionName" : "function coalesce",
+    "functionName" : "`coalesce`",
     "sqlExpr" : "\"coalesce(INTERVAL '1' MONTH, INTERVAL '20' DAY)\""
   },
   "queryContext" : [ {
@@ -3714,9 +3749,10 @@ SELECT div(INTERVAL '1' MONTH, INTERVAL '-1' DAY)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"INTERVAL MONTH\"",
     "right" : "\"INTERVAL DAY\"",

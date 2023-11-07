@@ -133,33 +133,23 @@ private[spark] object SerDe {
   }
 
   def readDate(in: DataInputStream): Date = {
-    try {
-      val inStr = readString(in)
-      if (inStr == "NA") {
-        null
-      } else {
-        Date.valueOf(inStr)
-      }
-    } catch {
-      // TODO: SPARK-18011 with some versions of R deserializing NA from R results in NASE
-      case _: NegativeArraySizeException => null
+    val inStr = readString(in)
+    if (inStr == "NA") {
+      null
+    } else {
+      Date.valueOf(inStr)
     }
   }
 
   def readTime(in: DataInputStream): Timestamp = {
-    try {
-      val seconds = in.readDouble()
-      if (java.lang.Double.isNaN(seconds)) {
-        null
-      } else {
-        val sec = Math.floor(seconds).toLong
-        val t = new Timestamp(sec * 1000L)
-        t.setNanos(((seconds - sec) * 1e9).toInt)
-        t
-      }
-    } catch {
-      // TODO: SPARK-18011 with some versions of R deserializing NA from R results in NASE
-      case _: NegativeArraySizeException => null
+    val seconds = in.readDouble()
+    if (java.lang.Double.isNaN(seconds)) {
+      null
+    } else {
+      val sec = Math.floor(seconds).toLong
+      val t = new Timestamp(sec * 1000L)
+      t.setNanos(((seconds - sec) * 1e9).toInt)
+      t
     }
   }
 
@@ -303,9 +293,9 @@ private[spark] object SerDe {
     } else {
       // Convert ArrayType collected from DataFrame to Java array
       // Collected data of ArrayType from a DataFrame is observed to be of
-      // type "scala.collection.mutable.WrappedArray"
+      // type "scala.collection.mutable.ArraySeq"
       val value = obj match {
-        case wa: mutable.WrappedArray[_] => wa.array
+        case wa: mutable.ArraySeq[_] => wa.array
         case other => other
       }
 

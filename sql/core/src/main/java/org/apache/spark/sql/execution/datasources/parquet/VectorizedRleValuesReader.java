@@ -147,13 +147,10 @@ public final class VectorizedRleValuesReader extends ValuesReader
     if (this.currentCount == 0) { this.readNextGroup(); }
 
     this.currentCount--;
-    switch (mode) {
-      case RLE:
-        return this.currentValue;
-      case PACKED:
-        return this.currentBuffer[currentBufferIdx++];
-    }
-    throw new RuntimeException("Unreachable");
+    return switch (mode) {
+      case RLE -> this.currentValue;
+      case PACKED -> this.currentBuffer[currentBufferIdx++];
+    };
   }
 
   /**
@@ -673,12 +670,14 @@ public final class VectorizedRleValuesReader extends ValuesReader
           }
           break;
         case PACKED:
+          int totalSkipNum = 0;
           for (int i = 0; i < num; ++i) {
             // Same as above, only skip non-null values from `valuesReader`
             if (currentBuffer[currentBufferIdx++] == state.maxDefinitionLevel) {
-              updater.skipValues(1, valuesReader);
+              ++totalSkipNum;
             }
           }
+          updater.skipValues(totalSkipNum, valuesReader);
           break;
       }
       currentCount -= num;

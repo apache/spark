@@ -212,8 +212,8 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
       </td>
       <td>{formatResourcesAddresses(driver.resources)}</td>
       <td>
-        <a href={s"$workerUrlRef/logPage?driverId=${driver.driverId}&logType=stdout"}>stdout</a>
-        <a href={s"$workerUrlRef/logPage?driverId=${driver.driverId}&logType=stderr"}>stderr</a>
+        <a href={s"$workerUrlRef/logPage/?driverId=${driver.driverId}&logType=stdout"}>stdout</a>
+        <a href={s"$workerUrlRef/logPage/?driverId=${driver.driverId}&logType=stderr"}>stderr</a>
       </td>
       <td>
         {driver.finalException.getOrElse("")}
