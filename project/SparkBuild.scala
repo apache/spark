@@ -254,8 +254,7 @@ object SparkBuild extends PomBuild {
         // SPARK-45627 `enum`, `export` and `given` will become keywords in Scala 3,
         // so they are prohibited from being used as variable names in Scala 2.13 to
         // reduce the cost of migration in subsequent versions.
-        "-Wconf:cat=deprecation&msg=it will become a keyword in Scala 3:e",
-        "-Wconf:cat=deprecation&msg=Passing an explicit array value to a Scala varargs method is deprecated:e"
+        "-Wconf:cat=deprecation&msg=it will become a keyword in Scala 3:e"
       )
     }
   )
