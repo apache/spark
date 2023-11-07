@@ -30,7 +30,6 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession with KafkaTest {
@@ -358,7 +357,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
       val records = msgs.map { msg =>
         new RecordBuilder(topic, msg).partition(part).timestamp(ts).build()
       }
-      testUtils.sendMessages(records.toImmutableArraySeq)
+      testUtils.sendMessages(records)
     }
 
     val firstTimestamp = System.currentTimeMillis() - 5000

@@ -417,11 +417,11 @@ class KafkaTestUtils(
       part.foreach { p => builder.partition(p) }
       builder.build()
     }
-    sendMessages(records.toImmutableArraySeq)
+    sendMessages(records)
   }
 
   def sendMessage(msg: ProducerRecord[String, String]): Seq[(String, RecordMetadata)] = {
-    sendMessages(Array(msg).toImmutableArraySeq)
+    sendMessages(Array(msg))
   }
 
   def sendMessages(msgs: Seq[ProducerRecord[String, String]]): Seq[(String, RecordMetadata)] = {
@@ -439,6 +439,10 @@ class KafkaTestUtils(
       }
     }
     offsets
+  }
+
+  def sendMessages(msgs: Array[ProducerRecord[String, String]]): Seq[(String, RecordMetadata)] = {
+    sendMessages(msgs.toImmutableArraySeq)
   }
 
   def cleanupLogs(): Unit = {
