@@ -140,7 +140,7 @@ def main(infile: IO, outfile: IO) -> None:
                 and num_expected_args != num_provided_args
             ):
                 # The UDTF call provided the wrong number of positional arguments.
-                def arguments(num):
+                def arguments(num: int) -> str:
                     return f"{num} argument{'' if num == 1 else 's'}"
 
                 raise PySparkValueError(
@@ -185,11 +185,15 @@ def main(infile: IO, outfile: IO) -> None:
                     )
 
         check_method_invariants_before_running(
-            inspect.getfullargspec(handler.analyze), "static analyze", is_static=True
+            inspect.getfullargspec(handler.analyze),  # type: ignore[attr-defined]
+            "static analyze",
+            is_static=True
         )
         if hasattr(handler, "eval"):
             check_method_invariants_before_running(
-                inspect.getfullargspec(handler.eval), "eval", is_static=False
+                inspect.getfullargspec(handler.eval),  # type: ignore[attr-defined]
+                "eval",
+                is_static=False
             )
 
         # Invoke the UDTF's 'analyze' method.
