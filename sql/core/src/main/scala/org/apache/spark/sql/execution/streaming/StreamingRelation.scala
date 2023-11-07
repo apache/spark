@@ -62,7 +62,7 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
 
   override lazy val metadataOutput: Seq[AttributeReference] = {
     dataSource.providingInstance() match {
-      case f: FileFormat => metadataOutputWithOutConflicts(Seq(f.createFileMetadataCol))
+      case f: FileFormat => metadataOutputWithOutConflicts(Seq(f.createFileMetadataCol()))
       case s: SupportsStreamSourceMetadataColumns =>
         metadataOutputWithOutConflicts(s.getMetadataOutput(
           dataSource.sparkSession, dataSource.options, dataSource.userSpecifiedSchema))
