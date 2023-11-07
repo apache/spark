@@ -33,7 +33,7 @@ import org.apache.spark.util.Utils
  *
  * Please note that `EquivalentExpressions` is mainly used in subexpression elimination where common
  * non-leaf expression subtrees are calculated, but there there is one special use case in
- * `PhysicalAggregation` where `EquivalentExpressions` is used as a mutable set of non-deterministic
+ * `PhysicalAggregation` where `EquivalentExpressions` is used as a mutable set of deterministic
  * expressions. For that special use case we have the `allowLeafExpressions` config.
  */
 class EquivalentExpressions(
@@ -43,7 +43,7 @@ class EquivalentExpressions(
         .filter(_ >= 0d),
     allowLeafExpressions: Boolean = false) {
 
-  // The subexpressions are stored by height to speed up certain calculations.
+  // The subexpressions are stored by height in separate maps to speed up certain calculations.
   private val maps = mutable.ArrayBuffer[mutable.Map[ExpressionEquals, ExpressionStats]]()
 
   // `EquivalentExpressions` has 2 states internally, it can be either inflated or not.
@@ -95,12 +95,12 @@ class EquivalentExpressions(
     require(evalCount >= 0 && condEvalCount >= 0d)
 
     inflated = false
+    val map = getMapByHeight(expr.height)
     val wrapper = ExpressionEquals(expr)
-    val map = getMapByHeight(wrapper.height)
     map.get(wrapper) match {
       case Some(es) =>
-        es.evalCount += evalCount
-        es.condEvalCount += condEvalCount
+        es.directEvalCount += evalCount
+        es.directCondEvalCount += condEvalCount
         true
       case _ =>
         map(wrapper) = ExpressionStats(expr)(evalCount, condEvalCount, 0, 0d)
@@ -116,8 +116,8 @@ class EquivalentExpressions(
     maps(index)
   }
 
-  // Iterate expressions from parents to children and fill inflated `realEvalCount`s and
-  // `realCondEvalCount`s from explicitly added `evalCount`s and `condEvalCount`s.
+  // Iterate expressions from parents to children and fill `transientEvalCount`s and
+  // `transientCondEvalCount`s from explicitly added `directEvalCount`s and `directCondEvalCount`s.
   private def inflate() = {
     if (!inflated) {
       maps.reverse.foreach { map =>
@@ -133,13 +133,13 @@ class EquivalentExpressions(
   private def inflateExprState(exprStats: ExpressionStats): Unit = {
     val expr = exprStats.expr
     if (!expr.isInstanceOf[LeafExpression] || allowLeafExpressions) {
-      val evalCount = exprStats.evalCount
-      val condEvalCount = exprStats.condEvalCount
+      val evalCount = exprStats.directEvalCount
+      val condEvalCount = exprStats.directCondEvalCount
 
-      exprStats.evalCount = 0
-      exprStats.condEvalCount = 0d
-      exprStats.realEvalCount += evalCount
-      exprStats.realCondEvalCount += condEvalCount
+      exprStats.directEvalCount = 0
+      exprStats.directCondEvalCount = 0d
+      exprStats.transientEvalCount += evalCount
+      exprStats.transientCondEvalCount += condEvalCount
 
       expr match {
         // CodegenFallback's children will not be used to generate code (call eval() instead)
@@ -235,17 +235,17 @@ class EquivalentExpressions(
    * evaluation.
    * E.g. if we have `If(_, a, b)` expression and `A` and `B` are the equivalence maps built from
    * `a` and `b` this method computes the equivalence map `C` in which the keys are the superset of
-   * expressions from both `A` and `B`. The `evalCount` statistics of expressions in `C` depends on
-   * whether the expression was present in both `A` and `B` or not.
-   * If an expression was present in both then the result `evalCount` of the expression is the
-   * minimum of `evalCount`s from `A` and `B` (intersection of equivalence maps).
+   * expressions from both `A` and `B`. The `transientEvalCount` statistics of expressions in `C`
+   * depends on whether the expression was present in both `A` and `B` or not.
+   * If an expression was present in both then the result `transientEvalCount` of the expression is
+   * the minimum of `transientEvalCount`s from `A` and `B` (intersection of equivalence maps).
    * For the sake of simplicity branching is modelled with 0.5 / 0.5 probabilities so the
    * `condEvalCount` statistics of expressions in `C` are calculated by adjusting both
    * `condEvalCount` from `A` and `B` by `0.5` and summing them. Also, difference between
-   * `evalCount` of an expression from `A` and `B` becomes part of `condEvalCount` and so adjusted
-   * by `0.5`.
+   * `transientEvalCount` of an expression from `A` and `B` becomes part of `condEvalCount` and so
+   * adjusted by `0.5`.
    *
-   * Please note that this method modifies `map` and `otherMap` is no longer safe to use after this
+   * Please note that this method modifies `this` and `other` is no longer safe to use after this
    * method.
    */
   private def intersectWith(other: EquivalentExpressions) = {
@@ -257,40 +257,40 @@ class EquivalentExpressions(
       map.foreach { case (key, value) =>
         otherMap.remove(key) match {
           case Some(otherValue) =>
-            val (min, max) = if (value.realEvalCount < otherValue.realEvalCount) {
-              (value.realEvalCount, otherValue.realEvalCount)
+            val (min, max) = if (value.transientEvalCount < otherValue.transientEvalCount) {
+              (value.transientEvalCount, otherValue.transientEvalCount)
             } else {
-              (otherValue.realEvalCount, value.realEvalCount)
+              (otherValue.transientEvalCount, value.transientEvalCount)
             }
-            value.realCondEvalCount += otherValue.realCondEvalCount + max - min
-            value.realEvalCount = min
+            value.transientCondEvalCount += otherValue.transientCondEvalCount + max - min
+            value.transientEvalCount = min
           case _ =>
-            value.realCondEvalCount += value.realEvalCount
-            value.realEvalCount = 0
+            value.transientCondEvalCount += value.transientEvalCount
+            value.transientEvalCount = 0
         }
-        value.realCondEvalCount /= 2
+        value.transientCondEvalCount /= 2
       }
       otherMap.foreach { case e @ (_, value) =>
-        value.realCondEvalCount = (value.realCondEvalCount + value.realEvalCount) / 2
-        value.realEvalCount = 0
+        value.transientCondEvalCount = (value.transientCondEvalCount + value.transientEvalCount) / 2
+        value.transientEvalCount = 0
         map += e
       }
     }
     maps ++= other.maps.drop(maps.size)
     maps.drop(zippedMaps.size).foreach { map =>
       map.foreach { case (_, value) =>
-        value.realCondEvalCount = (value.realCondEvalCount + value.realEvalCount) / 2
-        value.realEvalCount = 0
+        value.transientCondEvalCount = (value.transientCondEvalCount + value.transientEvalCount) / 2
+        value.transientEvalCount = 0
       }
     }
   }
 
   /**
-   * This method adds the content of `otherMap` to `map`. It is very similar to
-   * `updateWithExprTree()` in terms that it adds expressions to an equivalence map, but
-   * `otherMap` might contain more than one expressions.
+   * This method adds the content of `other` to `this`. It is very similar to `updateWithExprTree()`
+   * in terms that it adds expressions to an equivalence map, but `other` might contain more than
+   * one expressions.
    *
-   * Please note that this method modifies `map` and `otherMap` is no longer safe to use after this
+   * Please note that this method modifies `this` and `other` is no longer safe to use after this
    * method.
    */
   private def unionWith(other: EquivalentExpressions) = {
@@ -298,10 +298,10 @@ class EquivalentExpressions(
       otherMap.foreach { case e @ (key, otherValue) =>
         map.get(key) match {
           case Some(value) =>
-            value.evalCount += otherValue.evalCount
-            value.realEvalCount += otherValue.realEvalCount
-            value.condEvalCount += otherValue.condEvalCount
-            value.realCondEvalCount += otherValue.realCondEvalCount
+            value.directEvalCount += otherValue.directEvalCount
+            value.transientEvalCount += otherValue.transientEvalCount
+            value.directCondEvalCount += otherValue.directCondEvalCount
+            value.transientCondEvalCount += otherValue.transientCondEvalCount
           case _ =>
             map += e
         }
@@ -317,9 +317,8 @@ class EquivalentExpressions(
     if (supportedExpression(expr) && expr.deterministic) {
       inflate()
 
-      val wrapper = ExpressionEquals(expr)
-      val map = getMapByHeight(wrapper.height)
-      map.get(wrapper)
+      val map = getMapByHeight(expr.height)
+      map.get(ExpressionEquals(expr))
     } else {
       None
     }
@@ -335,8 +334,9 @@ class EquivalentExpressions(
     (if (increasingOrder) maps else maps.reverse).flatMap { map =>
       map.collect {
         case (_, es) if es.expr.deterministic && (
-            es.realEvalCount > evalCount ||
-            es.realEvalCount == evalCount && condEvalCount.exists(es.realCondEvalCount > _)) => es
+            es.transientEvalCount > evalCount ||
+            es.transientEvalCount == evalCount &&
+              condEvalCount.exists(es.transientCondEvalCount > _)) => es
       }
     }
   }
@@ -370,20 +370,20 @@ class EquivalentExpressions(
   def getCommonSubexpressions: Seq[Expression] = {
     inflate()
 
-    // We use the fact that a child's `realEvalCount` + `realCondEvalCount` (total expected
-    // evaluation count) is always >= than any of its parent's and if it is > then it make sense to
-    // include the child in the result.
-    // (Also note that a child's `realEvalCount` is always >= than any of its parent's.)
+    // We use the fact that a child's `transientEvalCount` + `transientCondEvalCount` (total
+    // expected evaluation count) is always >= than any of its parent's and if it is > then it make
+    // sense to include the child in the result.
+    // (Also note that a child's `transientEvalCount` is always >= than any of its parent's.)
     //
     // So start iterating on expressions that satisfy the requirements from higher to lower (parents
-    // to children) and record `realEvalCount` + `realCondEvalCount` to all its children that don't
-    // have a record yet. An expression can be included in the result if there is no recorded value
-    // for it or the expression's `realEvalCount` + `realCondEvalCount` is > than the recorded
-    // value.
+    // to children) and record `transientEvalCount` + `transientCondEvalCount` to all its children
+    // that don't have a record yet. An expression can be included in the result if there is no
+    // recorded value for it or the expression's `transientEvalCount` + `transientCondEvalCount` is
+    // > than the recorded value.
     val m = mutable.Map.empty[ExpressionEquals, Double]
     getAllExprStates(1, minConditionalCount, false).filter { es =>
       val wrapper = ExpressionEquals(es.expr)
-      val sumEvalCount = es.realEvalCount + es.realCondEvalCount
+      val sumEvalCount = es.transientEvalCount + es.transientCondEvalCount
       es.expr.children.map(ExpressionEquals(_)).toSet.foreach { childWrapper: ExpressionEquals =>
         if (!m.contains(childWrapper)) {
           m(childWrapper) = sumEvalCount
@@ -410,23 +410,20 @@ class EquivalentExpressions(
  * Wrapper around an Expression that provides semantic equality.
  */
 case class ExpressionEquals(e: Expression) {
-  // This is used to do a fast pre-check for child-parent relationship. For example, expr1 can
-  // only be a parent of expr2 if expr1.height is larger than expr2.height.
-  def height: Int = e.height
-
   override def equals(o: Any): Boolean = o match {
     case other: ExpressionEquals =>
-      e.canonicalized == other.expr.canonicalized && height == other.height
+      e.canonicalized == other.e.canonicalized && e.height == other.e.height
     case _ => false
   }
 
-  override def hashCode: Int = Objects.hash(e.semanticHash(): Integer, height: Integer)
+  override def hashCode: Int = Objects.hash(e.semanticHash(): Integer, e.height: Integer)
 }
 
 /**
- * This class stores the expected evaluation count of expressions split into `evalCount` +
- * `realEvalCount` that records sure evaluations and `condEvalCount` + `realCondEvalCount` that
- * records conditional evaluations. The `real...` fields are filled up during `inflate()`.
+ * This class stores the expected evaluation count of expressions split into `directEvalCount` +
+ * `transientEvalCount` that records sure evaluations and `directCondEvalCount` +
+ * `transientCondEvalCount` that records conditional evaluations. The `transient...` fields are
+ * filled up during `inflate()`.
  *
  * Here are a few example expressions and the statistics of a non-leaf `c` subexpression from the
  * equivalence maps built from the expressions:
@@ -438,10 +435,11 @@ case class ExpressionEquals(e: Expression) {
  * `If(c, c, _)`     => `c -> (1 + 0.5)`
  */
 case class ExpressionStats(expr: Expression)(
-    var evalCount: Int,
-    var condEvalCount: Double,
-    var realEvalCount: Int,
-    var realCondEvalCount: Double) {
+    var directEvalCount: Int,
+    var directCondEvalCount: Double,
+    var transientEvalCount: Int,
+    var transientCondEvalCount: Double) {
   override def toString: String =
-    s"$expr -> (${evalCount + realEvalCount} + ${condEvalCount + realCondEvalCount})"
+    s"$expr -> (${directEvalCount + transientEvalCount} + " +
+      s"${directCondEvalCount + transientCondEvalCount})"
 }

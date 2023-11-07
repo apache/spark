@@ -63,10 +63,10 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 
     // Add oneA and test if it is returned. Since it is a group of one, it does not.
     assert(!equivalence.addExpr(oneA))
-    assert(equivalence.getExprState(oneA).get.realEvalCount == 1)
+    assert(equivalence.getExprState(oneA).get.transientEvalCount == 1)
     assert(equivalence.getExprState(twoA).isEmpty)
     assert(equivalence.addExpr(oneA))
-    assert(equivalence.getExprState(oneA).get.realEvalCount == 2)
+    assert(equivalence.getExprState(oneA).get.transientEvalCount == 2)
 
     // Add B and make sure they can see each other.
     assert(equivalence.addExpr(oneB))
@@ -75,7 +75,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     assert(equivalence.getExprState(oneB).exists(_.expr eq oneA))
     assert(equivalence.getExprState(twoA).isEmpty)
     assert(equivalence.getAllExprStates().size == 1)
-    assert(equivalence.getAllExprStates().head.realEvalCount == 3)
+    assert(equivalence.getAllExprStates().head.transientEvalCount == 3)
     assert(equivalence.getAllExprStates().head.expr eq oneA)
 
     val add1 = Add(oneA, oneB)
@@ -86,7 +86,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 
     assert(equivalence.getAllExprStates().size == 2)
     assert(equivalence.getExprState(add1).exists(_.expr eq add1))
-    assert(equivalence.getExprState(add2).get.realEvalCount == 2)
+    assert(equivalence.getExprState(add2).get.transientEvalCount == 2)
     assert(equivalence.getExprState(add2).exists(_.expr eq add1))
   }
 
@@ -105,7 +105,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 
     // Should only have one equivalence for `one + two`
     assert(equivalence.getAllExprStates(1).size == 1)
-    assert(equivalence.getAllExprStates(1).head.realEvalCount == 4)
+    assert(equivalence.getAllExprStates(1).head.transientEvalCount == 4)
 
     val cs = equivalence.getCommonSubexpressions
     assert(cs === Seq(add))
@@ -127,10 +127,10 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 
     // (one * two), (one * two) * (one * two) and sqrt( (one * two) * (one * two) ) should be found
     assert(equivalence.getAllExprStates(1).size == 3)
-    assert(equivalence.getExprState(mul).get.realEvalCount == 9)
-    assert(equivalence.getExprState(mul2).get.realEvalCount == 4)
-    assert(equivalence.getExprState(sqrt).get.realEvalCount == 2)
-    assert(equivalence.getExprState(sum).get.realEvalCount == 1)
+    assert(equivalence.getExprState(mul).get.transientEvalCount == 9)
+    assert(equivalence.getExprState(mul2).get.transientEvalCount == 4)
+    assert(equivalence.getExprState(sqrt).get.transientEvalCount == 2)
+    assert(equivalence.getExprState(sum).get.transientEvalCount == 1)
 
     val cs2 = equivalence.getCommonSubexpressions
     assert(cs2 === Seq(mul, mul2, sqrt))
@@ -154,7 +154,8 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     equivalence.addExprTree(add)
     // the `two` inside `fallback` should not be added
     assert(equivalence.getAllExprStates(1).size == 0)
-    assert(equivalence.getAllExprStates().count(_.realEvalCount == 1) == 3) // add, two, explode
+    assert(equivalence.getAllExprStates()
+      .count(_.transientEvalCount == 1) == 3) // add, two, explode
 
     val cs = equivalence.getCommonSubexpressions
     assert(cs === Seq.empty)
@@ -169,12 +170,14 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     equivalence1.addExprTree(ifExpr1)
 
     // `add` is in both two branches of `If` and predicate.
-    assert(equivalence1.getAllExprStates().count(_.realEvalCount == 2) == 1)
-    assert(equivalence1.getAllExprStates().filter(_.realEvalCount == 2).head.expr eq add)
+    assert(equivalence1.getAllExprStates().count(_.transientEvalCount == 2) == 1)
+    assert(equivalence1.getAllExprStates().filter(_.transientEvalCount == 2).head.expr eq add)
     // one-time expressions: only ifExpr and its predicate expression
-    assert(equivalence1.getAllExprStates().count(_.realEvalCount == 1) == 2)
-    assert(equivalence1.getAllExprStates().filter(_.realEvalCount == 1).exists(_.expr eq ifExpr1))
-    assert(equivalence1.getAllExprStates().filter(_.realEvalCount == 1).exists(_.expr eq condition))
+    assert(equivalence1.getAllExprStates().count(_.transientEvalCount == 1) == 2)
+    assert(equivalence1.getAllExprStates().filter(_.transientEvalCount == 1)
+      .exists(_.expr eq ifExpr1))
+    assert(equivalence1.getAllExprStates().filter(_.transientEvalCount == 1)
+      .exists(_.expr eq condition))
 
     val cs = equivalence1.getCommonSubexpressions
     assert(cs === Seq(add))
@@ -185,7 +188,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     equivalence2.addExprTree(ifExpr2)
 
     assert(equivalence2.getAllExprStates(1).isEmpty)
-    assert(equivalence2.getAllExprStates().count(_.realEvalCount == 1) == 3)
+    assert(equivalence2.getAllExprStates().count(_.transientEvalCount == 1) == 3)
 
     val cs2 = equivalence2.getCommonSubexpressions
     assert(cs2 === Seq(add))
@@ -195,14 +198,18 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     equivalence3.addExprTree(ifExpr3)
 
     // `add`: 3, `condition`: 2
-    assert(equivalence3.getAllExprStates().count(_.realEvalCount >= 2) == 2)
-    assert(equivalence3.getAllExprStates().filter(_.realEvalCount == 2).exists(_.expr eq condition))
-    assert(equivalence3.getAllExprStates().filter(_.realEvalCount == 3).exists(_.expr eq add))
+    assert(equivalence3.getAllExprStates().count(_.transientEvalCount >= 2) == 2)
+    assert(equivalence3.getAllExprStates().filter(_.transientEvalCount == 2)
+      .exists(_.expr eq condition))
+    assert(equivalence3.getAllExprStates().filter(_.transientEvalCount == 3)
+      .exists(_.expr eq add))
 
     // `ifExpr1`, `ifExpr3`
-    assert(equivalence3.getAllExprStates().count(_.realEvalCount == 1) == 2)
-    assert(equivalence3.getAllExprStates().filter(_.realEvalCount == 1).exists(_.expr eq ifExpr1))
-    assert(equivalence3.getAllExprStates().filter(_.realEvalCount == 1).exists(_.expr eq ifExpr3))
+    assert(equivalence3.getAllExprStates().count(_.transientEvalCount == 1) == 2)
+    assert(equivalence3.getAllExprStates().filter(_.transientEvalCount == 1)
+      .exists(_.expr eq ifExpr1))
+    assert(equivalence3.getAllExprStates().filter(_.transientEvalCount == 1)
+      .exists(_.expr eq ifExpr3))
 
     val cs3 = equivalence3.getCommonSubexpressions
     assert(cs3 === Seq(add, condition))
@@ -211,35 +218,35 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
   test("Children of conditional expressions: CaseWhen") {
     val add1 = Add(Literal(1), Literal(2))
     val add2 = Add(Literal(2), Literal(3))
-//    val conditions1 = (GreaterThan(add2, Literal(3)), add1) ::
-//      (GreaterThan(add2, Literal(4)), add1) ::
-//      (GreaterThan(add2, Literal(5)), add1) :: Nil
-//
-//    val caseWhenExpr1 = CaseWhen(conditions1, None)
-//    val equivalence1 = new EquivalentExpressions
-//    equivalence1.addExprTree(caseWhenExpr1)
-//
-//    val ess = equivalence1.getAllExprStates()
-//      .filter(es => es.realEvalCount == 1 && es.realCondEvalCount == 0.75)
-//    assert(ess.map(_.expr) === Seq(add2))
-//
-//    val cs = equivalence1.getCommonSubexpressions
-//    assert(cs === Seq(add2))
-//
-//    val conditions2 = (GreaterThan(add1, Literal(3)), add1) ::
-//      (GreaterThan(add2, Literal(4)), add1) ::
-//      (GreaterThan(add2, Literal(5)), add1) :: Nil
-//
-//    val caseWhenExpr2 = CaseWhen(conditions2, add1)
-//    val equivalence2 = new EquivalentExpressions
-//    equivalence2.addExprTree(caseWhenExpr2)
-//
-//    // `add1` is repeatedly in all branch values, and first predicate.
-//    assert(equivalence2.getAllExprStates().count(_.realEvalCount == 2) == 1)
-//    assert(equivalence2.getAllExprStates().filter(_.realEvalCount == 2).head.expr eq add1)
-//
-//    val cs2 = equivalence2.getCommonSubexpressions
-//    assert(cs2 === Seq(add1))
+    val conditions1 = (GreaterThan(add2, Literal(3)), add1) ::
+      (GreaterThan(add2, Literal(4)), add1) ::
+      (GreaterThan(add2, Literal(5)), add1) :: Nil
+
+    val caseWhenExpr1 = CaseWhen(conditions1, None)
+    val equivalence1 = new EquivalentExpressions
+    equivalence1.addExprTree(caseWhenExpr1)
+
+    val ess = equivalence1.getAllExprStates()
+      .filter(es => es.transientEvalCount == 1 && es.transientCondEvalCount == 0.75)
+    assert(ess.map(_.expr) === Seq(add2))
+
+    val cs = equivalence1.getCommonSubexpressions
+    assert(cs === Seq(add2))
+
+    val conditions2 = (GreaterThan(add1, Literal(3)), add1) ::
+      (GreaterThan(add2, Literal(4)), add1) ::
+      (GreaterThan(add2, Literal(5)), add1) :: Nil
+
+    val caseWhenExpr2 = CaseWhen(conditions2, add1)
+    val equivalence2 = new EquivalentExpressions
+    equivalence2.addExprTree(caseWhenExpr2)
+
+    // `add1` is repeatedly in all branch values, and first predicate.
+    assert(equivalence2.getAllExprStates().count(_.transientEvalCount == 2) == 1)
+    assert(equivalence2.getAllExprStates().filter(_.transientEvalCount == 2).head.expr eq add1)
+
+    val cs2 = equivalence2.getCommonSubexpressions
+    assert(cs2 === Seq(add1))
 
     // Negative case. `add1` or `add2` is not commonly used in all predicates/branch values.
     val conditions3 = (GreaterThan(add1, Literal(3)), add2) ::
@@ -249,11 +256,11 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     val caseWhenExpr3 = CaseWhen(conditions3, None)
     val equivalence3 = new EquivalentExpressions
     equivalence3.addExprTree(caseWhenExpr3)
-    assert(equivalence3.getAllExprStates().count(_.realEvalCount == 2) == 0)
+    assert(equivalence3.getAllExprStates().count(_.transientEvalCount == 2) == 0)
     assert(equivalence3.getAllExprStates()
-      .count(es => es.realEvalCount == 1 && es.realCondEvalCount == 0.375) == 1)
+      .count(es => es.transientEvalCount == 1 && es.transientCondEvalCount == 0.375) == 1)
     assert(equivalence3.getAllExprStates()
-      .count(es => es.realEvalCount == 1 && es.realCondEvalCount == 0.25) == 1)
+      .count(es => es.transientEvalCount == 1 && es.transientCondEvalCount == 0.25) == 1)
 
     val cs3 = equivalence3.getCommonSubexpressions
     assert(cs3 === Seq(add2, add1))
@@ -272,7 +279,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 
     // `add2` is repeatedly in all conditions.
     val ess = equivalence1.getAllExprStates()
-      .filter(es => es.realEvalCount == 1 && es.realCondEvalCount == 1.0)
+      .filter(es => es.transientEvalCount == 1 && es.transientCondEvalCount == 1.0)
     assert(ess.map(_.expr) === Seq(add2))
 
     val cs = equivalence1.getCommonSubexpressions
@@ -287,7 +294,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     val equivalence2 = new EquivalentExpressions
     equivalence2.addExprTree(coalesceExpr2)
 
-    assert(equivalence2.getAllExprStates().count(_.realEvalCount == 2) == 0)
+    assert(equivalence2.getAllExprStates().count(_.transientEvalCount == 2) == 0)
 
     val cs2 = equivalence2.getCommonSubexpressions
     assert(cs2 === Seq.empty)
@@ -361,7 +368,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 
     val commonExprs = equivalence.getAllExprStates(1)
     assert(commonExprs.map(_.expr).toSet === Set(add3, add2, add1))
-    assert(commonExprs.count(_.realEvalCount == 2) == 3)
+    assert(commonExprs.count(_.transientEvalCount == 2) == 3)
 
     val cs = equivalence.getCommonSubexpressions
     assert(cs === Seq(add3))
@@ -378,8 +385,8 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 
     val commonExprs = equivalence.getAllExprStates(1)
     assert(commonExprs.size == 1)
-    assert(commonExprs.head.realEvalCount == 2)
-    assert(commonExprs.head.realCondEvalCount == 0.5)
+    assert(commonExprs.head.transientEvalCount == 2)
+    assert(commonExprs.head.transientCondEvalCount == 0.5)
     assert(commonExprs.head.expr eq add)
 
     val cs = equivalence.getCommonSubexpressions
@@ -395,7 +402,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 
     val commonExprs = equivalence.getAllExprStates()
     assert(commonExprs.size == 2)
-    assert(commonExprs.map(_.realEvalCount) === Seq(1, 1))
+    assert(commonExprs.map(_.transientEvalCount) === Seq(1, 1))
     assert(commonExprs.map(_.expr) === Seq(add, transparent))
 
     val cs = equivalence.getCommonSubexpressions
@@ -411,11 +418,11 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     assert(equivalence1.getAllExprStates().head.expr eq add)
 
     equivalence1.addExprTree(Add(Literal(3), add))
-    assert(equivalence1.getAllExprStates().map(_.realEvalCount) === Seq(2, 1))
+    assert(equivalence1.getAllExprStates().map(_.transientEvalCount) === Seq(2, 1))
     assert(equivalence1.getAllExprStates().map(_.expr) === Seq(add, Add(Literal(3), add)))
 
     equivalence1.addExprTree(Add(Literal(3), add))
-    assert(equivalence1.getAllExprStates().map(_.realEvalCount) === Seq(3, 2))
+    assert(equivalence1.getAllExprStates().map(_.transientEvalCount) === Seq(3, 2))
     assert(equivalence1.getAllExprStates().map(_.expr) === Seq(add, Add(Literal(3), add)))
 
     val cs = equivalence1.getCommonSubexpressions
@@ -424,15 +431,15 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     val equivalence2 = new EquivalentExpressions
 
     equivalence2.addExprTree(Add(Literal(3), add))
-    assert(equivalence2.getAllExprStates().map(_.realEvalCount) === Seq(1, 1))
+    assert(equivalence2.getAllExprStates().map(_.transientEvalCount) === Seq(1, 1))
     assert(equivalence2.getAllExprStates().map(_.expr) === Seq(add, Add(Literal(3), add)))
 
     equivalence2.addExprTree(add)
-    assert(equivalence2.getAllExprStates().map(_.realEvalCount) === Seq(2, 1))
+    assert(equivalence2.getAllExprStates().map(_.transientEvalCount) === Seq(2, 1))
     assert(equivalence2.getAllExprStates().map(_.expr) === Seq(add, Add(Literal(3), add)))
 
     equivalence2.addExprTree(Add(Literal(3), add))
-    assert(equivalence2.getAllExprStates().map(_.realEvalCount) === Seq(3, 2))
+    assert(equivalence2.getAllExprStates().map(_.transientEvalCount) === Seq(3, 2))
     assert(equivalence2.getAllExprStates().map(_.expr) === Seq(add, Add(Literal(3), add)))
 
     val cs2 = equivalence2.getCommonSubexpressions
@@ -452,9 +459,9 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     equivalence.addExprTree(caseWhenExpr)
 
     // `add1` is not in the elseValue, so we can't extract it from the branches
-    assert(equivalence.getAllExprStates().count(_.realEvalCount == 2) == 0)
+    assert(equivalence.getAllExprStates().count(_.transientEvalCount == 2) == 0)
     assert(equivalence.getAllExprStates()
-      .count(es => es.realEvalCount == 1 && es.realCondEvalCount == 0.875) == 1)
+      .count(es => es.transientEvalCount == 1 && es.transientCondEvalCount == 0.875) == 1)
 
     val cs = equivalence.getCommonSubexpressions
     assert(cs === Seq(add1))
@@ -503,18 +510,18 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     val e1 = new EquivalentExpressions
     e1.addExprTree(n1)
     val ess = e1.getAllExprStates(0, Some(0))
-    assert(ess.filter(es => es.realEvalCount == 0 && es.realCondEvalCount == 0.5).map(_.expr) ===
-      Seq(add2))
-    assert(ess.filter(es => es.realEvalCount == 0 && es.realCondEvalCount == 1.0).map(_.expr) ===
-      Seq(add))
+    assert(ess.filter(es => es.transientEvalCount == 0 && es.transientCondEvalCount == 0.5)
+      .map(_.expr) === Seq(add2))
+    assert(ess.filter(es => es.transientEvalCount == 0 && es.transientCondEvalCount == 1.0)
+      .map(_.expr) === Seq(add))
     assert(e1.getCommonSubexpressions.isEmpty)
 
     val n2 = NaNvl(add, add)
     val e2 = new EquivalentExpressions
     e2.addExprTree(n2)
     val ess2 = e2.getAllExprStates(0, Some(0))
-    assert(ess2.filter(es => es.realEvalCount == 1 && es.realCondEvalCount == 0.5).map(_.expr) ===
-      Seq(add))
+    assert(ess2.filter(es => es.transientEvalCount == 1 && es.transientCondEvalCount == 0.5)
+      .map(_.expr) === Seq(add))
     assert(e2.getCommonSubexpressions.size == 1)
     assert(e2.getCommonSubexpressions.head == add)
   }
