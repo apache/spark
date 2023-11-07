@@ -29,7 +29,7 @@ private[client] class CustomSparkConnectStub(
 
   def addArtifacts(responseObserver: StreamObserver[AddArtifactsResponse])
       : StreamObserver[AddArtifactsRequest] = {
-    stubState.wrapStreamObserver(
+    stubState.responseValidator.wrapStreamObserver(
       stubState.retryHandler.RetryStreamObserver(responseObserver, stub.addArtifacts))
   }
 }
