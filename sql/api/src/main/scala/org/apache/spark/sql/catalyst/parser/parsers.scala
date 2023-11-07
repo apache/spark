@@ -99,10 +99,9 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
       case e: SparkThrowable with WithOrigin =>
         throw new ParseException(
           command = Option(command),
-          message = e.getMessage,
           start = e.origin,
           stop = e.origin,
-          errorClass = Option(e.getErrorClass),
+          errorClass = e.getErrorClass,
           messageParameters = e.getMessageParameters.asScala.toMap,
           queryContext = e.getQueryContext)
     }
@@ -174,7 +173,12 @@ case object ParseErrorListener extends BaseErrorListener {
       case sre: SparkRecognitionException if sre.errorClass.isDefined =>
         throw new ParseException(None, start, stop, sre.errorClass.get, sre.messageParameters)
       case _ =>
-        throw new ParseException(None, msg, start, stop)
+        throw new ParseException(
+          command = None,
+          start = start,
+          stop = stop,
+          errorClass = "PARSE_SYNTAX_ERROR",
+          messageParameters = Map("error" -> msg, "hint" -> ""))
     }
   }
 }
@@ -183,7 +187,7 @@ case object ParseErrorListener extends BaseErrorListener {
  * A [[ParseException]] is an [[SparkException]] that is thrown during the parse process. It
  * contains fields and an extended error message that make reporting and diagnosing errors easier.
  */
-class ParseException(
+class ParseException private(
     val command: Option[String],
     message: String,
     val start: Origin,
@@ -223,7 +227,24 @@ class ParseException(
       start,
       stop,
       Some(errorClass),
-      messageParameters)
+      messageParameters,
+      queryContext = ParseException.getQueryContext())
+
+  def this(
+      command: Option[String],
+      start: Origin,
+      stop: Origin,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      queryContext: Array[QueryContext]) =
+    this(
+      command,
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      start,
+      stop,
+      Some(errorClass),
+      messageParameters,
+      queryContext)
 
   override def getMessage: String = {
     val builder = new StringBuilder
