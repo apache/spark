@@ -22,6 +22,7 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.{Node, Text}
 
 import org.apache.spark.SparkContext
+import org.apache.spark.internal.config.UI.UI_FLAMEGRAPH_ENABLED
 import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.ui.{SparkUITab, UIUtils, WebUIPage}
 import org.apache.spark.ui.UIUtils.prependBaseUri
@@ -30,6 +31,8 @@ import org.apache.spark.ui.flamegraph.FlamegraphNode
 private[ui] class ExecutorThreadDumpPage(
     parent: SparkUITab,
     sc: Option[SparkContext]) extends WebUIPage("threadDump") {
+
+  private val flamegraphEnabled = sc.isDefined && sc.get.conf.get(UI_FLAMEGRAPH_ENABLED)
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val executorId = Option(request.getParameter("executorId")).map { executorId =>
@@ -70,7 +73,12 @@ private[ui] class ExecutorThreadDumpPage(
     <div class="row">
       <div class="col-12">
         <p>Updated at {UIUtils.formatDate(time)}</p>
-        {drawExecutorFlamegraph(request, threadDump)}
+        { if (flamegraphEnabled) {
+            drawExecutorFlamegraph(request, threadDump) }
+          else {
+            Seq.empty
+          }
+        }
         {
           // scalastyle:off
           <p></p>

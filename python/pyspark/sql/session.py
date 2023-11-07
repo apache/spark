@@ -253,12 +253,17 @@ class SparkSession(SparkConversionMixin):
             -------
             :class:`SparkSession.Builder`
 
+            See Also
+            --------
+            :class:`SparkConf`
+
             Examples
             --------
-            For an existing class:`SparkConf`, use `conf` parameter.
+            For an existing :class:`SparkConf`, use `conf` parameter.
 
             >>> from pyspark.conf import SparkConf
-            >>> SparkSession.builder.config(conf=SparkConf())
+            >>> conf = SparkConf().setAppName("example").setMaster("local")
+            >>> SparkSession.builder.config(conf=conf)
             <pyspark.sql.session.SparkSession.Builder...
 
             For a (key, value) pair, you can omit parameter names.
@@ -266,7 +271,13 @@ class SparkSession(SparkConversionMixin):
             >>> SparkSession.builder.config("spark.some.config.option", "some-value")
             <pyspark.sql.session.SparkSession.Builder...
 
-            Additionally, you can pass a dictionary of configurations to set.
+            Set multiple configurations.
+
+            >>> SparkSession.builder.config(
+            ...     "spark.some.config.number", 123).config("spark.some.config.float", 0.123)
+            <pyspark.sql.session.SparkSession.Builder...
+
+            Set multiple configurations using a dictionary.
 
             >>> SparkSession.builder.config(
             ...     map={"spark.some.config.number": 123, "spark.some.config.float": 0.123})
