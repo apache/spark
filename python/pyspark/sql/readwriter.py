@@ -418,20 +418,7 @@ class DataFrameReader(OptionUtils):
         | 30|  Bob|
         +---+-----+
 
-        Example 3: Read JSON from an RDD of JSON strings
-
-        >>> json_strings = ["{'name': 'Alice', 'age': 25}", "{'name': 'Bob', 'age': 30}"]
-        >>> rdd = spark.sparkContext.parallelize(json_strings)  # doctest: +SKIP
-        >>> df = spark.read.json(rdd)  # doctest: +SKIP
-        >>> df.show()  # doctest: +SKIP
-        +---+-----+
-        |age| name|
-        +---+-----+
-        | 25|Alice|
-        | 30|  Bob|
-        +---+-----+
-
-        Example 4: Read JSON with a custom schema
+        Example 3: Read JSON with a custom schema
 
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory() as d:
