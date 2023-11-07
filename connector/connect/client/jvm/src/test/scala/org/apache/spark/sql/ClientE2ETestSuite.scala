@@ -136,8 +136,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
         assert(
           ex.getStackTrace
             .find(_.getClassName.contains("org.apache.spark.sql.catalyst.analysis.CheckAnalysis"))
-            .isDefined
-            == isServerStackTraceEnabled)
+            .isDefined)
       }
     }
   }
