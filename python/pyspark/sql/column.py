@@ -1423,14 +1423,15 @@ class Column:
         >>> from pyspark.sql import functions as sf
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> result = df.select(
-        ...     df.name, sf.when(sf.lit(True), 1).otherwise(sf.raise_error("unreachable")))
+        ...     df.name, sf.when(sf.lit(True), 1).otherwise(
+        ...         sf.raise_error("unreachable")).alias("when"))
         >>> result.show()
-        +-----+--------------------------------+
-        | name|CASE WHEN true THEN 1 ELSE 0 END|
-        +-----+--------------------------------+
-        |Alice|                               1|
-        |  Bob|                               1|
-        +-----+--------------------------------+
+        +-----+----+
+        | name|when|
+        +-----+----+
+        |Alice|   1|
+        |  Bob|   1|
+        +-----+----+
 
         See Also
         --------
