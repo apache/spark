@@ -143,7 +143,7 @@
     <parquet.version>1.13.1</parquet.version>
     <orc.version>1.9.2</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>9.4.53.v20231009</jetty.version>
+    <jetty.version>10.0.18</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
     <!--
@@ -486,12 +486,6 @@
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-http</artifactId>
-        <version>${jetty.version}</version>
-        <scope>provided</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-continuation</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
