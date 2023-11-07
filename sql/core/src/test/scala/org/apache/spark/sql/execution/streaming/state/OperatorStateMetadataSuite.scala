@@ -167,8 +167,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       )
       checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata)
 
-      val df = spark.read.format("state-metadata")
-        .load(checkpointDir.toString)
+      val df = spark.read.format("state-metadata").load(checkpointDir.toString)
       checkAnswer(df, Seq(Row(0, "sessionWindowStateStoreSaveExec", "default", 5, 0L, 0L)))
       checkAnswer(df.select(df.metadataColumn("_numColsPrefixKey")), Seq(Row(1)))
     }
@@ -201,8 +200,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata0)
       checkOperatorStateMetadata(checkpointDir.toString, 1, expectedMetadata1)
 
-      val df = spark.read.format("state-metadata")
-        .load(checkpointDir.toString)
+      val df = spark.read.format("state-metadata").load(checkpointDir.toString)
       checkAnswer(df, Seq(Row(0, "stateStoreSave", "default", 5, 0L, 1L),
           Row(1, "stateStoreSave", "default", 5, 0L, 1L)))
       checkAnswer(df.select(df.metadataColumn("_numColsPrefixKey")), Seq(Row(0), Row(0)))
