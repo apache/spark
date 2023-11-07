@@ -670,7 +670,7 @@ object PrefixSpanModel extends Loader[PrefixSpanModel[_]] {
     }
 
     def load(sc: SparkContext, path: String): PrefixSpanModel[_] = {
-      implicit val formats: DefaultFormats.type = DefaultFormats
+      implicit val formats: Formats = DefaultFormats
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)

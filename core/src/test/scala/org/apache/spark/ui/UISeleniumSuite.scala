@@ -83,7 +83,7 @@ private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
 class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
 
   implicit var webDriver: WebDriver = _
-  implicit val formats: DefaultFormats.type = DefaultFormats
+  implicit val formats: Formats = DefaultFormats
 
 
   override def beforeAll(): Unit = {

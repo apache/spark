@@ -27,7 +27,7 @@ import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
 import io.netty.util.internal.PlatformDependent
-import org.json4s.DefaultFormats
+import org.json4s._
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
@@ -60,7 +60,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   import CoarseGrainedExecutorBackend._
 
-  private implicit val formats: DefaultFormats.type = DefaultFormats
+  private implicit val formats: Formats = DefaultFormats
 
   private[spark] val stopping = new AtomicBoolean(false)
   var executor: Executor = null

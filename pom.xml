@@ -2995,10 +2995,6 @@
               -->
               <arg>-Wconf:cat=deprecation&amp;msg=procedure syntax is deprecated:e</arg>
               <!--
-                SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
-              -->
-              <arg>-Wconf:msg=Implicit definition should have explicit type:s</arg>
-              <!--
                 SPARK-45627 Symbol literals are deprecated in Scala 2.13 and it's a compile error in Scala 3.
               -->
               <arg>-Wconf:cat=deprecation&amp;msg=symbol literal is deprecated:e</arg>
