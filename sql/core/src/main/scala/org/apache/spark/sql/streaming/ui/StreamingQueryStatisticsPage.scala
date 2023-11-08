@@ -22,7 +22,7 @@ import java.lang.{Long => JLong}
 import java.util.Locale
 import javax.servlet.http.HttpServletRequest
 
-import scala.jdk.CollectionConverters._
+import scala.collection.JavaConverters._
 import scala.xml.{Node, NodeBuffer, Unparsed}
 
 import org.apache.spark.internal.Logging
@@ -209,6 +209,10 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         p.stateOperators.map(_.numRowsUpdated).sum.toDouble))
       val maxNumRowsUpdated = numRowsUpdatedData.maxBy(_._2)._2
 
+      val numRowsRemovedData = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
+        p.stateOperators.map(_.numRowsRemoved).sum.toDouble))
+      val maxNumRowsRemoved = numRowsRemovedData.maxBy(_._2)._2
+
       val memoryUsedBytesData = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
         p.stateOperators.map(_.memoryUsedBytes).sum.toDouble))
       val maxMemoryUsedBytes = memoryUsedBytesData.maxBy(_._2)._2
@@ -241,6 +245,18 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
           maxNumRowsUpdated,
           "records")
       graphUIDataForNumberUpdatedRows.generateDataJs(jsCollector)
+
+      val graphUIDataForNumberRemovedRows =
+        new GraphUIData(
+          "aggregated-num-removed-state-rows-timeline",
+          "aggregated-num-removed-state-rows-histogram",
+          numRowsRemovedData,
+          minBatchTime,
+          maxBatchTime,
+          0,
+          maxNumRowsRemoved,
+          "records")
+      graphUIDataForNumberRemovedRows.generateDataJs(jsCollector)
 
       val graphUIDataForMemoryUsedBytes =
         new GraphUIData(
@@ -286,6 +302,23 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
           <td class={"aggregated-num-updated-state-rows-timeline"}>{graphUIDataForNumberUpdatedRows.generateTimelineHtml(jsCollector)}</td>
           <td class={"aggregated-num-updated-state-rows-histogram"}>{graphUIDataForNumberUpdatedRows.generateHistogramHtml(jsCollector)}</td>
         </tr>
+          <tr>
+            <td style="vertical-align: middle;">
+              <div style="width: 160px;">
+                <div>
+                  <strong>Aggregated Number Of Evicted State Rows
+                    {SparkUIUtils.tooltip("Aggregated number of state rows evicted from the state.", "right")}
+                  </strong>
+                </div>
+              </div>
+            </td>
+            <td class={"aggregated-num-removed-state-rows-timeline"}>
+              {graphUIDataForNumberRemovedRows.generateTimelineHtml(jsCollector)}
+            </td>
+            <td class={"aggregated-num-removed-state-rows-histogram"}>
+              {graphUIDataForNumberRemovedRows.generateHistogramHtml(jsCollector)}
+            </td>
+          </tr>
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
@@ -298,7 +331,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
-              <div><strong>Aggregated Number Of Rows Dropped By Watermark {SparkUIUtils.tooltip("Accumulates all input rows being dropped in stateful operators by watermark. 'Inputs' are relative to operators.", "right")}</strong></div>
+              <div><strong>Aggregated Number Of Late Rows Dropped By Watermark {SparkUIUtils.tooltip("Accumulates all late input rows being dropped in stateful operators by watermark. This only represents the late rows ever reached to stateful operators, not rows from the source. A row could be filtered out at an earlier stage.", "right")}</strong></div>
             </div>
           </td>
           <td class={"aggregated-num-rows-dropped-by-watermark-timeline"}>{graphUIDataForNumRowsDroppedByWatermark.generateTimelineHtml(jsCollector)}</td>
