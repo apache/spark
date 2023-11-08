@@ -99,10 +99,11 @@ class BasePythonDataSourceTestsMixin:
                 return iter(self.paths)
 
             def read(self, path):
-                with open(path) as file:
-                    for line in file:
-                        data = json.loads(line)
-                        yield data.get("name"), data.get("age")
+                with open(path, "r") as file:
+                    for line in file.readlines():
+                        if line.strip():
+                            data = json.loads(line)
+                            yield data.get("name"), data.get("age")
 
         class JsonDataSource(DataSource):
             @classmethod

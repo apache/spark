@@ -660,7 +660,7 @@ The operation `<statement>` is not allowed on the `<objectType>`: `<objectName>`
 
 ### FOUND_MULTIPLE_DATA_SOURCES
 
-SQLSTATE: none assigned
+[SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Detected multiple data sources with the name '`<provider>`'. Please check the data source isn't simultaneously registered and located in the classpath.
 
