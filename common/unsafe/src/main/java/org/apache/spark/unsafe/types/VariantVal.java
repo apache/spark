@@ -36,8 +36,8 @@ import java.util.Arrays;
  * <p>
  * The storage layout of this class in {@link org.apache.spark.sql.catalyst.expressions.UnsafeRow}
  * and {@link org.apache.spark.sql.catalyst.expressions.UnsafeArrayData} is: the fixed-size part is
- * a long value "offsetAndSize". The upper 32 bits is the offset that points to the start position of
- * the actual binary content. The lower 32 bits is the total length of the binary content. The
+ * a long value "offsetAndSize". The upper 32 bits is the offset that points to the start position
+ * of the actual binary content. The lower 32 bits is the total length of the binary content. The
  * binary content contains: 4 bytes representing the length of {@link VariantVal#value}, content of
  * {@link VariantVal#value}, content of {@link VariantVal#metadata}. This is an internal and
  * transient format and can be modified at any time.
@@ -79,7 +79,8 @@ public class VariantVal implements Serializable {
    * This function reads the binary content described in `writeIntoUnsafeRow` from `baseObject`. The
    * offset is computed by adding the offset in {@code offsetAndSize} and {@code baseOffset}.
    */
-  public static VariantVal readFromUnsafeRow(long offsetAndSize, Object baseObject, long baseOffset) {
+  public static VariantVal readFromUnsafeRow(long offsetAndSize, Object baseObject,
+                                             long baseOffset) {
     // offset and totalSize is the upper/lower 32 bits in offsetAndSize.
     int offset = (int) (offsetAndSize >> 32);
     int totalSize = (int) offsetAndSize;
@@ -112,8 +113,8 @@ public class VariantVal implements Serializable {
   }
 
   /**
-   * @return A human-readable representation of the Variant value. It is always a JSON string at this
-   * moment.
+   * @return A human-readable representation of the Variant value. It is always a JSON string at
+   * this moment.
    */
   @Override
   public String toString() {
