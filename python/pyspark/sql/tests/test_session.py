@@ -17,6 +17,7 @@
 
 import os
 import unittest
+import unittest.mock
 
 from pyspark import SparkConf, SparkContext
 from pyspark.sql import SparkSession, SQLContext, Row

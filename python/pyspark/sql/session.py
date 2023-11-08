@@ -483,9 +483,10 @@ class SparkSession(SparkConversionMixin):
 
                             if url is None:
                                 raise RuntimeError(
-                                    "Cannot create a Spark Connect session because the Spark Connect remote URL has "
-                                    "not been set. Please define the remote URL by setting either the 'spark.remote' "
-                                    "option or the 'SPARK_REMOTE' environment variable."
+                                    "Cannot create a Spark Connect session because the "
+                                    "Spark Connect remote URL has not been set. Please define "
+                                    "the remote URL by setting either the 'spark.remote' option "
+                                    "or the 'SPARK_REMOTE' environment variable."
                                 )
 
                             if url.startswith("local"):
