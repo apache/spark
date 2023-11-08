@@ -284,6 +284,32 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     CatalogImpl.makeDataset(functions.result(), sparkSession)
   }
 
+  private def toFunctionIdent(functionName: String): Seq[String] = {
+    val parsed = parseIdent(functionName)
+    // For backward compatibility (Spark 3.3 and prior), we should check if the function exists in
+    // the Hive Metastore first.
+    if (parsed.length <= 2 &&
+      !sessionCatalog.isTemporaryFunction(parsed.asFunctionIdentifier) &&
+      sessionCatalog.isPersistentFunction(parsed.asFunctionIdentifier)) {
+      qualifyV1Ident(parsed)
+    } else {
+      parsed
+    }
+  }
+
+  private def functionExists(nameParts: Seq[String]): Boolean = {
+    val plan = UnresolvedFunctionName(nameParts, "Catalog.functionExists", false, None)
+    try {
+      sparkSession.sessionState.executePlan(plan).analyzed match {
+        case _: ResolvedPersistentFunc => true
+        case _: ResolvedNonPersistentFunc => true
+        case _ => false
+      }
+    } catch {
+      case e: AnalysisException if e.getErrorClass == "UNRESOLVED_ROUTINE" => false
+    }
+  }
+
   private def makeFunction(ident: Seq[String]): Function = {
     val plan = UnresolvedFunctionName(ident, "Catalog.makeFunction", false, None)
     sparkSession.sessionState.executePlan(plan).analyzed match {
@@ -465,17 +491,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * function. This throws an `AnalysisException` when no `Function` can be found.
    */
   override def getFunction(functionName: String): Function = {
-    val parsed = parseIdent(functionName)
-    // For backward compatibility (Spark 3.3 and prior), we should check if the function exists in
-    // the Hive Metastore first.
-    val nameParts = if (parsed.length <= 2 &&
-      !sessionCatalog.isTemporaryFunction(parsed.asFunctionIdentifier) &&
-      sessionCatalog.isPersistentFunction(parsed.asFunctionIdentifier)) {
-      qualifyV1Ident(parsed)
-    } else {
-      parsed
-    }
-    makeFunction(nameParts)
+    makeFunction(toFunctionIdent(functionName))
   }
 
   /**
@@ -540,23 +556,16 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * or a function.
    */
   override def functionExists(functionName: String): Boolean = {
-    val parsed = parseIdent(functionName)
-    // For backward compatibility (Spark 3.3 and prior), we should check if the function exists in
-    // the Hive Metastore first. This also checks if it's a built-in/temp function.
-    (parsed.length <= 2 && sessionCatalog.functionExists(parsed.asFunctionIdentifier)) || {
-      val plan = UnresolvedIdentifier(parsed)
-      sparkSession.sessionState.executePlan(plan).analyzed match {
-        case ResolvedIdentifier(catalog: FunctionCatalog, ident) => catalog.functionExists(ident)
-        case _ => false
-      }
-    }
+    functionExists(toFunctionIdent(functionName))
   }
 
   /**
    * Checks if the function with the specified name exists in the specified database.
    */
   override def functionExists(dbName: String, functionName: String): Boolean = {
-    sessionCatalog.functionExists(FunctionIdentifier(functionName, Option(dbName)))
+    // For backward compatibility (Spark 3.3 and prior), here we always look up the function from
+    // the Hive Metastore.
+    functionExists(Seq(CatalogManager.SESSION_CATALOG_NAME, dbName, functionName))
   }
 
   /**
