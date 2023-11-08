@@ -80,7 +80,7 @@ private[sql] object ArrowConverters extends Logging {
       maxRecordsPerBatch: Long,
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
-      context: TaskContext) extends Iterator[Array[Byte]] {
+      context: TaskContext) extends Iterator[Array[Byte]] with AutoCloseable {
 
     protected val arrowSchema =
       ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames)
@@ -93,13 +93,11 @@ private[sql] object ArrowConverters extends Logging {
     protected val arrowWriter = ArrowWriter.create(root)
 
     Option(context).foreach {_.addTaskCompletionListener[Unit] { _ =>
-      root.close()
-      allocator.close()
+      close()
     }}
 
     override def hasNext: Boolean = rowIter.hasNext || {
-      root.close()
-      allocator.close()
+      close()
       false
     }
 
@@ -123,6 +121,11 @@ private[sql] object ArrowConverters extends Logging {
       }
 
       out.toByteArray
+    }
+
+    override def close(): Unit = {
+        root.close()
+        allocator.close()
     }
   }
 
@@ -226,18 +229,21 @@ private[sql] object ArrowConverters extends Logging {
       schema: StructType,
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean): Array[Byte] = {
-    new ArrowBatchWithSchemaIterator(
+    val batches = new ArrowBatchWithSchemaIterator(
         Iterator.empty, schema, 0L, 0L,
         timeZoneId, errorOnDuplicatedFieldNames, TaskContext.get()) {
       override def hasNext: Boolean = true
 
-      // SPARK-45814: We need to call `super.hasNext` to avoid memory leak.
       override def next(): Array[Byte] = {
         val res = super.next()
         super.hasNext
         res
       }
-    }.next()
+    }
+    val emptyBatch = batches.next()
+    // SPARK-45814: We need to call `close()` to avoid memory leak.
+    batches.close()
+    emptyBatch
   }
 
   /**
