@@ -233,12 +233,6 @@ private[sql] object ArrowConverters extends Logging {
         Iterator.empty, schema, 0L, 0L,
         timeZoneId, errorOnDuplicatedFieldNames, TaskContext.get()) {
       override def hasNext: Boolean = true
-
-      override def next(): Array[Byte] = {
-        val res = super.next()
-        super.hasNext
-        res
-      }
     }
     val emptyBatch = batches.next()
     // SPARK-45814: We need to call `close()` to avoid memory leak.
