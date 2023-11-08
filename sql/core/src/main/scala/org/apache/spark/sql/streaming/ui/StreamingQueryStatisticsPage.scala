@@ -302,23 +302,15 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
           <td class={"aggregated-num-updated-state-rows-timeline"}>{graphUIDataForNumberUpdatedRows.generateTimelineHtml(jsCollector)}</td>
           <td class={"aggregated-num-updated-state-rows-histogram"}>{graphUIDataForNumberUpdatedRows.generateHistogramHtml(jsCollector)}</td>
         </tr>
-          <tr>
-            <td style="vertical-align: middle;">
-              <div style="width: 160px;">
-                <div>
-                  <strong>Aggregated Number Of Evicted State Rows
-                    {SparkUIUtils.tooltip("Aggregated number of state rows evicted from the state.", "right")}
-                  </strong>
-                </div>
-              </div>
-            </td>
-            <td class={"aggregated-num-removed-state-rows-timeline"}>
-              {graphUIDataForNumberRemovedRows.generateTimelineHtml(jsCollector)}
-            </td>
-            <td class={"aggregated-num-removed-state-rows-histogram"}>
-              {graphUIDataForNumberRemovedRows.generateHistogramHtml(jsCollector)}
-            </td>
-          </tr>
+        <tr>
+          <td style="vertical-align: middle;">
+            <div style="width: 160px;">
+              <div><strong>Aggregated Number Of Evicted State Rows{SparkUIUtils.tooltip("Aggregated number of state rows evicted from the state.", "right")}</strong></div>
+            </div>
+          </td>
+          <td class={"aggregated-num-removed-state-rows-timeline"}>{graphUIDataForNumberRemovedRows.generateTimelineHtml(jsCollector)}</td>
+          <td class={"aggregated-num-removed-state-rows-histogram"}>{graphUIDataForNumberRemovedRows.generateHistogramHtml(jsCollector)}</td>
+        </tr>
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
