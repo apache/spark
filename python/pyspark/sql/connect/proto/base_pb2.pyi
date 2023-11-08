@@ -2326,21 +2326,6 @@ class ArtifactStatusesResponse(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    class ArtifactStatus(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        EXISTS_FIELD_NUMBER: builtins.int
-        exists: builtins.bool
-        """Exists or not particular artifact at the server."""
-        def __init__(
-            self,
-            *,
-            exists: builtins.bool = ...,
-        ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["exists", b"exists"]
-        ) -> None: ...
-
     class StatusesEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -2362,9 +2347,30 @@ class ArtifactStatusesResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
-    STATUSES_FIELD_NUMBER: builtins.int
+    class ArtifactStatus(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        EXISTS_FIELD_NUMBER: builtins.int
+        exists: builtins.bool
+        """Exists or not particular artifact at the server."""
+        def __init__(
+            self,
+            *,
+            exists: builtins.bool = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["exists", b"exists"]
+        ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
+    STATUSES_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """Session id in which the ArtifactStatus was running."""
+    server_side_session_id: builtins.str
+    """Server-side generated idempotency key that the client can use to assert that the server side
+    session has not changed.
+    """
     @property
     def statuses(
         self,
@@ -2372,21 +2378,15 @@ class ArtifactStatusesResponse(google.protobuf.message.Message):
         builtins.str, global___ArtifactStatusesResponse.ArtifactStatus
     ]:
         """A map of artifact names to their statuses."""
-    session_id: builtins.str
-    """Session id in which the ArtifactStatus was running."""
-    server_side_session_id: builtins.str
-    """Server-side generated idempotency key that the client can use to assert that the server side
-    session has not changed.
-    """
     def __init__(
         self,
         *,
+        session_id: builtins.str = ...,
+        server_side_session_id: builtins.str = ...,
         statuses: collections.abc.Mapping[
             builtins.str, global___ArtifactStatusesResponse.ArtifactStatus
         ]
         | None = ...,
-        session_id: builtins.str = ...,
-        server_side_session_id: builtins.str = ...,
     ) -> None: ...
     def ClearField(
         self,
@@ -3332,10 +3332,15 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_spark_throwable", b"_spark_throwable"]
         ) -> typing_extensions.Literal["spark_throwable"] | None: ...
 
-    ROOT_ERROR_IDX_FIELD_NUMBER: builtins.int
-    ERRORS_FIELD_NUMBER: builtins.int
     SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
     SESSION_ID_FIELD_NUMBER: builtins.int
+    ROOT_ERROR_IDX_FIELD_NUMBER: builtins.int
+    ERRORS_FIELD_NUMBER: builtins.int
+    server_side_session_id: builtins.str
+    """Server-side generated idempotency key that the client can use to assert that the server side
+    session has not changed.
+    """
+    session_id: builtins.str
     root_error_idx: builtins.int
     """The index of the root error in errors. The field will not be set if the error is not found."""
     @property
@@ -3345,18 +3350,13 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         global___FetchErrorDetailsResponse.Error
     ]:
         """A list of errors."""
-    server_side_session_id: builtins.str
-    """Server-side generated idempotency key that the client can use to assert that the server side
-    session has not changed.
-    """
-    session_id: builtins.str
     def __init__(
         self,
         *,
-        root_error_idx: builtins.int | None = ...,
-        errors: collections.abc.Iterable[global___FetchErrorDetailsResponse.Error] | None = ...,
         server_side_session_id: builtins.str = ...,
         session_id: builtins.str = ...,
+        root_error_idx: builtins.int | None = ...,
+        errors: collections.abc.Iterable[global___FetchErrorDetailsResponse.Error] | None = ...,
     ) -> None: ...
     def HasField(
         self,
