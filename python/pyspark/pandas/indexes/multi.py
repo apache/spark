@@ -815,7 +815,7 @@ class MultiIndex(Index):
         sdf_symdiff = sdf_self.union(sdf_other).subtract(sdf_self.intersect(sdf_other))
 
         if sort:
-            sdf_symdiff = sdf_symdiff.sort(*self._internal.index_spark_columns)
+            sdf_symdiff = sdf_symdiff.sort(*self._internal.index_spark_column_names)
 
         internal = InternalFrame(
             spark_frame=sdf_symdiff,
