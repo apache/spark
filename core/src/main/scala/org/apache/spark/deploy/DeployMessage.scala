@@ -238,6 +238,8 @@ private[deploy] object DeployMessages {
   case class DriverStatusResponse(found: Boolean, state: Option[DriverState],
     workerId: Option[String], workerHostPort: Option[String], exception: Option[Exception])
 
+  case object RequestClearCompletedDriversAndApps extends DeployMessage
+
   // Internal message in AppClient
 
   case object StopAppClient
