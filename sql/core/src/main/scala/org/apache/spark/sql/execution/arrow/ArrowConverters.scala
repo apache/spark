@@ -234,10 +234,14 @@ private[sql] object ArrowConverters extends Logging {
         timeZoneId, errorOnDuplicatedFieldNames, TaskContext.get()) {
       override def hasNext: Boolean = true
     }
-    val emptyBatch = batches.next()
-    // SPARK-45814: We need to call `close()` to avoid memory leak.
-    batches.close()
-    emptyBatch
+    Utils.tryWithSafeFinally {
+      batches.next()
+    } {
+      // If taskContext is null, `batches.close()` should be called to avoid memory leak.
+      if (TaskContext.get() == null) {
+        batches.close()
+      }
+    }
   }
 
   /**
