@@ -614,8 +614,7 @@ class SparkConnectClient(object):
             default_policy_args.update(retry_policy)
 
         default_policy = DefaultPolicy(**default_policy_args)
-        self.register_retry_policy(default_policy)
-        self.set_retry_policies([default_policy.name])
+        self.set_retry_policies([default_policy])
 
         if self._builder.session_id is None:
             # Generate a unique session ID for this client. This UUID must be unique to allow
@@ -653,35 +652,19 @@ class SparkConnectClient(object):
         self._use_reattachable_execute = True
         return self
 
-    def register_retry_policy(self, policy: RetryPolicy):
-        """
-        Registers specified policy in the dictionary of known policies.
-
-        To activate it, use set_retry_policies().
-        """
-        if policy.name in self._known_retry_policies:
-            raise ValueError("Already known policy")
-        self._known_retry_policies[policy.name] = policy
-
-    def set_retry_policies(self, policies: List[Union[str, RetryPolicy]]):
+    def set_retry_policies(self, policies: Iterable[RetryPolicy]):
         """
         Sets list of policies to be used for retries.
-        I.e. set_retry_policies(["DefaultPolicy", "CustomPolicy"]).
+        I.e. set_retry_policies([DefaultPolicy(), CustomPolicy()]).
 
-        If policy is given as string, the policy object is sourced from previously
-        registered policies.
-        Specifying policy directly bypasses the registration mechanism.
         """
-        self._retry_policies = [
-            policy if isinstance(policy, RetryPolicy) else self._known_retry_policies[policy]
-            for policy in policies
-        ]
+        self._retry_policies = list(policies)
 
-    def get_retry_policies(self) -> List[str]:
+    def get_retry_policies(self) -> List[RetryPolicy]:
         """
-        Return list of currently used policies, i.e. ["DefaultPolicy", "MyCustomPolicy"].
+        Return list of currently used policies
         """
-        return [policy.name for policy in self._retry_policies]
+        return list(self._retry_policies)
 
     def register_udf(
         self,

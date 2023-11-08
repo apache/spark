@@ -118,17 +118,13 @@ class SparkConnectClientTestCase(unittest.TestCase):
 
     def test_retry_client_unit(self):
         client = SparkConnectClient("sc://foo/;token=bar")
-        client.register_retry_policy(TestPolicy())
 
-        # Using policy names.
-        client.set_retry_policies([DefaultPolicy().name, TestPolicy().name])
+        policyA = TestPolicy()
+        policyB = DefaultPolicy()
 
-        self.assertEqual(client.get_retry_policies(), [DefaultPolicy().name, TestPolicy().name])
+        client.set_retry_policies([policyA, policyB])
 
-        # Explicitly specified objects
-        client.set_retry_policies([TestPolicy(), DefaultPolicy()])
-
-        self.assertEqual(client.get_retry_policies(), [TestPolicy().name, DefaultPolicy().name])
+        self.assertEqual(client.get_retry_policies(), [policyA, policyB])
 
     def test_channel_builder_with_session(self):
         dummy = str(uuid.uuid4())
