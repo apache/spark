@@ -30,7 +30,10 @@ if should_test_connect:
     import pyarrow as pa
     from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
     from pyspark.sql.connect.client.retries import (
-        Retrying, DefaultPolicy, RetryPolicy, RetryException
+        Retrying,
+        DefaultPolicy,
+        RetryPolicy,
+        RetryException,
     )
     from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
     import pyspark.sql.connect.proto as proto
