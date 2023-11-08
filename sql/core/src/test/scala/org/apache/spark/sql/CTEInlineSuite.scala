@@ -683,7 +683,7 @@ abstract class CTEInlineSuiteBase
     val e = intercept[AnalysisException](sql(
       s"""
         |with
-        |a as (select * from t),
+        |a as (select * from non_exist),
         |b as (select * from a)
         |select 2
         |""".stripMargin))
