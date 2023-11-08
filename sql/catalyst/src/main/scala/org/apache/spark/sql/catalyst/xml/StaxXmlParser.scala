@@ -31,10 +31,11 @@ import scala.xml.SAXException
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, CaseInsensitiveMap, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode}
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.catalyst.xml.TypeCast._
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -59,6 +60,8 @@ class StaxXmlParser(
       (input: String) => doParseColumn(input, options.parseMode, xsdSchema)
     }
   }
+
+  private val caseSensitive: Boolean = SQLConf.get.caseSensitiveAnalysis
 
   def parseStream(
       inputStream: InputStream,
@@ -250,7 +253,11 @@ class StaxXmlParser(
     val convertedValuesMap = collection.mutable.Map.empty[String, Any]
     val valuesMap = StaxXmlParserUtils.convertAttributesToValuesMap(attributes, options)
     valuesMap.foreach { case (f, v) =>
-      val nameToIndex = schema.map(_.name).zipWithIndex.toMap
+      val nameToIndex = if (SQLConf.get.caseSensitiveAnalysis) {
+        schema.map(_.name).zipWithIndex.toMap
+      } else {
+        CaseInsensitiveMap(schema.map(_.name).zipWithIndex.toMap)
+      }
       nameToIndex.get(f).foreach { i =>
         convertedValuesMap(f) = convertTo(v, schema(i).dataType, options)
       }
@@ -290,7 +297,11 @@ class StaxXmlParser(
     // Here we merge both to a row.
     val valuesMap = fieldsMap ++ attributesMap
     valuesMap.foreach { case (f, v) =>
-      val nameToIndex = schema.map(_.name).zipWithIndex.toMap
+      val nameToIndex = if (SQLConf.get.caseSensitiveAnalysis) {
+        schema.map(_.name).zipWithIndex.toMap
+      } else {
+        CaseInsensitiveMap(schema.map(_.name).zipWithIndex.toMap)
+      }
       nameToIndex.get(f).foreach { row(_) = v }
     }
 
@@ -313,7 +324,11 @@ class StaxXmlParser(
       rootAttributes: Array[Attribute] = Array.empty,
       isRootAttributesOnly: Boolean = false): InternalRow = {
     val row = new Array[Any](schema.length)
-    val nameToIndex = schema.map(_.name).zipWithIndex.toMap
+    val nameToIndex = if (caseSensitive) {
+      schema.map(_.name).zipWithIndex.toMap
+    } else {
+      CaseInsensitiveMap(schema.map(_.name).zipWithIndex.toMap)
+    }
     // If there are attributes, then we process them first.
     convertAttributes(rootAttributes, schema, options).toSeq.foreach { case (f, v) =>
       nameToIndex.get(f).foreach { row(_) = v }

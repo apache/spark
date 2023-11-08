@@ -207,7 +207,8 @@ case class SchemaOfXml(
   }
 
   override def eval(v: InternalRow): Any = {
-    val dataType = XmlInferSchema.infer(xml.toString, xmlOptions).get match {
+    val dataType = XmlInferSchema
+      .infer(xml.toString, xmlOptions, SQLConf.get.caseSensitiveAnalysis).get match {
       case st: StructType =>
         XmlInferSchema.canonicalizeType(st).getOrElse(StructType(Nil))
       case at: ArrayType if at.elementType.isInstanceOf[StructType] =>
