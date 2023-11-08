@@ -78,7 +78,7 @@ class InMemoryTableWithV2Filter(
                 val matchingKeys =
                   p.children().drop(1).map(_.asInstanceOf[LiteralValue[_]].value.toString).toSet
                 data = data.filter(partition => {
-                  val key = partition.asInstanceOf[BufferedRows].keyString
+                  val key = partition.asInstanceOf[BufferedRows].keyString()
                   matchingKeys.contains(key)
                 })
               }

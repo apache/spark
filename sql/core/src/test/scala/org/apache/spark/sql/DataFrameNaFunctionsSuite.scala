@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.internal.SQLConf
@@ -320,7 +320,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = createDFWithNestedColumns
 
     // Rows with the specified nested columns whose null values are dropped.
-    assert(df.count == 3)
+    assert(df.count() == 3)
     checkAnswer(
       df.na.drop("any", Seq("c1.c1-1")),
       Seq(Row(Row("b1", "b2"))))

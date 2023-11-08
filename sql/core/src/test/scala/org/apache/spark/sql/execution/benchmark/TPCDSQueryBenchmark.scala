@@ -60,7 +60,7 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark with Logging {
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .set("spark.kryo.registrationRequired", "true")
 
-    SparkSession.builder.config(conf).getOrCreate()
+    SparkSession.builder().config(conf).getOrCreate()
   }
 
   val tables = Seq("catalog_page", "catalog_returns", "customer", "customer_address",

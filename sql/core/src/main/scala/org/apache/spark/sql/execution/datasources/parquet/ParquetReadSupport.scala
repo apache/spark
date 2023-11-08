@@ -21,7 +21,7 @@ import java.time.ZoneId
 import java.util
 import java.util.{Locale, Map => JMap, UUID}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.hadoop.api.{InitContext, ReadSupport}

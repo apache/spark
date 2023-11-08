@@ -46,8 +46,8 @@ class ProcfsMetricsGetterSuite extends SparkFunSuite {
     val mockedP = spy[ProcfsMetricsGetter](p)
 
     var ptree: Set[Int] = Set(26109, 22763)
-    when(mockedP.computeProcessTree).thenReturn(ptree)
-    var r = mockedP.computeAllMetrics
+    when(mockedP.computeProcessTree()).thenReturn(ptree)
+    var r = mockedP.computeAllMetrics()
     assert(r.jvmVmemTotal == 4769947648L)
     assert(r.jvmRSSTotal == 262610944)
     assert(r.pythonVmemTotal == 360595456)
@@ -55,8 +55,8 @@ class ProcfsMetricsGetterSuite extends SparkFunSuite {
 
     // proc file of pid 22764 doesn't exist, so partial metrics shouldn't be returned
     ptree = Set(26109, 22764, 22763)
-    when(mockedP.computeProcessTree).thenReturn(ptree)
-    r = mockedP.computeAllMetrics
+    when(mockedP.computeProcessTree()).thenReturn(ptree)
+    r = mockedP.computeAllMetrics()
     assert(r.jvmVmemTotal == 0)
     assert(r.jvmRSSTotal == 0)
     assert(r.pythonVmemTotal == 0)

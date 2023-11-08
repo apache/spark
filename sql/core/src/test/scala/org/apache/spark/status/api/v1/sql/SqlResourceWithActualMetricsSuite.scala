@@ -19,6 +19,7 @@ package org.apache.spark.status.api.v1.sql
 
 import java.net.URL
 import java.text.SimpleDateFormat
+import javax.servlet.http.HttpServletResponse
 
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods
@@ -127,7 +128,7 @@ class SqlResourceWithActualMetricsSuite
       .filter(_.getAs[Int]("age") <= 30)
       .sort()
 
-    ds.toDF
+    ds.toDF()
   }
 
   test("SPARK-44334: Status of a failed DDL/DML with no jobs should be FAILED") {
@@ -148,4 +149,12 @@ class SqlResourceWithActualMetricsSuite
     }
   }
 
+  test("SPARK-45291: Use unknown query execution id instead of no such app when id is invalid") {
+    val url = new URL(spark.sparkContext.ui.get.webUrl +
+      s"/api/v1/applications/${spark.sparkContext.applicationId}/sql/${Long.MaxValue}")
+    val (code, resultOpt, error) = getContentAndCode(url)
+    assert(code === HttpServletResponse.SC_NOT_FOUND)
+    assert(resultOpt.isEmpty)
+    assert(error.get === s"unknown query execution id: ${Long.MaxValue}")
+  }
 }

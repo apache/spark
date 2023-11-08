@@ -16,7 +16,6 @@
 #
 
 from abc import ABCMeta, abstractmethod
-
 from typing import Any, Generic, Optional, List, Type, TypeVar, TYPE_CHECKING
 
 from pyspark import since

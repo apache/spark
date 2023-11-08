@@ -74,7 +74,7 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
     } else {
       monotonically_increasing_id()
     }
-    val df = spark.range(numRows).map(_ => Random.nextLong).selectExpr(selectExpr: _*)
+    val df = spark.range(numRows).map(_ => Random.nextLong()).selectExpr(selectExpr: _*)
       .withColumn("value", valueCol)
       .sort("value")
 

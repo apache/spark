@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -1215,7 +1216,8 @@ trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
           } else {
             beforeMapChildren
           }
-          withPropagatedTypes.transformExpressionsUp(typeCoercionFn)
+          withPropagatedTypes.transformExpressionsUpWithPruning(
+            AlwaysProcess.fn, ruleId)(typeCoercionFn)
         }
     }
   }

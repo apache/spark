@@ -254,7 +254,7 @@ class SortBasedAggregator(
       private var result: AggregationBufferEntry = _
       private var groupingKey: UnsafeRow = _
 
-      override def hasNext(): Boolean = {
+      override def hasNext: Boolean = {
         result != null || findNextSortedGroup()
       }
 

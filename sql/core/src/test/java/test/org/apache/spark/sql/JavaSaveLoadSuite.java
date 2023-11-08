@@ -24,9 +24,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.types.DataTypes;
@@ -45,7 +45,7 @@ public class JavaSaveLoadSuite {
     QueryTest$.MODULE$.checkAnswer(actual, expected);
   }
 
-  @Before
+  @BeforeEach
   public void setUp() throws IOException {
     spark = SparkSession.builder()
       .master("local[*]")
@@ -67,7 +67,7 @@ public class JavaSaveLoadSuite {
     df.createOrReplaceTempView("jsonTable");
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     spark.stop();
     spark = null;

@@ -20,8 +20,8 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 import java.util.Locale
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.kafka.clients.admin.{Admin, ListOffsetsOptions, ListOffsetsResult, OffsetSpec}

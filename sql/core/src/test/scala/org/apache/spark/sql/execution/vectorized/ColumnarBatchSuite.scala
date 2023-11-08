@@ -24,8 +24,8 @@ import java.sql.{Date, Timestamp}
 import java.time.LocalDateTime
 import java.util
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
 import scala.util.Random
 

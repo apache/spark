@@ -407,12 +407,6 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     assert(filteredVariables == Map("SPARK_VAR" -> "1"))
   }
 
-  test("client includes mesos env vars") {
-    val environmentVariables = Map("SPARK_VAR" -> "1", "MESOS_VAR" -> "1", "OTHER_VAR" -> "1")
-    val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
-    assert(filteredVariables == Map("SPARK_VAR" -> "1", "MESOS_VAR" -> "1"))
-  }
-
   test("SPARK-45197: Make StandaloneRestServer add JavaModuleOptions to drivers") {
     val request = new CreateSubmissionRequest
     request.appResource = ""

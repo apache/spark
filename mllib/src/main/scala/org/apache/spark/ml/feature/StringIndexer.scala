@@ -199,7 +199,7 @@ class StringIndexer @Since("1.4.0") (
 
     val selectedCols = getSelectedCols(dataset, inputCols)
     dataset.select(selectedCols: _*)
-      .toDF
+      .toDF()
       .agg(aggregator.toColumn)
       .as[Array[OpenHashMap[String, Long]]]
       .collect()(0)

@@ -90,12 +90,6 @@ private[hive] object IsolatedClientLoader extends Logging {
 
   def hiveVersion(version: String): HiveVersion = {
     VersionUtils.majorMinorPatchVersion(version).flatMap {
-      case (12, _, _) | (0, 12, _) => Some(hive.v12)
-      case (13, _, _) | (0, 13, _) => Some(hive.v13)
-      case (14, _, _) | (0, 14, _) => Some(hive.v14)
-      case (1, 0, _) => Some(hive.v1_0)
-      case (1, 1, _) => Some(hive.v1_1)
-      case (1, 2, _) => Some(hive.v1_2)
       case (2, 0, _) => Some(hive.v2_0)
       case (2, 1, _) => Some(hive.v2_1)
       case (2, 2, _) => Some(hive.v2_2)

@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.time.LocalDateTime
 import java.util.Locale
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 

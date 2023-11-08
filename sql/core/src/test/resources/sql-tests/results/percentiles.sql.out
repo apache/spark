@@ -180,6 +180,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_cont(salary, 0.25)\""
   },
@@ -208,6 +209,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_disc(salary, 0.25)\""
   },
@@ -235,6 +237,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"median(salary)\""
   },
@@ -263,6 +266,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_cont(salary, 0.25)\""
   },
@@ -291,6 +295,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_disc(salary, 0.25)\""
   },
@@ -318,6 +323,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"median(salary)\""
   },
@@ -410,6 +416,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_cont(salary, 0.25)\""
   },
@@ -439,6 +446,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_disc(salary, 0.25)\""
   },
@@ -467,6 +475,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"median(salary)\""
   },
@@ -496,6 +505,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_cont(salary, 0.25)\""
   },
@@ -525,6 +535,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_disc(salary, 0.25)\""
   },
@@ -553,6 +564,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"median(salary)\""
   },

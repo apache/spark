@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransfo
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{Decimal, IntegerType, LongType, MetadataBuilder, StringType, StructType, TimestampType}
+import org.apache.spark.storage.StorageLevelMapper
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class DDLParserSuite extends AnalysisTest {
@@ -2341,7 +2342,7 @@ class DDLParserSuite extends AnalysisTest {
         UnresolvedRelation(Seq("a", "b", "c")),
         Seq("a", "b", "c"),
         true,
-        Map("storageLevel" -> "DISK_ONLY")))
+        Map("storageLevel" -> StorageLevelMapper.DISK_ONLY.name())))
 
     val sql = "CACHE TABLE a.b.c AS SELECT * FROM testData"
     checkError(

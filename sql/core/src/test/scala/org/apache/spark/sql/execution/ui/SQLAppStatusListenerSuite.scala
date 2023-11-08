@@ -694,7 +694,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
       time,
       Map.empty))
-    assert(statusStore.executionsCount === 2)
+    assert(statusStore.executionsCount() === 2)
     assert(statusStore.execution(2) === None)
   }
 

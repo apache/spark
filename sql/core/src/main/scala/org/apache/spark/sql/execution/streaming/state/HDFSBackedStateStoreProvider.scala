@@ -22,8 +22,8 @@ import java.util
 import java.util.Locale
 import java.util.concurrent.atomic.LongAdder
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.common.io.ByteStreams

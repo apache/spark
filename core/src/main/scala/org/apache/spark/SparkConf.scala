@@ -20,8 +20,8 @@ package org.apache.spark
 import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
+import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
@@ -498,7 +498,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   private[spark] def validateSettings(): Unit = {
     if (contains("spark.local.dir")) {
       val msg = "Note that spark.local.dir will be overridden by the value set by " +
-        "the cluster manager (via SPARK_LOCAL_DIRS in mesos/standalone/kubernetes and LOCAL_DIRS" +
+        "the cluster manager (via SPARK_LOCAL_DIRS in standalone/kubernetes and LOCAL_DIRS" +
         " in YARN)."
       logWarning(msg)
     }
@@ -739,6 +739,9 @@ private[spark] object SparkConf extends Logging {
     (name.startsWith("spark.auth") && name != SecurityManager.SPARK_AUTH_SECRET_CONF) ||
     name.startsWith("spark.rpc") ||
     name.startsWith("spark.network") ||
+    // We need SSL configs to propagate as they may be needed for RPCs.
+    // Passwords are propagated separately though.
+    (name.startsWith("spark.ssl") && !name.contains("Password")) ||
     isSparkPortConf(name)
   }
 
@@ -804,5 +807,4 @@ private[spark] object SparkConf extends Logging {
       key: String,
       version: String,
       translation: String => String = null)
-
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
@@ -138,7 +138,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def flatMapGroups[U : Encoder](f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
+  def flatMapGroups[U : Encoder](f: (K, Iterator[V]) => IterableOnce[U]): Dataset[U] = {
     Dataset[U](
       sparkSession,
       MapGroups(
@@ -198,7 +198,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    */
   def flatMapSortedGroups[U : Encoder](
       sortExprs: Column*)(
-      f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
+      f: (K, Iterator[V]) => IterableOnce[U]): Dataset[U] = {
     val sortOrder: Seq[SortOrder] = MapGroups.sortOrder(sortExprs.map(_.expr))
 
     Dataset[U](
@@ -807,7 +807,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    */
   def cogroup[U, R : Encoder](
       other: KeyValueGroupedDataset[K, U])(
-      f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
+      f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): Dataset[R] = {
     implicit val uEncoder = other.vExprEnc
     Dataset[R](
       sparkSession,
@@ -857,7 +857,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
       other: KeyValueGroupedDataset[K, U])(
       thisSortExprs: Column*)(
       otherSortExprs: Column*)(
-      f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
+      f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): Dataset[R] = {
     def toSortOrder(col: Column): SortOrder = col.expr match {
       case expr: SortOrder => expr
       case expr: Expression => SortOrder(expr, Ascending)

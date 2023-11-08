@@ -19,7 +19,7 @@ package org.apache.spark.sql.avro
 import java.io.{FileNotFoundException, IOException}
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.avro.Schema
 import org.apache.avro.file.{DataFileReader, FileReader}

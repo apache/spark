@@ -60,8 +60,7 @@ public final class RpcFailure extends AbstractMessage implements ResponseMessage
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof RpcFailure) {
-      RpcFailure o = (RpcFailure) other;
+    if (other instanceof RpcFailure o) {
       return requestId == o.requestId && errorString.equals(o.errorString);
     }
     return false;

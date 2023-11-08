@@ -20,8 +20,8 @@ package org.apache.spark
 import java.util.{Collections => JCollections, HashSet => JHashSet}
 import java.util.concurrent.atomic.LongAdder
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._

@@ -548,7 +548,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
    * 'this' DStream without changing the key.
    */
   def flatMapValues[U: ClassTag](
-      flatMapValuesFunc: V => TraversableOnce[U]
+      flatMapValuesFunc: V => IterableOnce[U]
     ): DStream[(K, U)] = ssc.withScope {
     new FlatMapValuedDStream[K, V, U](self, sparkContext.clean(flatMapValuesFunc))
   }

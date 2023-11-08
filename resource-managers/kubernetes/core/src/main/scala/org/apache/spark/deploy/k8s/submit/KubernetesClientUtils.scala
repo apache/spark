@@ -21,9 +21,9 @@ import java.io.{File, StringWriter}
 import java.nio.charset.MalformedInputException
 import java.util.Properties
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.io.{Codec, Source}
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, KeyToPath}
 

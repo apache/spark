@@ -19,7 +19,7 @@ package org.apache.spark.mllib.evaluation
 
 import java.{lang => jl}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.annotation.Since

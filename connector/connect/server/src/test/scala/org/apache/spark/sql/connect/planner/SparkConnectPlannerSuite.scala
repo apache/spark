@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.planner
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
@@ -58,8 +58,8 @@ trait SparkConnectPlanTest extends SharedSparkSession {
 
   def transform(cmd: proto.Command): Unit = {
     val executeHolder = buildExecutePlanHolder(cmd)
-    new SparkConnectPlanner(executeHolder.sessionHolder)
-      .process(cmd, new MockObserver(), executeHolder)
+    new SparkConnectPlanner(executeHolder)
+      .process(cmd, new MockObserver())
   }
 
   def readRel: proto.Relation =
@@ -148,7 +148,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Simple Limit") {
     assertThrows[IndexOutOfBoundsException] {
-      new SparkConnectPlanner(None.orNull)
+      new SparkConnectPlanner(SessionHolder.forTesting(None.orNull))
         .transformRelation(
           proto.Relation.newBuilder
             .setLimit(proto.Limit.newBuilder.setLimit(10))
@@ -159,10 +159,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("InvalidInputs") {
     // No Relation Set
     intercept[IndexOutOfBoundsException](
-      new SparkConnectPlanner(None.orNull).transformRelation(proto.Relation.newBuilder().build()))
+      new SparkConnectPlanner(SessionHolder.forTesting(None.orNull))
+        .transformRelation(proto.Relation.newBuilder().build()))
 
     intercept[InvalidPlanInput](
-      new SparkConnectPlanner(None.orNull)
+      new SparkConnectPlanner(SessionHolder.forTesting(None.orNull))
         .transformRelation(
           proto.Relation.newBuilder.setUnknown(proto.Unknown.newBuilder().build()).build()))
   }

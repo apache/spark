@@ -23,8 +23,8 @@ import java.util.jar.{JarFile, Manifest}
 import java.util.jar.Attributes.Name
 import java.util.zip.ZipFile
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfterEach

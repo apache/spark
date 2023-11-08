@@ -49,9 +49,9 @@ specified below, the secret must be defined by setting the `spark.authenticate.s
 option. The same secret is shared by all Spark applications and daemons in that case, which limits
 the security of these deployments, especially on multi-tenant clusters.
 
-The REST Submission Server and the MesosClusterDispatcher do not support authentication.  You should
-ensure that all network access to the REST API & MesosClusterDispatcher (port 6066 and 7077
-respectively by default) are restricted to hosts that are trusted to submit jobs.
+The REST Submission Server does not support authentication. You should
+ensure that all network access to the REST API (port 6066 by default) 
+is restricted to hosts that are trusted to submit jobs.
 
 ### YARN
 
@@ -225,7 +225,7 @@ The following settings cover enabling encryption for data written to disk:
   <td><code>spark.io.encryption.enabled</code></td>
   <td>false</td>
   <td>
-    Enable local disk I/O encryption. Currently supported by all modes except Mesos. It's strongly
+    Enable local disk I/O encryption. Currently supported by all modes. It's strongly
     recommended that RPC encryption be enabled when using this feature.
   </td>
   <td>2.1.0</td>
@@ -621,20 +621,6 @@ The user may allow the executors to use the SSL settings inherited from the work
 can be accomplished by setting `spark.ssl.useNodeLocalConf` to `true`. In that case, the settings
 provided by the user on the client side are not used.
 
-### Mesos mode
-
-Mesos 1.3.0 and newer supports `Secrets` primitives as both file-based and environment based
-secrets. Spark allows the specification of file-based and environment variable based secrets with
-`spark.mesos.driver.secret.filenames` and `spark.mesos.driver.secret.envkeys`, respectively.
-
-Depending on the secret store backend secrets can be passed by reference or by value with the
-`spark.mesos.driver.secret.names` and `spark.mesos.driver.secret.values` configuration properties,
-respectively.
-
-Reference type secrets are served by the secret store and referred to by name, for example
-`/mysecret`. Value type secrets are passed on the command line and translated into their
-appropriate files or environment variables.
-
 ## HTTP Security Headers
 
 Apache Spark can be configured to include HTTP headers to aid in preventing Cross Site Scripting
@@ -819,7 +805,7 @@ mechanism (see `java.util.ServiceLoader`). Implementations of
 `org.apache.spark.security.HadoopDelegationTokenProvider` can be made available to Spark
 by listing their names in the corresponding file in the jar's `META-INF/services` directory.
 
-Delegation token support is currently only supported in YARN and Mesos modes. Consult the
+Delegation token support is currently only supported in YARN mode. Consult the
 deployment-specific page for more information.
 
 The following options provides finer-grained control for this feature:
@@ -861,7 +847,7 @@ Long-running applications may run into issues if their run time exceeds the maxi
 token lifetime configured in services it needs to access.
 
 This feature is not available everywhere. In particular, it's only implemented
-on YARN and Kubernetes (both client and cluster modes), and on Mesos when using client mode.
+on YARN and Kubernetes (both client and cluster modes).
 
 Spark supports automatically creating new tokens for these applications. There are two ways to
 enable this functionality.

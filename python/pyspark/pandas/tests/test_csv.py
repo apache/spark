@@ -20,7 +20,6 @@ import shutil
 import tempfile
 import unittest
 from contextlib import contextmanager
-from distutils.version import LooseVersion
 
 import pandas as pd
 import numpy as np

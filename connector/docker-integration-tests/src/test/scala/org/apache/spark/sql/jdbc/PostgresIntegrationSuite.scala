@@ -344,7 +344,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       .option("url", jdbcUrl)
       .option("query", query)
       .load()
-    assert(df.collect.toSet === expectedResult)
+    assert(df.collect().toSet === expectedResult)
 
     // query option in the create table path.
     sql(
@@ -353,7 +353,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
          |USING org.apache.spark.sql.jdbc
          |OPTIONS (url '$jdbcUrl', query '$query')
        """.stripMargin.replaceAll("\n", " "))
-    assert(sql("select c1, c3 from queryOption").collect.toSet == expectedResult)
+    assert(sql("select c1, c3 from queryOption").collect().toSet == expectedResult)
   }
 
   test("write byte as smallint") {

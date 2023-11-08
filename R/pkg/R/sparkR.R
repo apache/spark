@@ -662,6 +662,7 @@ setJobDescription <- function(value) {
 
 #' Set a local property that affects jobs submitted from this thread, such as the
 #' Spark fair scheduler pool.
+#' To remove/unset property simply set `value` to NULL e.g. setLocalProperty("key", NULL)
 #'
 #' @param key The key for a local property.
 #' @param value The value for a local property.

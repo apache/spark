@@ -55,23 +55,23 @@ public interface Message extends Encodable {
 
     public static Type decode(ByteBuf buf) {
       byte id = buf.readByte();
-      switch (id) {
-        case 0: return ChunkFetchRequest;
-        case 1: return ChunkFetchSuccess;
-        case 2: return ChunkFetchFailure;
-        case 3: return RpcRequest;
-        case 4: return RpcResponse;
-        case 5: return RpcFailure;
-        case 6: return StreamRequest;
-        case 7: return StreamResponse;
-        case 8: return StreamFailure;
-        case 9: return OneWayMessage;
-        case 10: return UploadStream;
-        case 11: return MergedBlockMetaRequest;
-        case 12: return MergedBlockMetaSuccess;
-        case -1: throw new IllegalArgumentException("User type messages cannot be decoded.");
-        default: throw new IllegalArgumentException("Unknown message type: " + id);
-      }
+      return switch (id) {
+        case 0 -> ChunkFetchRequest;
+        case 1 -> ChunkFetchSuccess;
+        case 2 -> ChunkFetchFailure;
+        case 3 -> RpcRequest;
+        case 4 -> RpcResponse;
+        case 5 -> RpcFailure;
+        case 6 -> StreamRequest;
+        case 7 -> StreamResponse;
+        case 8 -> StreamFailure;
+        case 9 -> OneWayMessage;
+        case 10 -> UploadStream;
+        case 11 -> MergedBlockMetaRequest;
+        case 12 -> MergedBlockMetaSuccess;
+        case -1 -> throw new IllegalArgumentException("User type messages cannot be decoded.");
+        default -> throw new IllegalArgumentException("Unknown message type: " + id);
+      };
     }
   }
 }

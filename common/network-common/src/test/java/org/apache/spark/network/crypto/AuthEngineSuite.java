@@ -29,9 +29,9 @@ import io.netty.channel.FileRegion;
 import org.apache.spark.network.util.ByteArrayWritableChannel;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
-import static org.junit.Assert.*;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import static org.mockito.Mockito.*;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -54,7 +54,7 @@ public class AuthEngineSuite {
   private static final String outputIv = "a72709baf00785cad6329ce09f631f71";
   private static TransportConf conf;
 
-  @BeforeClass
+  @BeforeAll
   public static void setUp() {
     conf = new TransportConf("rpc", MapConfigProvider.EMPTY);
   }

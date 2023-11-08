@@ -82,7 +82,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite {
         pushedBlocks ++= blocks
         val managedBuffers = invocation.getArguments()(3).asInstanceOf[Array[ManagedBuffer]]
         val blockPushListener = invocation.getArguments()(4).asInstanceOf[BlockPushingListener]
-        (blocks, managedBuffers).zipped.foreach((blockId, buffer) => {
+        blocks.lazyZip(managedBuffers).foreach((blockId, buffer) => {
           blockPushListener.onBlockPushSuccess(blockId, buffer)
         })
       })
@@ -91,7 +91,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite {
   private def verifyPushRequests(
       pushRequests: Seq[PushRequest],
       expectedSizes: Seq[Int]): Unit = {
-    (pushRequests, expectedSizes).zipped.foreach((req, size) => {
+    pushRequests.lazyZip(expectedSizes).foreach((req, size) => {
       assert(req.size == size)
     })
   }
@@ -256,7 +256,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite {
           // blocks to be deferred
           blockPushListener.onBlockPushSuccess(blocks(0), managedBuffers(0))
         } else {
-          (blocks, managedBuffers).zipped.foreach((blockId, buffer) => {
+          blocks.lazyZip(managedBuffers).foreach((blockId, buffer) => {
             blockPushListener.onBlockPushSuccess(blockId, buffer)
           })
         }

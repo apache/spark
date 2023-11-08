@@ -136,9 +136,6 @@ R:
   - "bin/sparkR*"
 YARN:
   - "resource-managers/yarn/**/*"
-MESOS:
-  - "resource-managers/mesos/**/*"
-  - "sbin/*mesos*.sh"
 KUBERNETES:
   - "resource-managers/kubernetes/**/*"
 WINDOWS:

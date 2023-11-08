@@ -19,7 +19,7 @@ package org.apache.spark.mllib.api.python
 
 import java.util.{List => JList, Map => JMap}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.api.java.JavaRDD

@@ -69,7 +69,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
   test("name unique in active queries") {
     withTempDir { dir =>
       def startQuery(name: Option[String]): StreamingQuery = {
-        val writer = MemoryStream[Int].toDS.writeStream
+        val writer = MemoryStream[Int].toDS().writeStream
         name.foreach(writer.queryName)
         writer
           .foreach(new TestForeachWriter)
@@ -164,9 +164,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AddData(inputData, 0),
       ExpectFailure[SparkException](),
       AssertOnQuery(_.isActive === false),
-      TestAwaitTermination(ExpectException[SparkException]),
-      TestAwaitTermination(ExpectException[SparkException], timeoutMs = 2000),
-      TestAwaitTermination(ExpectException[SparkException], timeoutMs = 10),
+      TestAwaitTermination(ExpectException[SparkException]()),
+      TestAwaitTermination(ExpectException[SparkException](), timeoutMs = 2000),
+      TestAwaitTermination(ExpectException[SparkException](), timeoutMs = 10),
       AssertOnQuery(q => {
         q.exception.get.startOffset ===
           q.committedOffsets.toOffsetSeq(Seq(inputData), OffsetSeqMetadata()).toString &&
@@ -245,7 +245,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
 
     // query execution should take 350 ms the first time it is called
-    val mapped = inputData.toDS.coalesce(1).as[Long].map { x =>
+    val mapped = inputData.toDS().coalesce(1).as[Long].map { x =>
       clock.waitTillTime(1500)  // this will only wait the first time when clock < 1500
       10 / x
     }.agg(count("*")).as[Long]
@@ -431,7 +431,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     assert(spark.conf.get(SQLConf.STREAMING_METRICS_ENABLED.key).toBoolean === false)
 
     withSQLConf(SQLConf.STREAMING_METRICS_ENABLED.key -> "false") {
-      testStream(inputData.toDF)(
+      testStream(inputData.toDF())(
         AssertOnQuery { q => !isMetricsRegistered(q) },
         StopStream,
         AssertOnQuery { q => !isMetricsRegistered(q) }
@@ -440,7 +440,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
     // Registered when enabled
     withSQLConf(SQLConf.STREAMING_METRICS_ENABLED.key -> "true") {
-      testStream(inputData.toDF)(
+      testStream(inputData.toDF())(
         AssertOnQuery { q => isMetricsRegistered(q) },
         StopStream,
         AssertOnQuery { q => !isMetricsRegistered(q) }
@@ -485,7 +485,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
   }
 
   test("input row calculation with same V1 source used twice in self-join") {
-    val streamingTriggerDF = spark.createDataset(1 to 10).toDF
+    val streamingTriggerDF = spark.createDataset(1 to 10).toDF()
     val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF).toDF("value")
 
     val progress = getStreamingQuery(streamingInputDF.join(streamingInputDF, "value"))
@@ -496,7 +496,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
   }
 
   test("input row calculation with mixed batch and streaming V1 sources") {
-    val streamingTriggerDF = spark.createDataset(1 to 10).toDF
+    val streamingTriggerDF = spark.createDataset(1 to 10).toDF()
     val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF).toDF("value")
     val staticInputDF = spark.createDataFrame(Seq(1 -> "1", 2 -> "2")).toDF("value", "anotherValue")
 
@@ -511,7 +511,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
   test("input row calculation with trigger input DF having multiple leaves in V1 source") {
     val streamingTriggerDF =
-      spark.createDataset(1 to 5).toDF.union(spark.createDataset(6 to 10).toDF)
+      spark.createDataset(1 to 5).toDF().union(spark.createDataset(6 to 10).toDF())
     require(streamingTriggerDF.logicalPlan.collectLeaves().size > 1)
     val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF)
 
@@ -826,14 +826,14 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
 
     val input = MemoryStream[Int] :: MemoryStream[Int] :: MemoryStream[Int] :: Nil
-    val q1 = startQuery(input(0).toDS, "stream_serializable_test_1")
-    val q2 = startQuery(input(1).toDS.map { i =>
+    val q1 = startQuery(input(0).toDS(), "stream_serializable_test_1")
+    val q2 = startQuery(input(1).toDS().map { i =>
       // Emulate that `StreamingQuery` get captured with normal usage unintentionally.
       // It should not fail the query.
       val q = q1
       i
     }, "stream_serializable_test_2")
-    val q3 = startQuery(input(2).toDS.map { i =>
+    val q3 = startQuery(input(2).toDS().map { i =>
       // Emulate that `StreamingQuery` is used in executors. We should fail the query with a clear
       // error message.
       q1.explain()

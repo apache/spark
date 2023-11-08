@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import java.time.{LocalDateTime, ZoneId}
 
-import scala.collection.JavaConverters.mapAsScalaMap
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters.MapHasAsScala
 
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTimestamp, CurrentTimeZone, InSubquery, ListQuery, Literal, LocalTimestamp, Now}
@@ -105,7 +105,7 @@ class ComputeCurrentTimeSuite extends PlanTest {
   }
 
   test("analyzer should use consistent timestamps for different timezones") {
-    val localTimestamps = mapAsScalaMap(ZoneId.SHORT_IDS)
+    val localTimestamps = ZoneId.SHORT_IDS.asScala
       .map { case (zoneId, _) => Alias(LocalTimestamp(Some(zoneId)), zoneId)() }.toSeq
     val input = Project(localTimestamps, LocalRelation())
 

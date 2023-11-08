@@ -17,6 +17,7 @@
 #
 
 import unittest
+
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 

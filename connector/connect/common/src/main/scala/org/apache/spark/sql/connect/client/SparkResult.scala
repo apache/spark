@@ -104,6 +104,7 @@ private[sql] class SparkResult[T](
       }
       if (response.hasArrowBatch) {
         val ipcStreamBytes = response.getArrowBatch.getData
+        val expectedNumRows = response.getArrowBatch.getRowCount
         val reader = new MessageIterator(ipcStreamBytes.newInput(), allocator)
         if (arrowSchema == null) {
           arrowSchema = reader.schema
@@ -121,6 +122,14 @@ private[sql] class SparkResult[T](
           // If the schema is not available yet, fallback to the arrow schema.
           structType = ArrowUtils.fromArrowSchema(reader.schema)
         }
+        if (response.getArrowBatch.hasStartOffset) {
+          val expectedStartOffset = response.getArrowBatch.getStartOffset
+          if (numRecords != expectedStartOffset) {
+            throw new IllegalStateException(
+              s"Expected arrow batch to start at row offset $numRecords in results, " +
+                s"but received arrow batch starting at offset $expectedStartOffset.")
+          }
+        }
         var numRecordsInBatch = 0
         val messages = Seq.newBuilder[ArrowMessage]
         while (reader.hasNext) {
@@ -131,6 +140,10 @@ private[sql] class SparkResult[T](
             case _ =>
           }
           messages += message
+        }
+        if (numRecordsInBatch != expectedNumRows) {
+          throw new IllegalStateException(
+            s"Expected $expectedNumRows rows in arrow batch but got $numRecordsInBatch.")
         }
         // Skip the entire result if it is empty.
         if (numRecordsInBatch > 0) {

@@ -357,7 +357,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     assertAmbiguousSelfJoin(df2.join(df1, df1("key1") === df2("key2")))
 
     // Test for SerializeFromObject
-    val df3 = spark.sparkContext.parallelize(1 to 10).map(x => (x, x)).toDF
+    val df3 = spark.sparkContext.parallelize(1 to 10).map(x => (x, x)).toDF()
     val df4 = df3.filter($"_1" <=> 0)
     assertAmbiguousSelfJoin(df3.join(df4, df3("_1") === df4("_2")))
     assertAmbiguousSelfJoin(df4.join(df3, df3("_1") === df4("_2")))
@@ -411,7 +411,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     // Test for Generate
     // Ensure that the root of the plan is Generate
     val df15 = Seq((1, Seq(1, 2, 3))).toDF("a", "intList").select($"a", explode($"intList"))
-      .queryExecution.optimizedPlan.find(_.isInstanceOf[Generate]).get.toDF
+      .queryExecution.optimizedPlan.find(_.isInstanceOf[Generate]).get.toDF()
     val df16 = df15.filter($"a" > 0)
     assertAmbiguousSelfJoin(df15.join(df16, df15("a") === df16("col")))
     assertAmbiguousSelfJoin(df16.join(df15, df15("a") === df16("col")))
@@ -424,7 +424,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
         Seq(
           AttributeReference("x", IntegerType)(),
           AttributeReference("y", IntegerType)()),
-        df1.queryExecution.logical).toDF
+        df1.queryExecution.logical).toDF()
     val df18 = df17.filter($"x" > 0)
     assertAmbiguousSelfJoin(df17.join(df18, df17("x") === df18("y")))
     assertAmbiguousSelfJoin(df18.join(df17, df17("x") === df18("y")))
@@ -436,7 +436,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       Seq(Alias(dfWithTS("time").expr, "ts")()),
       Seq(dfWithTS("a").expr),
       Seq(SortOrder(dfWithTS("a").expr, Ascending)),
-      dfWithTS.queryExecution.logical).toDF
+      dfWithTS.queryExecution.logical).toDF()
     val df20 = df19.filter($"a" > 0)
     assertAmbiguousSelfJoin(df19.join(df20, df19("a") === df20("b")))
     assertAmbiguousSelfJoin(df20.join(df19, df19("a") === df20("b")))
@@ -462,7 +462,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
         AttributeReference("x", IntegerType)(),
         AttributeReference("y", IntegerType)()),
       df1.queryExecution.logical,
-      ioSchema).toDF
+      ioSchema).toDF()
     val df22 = df21.filter($"x" > 0)
     assertAmbiguousSelfJoin(df21.join(df22, df21("x") === df22("y")))
     assertAmbiguousSelfJoin(df22.join(df21, df21("x") === df22("y")))

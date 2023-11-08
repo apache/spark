@@ -24,7 +24,7 @@ import java.util.{Map => JMap, Properties}
 import java.util.concurrent.{TimeoutException, TimeUnit}
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import kafka.api.Request

@@ -22,9 +22,9 @@ import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util.Properties
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{JobArtifactSet, JobArtifactState}
 import org.apache.spark.resource.ResourceInformation

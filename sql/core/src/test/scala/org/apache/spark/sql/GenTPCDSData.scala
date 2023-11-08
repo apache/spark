@@ -223,7 +223,7 @@ class TPCDSTables(spark: SparkSession, dsdgenDir: String, scaleFactor: Int)
           // in case data has more than maxRecordsPerFile, split into multiple writers to improve
           // datagen speed files will be truncated to maxRecordsPerFile value, so the final
           // result will be the same.
-          val numRows = data.count
+          val numRows = data.count()
           val maxRecordPerFile = spark.conf.get(SQLConf.MAX_RECORDS_PER_FILE)
 
           if (maxRecordPerFile > 0 && numRows > maxRecordPerFile) {

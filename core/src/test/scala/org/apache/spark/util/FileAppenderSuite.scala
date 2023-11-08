@@ -340,7 +340,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter {
 
       // Make sure no IOException errors have been logged as a result of appender closing gracefully
       verify(mockAppender, atLeast(0)).append(loggingEventCaptor.capture)
-      import scala.collection.JavaConverters._
+      import scala.jdk.CollectionConverters._
       loggingEventCaptor.getAllValues.asScala.foreach { loggingEvent =>
         assert(loggingEvent.getThrown === null
           || !loggingEvent.getThrown.isInstanceOf[IOException])

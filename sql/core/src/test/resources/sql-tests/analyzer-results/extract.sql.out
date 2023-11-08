@@ -933,7 +933,7 @@ select date_part(c, c) from t
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NON_FOLDABLE_ARGUMENT",
-  "sqlState" : "22024",
+  "sqlState" : "42K08",
   "messageParameters" : {
     "funcName" : "`date_part`",
     "paramName" : "`field`",
@@ -966,7 +966,7 @@ select date_part(i, i) from t
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NON_FOLDABLE_ARGUMENT",
-  "sqlState" : "22024",
+  "sqlState" : "42K08",
   "messageParameters" : {
     "funcName" : "`date_part`",
     "paramName" : "`field`",

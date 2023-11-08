@@ -19,8 +19,8 @@ package org.apache.spark.scheduler.cluster.k8s
 import java.util.concurrent.TimeUnit
 import java.util.function.UnaryOperator
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import com.google.common.cache.CacheBuilder
 import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}

@@ -47,9 +47,8 @@ import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
  * A scheduler backend that waits for coarse-grained executors to connect.
  * This backend holds onto each executor for the duration of the Spark job rather than relinquishing
  * executors whenever a task is done and asking the scheduler to launch a new executor for
- * each new task. Executors may be launched in a variety of ways, such as Mesos tasks for the
- * coarse-grained Mesos mode or standalone processes for Spark's standalone deploy mode
- * (spark.deploy.*).
+ * each new task. Executors may be launched in a variety of ways, such as standalone processes for
+ * Spark's standalone deploy mode (spark.deploy.*).
  */
 private[spark]
 class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: RpcEnv)
@@ -249,7 +248,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           attributes, resources, resourceProfileId) =>
         if (executorDataMap.contains(executorId)) {
           context.sendFailure(new IllegalStateException(s"Duplicate executor ID: $executorId"))
-        } else if (scheduler.excludedNodes.contains(hostname) ||
+        } else if (scheduler.excludedNodes().contains(hostname) ||
             isExecutorExcluded(executorId, hostname)) {
           // If the cluster manager gives us an executor on an excluded node (because it
           // already started allocating those resources before we informed it of our exclusion,
@@ -372,7 +371,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // Make sure no executor is killed while some task is launching on it
       val taskDescs = withLock {
         // Filter out executors under killing
-        val activeExecutors = executorDataMap.filterKeys(isExecutorActive)
+        val activeExecutors = executorDataMap.view.filterKeys(isExecutorActive)
         val workOffers = activeExecutors.map {
           case (id, executorData) => buildWorkerOffer(id, executorData)
         }.toIndexedSeq
@@ -719,7 +718,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   def sufficientResourcesRegistered(): Boolean = true
 
   override def isReady(): Boolean = {
-    if (sufficientResourcesRegistered) {
+    if (sufficientResourcesRegistered()) {
       logInfo("SchedulerBackend is ready for scheduling beginning after " +
         s"reached minRegisteredResourcesRatio: $minRegisteredRatio")
       return true
@@ -731,11 +730,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
     false
   }
-
-  /**
-   * Return the number of executors currently registered with this backend.
-   */
-  private def numExistingExecutors: Int = synchronized { executorDataMap.size }
 
   override def getExecutorIds(): Seq[String] = synchronized {
     executorDataMap.keySet.toSeq
@@ -887,7 +881,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // Note: it's possible that something else allocated an executor and we have
       // a negative delta, we can just avoid mutating the queue.
       while (toConsume > 0 && times.nonEmpty) {
-        val h = times.dequeue
+        val h = times.dequeue()
         if (h._1 > toConsume) {
           // Prepend updated first req to times, constant time op
           ((h._1 - toConsume, h._2)) +=: times

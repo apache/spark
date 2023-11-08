@@ -19,8 +19,8 @@ package org.apache.spark.util.collection
 
 import java.util.Collections
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable
+import scala.jdk.CollectionConverters._
 
 import com.google.common.collect.{Iterators => GuavaIterators, Ordering => GuavaOrdering}
 
@@ -50,13 +50,13 @@ private[spark] object Utils extends SparkCollectionUtils {
    * Callers must ensure that all the input iterators are already sorted by
    * the same ordering `ord`, otherwise the result is likely to be incorrect.
    */
-  def mergeOrdered[T](inputs: Iterable[TraversableOnce[T]])(
+  def mergeOrdered[T](inputs: Iterable[IterableOnce[T]])(
     implicit ord: Ordering[T]): Iterator[T] = {
     val ordering = new GuavaOrdering[T] {
       override def compare(l: T, r: T): Int = ord.compare(l, r)
     }
     GuavaIterators.mergeSorted(
-      inputs.map(_.toIterator.asJava).asJava, ordering).asScala
+      inputs.map(_.iterator.asJava).asJava, ordering).asScala
   }
 
   /**

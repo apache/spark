@@ -18,7 +18,6 @@
 import unittest
 from collections import defaultdict
 import inspect
-
 from datetime import datetime, timedelta
 
 import numpy as np
