@@ -460,6 +460,31 @@ private[deploy] class Master(
         }
       }
 
+    case RequestKillAllDrivers =>
+      if (state != RecoveryState.ALIVE) {
+        val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
+          s"Can only kill drivers in ALIVE state."
+        context.reply(KillAllDriversResponse(self, success = false, msg))
+      } else {
+        logInfo("Asked to kill all drivers")
+        drivers.foreach { d =>
+          val driverId = d.id
+          if (waitingDrivers.contains(d)) {
+            waitingDrivers -= d
+            self.send(DriverStateChanged(driverId, DriverState.KILLED, None))
+          } else {
+            // We just notify the worker to kill the driver here. The final bookkeeping occurs
+            // on the return path when the worker submits a state change back to the master
+            // to notify it that the driver was successfully killed.
+            d.worker.foreach { w =>
+              w.endpoint.send(KillDriver(driverId))
+            }
+          }
+          logInfo(s"Kill request for $driverId submitted")
+        }
+        context.reply(KillAllDriversResponse(self, true, "Kill request for all drivers submitted"))
+      }
+
     case RequestClearCompletedDriversAndApps =>
       val numDrivers = completedDrivers.length
       val numApps = completedApps.length

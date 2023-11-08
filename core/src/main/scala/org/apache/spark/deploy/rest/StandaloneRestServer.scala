@@ -63,6 +63,8 @@ private[deploy] class StandaloneRestServer(
     new StandaloneSubmitRequestServlet(masterEndpoint, masterUrl, masterConf)
   protected override val killRequestServlet =
     new StandaloneKillRequestServlet(masterEndpoint, masterConf)
+  protected override val killAllRequestServlet =
+    new StandaloneKillAllRequestServlet(masterEndpoint, masterConf)
   protected override val statusRequestServlet =
     new StandaloneStatusRequestServlet(masterEndpoint, masterConf)
   protected override val clearRequestServlet =
@@ -82,6 +84,23 @@ private[rest] class StandaloneKillRequestServlet(masterEndpoint: RpcEndpointRef,
     k.serverSparkVersion = sparkVersion
     k.message = response.message
     k.submissionId = submissionId
+    k.success = response.success
+    k
+  }
+}
+
+/**
+ * A servlet for handling killAll requests passed to the [[StandaloneRestServer]].
+ */
+private[rest] class StandaloneKillAllRequestServlet(masterEndpoint: RpcEndpointRef, conf: SparkConf)
+  extends KillAllRequestServlet {
+
+  protected def handleKillAll() : KillAllSubmissionResponse = {
+    val response = masterEndpoint.askSync[DeployMessages.KillAllDriversResponse](
+      DeployMessages.RequestKillAllDrivers)
+    val k = new KillAllSubmissionResponse
+    k.serverSparkVersion = sparkVersion
+    k.message = response.message
     k.success = response.success
     k
   }
