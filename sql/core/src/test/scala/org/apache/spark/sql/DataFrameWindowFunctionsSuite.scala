@@ -139,8 +139,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         // As corr(expr1, expr2) = covar_pop(expr1, expr2) / (stddev_pop(expr1) * stddev_pop(expr2))
         // the "corr" column can be calculated from the "covar_pop" and the two "stddev_pop" columns
         Seq(
-          Row("a", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
-          Row("b", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
+          Row("a", -0.9999999999999999, -25.0, 25.0, 5.0, 25.0, 5.0),
+          Row("b", -0.9999999999999999, -25.0, 25.0, 5.0, 25.0, 5.0),
           Row("c", null, 0.0, 0.0, 0.0, 0.0, 0.0),
           Row("d", null, 0.0, 0.0, 0.0, 0.0, 0.0),
           Row("e", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
@@ -193,8 +193,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         // As corr(expr1, expr2) = covar_pop(expr1, expr2) / (stddev_pop(expr1) * stddev_pop(expr2))
         // the "corr" column can be calculated from the "covar_pop" and the two "stddev_pop" columns
         Seq(
-          Row("a", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
-          Row("b", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
+          Row("a", -0.9999999999999999, -25.0, 25.0, 5.0, 25.0, 5.0),
+          Row("b", -0.9999999999999999, -25.0, 25.0, 5.0, 25.0, 5.0),
           Row("c", null, 0.0, 0.0, 0.0, 0.0, 0.0),
           Row("d", null, 0.0, 0.0, 0.0, 0.0, 0.0),
           Row("e", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),

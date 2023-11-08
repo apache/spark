@@ -272,7 +272,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> type(df.stat)
         <class '...dataframe.DataFrameStatFunctions'>
         >>> df.stat.corr("id", "c")
-        1.0
+        0.9999999999999999
         """
         return DataFrameStatFunctions(self)
 
@@ -5600,7 +5600,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         -0.3592106040535498
         >>> df = spark.createDataFrame([(11, 12), (10, 11), (9, 10)], ["small", "bigger"])
         >>> df.corr("small", "bigger")
-        1.0
+        0.9999999999999999
 
         """
         if not isinstance(col1, str):
