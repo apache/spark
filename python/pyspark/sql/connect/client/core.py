@@ -594,7 +594,6 @@ class SparkConnectClient(object):
             else ChannelBuilder(connection, channel_options)
         )
         self._user_id = None
-        self._known_retry_policies: Dict[str, RetryPolicy] = dict()
         self._retry_policies: List[RetryPolicy] = []
 
         default_policy_args = {
