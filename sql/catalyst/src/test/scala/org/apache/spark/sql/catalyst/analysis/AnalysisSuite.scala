@@ -794,9 +794,20 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // No columns
     assert(!CollectMetrics("evt", Nil, testRelation, 0).resolved)
 
-    def checkAnalysisError(exprs: Seq[NamedExpression], errors: String*): Unit = {
-      assertAnalysisError(CollectMetrics("event", exprs, testRelation, 0), errors)
-    }
+    // non-deterministic expression inside an aggregate function is valid
+    val tsLiteral = Literal.create(java.sql.Timestamp.valueOf("2023-11-30 21:05:00.000000"),
+      TimestampType)
+
+    assertAnalysisSuccess(
+      CollectMetrics(
+        "invalid",
+        Count(
+          GreaterThan(tsLiteral, CurrentBatchTimestamp(1699485296000L, TimestampType))
+        ).as("count") :: Nil,
+        testRelation,
+        0
+      )
+    )
 
     // Unwrapped attribute
     assertAnalysisErrorClass(
