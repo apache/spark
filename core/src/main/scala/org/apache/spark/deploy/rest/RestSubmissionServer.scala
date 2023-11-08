@@ -54,6 +54,7 @@ private[spark] abstract class RestSubmissionServer(
 
   protected val submitRequestServlet: SubmitRequestServlet
   protected val killRequestServlet: KillRequestServlet
+  protected val killAllRequestServlet: KillAllRequestServlet
   protected val statusRequestServlet: StatusRequestServlet
   protected val clearRequestServlet: ClearRequestServlet
 
@@ -64,6 +65,7 @@ private[spark] abstract class RestSubmissionServer(
   protected lazy val contextToServlet = Map[String, RestServlet](
     s"$baseContext/create/*" -> submitRequestServlet,
     s"$baseContext/kill/*" -> killRequestServlet,
+    s"$baseContext/killall/*" -> killAllRequestServlet,
     s"$baseContext/status/*" -> statusRequestServlet,
     s"$baseContext/clear/*" -> clearRequestServlet,
     "/*" -> new ErrorServlet // default handler
@@ -230,6 +232,25 @@ private[rest] abstract class KillRequestServlet extends RestServlet {
 }
 
 /**
+ * A servlet for handling killAll requests passed to the [[RestSubmissionServer]].
+ */
+private[rest] abstract class KillAllRequestServlet extends RestServlet {
+
+  /**
+   * Have the Master kill all drivers and return an appropriate response to the client.
+   * Otherwise, return error.
+   */
+  protected override def doPost(
+      request: HttpServletRequest,
+      response: HttpServletResponse): Unit = {
+    val responseMessage = handleKillAll()
+    sendResponse(responseMessage, response)
+  }
+
+  protected def handleKillAll(): KillAllSubmissionResponse
+}
+
+/**
  * A servlet for handling clear requests passed to the [[RestSubmissionServer]].
  */
 private[rest] abstract class ClearRequestServlet extends RestServlet {
@@ -331,7 +352,7 @@ private class ErrorServlet extends RestServlet {
           "Missing the /submissions prefix."
         case `serverVersion` :: "submissions" :: tail =>
           // http://host:port/correct-version/submissions/*
-          "Missing an action: please specify one of /create, /kill, /clear or /status."
+          "Missing an action: please specify one of /create, /kill, /killall, /clear or /status."
         case unknownVersion :: tail =>
           // http://host:port/unknown-version/*
           versionMismatch = true
