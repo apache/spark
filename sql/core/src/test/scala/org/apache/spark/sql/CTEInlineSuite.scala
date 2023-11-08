@@ -687,7 +687,7 @@ abstract class CTEInlineSuiteBase
         |b as (select * from a)
         |select 2
         |""".stripMargin))
-    assert(e.getMessage.contains("[TABLE_OR_VIEW_NOT_FOUND]"))
+    checkErrorTableNotFound(e, "`non_exist`")
   }
 }
 

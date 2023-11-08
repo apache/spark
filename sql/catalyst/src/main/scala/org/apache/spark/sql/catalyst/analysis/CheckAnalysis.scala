@@ -148,7 +148,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       errorClass, missingCol, orderedCandidates, a.origin)
   }
 
-  private def reconcileCTERefCount(
+  private def checkUnreferencedCTERelations(
       cteMap: mutable.Map[Long, (CTERelationDef, Int, mutable.Map[Long, Int])],
       visited: mutable.Map[Long, Boolean],
       cteId: Long): Unit = {
@@ -156,8 +156,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       return
     }
     val (cteDef, _, refMap) = cteMap(cteId)
-    refMap.foreach { case(id, _) =>
-      reconcileCTERefCount(cteMap, visited, id)
+    refMap.foreach { case (id, _) =>
+      checkUnreferencedCTERelations(cteMap, visited, id)
     }
     checkAnalysis0(cteDef.child)
     visited(cteId) = true
@@ -171,13 +171,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       // If a CTE relation is never used, it will disappear after inline. Here we explicitly check
       // analysis for it, to make sure the entire query plan is valid.
       try {
-        // If a CTE ref count is 0, the other CTE that is referencing it should also be
-        // checked by checkAnalysis0.
+        // If a CTE relation ref count is 0, the other CTE relations that reference it
+        // should also be checked by checkAnalysis0.
         val visited: mutable.Map[Long, Boolean] = mutable.Map.empty.withDefaultValue(false)
         cteMap.foreach { case(cteId, _) =>
           val (_, refCount, _) = cteMap(cteId)
-          if (refCount == 0 && !visited(cteId) ) {
-            reconcileCTERefCount(cteMap, visited, cteId)
+          if (refCount == 0) {
+            checkUnreferencedCTERelations(cteMap, visited, cteId)
           }
         }
       } catch {
