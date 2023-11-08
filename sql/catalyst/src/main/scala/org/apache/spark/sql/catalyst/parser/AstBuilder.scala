@@ -3246,7 +3246,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   override def visitClusterBySpec(ctx: ClusterBySpecContext): ClusterBySpec = withOrigin(ctx) {
     val columnNames = ctx.multipartIdentifierList.multipartIdentifier.asScala
-      .map(typedVisit[Seq[String]]).map(UnresolvedAttribute(_)).toSeq
+      .map(typedVisit[Seq[String]]).map(FieldReference(_)).toSeq
     ClusterBySpec(columnNames)
   }
 

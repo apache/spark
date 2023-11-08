@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
-import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.execution.command
 
 /**
@@ -35,12 +33,11 @@ import org.apache.spark.sql.execution.command
  */
 trait CreateTableClusterBySuiteBase extends command.CreateTableClusterBySuiteBase
     with command.TestsV1AndV2Commands {
-  override def validateClusterBy(
-      tableIdent: TableIdentifier, clusteringColumns: Seq[String]): Unit = {
+  override def validateClusterBy(tableName: String, clusteringColumns: Seq[String]): Unit = {
     val catalog = spark.sessionState.catalog
-    val table = catalog.getTableMetadata(tableIdent)
-    assert(table.clusterBySpec ===
-      Some(ClusterBySpec(clusteringColumns.map(UnresolvedAttribute(_)))))
+    val (_, db, t) = parseTableName(tableName)
+    val table = catalog.getTableMetadata(TableIdentifier.apply(t, Some(db)))
+    assert(table.clusterBySpec === Some(ClusterBySpec(clusteringColumns.map(FieldReference(_)))))
   }
 }
 
@@ -51,18 +48,4 @@ trait CreateTableClusterBySuiteBase extends command.CreateTableClusterBySuiteBas
 class CreateTableClusterBySuite extends CreateTableClusterBySuiteBase
     with CommandSuiteBase {
   override def commandVersion: String = super[CreateTableClusterBySuiteBase].commandVersion
-
-  test("clustering columns not defined in schema") {
-    withNamespaceAndTable("ns", "table") { tbl =>
-      checkError(
-        exception = intercept[AnalysisException](
-          sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing CLUSTER BY (unknown)")),
-        errorClass = "COLUMN_NOT_DEFINED_IN_TABLE",
-        parameters = Map(
-          "colType" -> "cluster by",
-          "colName" -> "`unknown`",
-          "tableName" -> s"`$SESSION_CATALOG_NAME`.`ns`.`table`",
-          "tableCols" -> "`id`, `data`"))
-    }
-  }
 }

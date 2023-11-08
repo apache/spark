@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.Shell
 
-import org.apache.spark.sql.catalyst.analysis.{Resolver, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, BasePredicate, BoundReference, Expression, Predicate}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -233,18 +233,6 @@ object CatalogUtils {
       normalizeColumnName(tableName, tableCols, colName, "sort", resolver)
     }
     BucketSpec(numBuckets, normalizedBucketCols, normalizedSortCols)
-  }
-
-  def normalizeClusterBySpec(
-      tableName: String,
-      tableCols: Seq[String],
-      clusterBySpec: ClusterBySpec,
-      resolver: Resolver): ClusterBySpec = {
-    val normalizedClusterByCols = clusterBySpec.columnNames.map { colName =>
-      normalizeColumnName(tableName, tableCols, colName.name, "cluster by", resolver)
-    }
-
-    ClusterBySpec(normalizedClusterByCols.map(UnresolvedAttribute.quotedString(_)))
   }
 
   /**

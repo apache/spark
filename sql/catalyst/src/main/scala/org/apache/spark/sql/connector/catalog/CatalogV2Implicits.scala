@@ -21,7 +21,6 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, ClusterBySpec}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -56,10 +55,7 @@ private[sql] object CatalogV2Implicits {
   }
 
   implicit class ClusterByHelper(spec: ClusterBySpec) {
-    def asTransform: Transform = {
-      val references = spec.columnNames.map(col => FieldReference(col.nameParts))
-      clusterBy(references.toArray)
-    }
+    def asTransform: Transform = clusterBy(spec.columnNames.toArray)
   }
 
   implicit class TransformHelper(transforms: Seq[Transform]) {
@@ -88,8 +84,7 @@ private[sql] object CatalogV2Implicits {
             // AstBuilder guarantees that it only passes down one ClusterByTransform.
             throw SparkException.internalError("Cannot have multiple cluster by transforms.")
           }
-          clusterBySpec =
-            Some(ClusterBySpec(columnNames.map(_.fieldNames).map(UnresolvedAttribute(_))))
+          clusterBySpec = Some(ClusterBySpec(columnNames))
 
         case transform =>
           throw QueryExecutionErrors.unsupportedPartitionTransformError(transform)

@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 
 /**
  * This base suite contains unified tests for the `CREATE/REPLACE TABLE ... CLUSTER BY` command
@@ -40,12 +39,22 @@ trait CreateTableClusterBySuiteBase extends QueryTest with DDLCommandTestUtils {
   protected val nestedClusteringColumns: Seq[String] =
     Seq("col2.col3", "col2.`col4 1`", "col3.`col4.1`")
 
-  def validateClusterBy(tableIdent: TableIdentifier, clusteringColumns: Seq[String]): Unit
+  def validateClusterBy(tableName: String, clusteringColumns: Seq[String]): Unit
 
   test("test basic CREATE TABLE with clustering columns") {
     withNamespaceAndTable("ns", "table") { tbl =>
       spark.sql(s"CREATE TABLE $tbl (id INT, data STRING) $defaultUsing CLUSTER BY (id, data)")
-      validateClusterBy(toTableIdentifier(tbl), Seq("id", "data"))
+      validateClusterBy(tbl, Seq("id", "data"))
+    }
+  }
+
+  test("test clustering columns with comma") {
+    assume(!catalogVersion.contains("Hive")) // Hive catalog doesn't support column names with dots.
+
+    withNamespaceAndTable("ns", "table") { tbl =>
+      spark.sql(s"CREATE TABLE $tbl (`i,d` INT, data STRING) $defaultUsing " +
+        "CLUSTER BY (`i,d`, data)")
+      validateClusterBy(tbl, Seq("`i,d`", "data"))
     }
   }
 
@@ -54,13 +63,23 @@ trait CreateTableClusterBySuiteBase extends QueryTest with DDLCommandTestUtils {
       spark.sql(s"CREATE TABLE $tbl " +
         s"($nestedColumnSchema) " +
         s"$defaultUsing CLUSTER BY (${nestedClusteringColumns.mkString(",")})")
-      validateClusterBy(toTableIdentifier(tbl), nestedClusteringColumns)
+      validateClusterBy(tbl, nestedClusteringColumns)
+    }
+  }
+
+  test("clustering columns not defined in schema") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      val err = intercept[AnalysisException] {
+        sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing CLUSTER BY (unknown)")
+      }
+      assert(err.message.contains("Couldn't find column unknown in:"))
     }
   }
 
   // Converts three-part table name (catalog.namespace.table) to TableIdentifier.
-  protected def toTableIdentifier(threePartTableName: String): TableIdentifier = {
+  protected def parseTableName(threePartTableName: String): (String, String, String) = {
     val tablePath = threePartTableName.split('.')
-    TableIdentifier(tablePath(2), Some(tablePath(1)), Some(tablePath(0)))
+    assert(tablePath.length === 3)
+    (tablePath(0), tablePath(1), tablePath(2))
   }
 }

@@ -297,7 +297,6 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
 
     val normalizedPartCols = normalizePartitionColumns(schema, table)
     val normalizedBucketSpec = normalizeBucketSpec(schema, table)
-    val normalizedClusterBySpec = normalizeClusterBySpec(schema, table)
 
     normalizedBucketSpec.foreach { spec =>
       for (bucketCol <- spec.bucketColumnNames if normalizedPartCols.contains(bucketCol)) {
@@ -312,8 +311,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
 
     table.copy(
       partitionColumnNames = normalizedPartCols,
-      bucketSpec = normalizedBucketSpec,
-      properties = table.properties ++ normalizedClusterBySpec.map(ClusterBySpec.asProperty))
+      bucketSpec = normalizedBucketSpec)
   }
 
   private def normalizePartitionColumns(schema: StructType, table: CatalogTable): Seq[String] = {
@@ -361,26 +359,6 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         }
 
         Some(normalizedBucketSpec)
-
-      case None => None
-    }
-  }
-
-  private def normalizeClusterBySpec(
-      schema: StructType, table: CatalogTable): Option[ClusterBySpec] = {
-    table.clusterBySpec match {
-      case Some(clusterBySpec) =>
-        val normalizedClusterBySpec = CatalogUtils.normalizeClusterBySpec(
-          tableName = table.identifier.unquotedString,
-          tableCols = SchemaUtils.explodeNestedFieldNames(schema),
-          clusterBySpec = clusterBySpec,
-          resolver = conf.resolver)
-
-        SchemaUtils.checkColumnNameDuplication(
-          normalizedClusterBySpec.columnNames.map(_.name),
-          conf.resolver)
-
-        Some(normalizedClusterBySpec)
 
       case None => None
     }

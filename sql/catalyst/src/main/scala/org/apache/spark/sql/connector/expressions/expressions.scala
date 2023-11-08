@@ -162,9 +162,7 @@ final case class ClusterByTransform(
 
   override val name: String = "cluster_by"
 
-  override def references: Array[NamedReference] = {
-    arguments.collect { case named: NamedReference => named }
-  }
+  override def references: Array[NamedReference] = columnNames.toArray
 
   override def arguments: Array[Expression] = columnNames.toArray
 

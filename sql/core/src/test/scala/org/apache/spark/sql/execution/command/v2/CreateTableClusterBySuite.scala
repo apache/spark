@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryPartitionTable}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference}
@@ -30,32 +28,23 @@ import org.apache.spark.sql.execution.command
  */
 class CreateTableClusterBySuite extends command.CreateTableClusterBySuiteBase
   with CommandSuiteBase {
-  override def validateClusterBy(
-      tableIdent: TableIdentifier, clusteringColumns: Seq[String]): Unit = {
-    val catalogPlugin = spark.sessionState.catalogManager.catalog(tableIdent.catalog.get)
+  override def validateClusterBy(tableName: String, clusteringColumns: Seq[String]): Unit = {
+    val (catalog, namespace, table) = parseTableName(tableName)
+    val catalogPlugin = spark.sessionState.catalogManager.catalog(catalog)
     val partTable = catalogPlugin.asTableCatalog
-      .loadTable(Identifier.of(Array(tableIdent.database.get), tableIdent.table))
+      .loadTable(Identifier.of(Array(namespace), table))
       .asInstanceOf[InMemoryPartitionTable]
     assert(partTable.partitioning ===
       Array(ClusterByTransform(clusteringColumns.map(FieldReference(_)))))
   }
 
-  test("test basic CREATE/REPLACE TABLE with clustering columns") {
+  test("test REPLACE TABLE with clustering columns") {
     withNamespaceAndTable("ns", "table") { tbl =>
       spark.sql(s"CREATE TABLE $tbl (id INT) $defaultUsing CLUSTER BY (id)")
-      validateClusterBy(toTableIdentifier(tbl), Seq("id"))
+      validateClusterBy(tbl, Seq("id"))
 
       spark.sql(s"REPLACE TABLE $tbl (id2 INT) $defaultUsing CLUSTER BY (id2)")
-      validateClusterBy(toTableIdentifier(tbl), Seq("id2"))
-    }
-  }
-
-  test("clustering columns not defined in schema") {
-    withNamespaceAndTable("ns", "table") { tbl =>
-      val err = intercept[AnalysisException] {
-        sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing CLUSTER BY (unknown)")
-      }
-      assert(err.message.contains("Couldn't find column unknown in:"))
+      validateClusterBy(tbl, Seq("id2"))
     }
   }
 }
