@@ -18,6 +18,8 @@ package org.apache.spark.sql.catalyst.xml
 
 import java.io.{CharConversionException, InputStream, InputStreamReader, StringReader}
 import java.nio.charset.{Charset, MalformedInputException}
+import java.text.NumberFormat
+import java.util.Locale
 import javax.xml.stream.{XMLEventReader, XMLStreamException}
 import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
@@ -25,15 +27,17 @@ import javax.xml.validation.Schema
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+import scala.util.Try
 import scala.util.control.NonFatal
 import scala.xml.SAXException
 
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode}
+import org.apache.spark.sql.catalyst.expressions.ExprUtils
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, DateFormatter, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
-import org.apache.spark.sql.catalyst.xml.TypeCast._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
@@ -45,6 +49,29 @@ class StaxXmlParser(
     filters: Seq[Filter] = Seq.empty) extends Logging {
 
   private val factory = options.buildXmlFactory()
+
+  private lazy val timestampFormatter = TimestampFormatter(
+    options.timestampFormatInRead,
+    options.zoneId,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
+
+  private lazy val timestampNTZFormatter = TimestampFormatter(
+    options.timestampNTZFormatInRead,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true,
+    forTimestampNTZ = true)
+
+  private lazy val dateFormatter = DateFormatter(
+    options.dateFormatInRead,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
+
+  private val decimalParser = ExprUtils.getDecimalParser(options.locale)
+
 
   /**
    * Parses a single XML string and turns it into either one resulting row or no row (if the
@@ -108,7 +135,7 @@ class StaxXmlParser(
       val isRootAttributesOnly = schema.fields.forall { f =>
         f.name == options.valueTag || f.name.startsWith(options.attributePrefix)
       }
-      Some(convertObject(parser, schema, options, rootAttributes, isRootAttributesOnly))
+      Some(convertObject(parser, schema, rootAttributes, isRootAttributesOnly))
     } catch {
       case e: SparkUpgradeException => throw e
       case e@(_: RuntimeException | _: XMLStreamException | _: MalformedInputException
@@ -145,15 +172,14 @@ class StaxXmlParser(
   private[xml] def convertField(
       parser: XMLEventReader,
       dataType: DataType,
-      options: XmlOptions,
       attributes: Array[Attribute] = Array.empty): Any = {
 
     def convertComplicatedType(dt: DataType, attributes: Array[Attribute]): Any = dt match {
-      case st: StructType => convertObject(parser, st, options)
-      case MapType(StringType, vt, _) => convertMap(parser, vt, options, attributes)
-      case ArrayType(st, _) => convertField(parser, st, options)
+      case st: StructType => convertObject(parser, st)
+      case MapType(StringType, vt, _) => convertMap(parser, vt, attributes)
+      case ArrayType(st, _) => convertField(parser, st)
       case _: StringType =>
-        convertTo(StaxXmlParserUtils.currentStructureAsString(parser), StringType, options)
+        convertTo(StaxXmlParserUtils.currentStructureAsString(parser), StringType)
     }
 
     (parser.peek, dataType) match {
@@ -168,7 +194,7 @@ class StaxXmlParser(
       case (_: EndElement, _: DataType) => null
       case (c: Characters, ArrayType(st, _)) =>
         // For `ArrayType`, it needs to return the type of element. The values are merged later.
-        convertTo(c.getData, st, options)
+        convertTo(c.getData, st)
       case (c: Characters, st: StructType) =>
         // If a value tag is present, this can be an attribute-only element whose values is in that
         // value tag field. Or, it can be a mixed-type element with both some character elements
@@ -180,18 +206,18 @@ class StaxXmlParser(
           // If everything else is an attribute column, there's no complex structure.
           // Just return the value of the character element, or null if we don't have a value tag
           st.find(_.name == options.valueTag).map(
-            valueTag => convertTo(c.getData, valueTag.dataType, options)).orNull
+            valueTag => convertTo(c.getData, valueTag.dataType)).orNull
         } else {
           // Otherwise, ignore this character element, and continue parsing the following complex
           // structure
           parser.next
           parser.peek match {
             case _: EndElement => null // no struct here at all; done
-            case _ => convertObject(parser, st, options)
+            case _ => convertObject(parser, st)
           }
         }
       case (_: Characters, _: StringType) =>
-        convertTo(StaxXmlParserUtils.currentStructureAsString(parser), StringType, options)
+        convertTo(StaxXmlParserUtils.currentStructureAsString(parser), StringType)
       case (c: Characters, _: DataType) if c.isWhiteSpace =>
         // When `Characters` is found, we need to look further to decide
         // if this is really data or space between other elements.
@@ -201,11 +227,11 @@ class StaxXmlParser(
           case _: StartElement => convertComplicatedType(dataType, attributes)
           case _: EndElement if data.isEmpty => null
           case _: EndElement if options.treatEmptyValuesAsNulls => null
-          case _: EndElement => convertTo(data, dataType, options)
-          case _ => convertField(parser, dataType, options, attributes)
+          case _: EndElement => convertTo(data, dataType)
+          case _ => convertField(parser, dataType, attributes)
         }
       case (c: Characters, dt: DataType) =>
-        convertTo(c.getData, dt, options)
+        convertTo(c.getData, dt)
       case (e: XMLEvent, dt: DataType) =>
         throw new IllegalArgumentException(
           s"Failed to parse a value for data type $dt with event ${e.toString}")
@@ -218,12 +244,11 @@ class StaxXmlParser(
   private def convertMap(
       parser: XMLEventReader,
       valueType: DataType,
-      options: XmlOptions,
       attributes: Array[Attribute]): MapData = {
     val kvPairs = ArrayBuffer.empty[(UTF8String, Any)]
     attributes.foreach { attr =>
       kvPairs += (UTF8String.fromString(options.attributePrefix + attr.getName.getLocalPart)
-        -> convertTo(attr.getValue, valueType, options))
+        -> convertTo(attr.getValue, valueType))
     }
     var shouldStop = false
     while (!shouldStop) {
@@ -231,7 +256,7 @@ class StaxXmlParser(
         case e: StartElement =>
           kvPairs +=
             (UTF8String.fromString(StaxXmlParserUtils.getName(e.asStartElement.getName, options)) ->
-             convertField(parser, valueType, options))
+             convertField(parser, valueType))
         case _: EndElement =>
           shouldStop = StaxXmlParserUtils.checkEndElement(parser)
         case _ => // do nothing
@@ -245,14 +270,13 @@ class StaxXmlParser(
    */
   private def convertAttributes(
       attributes: Array[Attribute],
-      schema: StructType,
-      options: XmlOptions): Map[String, Any] = {
+      schema: StructType): Map[String, Any] = {
     val convertedValuesMap = collection.mutable.Map.empty[String, Any]
     val valuesMap = StaxXmlParserUtils.convertAttributesToValuesMap(attributes, options)
     valuesMap.foreach { case (f, v) =>
       val nameToIndex = schema.map(_.name).zipWithIndex.toMap
       nameToIndex.get(f).foreach { i =>
-        convertedValuesMap(f) = convertTo(v, schema(i).dataType, options)
+        convertedValuesMap(f) = convertTo(v, schema(i).dataType)
       }
     }
     convertedValuesMap.toMap
@@ -266,16 +290,15 @@ class StaxXmlParser(
   private def convertObjectWithAttributes(
       parser: XMLEventReader,
       schema: StructType,
-      options: XmlOptions,
       attributes: Array[Attribute] = Array.empty): InternalRow = {
     // TODO: This method might have to be removed. Some logics duplicate `convertObject()`
     val row = new Array[Any](schema.length)
 
     // Read attributes first.
-    val attributesMap = convertAttributes(attributes, schema, options)
+    val attributesMap = convertAttributes(attributes, schema)
 
     // Then, we read elements here.
-    val fieldsMap = convertField(parser, schema, options) match {
+    val fieldsMap = convertField(parser, schema) match {
       case internalRow: InternalRow =>
         Map(schema.map(_.name).zip(internalRow.toSeq(schema)): _*)
       case v if schema.fieldNames.contains(options.valueTag) =>
@@ -309,13 +332,12 @@ class StaxXmlParser(
   private def convertObject(
       parser: XMLEventReader,
       schema: StructType,
-      options: XmlOptions,
       rootAttributes: Array[Attribute] = Array.empty,
       isRootAttributesOnly: Boolean = false): InternalRow = {
     val row = new Array[Any](schema.length)
     val nameToIndex = schema.map(_.name).zipWithIndex.toMap
     // If there are attributes, then we process them first.
-    convertAttributes(rootAttributes, schema, options).toSeq.foreach { case (f, v) =>
+    convertAttributes(rootAttributes, schema).toSeq.foreach { case (f, v) =>
       nameToIndex.get(f).foreach { row(_) = v }
     }
 
@@ -334,7 +356,7 @@ class StaxXmlParser(
           nameToIndex.get(field) match {
             case Some(index) => schema(index).dataType match {
               case st: StructType =>
-                row(index) = convertObjectWithAttributes(parser, st, options, attributes)
+                row(index) = convertObjectWithAttributes(parser, st, attributes)
 
               case ArrayType(dt: DataType, _) =>
                 val values = Option(row(index))
@@ -342,21 +364,21 @@ class StaxXmlParser(
                   .getOrElse(ArrayBuffer.empty[Any])
                 val newValue = dt match {
                   case st: StructType =>
-                    convertObjectWithAttributes(parser, st, options, attributes)
+                    convertObjectWithAttributes(parser, st, attributes)
                   case dt: DataType =>
-                    convertField(parser, dt, options)
+                    convertField(parser, dt)
                 }
                 row(index) = values :+ newValue
 
               case dt: DataType =>
-                row(index) = convertField(parser, dt, options, attributes)
+                row(index) = convertField(parser, dt, attributes)
             }
 
             case None =>
               if (hasWildcard) {
                 // Special case: there's an 'any' wildcard element that matches anything else
                 // as a string (or array of strings, to parse multiple ones)
-                val newValue = convertField(parser, StringType, options)
+                val newValue = convertField(parser, StringType)
                 val anyIndex = schema.fieldIndex(wildcardColName)
                 schema(wildcardColName).dataType match {
                   case StringType =>
@@ -380,7 +402,7 @@ class StaxXmlParser(
         case c: Characters if !c.isWhiteSpace && isRootAttributesOnly =>
           nameToIndex.get(options.valueTag) match {
             case Some(index) =>
-              row(index) = convertTo(c.getData, schema(index).dataType, options)
+              row(index) = convertTo(c.getData, schema(index).dataType)
             case None => // do nothing
           }
 
@@ -408,6 +430,144 @@ class StaxXmlParser(
     } else {
       throw PartialResultException(InternalRow.fromSeq(newRow.toIndexedSeq),
         badRecordException.get)
+    }
+  }
+
+  /**
+   * Casts given string datum to specified type.
+   *
+   * For string types, this is simply the datum.
+   * For other nullable types, returns null if it is null or equals to the value specified
+   * in `nullValue` option.
+   *
+   * @param datum    string value
+   * @param castType SparkSQL type
+   */
+  private def castTo(
+      datum: String,
+      castType: DataType): Any = {
+    if ((datum == options.nullValue) ||
+      (options.treatEmptyValuesAsNulls && datum == "")) {
+      null
+    } else {
+      castType match {
+        case _: ByteType => datum.toByte
+        case _: ShortType => datum.toShort
+        case _: IntegerType => datum.toInt
+        case _: LongType => datum.toLong
+        case _: FloatType => Try(datum.toFloat)
+          .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue())
+        case _: DoubleType => Try(datum.toDouble)
+          .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
+        case _: BooleanType => parseXmlBoolean(datum)
+        case dt: DecimalType =>
+          Decimal(decimalParser(datum), dt.precision, dt.scale)
+        case _: TimestampType => parseXmlTimestamp(datum, options)
+        case _: DateType => parseXmlDate(datum, options)
+        case _: StringType => UTF8String.fromString(datum)
+        case _ => throw new IllegalArgumentException(s"Unsupported type: ${castType.typeName}")
+      }
+    }
+  }
+
+  private def parseXmlBoolean(s: String): Boolean = {
+    s.toLowerCase(Locale.ROOT) match {
+      case "true" | "1" => true
+      case "false" | "0" => false
+      case _ => throw new IllegalArgumentException(s"For input string: $s")
+    }
+  }
+
+  private def parseXmlDate(value: String, options: XmlOptions): Int = {
+    dateFormatter.parse(value)
+  }
+
+  private def parseXmlTimestamp(value: String, options: XmlOptions): Long = {
+    timestampFormatter.parse(value)
+  }
+
+  // TODO: This function unnecessarily does type dispatch. Should merge it with `castTo`.
+  private def convertTo(
+      datum: String,
+      dataType: DataType): Any = {
+    val value = if (datum != null && options.ignoreSurroundingSpaces) {
+      datum.trim()
+    } else {
+      datum
+    }
+    if ((value == options.nullValue) ||
+      (options.treatEmptyValuesAsNulls && value == "")) {
+      null
+    } else {
+      dataType match {
+        case NullType => castTo(value, StringType)
+        case LongType => signSafeToLong(value)
+        case DoubleType => signSafeToDouble(value)
+        case BooleanType => castTo(value, BooleanType)
+        case StringType => castTo(value, StringType)
+        case DateType => castTo(value, DateType)
+        case TimestampType => castTo(value, TimestampType)
+        case FloatType => signSafeToFloat(value)
+        case ByteType => castTo(value, ByteType)
+        case ShortType => castTo(value, ShortType)
+        case IntegerType => signSafeToInt(value)
+        case dt: DecimalType => castTo(value, dt)
+        case _ => throw new IllegalArgumentException(
+          s"Failed to parse a value for data type $dataType.")
+      }
+    }
+  }
+
+
+  private def signSafeToLong(value: String): Long = {
+    if (value.startsWith("+")) {
+      val data = value.substring(1)
+      castTo(data, LongType).asInstanceOf[Long]
+    } else if (value.startsWith("-")) {
+      val data = value.substring(1)
+      -castTo(data, LongType).asInstanceOf[Long]
+    } else {
+      val data = value
+      castTo(data, LongType).asInstanceOf[Long]
+    }
+  }
+
+  private def signSafeToDouble(value: String): Double = {
+    if (value.startsWith("+")) {
+      val data = value.substring(1)
+      castTo(data, DoubleType).asInstanceOf[Double]
+    } else if (value.startsWith("-")) {
+      val data = value.substring(1)
+      -castTo(data, DoubleType).asInstanceOf[Double]
+    } else {
+      val data = value
+      castTo(data, DoubleType).asInstanceOf[Double]
+    }
+  }
+
+  private def signSafeToInt(value: String): Int = {
+    if (value.startsWith("+")) {
+      val data = value.substring(1)
+      castTo(data, IntegerType).asInstanceOf[Int]
+    } else if (value.startsWith("-")) {
+      val data = value.substring(1)
+      -castTo(data, IntegerType).asInstanceOf[Int]
+    } else {
+      val data = value
+      castTo(data, IntegerType).asInstanceOf[Int]
+    }
+  }
+
+  private def signSafeToFloat(value: String): Float = {
+    if (value.startsWith("+")) {
+      val data = value.substring(1)
+      castTo(data, FloatType).asInstanceOf[Float]
+    } else if (value.startsWith("-")) {
+      val data = value.substring(1)
+      -castTo(data, FloatType).asInstanceOf[Float]
+    } else {
+      val data = value
+      castTo(data, FloatType).asInstanceOf[Float]
     }
   }
 }

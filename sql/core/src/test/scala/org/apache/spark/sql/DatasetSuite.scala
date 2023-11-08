@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoders, ExpressionEncod
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.BoxedIntEncoder
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
+import org.apache.spark.sql.catalyst.trees.DataFrameQueryContext
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -2668,16 +2669,18 @@ class DatasetSuite extends QueryTest
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       val df = Seq(1).toDS()
       var callSitePattern: String = null
+      val exception = intercept[AnalysisException] {
+        callSitePattern = getNextLineCallSitePattern()
+        val c = col("a")
+        df.select(c)
+      }
       checkError(
-        exception = intercept[AnalysisException] {
-          callSitePattern = getNextLineCallSitePattern()
-          val c = col("a")
-          df.select(c)
-        },
+        exception,
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map("objectName" -> "`a`", "proposal" -> "`value`"),
         context = ExpectedContext(fragment = "col", callSitePattern = callSitePattern))
+      assert(exception.context.head.asInstanceOf[DataFrameQueryContext].stackTrace.length == 2)
     }
   }
 }
