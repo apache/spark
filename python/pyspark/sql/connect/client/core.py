@@ -19,7 +19,7 @@ __all__ = [
     "SparkConnectClient",
 ]
 
-from pyspark.loose_version import LooseVersion
+
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -61,6 +61,7 @@ import grpc
 from google.protobuf import text_format
 from google.rpc import error_details_pb2
 
+from pyspark.loose_version import LooseVersion
 from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql.connect.client.artifact import ArtifactManager
@@ -1471,6 +1472,26 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
+    def release_session(self) -> None:
+        req = pb2.ReleaseSessionRequest()
+        req.session_id = self._session_id
+        req.client_type = self._builder.userAgent
+        if self._user_id:
+            req.user_context.user_id = self._user_id
+        try:
+            for attempt in self._retrying():
+                with attempt:
+                    resp = self._stub.ReleaseSession(req, metadata=self._builder.metadata())
+                    if resp.session_id != self._session_id:
+                        raise SparkConnectException(
+                            "Received incorrect session identifier for request:"
+                            f"{resp.session_id} != {self._session_id}"
+                        )
+                    return
+            raise SparkConnectException("Invalid state during retry exception handling.")
+        except Exception as error:
+            self._handle_error(error)
+
     def add_tag(self, tag: str) -> None:
         self._throw_if_invalid_tag(tag)
         if not hasattr(self.thread_local, "tags"):
@@ -1543,6 +1564,14 @@ class SparkConnectClient(object):
         except grpc.RpcError:
             return None
 
+    def _display_server_stack_trace(self) -> bool:
+        from pyspark.sql.connect.conf import RuntimeConf
+
+        conf = RuntimeConf(self)
+        if conf.get("spark.sql.connect.serverStacktrace.enabled") == "true":
+            return True
+        return conf.get("spark.sql.pyspark.jvmStacktrace.enabled") == "true"
+
     def _handle_rpc_error(self, rpc_error: grpc.RpcError) -> NoReturn:
         """
         Error handling helper for dealing with GRPC Errors. On the server side, certain
@@ -1573,7 +1602,10 @@ class SparkConnectClient(object):
                     d.Unpack(info)
 
                     raise convert_exception(
-                        info, status.message, self._fetch_enriched_error(info)
+                        info,
+                        status.message,
+                        self._fetch_enriched_error(info),
+                        self._display_server_stack_trace(),
                     ) from None
 
             raise SparkConnectGrpcException(status.message) from None

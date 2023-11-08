@@ -39,6 +39,9 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
+import io.netty.handler.ssl.SslHandler;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.GenericFutureListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -268,7 +271,7 @@ public class TransportClientFactory implements Closeable {
     bootstrap.handler(new ChannelInitializer<SocketChannel>() {
       @Override
       public void initChannel(SocketChannel ch) {
-        TransportChannelHandler clientHandler = context.initializePipeline(ch);
+        TransportChannelHandler clientHandler = context.initializePipeline(ch, true);
         clientRef.set(clientHandler.getClient());
         channelRef.set(ch);
       }
@@ -292,6 +295,27 @@ public class TransportClientFactory implements Closeable {
           address, connCreateTimeout));
     } else if (cf.cause() != null) {
       throw new IOException(String.format("Failed to connect to %s", address), cf.cause());
+    }
+    if (context.sslEncryptionEnabled()) {
+      final SslHandler sslHandler = cf.channel().pipeline().get(SslHandler.class);
+      Future<Channel> future = sslHandler.handshakeFuture().addListener(
+        new GenericFutureListener<Future<Channel>>() {
+          @Override
+          public void operationComplete(final Future<Channel> handshakeFuture) {
+            if (handshakeFuture.isSuccess()) {
+              logger.debug("{} successfully completed TLS handshake to ", address);
+            } else {
+              logger.info(
+                "failed to complete TLS handshake to " + address, handshakeFuture.cause());
+              cf.channel().close();
+            }
+          }
+      });
+      if (!future.await(conf.connectionTimeoutMs())) {
+        cf.channel().close();
+        throw new IOException(
+          String.format("Failed to connect to %s within connection timeout", address));
+      }
     }
 
     TransportClient client = clientRef.get();

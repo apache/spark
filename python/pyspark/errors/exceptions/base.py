@@ -15,10 +15,13 @@
 # limitations under the License.
 #
 
-from typing import Dict, Optional, cast
+from typing import Dict, Optional, cast, Iterable, TYPE_CHECKING
 
 from pyspark.errors.utils import ErrorClassesReader
 from pickle import PicklingError
+
+if TYPE_CHECKING:
+    from pyspark.sql.types import Row
 
 
 class PySparkException(Exception):
@@ -75,7 +78,7 @@ class PySparkException(Exception):
         """
         return self.message_parameters
 
-    def getSqlState(self) -> None:
+    def getSqlState(self) -> Optional[str]:
         """
         Returns an SQLSTATE as a string.
 
@@ -221,6 +224,16 @@ class PySparkAssertionError(PySparkException, AssertionError):
     """
     Wrapper class for AssertionError to support error classes.
     """
+
+    def __init__(
+        self,
+        message: Optional[str] = None,
+        error_class: Optional[str] = None,
+        message_parameters: Optional[Dict[str, str]] = None,
+        data: Optional[Iterable["Row"]] = None,
+    ):
+        super().__init__(message, error_class, message_parameters)
+        self.data = data
 
 
 class PySparkNotImplementedError(PySparkException, NotImplementedError):

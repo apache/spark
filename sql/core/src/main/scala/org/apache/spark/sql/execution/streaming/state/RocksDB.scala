@@ -29,6 +29,7 @@ import org.apache.hadoop.conf.Configuration
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 import org.rocksdb.{RocksDB => NativeRocksDB, _}
+import org.rocksdb.CompressionType._
 import org.rocksdb.TickerType._
 
 import org.apache.spark.TaskContext
@@ -91,7 +92,7 @@ class RocksDB(
     tableFormatConfig.setPinL0FilterAndIndexBlocksInCache(true)
   }
 
-  private val columnFamilyOptions = new ColumnFamilyOptions()
+  private[state] val columnFamilyOptions = new ColumnFamilyOptions()
 
   // Set RocksDB options around MemTable memory usage. By default, we let RocksDB
   // use its internal default values for these settings.
@@ -102,6 +103,8 @@ class RocksDB(
   if (conf.maxWriteBufferNumber > 0L) {
     columnFamilyOptions.setMaxWriteBufferNumber(conf.maxWriteBufferNumber)
   }
+
+  columnFamilyOptions.setCompressionType(getCompressionType(conf.compression))
 
   private val dbOptions =
     new Options(new DBOptions(), columnFamilyOptions) // options to open the RocksDB
@@ -504,7 +507,7 @@ class RocksDB(
       "put" -> DB_WRITE,
       "compaction" -> COMPACTION_TIME
     ).toMap
-    val nativeOpsLatencyMicros = nativeOpsHistograms.mapValues { typ =>
+    val nativeOpsLatencyMicros = nativeOpsHistograms.view.mapValues { typ =>
       RocksDBNativeHistogram(nativeStats.getHistogramData(typ))
     }
     val nativeOpsMetricTickers = Seq(
@@ -527,7 +530,7 @@ class RocksDB(
       /** Number of bytes written during flush */
       "totalBytesWrittenByFlush" -> FLUSH_WRITE_BYTES
     ).toMap
-    val nativeOpsMetrics = nativeOpsMetricTickers.mapValues { typ =>
+    val nativeOpsMetrics = nativeOpsMetricTickers.view.mapValues { typ =>
       nativeStats.getTickerCount(typ)
     }
 
@@ -676,7 +679,8 @@ case class RocksDBConf(
     writeBufferCacheRatio: Double,
     highPriorityPoolRatio: Double,
     compressionCodec: String,
-    allowFAllocate: Boolean)
+    allowFAllocate: Boolean,
+    compression: String)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -767,6 +771,10 @@ object RocksDBConf {
   val ALLOW_FALLOCATE_CONF_KEY = "allowFAllocate"
   private val ALLOW_FALLOCATE_CONF = SQLConfEntry(ALLOW_FALLOCATE_CONF_KEY, "true")
 
+  // Pass as compression type to RocksDB.
+  val COMPRESSION_KEY = "compression"
+  private val COMPRESSION_CONF = SQLConfEntry(COMPRESSION_KEY, "lz4")
+
   def apply(storeConf: StateStoreConf): RocksDBConf = {
     val sqlConfs = CaseInsensitiveMap[String](storeConf.sqlConfs)
     val extraConfs = CaseInsensitiveMap[String](storeConf.extraOptions)
@@ -826,6 +834,14 @@ object RocksDBConf {
       }
     }
 
+    def getStringConf(conf: ConfEntry): String = {
+      Try { getConfigMap(conf).getOrElse(conf.fullName, conf.default).toString } getOrElse {
+        throw new IllegalArgumentException(
+          s"Invalid value for '${conf.fullName}', must be a string"
+        )
+      }
+    }
+
     RocksDBConf(
       storeConf.minVersionsToRetain,
       storeConf.minDeltasForSnapshot,
@@ -845,7 +861,8 @@ object RocksDBConf {
       getRatioConf(WRITE_BUFFER_CACHE_RATIO_CONF),
       getRatioConf(HIGH_PRIORITY_POOL_RATIO_CONF),
       storeConf.compressionCodec,
-      getBooleanConf(ALLOW_FALLOCATE_CONF))
+      getBooleanConf(ALLOW_FALLOCATE_CONF),
+      getStringConf(COMPRESSION_CONF))
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())

@@ -147,6 +147,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
 
     val batches = (
     Batch("Finish Analysis", Once, FinishAnalysis) ::
+    // We must run this batch after `ReplaceExpressions`, as `RuntimeReplaceable` expression
+    // may produce `With` expressions that need to be rewritten.
+    Batch("Rewrite With expression", Once, RewriteWithExpression) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -1055,6 +1058,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       .filter(_.references.exists(producerMap.contains))
       .flatMap(collectReferences)
       .groupBy(identity)
+      .view
       .mapValues(_.size)
       .forall {
         case (reference, count) =>

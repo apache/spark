@@ -55,6 +55,15 @@ See '`<docroot>`/sql-migration-guide.html#query-engine'.
 
 Column or field `<name>` is ambiguous and has `<n>` matches.
 
+### AMBIGUOUS_COLUMN_REFERENCE
+
+[SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Column `<name>` is ambiguous. It's because you joined several DataFrame together, and some of these DataFrames are the same.
+This column points to one of the DataFrame but Spark is unable to figure out which one.
+Please alias the DataFrames with different names via `DataFrame.alias` before joining them,
+and specify the column using qualified name, e.g. `df.alias("a").join(df.alias("b"), col("a.id") > col("b.id"))`.
+
 ### AMBIGUOUS_LATERAL_COLUMN_ALIAS
 
 [SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -338,6 +347,14 @@ The codec `<codecName>` is not available. Consider to set the config `<configKey
 
 Cannot find a short name for the codec `<codecName>`.
 
+### [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
+
+[SQLSTATE: 54000](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
+
+Can't create array with `<numberOfElements>` elements which exceeding the array size limit `<maxRoundedArrayLength>`,
+
+For more details see [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
+
 ### COLUMN_ALIASES_IS_NOT_ALLOWED
 
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -430,6 +447,18 @@ For more details see [DATATYPE_MISMATCH](sql-error-conditions-datatype-mismatch-
 [SQLSTATE: 42K01](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 DataType `<type>` requires a length parameter, for example `<type>`(10). Please specify the length.
+
+### DATA_SOURCE_ALREADY_EXISTS
+
+[SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Data source '`<provider>`' already exists in the registry. Please use a different name for the new data source.
+
+### DATA_SOURCE_NOT_EXIST
+
+[SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Data source '`<provider>`' not found. Please make sure the data source is registered.
 
 ### DATA_SOURCE_NOT_FOUND
 
@@ -645,6 +674,12 @@ No such struct field `<fieldName>` in `<fields>`.
 [SQLSTATE: 42809](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The operation `<statement>` is not allowed on the `<objectType>`: `<objectName>`.
+
+### FOUND_MULTIPLE_DATA_SOURCES
+
+[SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Detected multiple data sources with the name '`<provider>`'. Please check the data source isn't simultaneously registered and located in the classpath.
 
 ### GENERATED_COLUMN_WITH_DEFAULT_VALUE
 
@@ -1222,6 +1257,12 @@ For more details see [INVALID_SUBQUERY_EXPRESSION](sql-error-conditions-invalid-
 
 Cannot create the persistent object `<objName>` of the type `<obj>` because it references to the temporary object `<tempObjName>` of the type `<tempObj>`. Please make the temporary object `<tempObjName>` persistent, or make the persistent object `<objName>` temporary.
 
+### INVALID_TIME_TRAVEL_SPEC
+
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot specify both version and timestamp when time travelling the table.
+
 ### [INVALID_TIME_TRAVEL_TIMESTAMP_EXPR](sql-error-conditions-invalid-time-travel-timestamp-expr-error-class.html)
 
 [SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1359,6 +1400,12 @@ For more details see [MISSING_ATTRIBUTES](sql-error-conditions-missing-attribute
 [SQLSTATE: 42803](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses.
+
+### MULTIPLE_TIME_TRAVEL_SPEC
+
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot specify time travel in both the time travel clause and options.
 
 ### MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION
 
@@ -1669,6 +1716,12 @@ Unable to locate Message `<messageName>` in Descriptor.
 
 Protobuf type not yet supported: `<protobufType>`.
 
+### PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON
+
+[SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
+
+Failed to `<action>` Python data source `<type>` in Python: `<msg>`
+
 ### RECURSIVE_PROTOBUF_SCHEMA
 
 [SQLSTATE: 42K0G](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1896,12 +1949,6 @@ Choose a different name, drop or replace the existing view,  or add the IF NOT E
 [SQLSTATE: 428EK](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: `<actualName>`.
-
-### TOO_MANY_ARRAY_ELEMENTS
-
-[SQLSTATE: 54000](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
-
-Cannot initialize array with `<numElements>` elements of size `<size>`.
 
 ### UDTF_ALIAS_NUMBER_MISMATCH
 

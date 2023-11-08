@@ -1238,6 +1238,9 @@ class UtilsTestsMixin:
 
         assertDataFrameEqual(df1, df2)
 
+        with self.assertRaises(PySparkAssertionError):
+            assertDataFrameEqual(df1, df2, ignoreNullable=False)
+
     def test_schema_ignore_nullable_array_equal(self):
         s1 = StructType([StructField("names", ArrayType(DoubleType(), True), True)])
         s2 = StructType([StructField("names", ArrayType(DoubleType(), False), False)])
@@ -1610,6 +1613,93 @@ class UtilsTestsMixin:
             error_class="DIFFERENT_ROWS",
             message_parameters={"error_msg": error_msg},
         )
+
+    def test_dataframe_include_diff_rows(self):
+        df1 = self.spark.createDataFrame(
+            [("1", 1000.00), ("2", 3000.00), ("3", 2000.00)], ["id", "amount"]
+        )
+        df2 = self.spark.createDataFrame(
+            [("1", 1001.00), ("2", 3000.00), ("3", 2003.00)], ["id", "amount"]
+        )
+
+        with self.assertRaises(PySparkAssertionError) as context:
+            assertDataFrameEqual(df1, df2, includeDiffRows=True)
+
+        # Extracting the differing rows data from the exception
+        error_data = context.exception.data
+
+        # Expected differences
+        expected_diff = [
+            (Row(id="1", amount=1000.0), Row(id="1", amount=1001.0)),
+            (Row(id="3", amount=2000.0), Row(id="3", amount=2003.0)),
+        ]
+
+        self.assertEqual(error_data, expected_diff)
+
+    def test_dataframe_ignore_column_order(self):
+        df1 = self.spark.createDataFrame([Row(A=1, B=2), Row(A=3, B=4)])
+        df2 = self.spark.createDataFrame([Row(B=2, A=1), Row(B=4, A=3)])
+
+        with self.assertRaises(PySparkAssertionError):
+            assertDataFrameEqual(df1, df2, ignoreColumnOrder=False)
+
+        assertDataFrameEqual(df1, df2, ignoreColumnOrder=True)
+
+    def test_dataframe_ignore_column_name(self):
+        df1 = self.spark.createDataFrame([(1, 2), (3, 4)], ["A", "B"])
+        df2 = self.spark.createDataFrame([(1, 2), (3, 4)], ["X", "Y"])
+
+        with self.assertRaises(PySparkAssertionError):
+            assertDataFrameEqual(df1, df2, ignoreColumnName=False)
+
+        assertDataFrameEqual(df1, df2, ignoreColumnName=True)
+
+    def test_dataframe_ignore_column_type(self):
+        df1 = self.spark.createDataFrame([(1, "2"), (3, "4")], ["A", "B"])
+        df2 = self.spark.createDataFrame([(1, 2), (3, 4)], ["A", "B"])
+
+        with self.assertRaises(PySparkAssertionError):
+            assertDataFrameEqual(df1, df2, ignoreColumnType=False)
+
+        assertDataFrameEqual(df1, df2, ignoreColumnType=True)
+
+    def test_dataframe_max_errors(self):
+        df1 = self.spark.createDataFrame([(1, "a"), (2, "b"), (3, "c"), (4, "d")], ["id", "value"])
+        df2 = self.spark.createDataFrame([(1, "a"), (2, "z"), (3, "x"), (4, "y")], ["id", "value"])
+
+        # We expect differences in rows 2, 3, and 4.
+        # Setting maxErrors to 2 will limit the reported errors.
+        maxErrors = 2
+        with self.assertRaises(PySparkAssertionError) as context:
+            assertDataFrameEqual(df1, df2, maxErrors=maxErrors)
+
+        # Check if the error message contains information about 2 mismatches only.
+        error_message = str(context.exception)
+        self.assertTrue("! Row" in error_message and error_message.count("! Row") == maxErrors * 2)
+
+    def test_dataframe_show_only_diff(self):
+        df1 = self.spark.createDataFrame(
+            [(1, "apple", "red"), (2, "banana", "yellow"), (3, "cherry", "red")],
+            ["id", "fruit", "color"],
+        )
+        df2 = self.spark.createDataFrame(
+            [(1, "apple", "green"), (2, "banana", "yellow"), (3, "cherry", "blue")],
+            ["id", "fruit", "color"],
+        )
+
+        with self.assertRaises(PySparkAssertionError) as context:
+            assertDataFrameEqual(df1, df2, showOnlyDiff=False)
+
+        error_message = str(context.exception)
+
+        self.assertTrue("apple" in error_message and "banana" in error_message)
+
+        with self.assertRaises(PySparkAssertionError) as context:
+            assertDataFrameEqual(df1, df2, showOnlyDiff=True)
+
+        error_message = str(context.exception)
+
+        self.assertTrue("apple" in error_message and "banana" not in error_message)
 
 
 class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):

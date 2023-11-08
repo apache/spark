@@ -666,7 +666,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.executor.logs.rolling.maxRetainedFiles</code></td>
-  <td>(none)</td>
+  <td>-1</td>
   <td>
     Sets the number of latest rolling log files that are going to be retained by the system.
     Older log files will be deleted. Disabled by default.
@@ -684,7 +684,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.executor.logs.rolling.maxSize</code></td>
-  <td>(none)</td>
+  <td>1024 * 1024</td>
   <td>
     Set the max size of the file in bytes by which the executor logs will be rolled over.
     Rolling is disabled by default. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>

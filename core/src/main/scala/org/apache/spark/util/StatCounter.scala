@@ -52,7 +52,7 @@ class StatCounter(values: IterableOnce[Double]) extends Serializable {
 
   /** Add multiple values into this StatCounter, updating the internal statistics. */
   def merge(values: IterableOnce[Double]): StatCounter = {
-    values.foreach(v => merge(v))
+    values.iterator.foreach(v => merge(v))
     this
   }
 

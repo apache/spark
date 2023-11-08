@@ -490,6 +490,14 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     StructType(newFields)
   }
 
+  /**
+   * Returns the same data type but set all nullability fields are true
+   * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
+   *
+   * @since 4.0.0
+   */
+  def toNullable: StructType = asNullable
+
   override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
     f(this) || fields.exists(field => field.dataType.existsRecursively(f))
   }

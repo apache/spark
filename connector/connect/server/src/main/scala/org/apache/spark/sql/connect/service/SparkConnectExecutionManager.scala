@@ -95,11 +95,16 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
    * Remove an ExecuteHolder from this global manager and from its session. Interrupt the
    * execution if still running, free all resources.
    */
-  private[connect] def removeExecuteHolder(key: ExecuteKey): Unit = {
+  private[connect] def removeExecuteHolder(key: ExecuteKey, abandoned: Boolean = false): Unit = {
     var executeHolder: Option[ExecuteHolder] = None
     executionsLock.synchronized {
       executeHolder = executions.remove(key)
-      executeHolder.foreach(e => e.sessionHolder.removeExecuteHolder(e.operationId))
+      executeHolder.foreach { e =>
+        if (abandoned) {
+          abandonedTombstones.put(key, e.getExecuteInfo)
+        }
+        e.sessionHolder.removeExecuteHolder(e.operationId)
+      }
       if (executions.isEmpty) {
         lastExecutionTime = Some(System.currentTimeMillis())
       }
@@ -112,6 +117,17 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
   private[connect] def getExecuteHolder(key: ExecuteKey): Option[ExecuteHolder] = {
     executionsLock.synchronized {
       executions.get(key)
+    }
+  }
+
+  private[connect] def removeAllExecutionsForSession(key: SessionKey): Unit = {
+    val sessionExecutionHolders = executionsLock.synchronized {
+      executions.filter(_._2.sessionHolder.key == key)
+    }
+    sessionExecutionHolders.foreach { case (_, executeHolder) =>
+      val info = executeHolder.getExecuteInfo
+      logInfo(s"Execution $info removed in removeSessionExecutions.")
+      removeExecuteHolder(executeHolder.key, abandoned = true)
     }
   }
 
@@ -204,8 +220,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       toRemove.foreach { executeHolder =>
         val info = executeHolder.getExecuteInfo
         logInfo(s"Found execution $info that was abandoned and expired and will be removed.")
-        removeExecuteHolder(executeHolder.key)
-        abandonedTombstones.put(executeHolder.key, info)
+        removeExecuteHolder(executeHolder.key, abandoned = true)
       }
     }
     logInfo("Finished periodic run of SparkConnectExecutionManager maintenance.")

@@ -16,7 +16,6 @@
 #
 import shutil
 import tempfile
-import types
 import typing
 import os
 import functools

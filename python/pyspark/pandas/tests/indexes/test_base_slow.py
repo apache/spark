@@ -20,7 +20,7 @@ import unittest
 import pandas as pd
 
 import pyspark.pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils, SPARK_CONF_ARROW_ENABLED
+from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils
 
 
 class IndexesSlowTestsMixin:

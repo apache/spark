@@ -491,6 +491,7 @@ case class EnsureRequirements(
               val numExpectedPartitions = partValues
                 .map(InternalRowComparableWrapper(_, partitionExprs))
                 .groupBy(identity)
+                .view
                 .mapValues(_.size)
 
               mergedPartValues = mergedPartValues.map { case (partVal, numParts) =>

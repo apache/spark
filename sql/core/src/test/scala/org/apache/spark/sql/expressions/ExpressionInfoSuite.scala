@@ -122,7 +122,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       withClue(s"Expression class '$className'") {
         val exprExamples = info.getOriginalExamples
         if (!exprExamples.isEmpty && !ignoreSet.contains(className)) {
-          assert(exampleRe.findAllIn(exprExamples).toIterable
+          assert(exampleRe.findAllIn(exprExamples).iterator.to(Iterable)
             .filter(setStmtRe.findFirstIn(_).isEmpty) // Ignore SET commands
             .forall(_.contains("_FUNC_")))
         }

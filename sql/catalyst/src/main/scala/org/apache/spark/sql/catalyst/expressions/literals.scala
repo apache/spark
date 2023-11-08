@@ -480,9 +480,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case (v: UTF8String, StringType) =>
       // Escapes all backslashes and single quotes.
       "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") + "'"
-    case (v: Byte, ByteType) => v + "Y"
-    case (v: Short, ShortType) => v + "S"
-    case (v: Long, LongType) => v + "L"
+    case (v: Byte, ByteType) => s"${v}Y"
+    case (v: Short, ShortType) => s"${v}S"
+    case (v: Long, LongType) => s"${v}L"
     // Float type doesn't have a suffix
     case (v: Float, FloatType) =>
       val castedValue = v match {
@@ -497,9 +497,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case _ if v.isNaN => s"CAST('NaN' AS ${DoubleType.sql})"
         case Double.PositiveInfinity => s"CAST('Infinity' AS ${DoubleType.sql})"
         case Double.NegativeInfinity => s"CAST('-Infinity' AS ${DoubleType.sql})"
-        case _ => v + "D"
+        case _ => s"${v}D"
       }
-    case (v: Decimal, t: DecimalType) => v + "BD"
+    case (v: Decimal, t: DecimalType) => s"${v}BD"
     case (v: Int, DateType) =>
       s"DATE '$toString'"
     case (v: Long, TimestampType) =>

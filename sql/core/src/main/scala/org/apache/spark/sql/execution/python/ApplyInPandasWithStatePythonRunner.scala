@@ -71,6 +71,8 @@ class ApplyInPandasWithStatePythonRunner(
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
       funcs.head.funcs.head.pythonExec)
 
+  override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
+
   private val sqlConf = SQLConf.get
 
   // Use lazy val to initialize the fields before these are accessed in [[PythonArrowInput]]'s

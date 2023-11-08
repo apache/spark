@@ -19,13 +19,11 @@
 A base class of DataFrame/Column to behave like pandas DataFrame/Series.
 """
 from abc import ABCMeta, abstractmethod
-from collections import Counter
 from functools import reduce
 from typing import (
     Any,
     Callable,
     Dict,
-    Iterable,
     IO,
     List,
     Optional,
@@ -399,55 +397,6 @@ class Frame(object, metaclass=ABCMeta):
         Name: A, dtype: float64
         """
         return self._apply_series_op(lambda psser: psser._cumprod(skipna), should_resolve=True)
-
-    # TODO: Although this has removed pandas >= 1.0.0, but we're keeping this as deprecated
-    # since we're using this for `DataFrame.info` internally.
-    # We can drop it once our minimal pandas version becomes 1.0.0.
-    def get_dtype_counts(self) -> pd.Series:
-        """
-        Return counts of unique dtypes in this object.
-
-        .. deprecated:: 0.14.0
-
-        Returns
-        -------
-        dtype: pd.Series
-            Series with the count of columns with each dtype.
-
-        See Also
-        --------
-        dtypes: Return the dtypes in this object.
-
-        Examples
-        --------
-        >>> a = [['a', 1, 1], ['b', 2, 2], ['c', 3, 3]]
-        >>> df = ps.DataFrame(a, columns=['str', 'int1', 'int2'])
-        >>> df
-          str  int1  int2
-        0   a     1     1
-        1   b     2     2
-        2   c     3     3
-
-        >>> df.get_dtype_counts().sort_values()
-        object    1
-        int64     2
-        dtype: int64
-
-        >>> df.str.get_dtype_counts().sort_values()
-        object    1
-        dtype: int64
-        """
-        warnings.warn(
-            "`get_dtype_counts` has been deprecated and will be "
-            "removed in a future version. For DataFrames use "
-            "`.dtypes.value_counts()",
-            FutureWarning,
-        )
-        if not isinstance(self.dtypes, Iterable):
-            dtypes = [self.dtypes]
-        else:
-            dtypes = list(self.dtypes)
-        return pd.Series(dict(Counter([d.name for d in dtypes])))
 
     def pipe(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         r"""
@@ -1041,9 +990,7 @@ class Frame(object, metaclass=ABCMeta):
         startcol: int = 0,
         engine: Optional[str] = None,
         merge_cells: bool = True,
-        encoding: Optional[str] = None,
         inf_rep: str = "inf",
-        verbose: bool = True,
         freeze_panes: Optional[Tuple[int, int]] = None,
     ) -> None:
         """
@@ -1094,20 +1041,9 @@ class Frame(object, metaclass=ABCMeta):
             ``io.excel.xlsm.writer``.
         merge_cells: bool, default True
             Write MultiIndex and Hierarchical Rows as merged cells.
-        encoding: str, optional
-            Encoding of the resulting excel file. Only necessary for xlwt,
-            other writers support unicode natively.
-
-            .. deprecated:: 3.4.0
-
         inf_rep: str, default 'inf'
             Representation for infinity (there is no native representation for
             infinity in Excel).
-        verbose: bool, default True
-            Display more information in the error logs.
-
-            .. deprecated:: 3.4.0
-
         freeze_panes: tuple of int (length 2), optional
             Specifies the one-based bottommost row and rightmost column that
             is to be frozen.

@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.GZIP
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.execution.{FilterExec, LogicalRDD, QueryExecution, SortExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -354,7 +355,8 @@ class DataFrameSuite extends QueryTest
         "paramIndex" -> "1",
         "inputSql"-> "\"csv\"",
         "inputType" -> "\"STRING\"",
-        "requiredType" -> "(\"ARRAY\" or \"MAP\")")
+        "requiredType" -> "(\"ARRAY\" or \"MAP\")"),
+      context = ExpectedContext(fragment = "explode", getCurrentClassCallSitePattern)
     )
 
     val df2 = Seq(Array("1", "2"), Array("4"), Array("7", "8", "9")).toDF("csv")
@@ -2765,7 +2767,8 @@ class DataFrameSuite extends QueryTest
         // The data set has 2 partitions, so Spark will write at least 2 json files.
         // Use a non-splittable compression (gzip), to make sure the json scan RDD has at least 2
         // partitions.
-        .write.partitionBy("p").option("compression", "gzip").json(path.getCanonicalPath)
+        .write.partitionBy("p")
+        .option("compression", GZIP.lowerCaseName()).json(path.getCanonicalPath)
 
       val numJobs = new AtomicLong(0)
       sparkContext.addSparkListener(new SparkListener {
@@ -2947,7 +2950,8 @@ class DataFrameSuite extends QueryTest
         df.groupBy($"d", $"b").as[GroupByKey, Row]
       },
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      parameters = Map("objectName" -> "`d`", "proposal" -> "`a`, `b`, `c`"))
+      parameters = Map("objectName" -> "`d`", "proposal" -> "`a`, `b`, `c`"),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("SPARK-40601: flatMapCoGroupsInPandas should fail with different number of keys") {
