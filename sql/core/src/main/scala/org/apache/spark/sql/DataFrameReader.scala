@@ -592,8 +592,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         TextInputXmlDataSource.inferFromDataset(
           xmlDataset,
           parsedOptions,
-          sparkSession.sessionState.conf.caseSensitiveAnalysis
-        )
+          sparkSession.sessionState.conf.caseSensitiveAnalysis)
       }
 
     ExprUtils.verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)

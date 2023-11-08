@@ -21,10 +21,12 @@ import javax.xml.stream.XMLEventReader
 import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
+
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, PermissiveMode}
 import org.apache.spark.sql.catalyst.xml.TypeCast._
@@ -71,9 +73,8 @@ private[sql] object XmlInferSchema {
       xml
     }
     // perform schema inference on each row and merge afterwards
-    val rootType = schemaData
-      .mapPartitions { iter =>
-        val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
+    val rootType = schemaData.mapPartitions { iter =>
+      val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
 
         iter.flatMap { xml =>
           infer(xml, options, caseSensitive, xsdSchema)
@@ -183,12 +184,32 @@ private[sql] object XmlInferSchema {
       rootAttributes: Array[Attribute] = Array.empty): DataType = {
     val builder = ArrayBuffer[StructField]()
     val nameToDataType = collection.mutable.Map.empty[String, ArrayBuffer[DataType]]
+    // Initialize a map to hold field names with case sensitivity based on configuration.
+    // The map is only used in case *insensitive* mode
     var fieldNames = if (caseSensitive) {
       Map.empty[String, String]
     } else {
       CaseInsensitiveMap[String](Map.empty)
     }
-    def getFieldNameWCaseSensitive(fieldName: String): String = {
+
+    /**
+     * Retrieves the field name with respect to the case sensitivity setting.
+     * We pick the first name we encountered.
+     *
+     * For instance, we encounter the following field names:
+     * foo, Foo, FOO
+     *
+     * In case-sensitive mode: we will infer three fields: foo, Foo, FOO
+     * In case-insensitive mode, we will infer an array named by foo
+     * (as it's the first one we encounter)
+     *
+     * If case sensitivity is enabled, the original field name is returned.
+     * If not, the field name is managed in a case-insensitive map.
+     *
+     * @param fieldName The field name to retrieve.
+     * @return The field name managed according to case sensitivity rules.
+     */
+    def getCaseSensitiveName(fieldName: String): String = {
       if (caseSensitive) {
         return fieldName
       }
@@ -202,7 +223,7 @@ private[sql] object XmlInferSchema {
       StaxXmlParserUtils.convertAttributesToValuesMap(rootAttributes, options)
     rootValuesMap.foreach {
       case (f, v) =>
-        nameToDataType += (getFieldNameWCaseSensitive(f) -> ArrayBuffer(inferFrom(v, options)))
+        nameToDataType += (getCaseSensitiveName(f) -> ArrayBuffer(inferFrom(v, options)))
     }
     var shouldStop = false
     while (!shouldStop) {
@@ -217,7 +238,8 @@ private[sql] object XmlInferSchema {
               nestedBuilder ++= st.fields
               valuesMap.foreach {
                 case (f, v) =>
-                  nestedBuilder += StructField(f, inferFrom(v, options), nullable = true)
+                  nestedBuilder +=
+                    StructField(getCaseSensitiveName(f), inferFrom(v, options), nullable = true)
               }
               StructType(nestedBuilder.sortBy(_.name).toArray)
 
@@ -227,7 +249,8 @@ private[sql] object XmlInferSchema {
               nestedBuilder += StructField(options.valueTag, dt, nullable = true)
               valuesMap.foreach {
                 case (f, v) =>
-                  nestedBuilder += StructField(f, inferFrom(v, options), nullable = true)
+                  nestedBuilder +=
+                    StructField(getCaseSensitiveName(f), inferFrom(v, options), nullable = true)
               }
               StructType(nestedBuilder.sortBy(_.name).toArray)
 
@@ -236,14 +259,14 @@ private[sql] object XmlInferSchema {
           // Add the field and datatypes so that we can check if this is ArrayType.
           val field = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
           val dataTypes =
-            nameToDataType.getOrElse(getFieldNameWCaseSensitive(field), ArrayBuffer.empty[DataType])
+            nameToDataType.getOrElse(getCaseSensitiveName(field), ArrayBuffer.empty[DataType])
           dataTypes += inferredType
-          nameToDataType += (getFieldNameWCaseSensitive(field) -> dataTypes)
+          nameToDataType += (getCaseSensitiveName(field) -> dataTypes)
 
         case c: Characters if !c.isWhiteSpace =>
           // This can be an attribute-only object
           val valueTagType = inferFrom(c.getData, options)
-          // there are no duplicate valueTag
+          // the valueTag is unique and thus we don't need to take case of case-insensitivity
           nameToDataType += options.valueTag -> ArrayBuffer(valueTagType)
 
         case _: EndElement =>

@@ -253,7 +253,7 @@ class StaxXmlParser(
     val convertedValuesMap = collection.mutable.Map.empty[String, Any]
     val valuesMap = StaxXmlParserUtils.convertAttributesToValuesMap(attributes, options)
     valuesMap.foreach { case (f, v) =>
-      val nameToIndex = if (SQLConf.get.caseSensitiveAnalysis) {
+      val nameToIndex = if (caseSensitive) {
         schema.map(_.name).zipWithIndex.toMap
       } else {
         CaseInsensitiveMap(schema.map(_.name).zipWithIndex.toMap)
@@ -297,7 +297,7 @@ class StaxXmlParser(
     // Here we merge both to a row.
     val valuesMap = fieldsMap ++ attributesMap
     valuesMap.foreach { case (f, v) =>
-      val nameToIndex = if (SQLConf.get.caseSensitiveAnalysis) {
+      val nameToIndex = if (caseSensitive) {
         schema.map(_.name).zipWithIndex.toMap
       } else {
         CaseInsensitiveMap(schema.map(_.name).zipWithIndex.toMap)

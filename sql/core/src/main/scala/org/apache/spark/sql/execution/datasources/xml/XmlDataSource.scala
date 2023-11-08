@@ -178,8 +178,10 @@ object MultiLineXmlDataSource extends XmlDataSource {
         parsedOptions)
     }
     SQLExecution.withSQLConfPropagated(sparkSession) {
-      val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-      val schema = XmlInferSchema.infer(tokenRDD, parsedOptions, caseSensitive)
+      val schema = XmlInferSchema.infer(
+        tokenRDD,
+        parsedOptions,
+        sparkSession.sessionState.conf.caseSensitiveAnalysis)
       schema
     }
   }
