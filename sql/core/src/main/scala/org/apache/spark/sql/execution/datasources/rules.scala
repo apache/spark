@@ -309,9 +309,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       }
     }
 
-    table.copy(
-      partitionColumnNames = normalizedPartCols,
-      bucketSpec = normalizedBucketSpec)
+    table.copy(partitionColumnNames = normalizedPartCols, bucketSpec = normalizedBucketSpec)
   }
 
   private def normalizePartitionColumns(schema: StructType, table: CatalogTable): Seq[String] = {
