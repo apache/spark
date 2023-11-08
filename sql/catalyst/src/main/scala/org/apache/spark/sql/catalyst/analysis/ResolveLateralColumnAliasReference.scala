@@ -170,7 +170,7 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
           case (a: Alias, idx) =>
             val lcaResolved = unwrapLCAReference(a)
             // Insert the original alias instead of rewritten one to detect chained LCA
-            aliasMap += (a.toAttribute -> AliasEntry(a, idx))
+            aliasMap = AttributeMap(aliasMap.updated(a.toAttribute, AliasEntry(a, idx)))
             lcaResolved
           case (e, _) =>
             unwrapLCAReference(e)
