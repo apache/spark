@@ -2666,7 +2666,9 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-45022: exact DatasetQueryContext call site") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.EXTRA_ORIGIN_TRACES.key -> "3") {
       val df = Seq(1).toDS()
       var callSitePattern: String = null
       val exception = intercept[AnalysisException] {
@@ -2680,7 +2682,8 @@ class DatasetSuite extends QueryTest
         sqlState = "42703",
         parameters = Map("objectName" -> "`a`", "proposal" -> "`value`"),
         context = ExpectedContext(fragment = "col", callSitePattern = callSitePattern))
-      assert(exception.context.head.asInstanceOf[DataFrameQueryContext].stackTrace.length == 2)
+      assert(exception.context.head.asInstanceOf[DataFrameQueryContext].stackTrace.length ==
+        1 + spark.conf.get(SQLConf.EXTRA_ORIGIN_TRACES))
     }
   }
 }
