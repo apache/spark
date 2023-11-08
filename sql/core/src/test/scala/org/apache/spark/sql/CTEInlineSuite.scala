@@ -687,7 +687,7 @@ abstract class CTEInlineSuiteBase
         |b as (select * from a)
         |select 2
         |""".stripMargin))
-    checkErrorTableNotFound(e, "`non_exist`")
+    checkErrorTableNotFound(e, "`non_exist`", ExpectedContext("non_exist", 26, 34))
   }
 }
 
