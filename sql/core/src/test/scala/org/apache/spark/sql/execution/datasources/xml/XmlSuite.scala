@@ -30,12 +30,13 @@ import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.GzipCodec
-
 import org.apache.spark.SparkException
+
 import org.apache.spark.sql.{AnalysisException, Dataset, Encoders, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.xml.XmlOptions
 import org.apache.spark.sql.catalyst.xml.XmlOptions._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.xml.TestUtils._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1782,17 +1783,21 @@ class XmlSuite extends QueryTest with SharedSparkSession {
   test("Test XML Options Error Messages") {
     def checkXmlOptionErrorMessage(
       parameters: Map[String, String] = Map.empty,
-      msg: String): Unit = {
-      val e = intercept[IllegalArgumentException] {
+      msg: String,
+      exception: Throwable = new IllegalArgumentException().getCause): Unit = {
+      val e = intercept[Exception] {
         spark.read
           .options(parameters)
           .xml(getTestResourcePath(resDir + "ages.xml"))
           .collect()
       }
+      assert(e.getCause === exception)
       assert(e.getMessage.contains(msg))
     }
 
-    checkXmlOptionErrorMessage(Map.empty, "'rowTag' option is required.")
+    checkXmlOptionErrorMessage(Map.empty,
+      "[XML_ROW_TAG_OPTION_REQUIRED] rowTag option is required for reading files in XML format.",
+      QueryCompilationErrors.xmlRowTagRequiredError(XmlOptions.ROW_TAG).getCause)
     checkXmlOptionErrorMessage(Map("rowTag" -> ""),
       "'rowTag' option should not be an empty string.")
     checkXmlOptionErrorMessage(Map("rowTag" -> " "),
