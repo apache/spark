@@ -67,7 +67,7 @@ class RetryPolicy:
     def name(self) -> str:
         return self._name
 
-    def can_retry(self, exception: BaseException):
+    def can_retry(self, exception: BaseException) -> bool:
         return False
 
     def to_state(self) -> "RetryPolicyState":
@@ -87,14 +87,14 @@ class RetryPolicyState:
         self._next_wait: float = self._policy.initial_backoff
 
     @property
-    def policy(self):
+    def policy(self) -> RetryPolicy:
         return self._policy
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self.policy.name
 
-    def can_retry(self, exception: BaseException):
+    def can_retry(self, exception: BaseException) -> bool:
         return self.policy.can_retry(exception)
 
     def next_attempt(self) -> Optional[int]:
@@ -193,7 +193,7 @@ class Retrying:
             return True
         return False
 
-    def accept_succeeded(self):
+    def accept_succeeded(self) -> None:
         self._done = True
 
     def _last_exception(self) -> BaseException:
@@ -201,7 +201,7 @@ class Retrying:
             raise RuntimeError("No active exception")
         return self._exception
 
-    def _wait(self):
+    def _wait(self) -> None:
         exception = self._last_exception()
 
         # Attempt to find a policy to wait with
@@ -248,10 +248,10 @@ class RetryException(Exception):
 
 
 class DefaultPolicy(RetryPolicy):
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs):  # type: ignore[no-untyped-def]
         super().__init__(**kwargs)
 
-    def can_retry(self, e: Exception) -> bool:
+    def can_retry(self, e: BaseException) -> bool:
         """
         Helper function that is used to identify if an exception thrown by the server
         can be retried or not.

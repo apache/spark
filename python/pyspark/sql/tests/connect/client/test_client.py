@@ -31,8 +31,8 @@ if should_test_connect:
     from pyspark.sql.connect.client.retries import (
         Retrying,
         DefaultPolicy,
-        RetryException,
-    )
+        RetryException, RetriesExceeded,
+)
     from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
     import pyspark.sql.connect.proto as proto
 
@@ -108,10 +108,10 @@ class SparkConnectClientTestCase(unittest.TestCase):
             total_sleep += t
 
         try:
-            for attempt in client._retrying():
+            for attempt in Retrying(client._retry_policies, sleep=sleep):
                 with attempt:
                     raise RetryException()
-        except RetryException:
+        except RetriesExceeded:
             pass
 
         # tolerated at least 10 mins of fails

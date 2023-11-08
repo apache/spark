@@ -651,7 +651,7 @@ class SparkConnectClient(object):
         self._use_reattachable_execute = True
         return self
 
-    def set_retry_policies(self, policies: Iterable[RetryPolicy]):
+    def set_retry_policies(self, policies: Iterable[RetryPolicy]) -> None:
         """
         Sets list of policies to be used for retries.
         I.e. set_retry_policies([DefaultPolicy(), CustomPolicy()]).
