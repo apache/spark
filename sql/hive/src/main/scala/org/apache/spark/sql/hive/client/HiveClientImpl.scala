@@ -502,7 +502,7 @@ private[hive] class HiveClientImpl(
       "comment",
       // For EXTERNAL_TABLE, the table properties has a particular field "EXTERNAL". This is added
       // in the function toHiveTable.
-      "EXTERNAL",
+      "EXTERNAL"
     )
 
     val filteredProperties = properties.filterNot {
