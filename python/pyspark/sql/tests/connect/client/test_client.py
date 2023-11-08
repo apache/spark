@@ -20,7 +20,6 @@ import uuid
 from collections.abc import Generator
 from typing import Optional, Any
 
-from pyspark.sql.connect.client.retries import RetryPolicy
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import eventually
 
@@ -32,7 +31,6 @@ if should_test_connect:
     from pyspark.sql.connect.client.retries import (
         Retrying,
         DefaultPolicy,
-        RetryPolicy,
         RetryException,
     )
     from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator

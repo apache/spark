@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.client.retries import Retrying
+from pyspark.sql.connect.client.retries import Retrying, RetryException
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)

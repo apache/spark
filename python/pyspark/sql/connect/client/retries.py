@@ -291,5 +291,3 @@ class RetriesExceeded(Exception):
     Represents an exception which is considered retriable, but retry limits
     were exceeded
     """
-
-    pass
