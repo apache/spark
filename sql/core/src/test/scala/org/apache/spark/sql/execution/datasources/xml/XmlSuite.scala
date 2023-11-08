@@ -1837,6 +1837,27 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     readDataCaseInsensitive = Seq(Row(1L), Row(2L)))
 
   testCaseSensitivity(
+    "nested struct",
+    writeData = Seq(Row(Row(1L), null), Row(null, Row(2L))),
+    writeSchema = new StructType()
+      .add("a1", new StructType().add("b1", LongType))
+      .add("A1", new StructType().add("B1", LongType)),
+    expectedSchema = new StructType()
+      .add("a1", new StructType().add("b1", LongType)),
+    readDataCaseInsensitive = Seq(Row(Row(1L)), Row(Row(2L)))
+  )
+
+  testCaseSensitivity(
+    "convert fields into array",
+    writeData = Seq(Row(1L, 2L)),
+    writeSchema = new StructType()
+      .add("A1", LongType)
+      .add("a1", LongType),
+    expectedSchema = new StructType()
+      .add("A1", ArrayType(LongType)),
+    readDataCaseInsensitive = Seq(Row(Array(1L, 2L))))
+
+  testCaseSensitivity(
     "basic array",
     writeData = Seq(Row(Array(1L, 2L), Array(3L, 4L))),
     writeSchema = new StructType()
