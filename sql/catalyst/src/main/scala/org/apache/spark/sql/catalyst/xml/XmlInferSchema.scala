@@ -32,10 +32,13 @@ import scala.util.control.NonFatal
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
-import org.apache.spark.sql.catalyst.util.{DateFormatter, PermissiveMode, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{
+  CaseInsensitiveMap,
+  DateFormatter,
+  PermissiveMode,
+  TimestampFormatter
+}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, PermissiveMode}
-import org.apache.spark.sql.catalyst.xml.TypeCast._
 import org.apache.spark.sql.types._
 
 private[sql] class XmlInferSchema(options: XmlOptions) extends Serializable with Logging {
@@ -104,11 +107,10 @@ private[sql] class XmlInferSchema(options: XmlOptions) extends Serializable with
     val rootType = schemaData.mapPartitions { iter =>
       val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
 
-        iter.flatMap { xml =>
-          infer(xml, caseSensitive, xsdSchema)
-        }
+      iter.flatMap { xml =>
+        infer(xml, caseSensitive, xsdSchema)
       }
-      .fold(StructType(Seq()))(compatibleType(caseSensitive))
+    }.fold(StructType(Seq()))(compatibleType(caseSensitive))
 
     canonicalizeType(rootType) match {
       case Some(st: StructType) => st
@@ -221,15 +223,15 @@ private[sql] class XmlInferSchema(options: XmlOptions) extends Serializable with
      * Retrieves the field name with respect to the case sensitivity setting.
      * We pick the first name we encountered.
      *
-     * For instance, we encounter the following field names:
+     * If case sensitivity is enabled, the original field name is returned.
+     * If not, the field name is managed in a case-insensitive map.
+     *
+     * For instance, if we encounter the following field names:
      * foo, Foo, FOO
      *
      * In case-sensitive mode: we will infer three fields: foo, Foo, FOO
      * In case-insensitive mode, we will infer an array named by foo
      * (as it's the first one we encounter)
-     *
-     * If case sensitivity is enabled, the original field name is returned.
-     * If not, the field name is managed in a case-insensitive map.
      *
      * @param fieldName The field name to retrieve.
      * @return The field name managed according to case sensitivity rules.

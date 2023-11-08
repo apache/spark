@@ -628,11 +628,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION) => s.asNullable
       case other => other
     }.getOrElse {
-        TextInputXmlDataSource.inferFromDataset(
-          xmlDataset,
-          parsedOptions,
-          sparkSession.sessionState.conf.caseSensitiveAnalysis)
-      }
+      TextInputXmlDataSource.inferFromDataset(
+        xmlDataset,
+        parsedOptions,
+        sparkSession.sessionState.conf.caseSensitiveAnalysis)
+    }
 
     ExprUtils.verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
     val actualSchema =
