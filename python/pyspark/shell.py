@@ -100,10 +100,11 @@ print(
     % (platform.python_version(), platform.python_build()[0], platform.python_build()[1])
 )
 if is_remote():
-    print(
-        "Client connected to the Spark Connect server at %s"
-        % urlparse(os.environ["SPARK_REMOTE"]).netloc
-    )
+    url = os.environ.get("SPARK_REMOTE", None)
+    assert url is not None
+    if url.startswith("local"):
+        url = "sc://localhost"  # only for display in the console.
+    print("Client connected to the Spark Connect server at %s" % urlparse(url).netloc)
 else:
     print("Spark context Web UI available at %s" % (sc.uiWebUrl))  # type: ignore[union-attr]
     print(

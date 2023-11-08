@@ -19,13 +19,14 @@ package org.apache.spark.status.protobuf
 
 import java.util.Date
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.status.ProcessSummaryWrapper
 import org.apache.spark.status.api.v1.ProcessSummary
 import org.apache.spark.status.protobuf.Utils.{getOptional, getStringField, setStringField}
 
-class ProcessSummaryWrapperSerializer extends ProtobufSerDe[ProcessSummaryWrapper] {
+private[protobuf] class ProcessSummaryWrapperSerializer
+  extends ProtobufSerDe[ProcessSummaryWrapper] {
 
   override def serialize(input: ProcessSummaryWrapper): Array[Byte] = {
     val builder = StoreTypes.ProcessSummaryWrapper.newBuilder()

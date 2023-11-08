@@ -20,7 +20,6 @@ package org.apache.spark.sql.sources
 import java.io.File
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -224,7 +223,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
   test("create table using as select - with invalid number of buckets") {
     withTable("t") {
       Seq(0, 100001).foreach(numBuckets => {
-        val e = intercept[AnalysisException] {
+        val e = intercept[ParseException] {
           sql(
             s"""
                |CREATE TABLE t USING PARQUET
@@ -265,7 +264,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
 
       // Over the new limit
       withTable("t") {
-        val e = intercept[AnalysisException](
+        val e = intercept[ParseException](
           sql(createTableSql(path.toURI.toString, maxNrBuckets + 1)))
         assert(
           e.getMessage.contains("Number of buckets should be greater than 0 but less than "))

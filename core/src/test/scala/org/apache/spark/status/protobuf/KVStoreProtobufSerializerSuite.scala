@@ -65,9 +65,9 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
 
   test("Job data") {
     Seq(
-      ("test", Some("test description"), Some("group")),
-      (null, None, None)
-    ).foreach { case (name, description, jobGroup) =>
+      ("test", Some("test description"), Some("group"), Seq("tag1", "tag2")),
+      (null, None, None, Seq())
+    ).foreach { case (name, description, jobGroup, jobTags) =>
       val input = new JobDataWrapper(
         new JobData(
           jobId = 1,
@@ -77,6 +77,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
           completionTime = Some(new Date(654321L)),
           stageIds = Seq(1, 2, 3, 4),
           jobGroup = jobGroup,
+          jobTags = jobTags,
           status = JobExecutionStatus.UNKNOWN,
           numTasks = 2,
           numActiveTasks = 3,
@@ -102,6 +103,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       assert(result.info.completionTime == input.info.completionTime)
       assert(result.info.stageIds == input.info.stageIds)
       assert(result.info.jobGroup == input.info.jobGroup)
+      assert(result.info.jobTags == input.info.jobTags)
       assert(result.info.status == input.info.status)
       assert(result.info.numTasks == input.info.numTasks)
       assert(result.info.numActiveTasks == input.info.numActiveTasks)

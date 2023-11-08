@@ -24,6 +24,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.{Expression, NullOrdering, SortDirection}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
@@ -34,7 +35,7 @@ import org.apache.spark.sql.types._
 private object MsSqlServerDialect extends JdbcDialect {
 
   // Special JDBC types in Microsoft SQL Server.
-  // https://github.com/microsoft/mssql-jdbc/blob/v8.2.2/src/main/java/microsoft/sql/Types.java
+  // https://github.com/microsoft/mssql-jdbc/blob/v9.4.1/src/main/java/microsoft/sql/Types.java
   private object SpecificTypes {
     val GEOMETRY = -157
     val GEOGRAPHY = -158
@@ -108,7 +109,9 @@ private object MsSqlServerDialect extends JdbcDialect {
         None
       } else {
         sqlType match {
-          case java.sql.Types.SMALLINT => Some(ShortType)
+          // Data range of TINYINT is 0-255 so it needs to be stored in ShortType.
+          // Reference doc: https://learn.microsoft.com/en-us/sql/t-sql/data-types
+          case java.sql.Types.SMALLINT | java.sql.Types.TINYINT => Some(ShortType)
           case java.sql.Types.REAL => Some(FloatType)
           case SpecificTypes.GEOMETRY | SpecificTypes.GEOGRAPHY => Some(BinaryType)
           case _ => None
@@ -133,8 +136,9 @@ private object MsSqlServerDialect extends JdbcDialect {
   // scalastyle:off line.size.limit
   // See https://docs.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-rename-transact-sql?view=sql-server-ver15
   // scalastyle:on line.size.limit
-  override def renameTable(oldTable: String, newTable: String): String = {
-    s"EXEC sp_rename $oldTable, $newTable"
+  override def renameTable(oldTable: Identifier, newTable: Identifier): String = {
+    s"EXEC sp_rename ${getFullyQualifiedQuotedTableName(oldTable)}, " +
+      s"${getFullyQualifiedQuotedTableName(newTable)}"
   }
 
   // scalastyle:off line.size.limit

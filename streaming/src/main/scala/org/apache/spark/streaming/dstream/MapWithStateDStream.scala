@@ -74,7 +74,7 @@ private[streaming] class MapWithStateDStreamImpl[
   /** Return a pair DStream where each RDD is the snapshot of the state of all the keys. */
   def stateSnapshots(): DStream[(KeyType, StateType)] = {
     internalStream.flatMap {
-      _.stateMap.getAll().map { case (k, s, _) => (k, s) }.toTraversable }
+      _.stateMap.getAll().map { case (k, s, _) => (k, s) }.iterator.to(Iterable) }
   }
 
   def keyClass: Class[_] = implicitly[ClassTag[KeyType]].runtimeClass

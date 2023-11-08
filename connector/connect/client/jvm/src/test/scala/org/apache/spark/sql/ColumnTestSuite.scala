@@ -18,10 +18,10 @@ package org.apache.spark.sql
 
 import java.io.ByteArrayOutputStream
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.{functions => fn}
-import org.apache.spark.sql.connect.client.util.ConnectFunSuite
+import org.apache.spark.sql.test.ConnectFunSuite
 import org.apache.spark.sql.types._
 
 /**

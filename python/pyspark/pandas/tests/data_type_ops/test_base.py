@@ -52,7 +52,7 @@ from pyspark.sql.types import (
 )
 
 
-class BaseTest(unittest.TestCase):
+class BaseTestsMixin:
     def test_data_type_ops(self):
         _mock_spark_type = DataType()
         _mock_dtype = ExtensionDtype()
@@ -89,6 +89,10 @@ class BaseTest(unittest.TestCase):
             self.assertIsInstance(DataTypeOps(BooleanDtype(), BooleanType()), BooleanExtensionOps)
         else:
             self.assertIsInstance(DataTypeOps(ExtensionDtype(), BooleanType()), BooleanOps)
+
+
+class BaseTests(BaseTestsMixin, unittest.TestCase):
+    pass
 
 
 if __name__ == "__main__":

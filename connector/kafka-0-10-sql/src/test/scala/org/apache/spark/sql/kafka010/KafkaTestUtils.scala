@@ -24,9 +24,8 @@ import java.util.{Collections, Properties, UUID}
 import java.util.concurrent.TimeUnit
 import javax.security.auth.login.Configuration
 
-import scala.collection.JavaConverters._
 import scala.io.Source
-import scala.util.control.NonFatal
+import scala.jdk.CollectionConverters._
 
 import com.google.common.io.Files
 import kafka.api.Request
@@ -139,30 +138,8 @@ class KafkaTestUtils(
     val kdcDir = Utils.createTempDir()
     val kdcConf = MiniKdc.createConf()
     kdcConf.setProperty(MiniKdc.DEBUG, "true")
-    // The port for MiniKdc service gets selected in the constructor, but will be bound
-    // to it later in MiniKdc.start() -> MiniKdc.initKDCServer() -> KdcServer.start().
-    // In meantime, when some other service might capture the port during this progress, and
-    // cause BindException.
-    // This makes our tests which have dedicated JVMs and rely on MiniKDC being flaky
-    //
-    // https://issues.apache.org/jira/browse/HADOOP-12656 get fixed in Hadoop 2.8.0.
-    //
-    // The workaround here is to periodically repeat this process with a timeout , since we are
-    // using Hadoop 2.7.4 as default.
-    // https://issues.apache.org/jira/browse/SPARK-31631
-    eventually(timeout(60.seconds), interval(1.second)) {
-      try {
-        kdc = new MiniKdc(kdcConf, kdcDir)
-        kdc.start()
-      } catch {
-        case NonFatal(e) =>
-          if (kdc != null) {
-            kdc.stop()
-            kdc = null
-          }
-          throw e
-      }
-    }
+    kdc = new MiniKdc(kdcConf, kdcDir)
+    kdc.start()
     // TODO https://issues.apache.org/jira/browse/SPARK-30037
     // Need to build spark's own MiniKDC and customize krb5.conf like Kafka
     rewriteKrb5Conf()
@@ -400,7 +377,7 @@ class KafkaTestUtils(
   }
 
   def getAllTopicsAndPartitionSize(): Seq[(String, Int)] = {
-    zkClient.getPartitionsForTopics(zkClient.getAllTopicsInCluster()).mapValues(_.size).toSeq
+    zkClient.getPartitionsForTopics(zkClient.getAllTopicsInCluster()).view.mapValues(_.size).toSeq
   }
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */

@@ -26,4 +26,5 @@ Development
    testing
    debugging
    setting_ide
+   errors
 

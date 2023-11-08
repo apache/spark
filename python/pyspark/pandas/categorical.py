@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 from typing import Any, Callable, List, Optional, Union, TYPE_CHECKING, cast
-import warnings
 
 import pandas as pd
 from pandas.api.types import (  # type: ignore[attr-defined]
@@ -186,8 +185,8 @@ class CategoricalAccessor:
 
         Returns
         -------
-        Series or None
-            Categorical with new categories added or None if ``inplace=True``.
+        Series
+            Categorical with new categories added
 
         Raises
         ------
@@ -250,14 +249,11 @@ class CategoricalAccessor:
         )
         return DataFrame(internal)._psser_for(self._data._column_label).copy()
 
-    def _set_ordered(self, *, ordered: bool, inplace: bool) -> Optional["ps.Series"]:
+    def _set_ordered(self, *, ordered: bool) -> Optional["ps.Series"]:
         from pyspark.pandas.frame import DataFrame
 
         if self.ordered == ordered:
-            if inplace:
-                return None
-            else:
-                return self._data.copy()
+            return self._data.copy()
         else:
             internal = self._data._psdf._internal.with_new_spark_column(
                 self._data._column_label,
@@ -266,28 +262,16 @@ class CategoricalAccessor:
                     dtype=CategoricalDtype(categories=self.categories, ordered=ordered)
                 ),
             )
-            if inplace:
-                self._data._psdf._update_internal_frame(internal)
-                return None
-            else:
-                return DataFrame(internal)._psser_for(self._data._column_label).copy()
+            return DataFrame(internal)._psser_for(self._data._column_label).copy()
 
-    def as_ordered(self, inplace: bool = False) -> Optional["ps.Series"]:
+    def as_ordered(self) -> Optional["ps.Series"]:
         """
         Set the Categorical to be ordered.
 
-        Parameters
-        ----------
-        inplace : bool, default False
-           Whether or not to set the ordered attribute in-place or return
-           a copy of this categorical with ordered set to True.
-
-            .. deprecated:: 3.4.0
-
         Returns
         -------
-        Series or None
-            Ordered Categorical or None if ``inplace=True``.
+        Series
+            Ordered Categorical
 
         Examples
         --------
@@ -312,30 +296,16 @@ class CategoricalAccessor:
         dtype: category
         Categories (3, object): ['a' < 'b' < 'c']
         """
-        if inplace:
-            warnings.warn(
-                "The `inplace` parameter in as_ordered is deprecated "
-                "and will be removed in a future version.",
-                FutureWarning,
-            )
-        return self._set_ordered(ordered=True, inplace=inplace)
+        return self._set_ordered(ordered=True)
 
-    def as_unordered(self, inplace: bool = False) -> Optional["ps.Series"]:
+    def as_unordered(self) -> Optional["ps.Series"]:
         """
         Set the Categorical to be unordered.
 
-        Parameters
-        ----------
-        inplace : bool, default False
-           Whether or not to set the ordered attribute in-place or return
-           a copy of this categorical with ordered set to False.
-
-            .. deprecated:: 3.4.0
-
         Returns
         -------
-        Series or None
-            Unordered Categorical or None if ``inplace=True``.
+        Series
+            Unordered Categorical
 
         Examples
         --------
@@ -360,13 +330,7 @@ class CategoricalAccessor:
         dtype: category
         Categories (3, object): ['a', 'b', 'c']
         """
-        if inplace:
-            warnings.warn(
-                "The `inplace` parameter in as_unordered is deprecated "
-                "and will be removed in a future version.",
-                FutureWarning,
-            )
-        return self._set_ordered(ordered=False, inplace=inplace)
+        return self._set_ordered(ordered=False)
 
     def remove_categories(self, removals: Union[pd.Index, Any, List]) -> Optional["ps.Series"]:
         """
@@ -382,8 +346,8 @@ class CategoricalAccessor:
 
         Returns
         -------
-        Series or None
-            Categorical with removed categories or None if ``inplace=True``.
+        Series
+            Categorical with removed categories
 
         Raises
         ------
@@ -441,8 +405,13 @@ class CategoricalAccessor:
         if len(categories) == 0:
             return self._data.copy()
         else:
+            data = [cat for cat in self.categories.sort_values() if cat not in categories]
+            if len(data) == 0:
+                # We should keep original dtype when even removing all categories.
+                data = pd.Index(data, dtype=self.categories.dtype)  # type: ignore[assignment]
             dtype = CategoricalDtype(
-                [cat for cat in self.categories if cat not in categories], ordered=self.ordered
+                categories=data,
+                ordered=self.ordered,
             )
             return self._data.astype(dtype)
 
@@ -452,8 +421,8 @@ class CategoricalAccessor:
 
         Returns
         -------
-        cat : Series or None
-            Categorical with unused categories dropped or None if ``inplace=True``.
+        cat : Series
+            Categorical with unused categories dropped
 
         See Also
         --------
@@ -488,7 +457,14 @@ class CategoricalAccessor:
         """
         categories = set(self._data.drop_duplicates()._to_pandas())
         removals = [cat for cat in self.categories if cat not in categories]
-        return self.remove_categories(removals=removals)
+        categories = [cat for cat in removals if cat is not None]  # type: ignore[assignment]
+        if len(categories) == 0:
+            return self._data.copy()
+        else:
+            dtype = CategoricalDtype(
+                [cat for cat in self.categories if cat not in categories], ordered=self.ordered
+            )
+            return self._data.astype(dtype)
 
     def rename_categories(
         self, new_categories: Union[list, dict, Callable]
@@ -515,8 +491,8 @@ class CategoricalAccessor:
 
         Returns
         -------
-        cat : Series or None
-            Categorical with removed categories or None if ``inplace=True``.
+        cat : Series
+            Categorical with removed categories
 
         Raises
         ------
@@ -607,8 +583,8 @@ class CategoricalAccessor:
 
         Returns
         -------
-        cat : Series or None
-            Categorical with removed categories or None if ``inplace=True``.
+        cat : Series
+            Categorical with removed categories
 
         Raises
         ------
@@ -703,7 +679,7 @@ class CategoricalAccessor:
 
         Returns
         -------
-        Series with reordered categories or None if inplace.
+        Series with reordered categories
 
         Raises
         ------

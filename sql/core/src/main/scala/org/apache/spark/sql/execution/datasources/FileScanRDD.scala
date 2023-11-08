@@ -30,14 +30,14 @@ import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, JoinedRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, JoinedRow, Literal, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.FileFormat._
-import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
-import org.apache.spark.sql.types.{LongType, StringType, StructType}
+import org.apache.spark.sql.execution.vectorized.{ColumnVectorUtils, ConstantColumnVector}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
 
 /**
@@ -50,6 +50,7 @@ import org.apache.spark.util.NextIterator
  * @param length number of bytes to read.
  * @param modificationTime The modification time of the input file, in milliseconds.
  * @param fileSize The length of the input file (not the block), in bytes.
+ * @param otherConstantMetadataColumnValues The values of any additional constant metadata columns.
  */
 case class PartitionedFile(
     partitionValues: InternalRow,
@@ -58,7 +59,8 @@ case class PartitionedFile(
     length: Long,
     @transient locations: Array[String] = Array.empty,
     modificationTime: Long = 0L,
-    fileSize: Long = 0L) {
+    fileSize: Long = 0L,
+    otherConstantMetadataColumnValues: Map[String, Any] = Map.empty) {
 
   def pathUri: URI = filePath.toUri
   def toPath: Path = filePath.toPath
@@ -71,6 +73,7 @@ case class PartitionedFile(
 
 /**
  * An RDD that scans a list of file partitions.
+ * @param metadataColumns File-constant metadata columns to append to end of schema.
  */
 class FileScanRDD(
     @transient private val sparkSession: SparkSession,
@@ -78,6 +81,7 @@ class FileScanRDD(
     @transient val filePartitions: Seq[FilePartition],
     val readSchema: StructType,
     val metadataColumns: Seq[AttributeReference] = Seq.empty,
+    metadataExtractors: Map[String, PartitionedFile => Any] = Map.empty,
     options: FileSourceOptions = new FileSourceOptions(CaseInsensitiveMap(Map.empty)))
   extends RDD[InternalRow](sparkSession.sparkContext, Nil) {
 
@@ -146,43 +150,28 @@ class FileScanRDD(
        */
       private def updateMetadataRow(): Unit =
         if (metadataColumns.nonEmpty && currentFile != null) {
-          updateMetadataInternalRow(metadataRow, metadataColumns.map(_.name),
-            currentFile.toPath, currentFile.fileSize, currentFile.start, currentFile.length,
-            currentFile.modificationTime)
+          updateMetadataInternalRow(
+            metadataRow, metadataColumns.map(_.name), currentFile, metadataExtractors)
         }
 
       /**
        * Create an array of constant column vectors containing all required metadata columns
        */
       private def createMetadataColumnVector(c: ColumnarBatch): Array[ColumnVector] = {
-        val path = currentFile.toPath
-        metadataColumns.map(_.name).map {
-          case FILE_PATH =>
-            val columnVector = new ConstantColumnVector(c.numRows(), StringType)
-            columnVector.setUtf8String(UTF8String.fromString(path.toString))
-            columnVector
-          case FILE_NAME =>
-            val columnVector = new ConstantColumnVector(c.numRows(), StringType)
-            columnVector.setUtf8String(UTF8String.fromString(path.getName))
-            columnVector
-          case FILE_SIZE =>
-            val columnVector = new ConstantColumnVector(c.numRows(), LongType)
-            columnVector.setLong(currentFile.fileSize)
-            columnVector
-          case FILE_BLOCK_START =>
-            val columnVector = new ConstantColumnVector(c.numRows(), LongType)
-            columnVector.setLong(currentFile.start)
-            columnVector
-          case FILE_BLOCK_LENGTH =>
-            val columnVector = new ConstantColumnVector(c.numRows(), LongType)
-            columnVector.setLong(currentFile.length)
-            columnVector
-          case FILE_MODIFICATION_TIME =>
-            val columnVector = new ConstantColumnVector(c.numRows(), LongType)
-            // the modificationTime from the file is in millisecond,
-            // while internally, the TimestampType is stored in microsecond
-            columnVector.setLong(currentFile.modificationTime * 1000L)
-            columnVector
+        val tmpRow = new GenericInternalRow(1)
+        metadataColumns.map { attr =>
+          // Populate each metadata column by passing the resulting value through `tmpRow`.
+          getFileConstantMetadataColumnValue(attr.name, currentFile, metadataExtractors) match {
+            case Literal(null, _) =>
+              tmpRow.setNullAt(0)
+            case literal =>
+              require(PhysicalDataType(attr.dataType) == PhysicalDataType(literal.dataType))
+              tmpRow.update(0, literal.value)
+          }
+
+          val columnVector = new ConstantColumnVector(c.numRows(), attr.dataType)
+          ColumnVectorUtils.populate(columnVector, tmpRow, 0)
+          columnVector
         }.toArray
       }
 

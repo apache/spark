@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.Pod
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
@@ -25,6 +25,7 @@ import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.{SparkFunSuite, TestUtils}
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.SPARK_PI_MAIN_CLASS
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.launcher.SparkLauncher
 
 private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
@@ -58,9 +59,13 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
     // Verify there is no dangling statefulset
     // This depends on the garbage collection happening inside of K8s so give it some time.
     Eventually.eventually(TIMEOUT, INTERVAL) {
-      val sets = kubernetesTestComponents.kubernetesClient.apps().statefulSets().list().getItems
-      val scalaSets = sets.asScala
-      scalaSets.size shouldBe (0)
+      val sets = kubernetesTestComponents.kubernetesClient
+        .apps()
+        .statefulSets()
+        .inNamespace(kubernetesTestComponents.namespace)
+        .list()
+        .getItems
+      sets.asScala.size shouldBe 0
     }
   }
 
@@ -89,7 +94,7 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
   test("Run SparkPi with an argument.", k8sTestTag) {
     // This additional configuration with snappy is for SPARK-26995
     sparkAppConf
-      .set("spark.io.compression.codec", "snappy")
+      .set("spark.io.compression.codec", CompressionCodec.SNAPPY)
     runSparkPiAndVerifyCompletion(appArgs = Array("5"))
   }
 
@@ -164,8 +169,10 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
     runSparkPiAndVerifyCompletion(
       executorPodChecker = (executorPod: Pod) => {
         doBasicExecutorPodCheck(executorPod)
-        executorPod.getSpec.getContainers.get(0).getEnv.asScala
-          .exists(envVar => envVar.getName == "SPARK_DRIVER_POD_IP")
+        assert {
+          executorPod.getSpec.getContainers.get(0).getEnv.asScala
+            .exists(envVar => envVar.getName == "SPARK_DRIVER_POD_IP")
+        }
       })
   }
 }

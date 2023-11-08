@@ -48,7 +48,8 @@ public class ExpressionInfo {
             "window_funcs", "xml_funcs", "table_funcs", "url_funcs"));
 
     private static final Set<String> validSources =
-            new HashSet<>(Arrays.asList("built-in", "hive", "python_udf", "scala_udf", "java_udf"));
+            new HashSet<>(Arrays.asList("built-in", "hive", "python_udf", "scala_udf",
+                    "java_udf", "python_udtf"));
 
     public String getClassName() {
         return className;
@@ -191,7 +192,7 @@ public class ExpressionInfo {
      * @deprecated This constructor is deprecated as of Spark 3.0. Use other constructors to fully
      *   specify each argument for extended usage.
      */
-    @Deprecated
+    @Deprecated(since = "3.0.0")
     public ExpressionInfo(String className, String db, String name, String usage, String extended) {
         // `arguments` and `examples` are concatenated for the extended description. So, here
         // simply pass the `extended` as `arguments` and an empty string for `examples`.

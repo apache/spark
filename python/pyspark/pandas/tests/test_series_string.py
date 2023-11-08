@@ -18,13 +18,14 @@
 import pandas as pd
 import numpy as np
 import re
+import unittest
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class SeriesStringTest(PandasOnSparkTestCase, SQLTestUtils):
+class SeriesStringTestsMixin:
     @property
     def pser(self):
         return pd.Series(
@@ -253,10 +254,10 @@ class SeriesStringTest(PandasOnSparkTestCase, SQLTestUtils):
         def repl(m):
             return m.group(0)[::-1]
 
-        self.check_func(lambda x: x.str.replace(r"[a-z]+", repl))
+        self.check_func(lambda x: x.str.replace("[a-z]+", repl, regex=True))
         # compiled regex with flags
-        regex_pat = re.compile(r"WHITESPACE", flags=re.IGNORECASE)
-        self.check_func(lambda x: x.str.replace(regex_pat, "---"))
+        regex_pat = re.compile("WHITESPACE", flags=re.IGNORECASE)
+        self.check_func(lambda x: x.str.replace(regex_pat, "---", regex=True))
 
     def test_string_rfind(self):
         self.check_func(lambda x: x.str.rfind("a"))
@@ -329,6 +330,10 @@ class SeriesStringTest(PandasOnSparkTestCase, SQLTestUtils):
     def test_string_get_dummies(self):
         with self.assertRaises(NotImplementedError):
             self.check_func(lambda x: x.str.get_dummies())
+
+
+class SeriesStringTests(SeriesStringTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+    pass
 
 
 if __name__ == "__main__":

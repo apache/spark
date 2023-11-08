@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.jdbc.v2
 
-import java.sql.{Connection, SQLFeatureNotSupportedException}
+import java.sql.Connection
 
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.DatabaseOnDocker
@@ -39,8 +39,27 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
 
-  override val catalogName: String = "mssql"
+  override def excluded: Seq[String] = Seq(
+    "simple scan with OFFSET",
+    "simple scan with LIMIT and OFFSET",
+    "simple scan with paging: top N and OFFSET",
+    "scan with aggregate push-down: VAR_POP with DISTINCT",
+    "scan with aggregate push-down: COVAR_POP with DISTINCT",
+    "scan with aggregate push-down: COVAR_POP without DISTINCT",
+    "scan with aggregate push-down: COVAR_SAMP with DISTINCT",
+    "scan with aggregate push-down: COVAR_SAMP without DISTINCT",
+    "scan with aggregate push-down: CORR with DISTINCT",
+    "scan with aggregate push-down: CORR without DISTINCT",
+    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT",
+    "scan with aggregate push-down: REGR_INTERCEPT without DISTINCT",
+    "scan with aggregate push-down: REGR_SLOPE with DISTINCT",
+    "scan with aggregate push-down: REGR_SLOPE without DISTINCT",
+    "scan with aggregate push-down: REGR_R2 with DISTINCT",
+    "scan with aggregate push-down: REGR_R2 without DISTINCT",
+    "scan with aggregate push-down: REGR_SXY with DISTINCT",
+    "scan with aggregate push-down: REGR_SXY without DISTINCT")
 
+  override val catalogName: String = "mssql"
   override val db = new DatabaseOnDocker {
     override val imageName = sys.env.getOrElse("MSSQLSERVER_DOCKER_IMAGE_NAME",
       "mcr.microsoft.com/mssql/server:2019-CU13-ubuntu-20.04")
@@ -81,29 +100,29 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
     expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update column type from STRING to INTEGER
-    val msg1 = intercept[AnalysisException] {
-      sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER")
-    }.getMessage
-    assert(msg1.contains(
-      s"Cannot update $catalogName.alt_table field ID: string cannot be cast to int"))
+    val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(sql1)
+      },
+      errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
+      parameters = Map(
+        "originType" -> "\"STRING\"",
+        "newType" -> "\"INT\"",
+        "newName" -> "`ID`",
+        "originName" -> "`ID`",
+        "table" -> s"`$catalogName`.`alt_table`"),
+      context = ExpectedContext(fragment = sql1, start = 0, stop = 55)
+    )
   }
 
   override def testUpdateColumnNullability(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID STRING NOT NULL)")
     // Update nullability is unsupported for mssql db.
-    val msg = intercept[AnalysisException] {
-      sql(s"ALTER TABLE $tbl ALTER COLUMN ID DROP NOT NULL")
-    }.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
-
-    assert(msg.contains("UpdateColumnNullability is not supported"))
+    checkError(
+      exception = intercept[SparkSQLFeatureNotSupportedException] {
+        sql(s"ALTER TABLE $tbl ALTER COLUMN ID DROP NOT NULL")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2271")
   }
-
-  testVarPop()
-  testVarPop(true)
-  testVarSamp()
-  testVarSamp(true)
-  testStddevPop()
-  testStddevPop(true)
-  testStddevSamp()
-  testStddevSamp(true)
 }

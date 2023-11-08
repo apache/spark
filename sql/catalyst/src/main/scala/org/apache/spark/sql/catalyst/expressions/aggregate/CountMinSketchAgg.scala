@@ -18,9 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.catalyst.trees.QuaternaryLike
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types._
@@ -39,22 +40,6 @@ import org.apache.spark.util.sketch.CountMinSketch
  * @param confidenceExpression confidence, must be positive and less than 1.0
  * @param seedExpression random seed
  */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(col, eps, confidence, seed) - Returns a count-min sketch of a column with the given esp,
-      confidence and seed. The result is an array of bytes, which can be deserialized to a
-      `CountMinSketch` before usage. Count-min sketch is a probabilistic data structure used for
-      cardinality estimation using sub-linear space.
-  """,
-  examples = """
-    Examples:
-      > SELECT hex(_FUNC_(col, 0.5d, 0.5d, 1)) FROM VALUES (1), (2), (1) AS tab(col);
-       0000000100000000000000030000000100000004000000005D8D6AB90000000000000000000000000000000200000000000000010000000000000000
-  """,
-  group = "agg_funcs",
-  since = "2.2.0")
-// scalastyle:on line.size.limit
 case class CountMinSketchAgg(
     child: Expression,
     epsExpression: Expression,
@@ -88,7 +73,7 @@ case class CountMinSketchAgg(
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "eps",
+          "inputName" -> toSQLId("eps"),
           "inputType" -> toSQLType(epsExpression.dataType),
           "inputExpr" -> toSQLExpr(epsExpression))
       )
@@ -96,7 +81,7 @@ case class CountMinSketchAgg(
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "confidence",
+          "inputName" -> toSQLId("confidence"),
           "inputType" -> toSQLType(confidenceExpression.dataType),
           "inputExpr" -> toSQLExpr(confidenceExpression))
       )
@@ -104,7 +89,7 @@ case class CountMinSketchAgg(
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "seed",
+          "inputName" -> toSQLId("seed"),
           "inputType" -> toSQLType(seedExpression.dataType),
           "inputExpr" -> toSQLExpr(seedExpression))
       )
@@ -207,4 +192,34 @@ case class CountMinSketchAgg(
       epsExpression = second,
       confidenceExpression = third,
       seedExpression = fourth)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(col, eps, confidence, seed) - Returns a count-min sketch of a column with the given esp,
+      confidence and seed. The result is an array of bytes, which can be deserialized to a
+      `CountMinSketch` before usage. Count-min sketch is a probabilistic data structure used for
+      cardinality estimation using sub-linear space.
+  """,
+  examples = """
+    Examples:
+      > SELECT hex(_FUNC_(col, 0.5d, 0.5d, 1)) FROM VALUES (1), (2), (1) AS tab(col);
+       0000000100000000000000030000000100000004000000005D8D6AB90000000000000000000000000000000200000000000000010000000000000000
+  """,
+  group = "agg_funcs",
+  since = "2.2.0")
+// scalastyle:on line.size.limit
+object CountMinSketchAggExpressionBuilder extends ExpressionBuilder {
+  final val defaultFunctionSignature = FunctionSignature(Seq(
+    InputParameter("column"),
+    InputParameter("epsilon"),
+    InputParameter("confidence"),
+    InputParameter("seed")
+  ))
+  override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    assert(expressions.size == 4)
+    new CountMinSketchAgg(expressions(0), expressions(1), expressions(2), expressions(3))
+  }
 }

@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.{lang => jl}
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions._
@@ -501,6 +501,10 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     // only keep the row if it has at least `minNonNulls` non-null and non-NaN values.
     val predicate = AtLeastNNonNulls(minNonNulls, cols)
     df.filter(Column(predicate))
+  }
+
+  private[sql] def fillValue(value: Any, cols: Option[Seq[String]]): DataFrame = {
+    fillValue(value, cols.map(toAttributes).getOrElse(outputAttributes))
   }
 
   /**

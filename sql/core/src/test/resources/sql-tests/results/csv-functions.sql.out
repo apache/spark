@@ -170,7 +170,7 @@ select schema_of_csv(null)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
   "sqlState" : "42K09",
@@ -201,13 +201,13 @@ SELECT schema_of_csv(csvField) FROM csvTable
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"csvField\"",
-    "inputName" : "csv",
+    "inputName" : "`csv`",
     "inputType" : "\"STRING\"",
     "sqlExpr" : "\"schema_of_csv(csvField)\""
   },

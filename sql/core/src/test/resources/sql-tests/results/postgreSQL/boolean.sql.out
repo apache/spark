@@ -717,10 +717,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2331",
+  "errorClass" : "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "msg" : "[CAST_INVALID_INPUT] The value 'XXX' of the type \"STRING\" cannot be cast to \"BOOLEAN\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error.\n== SQL(line 2, position 12) ==\n   VALUES (boolean('XXX'))\n           ^^^^^^^^^^^^^^\n",
-    "sqlExpr" : "CAST('XXX' AS BOOLEAN)"
+    "sqlExpr" : "\"XXX\""
   },
   "queryContext" : [ {
     "objectType" : "",

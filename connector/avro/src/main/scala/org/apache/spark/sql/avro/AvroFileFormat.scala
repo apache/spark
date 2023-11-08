@@ -21,6 +21,8 @@ import java.io._
 
 import scala.util.control.NonFatal
 
+import org.apache.avro.{LogicalTypes, Schema}
+import org.apache.avro.LogicalType
 import org.apache.avro.file.DataFileReader
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.FsInput
@@ -139,7 +141,8 @@ private[sql] class AvroFileFormat extends FileFormat
             requiredSchema,
             parsedOptions.positionalFieldMatching,
             datetimeRebaseMode,
-            avroFilters)
+            avroFilters,
+            parsedOptions.useStableIdForUnionType)
           override val stopPosition = file.start + file.length
 
           override def hasNext: Boolean = hasNextRow
@@ -168,4 +171,11 @@ private[sql] class AvroFileFormat extends FileFormat
 
 private[avro] object AvroFileFormat {
   val IgnoreFilesWithoutExtensionProperty = "avro.mapred.ignore.inputs.without.extension"
+
+  // Register the customized decimal type backed by long.
+  LogicalTypes.register(CustomDecimal.TYPE_NAME, new LogicalTypes.LogicalTypeFactory {
+    override def fromSchema(schema: Schema): LogicalType = {
+      new CustomDecimal(schema)
+    }
+  })
 }

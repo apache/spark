@@ -35,7 +35,8 @@ private[spark] object CoarseGrainedClusterMessages {
       sparkProperties: Seq[(String, String)],
       ioEncryptionKey: Option[Array[Byte]],
       hadoopDelegationCreds: Option[Array[Byte]],
-      resourceProfile: ResourceProfile)
+      resourceProfile: ResourceProfile,
+      logLevel: Option[String])
     extends CoarseGrainedClusterMessage
 
   case object RetrieveLastAllocatedExecutorId extends CoarseGrainedClusterMessage
@@ -48,6 +49,10 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class KillExecutorsOnHost(host: String)
     extends CoarseGrainedClusterMessage
+
+  case class UpdateExecutorsLogLevel(logLevel: String) extends CoarseGrainedClusterMessage
+
+  case class UpdateExecutorLogLevel(logLevel: String) extends CoarseGrainedClusterMessage
 
   case class DecommissionExecutorsOnHost(host: String)
     extends CoarseGrainedClusterMessage
@@ -161,4 +166,6 @@ private[spark] object CoarseGrainedClusterMessages {
 
   // The message to check if `CoarseGrainedSchedulerBackend` thinks the executor is alive or not.
   case class IsExecutorAlive(executorId: String) extends CoarseGrainedClusterMessage
+
+  case class TaskThreadDump(taskId: Long) extends CoarseGrainedClusterMessage
 }

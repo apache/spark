@@ -24,7 +24,7 @@ import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
 import java.net._
 import java.nio.ByteBuffer
-import java.nio.channels.{Channels, FileChannel, WritableByteChannel}
+import java.nio.channels.Channels
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.security.SecureRandom
@@ -34,10 +34,10 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 import java.util.zip.{GZIPInputStream, ZipInputStream}
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 import scala.util.control.{ControlThrowable, NonFatal}
@@ -54,11 +54,14 @@ import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
+import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
+import org.apache.hadoop.ipc.CallerContext.{Builder => HadoopCallerContextBuilder}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.{RunJar, StringUtils}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.logging.log4j.core.LoggerContext
+import org.apache.logging.log4j.core.config.LoggerConfig
 import org.eclipse.jetty.util.MultiException
 import org.slf4j.Logger
 
@@ -89,8 +92,14 @@ private[spark] object CallSite {
 /**
  * Various utility methods used by Spark.
  */
-private[spark] object Utils extends Logging {
-  val random = new Random()
+private[spark] object Utils
+  extends Logging
+  with SparkClassUtils
+  with SparkEnvUtils
+  with SparkErrorUtils
+  with SparkFileUtils
+  with SparkSerDeUtils
+  with SparkStreamUtils {
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
   @volatile private var cachedLocalDir: String = ""
@@ -116,36 +125,6 @@ private[spark] object Utils extends Logging {
   private val copyBuffer = ThreadLocal.withInitial[Array[Byte]](() => {
     new Array[Byte](COPY_BUFFER_LEN)
   })
-
-  /** Serialize an object using Java serialization */
-  def serialize[T](o: T): Array[Byte] = {
-    val bos = new ByteArrayOutputStream()
-    val oos = new ObjectOutputStream(bos)
-    oos.writeObject(o)
-    oos.close()
-    bos.toByteArray
-  }
-
-  /** Deserialize an object using Java serialization */
-  def deserialize[T](bytes: Array[Byte]): T = {
-    val bis = new ByteArrayInputStream(bytes)
-    val ois = new ObjectInputStream(bis)
-    ois.readObject.asInstanceOf[T]
-  }
-
-  /** Deserialize an object using Java serialization and the given ClassLoader */
-  def deserialize[T](bytes: Array[Byte], loader: ClassLoader): T = {
-    val bis = new ByteArrayInputStream(bytes)
-    val ois = new ObjectInputStream(bis) {
-      override def resolveClass(desc: ObjectStreamClass): Class[_] = {
-        // scalastyle:off classforname
-        Class.forName(desc.getName, false, loader)
-        // scalastyle:on classforname
-      }
-    }
-    ois.readObject.asInstanceOf[T]
-  }
-
   /** Deserialize a Long value (used for [[org.apache.spark.api.python.PythonPartitioner]]) */
   def deserializeLongValue(bytes: Array[Byte]) : Long = {
     // Note: we assume that we are given a Long value encoded in network (big-endian) byte order
@@ -190,44 +169,6 @@ private[spark] object Utils extends Logging {
   /** String interning to reduce the memory usage. */
   def weakIntern(s: String): String = {
     weakStringInterner.intern(s)
-  }
-
-  /**
-   * Get the ClassLoader which loaded Spark.
-   */
-  def getSparkClassLoader: ClassLoader = getClass.getClassLoader
-
-  /**
-   * Get the Context ClassLoader on this thread or, if not present, the ClassLoader that
-   * loaded Spark.
-   *
-   * This should be used whenever passing a ClassLoader to Class.ForName or finding the currently
-   * active loader when setting up ClassLoader delegation chains.
-   */
-  def getContextOrSparkClassLoader: ClassLoader =
-    Option(Thread.currentThread().getContextClassLoader).getOrElse(getSparkClassLoader)
-
-  /** Determines whether the provided class is loadable in the current thread. */
-  def classIsLoadable(clazz: String): Boolean = {
-    Try { classForName(clazz, initialize = false) }.isSuccess
-  }
-
-  // scalastyle:off classforname
-  /**
-   * Preferred alternative to Class.forName(className), as well as
-   * Class.forName(className, initialize, loader) with current thread's ContextClassLoader.
-   */
-  def classForName[C](
-      className: String,
-      initialize: Boolean = true,
-      noSparkClassLoader: Boolean = false): Class[C] = {
-    if (!noSparkClassLoader) {
-      Class.forName(className, initialize, getContextOrSparkClassLoader).asInstanceOf[Class[C]]
-    } else {
-      Class.forName(className, initialize, Thread.currentThread().getContextClassLoader).
-        asInstanceOf[Class[C]]
-    }
-    // scalastyle:on classforname
   }
 
   /**
@@ -294,86 +235,15 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Create a directory given the abstract pathname
-   * @return true, if the directory is successfully created; otherwise, return false.
-   */
-  def createDirectory(dir: File): Boolean = {
-    try {
-      // SPARK-35907: The check was required by File.mkdirs() because it could sporadically
-      // fail silently. After switching to Files.createDirectories(), ideally, there should
-      // no longer be silent fails. But the check is kept for the safety concern. We can
-      // remove the check when we're sure that Files.createDirectories() would never fail silently.
-      Files.createDirectories(dir.toPath)
-      if ( !dir.exists() || !dir.isDirectory) {
-        logError(s"Failed to create directory " + dir)
-      }
-      dir.isDirectory
-    } catch {
-      case e: Exception =>
-        logError(s"Failed to create directory " + dir, e)
-        false
-    }
-  }
-
-  /**
-   * Create a directory inside the given parent directory. The directory is guaranteed to be
-   * newly created, and is not marked for automatic deletion.
-   */
-  def createDirectory(root: String, namePrefix: String = "spark"): File = {
-    JavaUtils.createDirectory(root, namePrefix)
-  }
-
-  /**
    * Create a temporary directory inside the given parent directory. The directory will be
    * automatically deleted when the VM shuts down.
    */
-  def createTempDir(
+  override def createTempDir(
       root: String = System.getProperty("java.io.tmpdir"),
       namePrefix: String = "spark"): File = {
-    JavaUtils.createTempDir(root, namePrefix)
-  }
-
-  /**
-   * Copy all data from an InputStream to an OutputStream. NIO way of file stream to file stream
-   * copying is disabled by default unless explicitly set transferToEnabled as true,
-   * the parameter transferToEnabled should be configured by spark.file.transferTo = [true|false].
-   */
-  def copyStream(
-      in: InputStream,
-      out: OutputStream,
-      closeStreams: Boolean = false,
-      transferToEnabled: Boolean = false): Long = {
-    tryWithSafeFinally {
-      (in, out) match {
-        case (input: FileInputStream, output: FileOutputStream) if transferToEnabled =>
-          // When both streams are File stream, use transferTo to improve copy performance.
-          val inChannel = input.getChannel
-          val outChannel = output.getChannel
-          val size = inChannel.size()
-          copyFileStreamNIO(inChannel, outChannel, 0, size)
-          size
-        case (input, output) =>
-          var count = 0L
-          val buf = new Array[Byte](8192)
-          var n = 0
-          while (n != -1) {
-            n = input.read(buf)
-            if (n != -1) {
-              output.write(buf, 0, n)
-              count += n
-            }
-          }
-          count
-      }
-    } {
-      if (closeStreams) {
-        try {
-          in.close()
-        } finally {
-          out.close()
-        }
-      }
-    }
+    val dir = createDirectory(root, namePrefix)
+    ShutdownHookManager.registerShutdownDeleteDir(dir)
+    dir
   }
 
   /**
@@ -420,43 +290,6 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  def copyFileStreamNIO(
-      input: FileChannel,
-      output: WritableByteChannel,
-      startPosition: Long,
-      bytesToCopy: Long): Unit = {
-    val outputInitialState = output match {
-      case outputFileChannel: FileChannel =>
-        Some((outputFileChannel.position(), outputFileChannel))
-      case _ => None
-    }
-    var count = 0L
-    // In case transferTo method transferred less data than we have required.
-    while (count < bytesToCopy) {
-      count += input.transferTo(count + startPosition, bytesToCopy - count, output)
-    }
-    assert(count == bytesToCopy,
-      s"request to copy $bytesToCopy bytes, but actually copied $count bytes.")
-
-    // Check the position after transferTo loop to see if it is in the right position and
-    // give user information if not.
-    // Position will not be increased to the expected length after calling transferTo in
-    // kernel version 2.6.32, this issue can be seen in
-    // https://bugs.openjdk.java.net/browse/JDK-7052359
-    // This will lead to stream corruption issue when using sort-based shuffle (SPARK-3948).
-    outputInitialState.foreach { case (initialPos, outputFileChannel) =>
-      val finalPos = outputFileChannel.position()
-      val expectedPos = initialPos + bytesToCopy
-      assert(finalPos == expectedPos,
-        s"""
-           |Current position $finalPos do not equal to expected position $expectedPos
-           |after transferTo, please check your kernel version to see if it is 2.6.32,
-           |this is a kernel bug which will lead to unexpected behavior when using transferTo.
-           |You can set spark.file.transferTo = false to disable this NIO feature.
-         """.stripMargin)
-    }
-  }
-
   /**
    * A file name may contain some invalid URI characters, such as " ". This method will convert the
    * file name to a raw path accepted by `java.net.URI(String)`.
@@ -468,7 +301,18 @@ private[spark] object Utils extends Logging {
     // `file` and `localhost` are not used. Just to prevent URI from parsing `fileName` as
     // scheme or host. The prefix "/" is required because URI doesn't accept a relative path.
     // We should remove it after we get the raw path.
-    new URI("file", null, "localhost", -1, "/" + fileName, null, null).getRawPath.substring(1)
+    encodeRelativeUnixPathToURIRawPath(fileName)
+  }
+
+  /**
+   * Same as [[encodeFileNameToURIRawPath]] but returns the relative UNIX path.
+   */
+  def encodeRelativeUnixPathToURIRawPath(path: String): String = {
+    require(!path.startsWith("/") && !path.contains("\\"))
+    // `file` and `localhost` are not used. Just to prevent URI from parsing `fileName` as
+    // scheme or host. The prefix "/" is required because URI doesn't accept a relative path.
+    // We should remove it after we get the raw path.
+    new URI("file", null, "localhost", -1, "/" + path, null, null).getRawPath.substring(1)
   }
 
   /**
@@ -589,7 +433,7 @@ private[spark] object Utils extends Logging {
     if (lowerSrc.endsWith(".jar")) {
       RunJar.unJar(source, dest, RunJar.MATCH_ANY)
     } else if (lowerSrc.endsWith(".zip")) {
-      // TODO(SPARK-37677): should keep file permissions. Java implementation doesn't.
+      // After issue HADOOP-18145, unzip could keep file permissions.
       FileUtil.unZip(source, dest)
     } else if (lowerSrc.endsWith(".tar.gz") || lowerSrc.endsWith(".tgz")) {
       FileUtil.unTar(source, dest)
@@ -935,17 +779,7 @@ private[spark] object Utils extends Logging {
       conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
     } else if (conf.getenv("SPARK_LOCAL_DIRS") != null) {
       conf.getenv("SPARK_LOCAL_DIRS").split(",")
-    } else if (conf.getenv("MESOS_SANDBOX") != null && !shuffleServiceEnabled) {
-      // Mesos already creates a directory per Mesos task. Spark should use that directory
-      // instead so all temporary files are automatically cleaned up when the Mesos task ends.
-      // Note that we don't want this if the shuffle service is enabled because we want to
-      // continue to serve shuffle files after the executors that wrote them have already exited.
-      Array(conf.getenv("MESOS_SANDBOX"))
     } else {
-      if (conf.getenv("MESOS_SANDBOX") != null && shuffleServiceEnabled) {
-        logInfo("MESOS_SANDBOX available but not using provided Mesos sandbox because " +
-          s"${config.SHUFFLE_SERVICE_ENABLED.key} is enabled.")
-      }
       // In non-Yarn mode (or for the driver in yarn-client mode), we cannot trust the user
       // configuration to point to a secure directory. So create a subdirectory with restricted
       // permissions under each listed directory.
@@ -1004,8 +838,8 @@ private[spark] object Utils extends Logging {
    * result in a new collection. Unlike scala.util.Random.shuffle, this method
    * uses a local random number generator, avoiding inter-thread contention.
    */
-  def randomize[T: ClassTag](seq: TraversableOnce[T]): Seq[T] = {
-    randomizeInPlace(seq.toArray)
+  def randomize[T: ClassTag](seq: IterableOnce[T]): Seq[T] = {
+    randomizeInPlace(seq.iterator.toArray)
   }
 
   /**
@@ -1070,8 +904,7 @@ private[spark] object Utils extends Logging {
   private var customHostname: Option[String] = sys.env.get("SPARK_LOCAL_HOSTNAME")
 
   /**
-   * Allow setting a custom host name because when we run on Mesos we need to use the same
-   * hostname it reports to the master.
+   * Allow setting a custom host name
    */
   def setCustomHostname(hostname: String): Unit = {
     // DEBUG code
@@ -1197,29 +1030,13 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Lists files recursively.
-   */
-  def recursiveList(f: File): Array[File] = {
-    require(f.isDirectory)
-    val result = f.listFiles.toBuffer
-    val dirList = result.filter(_.isDirectory)
-    while (dirList.nonEmpty) {
-      val curDir = dirList.remove(0)
-      val files = curDir.listFiles()
-      result ++= files
-      dirList ++= files.filter(_.isDirectory)
-    }
-    result.toArray
-  }
-
-  /**
    * Delete a file or directory and its contents recursively.
    * Don't follow directories if they are symlinks.
    * Throws an exception if deletion is unsuccessful.
    */
-  def deleteRecursively(file: File): Unit = {
+  override def deleteRecursively(file: File): Unit = {
+    super.deleteRecursively(file)
     if (file != null) {
-      JavaUtils.deleteRecursively(file)
       ShutdownHookManager.removeShutdownDeleteDir(file)
     }
   }
@@ -1464,25 +1281,6 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  /**
-   * Execute a block of code that returns a value, re-throwing any non-fatal uncaught
-   * exceptions as IOException. This is used when implementing Externalizable and Serializable's
-   * read and write methods, since Java's serializer will not report non-IOExceptions properly;
-   * see SPARK-4080 for more context.
-   */
-  def tryOrIOException[T](block: => T): T = {
-    try {
-      block
-    } catch {
-      case e: IOException =>
-        logError("Exception encountered", e)
-        throw e
-      case NonFatal(e) =>
-        logError("Exception encountered", e)
-        throw new IOException(e)
-    }
-  }
-
   /** Executes the given block. Log non-fatal errors if any, and only throw fatal errors */
   def tryLogNonFatalError(block: => Unit): Unit = {
     try {
@@ -1490,38 +1288,6 @@ private[spark] object Utils extends Logging {
     } catch {
       case NonFatal(t) =>
         logError(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
-    }
-  }
-
-  /**
-   * Execute a block of code, then a finally block, but if exceptions happen in
-   * the finally block, do not suppress the original exception.
-   *
-   * This is primarily an issue with `finally { out.close() }` blocks, where
-   * close needs to be called to clean up `out`, but if an exception happened
-   * in `out.write`, it's likely `out` may be corrupted and `out.close` will
-   * fail as well. This would then suppress the original/likely more meaningful
-   * exception from the original `out.write` call.
-   */
-  def tryWithSafeFinally[T](block: => T)(finallyBlock: => Unit): T = {
-    var originalThrowable: Throwable = null
-    try {
-      block
-    } catch {
-      case t: Throwable =>
-        // Purposefully not using NonFatal, because even fatal exceptions
-        // we don't want to have our finallyBlock suppress
-        originalThrowable = t
-        throw originalThrowable
-    } finally {
-      try {
-        finallyBlock
-      } catch {
-        case t: Throwable if (originalThrowable != null && originalThrowable != t) =>
-          originalThrowable.addSuppressed(t)
-          logWarning(s"Suppressing exception in finally: ${t.getMessage}", t)
-          throw originalThrowable
-      }
     }
   }
 
@@ -1930,7 +1696,17 @@ private[spark] object Utils extends Logging {
   /**
    * Counts the number of elements of an iterator.
    */
-  def getIteratorSize(iterator: Iterator[_]): Long = Iterators.size(iterator)
+  def getIteratorSize(iterator: Iterator[_]): Long = {
+    if (iterator.knownSize >= 0) iterator.knownSize.toLong
+    else {
+      var count = 0L
+      while (iterator.hasNext) {
+        count += 1L
+        iterator.next()
+      }
+      count
+    }
+  }
 
   /**
    * Generate a zipWithIndex iterator, avoid index value overflowing problem
@@ -1995,6 +1771,12 @@ private[spark] object Utils extends Logging {
   val isMac = SystemUtils.IS_OS_MAC_OSX
 
   /**
+   * Whether the underlying Java version is at least 21.
+   */
+  val isJavaVersionAtLeast21 =
+    System.getProperty("java.version").split("[+.\\-]+", 3)(0).toInt >= 21
+
+  /**
    * Whether the underlying operating system is Mac OS X and processor is Apple Silicon.
    */
   val isMacOnAppleSilicon = SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64")
@@ -2008,15 +1790,6 @@ private[spark] object Utils extends Logging {
    * Pattern for matching a Windows drive, which contains only a single alphabet character.
    */
   val windowsDrive = "([a-zA-Z])".r
-
-  /**
-   * Indicates whether Spark is currently running unit tests.
-   */
-  def isTesting: Boolean = {
-    // Scala's `sys.env` creates a ton of garbage by constructing Scala immutable maps, so
-    // we directly use the Java APIs instead.
-    System.getenv("SPARK_TESTING") != null || System.getProperty(IS_TESTING.key) != null
-  }
 
   /**
    * Terminates a process waiting for at most the specified duration.
@@ -2101,31 +1874,6 @@ private[spark] object Utils extends Logging {
       case _ =>
         true
     }
-  }
-
-  /**
-   * Return a well-formed URI for the file described by a user input string.
-   *
-   * If the supplied path does not contain a scheme, or is a relative path, it will be
-   * converted into an absolute path with a file:// scheme.
-   */
-  def resolveURI(path: String): URI = {
-    try {
-      val uri = new URI(path)
-      if (uri.getScheme() != null) {
-        return uri
-      }
-      // make sure to handle if the path has a fragment (applies to yarn
-      // distributed cache)
-      if (uri.getFragment() != null) {
-        val absoluteURI = new File(uri.getPath()).getAbsoluteFile().toURI()
-        return new URI(absoluteURI.getScheme(), absoluteURI.getHost(), absoluteURI.getPath(),
-          uri.getFragment())
-      }
-    } catch {
-      case e: URISyntaxException =>
-    }
-    new File(path).getCanonicalFile().toURI()
   }
 
   /** Resolve a comma-separated list of paths. */
@@ -2272,10 +2020,8 @@ private[spark] object Utils extends Logging {
   private implicit class Lock(lock: LockInfo) {
     def lockString: String = {
       lock match {
-        case monitor: MonitorInfo =>
-          s"Monitor(${lock.getClassName}@${lock.getIdentityHashCode}})"
-        case _ =>
-          s"Lock(${lock.getClassName}@${lock.getIdentityHashCode}})"
+        case monitor: MonitorInfo => s"Monitor(${monitor.toString})"
+        case _ => s"Lock(${lock.toString})"
       }
     }
   }
@@ -2303,6 +2049,23 @@ private[spark] object Utils extends Logging {
     }.map(threadInfoToThreadStackTrace)
   }
 
+  /** Return a heap dump. Used to capture dumps for the web UI */
+  def getHeapHistogram(): Array[String] = {
+    val pid = String.valueOf(ProcessHandle.current().pid())
+    val jmap = System.getProperty("java.home") + "/bin/jmap"
+    val builder = new ProcessBuilder(jmap, "-histo:live", pid)
+    val p = builder.start()
+    val rows = ArrayBuffer.empty[String]
+    Utils.tryWithResource(new BufferedReader(new InputStreamReader(p.getInputStream()))) { r =>
+      var line = ""
+      while (line != null) {
+        if (line.nonEmpty) rows += line
+        line = r.readLine()
+      }
+    }
+    rows.toArray
+  }
+
   def getThreadDumpForThread(threadId: Long): Option[ThreadStackTrace] = {
     if (threadId <= 0) {
       None
@@ -2315,29 +2078,40 @@ private[spark] object Utils extends Logging {
   }
 
   private def threadInfoToThreadStackTrace(threadInfo: ThreadInfo): ThreadStackTrace = {
-    val monitors = threadInfo.getLockedMonitors.map(m => m.getLockedStackFrame -> m).toMap
-    val stackTrace = StackTrace(threadInfo.getStackTrace.map { frame =>
-      monitors.get(frame) match {
-        case Some(monitor) =>
-          monitor.getLockedStackFrame.toString + s" => holding ${monitor.lockString}"
-        case None =>
-          frame.toString
-      }
+    val threadState = threadInfo.getThreadState
+    val monitors = threadInfo.getLockedMonitors.map(m => m.getLockedStackDepth -> m.toString).toMap
+    val stackTrace = StackTrace(threadInfo.getStackTrace.zipWithIndex.map { case (frame, idx) =>
+      val locked = if (idx == 0 && threadInfo.getLockInfo != null) {
+        threadState match {
+          case Thread.State.BLOCKED =>
+            s"\t-  blocked on ${threadInfo.getLockInfo}\n"
+          case Thread.State.WAITING | Thread.State.TIMED_WAITING =>
+            s"\t-  waiting on ${threadInfo.getLockInfo}\n"
+          case _ => ""
+        }
+      } else ""
+      val locking = monitors.get(idx).map(mi => s"\t-  locked $mi\n").getOrElse("")
+      s"${frame.toString}\n$locked$locking"
     })
 
-    // use a set to dedup re-entrant locks that are held at multiple places
-    val heldLocks =
-      (threadInfo.getLockedSynchronizers ++ threadInfo.getLockedMonitors).map(_.lockString).toSet
-
+    val synchronizers = threadInfo.getLockedSynchronizers.map(_.toString)
+    val monitorStrs = monitors.values.toSeq
     ThreadStackTrace(
-      threadId = threadInfo.getThreadId,
-      threadName = threadInfo.getThreadName,
-      threadState = threadInfo.getThreadState,
-      stackTrace = stackTrace,
-      blockedByThreadId =
-        if (threadInfo.getLockOwnerId < 0) None else Some(threadInfo.getLockOwnerId),
-      blockedByLock = Option(threadInfo.getLockInfo).map(_.lockString).getOrElse(""),
-      holdingLocks = heldLocks.toSeq)
+      threadInfo.getThreadId,
+      threadInfo.getThreadName,
+      threadState,
+      stackTrace,
+      if (threadInfo.getLockOwnerId < 0) None else Some(threadInfo.getLockOwnerId),
+      Option(threadInfo.getLockInfo).map(_.lockString).getOrElse(""),
+      synchronizers ++ monitorStrs,
+      synchronizers,
+      monitorStrs,
+      Option(threadInfo.getLockName),
+      Option(threadInfo.getLockOwnerName),
+      threadInfo.isSuspended,
+      threadInfo.isInNative,
+      threadInfo.isDaemon,
+      threadInfo.getPriority)
   }
 
   /**
@@ -2462,14 +2236,32 @@ private[spark] object Utils extends Logging {
    * configure a new log4j level
    */
   def setLogLevel(l: Level): Unit = {
-    val ctx = LogManager.getContext(false).asInstanceOf[LoggerContext]
-    val config = ctx.getConfiguration()
-    val loggerConfig = config.getLoggerConfig(LogManager.ROOT_LOGGER_NAME)
+    val (ctx, loggerConfig) = getLogContext
     loggerConfig.setLevel(l)
     ctx.updateLoggers()
 
     // Setting threshold to null as rootLevel will define log level for spark-shell
     Logging.sparkShellThresholdLevel = null
+  }
+
+
+  def setLogLevelIfNeeded(newLogLevel: String): Unit = {
+    if (newLogLevel != Utils.getLogLevel) {
+      Utils.setLogLevel(Level.toLevel(newLogLevel))
+    }
+  }
+
+  private lazy val getLogContext: (LoggerContext, LoggerConfig) = {
+    val ctx = LogManager.getContext(false).asInstanceOf[LoggerContext]
+    (ctx, ctx.getConfiguration().getLoggerConfig(LogManager.ROOT_LOGGER_NAME))
+  }
+
+  /**
+   * Get current log level
+   */
+  def getLogLevel: String = {
+    val (_, loggerConfig) = getLogContext
+    loggerConfig.getLevel.name
   }
 
   /**
@@ -2761,11 +2553,6 @@ private[spark] object Utils extends Logging {
     initialExecutors
   }
 
-  def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {
-    val resource = createResource
-    try f.apply(resource) finally resource.close()
-  }
-
   /**
    * Returns a path of temporary file which is in the same directory with `path`.
    */
@@ -3019,34 +2806,6 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Returns true if and only if the underlying class is a member class.
-   *
-   * Note: jdk8u throws a "Malformed class name" error if a given class is a deeply-nested
-   * inner class (See SPARK-34607 for details). This issue has already been fixed in jdk9+, so
-   * we can remove this helper method safely if we drop the support of jdk8u.
-   */
-  def isMemberClass(cls: Class[_]): Boolean = {
-    try {
-      cls.isMemberClass
-    } catch {
-      case _: InternalError =>
-        // We emulate jdk8u `Class.isMemberClass` below:
-        //   public boolean isMemberClass() {
-        //     return getSimpleBinaryName() != null && !isLocalOrAnonymousClass();
-        //   }
-        // `getSimpleBinaryName()` returns null if a given class is a top-level class,
-        // so we replace it with `cls.getEnclosingClass != null`. The second condition checks
-        // if a given class is not a local or an anonymous class, so we replace it with
-        // `cls.getEnclosingMethod == null` because `cls.getEnclosingMethod()` return a value
-        // only in either case (JVM Spec 4.8.6).
-        //
-        // Note: The newer jdk evaluates `!isLocalOrAnonymousClass()` first,
-        // we reorder the conditions to follow it.
-        cls.getEnclosingMethod == null && cls.getEnclosingClass != null
-    }
-  }
-
-  /**
    * Safer than Class obj's getSimpleName which may throw Malformed class name error in scala.
    * This method mimics scalatest's getSimpleNameOfAnObjectsClass.
    */
@@ -3288,21 +3047,8 @@ private[spark] object Utils extends Logging {
 }
 
 private[util] object CallerContext extends Logging {
-  val callerContextSupported: Boolean = {
-    SparkHadoopUtil.get.conf.getBoolean("hadoop.caller.context.enabled", false) && {
-      try {
-        Utils.classForName("org.apache.hadoop.ipc.CallerContext")
-        Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
-        true
-      } catch {
-        case _: ClassNotFoundException =>
-          false
-        case NonFatal(e) =>
-          logWarning("Fail to load the CallerContext class", e)
-          false
-      }
-    }
-  }
+  val callerContextEnabled: Boolean =
+    SparkHadoopUtil.get.conf.getBoolean("hadoop.caller.context.enabled", false)
 }
 
 /**
@@ -3362,22 +3108,11 @@ private[spark] class CallerContext(
 
   /**
    * Set up the caller context [[context]] by invoking Hadoop CallerContext API of
-   * [[org.apache.hadoop.ipc.CallerContext]], which was added in hadoop 2.8.
+   * [[HadoopCallerContext]].
    */
-  def setCurrentContext(): Unit = {
-    if (CallerContext.callerContextSupported) {
-      try {
-        val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
-        val builder: Class[AnyRef] =
-          Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
-        val builderInst = builder.getConstructor(classOf[String]).newInstance(context)
-        val hdfsContext = builder.getMethod("build").invoke(builderInst)
-        callerContext.getMethod("setCurrent", callerContext).invoke(null, hdfsContext)
-      } catch {
-        case NonFatal(e) =>
-          logWarning("Fail to set Spark caller context", e)
-      }
-    }
+  def setCurrentContext(): Unit = if (CallerContext.callerContextEnabled) {
+    val hdfsContext = new HadoopCallerContextBuilder(context).build()
+    HadoopCallerContext.setCurrent(hdfsContext)
   }
 }
 

@@ -158,6 +158,11 @@ abstract class TaskContext extends Serializable {
   /** Runs a task with this context, ensuring failure and completion listeners get triggered. */
   private[spark] def runTaskWithListeners[T](task: Task[T]): T = {
     try {
+      // SPARK-44818 - Its possible that taskThread has not been initialized when kill is initially
+      // called with interruptThread=true. We do set the reason and eventually will set it on the
+      // context too within run(). If that's the case, kill the thread before it starts executing
+      // the actual task.
+      killTaskIfInterrupted()
       task.runTask(this)
     } catch {
       case e: Throwable =>

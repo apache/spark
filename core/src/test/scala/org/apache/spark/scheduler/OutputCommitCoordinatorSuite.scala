@@ -87,7 +87,8 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
           isLocal: Boolean,
           listenerBus: LiveListenerBus): SparkEnv = {
         outputCommitCoordinator =
-          spy(new OutputCommitCoordinator(conf, isDriver = true, Option(this)))
+          spy[OutputCommitCoordinator](
+            new OutputCommitCoordinator(conf, isDriver = true, Option(this)))
         // Use Mockito.spy() to maintain the default infrastructure everywhere else.
         // This mocking allows us to control the coordinator responses in test cases.
         SparkEnv.createDriverEnv(conf, isLocal, listenerBus,
@@ -95,7 +96,8 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
       }
     }
     // Use Mockito.spy() to maintain the default infrastructure everywhere else
-    val mockTaskScheduler = spy(sc.taskScheduler.asInstanceOf[TaskSchedulerImpl])
+    val mockTaskScheduler = spy[TaskSchedulerImpl](
+      sc.taskScheduler.asInstanceOf[TaskSchedulerImpl])
 
     doAnswer { (invoke: InvocationOnMock) =>
       // Submit the tasks, then force the task scheduler to dequeue the
@@ -159,7 +161,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     def resultHandler(x: Int, y: Unit): Unit = {}
     val futureAction: SimpleFutureAction[Unit] = sc.submitJob[Int, Unit, Unit](rdd,
       OutputCommitFunctions(tempDir.getAbsolutePath).commitSuccessfully,
-      0 until rdd.partitions.size, resultHandler, () => ())
+      0 until rdd.partitions.size, resultHandler, ())
     // It's an error if the job completes successfully even though no committer was authorized,
     // so throw an exception if the job was allowed to complete.
     intercept[TimeoutException] {
@@ -302,7 +304,7 @@ private case class OutputCommitFunctions(tempDirPath: String) {
   def failFirstCommitAttempt(iter: Iterator[Int]): Unit = {
     val ctx = TaskContext.get()
     runCommitWithProvidedCommitter(ctx, iter,
-      if (ctx.attemptNumber == 0) failingOutputCommitter else successfulOutputCommitter)
+      if (ctx.attemptNumber() == 0) failingOutputCommitter else successfulOutputCommitter)
   }
 
   private def runCommitWithProvidedCommitter(
@@ -322,9 +324,9 @@ private case class OutputCommitFunctions(tempDirPath: String) {
     // Create TaskAttemptContext.
     // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
     // around by taking a mod. We expect that no task will be attempted 2 billion times.
-    val taskAttemptId = (ctx.taskAttemptId % Int.MaxValue).toInt
+    val taskAttemptId = (ctx.taskAttemptId() % Int.MaxValue).toInt
     val attemptId = new TaskAttemptID(
-      new TaskID(jobId.value, TaskType.MAP, ctx.partitionId), taskAttemptId)
+      new TaskID(jobId.value, TaskType.MAP, ctx.partitionId()), taskAttemptId)
     val taskContext = new TaskAttemptContextImpl(jobConf, attemptId)
 
     committer.setupTask(taskContext)

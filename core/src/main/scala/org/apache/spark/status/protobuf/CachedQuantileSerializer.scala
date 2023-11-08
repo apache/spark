@@ -20,7 +20,7 @@ package org.apache.spark.status.protobuf
 import org.apache.spark.status.CachedQuantile
 import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 
-class CachedQuantileSerializer extends ProtobufSerDe[CachedQuantile] {
+private[protobuf] class CachedQuantileSerializer extends ProtobufSerDe[CachedQuantile] {
 
   override def serialize(data: CachedQuantile): Array[Byte] = {
     val builder = StoreTypes.CachedQuantile.newBuilder()

@@ -32,6 +32,7 @@ import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffse
 import java.util
 import java.util.Objects
 
+import scala.collection.mutable
 import scala.math.{BigDecimal, BigInt}
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
@@ -88,7 +89,7 @@ object Literal {
     case d: Duration => Literal(durationToMicros(d), DayTimeIntervalType())
     case p: Period => Literal(periodToMonths(p), YearMonthIntervalType())
     case a: Array[Byte] => Literal(a, BinaryType)
-    case a: collection.mutable.WrappedArray[_] => apply(a.array)
+    case a: mutable.ArraySeq[_] => apply(a.array)
     case a: Array[_] =>
       val elementType = componentTypeToDataType(a.getClass.getComponentType())
       val dataType = ArrayType(elementType)
@@ -208,7 +209,7 @@ object Literal {
       case _ if v == null => true
       case ObjectType(cls) => cls.isInstance(v)
       case udt: UserDefinedType[_] => doValidate(v, udt.sqlType)
-      case dt => dataType.physicalDataType match {
+      case dt => PhysicalDataType(dataType) match {
         case PhysicalArrayType(et, _) =>
           v.isInstanceOf[ArrayData] && {
             val ar = v.asInstanceOf[ArrayData]
@@ -258,6 +259,16 @@ object NonNullLiteral {
 }
 
 /**
+ * Extractor for retrieving Boolean literals.
+ */
+object BooleanLiteral {
+  def unapply(a: Any): Option[Boolean] = a match {
+    case Literal(a: Boolean, BooleanType) => Some(a)
+    case _ => None
+  }
+}
+
+/**
  * Extractor for retrieving Float literals.
  */
 object FloatLiteral {
@@ -283,6 +294,16 @@ object DoubleLiteral {
 object IntegerLiteral {
   def unapply(a: Any): Option[Int] = a match {
     case Literal(a: Int, IntegerType) => Some(a)
+    case _ => None
+  }
+}
+
+/**
+ * Extractor for retrieving Long literals.
+ */
+object LongLiteral {
+  def unapply(a: Any): Option[Long] = a match {
+    case Literal(a: Long, LongType) => Some(a)
     case _ => None
   }
 }
@@ -459,9 +480,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case (v: UTF8String, StringType) =>
       // Escapes all backslashes and single quotes.
       "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") + "'"
-    case (v: Byte, ByteType) => v + "Y"
-    case (v: Short, ShortType) => v + "S"
-    case (v: Long, LongType) => v + "L"
+    case (v: Byte, ByteType) => s"${v}Y"
+    case (v: Short, ShortType) => s"${v}S"
+    case (v: Long, LongType) => s"${v}L"
     // Float type doesn't have a suffix
     case (v: Float, FloatType) =>
       val castedValue = v match {
@@ -476,9 +497,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case _ if v.isNaN => s"CAST('NaN' AS ${DoubleType.sql})"
         case Double.PositiveInfinity => s"CAST('Infinity' AS ${DoubleType.sql})"
         case Double.NegativeInfinity => s"CAST('-Infinity' AS ${DoubleType.sql})"
-        case _ => v + "D"
+        case _ => s"${v}D"
       }
-    case (v: Decimal, t: DecimalType) => v + "BD"
+    case (v: Decimal, t: DecimalType) => s"${v}BD"
     case (v: Int, DateType) =>
       s"DATE '$toString'"
     case (v: Long, TimestampType) =>

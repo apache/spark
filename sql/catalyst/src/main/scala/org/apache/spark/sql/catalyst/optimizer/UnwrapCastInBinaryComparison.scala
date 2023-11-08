@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN, INSET}
+import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType}
 import org.apache.spark.sql.types._
 
 /**
@@ -187,7 +188,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       value: Any): Expression = {
 
     val fromType = fromExp.dataType
-    val ordering = toType.ordering.asInstanceOf[Ordering[Any]]
+    val ordering = PhysicalDataType.ordering(toType)
     val range = getRange(fromType)
 
     if (range.isDefined) {
@@ -314,7 +315,10 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         GreaterThanOrEqual(fromExp, Cast(dateAddOne, fromExp.dataType, tz, evalMode))
       case _: GreaterThanOrEqual =>
         GreaterThanOrEqual(fromExp, Cast(date, fromExp.dataType, tz, evalMode))
-      case Equality(_, _) =>
+      case _: EqualTo =>
+        And(GreaterThanOrEqual(fromExp, Cast(date, fromExp.dataType, tz, evalMode)),
+          LessThan(fromExp, Cast(dateAddOne, fromExp.dataType, tz, evalMode)))
+      case EqualNullSafe(left, _) if !left.nullable =>
         And(GreaterThanOrEqual(fromExp, Cast(date, fromExp.dataType, tz, evalMode)),
           LessThan(fromExp, Cast(dateAddOne, fromExp.dataType, tz, evalMode)))
       case _: LessThan =>
@@ -349,7 +353,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
 
     val (nullList, canCastList) = (ArrayBuffer[Literal](), ArrayBuffer[Literal]())
     val fromType = fromExp.dataType
-    val ordering = toType.ordering.asInstanceOf[Ordering[Any]]
+    val ordering = PhysicalDataType.ordering(toType)
 
     list.foreach {
       case lit @ Literal(null, _) => nullList += lit
@@ -380,7 +384,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       fromExp: Expression,
       toType: DataType,
       literalType: DataType): Boolean = {
-    toType.sameType(literalType) &&
+    DataTypeUtils.sameType(toType, literalType) &&
       !fromExp.foldable &&
       toType.isInstanceOf[NumericType] &&
       canUnwrapCast(fromExp.dataType, toType)

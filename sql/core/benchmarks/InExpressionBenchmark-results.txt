@@ -2,739 +2,739 @@
 In Expression Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 5 bytes:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        96            120          16        103.8           9.6       1.0X
-InSet expression                                     75             82           6        132.6           7.5       1.3X
+In expression                                        63             82          14        158.8           6.3       1.0X
+InSet expression                                     45             52           6        221.7           4.5       1.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 10 bytes:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        96            104          10        103.9           9.6       1.0X
-InSet expression                                     72             75           4        139.2           7.2       1.3X
+In expression                                        61             67           8        163.9           6.1       1.0X
+InSet expression                                     47             51           4        215.0           4.7       1.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 25 bytes:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       147            155          11         68.0          14.7       1.0X
-InSet expression                                    102            106           4         98.4          10.2       1.4X
+In expression                                       102            105           3         97.6          10.2       1.0X
+InSet expression                                     59             63           4        169.2           5.9       1.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 50 bytes:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       241            250           7         41.5          24.1       1.0X
-InSet expression                                    133            139           5         75.0          13.3       1.8X
+In expression                                       168            173           4         59.5          16.8       1.0X
+InSet expression                                     86             88           2        116.6           8.6       2.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 100 bytes:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       392            396           3         25.5          39.2       1.0X
-InSet expression                                    200            206           6         50.1          20.0       2.0X
+In expression                                       295            297           2         33.9          29.5       1.0X
+InSet expression                                    131            136           4         76.3          13.1       2.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 200 bytes:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       650            657           7         15.4          65.0       1.0X
-InSet expression                                    356            370          12         28.1          35.6       1.8X
+In expression                                       465            471           9         21.5          46.5       1.0X
+InSet expression                                    220            231           8         45.4          22.0       2.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 5 shorts:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        57             60           3        174.9           5.7       1.0X
-InSet expression                                     48             57           4        210.4           4.8       1.2X
+In expression                                        37             41           5        267.4           3.7       1.0X
+InSet expression                                     37             40           4        273.4           3.7       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 10 shorts:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        71             79           5        140.1           7.1       1.0X
-InSet expression                                     45             50           3        223.9           4.5       1.6X
+In expression                                        46             49           3        215.4           4.6       1.0X
+InSet expression                                     32             34           2        309.5           3.2       1.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 25 shorts:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        93            101           5        107.7           9.3       1.0X
-InSet expression                                     47             51           2        212.1           4.7       2.0X
+In expression                                        76             78           2        131.7           7.6       1.0X
+InSet expression                                     32             35           3        313.4           3.2       2.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 50 shorts:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       168            177           4         59.5          16.8       1.0X
-InSet expression                                     57             60           3        176.1           5.7       3.0X
+In expression                                       130            134           4         77.0          13.0       1.0X
+InSet expression                                     30             33           3        331.4           3.0       4.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 100 shorts:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       317            325           7         31.5          31.7       1.0X
-InSet expression                                     63             67           2        159.5           6.3       5.1X
+In expression                                       235            237           3         42.5          23.5       1.0X
+InSet expression                                     33             35           3        307.2           3.3       7.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 200 shorts:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       613            623           9         16.3          61.3       1.0X
-InSet expression                                     55             58           3        182.6           5.5      11.2X
+In expression                                       447            447           1         22.4          44.7       1.0X
+InSet expression                                     34             36           3        291.0           3.4      13.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 300 shorts:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       898            971          72         11.1          89.8       1.0X
-InSet expression                                     60             63           3        168.1           6.0      15.1X
+In expression                                       667            671           4         15.0          66.7       1.0X
+InSet expression                                     38             40           3        262.2           3.8      17.5X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 400 shorts:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      1268           1316          40          7.9         126.8       1.0X
-InSet expression                                     60             63           2        167.2           6.0      21.2X
+In expression                                       867            870           3         11.5          86.7       1.0X
+InSet expression                                     39             41           3        255.2           3.9      22.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 500 shorts:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      1565           1584          24          6.4         156.5       1.0X
-InSet expression                                    285            289           4         35.0          28.5       5.5X
+In expression                                      1088           1093           7          9.2         108.8       1.0X
+InSet expression                                    220            224           4         45.4          22.0       4.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 5 shorts (non-compact):                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        51             55           2        196.8           5.1       1.0X
-InSet expression                                     53             58           3        187.6           5.3       1.0X
+In expression                                        32             34           3        317.2           3.2       1.0X
+InSet expression                                     35             37           3        286.5           3.5       0.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 10 shorts (non-compact):                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        79             81           2        126.3           7.9       1.0X
-InSet expression                                     58             62           3        172.0           5.8       1.4X
+In expression                                        42             46           4        237.4           4.2       1.0X
+InSet expression                                     42             45           3        235.4           4.2       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 25 shorts (non-compact):                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       129            132           2         77.3          12.9       1.0X
-InSet expression                                     78             80           2        128.4           7.8       1.7X
+In expression                                        77             81           2        129.2           7.7       1.0X
+InSet expression                                     47             49           2        213.6           4.7       1.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 50 shorts (non-compact):                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       210            223          18         47.6          21.0       1.0X
-InSet expression                                     77             82           8        130.6           7.7       2.7X
+In expression                                       129            130           2         77.6          12.9       1.0X
+InSet expression                                     53             55           3        188.3           5.3       2.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 100 shorts (non-compact):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       388            396           6         25.8          38.8       1.0X
-InSet expression                                    112            119           7         89.6          11.2       3.5X
+In expression                                       236            237           1         42.4          23.6       1.0X
+InSet expression                                     57             59           3        175.7           5.7       4.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 200 shorts (non-compact):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       708            717           7         14.1          70.8       1.0X
-InSet expression                                    113            118           2         88.5          11.3       6.3X
+In expression                                       453            456           3         22.1          45.3       1.0X
+InSet expression                                     63             66           3        159.8           6.3       7.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 300 shorts (non-compact):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      1019           1024           4          9.8         101.9       1.0X
-InSet expression                                    111            118           5         89.9          11.1       9.2X
+In expression                                       650            652           3         15.4          65.0       1.0X
+InSet expression                                     69             72           4        144.9           6.9       9.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 400 shorts (non-compact):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      1344           1363          12          7.4         134.4       1.0X
-InSet expression                                    125            127           3         80.2          12.5      10.8X
+In expression                                       857            858           1         11.7          85.7       1.0X
+InSet expression                                     75             77           2        132.7           7.5      11.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 500 shorts (non-compact):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      1699           1710          11          5.9         169.9       1.0X
-InSet expression                                    295            304           7         33.9          29.5       5.8X
+In expression                                      1064           1066           2          9.4         106.4       1.0X
+InSet expression                                    218            221           2         45.9          21.8       4.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 5 ints:                                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        60             62           3        167.4           6.0       1.0X
-InSet expression                                     56             57           2        179.9           5.6       1.1X
+In expression                                        31             33           3        323.2           3.1       1.0X
+InSet expression                                     26             28           3        383.9           2.6       1.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 10 ints:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        65             69           4        154.1           6.5       1.0X
-InSet expression                                     56             59           4        179.2           5.6       1.2X
+In expression                                        42             44           2        239.8           4.2       1.0X
+InSet expression                                     26             28           2        384.7           2.6       1.6X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 25 ints:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       114            116           3         88.0          11.4       1.0X
-InSet expression                                     56             58           2        177.4           5.6       2.0X
+In expression                                        72             74           2        138.5           7.2       1.0X
+InSet expression                                     26             28           2        380.4           2.6       2.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 50 ints:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       172            180           6         58.0          17.2       1.0X
-InSet expression                                     52             55           3        190.7           5.2       3.3X
+In expression                                       126            128           3         79.5          12.6       1.0X
+InSet expression                                     29             32           3        350.3           2.9       4.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 100 ints:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       303            304           0         33.0          30.3       1.0X
-InSet expression                                     48             50           2        209.4           4.8       6.4X
+In expression                                       228            230           2         43.8          22.8       1.0X
+InSet expression                                     31             33           2        318.3           3.1       7.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 200 ints:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       612            620           8         16.3          61.2       1.0X
-InSet expression                                     52             55           3        190.6           5.2      11.7X
+In expression                                       442            445           2         22.6          44.2       1.0X
+InSet expression                                     32             34           2        315.4           3.2      14.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 300 ints:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       938            940           1         10.7          93.8       1.0X
-InSet expression                                     55             58           3        181.6           5.5      17.0X
+In expression                                       661            663           2         15.1          66.1       1.0X
+InSet expression                                     33             35           2        300.1           3.3      19.8X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 400 ints:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      1305           1356          33          7.7         130.5       1.0X
-InSet expression                                     59             61           3        169.5           5.9      22.1X
+In expression                                       873            875           1         11.5          87.3       1.0X
+InSet expression                                     36             38           3        278.7           3.6      24.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 500 ints:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      1601           1679          53          6.2         160.1       1.0X
-InSet expression                                    282            289           7         35.5          28.2       5.7X
+In expression                                      1101           1103           1          9.1         110.1       1.0X
+InSet expression                                    210            215           6         47.6          21.0       5.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 5 ints (non-compact):                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        39             42           2        253.5           3.9       1.0X
-InSet expression                                     38             41           5        265.6           3.8       1.0X
+In expression                                        31             32           2        322.8           3.1       1.0X
+InSet expression                                     25             26           2        393.9           2.5       1.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 10 ints (non-compact):                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        57             59           3        176.3           5.7       1.0X
-InSet expression                                     38             40           1        259.8           3.8       1.5X
+In expression                                        46             48           3        216.5           4.6       1.0X
+InSet expression                                     23             26           2        436.4           2.3       2.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 25 ints (non-compact):                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       106            110           5         94.6          10.6       1.0X
-InSet expression                                     53             55           2        189.3           5.3       2.0X
+In expression                                       112            113           2         89.2          11.2       1.0X
+InSet expression                                     29             33           2        347.1           2.9       3.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 50 ints (non-compact):                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       176            184           4         56.7          17.6       1.0X
-InSet expression                                     69             71           1        144.2           6.9       2.5X
+In expression                                       210            211           1         47.6          21.0       1.0X
+InSet expression                                     32             35           3        313.2           3.2       6.6X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 100 ints (non-compact):                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       357            362           5         28.0          35.7       1.0X
-InSet expression                                     73             77           4        137.4           7.3       4.9X
+In expression                                       414            415           1         24.1          41.4       1.0X
+InSet expression                                     35             37           2        282.0           3.5      11.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 200 ints (non-compact):                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       700            720          20         14.3          70.0       1.0X
-InSet expression                                     97            101           3        103.0           9.7       7.2X
+In expression                                       810            812           4         12.3          81.0       1.0X
+InSet expression                                     45             47           2        223.4           4.5      18.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 300 ints (non-compact):                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      1011           1023          11          9.9         101.1       1.0X
-InSet expression                                    103            106           3         97.5          10.3       9.9X
+In expression                                      1209           1214           4          8.3         120.9       1.0X
+InSet expression                                     45             47           3        223.3           4.5      27.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 400 ints (non-compact):                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      1393           1420          23          7.2         139.3       1.0X
-InSet expression                                    109            112           3         91.5          10.9      12.7X
+In expression                                      1439           1447           6          6.9         143.9       1.0X
+InSet expression                                     50             52           3        201.7           5.0      29.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 500 ints (non-compact):                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      1758           1860         131          5.7         175.8       1.0X
-InSet expression                                    272            280           6         36.8          27.2       6.5X
+In expression                                      1785           1815          60          5.6         178.5       1.0X
+InSet expression                                    209            212           2         47.9          20.9       8.6X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 5 longs:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        41             44           2        245.4           4.1       1.0X
-InSet expression                                    158            161           4         63.4          15.8       0.3X
+In expression                                        29             30           2        349.4           2.9       1.0X
+InSet expression                                    114            119           6         87.9          11.4       0.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 10 longs:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        53             56           3        190.1           5.3       1.0X
-InSet expression                                    181            185           4         55.3          18.1       0.3X
+In expression                                        37             39           2        269.4           3.7       1.0X
+InSet expression                                    139            145           6         72.1          13.9       0.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 25 longs:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        90             92           3        111.7           9.0       1.0X
-InSet expression                                    185            187           2         54.2          18.5       0.5X
+In expression                                        71             72           2        141.6           7.1       1.0X
+InSet expression                                    141            146           4         70.7          14.1       0.5X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 50 longs:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       154            158           4         64.8          15.4       1.0X
-InSet expression                                    250            257           5         40.0          25.0       0.6X
+In expression                                       124            126           2         80.5          12.4       1.0X
+InSet expression                                    201            204           3         49.9          20.1       0.6X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 100 longs:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       278            282           2         36.0          27.8       1.0X
-InSet expression                                    207            212           4         48.3          20.7       1.3X
+In expression                                       234            236           2         42.7          23.4       1.0X
+InSet expression                                    173            175           2         57.7          17.3       1.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 200 longs:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       599            611          15         16.7          59.9       1.0X
-InSet expression                                    211            220           7         47.5          21.1       2.8X
+In expression                                       439            445           5         22.8          43.9       1.0X
+InSet expression                                    180            184           6         55.6          18.0       2.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 5 floats:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        69             73           3        145.8           6.9       1.0X
-InSet expression                                    170            174           6         58.9          17.0       0.4X
+In expression                                        52             54           2        193.6           5.2       1.0X
+InSet expression                                    150            154           6         66.7          15.0       0.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 10 floats:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        94             98           4        106.1           9.4       1.0X
-InSet expression                                    202            212           6         49.4          20.2       0.5X
+In expression                                        83             84           2        120.4           8.3       1.0X
+InSet expression                                    186            189           6         53.8          18.6       0.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 25 floats:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       195            203           9         51.3          19.5       1.0X
-InSet expression                                    210            224          10         47.6          21.0       0.9X
+In expression                                       176            178           3         56.8          17.6       1.0X
+InSet expression                                    184            186           2         54.4          18.4       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 50 floats:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       355            363          10         28.2          35.5       1.0X
-InSet expression                                    271            280           8         36.9          27.1       1.3X
+In expression                                       367            368           2         27.3          36.7       1.0X
+InSet expression                                    254            256           2         39.4          25.4       1.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 100 floats:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       681            711          19         14.7          68.1       1.0X
-InSet expression                                    225            232           7         44.4          22.5       3.0X
+In expression                                       646            648           2         15.5          64.6       1.0X
+InSet expression                                    206            211           5         48.5          20.6       3.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 200 floats:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      3254           3336         168          3.1         325.4       1.0X
-InSet expression                                    235            239           4         42.6          23.5      13.9X
+In expression                                      2774           2831         101          3.6         277.4       1.0X
+InSet expression                                    214            217           2         46.6          21.4      12.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 5 doubles:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        66             68           2        152.4           6.6       1.0X
-InSet expression                                    172            176           4         58.1          17.2       0.4X
+In expression                                        50             52           2        199.1           5.0       1.0X
+InSet expression                                    155            162          10         64.7          15.5       0.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 10 doubles:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        91             96           3        109.8           9.1       1.0X
-InSet expression                                    198            201           3         50.5          19.8       0.5X
+In expression                                        83             85           3        120.3           8.3       1.0X
+InSet expression                                    189            192           2         52.9          18.9       0.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 25 doubles:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       187            192           3         53.3          18.7       1.0X
-InSet expression                                    197            203           5         50.8          19.7       1.0X
+In expression                                       177            178           2         56.6          17.7       1.0X
+InSet expression                                    188            191           2         53.1          18.8       0.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 50 doubles:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       348            353           4         28.7          34.8       1.0X
-InSet expression                                    265            274           9         37.7          26.5       1.3X
+In expression                                       367            369           2         27.3          36.7       1.0X
+InSet expression                                    259            262           3         38.7          25.9       1.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 100 doubles:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       666            685          24         15.0          66.6       1.0X
-InSet expression                                    215            228           9         46.5          21.5       3.1X
+In expression                                       649            652           5         15.4          64.9       1.0X
+InSet expression                                    207            211           2         48.2          20.7       3.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 200 doubles:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      3859           3916          88          2.6         385.9       1.0X
-InSet expression                                    221            225           3         45.2          22.1      17.4X
+In expression                                      3087           3159         126          3.2         308.7       1.0X
+InSet expression                                    213            220           6         46.9          21.3      14.5X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 5 small decimals:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        47             50           3         21.3          47.0       1.0X
-InSet expression                                    146            150           5          6.8         146.2       0.3X
+In expression                                        27             28           2         37.7          26.5       1.0X
+InSet expression                                     80             84           6         12.6          79.6       0.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 10 small decimals:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        59             63           4         16.9          59.1       1.0X
-InSet expression                                    152            157           6          6.6         152.3       0.4X
+In expression                                        33             35           2         30.2          33.1       1.0X
+InSet expression                                     82             86           8         12.2          82.1       0.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 25 small decimals:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        89             91           2         11.2          89.3       1.0X
-InSet expression                                    151            156           5          6.6         150.8       0.6X
+In expression                                        54             55           3         18.7          53.5       1.0X
+InSet expression                                     83             87           8         12.1          82.8       0.6X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 50 small decimals:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       157            159           1          6.4         156.8       1.0X
-InSet expression                                    159            165           5          6.3         159.4       1.0X
+In expression                                       117            119           3          8.6         116.9       1.0X
+InSet expression                                     89             94           8         11.2          88.9       1.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 100 small decimals:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       379            390          13          2.6         379.4       1.0X
-InSet expression                                    155            165           7          6.4         155.3       2.4X
+In expression                                       350            353           4          2.9         349.9       1.0X
+InSet expression                                     86             89           2         11.6          86.4       4.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 200 small decimals:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       820            841          26          1.2         819.8       1.0X
-InSet expression                                    156            162           4          6.4         155.9       5.3X
+In expression                                       793            797           4          1.3         793.1       1.0X
+InSet expression                                     90             94           7         11.2          89.6       8.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 5 large decimals:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        13             16           3         76.0          13.2       1.0X
-InSet expression                                     12             15           3         82.7          12.1       1.1X
+In expression                                         7              8           2        150.9           6.6       1.0X
+InSet expression                                      6              7           2        158.2           6.3       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 10 large decimals:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        12             14           2         85.3          11.7       1.0X
-InSet expression                                     12             14           2         82.9          12.1       1.0X
+In expression                                         6              7           2        157.2           6.4       1.0X
+InSet expression                                      6              7           2        158.0           6.3       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 25 large decimals:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        12             15           3         81.5          12.3       1.0X
-InSet expression                                     12             15           4         84.8          11.8       1.0X
+In expression                                         7              8           2        141.9           7.0       1.0X
+InSet expression                                      7              8           2        143.2           7.0       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 50 large decimals:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        14             17           3         70.3          14.2       1.0X
-InSet expression                                     15             18           4         66.4          15.1       0.9X
+In expression                                         8              9           2        120.8           8.3       1.0X
+InSet expression                                      8              9           2        121.3           8.2       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 100 large decimals:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        20             23           3         48.8          20.5       1.0X
-InSet expression                                     21             23           3         48.7          20.5       1.0X
+In expression                                        11             12           2         92.2          10.8       1.0X
+InSet expression                                     11             12           1         91.7          10.9       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 200 large decimals:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        30             33           3         33.5          29.9       1.0X
-InSet expression                                     28             31           3         35.7          28.0       1.1X
+In expression                                        16             18           2         61.1          16.4       1.0X
+InSet expression                                     16             17           2         61.6          16.2       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 5 strings:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       127            134           5          7.9         127.2       1.0X
-InSet expression                                    132            137           6          7.6         131.6       1.0X
+In expression                                        38             40           2         26.2          38.2       1.0X
+InSet expression                                     63             64           2         15.9          63.0       0.6X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 10 strings:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       132            135           3          7.6         132.2       1.0X
-InSet expression                                    137            144           5          7.3         136.7       1.0X
+In expression                                        46             47           2         21.9          45.7       1.0X
+InSet expression                                     66             68           4         15.1          66.2       0.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 25 strings:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       149            156           7          6.7         149.5       1.0X
-InSet expression                                    143            148           5          7.0         143.0       1.0X
+In expression                                        59             61           3         17.0          58.9       1.0X
+InSet expression                                     73             74           2         13.7          72.7       0.8X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 50 strings:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       233            236           3          4.3         232.8       1.0X
-InSet expression                                    144            153           6          7.0         143.7       1.6X
+In expression                                        80             81           2         12.6          79.6       1.0X
+InSet expression                                     79             80           1         12.7          78.9       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 100 strings:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       401            405           3          2.5         401.2       1.0X
-InSet expression                                    144            148           3          6.9         144.2       2.8X
+In expression                                       200            202           2          5.0         199.7       1.0X
+InSet expression                                     75             76           2         13.4          74.8       2.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 200 strings:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       757            777          21          1.3         757.2       1.0X
-InSet expression                                    141            148           6          7.1         140.7       5.4X
+In expression                                       656            716         131          1.5         655.8       1.0X
+InSet expression                                     76             77           2         13.2          76.0       8.6X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 5 timestamps:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        36             39           3        274.8           3.6       1.0X
-InSet expression                                    150            155           3         66.6          15.0       0.2X
+In expression                                        22             23           2        455.0           2.2       1.0X
+InSet expression                                    134            137           2         74.9          13.4       0.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 10 timestamps:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        51             53           2        196.5           5.1       1.0X
-InSet expression                                    170            173           2         58.8          17.0       0.3X
+In expression                                        31             32           3        327.8           3.1       1.0X
+InSet expression                                    152            155           2         65.8          15.2       0.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 25 timestamps:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       108            110           2         92.9          10.8       1.0X
-InSet expression                                    235            239           5         42.6          23.5       0.5X
+In expression                                        62             65           2        160.1           6.2       1.0X
+InSet expression                                    197            200           2         50.9          19.7       0.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 50 timestamps:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       186            194           7         53.8          18.6       1.0X
-InSet expression                                    259            271           6         38.7          25.9       0.7X
+In expression                                       111            114           3         90.0          11.1       1.0X
+InSet expression                                    241            244           1         41.5          24.1       0.5X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 100 timestamps:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       351            359           7         28.5          35.1       1.0X
-InSet expression                                    237            248          10         42.3          23.7       1.5X
+In expression                                       213            215           3         47.1          21.3       1.0X
+InSet expression                                    211            212           1         47.5          21.1       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 200 timestamps:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       664            689          16         15.1          66.4       1.0X
-InSet expression                                    226            232           6         44.2          22.6       2.9X
+In expression                                       409            416           4         24.5          40.9       1.0X
+InSet expression                                    204            207           3         49.1          20.4       2.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 5 dates:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       633            657          22         15.8          63.3       1.0X
-InSet expression                                    634            650          12         15.8          63.4       1.0X
+In expression                                       652            655           2         15.3          65.2       1.0X
+InSet expression                                    647            650           3         15.5          64.7       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 10 dates:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       646            656           6         15.5          64.6       1.0X
-InSet expression                                    655            674          32         15.3          65.5       1.0X
+In expression                                       649            653           3         15.4          64.9       1.0X
+InSet expression                                    646            649           6         15.5          64.6       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 25 dates:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       674            695          14         14.8          67.4       1.0X
-InSet expression                                    653            673          16         15.3          65.3       1.0X
+In expression                                       664            665           2         15.1          66.4       1.0X
+InSet expression                                    649            656          13         15.4          64.9       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 50 dates:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       785            826          29         12.7          78.5       1.0X
-InSet expression                                    658            675          14         15.2          65.8       1.2X
+In expression                                       736            740           2         13.6          73.6       1.0X
+InSet expression                                    655            658           3         15.3          65.5       1.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 100 dates:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       935            948          16         10.7          93.5       1.0X
-InSet expression                                    680            686           8         14.7          68.0       1.4X
+In expression                                       899            901           3         11.1          89.9       1.0X
+InSet expression                                    658            662           5         15.2          65.8       1.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 200 dates:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      1241           1278          42          8.1         124.1       1.0X
-InSet expression                                    685            694           5         14.6          68.5       1.8X
+In expression                                      1219           1241          13          8.2         121.9       1.0X
+InSet expression                                    663            666           2         15.1          66.3       1.8X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 300 dates:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      1553           1587          36          6.4         155.3       1.0X
-InSet expression                                    713            733          17         14.0          71.3       2.2X
+In expression                                      1561           1579          11          6.4         156.1       1.0X
+InSet expression                                    667            670           3         15.0          66.7       2.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 400 dates:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      1884           1949          73          5.3         188.4       1.0X
-InSet expression                                    715            732          18         14.0          71.5       2.6X
+In expression                                      1877           1926         106          5.3         187.7       1.0X
+InSet expression                                    665            672          10         15.0          66.5       2.8X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 500 dates:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      2181           2202          29          4.6         218.1       1.0X
-InSet expression                                    779            799          18         12.8          77.9       2.8X
+In expression                                      2214           2220           6          4.5         221.4       1.0X
+InSet expression                                    814            822          13         12.3          81.4       2.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 5 arrays:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        48             51           3         20.8          48.0       1.0X
-InSet expression                                     91             94           3         11.0          91.0       0.5X
+In expression                                        35             37           3         28.5          35.1       1.0X
+InSet expression                                     82             86           5         12.1          82.4       0.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 10 arrays:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        71             74           2         14.1          70.9       1.0X
-InSet expression                                     91             94           3         11.0          91.3       0.8X
+In expression                                        55             57           3         18.2          55.0       1.0X
+InSet expression                                    124            127           3          8.1         124.0       0.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 25 arrays:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       245            249           6          4.1         245.2       1.0X
-InSet expression                                    113            120           5          8.8         113.5       2.2X
+In expression                                       213            215           2          4.7         212.9       1.0X
+InSet expression                                    146            148           2          6.8         146.2       1.5X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 50 arrays:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       538            539           1          1.9         537.7       1.0X
-InSet expression                                    158            165           7          6.3         157.7       3.4X
+In expression                                       478            480           2          2.1         478.3       1.0X
+InSet expression                                    189            191           2          5.3         188.7       2.5X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 100 arrays:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      1167           1175           6          0.9        1167.4       1.0X
-InSet expression                                    185            190           5          5.4         184.6       6.3X
+In expression                                      1075           1082           7          0.9        1074.6       1.0X
+InSet expression                                    213            221           7          4.7         213.0       5.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 200 arrays:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      2998           3260         368          0.3        2998.3       1.0X
-InSet expression                                    237            246           6          4.2         237.5      12.6X
+In expression                                      2379           2635         379          0.4        2378.9       1.0X
+InSet expression                                    240            246           6          4.2         239.5       9.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 5 structs:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        53             56           3         18.9          53.0       1.0X
-InSet expression                                    155            162           6          6.5         154.7       0.3X
+In expression                                        32             34           3         30.9          32.4       1.0X
+InSet expression                                    108            111           4          9.3         107.7       0.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 10 structs:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                        72             76           4         13.9          72.1       1.0X
-InSet expression                                    152            158           5          6.6         152.1       0.5X
+In expression                                        42             44           3         24.1          41.6       1.0X
+InSet expression                                    162            166           3          6.2         162.1       0.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 25 structs:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       171            177           8          5.8         171.5       1.0X
-InSet expression                                    198            209           7          5.1         197.8       0.9X
+In expression                                        97            100           3         10.3          96.9       1.0X
+InSet expression                                    190            193           3          5.3         190.4       0.5X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 50 structs:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       422            439          17          2.4         422.1       1.0X
-InSet expression                                    273            278           5          3.7         273.2       1.5X
+In expression                                       265            269           6          3.8         264.8       1.0X
+InSet expression                                    250            254           4          4.0         250.5       1.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 100 structs:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                       902            922          24          1.1         902.3       1.0X
-InSet expression                                    334            339           5          3.0         333.9       2.7X
+In expression                                       651            656           3          1.5         651.5       1.0X
+InSet expression                                    278            287           8          3.6         277.5       2.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 200 structs:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-In expression                                      2088           2334         496          0.5        2088.1       1.0X
-InSet expression                                    422            429          13          2.4         422.3       4.9X
+In expression                                      2021           2176         190          0.5        2021.1       1.0X
+InSet expression                                    317            319           1          3.2         317.4       6.4X
 
 

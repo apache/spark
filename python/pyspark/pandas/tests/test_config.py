@@ -21,7 +21,7 @@ from pyspark.pandas.config import Option, DictWrapper
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class ConfigTest(PandasOnSparkTestCase):
+class ConfigTestsMixin:
     def setUp(self):
         config._options_dict["test.config"] = Option(key="test.config", doc="", default="default")
 
@@ -141,6 +141,10 @@ class ConfigTest(PandasOnSparkTestCase):
 
         self.assertTrue("default_index_type" not in dir(ps.options.plotting))
         self.assertTrue("sample_ratio" in dir(ps.options.plotting))
+
+
+class ConfigTests(ConfigTestsMixin, PandasOnSparkTestCase):
+    pass
 
 
 if __name__ == "__main__":

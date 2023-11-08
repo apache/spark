@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
@@ -249,6 +250,10 @@ object DecorrelateInnerQuery extends PredicateHelper {
       // or a cast expression after the optimization.
       case EqualNullSafe(left: Attribute, right: Expression) if domainAttrSet.contains(left) =>
         left -> right
+      // IsNull(x) results from a constant folding, so we restore the original predicate as
+      // x <=> Null.
+      case IsNull(child: Attribute) if domainAttrSet.contains(child) =>
+        child -> Literal.create(null, child.dataType)
     }.toMap
   }
 
@@ -457,6 +462,22 @@ object DecorrelateInnerQuery extends PredicateHelper {
       p.mapChildren(rewriteDomainJoins(outerPlan, _, conditions))
   }
 
+  private def isCountBugFree(aggregateExpressions: Seq[NamedExpression]): Boolean = {
+    // The COUNT bug only appears if an aggregate expression returns a non-NULL result on an empty
+    // input.
+    // Typical example (hence the name) is COUNT(*) that returns 0 from an empty result.
+    // However, SUM(x) IS NULL is another case that returns 0, and in general any IS/NOT IS and CASE
+    // expressions are suspect (and the combination of those).
+    // For now we conservatively accept only those expressions that are guaranteed to be safe.
+    aggregateExpressions.forall {
+      case _ : AttributeReference => true
+      case Alias(_: AttributeReference, _) => true
+      case Alias(_: Literal, _) => true
+      case Alias(a: AggregateExpression, _) if a.aggregateFunction.defaultResult == None => true
+      case _ => false
+    }
+  }
+
   def apply(
       innerPlan: LogicalPlan,
       outerPlan: LogicalPlan,
@@ -474,7 +495,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
     // parentOuterReferences: a set of parent outer references. As we recurse down we collect the
     // set of outer references that are part of the Domain, and use it to construct the DomainJoins
     // and join conditions.
-    // aggregated: a boolean flag indicating whether the result of the plan will be aggregated.
+    // aggregated: a boolean flag indicating whether the result of the plan will be aggregated
+    // (or used as an input for a window function)
     // underSetOp: a boolean flag indicating whether a set operator (e.g. UNION) is a parent of the
     // inner plan.
     //
@@ -650,9 +672,63 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val newProject = Project(newProjectList ++ referencesToAdd, newChild)
             (newProject, joinCond, outerReferenceMap)
 
+          case Limit(limit, input) =>
+            // LIMIT K (with potential ORDER BY) is decorrelated by computing K rows per every
+            // domain value via a row_number() window function. For example, for a subquery
+            // (SELECT T2.a FROM T2 WHERE T2.b = OuterReference(x) ORDER BY T2.c LIMIT 3)
+            // -- we need to get top 3 values of T2.a (ordering by T2.c) for every value of x.
+            // Following our general decorrelation procedure, 'x' is then replaced by T2.b, so the
+            // subquery is decorrelated as:
+            // SELECT * FROM (
+            //   SELECT T2.a, row_number() OVER (PARTITION BY T2.b ORDER BY T2.c) AS rn FROM T2)
+            // WHERE rn <= 3
+            val (child, ordering) = input match {
+              case Sort(order, _, child) => (child, order)
+              case _ => (input, Seq())
+            }
+            val (newChild, joinCond, outerReferenceMap) =
+              decorrelate(child, parentOuterReferences, aggregated = true, underSetOp)
+            val collectedChildOuterReferences = collectOuterReferencesInPlanTree(child)
+            // Add outer references to the PARTITION BY clause
+            val partitionFields = collectedChildOuterReferences.map(outerReferenceMap(_)).toSeq
+            val orderByFields = replaceOuterReferences(ordering, outerReferenceMap)
+
+            val rowNumber = WindowExpression(RowNumber(),
+              WindowSpecDefinition(partitionFields, orderByFields,
+                SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
+            val rowNumberAlias = Alias(rowNumber, "rn")()
+            // Window function computes row_number() when partitioning by correlated references,
+            // and projects all the other fields from the input.
+            val window = Window(Seq(rowNumberAlias),
+              partitionFields, orderByFields, newChild)
+            val filter = Filter(LessThanOrEqual(rowNumberAlias.toAttribute, limit), window)
+            val project = Project(newChild.output, filter)
+            (project, joinCond, outerReferenceMap)
+
+          case w @ Window(projectList, partitionSpec, orderSpec, child) =>
+            val outerReferences = collectOuterReferences(w.expressions)
+            assert(outerReferences.isEmpty, s"Correlated column is not allowed in window " +
+              s"function: $w")
+            val newOuterReferences = parentOuterReferences ++ outerReferences
+            val (newChild, joinCond, outerReferenceMap) =
+              decorrelate(child, newOuterReferences, aggregated = true, underSetOp)
+            // For now these are no-op, as we don't allow correlated references in the window
+            // function itself.
+            val newProjectList = replaceOuterReferences(projectList, outerReferenceMap)
+            val newPartitionSpec = replaceOuterReferences(partitionSpec, outerReferenceMap)
+            val newOrderSpec = replaceOuterReferences(orderSpec, outerReferenceMap)
+            val referencesToAdd = missingReferences(newProjectList, joinCond)
+
+            val newWindow = Window(newProjectList ++ referencesToAdd,
+              partitionSpec = newPartitionSpec ++ referencesToAdd,
+              orderSpec = newOrderSpec, newChild)
+            (newWindow, joinCond, outerReferenceMap)
+
           case a @ Aggregate(groupingExpressions, aggregateExpressions, child) =>
             val outerReferences = collectOuterReferences(a.expressions)
             val newOuterReferences = parentOuterReferences ++ outerReferences
+            val countBugSusceptible = groupingExpressions.isEmpty &&
+              !isCountBugFree(aggregateExpressions)
             val (newChild, joinCond, outerReferenceMap) =
               decorrelate(child, newOuterReferences, aggregated = true, underSetOp)
             // Replace all outer references in grouping and aggregate expressions, and keep
@@ -715,7 +791,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
             // | 0 | 2    | true       | 2                              |
             // | 0 | null | null       | 0                              |  <--- correct result
             // +---+------+------------+--------------------------------+
-            if (groupingExpressions.isEmpty && handleCountBug) {
+            // TODO(a.gubichev): retire the 'handleCountBug' parameter.
+            if (countBugSusceptible && handleCountBug) {
               // Evaluate the aggregate expressions with zero tuples.
               val resultMap = RewriteCorrelatedScalarSubquery.evalAggregateOnZeroTups(newAggregate)
               val alwaysTrue = Alias(Literal.TrueLiteral, "alwaysTrue")()
@@ -800,17 +877,87 @@ object DecorrelateInnerQuery extends PredicateHelper {
             (d.copy(child = newChild), joinCond, outerReferenceMap)
 
           case j @ Join(left, right, joinType, condition, _) =>
-            val outerReferences = collectOuterReferences(j.expressions)
-            // Join condition containing outer references is not supported.
-            assert(outerReferences.isEmpty, s"Correlated column is not allowed in join: $j")
-            val newOuterReferences = parentOuterReferences ++ outerReferences
-            val shouldPushToLeft = joinType match {
+            // Given 'condition', computes the tuple of
+            // (correlated, uncorrelated, equalityCond, predicates, equivalences).
+            // 'correlated' and 'uncorrelated' are the conjuncts with (resp. without)
+            // outer (correlated) references. Furthermore, correlated conjuncts are split
+            // into 'equalityCond' (those that are equalities) and all rest ('predicates').
+            // 'equivalences' track equivalent attributes given 'equalityCond'.
+            // The split is only performed if 'shouldDecorrelatePredicates' is true.
+            // The input parameter 'isInnerJoin' is set to true for INNER joins and helps
+            // determine whether some predicates can be lifted up from the join (this is only
+            // valid for inner joins).
+            // Example: For a 'condition' A = outer(X) AND B > outer(Y) AND C = D, the output
+            // would be:
+            // correlated = (A = outer(X), B > outer(Y))
+            // uncorrelated = (C = D)
+            // equalityCond = (A = outer(X))
+            // predicates = (B > outer(Y))
+            // equivalences: (A -> outer(X))
+            def splitCorrelatedPredicate(
+                condition: Option[Expression],
+                isInnerJoin: Boolean,
+                shouldDecorrelatePredicates: Boolean):
+            (Seq[Expression], Seq[Expression], Seq[Expression],
+              Seq[Expression], AttributeMap[Attribute]) = {
+              // Similar to Filters above, we split the join condition (if present) into correlated
+              // and uncorrelated predicates, and separately handle joins under set and aggregation
+              // operations.
+              if (shouldDecorrelatePredicates) {
+                val conditions =
+                  if (condition.isDefined) splitConjunctivePredicates(condition.get)
+                  else Seq.empty[Expression]
+                val (correlated, uncorrelated) = conditions.partition(containsOuter)
+                var equivalences =
+                  if (underSetOp) AttributeMap.empty[Attribute]
+                  else collectEquivalentOuterReferences(correlated)
+                var (equalityCond, predicates) =
+                  if (underSetOp) (Seq.empty[Expression], correlated)
+                  else correlated.partition(canPullUpOverAgg)
+                // Fully preserve the join predicate for non-inner joins.
+                if (!isInnerJoin) {
+                  predicates = correlated
+                  equalityCond = Seq.empty[Expression]
+                  equivalences = AttributeMap.empty[Attribute]
+                }
+                (correlated, uncorrelated, equalityCond, predicates, equivalences)
+              } else {
+                (Seq.empty[Expression],
+                  if (condition.isEmpty) Seq.empty[Expression] else Seq(condition.get),
+                  Seq.empty[Expression],
+                  Seq.empty[Expression],
+                  AttributeMap.empty[Attribute])
+              }
+            }
+
+            val shouldDecorrelatePredicates =
+              SQLConf.get.getConf(SQLConf.DECORRELATE_JOIN_PREDICATE_ENABLED)
+            if (!shouldDecorrelatePredicates) {
+              val outerReferences = collectOuterReferences(j.expressions)
+              // Join condition containing outer references is not supported.
+              assert(outerReferences.isEmpty, s"Correlated column is not allowed in join: $j")
+            }
+            val (correlated, uncorrelated, equalityCond, predicates, equivalences) =
+              splitCorrelatedPredicate(condition, joinType == Inner, shouldDecorrelatePredicates)
+            val outerReferences = collectOuterReferences(j.expressions) ++
+              collectOuterReferences(predicates)
+            val newOuterReferences =
+              parentOuterReferences ++ outerReferences -- equivalences.keySet
+            var shouldPushToLeft = joinType match {
               case LeftOuter | LeftSemiOrAnti(_) | FullOuter => true
               case _ => hasOuterReferences(left)
             }
             val shouldPushToRight = joinType match {
               case RightOuter | FullOuter => true
               case _ => hasOuterReferences(right)
+            }
+            if (shouldDecorrelatePredicates && !shouldPushToLeft && !shouldPushToRight
+              && !predicates.isEmpty) {
+              // Neither left nor right children of the join have correlations, but the join
+              // predicate does, and the correlations can not be replaced via equivalences.
+              // Introduce a domain join on the left side of the join
+              // (chosen arbitrarily) to provide values for the correlated attribute reference.
+              shouldPushToLeft = true;
             }
             val (newLeft, leftJoinCond, leftOuterReferenceMap) = if (shouldPushToLeft) {
               decorrelate(left, newOuterReferences, aggregated, underSetOp)
@@ -822,8 +969,13 @@ object DecorrelateInnerQuery extends PredicateHelper {
             } else {
               (right, Nil, AttributeMap.empty[Attribute])
             }
-            val newOuterReferenceMap = leftOuterReferenceMap ++ rightOuterReferenceMap
-            val newJoinCond = leftJoinCond ++ rightJoinCond
+            val newOuterReferenceMap = leftOuterReferenceMap ++ rightOuterReferenceMap ++
+              equivalences
+            val newCorrelated =
+              if (shouldDecorrelatePredicates) {
+                replaceOuterReferences(correlated, newOuterReferenceMap)
+              } else Seq.empty[Expression]
+            val newJoinCond = leftJoinCond ++ rightJoinCond ++ equalityCond
             // If we push the dependent join to both sides, we can augment the join condition
             // such that both sides are matched on the domain attributes. For example,
             // - Left Map: {outer(c1) = c1}
@@ -832,7 +984,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val augmentedConditions = leftOuterReferenceMap.flatMap {
               case (outer, inner) => rightOuterReferenceMap.get(outer).map(EqualNullSafe(inner, _))
             }
-            val newCondition = (condition ++ augmentedConditions).reduceOption(And)
+            val newCondition = (newCorrelated ++ uncorrelated
+              ++ augmentedConditions).reduceOption(And)
             val newJoin = j.copy(left = newLeft, right = newRight, condition = newCondition)
             (newJoin, newJoinCond, newOuterReferenceMap)
 

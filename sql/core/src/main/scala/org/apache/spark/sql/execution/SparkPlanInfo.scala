@@ -76,4 +76,6 @@ private[execution] object SparkPlanInfo {
       metadata,
       metrics)
   }
+
+  final lazy val EMPTY: SparkPlanInfo = new SparkPlanInfo("", "", Nil, Map.empty, Nil)
 }

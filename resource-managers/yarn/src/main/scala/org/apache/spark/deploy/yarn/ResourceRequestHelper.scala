@@ -17,13 +17,11 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.lang.{Long => JLong}
-import java.lang.reflect.InvocationTargetException
-
 import scala.collection.mutable
-import scala.util.Try
 
 import org.apache.hadoop.yarn.api.records.Resource
+import org.apache.hadoop.yarn.api.records.ResourceInformation
+import org.apache.hadoop.yarn.exceptions.ResourceNotFoundException
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.yarn.config._
@@ -31,16 +29,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceID
 import org.apache.spark.resource.ResourceUtils.{AMOUNT, FPGA, GPU}
-import org.apache.spark.util.{CausedBy, Utils}
+import org.apache.spark.util.CausedBy
 
-/**
- * This helper class uses some of Hadoop 3 methods from the YARN API,
- * so we need to use reflection to avoid compile error when building against Hadoop 2.x
- */
 private object ResourceRequestHelper extends Logging {
   private val AMOUNT_AND_UNIT_REGEX = "([0-9]+)([A-Za-z]*)".r
-  private val RESOURCE_INFO_CLASS = "org.apache.hadoop.yarn.api.records.ResourceInformation"
-  private val RESOURCE_NOT_FOUND = "org.apache.hadoop.yarn.exceptions.ResourceNotFoundException"
   @volatile private var numResourceErrors: Int = 0
 
   private[yarn] def getYarnResourcesAndAmounts(
@@ -152,23 +144,6 @@ private object ResourceRequestHelper extends Logging {
       return
     }
 
-    if (!isYarnResourceTypesAvailable()) {
-      logWarning("Ignoring custom resource requests because " +
-          "the version of YARN does not support it!")
-      return
-    }
-
-    val resInfoClass = Utils.classForName(RESOURCE_INFO_CLASS)
-    val setResourceInformationMethod =
-      try {
-        resource.getClass.getMethod("setResourceInformation", classOf[String], resInfoClass)
-      } catch {
-        case e: NoSuchMethodException =>
-          throw new SparkException(
-            s"Cannot find setResourceInformation in ${resource.getClass}. " +
-              "This is likely due to a JAR conflict between different YARN versions.", e)
-      }
-
     resources.foreach { case (name, rawAmount) =>
       try {
         val AMOUNT_AND_UNIT_REGEX(amountPart, unitPart) = rawAmount
@@ -180,32 +155,21 @@ private object ResourceRequestHelper extends Logging {
           case _ => unitPart
         }
         logDebug(s"Registering resource with name: $name, amount: $amount, unit: $unit")
-        val resourceInformation = createResourceInformation(name, amount, unit, resInfoClass)
-        setResourceInformationMethod.invoke(
-          resource, name, resourceInformation.asInstanceOf[AnyRef])
+        val resourceInformation = createResourceInformation(name, amount, unit)
+        resource.setResourceInformation(name, resourceInformation)
       } catch {
         case _: MatchError =>
           throw new IllegalArgumentException(s"Resource request for '$name' ('$rawAmount') " +
               s"does not match pattern $AMOUNT_AND_UNIT_REGEX.")
         case CausedBy(e: IllegalArgumentException) =>
           throw new IllegalArgumentException(s"Invalid request for $name: ${e.getMessage}")
-        case e: InvocationTargetException =>
-          if (e.getCause != null) {
-            if (Try(Utils.classForName(RESOURCE_NOT_FOUND)).isSuccess) {
-              if (e.getCause().getClass().getName().equals(RESOURCE_NOT_FOUND)) {
-                // warn a couple times and then stop so we don't spam the logs
-                if (numResourceErrors < 2) {
-                  logWarning(s"YARN doesn't know about resource $name, your resource discovery " +
-                    s"has to handle properly discovering and isolating the resource! Error: " +
-                    s"${e.getCause().getMessage}")
-                  numResourceErrors += 1
-                }
-              } else {
-                throw e.getCause
-              }
-            } else {
-              throw e.getCause
-            }
+        case e: ResourceNotFoundException =>
+          // warn a couple times and then stop so we don't spam the logs
+          if (numResourceErrors < 2) {
+            logWarning(s"YARN doesn't know about resource $name, your resource discovery " +
+              s"has to handle properly discovering and isolating the resource! Error: " +
+              s"${e.getCause.getMessage}")
+            numResourceErrors += 1
           }
       }
     }
@@ -214,38 +178,11 @@ private object ResourceRequestHelper extends Logging {
   private def createResourceInformation(
       resourceName: String,
       amount: Long,
-      unit: String,
-      resInfoClass: Class[_]): Any = {
-    val resourceInformation =
-      if (unit.nonEmpty) {
-        val resInfoNewInstanceMethod = resInfoClass.getMethod("newInstance",
-          classOf[String], classOf[String], JLong.TYPE)
-        resInfoNewInstanceMethod.invoke(null, resourceName, unit, amount.asInstanceOf[JLong])
-      } else {
-        val resInfoNewInstanceMethod = resInfoClass.getMethod("newInstance",
-          classOf[String], JLong.TYPE)
-        resInfoNewInstanceMethod.invoke(null, resourceName, amount.asInstanceOf[JLong])
-      }
-    resourceInformation
-  }
-
-  def isYarnCustomResourcesNonEmpty(resource: Resource): Boolean = {
-    try {
-      // Use reflection as this uses APIs only available in Hadoop 3
-      val getResourcesMethod = resource.getClass().getMethod("getResources")
-      val resources = getResourcesMethod.invoke(resource).asInstanceOf[Array[Any]]
-      if (resources.nonEmpty) true else false
-    } catch {
-      case  _: NoSuchMethodException => false
+      unit: String): ResourceInformation = {
+    if (unit.nonEmpty) {
+      ResourceInformation.newInstance(resourceName, unit, amount)
+    } else {
+      ResourceInformation.newInstance(resourceName, amount)
     }
-  }
-
-  /**
-   * Checks whether Hadoop 2.x or 3 is used as a dependency.
-   * In case of Hadoop 3 and later, the ResourceInformation class
-   * should be available on the classpath.
-   */
-  def isYarnResourceTypesAvailable(): Boolean = {
-    Try(Utils.classForName(RESOURCE_INFO_CLASS)).isSuccess
   }
 }

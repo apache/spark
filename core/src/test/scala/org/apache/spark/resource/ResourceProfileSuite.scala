@@ -146,6 +146,22 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
     assert(immrprof.taskResources.get("gpu").get.amount == 0.33)
   }
 
+  test("test default profile task gpus 0") {
+    val sparkConf = new SparkConf()
+      .set(EXECUTOR_GPU_ID.amountConf, "2")
+      .set(TASK_GPU_ID.amountConf, "0")
+    val immrprof = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    assert(immrprof.taskResources.get("gpu") == None)
+  }
+
+  test("test default profile executor gpus 0") {
+    val sparkConf = new SparkConf()
+      .set(EXECUTOR_GPU_ID.amountConf, "0")
+      .set(TASK_GPU_ID.amountConf, "1")
+    val immrprof = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    assert(immrprof.executorResources.get("gpu") == None)
+  }
+
   test("maxTasksPerExecutor cpus") {
     val sparkConf = new SparkConf()
       .set(EXECUTOR_CORES, 1)
@@ -272,13 +288,13 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
     val taskReq = new TaskResourceRequests().resource("gpu", 1)
     val eReq = new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
     rprofBuilder.require(taskReq).require(eReq)
-    val rprof = rprofBuilder.build
+    val rprof = rprofBuilder.build()
 
     val rprofBuilder2 = new ResourceProfileBuilder()
     val taskReq2 = new TaskResourceRequests().resource("gpu", 1)
     val eReq2 = new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
     rprofBuilder2.require(taskReq2).require(eReq2)
-    val rprof2 = rprofBuilder.build
+    val rprof2 = rprofBuilder.build()
     rprof2.setResourceProfileId(rprof.id)
 
     assert(rprof === rprof2, "resource profile equality not working")

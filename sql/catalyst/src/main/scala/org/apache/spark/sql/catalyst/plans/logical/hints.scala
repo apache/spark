@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_HINT}
 
 /**
@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_
  * @param parameters the parameters of the hint
  * @param child the [[LogicalPlan]] on which this hint applies
  */
-case class UnresolvedHint(name: String, parameters: Seq[Any], child: LogicalPlan)
+case class UnresolvedHint(name: String, parameters: Seq[Expression], child: LogicalPlan)
   extends UnaryNode {
 
   // we need it to be resolved so that the analyzer can continue to analyze the rest of the query
@@ -184,6 +184,16 @@ case object NO_BROADCAST_HASH extends JoinStrategyHint {
  */
 case object PREFER_SHUFFLE_HASH extends JoinStrategyHint {
   override def displayName: String = "prefer_shuffle_hash"
+  override def hintAliases: Set[String] = Set.empty
+}
+
+/**
+ * An internal hint to prohibit broadcasting and replicating one side of a join. This hint is used
+ * by some rules where broadcasting or replicating a particular side of the join is not permitted,
+ * such as the cardinality check in MERGE operations.
+ */
+case object NO_BROADCAST_AND_REPLICATION extends JoinStrategyHint {
+  override def displayName: String = "no_broadcast_and_replication"
   override def hintAliases: Set[String] = Set.empty
 }
 

@@ -31,6 +31,7 @@ import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, TaskResourceRequest}
+import org.apache.spark.status.AppStatusUtils.getQuantilesValue
 
 case class ApplicationInfo private[spark](
     id: String,
@@ -198,6 +199,7 @@ class JobData private[spark](
     val completionTime: Option[Date],
     val stageIds: collection.Seq[Int],
     val jobGroup: Option[String],
+    val jobTags: collection.Seq[String],
     val status: JobExecutionStatus,
     val numTasks: Int,
     val numActiveTasks: Int,
@@ -454,13 +456,11 @@ class ExecutorMetricsDistributions private[spark](
 class ExecutorPeakMetricsDistributions private[spark](
   val quantiles: IndexedSeq[Double],
   val executorMetrics: IndexedSeq[ExecutorMetrics]) {
-  private lazy val count = executorMetrics.length
-  private lazy val indices = quantiles.map { q => math.min((q * count).toLong, count - 1) }
 
   /** Returns the distributions for the specified metric. */
   def getMetricDistribution(metricName: String): IndexedSeq[Double] = {
-    val sorted = executorMetrics.map(_.getMetricValue(metricName)).sorted
-    indices.map(i => sorted(i.toInt).toDouble)
+    val sorted = executorMetrics.map(_.getMetricValue(metricName).toDouble).sorted
+    getQuantilesValue(sorted, quantiles.toArray)
   }
 }
 
@@ -527,13 +527,53 @@ case class StackTrace(elems: Seq[String]) {
 }
 
 case class ThreadStackTrace(
-    val threadId: Long,
-    val threadName: String,
-    val threadState: Thread.State,
-    val stackTrace: StackTrace,
-    val blockedByThreadId: Option[Long],
-    val blockedByLock: String,
-    val holdingLocks: Seq[String])
+    threadId: Long,
+    threadName: String,
+    threadState: Thread.State,
+    stackTrace: StackTrace,
+    blockedByThreadId: Option[Long],
+    blockedByLock: String,
+    @deprecated("using synchronizers and monitors instead", "4.0.0")
+    holdingLocks: Seq[String],
+    synchronizers: Seq[String],
+    monitors: Seq[String],
+    lockName: Option[String],
+    lockOwnerName: Option[String],
+    suspended: Boolean,
+    inNative: Boolean,
+    isDaemon: Boolean,
+    priority: Int) {
+
+  /**
+   * Returns a string representation of this thread stack trace
+   * w.r.t java.lang.management.ThreadInfo(JDK 8)'s toString.
+   *
+   * TODO(SPARK-44896): Also considering adding information os_prio, cpu, elapsed, tid, nid, etc.,
+   *   from the jstack tool
+   */
+  override def toString: String = {
+    val daemon = if (isDaemon) " daemon" else ""
+    val sb = new StringBuilder(
+      s""""$threadName"$daemon prio=$priority Id=$threadId $threadState""")
+    lockName.foreach(lock => sb.append(s" on $lock"))
+    lockOwnerName.foreach {
+      owner => sb.append(s"""owned by "$owner"""")
+    }
+    blockedByThreadId.foreach(id => s" Id=$id")
+    if (suspended) sb.append(" (suspended)")
+    if (inNative) sb.append(" (in native)")
+    sb.append('\n')
+
+    sb.append(stackTrace.elems.map(e => s"\tat $e").mkString)
+
+    if (synchronizers.nonEmpty) {
+      sb.append(s"\n\tNumber of locked synchronizers = ${synchronizers.length}\n")
+      synchronizers.foreach(sync => sb.append(s"\t- $sync\n"))
+    }
+    sb.append('\n')
+    sb.toString
+  }
+}
 
 class ProcessSummary private[spark](
      val id: String,

@@ -20,7 +20,7 @@ package org.apache.spark.resource
 import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.{Evolving, Since}
 import org.apache.spark.network.util.JavaUtils

@@ -55,17 +55,19 @@ trait NestedDataSourceSuiteBase extends QueryTest with SharedSparkSession {
             withTempPath { dir =>
               val path = dir.getCanonicalPath
               save(selectExpr, format, path)
-              val e = intercept[AnalysisException] {
-                spark
-                  .read
-                  .options(readOptions(caseInsensitiveSchema))
-                  .schema(caseInsensitiveSchema)
-                  .format(format)
-                  .load(path)
-                  .collect()
-              }
-              assert(e.getErrorClass == "COLUMN_ALREADY_EXISTS")
-              assert(e.getMessageParameters().get("columnName") == "`camelcase`")
+              checkError(
+                exception = intercept[AnalysisException] {
+                  spark
+                    .read
+                    .options(readOptions(caseInsensitiveSchema))
+                    .schema(caseInsensitiveSchema)
+                    .format(format)
+                    .load(path)
+                    .collect()
+                },
+                errorClass = "COLUMN_ALREADY_EXISTS",
+                parameters = Map("columnName" -> "`camelcase`")
+              )
             }
           }
         }

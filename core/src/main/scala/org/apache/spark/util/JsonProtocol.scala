@@ -17,16 +17,13 @@
 
 package org.apache.spark.util
 
-import java.io.ByteArrayOutputStream
-import java.nio.charset.StandardCharsets
 import java.util.{Properties, UUID}
 
-import scala.collection.JavaConverters._
 import scala.collection.Map
+import scala.jdk.CollectionConverters._
 
-import com.fasterxml.jackson.core.{JsonEncoding, JsonGenerator}
-import com.fasterxml.jackson.databind.{DeserializationFeature, JsonNode, ObjectMapper}
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import com.fasterxml.jackson.core.JsonGenerator
+import com.fasterxml.jackson.databind.JsonNode
 import org.json4s.jackson.JsonMethods.compact
 
 import org.apache.spark._
@@ -54,11 +51,8 @@ import org.apache.spark.util.Utils.weakIntern
  *  - Any new JSON fields should be optional; use `jsonOption` when reading these fields
  *    in `*FromJson` methods.
  */
-private[spark] object JsonProtocol {
+private[spark] object JsonProtocol extends JsonUtils {
   // TODO: Remove this file and put JSON serialization into each individual class.
-
-  private val mapper = new ObjectMapper().registerModule(DefaultScalaModule)
-    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
 
   /** ------------------------------------------------- *
    * JSON serialization methods for SparkListenerEvents |
@@ -68,15 +62,6 @@ private[spark] object JsonProtocol {
     toJsonString { generator =>
       writeSparkEventToJson(event, generator)
     }
-  }
-
-  def toJsonString(block: JsonGenerator => Unit): String = {
-    val baos = new ByteArrayOutputStream()
-    val generator = mapper.createGenerator(baos, JsonEncoding.UTF8)
-    block(generator)
-    generator.close()
-    baos.close()
-    new String(baos.toByteArray, StandardCharsets.UTF_8)
   }
 
   def writeSparkEventToJson(event: SparkListenerEvent, g: JsonGenerator): Unit = {
@@ -130,7 +115,8 @@ private[spark] object JsonProtocol {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.stageSubmitted)
     g.writeFieldName("Stage Info")
-    stageInfoToJson(stageSubmitted.stageInfo, g)
+    // SPARK-42205: don't log accumulables in start events:
+    stageInfoToJson(stageSubmitted.stageInfo, g, includeAccumulables = false)
     Option(stageSubmitted.properties).foreach { properties =>
       g.writeFieldName("Properties")
       propertiesToJson(properties, g)
@@ -142,7 +128,7 @@ private[spark] object JsonProtocol {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.stageCompleted)
     g.writeFieldName("Stage Info")
-    stageInfoToJson(stageCompleted.stageInfo, g)
+    stageInfoToJson(stageCompleted.stageInfo, g, includeAccumulables = true)
     g.writeEndObject()
   }
 
@@ -152,7 +138,8 @@ private[spark] object JsonProtocol {
     g.writeNumberField("Stage ID", taskStart.stageId)
     g.writeNumberField("Stage Attempt ID", taskStart.stageAttemptId)
     g.writeFieldName("Task Info")
-    taskInfoToJson(taskStart.taskInfo, g)
+    // SPARK-42205: don't log accumulables in start events:
+    taskInfoToJson(taskStart.taskInfo, g, includeAccumulables = false)
     g.writeEndObject()
   }
 
@@ -163,7 +150,8 @@ private[spark] object JsonProtocol {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskGettingResult)
     g.writeFieldName("Task Info")
-    taskInfoToJson(taskInfo, g)
+    // SPARK-42205: don't log accumulables in "task getting result" events:
+    taskInfoToJson(taskInfo, g, includeAccumulables = false)
     g.writeEndObject()
   }
 
@@ -176,7 +164,7 @@ private[spark] object JsonProtocol {
     g.writeFieldName("Task End Reason")
     taskEndReasonToJson(taskEnd.reason, g)
     g.writeFieldName("Task Info")
-    taskInfoToJson(taskEnd.taskInfo, g)
+    taskInfoToJson(taskEnd.taskInfo, g, includeAccumulables = true)
     g.writeFieldName("Task Executor Metrics")
     executorMetricsToJson(taskEnd.taskExecutorMetrics, g)
     Option(taskEnd.taskMetrics).foreach { m =>
@@ -192,7 +180,12 @@ private[spark] object JsonProtocol {
     g.writeNumberField("Job ID", jobStart.jobId)
     g.writeNumberField("Submission Time", jobStart.time)
     g.writeArrayFieldStart("Stage Infos")  // Added in Spark 1.2.0
-    jobStart.stageInfos.foreach(stageInfoToJson(_, g))
+    // SPARK-42205: here, we purposely include accumulables so that we accurately log all
+    // available information about stages that may have already completed by the time
+    // the job was submitted: it is technically possible for a stage to belong to multiple
+    // concurrent jobs, so this situation can arise even without races occurring between
+    // event logging and stage completion.
+    jobStart.stageInfos.foreach(stageInfoToJson(_, g, includeAccumulables = true))
     g.writeEndArray()
     g.writeArrayFieldStart("Stage IDs")
     jobStart.stageIds.foreach(g.writeNumber)
@@ -388,10 +381,13 @@ private[spark] object JsonProtocol {
    * JSON serialization methods for classes SparkListenerEvents depend on |
    * -------------------------------------------------------------------- */
 
-  def stageInfoToJson(stageInfo: StageInfo, g: JsonGenerator): Unit = {
+  def stageInfoToJson(
+      stageInfo: StageInfo,
+      g: JsonGenerator,
+      includeAccumulables: Boolean): Unit = {
     g.writeStartObject()
     g.writeNumberField("Stage ID", stageInfo.stageId)
-    g.writeNumberField("Stage Attempt ID", stageInfo.attemptNumber)
+    g.writeNumberField("Stage Attempt ID", stageInfo.attemptNumber())
     g.writeStringField("Stage Name", stageInfo.name)
     g.writeNumberField ("Number of Tasks", stageInfo.numTasks)
     g.writeArrayFieldStart("RDD Info")
@@ -405,14 +401,22 @@ private[spark] object JsonProtocol {
     stageInfo.completionTime.foreach(g.writeNumberField("Completion Time", _))
     stageInfo.failureReason.foreach(g.writeStringField("Failure Reason", _))
     g.writeFieldName("Accumulables")
-    accumulablesToJson(stageInfo.accumulables.values, g)
+    if (includeAccumulables) {
+      accumulablesToJson(stageInfo.accumulables.values, g)
+    } else {
+      g.writeStartArray()
+      g.writeEndArray()
+    }
     g.writeNumberField("Resource Profile Id", stageInfo.resourceProfileId)
     g.writeBooleanField("Shuffle Push Enabled", stageInfo.isShufflePushEnabled)
     g.writeNumberField("Shuffle Push Mergers Count", stageInfo.shuffleMergerCount)
     g.writeEndObject()
   }
 
-  def taskInfoToJson(taskInfo: TaskInfo, g: JsonGenerator): Unit = {
+  def taskInfoToJson(
+      taskInfo: TaskInfo,
+      g: JsonGenerator,
+      includeAccumulables: Boolean): Unit = {
     g.writeStartObject()
     g.writeNumberField("Task ID", taskInfo.taskId)
     g.writeNumberField("Index", taskInfo.index)
@@ -428,7 +432,12 @@ private[spark] object JsonProtocol {
     g.writeBooleanField("Failed", taskInfo.failed)
     g.writeBooleanField("Killed", taskInfo.killed)
     g.writeFieldName("Accumulables")
-    accumulablesToJson(taskInfo.accumulables, g)
+    if (includeAccumulables) {
+      accumulablesToJson(taskInfo.accumulables, g)
+    } else {
+      g.writeStartArray()
+      g.writeEndArray()
+    }
     g.writeEndObject()
   }
 
@@ -1555,17 +1564,18 @@ private[spark] object JsonProtocol {
   }
 
   def stackTraceFromJson(json: JsonNode): Array[StackTraceElement] = {
-    json.extractElements.map { line =>
+    jsonOption(json).map(_.extractElements.map { line =>
       val declaringClass = line.get("Declaring Class").extractString
       val methodName = line.get("Method Name").extractString
-      val fileName = line.get("File Name").extractString
+      val fileName = jsonOption(line.get("File Name")).map(_.extractString).orNull
       val lineNumber = line.get("Line Number").extractInt
       new StackTraceElement(declaringClass, methodName, fileName, lineNumber)
-    }.toArray
+    }.toArray).getOrElse(Array[StackTraceElement]())
   }
 
   def exceptionFromJson(json: JsonNode): Exception = {
-    val e = new Exception(json.get("Message").extractString)
+    val message = jsonOption(json.get("Message")).map(_.extractString).orNull
+    val e = new Exception(message)
     e.setStackTrace(stackTraceFromJson(json.get("Stack Trace")))
     e
   }

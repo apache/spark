@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.TimeZone
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.InMemoryTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -64,7 +65,11 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       val table = new InMemoryTable("t", schema, Array.empty, Map.empty[String, String].asJava)
       intercept[IllegalStateException] {
         DataSourceV2Relation(
-          table, schema.toAttributes, None, None, CaseInsensitiveStringMap.empty()).analyze
+          table,
+          DataTypeUtils.toAttributes(schema),
+          None,
+          None,
+          CaseInsensitiveStringMap.empty()).analyze
       }
     }
   }
@@ -543,10 +548,10 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisSuccess(rangeWithAliases(3 :: Nil, "a" :: Nil))
     assertAnalysisSuccess(rangeWithAliases(1 :: 4 :: Nil, "b" :: Nil))
     assertAnalysisSuccess(rangeWithAliases(2 :: 6 :: 2 :: Nil, "c" :: Nil))
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       rangeWithAliases(3 :: Nil, "a" :: "b" :: Nil),
-      Seq("Number of given aliases does not match number of output columns. "
-        + "Function name: range; number of aliases: 2; number of output columns: 1."))
+      "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+      Map("funcName" -> "`range`", "aliasesNum" -> "2", "outColsNum" -> "1"))
   }
 
   test("SPARK-20841 Support table column aliases in FROM clause") {
@@ -557,14 +562,16 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       ).select(star())
     }
     assertAnalysisSuccess(tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       tableColumnsWithAliases("col1" :: Nil),
-      Seq("Number of column aliases does not match number of columns. " +
-        "Number of column aliases: 1; number of columns: 4."))
-    assertAnalysisError(
+      "ASSIGNMENT_ARITY_MISMATCH",
+      Map("numExpr" -> "1", "numTarget" -> "4")
+    )
+    assertAnalysisErrorClass(
       tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: "col5" :: Nil),
-      Seq("Number of column aliases does not match number of columns. " +
-        "Number of column aliases: 5; number of columns: 4."))
+      "ASSIGNMENT_ARITY_MISMATCH",
+      Map("numExpr" -> "5", "numTarget" -> "4")
+    )
   }
 
   test("SPARK-20962 Support subquery column aliases in FROM clause") {
@@ -577,14 +584,16 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       ).select(star())
     }
     assertAnalysisSuccess(tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       tableColumnsWithAliases("col1" :: Nil),
-      Seq("Number of column aliases does not match number of columns. " +
-        "Number of column aliases: 1; number of columns: 4."))
-    assertAnalysisError(
+      "ASSIGNMENT_ARITY_MISMATCH",
+      Map("numExpr" -> "1", "numTarget" -> "4")
+    )
+    assertAnalysisErrorClass(
       tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: "col5" :: Nil),
-      Seq("Number of column aliases does not match number of columns. " +
-        "Number of column aliases: 5; number of columns: 4."))
+      "ASSIGNMENT_ARITY_MISMATCH",
+      Map("numExpr" -> "5", "numTarget" -> "4")
+    )
   }
 
   test("SPARK-20963 Support aliases for join relations in FROM clause") {
@@ -599,14 +608,16 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       ).select(star())
     }
     assertAnalysisSuccess(joinRelationWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       joinRelationWithAliases("col1" :: Nil),
-      Seq("Number of column aliases does not match number of columns. " +
-        "Number of column aliases: 1; number of columns: 4."))
-    assertAnalysisError(
+      "ASSIGNMENT_ARITY_MISMATCH",
+      Map("numExpr" -> "1", "numTarget" -> "4")
+    )
+    assertAnalysisErrorClass(
       joinRelationWithAliases("col1" :: "col2" :: "col3" :: "col4" :: "col5" :: Nil),
-      Seq("Number of column aliases does not match number of columns. " +
-        "Number of column aliases: 5; number of columns: 4."))
+        "ASSIGNMENT_ARITY_MISMATCH",
+        Map("numExpr" -> "5", "numTarget" -> "4")
+      )
   }
 
   test("SPARK-22614 RepartitionByExpression partitioning") {
@@ -646,7 +657,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Seq.empty,
       PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
       true)
-    val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
+    val output = DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType])
     val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
     val flatMapGroupsInPandas = FlatMapGroupsInPandas(
       Seq(UnresolvedAttribute("a")), pythonUdf, output, project)
@@ -663,7 +674,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Seq.empty,
       PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
       true)
-    val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
+    val output = DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType])
     val project1 = Project(Seq(UnresolvedAttribute("a")), testRelation)
     val project2 = Project(Seq(UnresolvedAttribute("a")), testRelation2)
     val flatMapGroupsInPandas = FlatMapCoGroupsInPandas(
@@ -686,12 +697,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Seq.empty,
       PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
       true)
-    val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
+    val output = DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType])
     val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
     val mapInPandas = MapInPandas(
       pythonUdf,
       output,
-      project)
+      project,
+      false)
     val left = SubqueryAlias("temp0", mapInPandas)
     val right = SubqueryAlias("temp1", mapInPandas)
     val join = Join(left, right, Inner, None, JoinHint.NONE)
@@ -741,15 +753,17 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("CTE with non-existing column alias") {
     assertAnalysisErrorClass(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
       "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      Map("objectName" -> "`y`", "proposal" -> "`t`.`x`"),
+      Map("objectName" -> "`y`", "proposal" -> "`x`"),
       Array(ExpectedContext("y", 46, 46))
     )
   }
 
   test("CTE with non-matching column alias") {
-    assertAnalysisError(parsePlan("WITH t(x, y) AS (SELECT 1) SELECT * FROM t WHERE x = 1"),
-      Seq("Number of column aliases does not match number of columns. Number of column aliases: " +
-        "2; number of columns: 1."))
+    assertAnalysisErrorClass(parsePlan("WITH t(x, y) AS (SELECT 1) SELECT * FROM t WHERE x = 1"),
+      "ASSIGNMENT_ARITY_MISMATCH",
+      Map("numExpr" -> "2", "numTarget" -> "1"),
+      Array(ExpectedContext("t(x, y) AS (SELECT 1)", 5, 25))
+    )
   }
 
   test("SPARK-28251: Insert into non-existing table error message is user friendly") {
@@ -765,48 +779,75 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val literal = Literal(1).as("lit")
 
     // Ok
-    assert(CollectMetrics("event", literal :: sum :: random_sum :: Nil, testRelation).resolved)
+    assert(CollectMetrics("event", literal :: sum :: random_sum :: Nil, testRelation, 0).resolved)
 
     // Bad name
-    assert(!CollectMetrics("", sum :: Nil, testRelation).resolved)
-    assertAnalysisError(CollectMetrics("", sum :: Nil, testRelation),
-      "observed metrics should be named" :: Nil)
+    assert(!CollectMetrics("", sum :: Nil, testRelation, 0).resolved)
+    assertAnalysisErrorClass(
+      CollectMetrics("", sum :: Nil, testRelation, 0),
+      expectedErrorClass = "INVALID_OBSERVED_METRICS.MISSING_NAME",
+      expectedMessageParameters = Map(
+        "operator" ->
+          "'CollectMetrics , [sum(a#x) AS sum#xL], 0\n+- LocalRelation <empty>, [a#x]\n")
+    )
 
     // No columns
-    assert(!CollectMetrics("evt", Nil, testRelation).resolved)
+    assert(!CollectMetrics("evt", Nil, testRelation, 0).resolved)
 
     def checkAnalysisError(exprs: Seq[NamedExpression], errors: String*): Unit = {
-      assertAnalysisError(CollectMetrics("event", exprs, testRelation), errors)
+      assertAnalysisError(CollectMetrics("event", exprs, testRelation, 0), errors)
     }
 
     // Unwrapped attribute
-    checkAnalysisError(
-      a :: Nil,
-      "Attribute", "can only be used as an argument to an aggregate function")
+    assertAnalysisErrorClass(
+      CollectMetrics("event", a :: Nil, testRelation, 0),
+      expectedErrorClass = "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_ATTRIBUTE",
+      expectedMessageParameters = Map("expr" -> "\"a\"")
+    )
 
     // Unwrapped non-deterministic expression
-    checkAnalysisError(
-      Rand(10).as("rnd") :: Nil,
-      "non-deterministic expression", "can only be used as an argument to an aggregate function")
+    assertAnalysisErrorClass(
+      CollectMetrics("event", Rand(10).as("rnd") :: Nil, testRelation, 0),
+      expectedErrorClass = "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC",
+      expectedMessageParameters = Map("expr" -> "\"rand(10) AS rnd\"")
+    )
 
     // Distinct aggregate
-    checkAnalysisError(
-      Sum(a).toAggregateExpression(isDistinct = true).as("sum") :: Nil,
-    "distinct aggregates are not allowed in observed metrics, but found")
+    assertAnalysisErrorClass(
+      CollectMetrics(
+        "event",
+        Sum(a).toAggregateExpression(isDistinct = true).as("sum") :: Nil,
+        testRelation, 0),
+      expectedErrorClass =
+        "INVALID_OBSERVED_METRICS.AGGREGATE_EXPRESSION_WITH_DISTINCT_UNSUPPORTED",
+      expectedMessageParameters = Map("expr" -> "\"sum(DISTINCT a) AS sum\"")
+    )
 
     // Nested aggregate
-    checkAnalysisError(
-      Sum(Sum(a).toAggregateExpression()).toAggregateExpression().as("sum") :: Nil,
-      "nested aggregates are not allowed in observed metrics, but found")
+    assertAnalysisErrorClass(
+      CollectMetrics(
+        "event",
+        Sum(Sum(a).toAggregateExpression()).toAggregateExpression().as("sum") :: Nil,
+        testRelation, 0),
+      expectedErrorClass = "INVALID_OBSERVED_METRICS.NESTED_AGGREGATES_UNSUPPORTED",
+      expectedMessageParameters = Map("expr" -> "\"sum(sum(a)) AS sum\"")
+    )
 
     // Windowed aggregate
     val windowExpr = WindowExpression(
       RowNumber(),
       WindowSpecDefinition(Nil, a.asc :: Nil,
         SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
-    checkAnalysisError(
-      windowExpr.as("rn") :: Nil,
-      "window expressions are not allowed in observed metrics, but found")
+    assertAnalysisErrorClass(
+      CollectMetrics("event", windowExpr.as("rn") :: Nil, testRelation, 0),
+      expectedErrorClass = "INVALID_OBSERVED_METRICS.WINDOW_EXPRESSIONS_UNSUPPORTED",
+      expectedMessageParameters = Map(
+        "expr" ->
+          """
+            |"row_number() OVER (ORDER BY a ASC NULLS FIRST ROWS
+            | BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS rn"
+            |""".stripMargin.replace("\n", ""))
+    )
   }
 
   test("check CollectMetrics duplicates") {
@@ -816,37 +857,55 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     // Same result - duplicate names are allowed
     assertAnalysisSuccess(Union(
-      CollectMetrics("evt1", count :: Nil, testRelation) ::
-      CollectMetrics("evt1", count :: Nil, testRelation) :: Nil))
+      CollectMetrics("evt1", count :: Nil, testRelation, 0) ::
+      CollectMetrics("evt1", count :: Nil, testRelation, 0) :: Nil))
 
     // Same children, structurally different metrics - fail
-    assertAnalysisError(Union(
-      CollectMetrics("evt1", count :: Nil, testRelation) ::
-      CollectMetrics("evt1", sum :: Nil, testRelation) :: Nil),
-      "Multiple definitions of observed metrics" :: "evt1" :: Nil)
+    assertAnalysisErrorClass(
+      Union(
+        CollectMetrics("evt1", count :: Nil, testRelation, 0) ::
+          CollectMetrics("evt1", sum :: Nil, testRelation, 1) :: Nil),
+      expectedErrorClass = "DUPLICATED_METRICS_NAME",
+      expectedMessageParameters = Map("metricName" -> "evt1")
+    )
 
     // Different children, same metrics - fail
     val b = $"b".string
     val tblB = LocalRelation(b)
-    assertAnalysisError(Union(
-      CollectMetrics("evt1", count :: Nil, testRelation) ::
-      CollectMetrics("evt1", count :: Nil, tblB) :: Nil),
-      "Multiple definitions of observed metrics" :: "evt1" :: Nil)
+    assertAnalysisErrorClass(
+      Union(
+        CollectMetrics("evt1", count :: Nil, testRelation, 0) ::
+          CollectMetrics("evt1", count :: Nil, tblB, 1) :: Nil),
+      expectedErrorClass = "DUPLICATED_METRICS_NAME",
+      expectedMessageParameters = Map("metricName" -> "evt1")
+    )
 
     // Subquery different tree - fail
-    val subquery = Aggregate(Nil, sum :: Nil, CollectMetrics("evt1", count :: Nil, testRelation))
+    val subquery = Aggregate(Nil, sum :: Nil, CollectMetrics("evt1", count :: Nil, testRelation, 0))
     val query = Project(
       b :: ScalarSubquery(subquery, Nil).as("sum") :: Nil,
-      CollectMetrics("evt1", count :: Nil, tblB))
-    assertAnalysisError(query, "Multiple definitions of observed metrics" :: "evt1" :: Nil)
+      CollectMetrics("evt1", count :: Nil, tblB, 1))
+    assertAnalysisErrorClass(
+      query,
+      expectedErrorClass = "DUPLICATED_METRICS_NAME",
+      expectedMessageParameters = Map("metricName" -> "evt1")
+    )
 
     // Aggregate with filter predicate - fail
     val sumWithFilter = sum.transform {
       case a: AggregateExpression => a.copy(filter = Some(true))
     }.asInstanceOf[NamedExpression]
-    assertAnalysisError(
-      CollectMetrics("evt1", sumWithFilter :: Nil, testRelation),
-      "aggregates with filter predicate are not allowed" :: Nil)
+    assertAnalysisErrorClass(
+      CollectMetrics("evt1", sumWithFilter :: Nil, testRelation, 0),
+      expectedErrorClass =
+        "INVALID_OBSERVED_METRICS.AGGREGATE_EXPRESSION_WITH_FILTER_UNSUPPORTED",
+      expectedMessageParameters = Map("expr" -> "\"sum(a) FILTER (WHERE true) AS sum\"")
+    )
+  }
+
+  test("Canonicalize CollectMetrics") {
+    assert(CollectMetrics("", Seq(Rand(10).as("rnd")), testRelation, 1).canonicalized ==
+      CollectMetrics("", Seq(Rand(10).as("rnd")), testRelation, 2).canonicalized)
   }
 
   test("Analysis exceed max iterations") {
@@ -1011,14 +1070,23 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-31975: Throw user facing error when use WindowFunction directly") {
-    assertAnalysisError(testRelation2.select(RowNumber()),
-      Seq("Window function row_number() requires an OVER clause."))
+    assertAnalysisErrorClass(
+      inputPlan = testRelation2.select(RowNumber()),
+      expectedErrorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
+      expectedMessageParameters = Map("funcName" -> "\"row_number()\"")
+    )
 
-    assertAnalysisError(testRelation2.select(Sum(RowNumber())),
-      Seq("Window function row_number() requires an OVER clause."))
+    assertAnalysisErrorClass(
+      inputPlan = testRelation2.select(Sum(RowNumber())),
+      expectedErrorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
+      expectedMessageParameters = Map("funcName" -> "\"row_number()\"")
+    )
 
-    assertAnalysisError(testRelation2.select(RowNumber() + 1),
-      Seq("Window function row_number() requires an OVER clause."))
+    assertAnalysisErrorClass(
+      inputPlan = testRelation2.select(RowNumber() + 1),
+      expectedErrorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
+      expectedMessageParameters = Map("funcName" -> "\"row_number()\"")
+    )
   }
 
   test("SPARK-32237: Hint in CTE") {
@@ -1175,15 +1243,18 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         |    ORDER BY grouping__id > 0
       """.stripMargin), false)
 
-    assertAnalysisError(parsePlan(
-      """
-        |SELECT grouping__id FROM (
-        |  SELECT a, b, count(1), grouping__id FROM TaBlE2
-        |    GROUP BY a, b
-        |)
-      """.stripMargin),
-      Seq("grouping_id() can only be used with GroupingSets/Cube/Rollup"),
-      false)
+    assertAnalysisErrorClass(
+      parsePlan(
+        """
+          |SELECT grouping__id FROM (
+          |  SELECT a, b, count(1), grouping__id FROM TaBlE2
+          |    GROUP BY a, b
+          |)
+        """.stripMargin),
+      "UNSUPPORTED_GROUPING_EXPRESSION",
+      Map.empty,
+      Array(ExpectedContext("grouping__id", 53, 64))
+    )
   }
 
   test("SPARK-36275: Resolve aggregate functions should work with nested fields") {
@@ -1347,7 +1418,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-41271: bind named parameters to literals") {
     CTERelationDef.curId.set(0)
-    val actual1 = ParameterizedQuery(
+    val actual1 = NameParameterizedQuery(
       child = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT :limitA"),
       args = Map("limitA" -> Literal(10))).analyze
     CTERelationDef.curId.set(0)
@@ -1355,9 +1426,27 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     comparePlans(actual1, expected1)
     // Ignore unused arguments
     CTERelationDef.curId.set(0)
-    val actual2 = ParameterizedQuery(
+    val actual2 = NameParameterizedQuery(
       child = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < :param2"),
       args = Map("param1" -> Literal(10), "param2" -> Literal(20))).analyze
+    CTERelationDef.curId.set(0)
+    val expected2 = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < 20").analyze
+    comparePlans(actual2, expected2)
+  }
+
+  test("SPARK-44066: bind positional parameters to literals") {
+    CTERelationDef.curId.set(0)
+    val actual1 = PosParameterizedQuery(
+      child = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT ?"),
+      args = Seq(Literal(10))).analyze
+    CTERelationDef.curId.set(0)
+    val expected1 = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT 10").analyze
+    comparePlans(actual1, expected1)
+    // Ignore unused arguments
+    CTERelationDef.curId.set(0)
+    val actual2 = PosParameterizedQuery(
+      child = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < ?"),
+      args = Seq(Literal(20), Literal(10))).analyze
     CTERelationDef.curId.set(0)
     val expected2 = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < 20").analyze
     comparePlans(actual2, expected2)
@@ -1382,7 +1471,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Iterator.empty
     }
 
-    implicit val intEncoder = ExpressionEncoder[Int]
+    implicit val intEncoder = ExpressionEncoder[Int]()
 
     val left = testRelation2.select($"e").analyze
     val right = testRelation3.select($"e").analyze
@@ -1436,5 +1525,160 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         )
       ).analyze
     )
+  }
+
+  test("SPARK-43030: deduplicate relations in CTE relation definitions") {
+    val join = testRelation.as("left").join(testRelation.as("right"))
+    val cteDef = CTERelationDef(join)
+    val cteRef = CTERelationRef(cteDef.id, false, Nil)
+
+    withClue("flat CTE") {
+      val plan = WithCTE(cteRef.select($"left.a"), Seq(cteDef)).analyze
+      val relations = plan.collect {
+        case r: LocalRelation => r
+      }
+      assert(relations.length == 2)
+      assert(relations.map(_.output).distinct.length == 2)
+    }
+
+    withClue("nested CTE") {
+      val cteDef2 = CTERelationDef(WithCTE(cteRef.join(testRelation), Seq(cteDef)))
+      val cteRef2 = CTERelationRef(cteDef2.id, false, Nil)
+      val plan = WithCTE(cteRef2, Seq(cteDef2)).analyze
+      val relations = plan.collect {
+        case r: LocalRelation => r
+      }
+      assert(relations.length == 3)
+      assert(relations.map(_.output).distinct.length == 3)
+    }
+  }
+
+  test("SPARK-43030: deduplicate CTE relation references") {
+    val cteDef = CTERelationDef(testRelation.select($"a"))
+    val cteRef = CTERelationRef(cteDef.id, false, Nil)
+
+    withClue("single reference") {
+      val plan = WithCTE(cteRef.where($"a" > 1), Seq(cteDef)).analyze
+      val refs = plan.collect {
+        case r: CTERelationRef => r
+      }
+      // Only one CTE ref, no need to deduplicate
+      assert(refs.length == 1)
+      assert(refs(0).output == testRelation.output.take(1))
+    }
+
+    withClue("two references") {
+      val plan = WithCTE(cteRef.join(cteRef), Seq(cteDef)).analyze
+      val refs = plan.collect {
+        case r: CTERelationRef => r
+      }
+      assert(refs.length == 2)
+      assert(refs.map(_.output).distinct.length == 2)
+    }
+
+    withClue("CTE relation has duplicated attributes") {
+      val cteDef = CTERelationDef(testRelation.select($"a", $"a"))
+      val cteRef = CTERelationRef(cteDef.id, false, Nil)
+      val plan = WithCTE(cteRef.join(cteRef.select($"a")), Seq(cteDef)).analyze
+      val refs = plan.collect {
+        case r: CTERelationRef => r
+      }
+      assert(refs.length == 2)
+      assert(refs.map(_.output).distinct.length == 2)
+    }
+
+    withClue("CTE relation has duplicate aliases") {
+      val alias = Alias($"a", "x")()
+      val cteDef = CTERelationDef(testRelation.select(alias, alias).where($"x" === 1))
+      val cteRef = CTERelationRef(cteDef.id, false, Nil)
+      // Should not fail with the assertion failure: Found duplicate rewrite attributes.
+      WithCTE(cteRef.join(cteRef), Seq(cteDef)).analyze
+    }
+
+    withClue("references in both CTE relation definition and main query") {
+      val cteDef2 = CTERelationDef(cteRef.where($"a" > 2))
+      val cteRef2 = CTERelationRef(cteDef2.id, false, Nil)
+      val plan = WithCTE(cteRef.union(cteRef2), Seq(cteDef, cteDef2)).analyze
+      val refs = plan.collect {
+        case r: CTERelationRef => r
+      }
+      assert(refs.length == 3)
+      assert(refs.map(_.cteId).distinct.length == 2)
+      assert(refs.map(_.output).distinct.length == 3)
+    }
+  }
+
+  test("SPARK-43190: ListQuery.childOutput should be consistent with child output") {
+    val listQuery1 = ListQuery(testRelation2.select($"a"))
+    val listQuery2 = ListQuery(testRelation2.select($"b"))
+    val plan = testRelation3.where($"f".in(listQuery1) && $"f".in(listQuery2)).analyze
+    val resolvedCondition = plan.expressions.head
+    val finalPlan = testRelation2.join(testRelation3).where(resolvedCondition).analyze
+    val resolvedListQueries = finalPlan.expressions.flatMap(_.collect {
+      case l: ListQuery => l
+    })
+    assert(resolvedListQueries.length == 2)
+
+    def collectLocalRelations(plan: LogicalPlan): Seq[LocalRelation] = plan.collect {
+      case l: LocalRelation => l
+    }
+    val localRelations = resolvedListQueries.flatMap(l => collectLocalRelations(l.plan))
+    assert(localRelations.length == 2)
+    // DeduplicateRelations should deduplicate plans in subquery expressions as well.
+    assert(localRelations.head.output != localRelations.last.output)
+
+    resolvedListQueries.foreach { l =>
+      assert(l.childOutputs == l.plan.output)
+    }
+  }
+
+  test("SPARK-43293: __qualified_access_only should be ignored in normal columns") {
+    val attr = $"a".int.markAsQualifiedAccessOnly()
+    val rel = LocalRelation(attr)
+    checkAnalysis(rel.select($"a"), rel.select(attr.markAsAllowAnyAccess()))
+  }
+
+  test("SPARK-43030: deduplicate relations with duplicate aliases") {
+    // Should not fail with the assertion failure: Found duplicate rewrite attributes.
+    val alias = Alias($"a", "x")()
+
+    withClue("project") {
+      val plan = testRelation.select(alias, alias).where($"x" === 1)
+      plan.join(plan).analyze
+    }
+
+    withClue("aggregate") {
+      val plan = testRelation.groupBy($"a")(alias, alias).where($"x" === 1)
+      plan.join(plan).analyze
+    }
+
+    withClue("window") {
+      val frame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)
+      val spec = windowSpec(Seq($"c"), Seq(), frame)
+      val plan = testRelation2
+        .window(
+          Seq(alias, alias, windowExpr(min($"b"), spec).as("min_b")),
+          Seq($"c"),
+          Seq())
+        .where($"x" === 1)
+      plan.join(plan).analyze
+    }
+  }
+
+  test("IDENTIFIER with alias and RuntimeReplaceable") {
+    val name = Literal("a").as("name")
+    val replaceable = new Nvl(Literal("a"), Literal("b"))
+    withClue("IDENTIFIER as column") {
+      val ident = ExpressionWithUnresolvedIdentifier(name, UnresolvedAttribute.apply)
+      checkAnalysis(testRelation.select(ident), testRelation.select($"a").analyze)
+      val ident2 = ExpressionWithUnresolvedIdentifier(replaceable, UnresolvedAttribute.apply)
+      checkAnalysis(testRelation.select(ident2), testRelation.select($"a").analyze)
+    }
+    withClue("IDENTIFIER as table") {
+      val ident = PlanWithUnresolvedIdentifier(name, _ => testRelation)
+      checkAnalysis(ident.select($"a"), testRelation.select($"a").analyze)
+      val ident2 = PlanWithUnresolvedIdentifier(replaceable, _ => testRelation)
+      checkAnalysis(ident2.select($"a"), testRelation.select($"a").analyze)
+    }
   }
 }

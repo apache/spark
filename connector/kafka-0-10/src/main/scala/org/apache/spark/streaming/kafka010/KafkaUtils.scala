@@ -39,7 +39,7 @@ object KafkaUtils extends Logging {
    * Starting and ending offsets are specified in advance,
    * so that you can control exactly-once semantics.
    * @param kafkaParams Kafka
-   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
+   * <a href="https://kafka.apache.org/documentation.html#consumerconfigs">
    * configuration parameters</a>. Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
@@ -74,7 +74,7 @@ object KafkaUtils extends Logging {
    * Starting and ending offsets are specified in advance,
    * so that you can control exactly-once semantics.
    * @param kafkaParams Kafka
-   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
+   * <a href="https://kafka.apache.org/documentation.html#consumerconfigs">
    * configuration parameters</a>. Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD

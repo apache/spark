@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import java.net.URI
 import java.util.Locale
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TemporaryViewRelation}
@@ -33,8 +34,6 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.StructType
 
 trait AnalysisTest extends PlanTest {
-
-  import org.apache.spark.QueryContext
 
   protected def extendedAnalysisRules: Seq[Rule[LogicalPlan]] = Nil
 
@@ -176,7 +175,7 @@ trait AnalysisTest extends PlanTest {
       inputPlan: LogicalPlan,
       expectedErrorClass: String,
       expectedMessageParameters: Map[String, String],
-      queryContext: Array[QueryContext] = Array.empty,
+      queryContext: Array[ExpectedContext] = Array.empty,
       caseSensitive: Boolean = true): Unit = {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
       val analyzer = getAnalyzer
@@ -206,5 +205,9 @@ trait AnalysisTest extends PlanTest {
 
   protected def parseException(parser: String => Any)(sqlText: String): ParseException = {
     intercept[ParseException](parser(sqlText))
+  }
+
+  protected def internalException(parser: String => Any)(sqlText: String): SparkException = {
+    intercept[SparkException](parser(sqlText))
   }
 }

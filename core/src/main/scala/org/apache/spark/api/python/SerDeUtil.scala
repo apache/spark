@@ -19,8 +19,8 @@ package org.apache.spark.api.python
 
 import java.util.{ArrayList => JArrayList}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.Failure
 import scala.util.Try
 

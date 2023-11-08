@@ -17,9 +17,16 @@
 from __future__ import annotations
 
 import inspect
-import numpy as np
-import pandas as pd
 import uuid
+from typing import Any, Callable, Iterator, List, Mapping, TYPE_CHECKING, Tuple, Union, Optional
+
+import numpy as np
+
+try:
+    import pandas as pd
+except ImportError:
+    pass  # Let it throw a better error message later when the API is invoked.
+
 from pyspark import SparkContext
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.column import Column, _to_java_column
@@ -35,7 +42,7 @@ from pyspark.sql.types import (
     StringType,
     StructType,
 )
-from typing import Any, Callable, Iterator, List, Mapping, TYPE_CHECKING, Tuple, Union, Optional
+from pyspark.ml.util import try_remote_functions
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
@@ -60,11 +67,15 @@ PredictBatchFunction = Callable[
 ]
 
 
+@try_remote_functions
 def vector_to_array(col: Column, dtype: str = "float64") -> Column:
     """
     Converts a column of MLlib sparse/dense vectors into a column of dense arrays.
 
     .. versionadded:: 3.0.0
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -112,12 +123,16 @@ def vector_to_array(col: Column, dtype: str = "float64") -> Column:
     )
 
 
+@try_remote_functions
 def array_to_vector(col: Column) -> Column:
     """
     Converts a column of array of numeric type into a column of pyspark.ml.linalg.DenseVector
     instances
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -227,7 +242,8 @@ def _validate_and_transform_single_input(
         # scalar columns
         if len(batch.columns) == 1:
             # single scalar column, remove extra dim
-            single_input = np.squeeze(batch.to_numpy())
+            np_batch = batch.to_numpy()
+            single_input = np.squeeze(np_batch, -1) if len(np_batch.shape) > 1 else np_batch
             if input_shapes and input_shapes[0] not in [None, [], [1]]:
                 raise ValueError("Invalid input_tensor_shape for scalar column.")
         elif not has_tuple:
@@ -335,7 +351,7 @@ def _validate_and_transform_prediction_result(
         ):
             raise ValueError("Invalid shape for scalar prediction result.")
 
-        output = np.squeeze(preds)  # type: ignore[arg-type]
+        output = np.squeeze(preds_array, -1) if len(preds_array.shape) > 1 else preds_array
         return pd.Series(output).astype(output.dtype)
     else:
         raise ValueError("Unsupported return type")
@@ -502,11 +518,10 @@ def predict_batch_udf(
         ...         # outputs.shape = [batch_size]
         ...         return inputs * 2
         ...     return predict
-        >>>
+        ...
         >>> times_two_udf = predict_batch_udf(make_times_two_fn,
         ...                                   return_type=FloatType(),
         ...                                   batch_size=10)
-        >>>
         >>> df = spark.createDataFrame(pd.DataFrame(np.arange(100)))
         >>> df.withColumn("x2", times_two_udf("0")).show(5)
         +---+---+
@@ -521,7 +536,7 @@ def predict_batch_udf(
         only showing top 5 rows
 
     * Multiple scalar columns
-        Input DataFrame has muliple columns of scalar values.  If the user-provided `predict`
+        Input DataFrame has multiple columns of scalar values.  If the user-provided `predict`
         function expects a single input, then the user must combine the multiple columns into a
         single tensor using `pyspark.sql.functions.array`.
 
@@ -551,12 +566,11 @@ def predict_batch_udf(
         ...         # outputs.shape = [batch_size]
         ...         return np.sum(inputs, axis=1)
         ...     return predict
-        >>>
+        ...
         >>> sum_udf = predict_batch_udf(make_sum_fn,
         ...                             return_type=FloatType(),
         ...                             batch_size=10,
         ...                             input_tensor_shapes=[[4]])
-        >>>
         >>> df.withColumn("sum", sum_udf(array("a", "b", "c", "d"))).show(5)
         +----+----+----+----+----+
         |   a|   b|   c|   d| sum|
@@ -581,11 +595,10 @@ def predict_batch_udf(
         ...         # outputs.shape = [batch_size]
         ...         return x1 + x2 + x3 + x4
         ...     return predict
-        >>>
+        ...
         >>> sum_udf = predict_batch_udf(make_sum_fn,
         ...                             return_type=FloatType(),
         ...                             batch_size=10)
-        >>>
         >>> df.withColumn("sum", sum_udf("a", "b", "c", "d")).show(5)
         +----+----+----+----+----+
         |   a|   b|   c|   d| sum|
@@ -633,14 +646,13 @@ def predict_batch_udf(
         ...         # outputs.shape = [batch_size]
         ...         return np.sum(x1, axis=1) + np.sum(x2, axis=1)
         ...     return predict
-        >>>
+        ...
         >>> multi_sum_udf = predict_batch_udf(
         ...     make_multi_sum_fn,
         ...     return_type=FloatType(),
         ...     batch_size=5,
         ...     input_tensor_shapes=[[4], [3]],
         ... )
-        >>>
         >>> df.withColumn("sum", multi_sum_udf("t1", "t2")).show(5)
         +--------------------+------------------+-----+
         |                  t1|                t2|  sum|
@@ -666,7 +678,7 @@ def predict_batch_udf(
         ...             "sum2": np.sum(x2, axis=1)
         ...         }
         ...     return predict_columnar
-        >>>
+        ...
         >>> multi_sum_udf = predict_batch_udf(
         ...     make_multi_sum_fn,
         ...     return_type=StructType([
@@ -676,7 +688,6 @@ def predict_batch_udf(
         ...     batch_size=5,
         ...     input_tensor_shapes=[[4], [3]],
         ... )
-        >>>
         >>> df.withColumn("preds", multi_sum_udf("t1", "t2")).select("t1", "t2", "preds.*").show(5)
         +--------------------+------------------+----+----+
         |                  t1|                t2|sum1|sum2|
@@ -695,7 +706,7 @@ def predict_batch_udf(
         ...         # x2.shape = [batch_size, 3]
         ...         return [{'sum1': np.sum(x1[i]), 'sum2': np.sum(x2[i])} for i in range(len(x1))]
         ...     return predict_row
-        >>>
+        ...
         >>> multi_sum_udf = predict_batch_udf(
         ...     make_multi_sum_fn,
         ...     return_type=StructType([
@@ -705,7 +716,6 @@ def predict_batch_udf(
         ...     batch_size=5,
         ...     input_tensor_shapes=[[4], [3]],
         ... )
-        >>>
         >>> df.withColumn("sum", multi_sum_udf("t1", "t2")).select("t1", "t2", "sum.*").show(5)
         +--------------------+------------------+----+----+
         |                  t1|                t2|sum1|sum2|
@@ -726,7 +736,7 @@ def predict_batch_udf(
         ...         # x2.shape = [batch_size, 3]
         ...         return {"t1x2": x1 * 2, "t2x2": x2 * 2}
         ...     return predict
-        >>>
+        ...
         >>> multi_times_two_udf = predict_batch_udf(
         ...     make_multi_times_two_fn,
         ...     return_type=StructType([
@@ -736,7 +746,6 @@ def predict_batch_udf(
         ...     batch_size=5,
         ...     input_tensor_shapes=[[4], [3]],
         ... )
-        >>>
         >>> df.withColumn("x2", multi_times_two_udf("t1", "t2")).select("t1", "t2", "x2.*").show(5)
         +--------------------+------------------+--------------------+------------------+
         |                  t1|                t2|                t1x2|              t2x2|
@@ -818,6 +827,21 @@ def _test() -> None:
     from pyspark.sql import SparkSession
     import pyspark.ml.functions
     import sys
+
+    from pyspark.sql.pandas.utils import (
+        require_minimum_pandas_version,
+        require_minimum_pyarrow_version,
+    )
+
+    try:
+        require_minimum_pandas_version()
+        require_minimum_pyarrow_version()
+    except Exception as e:
+        print(
+            f"Skipping pyspark.ml.functions doctests: {e}",
+            file=sys.stderr,
+        )
+        sys.exit(0)
 
     globs = pyspark.ml.functions.__dict__.copy()
     spark = SparkSession.builder.master("local[2]").appName("ml.functions tests").getOrCreate()

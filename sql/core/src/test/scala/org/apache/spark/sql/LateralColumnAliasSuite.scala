@@ -21,6 +21,7 @@ import org.scalactic.source.Position
 import org.scalatest.Tag
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, ExpressionSet}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
 import org.apache.spark.sql.internal.SQLConf
@@ -634,18 +635,80 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       lca = "`bar`", windowExprRegex = "\"RANK.*\"")
   }
 
-  test("Lateral alias reference attribute further be used by upper plan") {
-    // underlying this is not in the scope of lateral alias project but things already supported
+  test("Lateral alias reference works with having and order by") {
+    // order by is resolved by an attribute in project / aggregate
+    // this is not in the scope of lateral alias feature but things already supported
     checkAnswer(
       sql(s"SELECT properties AS new_properties, new_properties.joinYear AS new_join_year " +
         s"FROM $testTable WHERE dept = 1 ORDER BY new_join_year DESC"),
       Row(Row(2020, "B"), 2020) :: Row(Row(2019, "A"), 2019) :: Nil
     )
-
     checkAnswer(
       sql(s"SELECT avg(bonus) AS avg_bonus, avg_bonus * 1.0 AS new_avg_bonus, avg(salary) " +
         s"FROM $testTable GROUP BY dept ORDER BY new_avg_bonus"),
       Row(1100, 1100, 9500.0) :: Row(1200, 1200, 12000) :: Row(1250, 1250, 11000) :: Nil
+    )
+    checkAnswer(
+      sql(s"SELECT avg(bonus) AS dept, dept, avg(salary) AS a, a + 10 AS b " +
+        s"FROM $testTable GROUP BY dept ORDER BY dept"),
+      Row(1100, 1, 9500, 9510) :: Row(1250, 2, 11000, 11010) :: Row(1200, 6, 12000, 12010) :: Nil
+    )
+    // order by is resolved by aggregate's child
+    checkAnswer(
+      sql(s"SELECT avg(bonus) AS dept, dept, avg(salary) AS a, a + 10 AS b " +
+        s"FROM $testTable GROUP BY dept ORDER BY max(name)"),
+      Row(1100, 1, 9500, 9510) :: Row(1250, 2, 11000, 11010) :: Row(1200, 6, 12000, 12010) :: Nil
+    )
+    checkAnswer(
+      sql(s"SELECT avg(bonus) AS dept, dept, avg(salary) AS a, a " + // no extra calculation
+        s"FROM $testTable GROUP BY dept ORDER BY dept"),
+      Row(1100, 1, 9500, 9500) :: Row(1250, 2, 11000, 11000) :: Row(1200, 6, 12000, 12000) :: Nil
+    )
+    checkAnswer(
+      sql(s"SELECT dept as a, a " + // even no extra function resolution
+        s"FROM $testTable GROUP BY dept ORDER BY max(name)"),
+      Row(1, 1) :: Row(2, 2) :: Row(6, 6) :: Nil
+    )
+    checkAnswer(
+      sql("SELECT dept, avg(salary) AS a, a + 10 FROM employee GROUP BY dept ORDER BY max(name)"),
+      Row(1, 9500, 9510) :: Row(2, 11000, 11010) :: Row(6, 12000, 12010) :: Nil
+    )
+    checkAnswer(
+      sql("SELECT dept, avg(salary) AS a, a + 10 AS b " +
+        "FROM employee GROUP BY dept ORDER BY max(name)"),
+      Row(1, 9500, 9510) :: Row(2, 11000, 11010) :: Row(6, 12000, 12010) :: Nil
+    )
+    checkAnswer(
+      sql("SELECT dept, avg(salary) AS a, a + cast(10 as double) AS b " +
+        "FROM employee GROUP BY dept ORDER BY max(name)"),
+      Row(1, 9500, 9510) :: Row(2, 11000, 11010) :: Row(6, 12000, 12010) :: Nil
+    )
+
+    // having cond is resolved by aggregate's child
+    checkAnswer(
+      sql(s"SELECT avg(bonus) AS dept, dept, avg(salary) AS a, a + 10 AS b " +
+        s"FROM $testTable GROUP BY dept HAVING max(name) = 'david'"),
+      Row(1250, 2, 11000, 11010) :: Nil
+    )
+    checkAnswer(
+      sql("SELECT dept, avg(salary) AS a, a + 10 " +
+        "FROM employee GROUP BY dept HAVING max(bonus) > 1200"),
+      Row(2, 11000, 11010) :: Nil
+    )
+    checkAnswer(
+      sql("SELECT dept, avg(salary) AS a, a + 10 AS b " +
+        "FROM employee GROUP BY dept HAVING max(bonus) > 1200"),
+      Row(2, 11000, 11010) :: Nil
+    )
+    checkAnswer(
+      sql("SELECT dept, avg(salary) AS a, a + cast(10 as double) AS b " +
+        "FROM employee GROUP BY dept HAVING max(bonus) > 1200"),
+      Row(2, 11000, 11010) :: Nil
+    )
+    // having cond is resolved by aggregate itself
+    checkAnswer(
+      sql(s"SELECT avg(bonus) AS a, a FROM $testTable GROUP BY dept HAVING a > 1200"),
+      Row(1250, 1250) :: Nil
     )
   }
 
@@ -796,15 +859,29 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       s"SELECT avg(salary) AS a, a           + dept + 10 FROM $testTable GROUP BY dept + 10",
       "\"dept\""
     )
-    Seq(
-      s"SELECT dept AS a, dept, " +
-      s"(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept) $groupBySeg",
-      s"SELECT dept AS a, a, " +
-      s"(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept) $groupBySeg"
-    ).foreach { query =>
-      val e = intercept[AnalysisException] { sql(query) }
-      assert(e.getErrorClass == "_LEGACY_ERROR_TEMP_2423")
-    }
+    checkError(
+      exception = intercept[AnalysisException] { sql(
+        "SELECT dept AS a, dept, " +
+          s"(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept) $groupBySeg") },
+      errorClass = "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
+      parameters = Map("sqlExpr" -> "\"scalarsubquery(dept)\""),
+      context = ExpectedContext(
+        fragment = "(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept)",
+        start = 24,
+        stop = 93)
+    )
+    checkError(
+      exception = intercept[AnalysisException] { sql(
+        "SELECT dept AS a, a, " +
+          s"(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept) $groupBySeg"
+      ) },
+      errorClass = "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
+      parameters = Map("sqlExpr" -> "\"scalarsubquery(dept)\""),
+      context = ExpectedContext(
+        fragment = "(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept)",
+        start = 21,
+        stop = 90)
+    )
 
     // one exception: no longer throws NESTED_AGGREGATE_FUNCTION but UNSUPPORTED_FEATURE
     Seq("", windowSeg).foreach { windowExpr =>
@@ -822,14 +899,14 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
   test("Leaf expression as aggregate expressions should be eligible to lift up") {
     // literal
     sql(s"select 1, avg(salary) as m, m + 1 from $testTable group by dept")
-      .queryExecution.assertAnalyzed
+      .queryExecution.assertAnalyzed()
     // leaf expression current_date, now and etc
     sql(s"select current_date(), max(salary) as m, m + 1 from $testTable group by dept")
-      .queryExecution.assertAnalyzed
+      .queryExecution.assertAnalyzed()
     sql("select dateadd(month, 5, current_date()), min(salary) as m, m + 1 as n " +
-      s"from $testTable group by dept").queryExecution.assertAnalyzed
+      s"from $testTable group by dept").queryExecution.assertAnalyzed()
     sql(s"select now() as n, dateadd(day, -1, n) from $testTable group by name")
-      .queryExecution.assertAnalyzed
+      .queryExecution.assertAnalyzed()
   }
 
   test("Aggregate expressions containing no aggregate or grouping expressions still resolves") {
@@ -892,7 +969,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       lca = "`jy`", windowExprRegex = "\"sum.*\"")
     // this is initially not supported
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[ParseException] {
         sql("select name, dept, 1 as n, rank() over " +
           "(partition by dept order by salary rows between n preceding and current row) as rank " +
           s"from $testTable where dept in (1, 6)")
@@ -1090,5 +1167,121 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
 
     // non group by or non aggregate function in Aggregate queries negative cases are covered in
     // "Aggregate expressions not eligible to lift up, throws same error as inline".
+  }
+
+  test("Still resolves when Aggregate with LCA is not the direct child of Having") {
+    // Previously there was a limitation of lca that it can't resolve the query when it satisfies
+    // all the following criteria:
+    //  1) the main (outer) query has having clause
+    //  2) there is a window expression in the query
+    //  3) in the same SELECT list as the window expression in 2), there is an lca
+    // Though [UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING] is
+    // still not supported, after SPARK-44714, a lot other limitations are
+    // lifted because it allows to resolve LCA when the query has UnresolvedHaving but its direct
+    // child does not contain an LCA.
+    // Testcases in this test focus on this change regarding enablement of resolution.
+
+    // CTE definition contains window and LCA; outer query contains having
+    checkAnswer(
+      sql(
+        s"""
+           |with w as (
+           |  select name, dept, salary, rank() over (partition by dept order by salary) as r, r
+           |  from $testTable
+           |)
+           |select dept
+           |from w
+           |group by dept
+           |having max(salary) > 10000
+           |""".stripMargin),
+      Row(2) :: Row(6) :: Nil
+    )
+    checkAnswer(
+      sql(
+        s"""
+           |with w as (
+           |  select name, dept, salary, rank() over (partition by dept order by salary) as r, r
+           |  from $testTable
+           |)
+           |select dept as d, d
+           |from w
+           |group by dept
+           |having max(salary) > 10000
+           |""".stripMargin),
+      Row(2, 2) :: Row(6, 6) :: Nil
+    )
+    checkAnswer(
+      sql(
+        s"""
+           |with w as (
+           |  select name, dept, salary, rank() over (partition by dept order by salary) as r, r
+           |  from $testTable
+           |)
+           |select dept as d
+           |from w
+           |group by dept
+           |having d = 2
+           |""".stripMargin),
+      Row(2) :: Nil
+    )
+
+    // inner subquery contains window and LCA; outer query contains having
+    checkAnswer(
+      sql(
+        s"""
+          |SELECT
+          |  dept
+          |FROM
+          |   (
+          |    select
+          |      name, dept, salary, rank() over (partition by dept order by salary) as r,
+          |      1 as a, a + 1 as e
+          |    FROM
+          |      $testTable
+          |  ) AS inner_t
+          |GROUP BY
+          |  dept
+          |HAVING max(salary) > 10000
+          |""".stripMargin),
+      Row(2) :: Row(6) :: Nil
+    )
+    checkAnswer(
+      sql(
+        s"""
+           |SELECT
+           |  dept as d, d
+           |FROM
+           |   (
+           |    select
+           |      name, dept, salary, rank() over (partition by dept order by salary) as r,
+           |      1 as a, a + 1 as e
+           |    FROM
+           |      $testTable
+           |  ) AS inner_t
+           |GROUP BY
+           |  dept
+           |HAVING max(salary) > 10000
+           |""".stripMargin),
+      Row(2, 2) :: Row(6, 6) :: Nil
+    )
+    checkAnswer(
+      sql(
+        s"""
+           |SELECT
+           |  dept as d
+           |FROM
+           |   (
+           |    select
+           |      name, dept, salary, rank() over (partition by dept order by salary) as r,
+           |      1 as a, a + 1 as e
+           |    FROM
+           |      $testTable
+           |  ) AS inner_t
+           |GROUP BY
+           |  dept
+           |HAVING d = 2
+           |""".stripMargin),
+      Row(2) :: Nil
+    )
   }
 }

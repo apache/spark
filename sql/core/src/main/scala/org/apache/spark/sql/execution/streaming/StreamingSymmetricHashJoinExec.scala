@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
@@ -182,7 +183,7 @@ case class StreamingSymmetricHashJoinExec(
   require(leftKeys.length == rightKeys.length &&
     leftKeys.map(_.dataType)
       .zip(rightKeys.map(_.dataType))
-      .forall(types => types._1.sameType(types._2)),
+      .forall(types => DataTypeUtils.sameType(types._1, types._2)),
     "Join keys from two sides should have same length and types")
 
   private val storeConf = new StateStoreConf(conf)
@@ -219,6 +220,16 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   override def shortName: String = "symmetricHashJoin"
+
+  private val stateStoreNames =
+    SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
+
+  override def operatorStateMetadata(): OperatorStateMetadata = {
+    val info = getStateInfo
+    val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
+    val stateStoreInfo = stateStoreNames.map(StateStoreMetadataV1(_, 0, info.numPartitions)).toArray
+    OperatorStateMetadataV1(operatorInfo, stateStoreInfo)
+  }
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     val watermarkUsedForStateCleanup =

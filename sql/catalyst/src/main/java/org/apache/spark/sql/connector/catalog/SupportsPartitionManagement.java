@@ -23,6 +23,7 @@ import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException;
 import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException;
+import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.StructType;
 
 /**
@@ -88,7 +89,7 @@ public interface SupportsPartitionManagement extends Table {
      */
     default boolean purgePartition(InternalRow ident)
       throws NoSuchPartitionException, UnsupportedOperationException {
-      throw new UnsupportedOperationException("Partition purge is not supported");
+      throw QueryExecutionErrors.unsupportedPurgePartitionError();
     }
 
     /**

@@ -310,7 +310,8 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
           .agg(sum($"sales.earnings"))
       },
       errorClass = "GROUP_BY_AGGREGATE",
-      parameters = Map("sqlExpr" -> "min(training)")
+      parameters = Map("sqlExpr" -> "min(training)"),
+      context = ExpectedContext(fragment = "min", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -332,7 +333,7 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
       (2, Seq("a", "x")),
       (3, Seq.empty[String]),
       (3, Seq("a", "x"))).toDF("x", "s")
-    val expected = Seq((3, 1, 1), (2, 1, 1)).toDF
+    val expected = Seq((3, 1, 1), (2, 1, 1)).toDF()
     val actual = df.groupBy("x").pivot("s").count()
     checkAnswer(actual, expected)
   }

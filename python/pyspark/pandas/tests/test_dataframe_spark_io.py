@@ -16,18 +16,16 @@
 #
 
 import unittest
-import glob
-import os
-from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
+class DataFrameSparkIOTestsMixin:
     """Test cases for big data I/O using Spark."""
 
     @property
@@ -218,7 +216,7 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
             expected = ps.DataFrame(pdf)
 
             # Write out partitioned by one column
-            expected.to_spark_io(tmp, format="json", mode="overwrite", partition_cols="i32")
+            expected.spark.to_spark_io(tmp, format="json", mode="overwrite", partition_cols="i32")
             # Reset column order, as once the data is written out, Spark rearranges partition
             # columns to appear first.
             actual = ps.read_spark_io(tmp, format="json")
@@ -230,7 +228,7 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
             )
 
             # Write out partitioned by two columns
-            expected.to_spark_io(
+            expected.spark.to_spark_io(
                 tmp, format="json", mode="overwrite", partition_cols=["i32", "bhello"]
             )
             # Reset column order, as once the data is written out, Spark rearranges partition
@@ -259,7 +257,6 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
     @unittest.skip("openpyxl")
     def test_read_excel(self):
         with self.temp_dir() as tmp:
-
             path1 = "{}/file1.xlsx".format(tmp)
             self.test_pdf[["i32"]].to_excel(path1)
 
@@ -469,6 +466,10 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
                 actual.sort_values(by="f").to_spark().toPandas(),
                 expected.sort_values(by="f").to_spark().toPandas(),
             )
+
+
+class DataFrameSparkIOTests(DataFrameSparkIOTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
 
 
 if __name__ == "__main__":

@@ -29,7 +29,7 @@ public final class SpecializedGettersReader {
       DataType dataType,
       boolean handleNull,
       boolean handleUserDefinedType) {
-    PhysicalDataType physicalDataType = dataType.physicalDataType();
+    PhysicalDataType physicalDataType = PhysicalDataType.apply(dataType);
     if (handleNull && (obj.isNullAt(ordinal) || physicalDataType instanceof PhysicalNullType)) {
       return null;
     }
@@ -57,8 +57,7 @@ public final class SpecializedGettersReader {
     if (physicalDataType instanceof PhysicalStringType) {
       return obj.getUTF8String(ordinal);
     }
-    if (physicalDataType instanceof PhysicalDecimalType) {
-      PhysicalDecimalType dt = (PhysicalDecimalType) physicalDataType;
+    if (physicalDataType instanceof PhysicalDecimalType dt) {
       return obj.getDecimal(ordinal, dt.precision(), dt.scale());
     }
     if (physicalDataType instanceof PhysicalCalendarIntervalType) {

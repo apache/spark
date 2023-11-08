@@ -22,7 +22,7 @@ import org.apache.spark.status.protobuf.StoreTypes
 import org.apache.spark.status.protobuf.Utils._
 import org.apache.spark.util.Utils.weakIntern
 
-object SQLPlanMetricSerializer {
+private[protobuf] object SQLPlanMetricSerializer {
 
   def serialize(metric: SQLPlanMetric): StoreTypes.SQLPlanMetric = {
     val builder = StoreTypes.SQLPlanMetric.newBuilder()

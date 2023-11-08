@@ -22,14 +22,16 @@ import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffse
 import java.time.temporal.ChronoUnit
 import java.util.TimeZone
 
+import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLType
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
@@ -88,6 +90,17 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.default(StructType(StructField("a", StringType) :: Nil)), Row(""))
     // ExamplePointUDT.sqlType is ArrayType(DoubleType, false).
     checkEvaluation(Literal.default(new ExamplePointUDT), Array())
+
+    // DateType without default value`
+    List(CharType(1), VarcharType(1)).foreach(errType => {
+      checkError(
+        exception = intercept[SparkException] {
+          Literal.default(errType)
+        },
+        errorClass = "INTERNAL_ERROR",
+        parameters = Map("message" -> s"No default value for type: ${toSQLType(errType)}.")
+      )
+    })
   }
 
   test("boolean literals") {
@@ -195,7 +208,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkArrayLiteral(Array("a", "b", "c"))
     checkArrayLiteral(Array(1.0, 4.0))
     checkArrayLiteral(Array(new CalendarInterval(1, 0, 0), new CalendarInterval(0, 1, 0)))
-    val arr = collection.mutable.WrappedArray.make(Array(1.0, 4.0))
+    val arr = mutable.ArraySeq.make(Array(1.0, 4.0))
     checkEvaluation(Literal(arr), toCatalyst(arr))
   }
 

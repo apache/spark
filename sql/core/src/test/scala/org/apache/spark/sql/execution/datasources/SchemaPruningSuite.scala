@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.SchemaPruningTest
 import org.apache.spark.sql.catalyst.expressions.Concat
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.Expand
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
@@ -851,7 +852,7 @@ abstract class SchemaPruningSuite
   protected val schemaEquality = new Equality[StructType] {
     override def areEqual(a: StructType, b: Any): Boolean =
       b match {
-        case otherType: StructType => a.sameType(otherType)
+        case otherType: StructType => DataTypeUtils.sameType(a, otherType)
         case _ => false
       }
   }
@@ -965,7 +966,7 @@ abstract class SchemaPruningSuite
             |  {"itemId": 2, "itemData": "b"}
             |]}
             |""".stripMargin
-        val df = spark.read.json(Seq(jsonStr).toDS)
+        val df = spark.read.json(Seq(jsonStr).toDS())
         makeDataSourceFile(df, new File(path))
 
         spark.read.format(dataSourceName).load(path)

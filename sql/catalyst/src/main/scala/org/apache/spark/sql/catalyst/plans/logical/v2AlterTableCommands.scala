@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition}
+import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, ResolvedFieldName}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{TableCatalog, TableChange}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
@@ -228,6 +228,13 @@ case class AlterColumn(
       TableChange.updateColumnPosition(colName, newPosition.position)
     }
     val defaultValueChange = setDefaultExpression.map { newDefaultExpression =>
+      if (newDefaultExpression.nonEmpty) {
+        // SPARK-45075: We call 'ResolveDefaultColumns.analyze' here to make sure that the default
+        // value parses successfully, and return an error otherwise
+        val newDataType = dataType.getOrElse(column.asInstanceOf[ResolvedFieldName].field.dataType)
+        ResolveDefaultColumns.analyze(column.name.last, newDataType, newDefaultExpression,
+          "ALTER TABLE ALTER COLUMN")
+      }
       TableChange.updateColumnDefaultValue(colName, newDefaultExpression)
     }
     typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange ++ defaultValueChange

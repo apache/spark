@@ -27,7 +27,6 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanInfo}
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SQLAppStatusStore}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.WHOLESTAGE_CODEGEN_ENABLED
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -37,7 +36,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
 
   protected def currentExecutionIds(): Set[Long] = {
     spark.sparkContext.listenerBus.waitUntilEmpty(10000)
-    statusStore.executionsList.map(_.executionId).toSet
+    statusStore.executionsList().map(_.executionId).toSet
   }
 
   protected def statusStore: SQLAppStatusStore = spark.sharedState.statusStore
@@ -81,13 +80,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
     assert(executionIds.size == 1)
     val executionId = executionIds.head
 
-    val executedNode = if (conf.plannedWriteEnabled) {
-      val executedNodeOpt = statusStore.planGraph(executionId).nodes.find(_.name == "WriteFiles")
-      assert(executedNodeOpt.isDefined)
-      executedNodeOpt.get
-    } else {
-      statusStore.planGraph(executionId).nodes.head
-    }
+    val executedNode = statusStore.planGraph(executionId).nodes.head
 
     val metricsNames = Seq(
       "number of written files",
@@ -111,17 +104,9 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
     assert(totalNumBytes > 0)
   }
 
-  protected def withPlannedWrite(f: => Unit): Unit = {
-    Seq(true, false).foreach { plannedWrite =>
-      withSQLConf(SQLConf.PLANNED_WRITE_ENABLED.key -> plannedWrite.toString) {
-        f
-      }
-    }
-  }
-
   protected def testMetricsNonDynamicPartition(
       dataFormat: String,
-      tableName: String): Unit = withPlannedWrite {
+      tableName: String): Unit = {
     withTable(tableName) {
       Seq((1, 2)).toDF("i", "j")
         .write.format(dataFormat).mode("overwrite").saveAsTable(tableName)
@@ -141,7 +126,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
   protected def testMetricsDynamicPartition(
       provider: String,
       dataFormat: String,
-      tableName: String): Unit = withPlannedWrite {
+      tableName: String): Unit = {
     withTable(tableName) {
       withTempPath { dir =>
         spark.sql(
@@ -231,8 +216,8 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
       expectedNumOfJobs: Int,
       expectedMetrics: Map[Long, (String, Map[String, Any])],
       enableWholeStage: Boolean = false): Unit = {
-    val expectedMetricsPredicates = expectedMetrics.mapValues { case (nodeName, nodeMetrics) =>
-      (nodeName, nodeMetrics.mapValues(expectedMetricValue =>
+    val expectedMetricsPredicates = expectedMetrics.view.mapValues { case (nodeName, nodeMetrics) =>
+      (nodeName, nodeMetrics.view.mapValues(expectedMetricValue =>
         (actualMetricValue: Any) => {
           actualMetricValue.toString.matches(expectedMetricValue.toString)
         }).toMap)

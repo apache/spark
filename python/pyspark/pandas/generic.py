@@ -19,13 +19,11 @@
 A base class of DataFrame/Column to behave like pandas DataFrame/Series.
 """
 from abc import ABCMeta, abstractmethod
-from collections import Counter
 from functools import reduce
 from typing import (
     Any,
     Callable,
     Dict,
-    Iterable,
     IO,
     List,
     Optional,
@@ -48,7 +46,6 @@ from pyspark.sql.types import (
     LongType,
     NumericType,
 )
-
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import (
     Axis,
@@ -401,55 +398,6 @@ class Frame(object, metaclass=ABCMeta):
         """
         return self._apply_series_op(lambda psser: psser._cumprod(skipna), should_resolve=True)
 
-    # TODO: Although this has removed pandas >= 1.0.0, but we're keeping this as deprecated
-    # since we're using this for `DataFrame.info` internally.
-    # We can drop it once our minimal pandas version becomes 1.0.0.
-    def get_dtype_counts(self) -> pd.Series:
-        """
-        Return counts of unique dtypes in this object.
-
-        .. deprecated:: 0.14.0
-
-        Returns
-        -------
-        dtype: pd.Series
-            Series with the count of columns with each dtype.
-
-        See Also
-        --------
-        dtypes: Return the dtypes in this object.
-
-        Examples
-        --------
-        >>> a = [['a', 1, 1], ['b', 2, 2], ['c', 3, 3]]
-        >>> df = ps.DataFrame(a, columns=['str', 'int1', 'int2'])
-        >>> df
-          str  int1  int2
-        0   a     1     1
-        1   b     2     2
-        2   c     3     3
-
-        >>> df.get_dtype_counts().sort_values()
-        object    1
-        int64     2
-        dtype: int64
-
-        >>> df.str.get_dtype_counts().sort_values()
-        object    1
-        dtype: int64
-        """
-        warnings.warn(
-            "`get_dtype_counts` has been deprecated and will be "
-            "removed in a future version. For DataFrames use "
-            "`.dtypes.value_counts()",
-            FutureWarning,
-        )
-        if not isinstance(self.dtypes, Iterable):
-            dtypes = [self.dtypes]
-        else:
-            dtypes = list(self.dtypes)
-        return pd.Series(dict(Counter([d.name for d in dtypes])))
-
     def pipe(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         r"""
         Apply func(self, \*args, \*\*kwargs).
@@ -729,7 +677,6 @@ class Frame(object, metaclass=ABCMeta):
         DataFrame.to_delta
         DataFrame.to_table
         DataFrame.to_parquet
-        DataFrame.to_spark_io
 
         Examples
         --------
@@ -1043,9 +990,7 @@ class Frame(object, metaclass=ABCMeta):
         startcol: int = 0,
         engine: Optional[str] = None,
         merge_cells: bool = True,
-        encoding: Optional[str] = None,
         inf_rep: str = "inf",
-        verbose: bool = True,
         freeze_panes: Optional[Tuple[int, int]] = None,
     ) -> None:
         """
@@ -1096,20 +1041,9 @@ class Frame(object, metaclass=ABCMeta):
             ``io.excel.xlsm.writer``.
         merge_cells: bool, default True
             Write MultiIndex and Hierarchical Rows as merged cells.
-        encoding: str, optional
-            Encoding of the resulting excel file. Only necessary for xlwt,
-            other writers support unicode natively.
-
-            .. deprecated:: 3.4.0
-
         inf_rep: str, default 'inf'
             Representation for infinity (there is no native representation for
             infinity in Excel).
-        verbose: bool, default True
-            Display more information in the error logs.
-
-            .. deprecated:: 3.4.0
-
         freeze_panes: tuple of int (length 2), optional
             Specifies the one-based bottommost row and rightmost column that
             is to be frozen.
@@ -1317,6 +1251,13 @@ class Frame(object, metaclass=ABCMeta):
         >>> df['b'].sum(min_count=3)
         nan
         """
+        if axis is None and isinstance(self, ps.DataFrame):
+            warnings.warn(
+                "The behavior of DataFrame.sum with axis=None is deprecated, "
+                "in a future version this will reduce over both axes and return a scalar. "
+                "To retain the old behavior, pass axis=0 (or do not pass axis)",
+                FutureWarning,
+            )
         axis = validate_axis(axis)
 
         if numeric_only is None and axis == 0:
@@ -1400,7 +1341,7 @@ class Frame(object, metaclass=ABCMeta):
 
         If there is no numeric type columns, returns empty Series.
 
-        >>> ps.DataFrame({"key": ['a', 'b', 'c'], "val": ['x', 'y', 'z']}).prod()
+        >>> ps.DataFrame({"key": ['a', 'b', 'c'], "val": ['x', 'y', 'z']}).prod()  # doctest: +SKIP
         Series([], dtype: float64)
 
         On a Series:
@@ -1410,14 +1351,21 @@ class Frame(object, metaclass=ABCMeta):
 
         By default, the product of an empty or all-NA Series is ``1``
 
-        >>> ps.Series([]).prod()
+        >>> ps.Series([]).prod()  # doctest: +SKIP
         1.0
 
         This can be controlled with the ``min_count`` parameter
 
-        >>> ps.Series([]).prod(min_count=1)
+        >>> ps.Series([]).prod(min_count=1)  # doctest: +SKIP
         nan
         """
+        if axis is None and isinstance(self, ps.DataFrame):
+            warnings.warn(
+                "The behavior of DataFrame.product with axis=None is deprecated, "
+                "in a future version this will reduce over both axes and return a scalar. "
+                "To retain the old behavior, pass axis=0 (or do not pass axis)",
+                FutureWarning,
+            )
         axis = validate_axis(axis)
 
         if numeric_only is None and axis == 0:
@@ -1870,6 +1818,13 @@ class Frame(object, metaclass=ABCMeta):
         if not isinstance(ddof, int):
             raise TypeError("ddof must be integer")
 
+        if axis is None and isinstance(self, ps.DataFrame):
+            warnings.warn(
+                "The behavior of DataFrame.std with axis=None is deprecated, "
+                "in a future version this will reduce over both axes and return a scalar. "
+                "To retain the old behavior, pass axis=0 (or do not pass axis)",
+                FutureWarning,
+            )
         axis = validate_axis(axis)
 
         if numeric_only is None and axis == 0:
@@ -1962,6 +1917,13 @@ class Frame(object, metaclass=ABCMeta):
         if not isinstance(ddof, int):
             raise TypeError("ddof must be integer")
 
+        if axis is None and isinstance(self, ps.DataFrame):
+            warnings.warn(
+                "The behavior of DataFrame.var with axis=None is deprecated, "
+                "in a future version this will reduce over both axes and return a scalar. "
+                "To retain the old behavior, pass axis=0 (or do not pass axis)",
+                FutureWarning,
+            )
         axis = validate_axis(axis)
 
         if numeric_only is None and axis == 0:
@@ -2191,6 +2153,13 @@ class Frame(object, metaclass=ABCMeta):
         if not isinstance(ddof, int):
             raise TypeError("ddof must be integer")
 
+        if axis is None and isinstance(self, ps.DataFrame):
+            warnings.warn(
+                "The behavior of DataFrame.sem with axis=None is deprecated, "
+                "in a future version this will reduce over both axes and return a scalar. "
+                "To retain the old behavior, pass axis=0 (or do not pass axis)",
+                FutureWarning,
+            )
         axis = validate_axis(axis)
 
         if numeric_only is None and axis == 0:
@@ -2448,6 +2417,8 @@ class Frame(object, metaclass=ABCMeta):
         This must be a boolean scalar value, either True or False. Raise a ValueError if
         the object does not have exactly 1 element, or that element is not boolean
 
+        .. deprecated:: 4.0.0
+
         Returns
         -------
         bool
@@ -2479,6 +2450,11 @@ class Frame(object, metaclass=ABCMeta):
           ...
         ValueError: bool cannot act on a non-boolean single element DataFrame
         """
+        warnings.warn(
+            f"{self.__class__.__name__}.bool is now deprecated "
+            "and will be removed in future version.",
+            FutureWarning,
+        )
         if isinstance(self, ps.DataFrame):
             df = self
         elif isinstance(self, ps.Series):
@@ -2726,7 +2702,7 @@ class Frame(object, metaclass=ABCMeta):
         return Rolling(self, window=window, min_periods=min_periods)
 
     # TODO: 'center' and 'axis' parameter should be implemented.
-    #   'axis' implementation, refer https://github.com/pyspark.pandas/pull/607
+    #   'axis' implementation, refer https://github.com/databricks/koalas/pull/607
     def expanding(self: FrameLike, min_periods: int = 1) -> "Expanding[FrameLike]":
         """
         Provide expanding transformations.

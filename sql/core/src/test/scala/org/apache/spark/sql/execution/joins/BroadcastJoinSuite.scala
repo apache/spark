@@ -35,6 +35,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{LongType, ShortType}
+import org.apache.spark.tags.ExtendedSQLTest
 
 /**
  * Test various broadcast join operators.
@@ -674,6 +675,8 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
   }
 }
 
+@ExtendedSQLTest
 class BroadcastJoinSuite extends BroadcastJoinSuiteBase with DisableAdaptiveExecutionSuite
 
+@ExtendedSQLTest
 class BroadcastJoinSuiteAE extends BroadcastJoinSuiteBase with EnableAdaptiveExecutionSuite

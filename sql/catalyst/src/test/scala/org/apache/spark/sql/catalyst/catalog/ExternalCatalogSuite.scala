@@ -475,6 +475,31 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
     assert(catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "unknown"))).isEmpty)
   }
 
+  test("SPARK-45054: list partitions should restore stats") {
+    val catalog = newBasicCatalog()
+    val stats = Some(CatalogStatistics(sizeInBytes = 1))
+    val newPart = CatalogTablePartition(Map("a" -> "1", "b" -> "2"), storageFormat, stats = stats)
+    catalog.alterPartitions("db2", "tbl2", Seq(newPart))
+    val parts = catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "1")))
+
+    assert(parts.length == 1)
+    val part = parts.head
+    assert(part.stats.exists(_.sizeInBytes == 1))
+  }
+
+  test("SPARK-45054: list partitions by filter should restore stats") {
+    val catalog = newBasicCatalog()
+    val stats = Some(CatalogStatistics(sizeInBytes = 1))
+    val newPart = CatalogTablePartition(Map("a" -> "1", "b" -> "2"), storageFormat, stats = stats)
+    catalog.alterPartitions("db2", "tbl2", Seq(newPart))
+    val tz = TimeZone.getDefault.getID
+    val parts = catalog.listPartitionsByFilter("db2", "tbl2", Seq($"a".int === 1), tz)
+
+    assert(parts.length == 1)
+    val part = parts.head
+    assert(part.stats.exists(_.sizeInBytes == 1))
+  }
+
   test("SPARK-21457: list partitions with special chars") {
     val catalog = newBasicCatalog()
     assert(catalog.listPartitions("db2", "tbl1").isEmpty)

@@ -18,7 +18,6 @@
 """
 Date/Time related functions on pandas-on-Spark Series
 """
-import warnings
 from typing import Any, Optional, Union, no_type_check
 
 import numpy as np
@@ -27,7 +26,9 @@ from pandas.tseries.offsets import DateOffset
 
 import pyspark.pandas as ps
 import pyspark.sql.functions as F
-from pyspark.sql.types import DateType, TimestampType, TimestampNTZType, LongType
+from pyspark.sql.types import DateType, TimestampType, TimestampNTZType, IntegerType
+from pyspark.pandas import DataFrame
+from pyspark.pandas.config import option_context
 
 
 class DatetimeMethods:
@@ -64,42 +65,42 @@ class DatetimeMethods:
         """
         The year of the datetime.
         """
-        return self._data.spark.transform(lambda c: F.year(c).cast(LongType()))
+        return self._data.spark.transform(lambda c: F.year(c).cast(IntegerType()))
 
     @property
     def month(self) -> "ps.Series":
         """
         The month of the timestamp as January = 1 December = 12.
         """
-        return self._data.spark.transform(lambda c: F.month(c).cast(LongType()))
+        return self._data.spark.transform(lambda c: F.month(c).cast(IntegerType()))
 
     @property
     def day(self) -> "ps.Series":
         """
         The days of the datetime.
         """
-        return self._data.spark.transform(lambda c: F.dayofmonth(c).cast(LongType()))
+        return self._data.spark.transform(lambda c: F.dayofmonth(c).cast(IntegerType()))
 
     @property
     def hour(self) -> "ps.Series":
         """
         The hours of the datetime.
         """
-        return self._data.spark.transform(lambda c: F.hour(c).cast(LongType()))
+        return self._data.spark.transform(lambda c: F.hour(c).cast(IntegerType()))
 
     @property
     def minute(self) -> "ps.Series":
         """
         The minutes of the datetime.
         """
-        return self._data.spark.transform(lambda c: F.minute(c).cast(LongType()))
+        return self._data.spark.transform(lambda c: F.minute(c).cast(IntegerType()))
 
     @property
     def second(self) -> "ps.Series":
         """
         The seconds of the datetime.
         """
-        return self._data.spark.transform(lambda c: F.second(c).cast(LongType()))
+        return self._data.spark.transform(lambda c: F.second(c).cast(IntegerType()))
 
     @property
     def microsecond(self) -> "ps.Series":
@@ -107,7 +108,7 @@ class DatetimeMethods:
         The microseconds of the datetime.
         """
 
-        def pandas_microsecond(s) -> ps.Series[np.int64]:  # type: ignore[no-untyped-def]
+        def pandas_microsecond(s) -> ps.Series[np.int32]:  # type: ignore[no-untyped-def]
             return s.dt.microsecond
 
         return self._data.pandas_on_spark.transform_batch(pandas_microsecond)
@@ -116,26 +117,59 @@ class DatetimeMethods:
     def nanosecond(self) -> "ps.Series":
         raise NotImplementedError()
 
-    # TODO(SPARK-42617): Support isocalendar.week and replace it.
-    # See also https://github.com/pandas-dev/pandas/pull/33595.
-    @property
-    def week(self) -> "ps.Series":
+    def isocalendar(self) -> "ps.DataFrame":
         """
-        The week ordinal of the year.
+        Calculate year, week, and day according to the ISO 8601 standard.
 
-        .. deprecated:: 3.4.0
+            .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        DataFrame
+            With columns year, week and day.
+
+        .. note:: Returns have int64 type instead of UInt32 as is in pandas due to UInt32
+            is not supported by spark
+
+        Examples
+        --------
+        >>> dfs = ps.from_pandas(pd.date_range(start='2019-12-29', freq='D', periods=4).to_series())
+        >>> dfs.dt.isocalendar()
+                    year  week  day
+        2019-12-29  2019    52    7
+        2019-12-30  2020     1    1
+        2019-12-31  2020     1    2
+        2020-01-01  2020     1    3
+
+        >>> dfs.dt.isocalendar().week
+        2019-12-29    52
+        2019-12-30     1
+        2019-12-31     1
+        2020-01-01     1
+        Name: week, dtype: int64
         """
-        warnings.warn(
-            "weekofyear and week have been deprecated.",
-            FutureWarning,
+
+        return_types = [self._data.index.dtype, int, int, int]
+
+        def pandas_isocalendar(  # type: ignore[no-untyped-def]
+            pdf,
+        ) -> ps.DataFrame[return_types]:  # type: ignore[valid-type]
+            # cast to int64 due to UInt32 is not supported by spark
+            return pdf[pdf.columns[0]].dt.isocalendar().astype(np.int64).reset_index()
+
+        with option_context("compute.default_index_type", "distributed"):
+            psdf = self._data.to_frame().pandas_on_spark.apply_batch(pandas_isocalendar)
+
+        return DataFrame(
+            psdf._internal.copy(
+                spark_frame=psdf._internal.spark_frame,
+                index_spark_columns=psdf._internal.data_spark_columns[:1],
+                index_fields=psdf._internal.data_fields[:1],
+                data_spark_columns=psdf._internal.data_spark_columns[1:],
+                data_fields=psdf._internal.data_fields[1:],
+                column_labels=[("year",), ("week",), ("day",)],
+            )
         )
-        return self._data.spark.transform(lambda c: F.weekofyear(c).cast(LongType()))
-
-    @property
-    def weekofyear(self) -> "ps.Series":
-        return self.week
-
-    weekofyear.__doc__ = week.__doc__
 
     @property
     def dayofweek(self) -> "ps.Series":
@@ -171,10 +205,10 @@ class DatetimeMethods:
         2017-01-06    4
         2017-01-07    5
         2017-01-08    6
-        dtype: int64
+        dtype: int32
         """
 
-        def pandas_dayofweek(s) -> ps.Series[np.int64]:  # type: ignore[no-untyped-def]
+        def pandas_dayofweek(s) -> ps.Series[np.int32]:  # type: ignore[no-untyped-def]
             return s.dt.dayofweek
 
         return self._data.pandas_on_spark.transform_batch(pandas_dayofweek)
@@ -191,7 +225,7 @@ class DatetimeMethods:
         The ordinal day of the year.
         """
 
-        def pandas_dayofyear(s) -> ps.Series[np.int64]:  # type: ignore[no-untyped-def]
+        def pandas_dayofyear(s) -> ps.Series[np.int32]:  # type: ignore[no-untyped-def]
             return s.dt.dayofyear
 
         return self._data.pandas_on_spark.transform_batch(pandas_dayofyear)
@@ -202,7 +236,7 @@ class DatetimeMethods:
         The quarter of the date.
         """
 
-        def pandas_quarter(s) -> ps.Series[np.int64]:  # type: ignore[no-untyped-def]
+        def pandas_quarter(s) -> ps.Series[np.int32]:  # type: ignore[no-untyped-def]
             return s.dt.quarter
 
         return self._data.pandas_on_spark.transform_batch(pandas_quarter)
@@ -320,7 +354,7 @@ class DatetimeMethods:
         1    1
         2    2
         3    2
-        Name: dates, dtype: int64
+        Name: dates, dtype: int32
 
         >>> df.dates.dt.is_quarter_start
         0    False
@@ -370,7 +404,7 @@ class DatetimeMethods:
         1    1
         2    2
         3    2
-        Name: dates, dtype: int64
+        Name: dates, dtype: int32
 
         >>> df.dates.dt.is_quarter_start
         0    False
@@ -508,7 +542,7 @@ class DatetimeMethods:
         The number of days in the month.
         """
 
-        def pandas_daysinmonth(s) -> ps.Series[np.int64]:  # type: ignore[no-untyped-def]
+        def pandas_daysinmonth(s) -> ps.Series[np.int32]:  # type: ignore[no-untyped-def]
             return s.dt.daysinmonth
 
         return self._data.pandas_on_spark.transform_batch(pandas_daysinmonth)

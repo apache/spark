@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, HiveTableRelation}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.SQLViewSuite
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
@@ -143,7 +144,7 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
         // Check the output rows.
         checkAnswer(df, Row(1, 2))
         // Check the output schema.
-        assert(df.schema.sameType(view.schema))
+        assert(DataTypeUtils.sameType(df.schema, view.schema))
       }
     }
   }
@@ -208,17 +209,26 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
            """.stripMargin
         )
 
-        val cause = intercept[AnalysisException] {
-          sql("SHOW CREATE TABLE v1")
-        }
-
-        assert(cause.getMessage.contains(" - partitioned view"))
-
-        val causeForSpark = intercept[AnalysisException] {
-          sql("SHOW CREATE TABLE v1 AS SERDE")
-        }
-
-        assert(causeForSpark.getMessage.contains(" - partitioned view"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("SHOW CREATE TABLE v1")
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_1271",
+          parameters = Map(
+            "unsupportedFeatures" -> " - partitioned view",
+            "table" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`"
+          )
+        )
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("SHOW CREATE TABLE v1 AS SERDE")
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_1275",
+          parameters = Map(
+            "table" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
+            "features" -> " - partitioned view"
+          )
+        )
       }
     }
   }

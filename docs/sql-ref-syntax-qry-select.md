@@ -185,6 +185,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
 * [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
 * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
 * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+* [OFFSET Clause](sql-ref-syntax-qry-select-offset.html)
 * [Common Table Expression](sql-ref-syntax-qry-select-cte.html)
 * [Hints](sql-ref-syntax-qry-select-hints.html)
 * [Inline Table](sql-ref-syntax-qry-select-inline-table.html)

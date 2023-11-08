@@ -24,8 +24,8 @@ import java.sql.{Date, Timestamp}
 import java.time.LocalDateTime
 import java.util
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
 import scala.util.Random
 
@@ -1955,6 +1955,21 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
 
       column.close()
+  }
+
+  testVector("Timestamp without timezone", 10, TimestampNTZType) {
+    column =>
+      val dt = TimestampNTZType
+      (0 until 10).foreach { i =>
+        column.putLong(i, i)
+      }
+      val bachRow = new ColumnarBatchRow(Array(column))
+      (0 until 10).foreach { i =>
+        bachRow.rowId = i
+        assert(bachRow.get(0, dt) === i)
+        val batchRowCopy = bachRow.copy()
+        assert(batchRowCopy.get(0, dt) === i)
+      }
   }
 
   testVector("WritableColumnVector.reserve(): requested capacity is negative", 1024, ByteType) {

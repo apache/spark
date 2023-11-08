@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.connect.service
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput}
+import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, StorageLevelProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
 
@@ -33,12 +33,13 @@ private[connect] class SparkConnectAnalyzeHandler(
     extends Logging {
 
   def handle(request: proto.AnalyzePlanRequest): Unit = {
-    val session =
-      SparkConnectService
-        .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getSessionId)
-        .session
-    session.withActive {
-      val response = process(request, session)
+    val sessionHolder = SparkConnectService.getOrCreateIsolatedSession(
+      request.getUserContext.getUserId,
+      request.getSessionId)
+    // `withSession` ensures that session-specific artifacts (such as JARs and class files) are
+    // available during processing (such as deserialization).
+    sessionHolder.withSession { _ =>
+      val response = process(request, sessionHolder)
       responseObserver.onNext(response)
       responseObserver.onCompleted()
     }
@@ -46,8 +47,9 @@ private[connect] class SparkConnectAnalyzeHandler(
 
   def process(
       request: proto.AnalyzePlanRequest,
-      session: SparkSession): proto.AnalyzePlanResponse = {
-    lazy val planner = new SparkConnectPlanner(session)
+      sessionHolder: SessionHolder): proto.AnalyzePlanResponse = {
+    lazy val planner = new SparkConnectPlanner(sessionHolder)
+    val session = sessionHolder.session
     val builder = proto.AnalyzePlanResponse.newBuilder()
 
     request.getAnalyzeCase match {
@@ -85,10 +87,14 @@ private[connect] class SparkConnectAnalyzeHandler(
             .build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.TREE_STRING =>
-        val treeString = Dataset
+        val schema = Dataset
           .ofRows(session, planner.transformRelation(request.getTreeString.getPlan.getRoot))
           .schema
-          .treeString
+        val treeString = if (request.getTreeString.hasLevel) {
+          schema.treeString(request.getTreeString.getLevel)
+        } else {
+          schema.treeString
+        }
         builder.setTreeString(
           proto.AnalyzePlanResponse.TreeString
             .newBuilder()
@@ -160,6 +166,37 @@ private[connect] class SparkConnectAnalyzeHandler(
           proto.AnalyzePlanResponse.SemanticHash
             .newBuilder()
             .setResult(semanticHash))
+
+      case proto.AnalyzePlanRequest.AnalyzeCase.PERSIST =>
+        val target = Dataset
+          .ofRows(session, planner.transformRelation(request.getPersist.getRelation))
+        if (request.getPersist.hasStorageLevel) {
+          target.persist(
+            StorageLevelProtoConverter.toStorageLevel(request.getPersist.getStorageLevel))
+        } else {
+          target.persist()
+        }
+        builder.setPersist(proto.AnalyzePlanResponse.Persist.newBuilder().build())
+
+      case proto.AnalyzePlanRequest.AnalyzeCase.UNPERSIST =>
+        val target = Dataset
+          .ofRows(session, planner.transformRelation(request.getUnpersist.getRelation))
+        if (request.getUnpersist.hasBlocking) {
+          target.unpersist(request.getUnpersist.getBlocking)
+        } else {
+          target.unpersist()
+        }
+        builder.setUnpersist(proto.AnalyzePlanResponse.Unpersist.newBuilder().build())
+
+      case proto.AnalyzePlanRequest.AnalyzeCase.GET_STORAGE_LEVEL =>
+        val target = Dataset
+          .ofRows(session, planner.transformRelation(request.getGetStorageLevel.getRelation))
+        val storageLevel = target.storageLevel
+        builder.setGetStorageLevel(
+          proto.AnalyzePlanResponse.GetStorageLevel
+            .newBuilder()
+            .setStorageLevel(StorageLevelProtoConverter.toConnectProtoType(storageLevel))
+            .build())
 
       case other => throw InvalidPlanInput(s"Unknown Analyze Method $other!")
     }

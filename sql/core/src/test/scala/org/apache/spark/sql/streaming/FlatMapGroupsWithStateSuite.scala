@@ -38,6 +38,7 @@ import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
 /** Class to check custom state types */
@@ -45,6 +46,7 @@ case class RunningCount(count: Long)
 
 case class Result(key: Long, count: Int)
 
+@SlowSQLTest
 class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
 
   import testImplicits._
@@ -450,10 +452,10 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       if (state.exists) throw new IllegalArgumentException("state.exists should be false")
       Iterator((key, values.size))
     }
-    val df = Seq("a", "a", "b").toDS
+    val df = Seq("a", "a", "b").toDS()
       .groupByKey(x => x)
-      .flatMapGroupsWithState(Update, GroupStateTimeout.NoTimeout)(stateFunc).toDF
-    checkAnswer(df, Seq(("a", 2), ("b", 1)).toDF)
+      .flatMapGroupsWithState(Update, GroupStateTimeout.NoTimeout)(stateFunc).toDF()
+    checkAnswer(df, Seq(("a", 2), ("b", 1)).toDF())
   }
 
   testWithAllStateVersions("flatMapGroupsWithState - streaming with processing time timeout") {
@@ -526,7 +528,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   testWithAllStateVersions("flatMapGroupsWithState - streaming w/ event time timeout + watermark") {
     val inputData = MemoryStream[(String, Int)]
     val result =
-      inputData.toDS
+      inputData.toDS()
         .select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
         .withWatermark("eventTime", "10 seconds")
         .as[(String, Long)]
@@ -581,7 +583,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   test("flatMapGroupsWithState - recovery from checkpoint uses state format version 1") {
     val inputData = MemoryStream[(String, Int)]
     val result =
-      inputData.toDS
+      inputData.toDS()
         .select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
         .withWatermark("eventTime", "10 seconds")
         .as[(String, Long)]
@@ -695,14 +697,14 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       spark.createDataset(Seq("a", "a", "b"))
         .groupByKey(x => x)
         .mapGroupsWithState(EventTimeTimeout)(stateFunc)
-        .toDF,
-      spark.createDataset(Seq(("a", 2), ("b", 1))).toDF)
+        .toDF(),
+      spark.createDataset(Seq(("a", 2), ("b", 1))).toDF())
   }
 
   test("SPARK-35896: metrics in StateOperatorProgress are output correctly") {
     val inputData = MemoryStream[(String, Int)]
     val result =
-      inputData.toDS
+      inputData.toDS()
         .select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
         .withWatermark("eventTime", "10 seconds")
         .as[(String, Long)]
@@ -823,7 +825,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   test("output partitioning is unknown") {
     val stateFunc = (key: String, values: Iterator[String], state: GroupState[RunningCount]) => key
     val inputData = MemoryStream[String]
-    val result = inputData.toDS.groupByKey(x => x).mapGroupsWithState(stateFunc)
+    val result = inputData.toDS().groupByKey(x => x).mapGroupsWithState(stateFunc)
     testStream(result, Update)(
       AddData(inputData, "a"),
       CheckNewAnswer("a"),
@@ -1040,7 +1042,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     val stateFormatVersion = spark.conf.get(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
     val emptyRdd = spark.sparkContext.emptyRDD[InternalRow]
     MemoryStream[Int]
-      .toDS
+      .toDS()
       .groupByKey(x => x)
       .flatMapGroupsWithState[Int, Int](Append, timeoutConf = timeoutType)(func)
       .logicalPlan.collectFirst {
@@ -1101,3 +1103,7 @@ object FlatMapGroupsWithStateSuite {
     throw new TestFailedException("Could get watermark when not expected", 20)
   }
 }
+
+@SlowSQLTest
+class RocksDBStateStoreFlatMapGroupsWithStateSuite
+  extends FlatMapGroupsWithStateSuite with RocksDBStateStoreTest

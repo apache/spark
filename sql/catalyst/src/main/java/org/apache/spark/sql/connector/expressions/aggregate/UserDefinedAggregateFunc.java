@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.expressions.aggregate;
 
+import java.util.Arrays;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.internal.connector.ExpressionWithToString;
@@ -50,4 +52,26 @@ public class UserDefinedAggregateFunc extends ExpressionWithToString implements 
 
   @Override
   public Expression[] children() { return children; }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+
+    UserDefinedAggregateFunc that = (UserDefinedAggregateFunc) o;
+
+    if (isDistinct != that.isDistinct) return false;
+    if (!name.equals(that.name)) return false;
+    if (!canonicalName.equals(that.canonicalName)) return false;
+    return Arrays.equals(children, that.children);
+  }
+
+  @Override
+  public int hashCode() {
+    int result = name.hashCode();
+    result = 31 * result + canonicalName.hashCode();
+    result = 31 * result + (isDistinct ? 1 : 0);
+    result = 31 * result + Arrays.hashCode(children);
+    return result;
+  }
 }

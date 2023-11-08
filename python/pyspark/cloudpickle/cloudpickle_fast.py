@@ -111,8 +111,8 @@ load, loads = pickle.load, pickle.loads
 
 def _class_getnewargs(obj):
     type_kwargs = {}
-    if "__slots__" in obj.__dict__:
-        type_kwargs["__slots__"] = obj.__slots__
+    if "__module__" in obj.__dict__:
+        type_kwargs["__module__"] = obj.__module__
 
     __dict__ = obj.__dict__.get('__dict__', None)
     if isinstance(__dict__, property):
@@ -631,7 +631,7 @@ class CloudPickler(Pickler):
         try:
             return Pickler.dump(self, obj)
         except RuntimeError as e:
-            if "recursion" in e.args[0]:
+            if len(e.args) > 0 and "recursion" in e.args[0]:
                 msg = (
                     "Could not pickle object as excessively deep recursion "
                     "required."

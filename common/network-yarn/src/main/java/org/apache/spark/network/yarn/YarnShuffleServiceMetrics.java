@@ -63,10 +63,9 @@ class YarnShuffleServiceMetrics implements MetricsSource {
   public static void collectMetric(
     MetricsRecordBuilder metricsRecordBuilder, String name, Metric metric) {
 
-    if (metric instanceof Timer) {
+    if (metric instanceof Timer t) {
       // Timer records both the operations count and delay
       // Snapshot inside the Timer provides the information for the operation delay
-      Timer t = (Timer) metric;
       Snapshot snapshot = t.getSnapshot();
       metricsRecordBuilder
         .addCounter(new ShuffleServiceMetricsInfo(name + "_count", "Count of timer " + name),
@@ -91,24 +90,16 @@ class YarnShuffleServiceMetrics implements MetricsSource {
         .addGauge(
           getShuffleServiceMetricsInfoForGenericValue(name, "stdDev"), snapshot.getStdDev());
       for (int percentileThousands : new int[] { 10, 50, 250, 500, 750, 950, 980, 990, 999 }) {
-        String percentileStr;
-        switch (percentileThousands) {
-          case 10:
-            percentileStr = "1stPercentile";
-            break;
-          case 999:
-            percentileStr = "999thPercentile";
-            break;
-          default:
-            percentileStr = String.format("%dthPercentile", percentileThousands / 10);
-            break;
-        }
+        String percentileStr = switch (percentileThousands) {
+          case 10 -> "1stPercentile";
+          case 999 -> "999thPercentile";
+          default -> String.format("%dthPercentile", percentileThousands / 10);
+        };
         metricsRecordBuilder.addGauge(
           getShuffleServiceMetricsInfoForGenericValue(name, percentileStr),
           snapshot.getValue(percentileThousands / 1000.0));
       }
-    } else if (metric instanceof Meter) {
-      Meter m = (Meter) metric;
+    } else if (metric instanceof Meter m) {
       metricsRecordBuilder
         .addCounter(new ShuffleServiceMetricsInfo(name + "_count", "Count of meter " + name),
           m.getCount())
@@ -141,8 +132,7 @@ class YarnShuffleServiceMetrics implements MetricsSource {
         throw new IllegalStateException(
                 "Not supported class type of metric[" + name + "] for value " + gaugeValue);
       }
-    } else if (metric instanceof Counter) {
-      Counter c = (Counter) metric;
+    } else if (metric instanceof Counter c) {
       long counterValue = c.getCount();
       metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfoForCounter(name), counterValue);
     }

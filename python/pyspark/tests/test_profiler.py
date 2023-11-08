@@ -25,8 +25,8 @@ from pyspark import SparkConf, SparkContext, BasicProfiler
 from pyspark.profiler import has_memory_profiler
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import udf
-from pyspark.errors import PythonException
-from pyspark.testing.utils import PySparkTestCase
+from pyspark.errors import PythonException, PySparkRuntimeError
+from pyspark.testing.utils import PySparkTestCase, PySparkErrorTestUtils
 
 
 class ProfilerTests(PySparkTestCase):
@@ -84,7 +84,7 @@ class ProfilerTests(PySparkTestCase):
         rdd.foreach(heavy_foo)
 
 
-class ProfilerTests2(unittest.TestCase):
+class ProfilerTests2(unittest.TestCase, PySparkErrorTestUtils):
     def test_profiler_disabled(self):
         sc = SparkContext(
             conf=SparkConf()
@@ -92,15 +92,20 @@ class ProfilerTests2(unittest.TestCase):
             .set("spark.python.profile.memory", "false")
         )
         try:
-            self.assertRaisesRegex(
-                RuntimeError,
-                "'spark.python.profile' or 'spark.python.profile.memory' configuration must be set",
-                lambda: sc.show_profiles(),
+            with self.assertRaises(PySparkRuntimeError) as pe:
+                sc.show_profiles()
+            self.check_error(
+                exception=pe.exception,
+                error_class="INCORRECT_CONF_FOR_PROFILE",
+                message_parameters={},
             )
-            self.assertRaisesRegex(
-                RuntimeError,
-                "'spark.python.profile' or 'spark.python.profile.memory' configuration must be set",
-                lambda: sc.dump_profiles("/tmp/abc"),
+
+            with self.assertRaises(PySparkRuntimeError) as pe:
+                sc.dump_profiles("/tmp/abc")
+            self.check_error(
+                exception=pe.exception,
+                error_class="INCORRECT_CONF_FOR_PROFILE",
+                message_parameters={},
             )
         finally:
             sc.stop()

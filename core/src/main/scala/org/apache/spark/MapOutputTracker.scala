@@ -23,10 +23,10 @@ import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolE
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import scala.collection
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, ListBuffer, Map}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
@@ -42,6 +42,7 @@ import org.apache.spark.scheduler.{MapStatus, MergeStatus, ShuffleOutputStatus}
 import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId, ShuffleMergedBlockId}
 import org.apache.spark.util._
+import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
 /**
@@ -148,6 +149,12 @@ private class ShuffleStatus(
   private[this] var shufflePushMergerLocations: Seq[BlockManagerId] = Seq.empty
 
   /**
+   * Mapping from a mapId to the mapIndex, this is required to reduce the searching overhead within
+   * the function updateMapOutput(mapId, bmAddress).
+   */
+  private[this] val mapIdToMapIndex = new OpenHashMap[Long, Int]()
+
+  /**
    * Register a map output. If there is already a registered location for the map output then it
    * will be replaced by the new location.
    */
@@ -157,6 +164,17 @@ private class ShuffleStatus(
       invalidateSerializedMapOutputStatusCache()
     }
     mapStatuses(mapIndex) = status
+    mapIdToMapIndex(status.mapId) = mapIndex
+  }
+
+  /**
+   * Get the map output that corresponding to a given mapId.
+   */
+  def getMapStatus(mapId: Long): Option[MapStatus] = withReadLock {
+    mapIdToMapIndex.get(mapId).map(mapStatuses(_)) match {
+      case Some(null) => None
+      case m => m
+    }
   }
 
   /**
@@ -164,15 +182,16 @@ private class ShuffleStatus(
    */
   def updateMapOutput(mapId: Long, bmAddress: BlockManagerId): Unit = withWriteLock {
     try {
-      val mapStatusOpt = mapStatuses.find(x => x != null && x.mapId == mapId)
+      val mapIndex = mapIdToMapIndex.get(mapId)
+      val mapStatusOpt = mapIndex.map(mapStatuses(_)).flatMap(Option(_))
       mapStatusOpt match {
         case Some(mapStatus) =>
           logInfo(s"Updating map output for ${mapId} to ${bmAddress}")
           mapStatus.updateLocation(bmAddress)
           invalidateSerializedMapOutputStatusCache()
         case None =>
-          val index = mapStatusesDeleted.indexWhere(x => x != null && x.mapId == mapId)
-          if (index >= 0 && mapStatuses(index) == null) {
+          if (mapIndex.map(mapStatusesDeleted).exists(_.mapId == mapId)) {
+            val index = mapIndex.get
             val mapStatus = mapStatusesDeleted(index)
             mapStatus.updateLocation(bmAddress)
             mapStatuses(index) = mapStatus
@@ -661,6 +680,9 @@ private[spark] class MapOutputTrackerMaster(
   /** Whether to compute locality preferences for reduce tasks */
   private val shuffleLocalityEnabled = conf.get(SHUFFLE_REDUCE_LOCALITY_ENABLE)
 
+  private val shuffleMigrationEnabled = conf.get(DECOMMISSION_ENABLED) &&
+    conf.get(STORAGE_DECOMMISSION_ENABLED) && conf.get(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)
+
   // Number of map and reduce tasks above which we do not assign preferred locations based on map
   // output sizes. We limit the size of jobs for which assign preferred locations as computing the
   // top locations by size becomes expensive.
@@ -696,6 +718,8 @@ private[spark] class MapOutputTrackerMaster(
     }
     pool
   }
+
+  private val availableProcessors = Runtime.getRuntime.availableProcessors()
 
   // Make sure that we aren't going to exceed the max RPC message size by making sure
   // we use broadcast to send large map output statuses.
@@ -787,6 +811,8 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
         shuffleStatus.updateMapOutput(mapId, bmAddress)
+      case None if shuffleMigrationEnabled =>
+        logWarning(s"Asked to update map output for unknown shuffle ${shuffleId}")
       case None =>
         logError(s"Asked to update map output for unknown shuffle ${shuffleId}")
     }
@@ -880,12 +906,8 @@ private[spark] class MapOutputTrackerMaster(
   /** Unregister shuffle data */
   def unregisterShuffle(shuffleId: Int): Unit = {
     shuffleStatuses.remove(shuffleId).foreach { shuffleStatus =>
-      // SPARK-39553: Add protection for Scala 2.13 due to https://github.com/scala/bug/issues/12613
-      // We should revert this if Scala 2.13 solves this issue.
-      if (shuffleStatus != null) {
-        shuffleStatus.invalidateSerializedMapOutputStatusCache()
-        shuffleStatus.invalidateSerializedMergeOutputStatusCache()
-      }
+      shuffleStatus.invalidateSerializedMapOutputStatusCache()
+      shuffleStatus.invalidateSerializedMergeOutputStatusCache()
     }
   }
 
@@ -966,7 +988,7 @@ private[spark] class MapOutputTrackerMaster(
       val parallelAggThreshold = conf.get(
         SHUFFLE_MAP_OUTPUT_PARALLEL_AGGREGATION_THRESHOLD)
       val parallelism = math.min(
-        Runtime.getRuntime.availableProcessors(),
+        availableProcessors,
         statuses.length.toLong * totalSizes.length / parallelAggThreshold + 1).toInt
       if (parallelism <= 1) {
         statuses.filter(_ != null).foreach { s =>
@@ -1032,7 +1054,7 @@ private[spark] class MapOutputTrackerMaster(
           val blockManagerIds = getLocationsWithLargestOutputs(dep.shuffleId, partitionId,
             dep.partitioner.numPartitions, REDUCER_PREF_LOCS_FRACTION)
           if (blockManagerIds.nonEmpty) {
-            blockManagerIds.get.map(_.host)
+            blockManagerIds.get.map(_.host).distinct.toSeq
           } else {
             Nil
           }
@@ -1120,7 +1142,7 @@ private[spark] class MapOutputTrackerMaster(
         if (startMapIndex < endMapIndex &&
           (startMapIndex >= 0 && endMapIndex <= statuses.length)) {
           val statusesPicked = statuses.slice(startMapIndex, endMapIndex).filter(_ != null)
-          statusesPicked.map(_.location.host).toSeq
+          statusesPicked.map(_.location.host).distinct.toSeq
         } else {
           Nil
         }
@@ -1135,9 +1157,7 @@ private[spark] class MapOutputTrackerMaster(
    */
   def getMapOutputLocation(shuffleId: Int, mapId: Long): Option[BlockManagerId] = {
     shuffleStatuses.get(shuffleId).flatMap { shuffleStatus =>
-      shuffleStatus.withMapStatuses { mapStatues =>
-        mapStatues.filter(_ != null).find(_.mapId == mapId).map(_.location)
-      }
+      shuffleStatus.getMapStatus(mapId).map(_.location)
     }
   }
 

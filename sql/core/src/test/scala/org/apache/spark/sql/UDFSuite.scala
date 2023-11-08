@@ -22,7 +22,8 @@ import java.sql.Timestamp
 import java.time.{Instant, LocalDate}
 import java.time.format.DateTimeFormatter
 
-import scala.collection.mutable.{ArrayBuffer, WrappedArray}
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException}
 import org.apache.spark.sql.api.java._
@@ -376,7 +377,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       spark.udf.register("f", (a: Int) => a)
       val outputStream = new java.io.ByteArrayOutputStream()
       Console.withOut(outputStream) {
-        spark.sql("SELECT f(a._1) FROM x").show
+        spark.sql("SELECT f(a._1) FROM x").show()
       }
       assert(outputStream.toString.contains("f(a._1)"))
     }
@@ -441,7 +442,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       Seq((1, "2"), (2, "4")).toDF("a", "b").write.format("json").saveAsTable("x")
       sql("insert into table x values(3, null)")
       sql("insert into table x values(null, '4')")
-      spark.udf.register("f", (a: Int, b: String) => a + b)
+      spark.udf.register("f", (a: Int, b: String) => s"$a$b")
       val df = spark.sql("SELECT f(a, b) FROM x")
       val plan = spark.sessionState.executePlan(df.logicalPlan).analyzed
       comparePlans(df.logicalPlan, plan)
@@ -526,7 +527,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       sparkContext.parallelize(Seq(Row(Map("a" -> new BigDecimal("2011000000000002456556"))))),
       StructType(Seq(StructField("col1", MapType(StringType, DecimalType(30, 0))))))
     val udf2 = org.apache.spark.sql.functions.udf((map: Map[String, BigDecimal]) => {
-      map.mapValues(value => if (value == null) null else value.toBigInteger.toString).toMap
+      map.view.mapValues(value => if (value == null) null else value.toBigInteger.toString).toMap
     })
     checkAnswer(df2.select(udf2($"col1")), Seq(Row(Map("a" -> "2011000000000002456556"))))
   }
@@ -820,9 +821,9 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     checkAnswer(sql("SELECT key(a) AS k FROM t GROUP BY key(a)"), Row(1) :: Nil)
   }
 
-  test("SPARK-32459: UDF should not fail on WrappedArray") {
-    val myUdf = udf((a: WrappedArray[Int]) =>
-      WrappedArray.make[Int](Array(a.head + 99)))
+  test("SPARK-32459: UDF should not fail on mutable.ArraySeq") {
+    val myUdf = udf((a: mutable.ArraySeq[Int]) =>
+      mutable.ArraySeq.make[Int](Array(a.head + 99)))
     checkAnswer(Seq(Array(1))
       .toDF("col")
       .select(myUdf(Column("col"))),
@@ -1059,5 +1060,12 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       input.select(overflowFunc($"p")).collect()
     }.getCause.getCause
     assert(e.isInstanceOf[java.lang.ArithmeticException])
+  }
+
+  test("SPARK-43099: UDF className is correctly populated") {
+    spark.udf.register("dummyUDF", (x: Int) => x + 1)
+    val expressionInfo = spark.sessionState.catalog
+      .lookupFunctionInfo(FunctionIdentifier("dummyUDF"))
+    assert(expressionInfo.getClassName.contains("org.apache.spark.sql.UDFRegistration$$Lambda"))
   }
 }

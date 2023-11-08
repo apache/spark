@@ -38,11 +38,8 @@ class CatalogMetadata(
     @Nullable val description: String)
   extends DefinedByConstructorParams {
 
-  override def toString: String = {
-    "Catalog[" +
-      s"name='$name', " +
-      Option(description).map { d => s"description='$d'] " }.getOrElse("]")
-  }
+  override def toString: String =
+    s"Catalog[name='$name', ${Option(description).map(d => s"description='$d'").getOrElse("")}]"
 }
 
 /**

@@ -31,6 +31,10 @@ class MicroBatchWrite(epochId: Long, val writeSupport: StreamingWrite) extends B
     s"MicroBatchWrite[epoch: $epochId, writer: $writeSupport]"
   }
 
+  override def useCommitCoordinator(): Boolean = {
+    writeSupport.useCommitCoordinator()
+  }
+
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
     writeSupport.commit(epochId, messages)
   }

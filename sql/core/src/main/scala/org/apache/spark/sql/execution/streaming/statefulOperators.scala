@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.TimeUnit._
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -64,7 +65,7 @@ case class StatefulOperatorStateInfo(
 trait StatefulOperator extends SparkPlan {
   def stateInfo: Option[StatefulOperatorStateInfo]
 
-  protected def getStateInfo: StatefulOperatorStateInfo = {
+  def getStateInfo: StatefulOperatorStateInfo = {
     stateInfo.getOrElse {
       throw new IllegalStateException("State location not present for execution")
     }
@@ -142,7 +143,6 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
     "allRemovalsTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to remove"),
     "commitTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to commit changes"),
     "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state"),
-    "numShufflePartitions" -> SQLMetrics.createMetric(sparkContext, "number of shuffle partitions"),
     "numStateStoreInstances" -> SQLMetrics.createMetric(sparkContext,
       "number of state store instances")
   ) ++ stateStoreCustomMetrics ++ pythonMetrics
@@ -156,8 +156,10 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
       .map(entry => entry._1 -> longMetric(entry._1).value)
 
     val javaConvertedCustomMetrics: java.util.HashMap[String, java.lang.Long] =
-      new java.util.HashMap(customMetrics.mapValues(long2Long).toMap.asJava)
+      new java.util.HashMap(customMetrics.view.mapValues(long2Long).toMap.asJava)
 
+    // We now don't report number of shuffle partitions inside the state operator. Instead,
+    // it will be filled when the stream query progress is reported
     new StateOperatorProgress(
       operatorName = shortName,
       numRowsTotal = longMetric("numTotalStateRows").value,
@@ -168,7 +170,7 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
       commitTimeMs = longMetric("commitTimeMs").value,
       memoryUsedBytes = longMetric("stateMemory").value,
       numRowsDroppedByWatermark = longMetric("numRowsDroppedByWatermark").value,
-      numShufflePartitions = longMetric("numShufflePartitions").value,
+      numShufflePartitions = stateInfo.map(_.numPartitions.toLong).getOrElse(-1L),
       numStateStoreInstances = longMetric("numStateStoreInstances").value,
       javaConvertedCustomMetrics
     )
@@ -177,12 +179,20 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
   /** Records the duration of running `body` for the next query progress update. */
   protected def timeTakenMs(body: => Unit): Long = Utils.timeTakenMs(body)._2
 
+  /** Metadata of this stateful operator and its states stores. */
+  def operatorStateMetadata(): OperatorStateMetadata = {
+    val info = getStateInfo
+    val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
+    val stateStoreInfo =
+      Array(StateStoreMetadataV1(StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions))
+    OperatorStateMetadataV1(operatorInfo, stateStoreInfo)
+  }
+
   /** Set the operator level metrics */
   protected def setOperatorMetrics(numStateStoreInstances: Int = 1): Unit = {
     assert(numStateStoreInstances >= 1, s"invalid number of stores: $numStateStoreInstances")
     // Shuffle partitions capture the number of tasks that have this stateful operator instance.
     // For each task instance this number is incremented by one.
-    longMetric("numShufflePartitions") += 1
     longMetric("numStateStoreInstances") += numStateStoreInstances
   }
 
@@ -505,20 +515,42 @@ case class StateStoreSaveExec(
                 numUpdatedStateRows += 1
               }
             }
-            allRemovalsTimeMs += 0
-            commitTimeMs += timeTakenMs {
-              stateManager.commit(store)
-            }
-            setStoreMetrics(store)
-            setOperatorMetrics()
-            stateManager.values(store).map { valueRow =>
-              numOutputRows += 1
-              valueRow
+
+            // SPARK-45582 - Ensure that store instance is not used after commit is called
+            // to invoke the iterator.
+            val rangeIter = stateManager.values(store)
+
+            new NextIterator[InternalRow] {
+              override protected def getNext(): InternalRow = {
+                if (rangeIter.hasNext) {
+                  val valueRow = rangeIter.next()
+                  numOutputRows += 1
+                  valueRow
+                } else {
+                  finished = true
+                  null
+                }
+              }
+
+              override protected def close(): Unit = {
+                allRemovalsTimeMs += 0
+                commitTimeMs += timeTakenMs {
+                  stateManager.commit(store)
+                }
+                setStoreMetrics(store)
+                setOperatorMetrics()
+              }
             }
 
           // Update and output only rows being evicted from the StateStore
           // Assumption: watermark predicates must be non-empty if append mode is allowed
           case Some(Append) =>
+            assert(watermarkPredicateForDataForLateEvents.isDefined,
+              "Watermark needs to be defined for streaming aggregation query in append mode")
+
+            assert(watermarkPredicateForKeysForEviction.isDefined,
+              "Watermark needs to be defined for streaming aggregation query in append mode")
+
             allUpdatesTimeMs += timeTakenMs {
               val filteredIter = applyRemovingRowsOlderThanWatermark(iter,
                 watermarkPredicateForDataForLateEvents.get)
@@ -734,6 +766,8 @@ case class SessionWindowStateStoreSaveExec(
 
   override def keyExpressions: Seq[Attribute] = keyWithoutSessionExpressions
 
+  override def shortName: String = "sessionWindowStateStoreSaveExec"
+
   private val stateManager = StreamingSessionWindowStateManager.createStateManager(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
 
@@ -764,18 +798,37 @@ case class SessionWindowStateStoreSaveExec(
           allUpdatesTimeMs += timeTakenMs {
             putToStore(iter, store)
           }
-          commitTimeMs += timeTakenMs {
-            stateManager.commit(store)
-          }
-          setStoreMetrics(store)
-          stateManager.iterator(store).map { row =>
-            numOutputRows += 1
-            row
+
+          // SPARK-45582 - Ensure that store instance is not used after commit is called
+          // to invoke the iterator.
+          val rangeIter = stateManager.iterator(store)
+
+          new NextIterator[InternalRow] {
+            override protected def getNext(): InternalRow = {
+              if (rangeIter.hasNext) {
+                val valueRow = rangeIter.next()
+                numOutputRows += 1
+                valueRow
+              } else {
+                finished = true
+                null
+              }
+            }
+
+            override protected def close(): Unit = {
+              commitTimeMs += timeTakenMs {
+                stateManager.commit(store)
+              }
+              setStoreMetrics(store)
+            }
           }
 
         // Update and output only rows being evicted from the StateStore
         // Assumption: watermark predicates must be non-empty if append mode is allowed
         case Some(Append) =>
+          assert(watermarkPredicateForDataForEviction.isDefined,
+              "Watermark needs to be defined for session window query in append mode")
+
           allUpdatesTimeMs += timeTakenMs {
             putToStore(iter, store)
           }
@@ -818,6 +871,14 @@ case class SessionWindowStateStoreSaveExec(
       keyWithoutSessionExpressions, getStateInfo, conf) :: Nil
   }
 
+  override def operatorStateMetadata(): OperatorStateMetadata = {
+    val info = getStateInfo
+    val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
+    val stateStoreInfo = Array(StateStoreMetadataV1(
+      StateStoreId.DEFAULT_STORE_NAME, stateManager.getNumColsForPrefixKey, info.numPartitions))
+    OperatorStateMetadataV1(operatorInfo, stateStoreInfo)
+  }
+
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     (outputMode.contains(Append) || outputMode.contains(Update)) &&
       eventTimeWatermarkForEviction.isDefined &&
@@ -836,7 +897,7 @@ case class SessionWindowStateStoreSaveExec(
         val (upserted, deleted) = stateManager.updateSessions(store, curKey, curValuesOnKey.toSeq)
         numUpdatedStateRows += upserted
         numRemovedStateRows += deleted
-        curValuesOnKey.clear
+        curValuesOnKey.clear()
       }
     }
 
@@ -885,15 +946,14 @@ case class SessionWindowStateStoreSaveExec(
   }
 }
 
-
-/** Physical operator for executing streaming Deduplicate. */
-case class StreamingDeduplicateExec(
-    keyExpressions: Seq[Attribute],
-    child: SparkPlan,
-    stateInfo: Option[StatefulOperatorStateInfo] = None,
-    eventTimeWatermarkForLateEvents: Option[Long] = None,
-    eventTimeWatermarkForEviction: Option[Long] = None)
+abstract class BaseStreamingDeduplicateExec
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
+
+  def keyExpressions: Seq[Attribute]
+  def child: SparkPlan
+  def stateInfo: Option[StatefulOperatorStateInfo]
+  def eventTimeWatermarkForLateEvents: Option[Long]
+  def eventTimeWatermarkForEviction: Option[Long]
 
   /** Distribute by grouping attributes */
   override def requiredChildDistribution: Seq[Distribution] = {
@@ -901,7 +961,8 @@ case class StreamingDeduplicateExec(
       keyExpressions, getStateInfo, conf) :: Nil
   }
 
-  private val schemaForEmptyRow: StructType = StructType(Array(StructField("__dummy__", NullType)))
+  protected val schemaForValueRow: StructType
+  protected val extraOptionOnStateStore: Map[String, String]
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
@@ -909,13 +970,11 @@ case class StreamingDeduplicateExec(
     child.execute().mapPartitionsWithStateStore(
       getStateInfo,
       keyExpressions.toStructType,
-      schemaForEmptyRow,
+      schemaForValueRow,
       numColsPrefixKey = 0,
       session.sessionState,
       Some(session.streams.stateStoreCoordinator),
-      // We won't check value row in state store since the value StreamingDeduplicateExec.EMPTY_ROW
-      // is unrelated to the output schema.
-      Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG -> "false")) { (store, iter) =>
+      extraOptionOnStateStore) { (store, iter) =>
       val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
       val numOutputRows = longMetric("numOutputRows")
       val numUpdatedStateRows = longMetric("numUpdatedStateRows")
@@ -929,6 +988,8 @@ case class StreamingDeduplicateExec(
         case None => iter
       }
 
+      val reusedDupInfoRow = initializeReusedDupInfoRow()
+
       val updatesStartTimeNs = System.nanoTime
 
       val result = baseIterator.filter { r =>
@@ -936,7 +997,7 @@ case class StreamingDeduplicateExec(
         val key = getKey(row)
         val value = store.get(key)
         if (value == null) {
-          store.put(key, StreamingDeduplicateExec.EMPTY_ROW)
+          putDupInfoIntoState(store, row, key, reusedDupInfoRow)
           numUpdatedStateRows += 1
           numOutputRows += 1
           true
@@ -949,13 +1010,23 @@ case class StreamingDeduplicateExec(
 
       CompletionIterator[InternalRow, Iterator[InternalRow]](result, {
         allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
-        allRemovalsTimeMs += timeTakenMs { removeKeysOlderThanWatermark(store) }
+        allRemovalsTimeMs += timeTakenMs { evictDupInfoFromState(store) }
         commitTimeMs += timeTakenMs { store.commit() }
         setStoreMetrics(store)
         setOperatorMetrics()
       })
     }
   }
+
+  protected def initializeReusedDupInfoRow(): Option[UnsafeRow]
+
+  protected def putDupInfoIntoState(
+      store: StateStore,
+      data: UnsafeRow,
+      key: UnsafeRow,
+      reusedDupInfoRow: Option[UnsafeRow]): Unit
+
+  protected def evictDupInfoFromState(store: StateStore): Unit
 
   override def output: Seq[Attribute] = child.output
 
@@ -965,12 +1036,44 @@ case class StreamingDeduplicateExec(
     Seq(StatefulOperatorCustomSumMetric("numDroppedDuplicateRows", "number of duplicates dropped"))
   }
 
-  override def shortName: String = "dedupe"
-
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     eventTimeWatermarkForEviction.isDefined &&
       newInputWatermark > eventTimeWatermarkForEviction.get
   }
+}
+
+/** Physical operator for executing streaming Deduplicate. */
+case class StreamingDeduplicateExec(
+    keyExpressions: Seq[Attribute],
+    child: SparkPlan,
+    stateInfo: Option[StatefulOperatorStateInfo] = None,
+    eventTimeWatermarkForLateEvents: Option[Long] = None,
+    eventTimeWatermarkForEviction: Option[Long] = None)
+  extends BaseStreamingDeduplicateExec {
+
+  protected val schemaForValueRow: StructType =
+    StructType(Array(StructField("__dummy__", NullType)))
+
+  // We won't check value row in state store since the value StreamingDeduplicateExec.EMPTY_ROW
+  // is unrelated to the output schema.
+  protected val extraOptionOnStateStore: Map[String, String] =
+    Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG -> "false")
+
+  protected def initializeReusedDupInfoRow(): Option[UnsafeRow] = None
+
+  protected def putDupInfoIntoState(
+      store: StateStore,
+      data: UnsafeRow,
+      key: UnsafeRow,
+      reusedDupInfoRow: Option[UnsafeRow]): Unit = {
+    store.put(key, StreamingDeduplicateExec.EMPTY_ROW)
+  }
+
+  protected def evictDupInfoFromState(store: StateStore): Unit = {
+    removeKeysOlderThanWatermark(store)
+  }
+
+  override def shortName: String = "dedupe"
 
   override protected def withNewChildInternal(newChild: SparkPlan): StreamingDeduplicateExec =
     copy(child = newChild)
@@ -979,4 +1082,68 @@ case class StreamingDeduplicateExec(
 object StreamingDeduplicateExec {
   private val EMPTY_ROW =
     UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null))
+}
+
+case class StreamingDeduplicateWithinWatermarkExec(
+    keyExpressions: Seq[Attribute],
+    child: SparkPlan,
+    stateInfo: Option[StatefulOperatorStateInfo] = None,
+    eventTimeWatermarkForLateEvents: Option[Long] = None,
+    eventTimeWatermarkForEviction: Option[Long] = None)
+  extends BaseStreamingDeduplicateExec {
+
+  protected val schemaForValueRow: StructType = StructType(
+    Array(StructField("expiresAtMicros", LongType, nullable = false)))
+
+  protected val extraOptionOnStateStore: Map[String, String] = Map.empty
+
+  private val eventTimeCol: Attribute = WatermarkSupport.findEventTimeColumn(child.output,
+    allowMultipleEventTimeColumns = false).get
+  private val delayThresholdMs = eventTimeCol.metadata.getLong(EventTimeWatermark.delayKey)
+  private val eventTimeColOrdinal: Int = child.output.indexOf(eventTimeCol)
+
+  protected def initializeReusedDupInfoRow(): Option[UnsafeRow] = {
+    val timeoutToUnsafeRow = UnsafeProjection.create(schemaForValueRow)
+    val timeoutRow = timeoutToUnsafeRow(new SpecificInternalRow(schemaForValueRow))
+    Some(timeoutRow)
+  }
+
+  protected def putDupInfoIntoState(
+      store: StateStore,
+      data: UnsafeRow,
+      key: UnsafeRow,
+      reusedDupInfoRow: Option[UnsafeRow]): Unit = {
+    assert(reusedDupInfoRow.isDefined, "This should have reused row.")
+    val timeoutRow = reusedDupInfoRow.get
+
+    // We expect data type of event time column to be TimestampType or TimestampNTZType which both
+    // are internally represented as Long.
+    val timestamp = data.getLong(eventTimeColOrdinal)
+    // The unit of timestamp in Spark is microseconds, convert the delay threshold to micros.
+    val expiresAt = timestamp + DateTimeUtils.millisToMicros(delayThresholdMs)
+
+    timeoutRow.setLong(0, expiresAt)
+    store.put(key, timeoutRow)
+  }
+
+  protected def evictDupInfoFromState(store: StateStore): Unit = {
+    val numRemovedStateRows = longMetric("numRemovedStateRows")
+
+    // Convert watermark value to micros.
+    val watermarkForEviction = DateTimeUtils.millisToMicros(eventTimeWatermarkForEviction.get)
+    store.iterator().foreach { rowPair =>
+      val valueRow = rowPair.value
+
+      val expiresAt = valueRow.getLong(0)
+      if (watermarkForEviction >= expiresAt) {
+        store.remove(rowPair.key)
+        numRemovedStateRows += 1
+      }
+    }
+  }
+
+  override def shortName: String = "dedupeWithinWatermark"
+
+  override protected def withNewChildInternal(
+      newChild: SparkPlan): StreamingDeduplicateWithinWatermarkExec = copy(child = newChild)
 }

@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import java.lang.reflect.{ParameterizedType, Type, WildcardType}
 import java.time.Duration
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.{io => hadoopIo}
 import org.apache.hadoop.hive.common.`type`.{HiveChar, HiveDecimal, HiveIntervalDayTime, HiveIntervalYearMonth, HiveVarchar}
@@ -623,13 +623,7 @@ private[hive] trait HiveInspectors {
         case x: BinaryObjectInspector if x.preferWritable() =>
           data: Any => {
             if (data != null) {
-              // BytesWritable.copyBytes() only available since Hadoop2
-              // In order to keep backward-compatible, we have to copy the
-              // bytes with old apis
-              val bw = x.getPrimitiveWritableObject(data)
-              val result = new Array[Byte](bw.getLength())
-              System.arraycopy(bw.getBytes(), 0, result, 0, bw.getLength())
-              result
+              x.getPrimitiveWritableObject(data).copyBytes()
             } else {
               null
             }

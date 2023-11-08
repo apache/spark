@@ -51,8 +51,8 @@ For connection properties, users can specify the JDBC connection properties in t
 <code>user</code> and <code>password</code> are normally provided as connection properties for
 logging into the data sources.
 
-<table class="table">
-  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
+<table class="table table-striped">
+  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr></thead>
   <tr>
     <td><code>url</code></td>
     <td>(none)</td>
@@ -340,7 +340,7 @@ logging into the data sources.
       This option controls whether the kerberos configuration is to be refreshed or not for the JDBC client before
       establishing a new connection. Set to true if you want to refresh the configuration, otherwise set to false.
       The default value is false. Note that if you set this option to true and try to establish multiple connections,
-      a race condition can occur. One possble situation would be like as follows.
+      a race condition can occur. One possible situation would be like as follows.
       <ol>
         <li>refreshKrb5Config flag is set with security context 1</li>
         <li>A JDBC connection provider is used for the corresponding DBMS</li>
@@ -352,7 +352,7 @@ logging into the data sources.
       </ol>
     </td>
     <td>read/write</td>
-  </tr>  
+  </tr>
 
   <tr>
     <td><code>connectionProvider</code></td>

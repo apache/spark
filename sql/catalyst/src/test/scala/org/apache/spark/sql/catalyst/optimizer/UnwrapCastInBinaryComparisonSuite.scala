@@ -46,7 +46,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   val f2: BoundReference = $"b".float.canBeNull.at(1)
   val f3: BoundReference = $"c".decimal(5, 2).canBeNull.at(2)
   val f4: BoundReference = $"d".boolean.canBeNull.at(3)
-  val f5: BoundReference = $"e".timestamp.canBeNull.at(4)
+  val f5: BoundReference = $"e".timestamp.notNull.at(4)
   val f6: BoundReference = $"f".timestampNTZ.canBeNull.at(5)
 
   test("unwrap casts when literal == max") {
@@ -392,9 +392,8 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
       (f5 >= castTimestamp(dateLit) && f5 < castTimestamp(dateAddOne)) ||
         (f6 >= castTimestampNTZ(dateLit) && f6 < castTimestampNTZ(dateAddOne)))
     assertEquivalent(
-      castDate(f5) <=> dateLit || castDate(f6) === dateLit,
-      (f5 >= castTimestamp(dateLit) && f5 < castTimestamp(dateAddOne)) ||
-        (f6 >= castTimestampNTZ(dateLit) && f6 < castTimestampNTZ(dateAddOne)))
+      castDate(f5) <=> dateLit || castDate(f6) <=> dateLit,
+      (f5 >= castTimestamp(dateLit) && f5 < castTimestamp(dateAddOne)) || castDate(f6) <=> dateLit)
     assertEquivalent(
       dateLit < castDate(f5) || dateLit < castDate(f6),
       castTimestamp(dateAddOne) <= f5 || castTimestampNTZ(dateAddOne) <= f6)

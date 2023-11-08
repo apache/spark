@@ -18,6 +18,7 @@
 import os
 import shutil
 import tempfile
+import unittest
 from contextlib import contextmanager
 
 import pandas as pd
@@ -31,9 +32,9 @@ def normalize_text(s):
     return "\n".join(map(str.strip, s.strip().split("\n")))
 
 
-class CsvTest(PandasOnSparkTestCase, TestUtils):
+class CsvTestsMixin:
     def setUp(self):
-        self.tmp_dir = tempfile.mkdtemp(prefix=CsvTest.__name__)
+        self.tmp_dir = tempfile.mkdtemp(prefix=CsvTests.__name__)
 
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
@@ -253,25 +254,6 @@ class CsvTest(PandasOnSparkTestCase, TestUtils):
             actual = ps.read_csv(fn, sep="\t")
             self.assert_eq(expected, actual, almost=True)
 
-    def test_read_csv_with_squeeze(self):
-        with self.csv_file(self.csv_text) as fn:
-            expected = pd.read_csv(fn, squeeze=True, usecols=["name"])
-            actual = ps.read_csv(fn, squeeze=True, usecols=["name"])
-            self.assert_eq(expected, actual, almost=True)
-
-            expected = pd.read_csv(fn, squeeze=True, usecols=["name", "amount"])
-            actual = ps.read_csv(fn, squeeze=True, usecols=["name", "amount"])
-            self.assert_eq(expected, actual, almost=True)
-
-            expected = pd.read_csv(fn, squeeze=True, usecols=["name", "amount"], index_col=["name"])
-            actual = ps.read_csv(fn, squeeze=True, usecols=["name", "amount"], index_col=["name"])
-            self.assert_eq(expected, actual, almost=True)
-
-    def test_read_csv_with_mangle_dupe_cols(self):
-        self.assertRaisesRegex(
-            ValueError, "mangle_dupe_cols", lambda: ps.read_csv("path", mangle_dupe_cols=False)
-        )
-
     def test_read_csv_with_parse_dates(self):
         self.assertRaisesRegex(
             ValueError, "parse_dates", lambda: ps.read_csv("path", parse_dates=True)
@@ -428,6 +410,10 @@ class CsvTest(PandasOnSparkTestCase, TestUtils):
             output_path = "%s/%s/%s" % (self.tmp_dir, partition_path, output_paths[0])
             with open(output_path) as f:
                 self.assertEqual(f.read(), expected)
+
+
+class CsvTests(CsvTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
 
 
 if __name__ == "__main__":

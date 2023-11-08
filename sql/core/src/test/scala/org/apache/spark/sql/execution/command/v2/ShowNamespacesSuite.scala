@@ -40,17 +40,29 @@ class ShowNamespacesSuite extends command.ShowNamespacesSuiteBase with CommandSu
 
   test("default v2 catalog doesn't support namespace") {
     withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat_no_namespace") {
-      val errMsg = intercept[AnalysisException] {
-        sql("SHOW NAMESPACES")
-      }.getMessage
-      assert(errMsg.contains("does not support namespaces"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SHOW NAMESPACES")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1184",
+        parameters = Map(
+          "plugin" -> "testcat_no_namespace",
+          "ability" -> "namespaces"
+        )
+      )
     }
   }
 
   test("v2 catalog doesn't support namespace") {
-    val errMsg = intercept[AnalysisException] {
-      sql("SHOW NAMESPACES in testcat_no_namespace")
-    }.getMessage
-    assert(errMsg.contains("does not support namespaces"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SHOW NAMESPACES in testcat_no_namespace")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_1184",
+      parameters = Map(
+        "plugin" -> "testcat_no_namespace",
+        "ability" -> "namespaces"
+      )
+    )
   }
 }

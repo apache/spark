@@ -26,7 +26,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class SeriesDateTimeTest(PandasOnSparkTestCase, SQLTestUtils):
+class SeriesDateTimeTestsMixin:
     @property
     def pdf1(self):
         date1 = pd.Series(pd.date_range("2012-1-1 12:45:31", periods=3, freq="M"))
@@ -121,17 +121,17 @@ class SeriesDateTimeTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assert_eq(
             psdf["end_date"].dt.date - psdf["start_date"].dt.date,
-            (pdf["end_date"].dt.date - pdf["start_date"].dt.date).dt.days,
+            (pdf["end_date"].dt.date - pdf["start_date"].dt.date).apply(lambda x: x.days),
         )
 
         self.assert_eq(
             psdf["end_date"].dt.date - datetime.date(2012, 1, 1),
-            (pdf["end_date"].dt.date - datetime.date(2012, 1, 1)).dt.days,
+            (pdf["end_date"].dt.date - datetime.date(2012, 1, 1)).apply(lambda x: x.days),
         )
 
         self.assert_eq(
             datetime.date(2013, 3, 11) - psdf["start_date"].dt.date,
-            (datetime.date(2013, 3, 11) - pdf["start_date"].dt.date).dt.days,
+            (datetime.date(2013, 3, 11) - pdf["start_date"].dt.date).apply(lambda x: x.days),
         )
 
         psdf = ps.DataFrame(
@@ -196,14 +196,11 @@ class SeriesDateTimeTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaises(NotImplementedError):
             self.check_func(lambda x: x.dt.nanosecond)
 
-    def test_week(self):
-        self.check_func(lambda x: x.dt.week)
-
-    def test_weekofyear(self):
-        self.check_func(lambda x: x.dt.weekofyear)
-
     def test_dayofweek(self):
         self.check_func(lambda x: x.dt.dayofweek)
+
+    def test_isocalendar(self):
+        self.check_func(lambda x: x.dt.isocalendar().astype(np.int64))
 
     def test_weekday(self):
         self.check_func(lambda x: x.dt.weekday)
@@ -212,7 +209,7 @@ class SeriesDateTimeTest(PandasOnSparkTestCase, SQLTestUtils):
         self.check_func(lambda x: x.dt.dayofyear)
 
     def test_quarter(self):
-        self.check_func(lambda x: x.dt.dayofyear)
+        self.check_func(lambda x: x.dt.quarter)
 
     def test_is_month_start(self):
         self.check_func(lambda x: x.dt.is_month_start)
@@ -281,6 +278,10 @@ class SeriesDateTimeTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assertRaisesRegex(
             ValueError, "Cannot call DatetimeMethods on type LongType", lambda: ps.Series([0]).dt
         )
+
+
+class SeriesDateTimeTests(SeriesDateTimeTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+    pass
 
 
 if __name__ == "__main__":

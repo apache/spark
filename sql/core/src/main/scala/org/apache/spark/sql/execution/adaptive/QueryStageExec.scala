@@ -86,7 +86,7 @@ abstract class QueryStageExec extends LeafExecNode {
   protected var _resultOption = new AtomicReference[Option[Any]](None)
 
   private[adaptive] def resultOption: AtomicReference[Option[Any]] = _resultOption
-  def isMaterialized: Boolean = resultOption.get().isDefined
+  final def isMaterialized: Boolean = resultOption.get().isDefined
 
   override def output: Seq[Attribute] = plan.output
   override def outputPartitioning: Partitioning = plan.outputPartitioning
@@ -110,7 +110,7 @@ abstract class QueryStageExec extends LeafExecNode {
 
   override def generateTreeString(
       depth: Int,
-      lastChildren: Seq[Boolean],
+      lastChildren: java.util.ArrayList[Boolean],
       append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
@@ -127,8 +127,10 @@ abstract class QueryStageExec extends LeafExecNode {
       maxFields,
       printNodeId,
       indent)
+    lastChildren.add(true)
     plan.generateTreeString(
-      depth + 1, lastChildren :+ true, append, verbose, "", false, maxFields, printNodeId, indent)
+      depth + 1, lastChildren, append, verbose, "", false, maxFields, printNodeId, indent)
+    lastChildren.remove(lastChildren.size() - 1)
   }
 
   override protected[sql] def cleanupResources(): Unit = {
@@ -179,6 +181,8 @@ case class ShuffleQueryStageExec(
     case _ =>
       throw new IllegalStateException(s"wrong plan for shuffle stage:\n ${plan.treeString}")
   }
+
+  def advisoryPartitionSize: Option[Long] = shuffle.advisoryPartitionSize
 
   @transient private lazy val shuffleFuture = shuffle.submitShuffleJob
 
@@ -248,7 +252,7 @@ case class BroadcastQueryStageExec(
 
   override def cancel(): Unit = {
     if (!broadcast.relationFuture.isDone) {
-      sparkContext.cancelJobGroup(broadcast.runId.toString)
+      sparkContext.cancelJobsWithTag(broadcast.jobTag)
       broadcast.relationFuture.cancel(true)
     }
   }
@@ -273,20 +277,22 @@ case class TableCacheQueryStageExec(
   }
 
   @transient
-  private lazy val future: FutureAction[Unit] = {
-    val rdd = inMemoryTableScan.baseCacheRDD()
-    sparkContext.submitJob(
-      rdd,
-      (_: Iterator[CachedBatch]) => (),
-      (0 until rdd.getNumPartitions).toSeq,
-      (_: Int, _: Unit) => (),
-      ()
-    )
+  private lazy val future: Future[Unit] = {
+    if (inMemoryTableScan.isMaterialized) {
+      Future.successful(())
+    } else {
+      val rdd = inMemoryTableScan.baseCacheRDD()
+      sparkContext.submitJob(
+        rdd,
+        (_: Iterator[CachedBatch]) => (),
+        (0 until rdd.getNumPartitions).toSeq,
+        (_: Int, _: Unit) => (),
+        ()
+      )
+    }
   }
 
   override protected def doMaterialize(): Future[Any] = future
-
-  override def isMaterialized: Boolean = super.isMaterialized || inMemoryTableScan.isMaterialized
 
   override def getRuntimeStatistics: Statistics = inMemoryTableScan.relation.computeStats()
 }

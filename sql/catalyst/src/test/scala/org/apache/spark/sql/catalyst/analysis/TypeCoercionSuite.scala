@@ -28,8 +28,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.ReferenceAllColumns
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
 
 abstract class TypeCoercionSuiteBase extends AnalysisTest {
@@ -53,7 +55,7 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
 
     // Check null value
     val castNull = implicitCast(createNull(from), to)
-    assert(DataType.equalsIgnoreCaseAndNullability(
+    assert(DataTypeUtils.equalsIgnoreCaseAndNullability(
       castNull.map(_.dataType).orNull, expected),
       s"Failed to cast $from to $to")
   }
@@ -516,7 +518,7 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
   test("implicit type cast - StringType") {
     val checkedType = StringType
     val nonCastableTypes =
-      complexTypes ++ Seq(BooleanType, NullType, CalendarIntervalType)
+      intervalTypes ++ complexTypes ++ Seq(BooleanType, NullType)
     checkTypeCasting(checkedType, castableTypes = allTypes.filterNot(nonCastableTypes.contains))
     shouldCast(checkedType, DecimalType, DecimalType.SYSTEM_DEFAULT)
     shouldCast(checkedType, NumericType, NumericType.defaultConcreteType)
@@ -527,7 +529,7 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
   test("implicit type cast - ArrayType(StringType)") {
     val checkedType = ArrayType(StringType)
     val nonCastableTypes =
-      complexTypes ++ Seq(BooleanType, NullType, CalendarIntervalType)
+      intervalTypes ++ complexTypes ++ Seq(BooleanType, NullType)
     checkTypeCasting(checkedType,
       castableTypes = allTypes.filterNot(nonCastableTypes.contains).map(ArrayType(_)))
     nonCastableTypes.map(ArrayType(_)).foreach(shouldNotCast(checkedType, _))
@@ -1578,6 +1580,22 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     ruleTest(rules, Divide(nullLit, 1L), Divide(Cast(nullLit, DoubleType), Cast(1L, DoubleType)))
   }
 
+  test("Do not promote strings in binary arithmetic with intervals") {
+    val rule = TypeCoercion.PromoteStrings
+    // Verify String literal is not promoted in binary arithmetic operations with
+    // CalendarIntervalType, DayTimeIntervalType and YearMonthIntervalType
+    Seq(
+      Literal(Duration.ofHours(1)),
+      Literal(Period.ofDays(1)),
+      Literal(new CalendarInterval(1, 1, 1))).foreach { interval =>
+      val l = Literal("a")
+      Seq(Add(l, interval), Subtract(l, interval), Multiply(l, interval), Divide(l, interval))
+        .foreach { expr =>
+          ruleTest(rule, expr, expr)
+        }
+    }
+  }
+
   test("binary comparison with string promotion") {
     val rule = TypeCoercion.PromoteStrings
     ruleTest(rule,
@@ -1762,6 +1780,8 @@ object TypeCoercionSuite {
     Seq(DoubleType, FloatType, DecimalType.SYSTEM_DEFAULT, DecimalType(10, 2))
   val numericTypes: Seq[DataType] = integralTypes ++ fractionalTypes
   val datetimeTypes: Seq[DataType] = Seq(DateType, TimestampType, TimestampNTZType)
+  val intervalTypes: Seq[DataType] = Seq(CalendarIntervalType,
+    DayTimeIntervalType.defaultConcreteType, YearMonthIntervalType.defaultConcreteType)
   val atomicTypes: Seq[DataType] =
     numericTypes ++ datetimeTypes ++ Seq(BinaryType, BooleanType, StringType)
   val complexTypes: Seq[DataType] =
@@ -1771,7 +1791,7 @@ object TypeCoercionSuite {
       new StructType().add("a1", StringType),
       new StructType().add("a1", StringType).add("a2", IntegerType))
   val allTypes: Seq[DataType] =
-    atomicTypes ++ complexTypes ++ Seq(NullType, CalendarIntervalType)
+    atomicTypes ++ intervalTypes ++ complexTypes ++ Seq(NullType)
 
   case class AnyTypeUnaryExpression(child: Expression)
     extends UnaryExpression with ExpectsInputTypes with Unevaluable {

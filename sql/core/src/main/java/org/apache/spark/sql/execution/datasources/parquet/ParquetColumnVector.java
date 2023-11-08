@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.ArrayType;
 import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.catalyst.types.DataTypeUtils;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.MapType;
 import org.apache.spark.sql.types.StructType;
@@ -64,7 +65,7 @@ final class ParquetColumnVector {
       boolean isTopLevel,
       Object defaultValue) {
     DataType sparkType = column.sparkType();
-    if (!sparkType.sameType(vector.dataType())) {
+    if (!DataTypeUtils.sameType(sparkType, vector.dataType())) {
       throw new IllegalArgumentException("Spark type: " + sparkType +
         " doesn't match the type: " + vector.dataType() + " in column vector");
     }
@@ -342,14 +343,10 @@ final class ParquetColumnVector {
   }
 
   private static WritableColumnVector allocateLevelsVector(int capacity, MemoryMode memoryMode) {
-    switch (memoryMode) {
-      case ON_HEAP:
-        return new OnHeapColumnVector(capacity, DataTypes.IntegerType);
-      case OFF_HEAP:
-        return new OffHeapColumnVector(capacity, DataTypes.IntegerType);
-      default:
-        throw new IllegalArgumentException("Unknown memory mode: " + memoryMode);
-    }
+    return switch (memoryMode) {
+      case ON_HEAP -> new OnHeapColumnVector(capacity, DataTypes.IntegerType);
+      case OFF_HEAP -> new OffHeapColumnVector(capacity, DataTypes.IntegerType);
+    };
   }
 
   /**

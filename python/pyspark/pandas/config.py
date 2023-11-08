@@ -23,7 +23,6 @@ import json
 from typing import Any, Callable, Dict, Iterator, List, Tuple, Union
 
 from pyspark._globals import _NoValue, _NoValueType
-
 from pyspark.pandas.utils import default_session
 
 
@@ -270,7 +269,7 @@ _options: List[Option] = [
         default=1000,
         types=int,
         check_func=(
-            lambda v: v is v >= 0,
+            lambda v: v >= 0,
             "'plotting.max_rows' should be greater than or equal to 0.",
         ),
     ),
@@ -365,8 +364,9 @@ def get_option(key: str, default: Union[Any, _NoValueType] = _NoValue) -> Any:
     if default is _NoValue:
         default = _options_dict[key].default
     _options_dict[key].validate(default)
+    spark_session = default_session()
 
-    return json.loads(default_session().conf.get(_key_format(key), default=json.dumps(default)))
+    return json.loads(spark_session.conf.get(_key_format(key), default=json.dumps(default)))
 
 
 def set_option(key: str, value: Any) -> None:
@@ -386,8 +386,9 @@ def set_option(key: str, value: Any) -> None:
     """
     _check_option(key)
     _options_dict[key].validate(value)
+    spark_session = default_session()
 
-    default_session().conf.set(_key_format(key), json.dumps(value))
+    spark_session.conf.set(_key_format(key), json.dumps(value))
 
 
 def reset_option(key: str) -> None:

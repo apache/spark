@@ -14,7 +14,7 @@ SELECT a, udaf(b) FROM testData
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_GROUP_BY",
   "sqlState" : "42803",
@@ -52,7 +52,7 @@ SELECT a, udaf(b) FROM testData GROUP BY b
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
@@ -115,7 +115,7 @@ SELECT a + 2, udaf(b) FROM testData GROUP BY a + 1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
@@ -162,7 +162,7 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "_LEGACY_ERROR_TEMP_1023",
   "messageParameters" : {
-    "prettyName" : "pythonudf",
+    "prettyName" : "pythonudaf",
     "syntax" : "DISTINCT"
   },
   "queryContext" : [ {
@@ -200,13 +200,13 @@ SELECT a AS k, udaf(non_existing) FROM testData GROUP BY k
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`non_existing`",
-    "proposal" : "`testdata`.`a`, `testdata`.`b`"
+    "proposal" : "`a`, `b`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -232,7 +232,7 @@ SELECT k AS a, udaf(v) FROM testDataHasSameNameWithAlias GROUP BY a
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
@@ -256,13 +256,13 @@ SELECT a AS k, udaf(b) FROM testData GROUP BY k
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`k`",
-    "proposal" : "`testdata`.`a`, `testdata`.`b`"
+    "proposal" : "`a`, `b`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -315,24 +315,9 @@ struct<1:int>
 -- !query
 SELECT 1 FROM range(10) HAVING udaf(id) > 0
 -- !query schema
-struct<>
+struct<1:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`id`",
-    "proposal" : "`1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 37,
-    "stopIndex" : 38,
-    "fragment" : "id"
-  } ]
-}
+1
 
 
 -- !query

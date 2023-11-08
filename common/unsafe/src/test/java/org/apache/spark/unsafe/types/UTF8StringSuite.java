@@ -26,9 +26,9 @@ import java.util.*;
 
 import com.google.common.collect.ImmutableMap;
 import org.apache.spark.unsafe.Platform;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 import static org.apache.spark.unsafe.types.UTF8String.*;
@@ -228,6 +228,10 @@ public class UTF8StringSuite {
   public void trims() {
     assertEquals(fromString("1"), fromString("1").trim());
     assertEquals(fromString("1"), fromString("1\t").trimAll());
+
+    assertEquals(fromString("1中文").toString(), fromString("1中文").trimAll().toString());
+    assertEquals(fromString("1"), fromString("1\u0003").trimAll());
+    assertEquals(fromString("1"), fromString("1\u007F").trimAll());
 
     assertEquals(fromString("hello"), fromString("  hello ").trim());
     assertEquals(fromString("hello "), fromString("  hello ").trimLeft());
@@ -678,7 +682,7 @@ public class UTF8StringSuite {
   }
 
   @Test
-  public void testToShort() throws IOException {
+  public void testToShort() {
     Map<String, Short> inputToExpectedOutput = new HashMap<>();
     inputToExpectedOutput.put("1", (short) 1);
     inputToExpectedOutput.put("+1", (short) 1);
@@ -696,7 +700,7 @@ public class UTF8StringSuite {
 
     IntWrapper wrapper = new IntWrapper();
     for (Map.Entry<String, Short> entry : inputToExpectedOutput.entrySet()) {
-      assertTrue(entry.getKey(), UTF8String.fromString(entry.getKey()).toShort(wrapper));
+      assertTrue(UTF8String.fromString(entry.getKey()).toShort(wrapper), entry.getKey());
       assertEquals((short) entry.getValue(), wrapper.value);
     }
 
@@ -704,12 +708,12 @@ public class UTF8StringSuite {
       Arrays.asList("", "  ", "null", "NULL", "\n", "~1212121", "3276700");
 
     for (String negativeInput : negativeInputs) {
-      assertFalse(negativeInput, UTF8String.fromString(negativeInput).toShort(wrapper));
+      assertFalse(UTF8String.fromString(negativeInput).toShort(wrapper), negativeInput);
     }
   }
 
   @Test
-  public void testToByte() throws IOException {
+  public void testToByte() {
     Map<String, Byte> inputToExpectedOutput = new HashMap<>();
     inputToExpectedOutput.put("1", (byte) 1);
     inputToExpectedOutput.put("+1",(byte)  1);
@@ -727,7 +731,7 @@ public class UTF8StringSuite {
 
     IntWrapper intWrapper = new IntWrapper();
     for (Map.Entry<String, Byte> entry : inputToExpectedOutput.entrySet()) {
-      assertTrue(entry.getKey(), UTF8String.fromString(entry.getKey()).toByte(intWrapper));
+      assertTrue(UTF8String.fromString(entry.getKey()).toByte(intWrapper), entry.getKey());
       assertEquals((byte) entry.getValue(), intWrapper.value);
     }
 
@@ -735,12 +739,12 @@ public class UTF8StringSuite {
       Arrays.asList("", "  ", "null", "NULL", "\n", "~1212121", "12345678901234567890");
 
     for (String negativeInput : negativeInputs) {
-      assertFalse(negativeInput, UTF8String.fromString(negativeInput).toByte(intWrapper));
+      assertFalse(UTF8String.fromString(negativeInput).toByte(intWrapper), negativeInput);
     }
   }
 
   @Test
-  public void testToInt() throws IOException {
+  public void testToInt() {
     Map<String, Integer> inputToExpectedOutput = new HashMap<>();
     inputToExpectedOutput.put("1", 1);
     inputToExpectedOutput.put("+1", 1);
@@ -758,7 +762,7 @@ public class UTF8StringSuite {
 
     IntWrapper intWrapper = new IntWrapper();
     for (Map.Entry<String, Integer> entry : inputToExpectedOutput.entrySet()) {
-      assertTrue(entry.getKey(), UTF8String.fromString(entry.getKey()).toInt(intWrapper));
+      assertTrue(UTF8String.fromString(entry.getKey()).toInt(intWrapper), entry.getKey());
       assertEquals((int) entry.getValue(), intWrapper.value);
     }
 
@@ -766,12 +770,12 @@ public class UTF8StringSuite {
       Arrays.asList("", "  ", "null", "NULL", "\n", "~1212121", "12345678901234567890");
 
     for (String negativeInput : negativeInputs) {
-      assertFalse(negativeInput, UTF8String.fromString(negativeInput).toInt(intWrapper));
+      assertFalse(UTF8String.fromString(negativeInput).toInt(intWrapper), negativeInput);
     }
   }
 
   @Test
-  public void testToLong() throws IOException {
+  public void testToLong() {
     Map<String, Long> inputToExpectedOutput = new HashMap<>();
     inputToExpectedOutput.put("1", 1L);
     inputToExpectedOutput.put("+1", 1L);
@@ -789,7 +793,7 @@ public class UTF8StringSuite {
 
     LongWrapper wrapper = new LongWrapper();
     for (Map.Entry<String, Long> entry : inputToExpectedOutput.entrySet()) {
-      assertTrue(entry.getKey(), UTF8String.fromString(entry.getKey()).toLong(wrapper));
+      assertTrue(UTF8String.fromString(entry.getKey()).toLong(wrapper), entry.getKey());
       assertEquals((long) entry.getValue(), wrapper.value);
     }
 
@@ -797,7 +801,7 @@ public class UTF8StringSuite {
         "1234567890123456789012345678901234");
 
     for (String negativeInput : negativeInputs) {
-      assertFalse(negativeInput, UTF8String.fromString(negativeInput).toLong(wrapper));
+      assertFalse(UTF8String.fromString(negativeInput).toLong(wrapper), negativeInput);
     }
   }
 

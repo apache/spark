@@ -27,7 +27,9 @@ import org.apache.logging.log4j.Level
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.command.CreateTableCommand
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.HiveExternalCatalog._
@@ -41,7 +43,10 @@ import org.apache.spark.util.Utils
 /**
  * Tests for persisting tables created though the data sources API into the metastore.
  */
-class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+class MetastoreDataSourcesSuite extends QueryTest
+  with SQLTestUtils
+  with TestHiveSingleton
+  with QueryErrorsBase {
   import hiveContext._
   import spark.implicits._
 
@@ -520,10 +525,21 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           assert(table("createdJsonTable").schema === df.schema)
           checkAnswer(sql("SELECT * FROM createdJsonTable"), df)
 
-          val e = intercept[AnalysisException] {
-              sparkSession.catalog.createTable("createdJsonTable", jsonFilePath.toString)
+          Seq("true", "false").foreach { caseSensitive =>
+            withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+              val e = intercept[AnalysisException] {
+                sparkSession.catalog.createTable("createdJsonTable", tempPath.toString)
+              }
+              val expectedTableName = s"`$SESSION_CATALOG_NAME`.`default`." + {
+                if (caseSensitive.toBoolean) {
+                  "`createdJsonTable`"
+                } else {
+                  "`createdjsontable`"
+                }
+              }
+              checkErrorTableAlreadyExists(e, expectedTableName)
             }
-          checkErrorTableAlreadyExists(e, s"`$SESSION_CATALOG_NAME`.`default`.`createdJsonTable`")
+          }
         }
 
         // Data should not be deleted.
@@ -550,16 +566,18 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   }
 
   test("path required error") {
-    assert(
-      intercept[AnalysisException] {
+    checkError(
+      exception = intercept[AnalysisException] {
         sparkSession.catalog.createTable(
           "createdJsonTable",
           "org.apache.spark.sql.json",
           Map.empty[String, String])
 
         table("createdJsonTable")
-      }.getMessage.contains("Unable to infer schema"),
-      "We should complain that path is not specified.")
+      },
+      errorClass = "UNABLE_TO_INFER_SCHEMA",
+      parameters = Map("format" -> "JSON")
+    )
 
     sql("DROP TABLE IF EXISTS createdJsonTable")
   }
@@ -776,7 +794,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           })
       // Make sure partition columns are correctly stored in metastore.
       assert(
-        expectedPartitionColumns.sameType(actualPartitionColumns),
+        DataTypeUtils.sameType(expectedPartitionColumns, actualPartitionColumns),
         s"Partitions columns stored in metastore $actualPartitionColumns is not the " +
           s"partition columns defined by the saveAsTable operation $expectedPartitionColumns.")
 
@@ -818,7 +836,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           })
       // Make sure bucketBy columns are correctly stored in metastore.
       assert(
-        expectedBucketByColumns.sameType(actualBucketByColumns),
+        DataTypeUtils.sameType(expectedBucketByColumns, actualBucketByColumns),
         s"Partitions columns stored in metastore $actualBucketByColumns is not the " +
           s"partition columns defined by the saveAsTable operation $expectedBucketByColumns.")
 
@@ -829,7 +847,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           })
       // Make sure sortBy columns are correctly stored in metastore.
       assert(
-        expectedSortByColumns.sameType(actualSortByColumns),
+        DataTypeUtils.sameType(expectedSortByColumns, actualSortByColumns),
         s"Partitions columns stored in metastore $actualSortByColumns is not the " +
           s"partition columns defined by the saveAsTable operation $expectedSortByColumns.")
 
@@ -902,33 +920,51 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
     withTable("appendOrcToParquet") {
       createDF(0, 9).write.format("parquet").saveAsTable("appendOrcToParquet")
-      val e = intercept[AnalysisException] {
-        createDF(10, 19).write.mode(SaveMode.Append).format("orc").saveAsTable("appendOrcToParquet")
-      }
-      assert(e.getMessage.contains("The format of the existing table " +
-        s"$SESSION_CATALOG_NAME.default.appendorctoparquet is `Parquet"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          createDF(10, 19).write.mode(SaveMode.Append).format("orc").
+            saveAsTable("appendOrcToParquet")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1159",
+        parameters = Map(
+          "tableName" -> s"$SESSION_CATALOG_NAME.default.appendorctoparquet",
+          "existingProvider" -> "ParquetDataSourceV2",
+          "specifiedProvider" -> "OrcDataSourceV2"
+        )
+      )
     }
 
     withTable("appendParquetToJson") {
       createDF(0, 9).write.format("json").saveAsTable("appendParquetToJson")
-      val msg = intercept[AnalysisException] {
-        createDF(10, 19).write.mode(SaveMode.Append).format("parquet")
-          .saveAsTable("appendParquetToJson")
-      }.getMessage
-
-      assert(msg.contains("The format of the existing table " +
-        s"$SESSION_CATALOG_NAME.default.appendparquettojson is `Json"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          createDF(10, 19).write.mode(SaveMode.Append).format("parquet")
+            .saveAsTable("appendParquetToJson")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1159",
+        parameters = Map(
+          "tableName" -> s"$SESSION_CATALOG_NAME.default.appendparquettojson",
+          "existingProvider" -> "JsonDataSourceV2",
+          "specifiedProvider" -> "ParquetDataSourceV2"
+        )
+      )
     }
 
     withTable("appendTextToJson") {
       createDF(0, 9).write.format("json").saveAsTable("appendTextToJson")
-      val msg = intercept[AnalysisException] {
-        createDF(10, 19).write.mode(SaveMode.Append).format("text")
-          .saveAsTable("appendTextToJson")
-      }.getMessage
-      // The format of the existing table can be JsonDataSourceV2 or JsonFileFormat.
-      assert(msg.contains("The format of the existing table " +
-        s"$SESSION_CATALOG_NAME.default.appendtexttojson is `Json"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          createDF(10, 19).write.mode(SaveMode.Append).format("text")
+            .saveAsTable("appendTextToJson")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1159",
+        // The format of the existing table can be JsonDataSourceV2 or JsonFileFormat.
+        parameters = Map(
+          "tableName" -> s"$SESSION_CATALOG_NAME.default.appendtexttojson",
+          "existingProvider" -> "JsonDataSourceV2",
+          "specifiedProvider" -> "TextDataSourceV2"
+        )
+      )
     }
   }
 
@@ -1220,16 +1256,18 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("create a temp view using hive") {
     val tableName = "tab1"
     withTempView(tableName) {
-      val e = intercept[AnalysisException] {
-        sql(
-          s"""
-             |CREATE TEMPORARY VIEW $tableName
-             |(col1 int)
-             |USING hive
-           """.stripMargin)
-      }.getMessage
-      assert(e.contains("Hive data source can only be used with tables, you can't use it with " +
-        "CREATE TEMP VIEW USING"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""
+               |CREATE TEMPORARY VIEW $tableName
+               |(col1 int)
+               |USING hive
+             """.stripMargin)
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1293",
+        parameters = Map.empty
+      )
     }
   }
 
@@ -1246,17 +1284,21 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       checkAnswer(table(tableName),
         Seq(Row(1, 2), Row(1, 2)))
 
-      var e = intercept[AnalysisException] {
-        table(tableName).write.mode(SaveMode.Overwrite).saveAsTable(tableName)
-      }
-      assert(e.getMessage.contains(
-        s"Cannot overwrite table $SESSION_CATALOG_NAME.default.$tableName " +
-        "that is also being read from"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          table(tableName).write.mode(SaveMode.Overwrite).saveAsTable(tableName)
+        },
+        errorClass = "UNSUPPORTED_OVERWRITE.TABLE",
+        parameters = Map("table" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`")
+      )
 
-      e = intercept[AnalysisException] {
-        table(tableName).write.mode(SaveMode.ErrorIfExists).saveAsTable(tableName)
-      }
-      checkErrorTableAlreadyExists(e, s"`$SESSION_CATALOG_NAME`.`default`.`$tableName`")
+      checkError(
+        exception = intercept[AnalysisException] {
+          table(tableName).write.mode(SaveMode.ErrorIfExists).saveAsTable(tableName)
+        },
+        errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+        parameters = Map("relationName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`")
+      )
     }
   }
 
@@ -1280,10 +1322,13 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         table(tableName),
         Seq(Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2)))
 
-      val e = intercept[AnalysisException] {
-        table(tableName).write.mode(SaveMode.Overwrite).insertInto(tableName)
-      }.getMessage
-      assert(e.contains(s"Cannot overwrite a path that is also being read from"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          table(tableName).write.mode(SaveMode.Overwrite).insertInto(tableName)
+        },
+        errorClass = "UNSUPPORTED_OVERWRITE.TABLE",
+        parameters = Map("table" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`")
+      )
     }
   }
 
@@ -1334,8 +1379,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
   test("read table with corrupted schema") {
     try {
-      val schema = StructType(StructField("int", IntegerType, true) :: Nil)
-      val hiveTable = CatalogTable(
+      val schema = StructType(StructField("int", IntegerType) :: Nil)
+      val hiveTableWithoutNumPartsProp = CatalogTable(
         identifier = TableIdentifier("t", Some("default")),
         tableType = CatalogTableType.MANAGED,
         schema = HiveExternalCatalog.EMPTY_DATA_SCHEMA,
@@ -1343,23 +1388,52 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         storage = CatalogStorageFormat.empty,
         properties = Map(
           DATASOURCE_PROVIDER -> "json",
-          // no DATASOURCE_SCHEMA_NUMPARTS
           DATASOURCE_SCHEMA_PART_PREFIX + 0 -> schema.json))
 
-      hiveClient.createTable(hiveTable, ignoreIfExists = false)
+      hiveClient.createTable(hiveTableWithoutNumPartsProp, ignoreIfExists = false)
 
-      val e = intercept[AnalysisException] {
-        sharedState.externalCatalog.getTable("default", "t")
-      }.getMessage
-      assert(e.contains("Cannot read table property 'spark.sql.sources.schema' as it's corrupted"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sharedState.externalCatalog.getTable("default", "t")
+        },
+        errorClass = "INSUFFICIENT_TABLE_PROPERTY.MISSING_KEY",
+        parameters = Map("key" -> toSQLConf("spark.sql.sources.schema"))
+      )
+
+      val hiveTableWithNumPartsProp = CatalogTable(
+        identifier = TableIdentifier("t2", Some("default")),
+        tableType = CatalogTableType.MANAGED,
+        schema = HiveExternalCatalog.EMPTY_DATA_SCHEMA,
+        provider = Some("json"),
+        storage = CatalogStorageFormat.empty,
+        properties = Map(
+          DATASOURCE_PROVIDER -> "json",
+          DATASOURCE_SCHEMA_PREFIX + "numParts" -> "3",
+          DATASOURCE_SCHEMA_PART_PREFIX + 0 -> schema.json))
+
+      hiveClient.createTable(hiveTableWithNumPartsProp, ignoreIfExists = false)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sharedState.externalCatalog.getTable("default", "t2")
+        },
+        errorClass = "INSUFFICIENT_TABLE_PROPERTY.MISSING_KEY_PART",
+        parameters = Map(
+          "key" -> toSQLConf("spark.sql.sources.schema.part.1"),
+          "totalAmountOfParts" -> "3")
+      )
 
       withDebugMode {
         val tableMeta = sharedState.externalCatalog.getTable("default", "t")
         assert(tableMeta.identifier == TableIdentifier("t", Some("default")))
         assert(tableMeta.properties(DATASOURCE_PROVIDER) == "json")
+        val tableMeta2 = sharedState.externalCatalog.getTable("default", "t2")
+        assert(tableMeta2.identifier == TableIdentifier("t2", Some("default")))
+        assert(tableMeta2.properties(DATASOURCE_PROVIDER) == "json")
       }
     } finally {
       hiveClient.dropTable("default", "t", ignoreIfNotExists = true, purge = true)
+      hiveClient.dropTable("default", "t2", ignoreIfNotExists = true, purge = true)
     }
   }
 

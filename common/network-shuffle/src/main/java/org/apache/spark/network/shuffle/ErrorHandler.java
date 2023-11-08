@@ -29,7 +29,7 @@ import org.apache.spark.network.server.BlockPushNonFatalFailure;
  * Plugs into {@link RetryingBlockTransferor} to further control when an exception should be retried
  * and logged.
  * Note: {@link RetryingBlockTransferor} will delegate the exception to this handler only when
- * - remaining retries < max retries
+ * - remaining retries  &lt; max retries
  * - exception is an IOException
  *
  * @since 3.1.0

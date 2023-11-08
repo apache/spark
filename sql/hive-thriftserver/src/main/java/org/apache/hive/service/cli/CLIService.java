@@ -536,7 +536,7 @@ public class CLIService extends CompositeService implements ICLIService {
 
     try {
       Hive.closeCurrent();
-      return Hive.get(hiveConf).getDelegationToken(owner, owner);
+      return Hive.getWithoutRegisterFns(hiveConf).getDelegationToken(owner, owner);
     } catch (HiveException e) {
       if (e.getCause() instanceof UnsupportedOperationException) {
         throw (UnsupportedOperationException)e.getCause();

@@ -19,6 +19,7 @@ from typing import ClassVar, Type, Dict, List, Optional, Union, cast
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.resource import ResourceInformation
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
+from pyspark.errors import PySparkRuntimeError
 
 
 class TaskContext:
@@ -355,7 +356,10 @@ class BarrierTaskContext(TaskContext):
         This API is experimental
         """
         if not isinstance(cls._taskContext, BarrierTaskContext):
-            raise RuntimeError("It is not in a barrier stage")
+            raise PySparkRuntimeError(
+                error_class="NOT_IN_BARRIER_STAGE",
+                message_parameters={},
+            )
         return cls._taskContext
 
     @classmethod
@@ -386,8 +390,12 @@ class BarrierTaskContext(TaskContext):
         or a `SparkException` after timeout.
         """
         if self._port is None or self._secret is None:
-            raise RuntimeError(
-                "Not supported to call barrier() before initialize BarrierTaskContext."
+            raise PySparkRuntimeError(
+                error_class="CALL_BEFORE_INITIALIZE",
+                message_parameters={
+                    "func_name": "barrier",
+                    "object": "BarrierTaskContext",
+                },
             )
         else:
             _load_from_socket(self._port, self._secret, BARRIER_FUNCTION)
@@ -411,8 +419,12 @@ class BarrierTaskContext(TaskContext):
         if not isinstance(message, str):
             raise TypeError("Argument `message` must be of type `str`")
         elif self._port is None or self._secret is None:
-            raise RuntimeError(
-                "Not supported to call barrier() before initialize BarrierTaskContext."
+            raise PySparkRuntimeError(
+                error_class="CALL_BEFORE_INITIALIZE",
+                message_parameters={
+                    "func_name": "allGather",
+                    "object": "BarrierTaskContext",
+                },
             )
         else:
             return _load_from_socket(self._port, self._secret, ALL_GATHER_FUNCTION, message)
@@ -438,8 +450,12 @@ class BarrierTaskContext(TaskContext):
         '...:...'
         """
         if self._port is None or self._secret is None:
-            raise RuntimeError(
-                "Not supported to call getTaskInfos() before initialize " + "BarrierTaskContext."
+            raise PySparkRuntimeError(
+                error_class="CALL_BEFORE_INITIALIZE",
+                message_parameters={
+                    "func_name": "getTaskInfos",
+                    "object": "BarrierTaskContext",
+                },
             )
         else:
             addresses = cast(Dict[str, str], self._localProperties).get("addresses", "")

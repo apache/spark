@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.datasources.v2.jdbc
 import java.sql.SQLException
 import java.util
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
@@ -66,7 +66,7 @@ class JDBCTableCatalog extends TableCatalog
     JdbcUtils.withConnection(options) { conn =>
       val schemaPattern = if (namespace.length == 1) namespace.head else null
       val rs = conn.getMetaData
-        .getTables(null, schemaPattern, "%", Array("TABLE"));
+        .getTables(null, schemaPattern, "%", Array("TABLE"))
       new Iterator[Identifier] {
         def hasNext = rs.next()
         def next() = Identifier.of(namespace, rs.getString("TABLE_NAME"))
@@ -99,7 +99,7 @@ class JDBCTableCatalog extends TableCatalog
     checkNamespace(oldIdent.namespace())
     JdbcUtils.withConnection(options) { conn =>
       JdbcUtils.classifyException(s"Failed table renaming from $oldIdent to $newIdent", dialect) {
-        JdbcUtils.renameTable(conn, getTableName(oldIdent), getTableName(newIdent), options)
+        JdbcUtils.renameTable(conn, oldIdent, newIdent, options)
       }
     }
   }

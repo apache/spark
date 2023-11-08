@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive.client
 import java.io.{ByteArrayOutputStream, File, PrintStream, PrintWriter}
 import java.net.URI
 
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
@@ -663,16 +662,22 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
 
   test("sql read hive materialized view") {
     // HIVE-14249 Since Hive 2.3.0, materialized view is supported.
-    if (version == "2.3" || version == "3.0" || version == "3.1") {
-      // Since Hive 3.0(HIVE-19383), we can not run local MR by `client.runSqlHive` with JDK 11.
-      assume(version == "2.3" || !SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
+    // Since Hive 3.0(HIVE-19383), we can not run local MR by `client.runSqlHive` with JDK 11.
+    if (version == "2.3") {
       // Since HIVE-18394(Hive 3.1), "Create Materialized View" should default to rewritable ones
-      val disableRewrite = if (version == "2.3" || version == "3.0") "" else "DISABLE REWRITE"
       client.runSqlHive("CREATE TABLE materialized_view_tbl (c1 INT)")
       client.runSqlHive(
-        s"CREATE MATERIALIZED VIEW mv1 $disableRewrite AS SELECT * FROM materialized_view_tbl")
-      val e = intercept[AnalysisException](versionSpark.table("mv1").collect()).getMessage
-      assert(e.contains("Hive materialized view is not supported"))
+        s"CREATE MATERIALIZED VIEW mv1 AS SELECT * FROM materialized_view_tbl")
+      checkError(
+        exception = intercept[AnalysisException] {
+          versionSpark.table("mv1").collect()
+        },
+        errorClass = "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE",
+        parameters = Map(
+          "tableName" -> "`mv1`",
+          "tableType" -> "materialized view"
+        )
+      )
     }
   }
 
@@ -900,7 +905,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
   test("Decimal support of Avro Hive serde") {
     val tableName = "tab1"
     // TODO: add the other logical types. For details, see the link:
-    // https://avro.apache.org/docs/1.11.1/specification/#logical-types
+    // https://avro.apache.org/docs/1.11.3/specification/#logical-types
     val avroSchema =
     """{
       |  "name": "test_record",
@@ -941,8 +946,15 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
         if (isPartitioned) {
           val insertStmt = s"INSERT OVERWRITE TABLE $tableName partition (ds='a') SELECT 1.3"
           if (version == "0.12" || version == "0.13") {
-            val e = intercept[AnalysisException](versionSpark.sql(insertStmt)).getMessage
-            assert(e.contains(errorMsg))
+            checkError(
+              exception = intercept[AnalysisException](versionSpark.sql(insertStmt)),
+              errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+              parameters = Map(
+                "tableName" -> "`spark_catalog`.`default`.`tab1`",
+                "colName" -> "`f0`",
+                "srcType" -> "\"DECIMAL(2,1)\"",
+                "targetType" -> "\"BINARY\"")
+            )
           } else {
             versionSpark.sql(insertStmt)
             assert(versionSpark.table(tableName).collect() ===
@@ -951,8 +963,15 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
         } else {
           val insertStmt = s"INSERT OVERWRITE TABLE $tableName SELECT 1.3"
           if (version == "0.12" || version == "0.13") {
-            val e = intercept[AnalysisException](versionSpark.sql(insertStmt)).getMessage
-            assert(e.contains(errorMsg))
+            checkError(
+              exception = intercept[AnalysisException](versionSpark.sql(insertStmt)),
+              errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+              parameters = Map(
+                "tableName" -> "`spark_catalog`.`default`.`tab1`",
+                "colName" -> "`f0`",
+                "srcType" -> "\"DECIMAL(2,1)\"",
+                "targetType" -> "\"BINARY\"")
+            )
           } else {
             versionSpark.sql(insertStmt)
             assert(versionSpark.table(tableName).collect() ===

@@ -18,6 +18,10 @@
           "unresolvedAttribute": {
             "unparsedIdentifier": "a"
           }
+        }, {
+          "literal": {
+            "boolean": false
+          }
         }]
       }
     }]

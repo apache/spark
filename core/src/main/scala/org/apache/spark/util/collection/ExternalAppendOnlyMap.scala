@@ -362,7 +362,7 @@ class ExternalAppendOnlyMap[K, V, C](
     private def removeFromBuffer[T](buffer: ArrayBuffer[T], index: Int): T = {
       val elem = buffer(index)
       buffer(index) = buffer(buffer.size - 1)  // This also works if index == buffer.size - 1
-      buffer.trimEnd(1)
+      buffer.dropRightInPlace(1)
       elem
     }
 
@@ -460,13 +460,13 @@ class ExternalAppendOnlyMap[K, V, C](
     // An intermediate stream that reads from exactly one batch
     // This guards against pre-fetching and other arbitrary behavior of higher level streams
     private var deserializeStream: DeserializationStream = null
-    private var nextItem: (K, C) = null
+    private var batchIterator: Iterator[(K, C)] = null
     private var objectsRead = 0
 
     /**
      * Construct a stream that reads only from the next batch.
      */
-    private def nextBatchStream(): DeserializationStream = {
+    private def nextBatchIterator(): Iterator[(K, C)] = {
       // Note that batchOffsets.length = numBatches + 1 since we did a scan above; check whether
       // we're still in a valid batch.
       if (batchIndex < batchOffsets.length - 1) {
@@ -489,7 +489,8 @@ class ExternalAppendOnlyMap[K, V, C](
 
         val bufferedStream = new BufferedInputStream(ByteStreams.limit(fileStream, end - start))
         val wrappedStream = serializerManager.wrapStream(blockId, bufferedStream)
-        ser.deserializeStream(wrappedStream)
+        deserializeStream = ser.deserializeStream(wrappedStream)
+        deserializeStream.asKeyValueIterator.asInstanceOf[Iterator[(K, C)]]
       } else {
         // No more batches left
         cleanup()
@@ -504,44 +505,31 @@ class ExternalAppendOnlyMap[K, V, C](
      * If no more pairs are left, return null.
      */
     private def readNextItem(): (K, C) = {
-      try {
-        val k = deserializeStream.readKey().asInstanceOf[K]
-        val c = deserializeStream.readValue().asInstanceOf[C]
-        val item = (k, c)
-        objectsRead += 1
-        if (objectsRead == serializerBatchSize) {
-          objectsRead = 0
-          deserializeStream = nextBatchStream()
-        }
-        item
-      } catch {
-        case e: EOFException =>
-          cleanup()
-          null
+      val item = batchIterator.next()
+      objectsRead += 1
+      if (objectsRead == serializerBatchSize) {
+        objectsRead = 0
+        batchIterator = nextBatchIterator()
       }
+      item
     }
 
     override def hasNext: Boolean = {
-      if (nextItem == null) {
-        if (deserializeStream == null) {
-          // In case of deserializeStream has not been initialized
-          deserializeStream = nextBatchStream()
-          if (deserializeStream == null) {
-            return false
-          }
+      if (batchIterator == null) {
+        // In case of batchIterator has not been initialized
+        batchIterator = nextBatchIterator()
+        if (batchIterator == null) {
+          return false
         }
-        nextItem = readNextItem()
       }
-      nextItem != null
+      batchIterator.hasNext
     }
 
     override def next(): (K, C) = {
       if (!hasNext) {
         throw new NoSuchElementException
       }
-      val item = nextItem
-      nextItem = null
-      item
+      readNextItem()
     }
 
     private def cleanup(): Unit = {
@@ -577,7 +565,7 @@ class ExternalAppendOnlyMap[K, V, C](
       if (hasSpilled) {
         false
       } else {
-        logInfo(s"Task ${context.taskAttemptId} force spilling in-memory map to disk and " +
+        logInfo(s"Task ${context.taskAttemptId()} force spilling in-memory map to disk and " +
           s"it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
         val nextUpstream = spillMemoryIteratorToDisk(upstream)
         assert(!upstream.hasNext)
@@ -593,7 +581,7 @@ class ExternalAppendOnlyMap[K, V, C](
     }
 
     def toCompletionIterator: CompletionIterator[(K, C), SpillableIterator] = {
-      CompletionIterator[(K, C), SpillableIterator](this, this.destroy)
+      CompletionIterator[(K, C), SpillableIterator](this, this.destroy())
     }
 
     def readNext(): (K, C) = SPILL_LOCK.synchronized {
@@ -604,7 +592,7 @@ class ExternalAppendOnlyMap[K, V, C](
       }
     }
 
-    override def hasNext(): Boolean = cur != null
+    override def hasNext: Boolean = cur != null
 
     override def next(): (K, C) = {
       val r = cur

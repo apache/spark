@@ -10,9 +10,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -433,8 +433,8 @@ Streaming core
 artifact `spark-streaming-xyz_{{site.SCALA_BINARY_VERSION}}` to the dependencies. For example,
 some of the common ones are as follows.
 
-<table class="table">
-<tr><th>Source</th><th>Artifact</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Source</th><th>Artifact</th></tr></thead>
 <tr><td> Kafka </td><td> spark-streaming-kafka-0-10_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> Kinesis<br/></td><td>spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}} [Amazon Software License] </td></tr>
 <tr><td></td><td></td></tr>
@@ -465,7 +465,7 @@ ssc = StreamingContext(sc, 1)
 {% endhighlight %}
 
 The `appName` parameter is a name for your application to show on the cluster UI.
-`master` is a [Spark, Mesos or YARN cluster URL](submitting-applications.html#master-urls),
+`master` is a [Spark or YARN cluster URL](submitting-applications.html#master-urls),
 or a special __"local[\*]"__ string to run in local mode. In practice, when running on a cluster,
 you will not want to hardcode `master` in the program,
 but rather [launch the application with `spark-submit`](submitting-applications.html) and
@@ -490,7 +490,7 @@ val ssc = new StreamingContext(conf, Seconds(1))
 {% endhighlight %}
 
 The `appName` parameter is a name for your application to show on the cluster UI.
-`master` is a [Spark, Mesos, Kubernetes or YARN cluster URL](submitting-applications.html#master-urls),
+`master` is a [Spark, Kubernetes or YARN cluster URL](submitting-applications.html#master-urls),
 or a special __"local[\*]"__ string to run in local mode. In practice, when running on a cluster,
 you will not want to hardcode `master` in the program,
 but rather [launch the application with `spark-submit`](submitting-applications.html) and
@@ -526,7 +526,7 @@ JavaStreamingContext ssc = new JavaStreamingContext(conf, new Duration(1000));
 {% endhighlight %}
 
 The `appName` parameter is a name for your application to show on the cluster UI.
-`master` is a [Spark, Mesos or YARN cluster URL](submitting-applications.html#master-urls),
+`master` is a [Spark or YARN cluster URL](submitting-applications.html#master-urls),
 or a special __"local[\*]"__ string to run in local mode. In practice, when running on a cluster,
 you will not want to hardcode `master` in the program,
 but rather [launch the application with `spark-submit`](submitting-applications.html) and
@@ -748,7 +748,7 @@ of the store is consistent with that expected by Spark Streaming. It may be
 that writing directly into a destination directory is the appropriate strategy for
 streaming data via the chosen object store.
 
-For more details on this topic, consult the [Hadoop Filesystem Specification](https://hadoop.apache.org/docs/stable2/hadoop-project-dist/hadoop-common/filesystem/introduction.html).
+For more details on this topic, consult the [Hadoop Filesystem Specification](https://hadoop.apache.org/docs/stable3/hadoop-project-dist/hadoop-common/filesystem/introduction.html).
 
 #### Streams based on Custom Receivers
 {:.no_toc}
@@ -762,9 +762,9 @@ DStreams can be created with data streams received through custom receivers. See
 For testing a Spark Streaming application with test data, one can also create a DStream based on a queue of RDDs, using `streamingContext.queueStream(queueOfRDDs)`. Each RDD pushed into the queue will be treated as a batch of data in the DStream, and processed like a stream.
 
 For more details on streams from sockets and files, see the API documentations of the relevant functions in
-[StreamingContext](api/scala/org/apache/spark/streaming/StreamingContext.html) for
-Scala, [JavaStreamingContext](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html)
-for Java, and [StreamingContext](api/python/reference/api/pyspark.streaming.StreamingContext.html#pyspark.streaming.StreamingContext) for Python.
+[StreamingContext](api/python/reference/api/pyspark.streaming.StreamingContext.html#pyspark.streaming.StreamingContext) for Python,
+[StreamingContext](api/scala/org/apache/spark/streaming/StreamingContext.html) for Scala,
+and [JavaStreamingContext](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html) for Java.
 
 ### Advanced Sources
 {:.no_toc}
@@ -820,8 +820,8 @@ Similar to that of RDDs, transformations allow the data from the input DStream t
 DStreams support many of the transformations available on normal Spark RDD's.
 Some of the common ones are as follows.
 
-<table class="table">
-<tr><th style="width:25%">Transformation</th><th>Meaning</th></tr>
+<table class="table table-striped">
+<thead><tr><th style="width:25%">Transformation</th><th>Meaning</th></tr></thead>
 <tr>
   <td> <b>map</b>(<i>func</i>) </td>
   <td> Return a new DStream by passing each element of the source DStream through a
@@ -1109,8 +1109,8 @@ JavaPairDStream<String, Integer> windowedWordCounts = pairs.reduceByKeyAndWindow
 Some of the common window operations are as follows. All of these operations take the
 said two parameters - <i>windowLength</i> and <i>slideInterval</i>.
 
-<table class="table">
-<tr><th style="width:25%">Transformation</th><th>Meaning</th></tr>
+<table class="table table-striped">
+<thead><tr><th style="width:25%">Transformation</th><th>Meaning</th></tr></thead>
 <tr>
   <td> <b>window</b>(<i>windowLength</i>, <i>slideInterval</i>) </td>
   <td> Return a new DStream which is computed based on windowed batches of the source DStream.
@@ -1201,7 +1201,7 @@ JavaPairDStream<String, Tuple2<String, String>> joinedStream = stream1.join(stre
 </div>
 
 </div>
-Here, in each batch interval, the RDD generated by `stream1` will be joined with the RDD generated by `stream2`. You can also do `leftOuterJoin`, `rightOuterJoin`, `fullOuterJoin`. Furthermore, it is often very useful to do joins over windows of the streams. That is pretty easy as well. 
+Here, in each batch interval, the RDD generated by `stream1` will be joined with the RDD generated by `stream2`. You can also do `leftOuterJoin`, `rightOuterJoin`, `fullOuterJoin`. Furthermore, it is often very useful to do joins over windows of the streams. That is pretty easy as well.
 
 <div class="codetabs">
 
@@ -1265,12 +1265,12 @@ JavaPairDStream<String, String> joinedStream = windowedStream.transform(rdd -> r
 
 In fact, you can also dynamically change the dataset you want to join against. The function provided to `transform` is evaluated every batch interval and therefore will use the current dataset that `dataset` reference points to.
 
-The complete list of DStream transformations is available in the API documentation. For the Scala API,
-see [DStream](api/scala/org/apache/spark/streaming/dstream/DStream.html)
+The complete list of DStream transformations is available in the API documentation. For the Python API,
+see [DStream](api/python/reference/api/pyspark.streaming.DStream.html#pyspark.streaming.DStream).
+For the Scala API, see [DStream](api/scala/org/apache/spark/streaming/dstream/DStream.html)
 and [PairDStreamFunctions](api/scala/org/apache/spark/streaming/dstream/PairDStreamFunctions.html).
 For the Java API, see [JavaDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaDStream.html)
 and [JavaPairDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaPairDStream.html).
-For the Python API, see [DStream](api/python/reference/api/pyspark.streaming.DStream.html#pyspark.streaming.DStream).
 
 ***
 
@@ -1280,8 +1280,8 @@ Since the output operations actually allow the transformed data to be consumed b
 they trigger the actual execution of all the DStream transformations (similar to actions for RDDs).
 Currently, the following output operations are defined:
 
-<table class="table">
-<tr><th style="width:30%">Output Operation</th><th>Meaning</th></tr>
+<table class="table table-striped">
+<thead><tr><th style="width:30%">Output Operation</th><th>Meaning</th></tr></thead>
 <tr>
   <td> <b>print</b>()</td>
   <td> Prints the first ten elements of every batch of data in a DStream on the driver node running
@@ -1603,7 +1603,7 @@ words.foreachRDD { rdd =>
   wordsDataFrame.createOrReplaceTempView("words")
 
   // Do word count on DataFrame using SQL and print it
-  val wordCountsDataFrame = 
+  val wordCountsDataFrame =
     spark.sql("select word, count(*) as total from words group by word")
   wordCountsDataFrame.show()
 }
@@ -1633,7 +1633,7 @@ public class JavaRow implements java.io.Serializable {
 
 /** DataFrame operations inside your streaming program */
 
-JavaDStream<String> words = ... 
+JavaDStream<String> words = ...
 
 words.foreachRDD((rdd, time) -> {
   // Get the singleton instance of SparkSession
@@ -1880,12 +1880,12 @@ batch interval that is at least 10 seconds. It can be set by using
 
 ## Accumulators, Broadcast Variables, and Checkpoints
 
-[Accumulators](rdd-programming-guide.html#accumulators) and [Broadcast variables](rdd-programming-guide.html#broadcast-variables) 
-cannot be recovered from checkpoint in Spark Streaming. If you enable checkpointing and use 
-[Accumulators](rdd-programming-guide.html#accumulators) or [Broadcast variables](rdd-programming-guide.html#broadcast-variables) 
-as well, you'll have to create lazily instantiated singleton instances for 
-[Accumulators](rdd-programming-guide.html#accumulators) and [Broadcast variables](rdd-programming-guide.html#broadcast-variables) 
-so that they can be re-instantiated after the driver restarts on failure. 
+[Accumulators](rdd-programming-guide.html#accumulators) and [Broadcast variables](rdd-programming-guide.html#broadcast-variables)
+cannot be recovered from checkpoint in Spark Streaming. If you enable checkpointing and use
+[Accumulators](rdd-programming-guide.html#accumulators) or [Broadcast variables](rdd-programming-guide.html#broadcast-variables)
+as well, you'll have to create lazily instantiated singleton instances for
+[Accumulators](rdd-programming-guide.html#accumulators) and [Broadcast variables](rdd-programming-guide.html#broadcast-variables)
+so that they can be re-instantiated after the driver restarts on failure.
 This is shown in the following example.
 
 <div class="codetabs">
@@ -2093,8 +2093,6 @@ To run Spark Streaming applications, you need to have the following.
       [Spark Standalone guide](spark-standalone.html) for more details.
     + *YARN* - Yarn supports a similar mechanism for automatically restarting an application.
       Please refer to YARN documentation for more details.
-    + *Mesos* - [Marathon](https://github.com/mesosphere/marathon) has been used to achieve this
-      with Mesos.
 
 - *Configuring write-ahead logs* - Since Spark 1.2,
   we have introduced _write-ahead logs_ for achieving strong
@@ -2252,7 +2250,7 @@ Another parameter that should be considered is the receiver's block interval,
 which is determined by the [configuration parameter](configuration.html#spark-streaming)
 `spark.streaming.blockInterval`. For most receivers, the received data is coalesced together into
 blocks of data before storing inside Spark's memory. The number of blocks in each batch
-determines the number of tasks that will be used to process 
+determines the number of tasks that will be used to process
 the received data in a map-like transformation. The number of tasks per receiver per batch will be
 approximately (batch interval / block interval). For example, a block interval of 200 ms will
 create 10 tasks per 2 second batches. If the number of tasks is too low (that is, less than the number
@@ -2290,19 +2288,6 @@ The overheads of data serialization can be reduced by tuning the serialization f
 In both cases, using Kryo serialization can reduce both CPU and memory overheads. See the [Spark Tuning Guide](tuning.html#data-serialization) for more details. For Kryo, consider registering custom classes, and disabling object reference tracking (see Kryo-related configurations in the [Configuration Guide](configuration.html#compression-and-serialization)).
 
 In specific cases where the amount of data that needs to be retained for the streaming application is not large, it may be feasible to persist data (both types) as deserialized objects without incurring excessive GC overheads. For example, if you are using batch intervals of a few seconds and no window operations, then you can try disabling serialization in persisted data by explicitly setting the storage level accordingly. This would reduce the CPU overheads due to serialization, potentially improving performance without too much GC overheads.
-
-### Task Launching Overheads
-{:.no_toc}
-If the number of tasks launched per second is high (say, 50 or more per second), then the overhead
-of sending out tasks to the executors may be significant and will make it hard to achieve sub-second
-latencies. The overhead can be reduced by the following changes:
-
-* **Execution mode**: Running Spark in Standalone mode or coarse-grained Mesos mode leads to
-  better task launch times than the fine-grained Mesos mode. Please refer to the
-  [Running on Mesos guide](running-on-mesos.html) for more details.
-
-These changes may reduce batch processing time by 100s of milliseconds,
-thus allowing sub-second batch size to be viable.
 
 ***
 
@@ -2342,15 +2327,15 @@ in the [Tuning Guide](tuning.html#memory-tuning). It is strongly recommended tha
 
 The amount of cluster memory required by a Spark Streaming application depends heavily on the type of transformations used. For example, if you want to use a window operation on the last 10 minutes of data, then your cluster should have sufficient memory to hold 10 minutes worth of data in memory. Or if you want to use `updateStateByKey` with a large number of keys, then the necessary memory  will be high. On the contrary, if you want to do a simple map-filter-store operation, then the necessary memory will be low.
 
-In general, since the data received through receivers is stored with StorageLevel.MEMORY_AND_DISK_SER_2, the data that does not fit in memory will spill over to the disk. This may reduce the performance of the streaming application, and hence it is advised to provide sufficient memory as required by your streaming application. Its best to try and see the memory usage on a small scale and estimate accordingly. 
+In general, since the data received through receivers is stored with StorageLevel.MEMORY_AND_DISK_SER_2, the data that does not fit in memory will spill over to the disk. This may reduce the performance of the streaming application, and hence it is advised to provide sufficient memory as required by your streaming application. Its best to try and see the memory usage on a small scale and estimate accordingly.
 
-Another aspect of memory tuning is garbage collection. For a streaming application that requires low latency, it is undesirable to have large pauses caused by JVM Garbage Collection. 
+Another aspect of memory tuning is garbage collection. For a streaming application that requires low latency, it is undesirable to have large pauses caused by JVM Garbage Collection.
 
 There are a few parameters that can help you tune the memory usage and GC overheads:
 
 * **Persistence Level of DStreams**: As mentioned earlier in the [Data Serialization](#data-serialization) section, the input data and RDDs are by default persisted as serialized bytes. This reduces both the memory usage and GC overheads, compared to deserialized persistence. Enabling Kryo serialization further reduces serialized sizes and memory usage. Further reduction in memory usage can be achieved with compression (see the Spark configuration `spark.rdd.compress`), at the cost of CPU time.
 
-* **Clearing old data**: By default, all input data and persisted RDDs generated by DStream transformations are automatically cleared. Spark Streaming decides when to clear the data based on the transformations that are used. For example, if you are using a window operation of 10 minutes, then Spark Streaming will keep around the last 10 minutes of data, and actively throw away older data. 
+* **Clearing old data**: By default, all input data and persisted RDDs generated by DStream transformations are automatically cleared. Spark Streaming decides when to clear the data based on the transformations that are used. For example, if you are using a window operation of 10 minutes, then Spark Streaming will keep around the last 10 minutes of data, and actively throw away older data.
 Data can be retained for a longer duration (e.g. interactively querying older data) by setting `streamingContext.remember`.
 
 * **CMS Garbage Collector**: Use of the concurrent mark-and-sweep GC is strongly recommended for keeping GC-related pauses consistently low. Even though concurrent GC is known to reduce the
@@ -2386,7 +2371,7 @@ Having a bigger blockinterval means bigger blocks. A high value of `spark.locali
 
 # Fault-tolerance Semantics
 In this section, we will discuss the behavior of Spark Streaming applications in the event
-of failures. 
+of failures.
 
 ## Background
 {:.no_toc}
@@ -2481,16 +2466,18 @@ lost. This will affect the results of the stateful transformations.
 
 To avoid this loss of past received data, Spark 1.2 introduced _write
 ahead logs_ which save the received data to fault-tolerant storage. With the [write-ahead logs
-enabled](#deploying-applications) and reliable receivers, there is zero data loss. In terms of semantics, it provides an at-least once guarantee. 
+enabled](#deploying-applications) and reliable receivers, there is zero data loss. In terms of semantics, it provides an at-least once guarantee.
 
 The following table summarizes the semantics under failures:
 
-<table class="table">
+<table class="table table-striped">
+  <thead>
   <tr>
     <th style="width:30%">Deployment Scenario</th>
     <th>Worker Failure</th>
     <th>Driver Failure</th>
   </tr>
+  </thead>
   <tr>
     <td>
       <i>Spark 1.1 or earlier,</i> OR<br/>
@@ -2531,7 +2518,7 @@ In Spark 1.3, we have introduced a new Kafka Direct API, which can ensure that a
 
 ## Semantics of output operations
 {:.no_toc}
-Output operations (like `foreachRDD`) have _at-least once_ semantics, that is, 
+Output operations (like `foreachRDD`) have _at-least once_ semantics, that is,
 the transformed data may get written to an external entity more than once in
 the event of a worker failure. While this is acceptable for saving to file systems using the
 `saveAs***Files` operations (as the file will simply get overwritten with the same data),
@@ -2562,21 +2549,21 @@ additional effort may be necessary to achieve exactly-once semantics. There are 
     - [Custom Receiver Guide](streaming-custom-receivers.html)
 * Third-party DStream data sources can be found in [Third Party Projects](https://spark.apache.org/third-party-projects.html)
 * API documentation
+  - Python docs
+    * [StreamingContext](api/python/reference/api/pyspark.streaming.StreamingContext.html#pyspark.streaming.StreamingContext) and [DStream](api/python/reference/api/pyspark.streaming.DStream.html#pyspark.streaming.DStream)
   - Scala docs
     * [StreamingContext](api/scala/org/apache/spark/streaming/StreamingContext.html) and
   [DStream](api/scala/org/apache/spark/streaming/dstream/DStream.html)
     * [KafkaUtils](api/scala/org/apache/spark/streaming/kafka/KafkaUtils$.html),
-    [KinesisUtils](api/scala/org/apache/spark/streaming/kinesis/KinesisInputDStream.html),
+    [KinesisUtils](api/scala/org/apache/spark/streaming/kinesis/KinesisInputDStream.html)
   - Java docs
     * [JavaStreamingContext](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html),
     [JavaDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaDStream.html) and
     [JavaPairDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaPairDStream.html)
     * [KafkaUtils](api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html),
     [KinesisUtils](api/java/index.html?org/apache/spark/streaming/kinesis/KinesisInputDStream.html)
-  - Python docs
-    * [StreamingContext](api/python/reference/api/pyspark.streaming.StreamingContext.html#pyspark.streaming.StreamingContext) and [DStream](api/python/reference/api/pyspark.streaming.DStream.html#pyspark.streaming.DStream)
 
-* More examples in [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming)
+* More examples in [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python/streaming)
+  and [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming)
   and [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming)
-  and [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python/streaming)
 * [Paper](http://www.eecs.berkeley.edu/Pubs/TechRpts/2012/EECS-2012-259.pdf) and [video](http://youtu.be/g171ndOHgJ0) describing Spark Streaming.

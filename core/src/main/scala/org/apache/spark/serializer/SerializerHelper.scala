@@ -49,6 +49,8 @@ private[spark] object SerializerHelper extends Logging {
       serializerInstance: SerializerInstance,
       bytes: ChunkedByteBuffer): T = {
     val in = serializerInstance.deserializeStream(bytes.toInputStream())
-    in.readObject()
+    val res = in.readObject()
+    in.close()
+    res
   }
 }

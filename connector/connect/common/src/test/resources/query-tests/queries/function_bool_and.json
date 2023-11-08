@@ -1,0 +1,25 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "project": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,flag:boolean\u003e"
+      }
+    },
+    "expressions": [{
+      "unresolvedFunction": {
+        "functionName": "bool_and",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "flag"
+          }
+        }]
+      }
+    }]
+  }
+}

@@ -92,7 +92,7 @@ install_app() {
       if [ -f "${local_checksum}" ]; then
         echo "  ${local_tarball}" >> ${local_checksum} # two spaces + file are important!
         # Assuming SHA512 here for now
-        echo "Veryfing checksum from ${local_checksum}" 1>&2
+        echo "Verifying checksum from ${local_checksum}" 1>&2
         if ! shasum -a 512 -c "${local_checksum}" > /dev/null ; then
           echo "Bad checksum from ${remote_checksum}"
           exit 2

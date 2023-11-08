@@ -18,14 +18,16 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{AliasAwareQueryOutputOrdering, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, UnaryLike}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{MapType, StructType}
 
 
 abstract class LogicalPlan
@@ -41,6 +43,34 @@ abstract class LogicalPlan
    * Should be overridden if the plan does not propagate its children's output.
    */
   def metadataOutput: Seq[Attribute] = children.flatMap(_.metadataOutput)
+
+  /**
+   * Searches for a metadata attribute by its logical name.
+   *
+   * The search works in spite of conflicts with column names in the data schema.
+   */
+  def getMetadataAttributeByNameOpt(name: String): Option[AttributeReference] = {
+    // NOTE: An already-referenced column might appear in `output` instead of `metadataOutput`.
+    (metadataOutput ++ output).collectFirst {
+      case MetadataAttributeWithLogicalName(attr, logicalName)
+          if conf.resolver(name, logicalName) => attr
+    }
+  }
+
+  /**
+   * Returns the metadata attribute having the specified logical name.
+   *
+   * Throws [[AnalysisException]] if no such metadata attribute exists.
+   */
+  def getMetadataAttributeByName(name: String): AttributeReference = {
+    getMetadataAttributeByNameOpt(name).getOrElse {
+      val availableMetadataColumns = (metadataOutput ++ output).collect {
+        case MetadataAttributeWithLogicalName(_, logicalName) => logicalName
+      }
+      throw QueryCompilationErrors.unresolvedAttributeError(
+        "UNRESOLVED_COLUMN", name, availableMetadataColumns.distinct, origin)
+    }
+  }
 
   /** Returns true if this subtree has data from a streaming data source. */
   def isStreaming: Boolean = _isStreaming
@@ -96,11 +126,11 @@ abstract class LogicalPlan
     }
   }
 
-  private[this] lazy val childAttributes = AttributeSeq(children.flatMap(_.output))
+  private[this] lazy val childAttributes = AttributeSeq.fromNormalOutput(children.flatMap(_.output))
 
   private[this] lazy val childMetadataAttributes = AttributeSeq(children.flatMap(_.metadataOutput))
 
-  private[this] lazy val outputAttributes = AttributeSeq(output)
+  private[this] lazy val outputAttributes = AttributeSeq.fromNormalOutput(output)
 
   private[this] lazy val outputMetadataAttributes = AttributeSeq(metadataOutput)
 
@@ -167,6 +197,7 @@ object LogicalPlan {
   //    3, resolve this expression with the matching node. If any error occurs, analyzer fallbacks
   //    to the old code path.
   private[spark] val PLAN_ID_TAG = TreeNodeTag[Long]("plan_id")
+  private[spark] val IS_METADATA_COL = TreeNodeTag[Unit]("is_metadata_col")
 }
 
 /**
@@ -296,6 +327,62 @@ object LogicalPlanIntegrity {
   }
 
   /**
+   * This method validates there are no dangling attribute references.
+   * Returns an error message if the check does not pass, or None if it does pass.
+   */
+  def validateNoDanglingReferences(plan: LogicalPlan): Option[String] = {
+    plan.collectFirst {
+      // DML commands and multi instance relations (like InMemoryRelation caches)
+      // have different output semantics than typical queries.
+      case _: Command => None
+      case _: MultiInstanceRelation => None
+      case n if canGetOutputAttrs(n) =>
+        if (n.missingInput.nonEmpty) {
+          Some(s"Aliases ${ n.missingInput.mkString(", ")} are dangling " +
+            s"in the references for plan:\n ${n.treeString}")
+        } else {
+          None
+        }
+    }.flatten
+  }
+
+  /**
+   * Validate that the grouping key types in Aggregate plans are valid.
+   * Returns an error message if the check fails, or None if it succeeds.
+   */
+  def validateGroupByTypes(plan: LogicalPlan): Option[String] = {
+    plan.collectFirst {
+      case a @ Aggregate(groupingExprs, _, _) =>
+        val badExprs = groupingExprs.filter(_.dataType.isInstanceOf[MapType]).map(_.toString)
+        if (badExprs.nonEmpty) {
+          Some(s"Grouping expressions ${badExprs.mkString(", ")} cannot be of type Map " +
+            s"for plan:\n ${a.treeString}")
+        } else {
+          None
+        }
+    }.flatten
+  }
+
+  /**
+   * Validate that the aggregation expressions in Aggregate plans are valid.
+   * Returns an error message if the check fails, or None if it succeeds.
+   */
+  def validateAggregateExpressions(plan: LogicalPlan): Option[String] = {
+    plan.collectFirst {
+      case a: Aggregate =>
+        try {
+          ExprUtils.assertValidAggregation(a)
+          None
+        } catch {
+          case e: AnalysisException =>
+            Some(s"Aggregate: ${a.toString} is not a valid aggregate expression: " +
+            s"${e.getSimpleMessage}")
+        }
+    }.flatten
+  }
+
+
+  /**
    * Validate the structural integrity of an optimized plan.
    * For example, we can check after the execution of each rule that each plan:
    * - is still resolved
@@ -307,14 +394,14 @@ object LogicalPlanIntegrity {
   def validateOptimizedPlan(
       previousPlan: LogicalPlan,
       currentPlan: LogicalPlan): Option[String] = {
-    if (!currentPlan.resolved) {
+    var validation = if (!currentPlan.resolved) {
       Some("The plan becomes unresolved: " + currentPlan.treeString + "\nThe previous plan: " +
         previousPlan.treeString)
     } else if (currentPlan.exists(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty)) {
       Some("Special expressions are placed in the wrong plan: " + currentPlan.treeString)
     } else {
       LogicalPlanIntegrity.validateExprIdUniqueness(currentPlan).orElse {
-        if (!DataType.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
+        if (!DataTypeUtils.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
           Some(s"The plan output schema has changed from ${previousPlan.schema.sql} to " +
             currentPlan.schema.sql + s". The previous plan: ${previousPlan.treeString}\nThe new " +
             "plan:\n" + currentPlan.treeString)
@@ -323,6 +410,13 @@ object LogicalPlanIntegrity {
         }
       }
     }
+    validation = validation
+      .orElse(LogicalPlanIntegrity.validateNoDanglingReferences(currentPlan))
+      .orElse(LogicalPlanIntegrity.validateGroupByTypes(currentPlan))
+      .orElse(LogicalPlanIntegrity.validateAggregateExpressions(currentPlan))
+      .map(err => s"${err}\nPrevious schema:${previousPlan.output.mkString(", ")}" +
+        s"\nPrevious plan: ${previousPlan.treeString}")
+    validation
   }
 }
 
@@ -331,7 +425,8 @@ object LogicalPlanIntegrity {
  */
 trait ExposesMetadataColumns extends LogicalPlan {
   protected def metadataOutputWithOutConflicts(
-      metadataOutput: Seq[AttributeReference]): Seq[AttributeReference] = {
+      metadataOutput: Seq[AttributeReference],
+      renameOnConflict: Boolean = true): Seq[AttributeReference] = {
     // If `metadataColFromOutput` is not empty that means `AddMetadataColumns` merged
     // metadata output into output. We should still return an available metadata output
     // so that the rule `ResolveReferences` can resolve metadata column correctly.
@@ -340,13 +435,18 @@ trait ExposesMetadataColumns extends LogicalPlan {
       val resolve = conf.resolver
       val outputNames = outputSet.map(_.name)
 
-      def isOutputColumn(col: AttributeReference): Boolean = {
-        outputNames.exists(name => resolve(col.name, name))
+      def isOutputColumn(colName: String): Boolean = outputNames.exists(resolve(colName, _))
+
+      @scala.annotation.tailrec
+      def makeUnique(name: String): String =
+        if (isOutputColumn(name)) makeUnique(s"_$name") else name
+
+      // If allowed to, resolve any name conflicts between metadata and output columns by renaming
+      // the conflicting metadata columns; otherwise, suppress them.
+      metadataOutput.collect {
+        case attr if !isOutputColumn(attr.name) => attr
+        case attr if renameOnConflict => attr.withName(makeUnique(attr.name))
       }
-      // filter out the metadata struct column if it has the name conflicting with output columns.
-      // if the file has a column "_metadata",
-      // then the data column should be returned not the metadata struct column
-      metadataOutput.filterNot(isOutputColumn)
     } else {
       metadataColFromOutput.asInstanceOf[Seq[AttributeReference]]
     }

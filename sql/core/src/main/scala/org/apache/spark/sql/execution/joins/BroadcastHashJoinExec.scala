@@ -115,7 +115,7 @@ case class BroadcastHashJoinExec(
     PartitioningCollection(partitioning.multiTransformDown {
       case e: Expression if streamedKeyToBuildKeyMapping.contains(e.canonicalized) =>
         e +: streamedKeyToBuildKeyMapping(e.canonicalized)
-    }.asInstanceOf[Stream[HashPartitioning]]
+    }.asInstanceOf[LazyList[HashPartitioning]]
       .take(conf.broadcastHashJoinOutputPartitioningExpandLimit))
   }
 
@@ -132,12 +132,8 @@ case class BroadcastHashJoinExec(
         } else if (hashed == HashedRelationWithAllNullKeys) {
           Iterator.empty
         } else {
-          val keyGenerator = UnsafeProjection.create(
-            BindReferences.bindReferences[Expression](
-              leftKeys,
-              AttributeSeq(left.output))
-          )
-          streamedIter.filter(row => {
+          val keyGenerator = streamSideKeyGenerator()
+          streamedIter.filter { row =>
             val lookupKey: UnsafeRow = keyGenerator(row)
             if (lookupKey.anyNull()) {
               false
@@ -145,10 +141,10 @@ case class BroadcastHashJoinExec(
               // Anti Join: Drop the row on the streamed side if it is a match on the build
               hashed.get(lookupKey) == null
             }
-          }).map(row => {
+          }.map { row =>
             numOutputRows += 1
             row
-          })
+          }
         }
       }
     } else {

@@ -18,15 +18,14 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.tags.SlowSQLTest
 
+@SlowSQLTest
 class DisableUnnecessaryBucketedScanWithoutHiveSupportSuite
   extends DisableUnnecessaryBucketedScanSuite
   with SharedSparkSession
@@ -38,6 +37,7 @@ class DisableUnnecessaryBucketedScanWithoutHiveSupportSuite
   }
 }
 
+@SlowSQLTest
 class DisableUnnecessaryBucketedScanWithoutHiveSupportSuiteAE
   extends DisableUnnecessaryBucketedScanSuite
   with SharedSparkSession
@@ -239,26 +239,6 @@ abstract class DisableUnnecessaryBucketedScanSuite
     }
   }
 
-  test("SPARK-33075: not disable bucketed table scan for cached query") {
-    withTable("t1") {
-      withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true") {
-        df1.write.format("parquet").bucketBy(8, "i").saveAsTable("t1")
-        spark.catalog.cacheTable("t1")
-        assertCached(spark.table("t1"))
-
-        // Verify cached bucketed table scan not disabled
-        val partitioning = stripAQEPlan(spark.table("t1").queryExecution.executedPlan)
-          .outputPartitioning
-        assert(partitioning match {
-          case HashPartitioning(Seq(column: AttributeReference), 8) if column.name == "i" => true
-          case _ => false
-        })
-        val aggregateQueryPlan = sql("SELECT SUM(i) FROM t1 GROUP BY i").queryExecution.executedPlan
-        assert(find(aggregateQueryPlan)(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
-      }
-    }
-  }
-
   test("Aggregates with no groupby over tables having 1 BUCKET, return multiple rows") {
     withTable("t1") {
       withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true") {
@@ -278,7 +258,7 @@ abstract class DisableUnnecessaryBucketedScanSuite
             |INSERT INTO TABLE t1 VALUES(2.28, cast("2021-08-08" as date))
             |""".stripMargin)
         val df = spark.sql("select sum(id) from t1 where id is not null")
-        assert(df.count == 1)
+        assert(df.count() == 1)
         checkDisableBucketedScan(query = "SELECT SUM(id) FROM t1 WHERE id is not null",
           expectedNumScanWithAutoScanEnabled = 1, expectedNumScanWithAutoScanDisabled = 1)
       }

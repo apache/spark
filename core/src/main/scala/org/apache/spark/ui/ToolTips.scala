@@ -35,10 +35,6 @@ private[spark] object ToolTips {
 
   val OUTPUT = "Bytes written to Hadoop."
 
-  val STORAGE_MEMORY =
-    "Memory used / total available memory for storage of data " +
-      "like RDD partitions cached in memory. "
-
   val SHUFFLE_WRITE =
     "Bytes and records written to disk in order to be read by a shuffle in a future stage."
 
@@ -87,9 +83,6 @@ private[spark] object ToolTips {
        multiple operations (e.g. two map() functions) if they can be pipelined. Some operations
        also create multiple RDDs internally. Cached RDDs are shown in green.
     """
-
-  val TASK_TIME =
-  "Shaded red when garbage collection (GC) time is over 10% of task time"
 
   val APPLICATION_EXECUTOR_LIMIT =
     """Maximum number of executors that this application will use. This limit is finite only when

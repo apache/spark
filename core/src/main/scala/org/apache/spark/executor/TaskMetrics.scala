@@ -17,8 +17,10 @@
 
 package org.apache.spark.executor
 
-import scala.collection.JavaConverters._
+import java.util.concurrent.CopyOnWriteArrayList
+
 import scala.collection.mutable.{ArrayBuffer, LinkedHashMap}
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
@@ -262,10 +264,12 @@ class TaskMetrics private[spark] () extends Serializable {
   /**
    * External accumulators registered with this task.
    */
-  @transient private[spark] lazy val externalAccums = new ArrayBuffer[AccumulatorV2[_, _]]
+  @transient private[spark] lazy val _externalAccums = new CopyOnWriteArrayList[AccumulatorV2[_, _]]
+
+  private[spark] def externalAccums = _externalAccums.asScala
 
   private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
-    externalAccums += a
+    _externalAccums.add(a)
   }
 
   private[spark] def accumulators(): Seq[AccumulatorV2[_, _]] = internalAccums ++ externalAccums
@@ -331,7 +335,7 @@ private[spark] object TaskMetrics extends Logging {
         tmAcc.metadata = acc.metadata
         tmAcc.merge(acc.asInstanceOf[AccumulatorV2[Any, Any]])
       } else {
-        tm.externalAccums += acc
+        tm._externalAccums.add(acc)
       }
     }
     tm

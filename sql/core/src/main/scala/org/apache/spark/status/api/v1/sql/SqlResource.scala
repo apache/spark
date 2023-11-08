@@ -56,10 +56,9 @@ private[v1] class SqlResource extends BaseAppResource {
       planDescription: Boolean): ExecutionData = {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
-      val graph = sqlStore.planGraph(execId)
       sqlStore
         .execution(execId)
-        .map(prepareExecutionData(_, graph, details, planDescription))
+        .map(prepareExecutionData(_, sqlStore.planGraph(execId), details, planDescription))
         .getOrElse(throw new NotFoundException("unknown query execution id: " + execId))
     }
   }
@@ -84,14 +83,6 @@ private[v1] class SqlResource extends BaseAppResource {
       case _ =>
     }
 
-    val status = if (exec.jobs.size == completed.size) {
-      "COMPLETED"
-    } else if (failed.nonEmpty) {
-      "FAILED"
-    } else {
-      "RUNNING"
-    }
-
     val duration = exec.completionTime.getOrElse(new Date()).getTime - exec.submissionTime
     val planDetails = if (planDescription) exec.physicalPlanDescription else ""
     val nodes = if (details) {
@@ -103,7 +94,7 @@ private[v1] class SqlResource extends BaseAppResource {
 
     new ExecutionData(
       exec.executionId,
-      status,
+      exec.executionStatus,
       exec.description,
       planDetails,
       new Date(exec.submissionTime),

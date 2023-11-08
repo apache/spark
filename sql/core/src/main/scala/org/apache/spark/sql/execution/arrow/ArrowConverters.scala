@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.arrow
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileInputStream, OutputStream}
 import java.nio.channels.{Channels, ReadableByteChannel}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.flatbuf.MessageHeader
 import org.apache.arrow.memory.BufferAllocator
@@ -36,6 +36,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
@@ -48,9 +49,10 @@ import org.apache.spark.util.{ByteBufferOutputStream, SizeEstimator, Utils}
 private[sql] class ArrowBatchStreamWriter(
     schema: StructType,
     out: OutputStream,
-    timeZoneId: String) {
+    timeZoneId: String,
+    errorOnDuplicatedFieldNames: Boolean) {
 
-  val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
+  val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames)
   val writeChannel = new WriteChannel(Channels.newChannel(out))
 
   // Write the Arrow schema first, before batches
@@ -77,9 +79,11 @@ private[sql] object ArrowConverters extends Logging {
       schema: StructType,
       maxRecordsPerBatch: Long,
       timeZoneId: String,
+      errorOnDuplicatedFieldNames: Boolean,
       context: TaskContext) extends Iterator[Array[Byte]] {
 
-    protected val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
+    protected val arrowSchema =
+      ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames)
     private val allocator =
       ArrowUtils.rootAllocator.newChildAllocator(
         s"to${this.getClass.getSimpleName}", 0, Long.MaxValue)
@@ -128,9 +132,10 @@ private[sql] object ArrowConverters extends Logging {
       maxRecordsPerBatch: Long,
       maxEstimatedBatchSize: Long,
       timeZoneId: String,
+      errorOnDuplicatedFieldNames: Boolean,
       context: TaskContext)
     extends ArrowBatchIterator(
-      rowIter, schema, maxRecordsPerBatch, timeZoneId, context) {
+      rowIter, schema, maxRecordsPerBatch, timeZoneId, errorOnDuplicatedFieldNames, context) {
 
     private val arrowSchemaSize = SizeEstimator.estimate(arrowSchema)
     var rowCountInLastBatch: Long = 0
@@ -145,17 +150,22 @@ private[sql] object ArrowConverters extends Logging {
         // Always write the schema.
         MessageSerializer.serialize(writeChannel, arrowSchema)
 
+        def isBatchSizeLimitExceeded: Boolean = {
+          // If `maxEstimatedBatchSize` is zero or negative, it implies unlimited.
+          maxEstimatedBatchSize > 0 && estimatedBatchSize >= maxEstimatedBatchSize
+        }
+        def isRecordLimitExceeded: Boolean = {
+          // If `maxRecordsPerBatch` is zero or negative, it implies unlimited.
+          maxRecordsPerBatch > 0 && rowCountInLastBatch >= maxRecordsPerBatch
+        }
         // Always write the first row.
         while (rowIter.hasNext && (
-          // For maxBatchSize and maxRecordsPerBatch, respect whatever smaller.
           // If the size in bytes is positive (set properly), always write the first row.
-          rowCountInLastBatch == 0 && maxEstimatedBatchSize > 0 ||
-            // If the size in bytes of rows are 0 or negative, unlimit it.
-            estimatedBatchSize <= 0 ||
-            estimatedBatchSize < maxEstimatedBatchSize ||
-            // If the size of rows are 0 or negative, unlimit it.
-            maxRecordsPerBatch <= 0 ||
-            rowCountInLastBatch < maxRecordsPerBatch)) {
+          (rowCountInLastBatch == 0 && maxEstimatedBatchSize > 0) ||
+            // If either limit is hit, create a batch. This implies that the limit that is hit first
+            // triggers the creation of a batch even if the other limit is not yet hit, hence
+            // preferring the more restrictive limit.
+            (!isBatchSizeLimitExceeded && !isRecordLimitExceeded))) {
           val row = rowIter.next()
           arrowWriter.write(row)
           estimatedBatchSize += (row match {
@@ -190,9 +200,10 @@ private[sql] object ArrowConverters extends Logging {
       schema: StructType,
       maxRecordsPerBatch: Long,
       timeZoneId: String,
+      errorOnDuplicatedFieldNames: Boolean,
       context: TaskContext): ArrowBatchIterator = {
     new ArrowBatchIterator(
-      rowIter, schema, maxRecordsPerBatch, timeZoneId, context)
+      rowIter, schema, maxRecordsPerBatch, timeZoneId, errorOnDuplicatedFieldNames, context)
   }
 
   /**
@@ -204,16 +215,20 @@ private[sql] object ArrowConverters extends Logging {
       schema: StructType,
       maxRecordsPerBatch: Long,
       maxEstimatedBatchSize: Long,
-      timeZoneId: String): ArrowBatchWithSchemaIterator = {
+      timeZoneId: String,
+      errorOnDuplicatedFieldNames: Boolean): ArrowBatchWithSchemaIterator = {
     new ArrowBatchWithSchemaIterator(
-      rowIter, schema, maxRecordsPerBatch, maxEstimatedBatchSize, timeZoneId, TaskContext.get)
+      rowIter, schema, maxRecordsPerBatch, maxEstimatedBatchSize,
+      timeZoneId, errorOnDuplicatedFieldNames, TaskContext.get())
   }
 
   private[sql] def createEmptyArrowBatch(
       schema: StructType,
-      timeZoneId: String): Array[Byte] = {
+      timeZoneId: String,
+      errorOnDuplicatedFieldNames: Boolean): Array[Byte] = {
     new ArrowBatchWithSchemaIterator(
-        Iterator.empty, schema, 0L, 0L, timeZoneId, TaskContext.get) {
+        Iterator.empty, schema, 0L, 0L,
+        timeZoneId, errorOnDuplicatedFieldNames, TaskContext.get()) {
       override def hasNext: Boolean = true
     }.next()
   }
@@ -271,11 +286,13 @@ private[sql] object ArrowConverters extends Logging {
       arrowBatchIter: Iterator[Array[Byte]],
       schema: StructType,
       timeZoneId: String,
+      errorOnDuplicatedFieldNames: Boolean,
       context: TaskContext)
       extends InternalRowIterator(arrowBatchIter, context) {
 
     override def nextBatch(): (Iterator[InternalRow], StructType) = {
-      val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
+      val arrowSchema =
+        ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames)
       val root = VectorSchemaRoot.create(arrowSchema, allocator)
       resources.append(root)
       val arrowRecordBatch = ArrowConverters.loadBatch(arrowBatchIter.next(), allocator)
@@ -298,7 +315,7 @@ private[sql] object ArrowConverters extends Logging {
       val reader =
         new ArrowStreamReader(new ByteArrayInputStream(arrowBatchIter.next()), allocator)
       val root = if (reader.loadNextBatch()) reader.getVectorSchemaRoot else null
-      resources.append(reader, root)
+      resources.appendAll(Seq(reader, root))
       if (root == null) {
         (Iterator.empty, null)
       } else {
@@ -314,8 +331,9 @@ private[sql] object ArrowConverters extends Logging {
       arrowBatchIter: Iterator[Array[Byte]],
       schema: StructType,
       timeZoneId: String,
+      errorOnDuplicatedFieldNames: Boolean,
       context: TaskContext): Iterator[InternalRow] = new InternalRowIteratorWithoutSchema(
-    arrowBatchIter, schema, timeZoneId, context
+    arrowBatchIter, schema, timeZoneId, errorOnDuplicatedFieldNames, context
   )
 
   /**
@@ -356,15 +374,12 @@ private[sql] object ArrowConverters extends Logging {
   /**
    * Create a DataFrame from an iterator of serialized ArrowRecordBatches.
    */
-  /**
-   * Create a DataFrame from an iterator of serialized ArrowRecordBatches.
-   */
   def toDataFrame(
       arrowBatches: Iterator[Array[Byte]],
       schemaString: String,
       session: SparkSession): DataFrame = {
     val schema = DataType.fromJson(schemaString).asInstanceOf[StructType]
-    val attrs = schema.toAttributes
+    val attrs = toAttributes(schema)
     val batchesInDriver = arrowBatches.toArray
     val shouldUseRDD = session.sessionState.conf
       .arrowLocalRelationThreshold < batchesInDriver.map(_.length.toLong).sum
@@ -378,15 +393,17 @@ private[sql] object ArrowConverters extends Logging {
             batchesInExecutors,
             schema,
             timezone,
+            errorOnDuplicatedFieldNames = false,
             TaskContext.get())
         }
       session.internalCreateDataFrame(rdd.setName("arrow"), schema)
     } else {
       logDebug("Using LocalRelation in createDataFrame with Arrow optimization.")
       val data = ArrowConverters.fromBatchIterator(
-        batchesInDriver.toIterator,
+        batchesInDriver.iterator,
         schema,
         session.sessionState.conf.sessionLocalTimeZone,
+        errorOnDuplicatedFieldNames = false,
         TaskContext.get())
 
       // Project/copy it. Otherwise, the Arrow column vectors will be closed and released out.

@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.ResolvedTable
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, CharVarcharUtils}
@@ -34,20 +35,22 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 case class ShowCreateTableExec(
     output: Seq[Attribute],
-    table: Table) extends V2CommandExec with LeafExecNode {
+    resolvedTable: ResolvedTable) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
     val builder = new StringBuilder
-    showCreateTable(table, builder)
+    showCreateTable(resolvedTable, builder)
     Seq(InternalRow(UTF8String.fromString(builder.toString)))
   }
 
-  private def showCreateTable(table: Table, builder: StringBuilder): Unit = {
-    builder ++= s"CREATE TABLE ${table.name()} "
+  private def showCreateTable(resolvedTable: ResolvedTable, builder: StringBuilder): Unit = {
+    val table = resolvedTable.table
+    val quotedName = resolvedTable.name
+    builder ++= s"CREATE TABLE ${quotedName} "
 
     showTableDataColumns(table, builder)
     showTableUsing(table, builder)
 
-    val tableOptions = table.properties.asScala
+    val tableOptions = table.properties.asScala.view
       .filterKeys(_.startsWith(TableCatalog.OPTION_PREFIX)).map {
       case (k, v) => k.drop(TableCatalog.OPTION_PREFIX.length) -> v
     }.toMap
@@ -129,7 +132,7 @@ case class ShowCreateTableExec(
       builder: StringBuilder,
       tableOptions: Map[String, String]): Unit = {
 
-    val showProps = table.properties.asScala
+    val showProps = table.properties.asScala.view
       .filterKeys(key => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(key)
         && !key.startsWith(TableCatalog.OPTION_PREFIX)
         && !tableOptions.contains(key))

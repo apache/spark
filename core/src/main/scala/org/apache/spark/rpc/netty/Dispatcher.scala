@@ -20,8 +20,8 @@ package org.apache.spark.rpc.netty
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, CountDownLatch}
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.JavaConverters._
 import scala.concurrent.Promise
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkEnv, SparkException}

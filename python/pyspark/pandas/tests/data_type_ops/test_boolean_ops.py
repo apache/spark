@@ -17,7 +17,6 @@
 
 import datetime
 import unittest
-from distutils.version import LooseVersion
 
 import pandas as pd
 import numpy as np
@@ -32,7 +31,7 @@ from pyspark.pandas.typedef.typehints import (
 )
 
 
-class BooleanOpsTest(OpsTestBase):
+class BooleanOpsTestsMixin:
     @property
     def bool_pdf(self):
         return pd.DataFrame({"this": [True, False, True], "that": [False, True, True]})
@@ -751,9 +750,7 @@ class BooleanExtensionOpsTest(OpsTestBase):
                 # A pandas boolean extension series cannot be casted to fractional extension dtypes
                 self.assert_eq([1.0, 0.0, np.nan], psser.astype(dtype).tolist())
             elif dtype in self.string_extension_dtype:
-                if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
-                    # Limit pandas version due to https://github.com/pandas-dev/pandas/issues/31204
-                    self.check_extension(pser.astype(dtype), psser.astype(dtype))
+                self.check_extension(pser.astype(dtype), psser.astype(dtype))
             else:
                 self.check_extension(pser.astype(dtype), psser.astype(dtype))
 
@@ -807,6 +804,10 @@ class BooleanExtensionOpsTest(OpsTestBase):
         other_pser, other_psser = pdf["that"], psdf["that"]
         self.check_extension(pser >= other_pser, psser >= other_psser)
         self.check_extension(pser >= pser, psser >= psser)
+
+
+class BooleanOpsTests(BooleanOpsTestsMixin, OpsTestBase):
+    pass
 
 
 if __name__ == "__main__":

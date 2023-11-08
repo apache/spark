@@ -20,23 +20,25 @@ import java.time.Instant
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import io.fabric8.kubernetes.api.model.{HasMetadata, PersistentVolumeClaim, Pod, PodBuilder}
 import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.deploy.ExecutorFailureTracker
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesConf
 import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT, DYN_ALLOCATION_MAX_EXECUTORS, EXECUTOR_INSTANCES}
+import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.SchedulerBackendUtils.DEFAULT_NUMBER_EXECUTORS
 import org.apache.spark.util.{Clock, Utils}
+import org.apache.spark.util.SparkExitCode.EXCEED_MAX_EXECUTOR_FAILURES
 
 class ExecutorPodsAllocator(
     conf: SparkConf,
@@ -70,6 +72,8 @@ class ExecutorPodsAllocator(
   protected val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
 
   protected val maxPendingPods = conf.get(KUBERNETES_MAX_PENDING_PODS)
+
+  protected val maxNumExecutorFailures = ExecutorFailureTracker.maxNumExecutorFailures(conf)
 
   protected val podCreationTimeout = math.max(
     podAllocationDelay * 5,
@@ -117,6 +121,12 @@ class ExecutorPodsAllocator(
   // if they happen to come up before the deletion takes effect.
   @volatile protected var deletedExecutorIds = Set.empty[Long]
 
+  @volatile private var failedExecutorIds = Set.empty[Long]
+
+  protected val failureTracker = new ExecutorFailureTracker(conf, clock)
+
+  protected[spark] def getNumExecutorsFailed: Int = failureTracker.numFailedExecutors
+
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     appId = applicationId
     driverPod.foreach { pod =>
@@ -130,8 +140,12 @@ class ExecutorPodsAllocator(
           .waitUntilReady(driverPodReadinessTimeout, TimeUnit.SECONDS)
       }
     }
-    snapshotsStore.addSubscriber(podAllocationDelay) {
-      onNewSnapshots(applicationId, schedulerBackend, _)
+    snapshotsStore.addSubscriber(podAllocationDelay) { executorPodsSnapshot =>
+      onNewSnapshots(applicationId, schedulerBackend, executorPodsSnapshot)
+      if (failureTracker.numFailedExecutors > maxNumExecutorFailures) {
+        logError(s"Max number of executor failures ($maxNumExecutorFailures) reached")
+        stopApplication(EXCEED_MAX_EXECUTOR_FAILURES)
+      }
     }
   }
 
@@ -147,6 +161,10 @@ class ExecutorPodsAllocator(
   }
 
   def isDeleted(executorId: String): Boolean = deletedExecutorIds.contains(executorId.toLong)
+
+  private[k8s] def stopApplication(exitCode: Int): Unit = {
+    sys.exit(exitCode)
+  }
 
   protected def onNewSnapshots(
       applicationId: String,
@@ -169,7 +187,7 @@ class ExecutorPodsAllocator(
     // to the schedulerKnownNewlyCreatedExecs
     val schedulerKnownExecs = schedulerBackend.getExecutorIds().map(_.toLong).toSet
     schedulerKnownNewlyCreatedExecs ++=
-      newlyCreatedExecutors.filterKeys(schedulerKnownExecs.contains(_)).mapValues(_._1)
+      newlyCreatedExecutors.view.filterKeys(schedulerKnownExecs.contains(_)).mapValues(_._1)
     newlyCreatedExecutors --= schedulerKnownNewlyCreatedExecs.keySet
 
     // For all executors we've created against the API but have not seen in a snapshot
@@ -221,7 +239,7 @@ class ExecutorPodsAllocator(
       _deletedExecutorIds = _deletedExecutorIds.intersect(existingExecs)
     }
 
-    val notDeletedPods = lastSnapshot.executorPods.filterKeys(!_deletedExecutorIds.contains(_))
+    val notDeletedPods = lastSnapshot.executorPods.view.filterKeys(!_deletedExecutorIds.contains(_))
     // Map the pods into per ResourceProfile id so we can check per ResourceProfile,
     // add a fast path if not using other ResourceProfiles.
     val rpIdToExecsAndPodState =
@@ -253,6 +271,18 @@ class ExecutorPodsAllocator(
         case PodRunning(_) => true
         case _ => false
       }
+
+      val currentFailedExecutorIds = podsForRpId.filter {
+        case (_, PodFailed(_)) => true
+        case _ => false
+      }.keySet
+
+      val newFailedExecutorIds = currentFailedExecutorIds.diff(failedExecutorIds)
+      if (newFailedExecutorIds.nonEmpty) {
+        logWarning(s"${newFailedExecutorIds.size} new failed executors.")
+        newFailedExecutorIds.foreach { _ => failureTracker.registerExecutorFailure() }
+      }
+      failedExecutorIds = failedExecutorIds ++ currentFailedExecutorIds
 
       val (schedulerKnownPendingExecsForRpId, currentPendingExecutorsForRpId) = podsForRpId.filter {
         case (_, PodPending(_)) => true

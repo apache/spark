@@ -94,6 +94,14 @@ class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
     assert(dfsFileStatus.getLen > 0)
   }
 
+  test("SPARK-44214: DriverLogger.apply returns None when only spark.driver.log.localDir exists") {
+    val sparkConf = new SparkConf()
+    assert(DriverLogger(sparkConf).isEmpty)
+    withTempDir { dir =>
+      assert(DriverLogger(sparkConf.set(DRIVER_LOG_LOCAL_DIR, dir.getCanonicalPath)).isEmpty)
+    }
+  }
+
   private def getSparkContext(): SparkContext = {
     getSparkContext(new SparkConf())
   }

@@ -21,13 +21,14 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{BinaryExecNode, FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InMemoryFileIndex, PartitionSpec}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.IntegerType
 
 class CoalesceBucketsInJoinSuite extends SQLTestUtils with SharedSparkSession {
   private val SORT_MERGE_JOIN = "sortMergeJoin"
@@ -68,7 +69,7 @@ class CoalesceBucketsInJoinSuite extends SQLTestUtils with SharedSparkSession {
     val relation = HadoopFsRelation(
       location = new InMemoryFileIndex(spark, Nil, Map.empty, None),
       partitionSchema = PartitionSpec.emptySpec.partitionColumns,
-      dataSchema = StructType.fromAttributes(setting.cols),
+      dataSchema = DataTypeUtils.fromAttributes(setting.cols),
       bucketSpec = Some(BucketSpec(setting.numBuckets, setting.cols.map(_.name), Nil)),
       fileFormat = new ParquetFileFormat(),
       options = Map.empty)(spark)

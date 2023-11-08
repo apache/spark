@@ -437,25 +437,6 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
     }
   }
 
-  Seq(LeftSemi, LeftAnti).foreach { case jt =>
-    test(s"Aggregate: $jt join no pushdown - join condition refers left leg and right leg child") {
-      val aggregation = testRelation
-        .select($"b".as("id"), $"c")
-        .groupBy($"id")($"id", sum($"c").as("sum"))
-
-      // reference "b" exists in left leg, and the children of the right leg of the join
-      val originalQuery = aggregation.select(($"id" + 1).as("id_plus_1"), $"sum")
-        .join(aggregation, joinType = jt, condition = Some($"id" === $"id_plus_1"))
-      val optimized = Optimize.execute(originalQuery.analyze)
-      val correctAnswer = testRelation
-        .select($"b".as("id"), $"c")
-        .groupBy($"id")(($"id" + 1).as("id_plus_1"), sum($"c").as("sum"))
-        .join(aggregation, joinType = jt, condition = Some($"id" === $"id_plus_1"))
-        .analyze
-      comparePlans(optimized, correctAnswer)
-    }
-  }
-
   Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
     Seq(Inner, LeftOuter, RightOuter, Cross).foreach { case innerJT =>
       test(s"$outerJT no pushdown - join condition refers none of the leg - join type $innerJT") {

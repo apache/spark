@@ -341,6 +341,16 @@ trait JoinSelectionHelper {
     )
   }
 
+  def getBroadcastNestedLoopJoinBuildSide(hint: JoinHint): Option[BuildSide] = {
+    if (hintToNotBroadcastAndReplicateLeft(hint)) {
+      Some(BuildRight)
+    } else if (hintToNotBroadcastAndReplicateRight(hint)) {
+      Some(BuildLeft)
+    } else {
+      None
+    }
+  }
+
   def getSmallerSide(left: LogicalPlan, right: LogicalPlan): BuildSide = {
     if (right.stats.sizeInBytes <= left.stats.sizeInBytes) BuildRight else BuildLeft
   }
@@ -374,14 +384,14 @@ trait JoinSelectionHelper {
 
   def canBuildShuffledHashJoinLeft(joinType: JoinType): Boolean = {
     joinType match {
-      case _: InnerLike | RightOuter | FullOuter => true
+      case _: InnerLike | LeftOuter | FullOuter | RightOuter => true
       case _ => false
     }
   }
 
   def canBuildShuffledHashJoinRight(joinType: JoinType): Boolean = {
     joinType match {
-      case _: InnerLike | LeftOuter | FullOuter |
+      case _: InnerLike | LeftOuter | FullOuter | RightOuter |
            LeftSemi | LeftAnti | _: ExistenceJoin => true
       case _ => false
     }
@@ -413,11 +423,19 @@ trait JoinSelectionHelper {
   }
 
   def hintToNotBroadcastLeft(hint: JoinHint): Boolean = {
-    hint.leftHint.exists(_.strategy.contains(NO_BROADCAST_HASH))
+    hint.leftHint.flatMap(_.strategy).exists {
+      case NO_BROADCAST_HASH => true
+      case NO_BROADCAST_AND_REPLICATION => true
+      case _ => false
+    }
   }
 
   def hintToNotBroadcastRight(hint: JoinHint): Boolean = {
-    hint.rightHint.exists(_.strategy.contains(NO_BROADCAST_HASH))
+    hint.rightHint.flatMap(_.strategy).exists {
+      case NO_BROADCAST_HASH => true
+      case NO_BROADCAST_AND_REPLICATION => true
+      case _ => false
+    }
   }
 
   def hintToShuffleHashJoinLeft(hint: JoinHint): Boolean = {
@@ -452,6 +470,18 @@ trait JoinSelectionHelper {
   def hintToShuffleReplicateNL(hint: JoinHint): Boolean = {
     hint.leftHint.exists(_.strategy.contains(SHUFFLE_REPLICATE_NL)) ||
       hint.rightHint.exists(_.strategy.contains(SHUFFLE_REPLICATE_NL))
+  }
+
+  def hintToNotBroadcastAndReplicate(hint: JoinHint): Boolean = {
+    hintToNotBroadcastAndReplicateLeft(hint) || hintToNotBroadcastAndReplicateRight(hint)
+  }
+
+  def hintToNotBroadcastAndReplicateLeft(hint: JoinHint): Boolean = {
+    hint.leftHint.exists(_.strategy.contains(NO_BROADCAST_AND_REPLICATION))
+  }
+
+  def hintToNotBroadcastAndReplicateRight(hint: JoinHint): Boolean = {
+    hint.rightHint.exists(_.strategy.contains(NO_BROADCAST_AND_REPLICATION))
   }
 
   private def getBuildSide(

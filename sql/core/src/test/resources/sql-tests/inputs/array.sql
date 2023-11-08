@@ -141,6 +141,12 @@ select array_insert(array(1, 2, 3, NULL), cast(NULL as INT), 4);
 select array_insert(array(1, 2, 3, NULL), 4, cast(NULL as INT));
 select array_insert(array(2, 3, NULL, 4), 5, 5);
 select array_insert(array(2, 3, NULL, 4), -5, 1);
+select array_insert(array(1), 2, cast(2 as tinyint));
+
+set spark.sql.legacy.negativeIndexInArrayInsert=true;
+select array_insert(array(1, 3, 4), -2, 2);
+select array_insert(array(2, 3, NULL, 4), -5, 1);
+set spark.sql.legacy.negativeIndexInArrayInsert=false;
 
 -- function array_compact
 select array_compact(id) from values (1) as t(id);
@@ -160,3 +166,14 @@ select array_append(CAST(null AS ARRAY<String>), CAST(null as String));
 select array_append(array(), 1);
 select array_append(CAST(array() AS ARRAY<String>), CAST(NULL AS String));
 select array_append(array(CAST(NULL AS String)), CAST(NULL AS String));
+
+-- function array_prepend
+select array_prepend(array(1, 2, 3), 4);
+select array_prepend(array('a', 'b', 'c'), 'd');
+select array_prepend(array(1, 2, 3, NULL), NULL);
+select array_prepend(array('a', 'b', 'c', NULL), NULL);
+select array_prepend(CAST(null AS ARRAY<String>), 'a');
+select array_prepend(CAST(null AS ARRAY<String>), CAST(null as String));
+select array_prepend(array(), 1);
+select array_prepend(CAST(array() AS ARRAY<String>), CAST(NULL AS String));
+select array_prepend(array(CAST(NULL AS String)), CAST(NULL AS String));

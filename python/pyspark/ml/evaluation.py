@@ -17,7 +17,6 @@
 
 import sys
 from abc import abstractmethod, ABCMeta
-
 from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from pyspark import since, keyword_only

@@ -87,7 +87,7 @@ class TableSchemaParserSuite extends SparkFunSuite {
     checkError(
       exception = parseException("a INT,, b long"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "','", "hint" -> ": extra input ','"))
+      parameters = Map("error" -> "','", "hint" -> ""))
     checkError(
       exception = parseException("a INT, b long,,"),
       errorClass = "PARSE_SYNTAX_ERROR",

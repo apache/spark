@@ -20,18 +20,18 @@ package org.apache.spark.storage
 import java.io.{File, InputStream, IOException}
 import java.nio.ByteBuffer
 import java.nio.file.Files
+import java.util.concurrent.ThreadLocalRandom
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Future, TimeoutException}
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.reflect.classTag
 
 import com.esotericsoftware.kryo.KryoException
-import org.apache.commons.lang3.RandomUtils
 import org.mockito.{ArgumentCaptor, ArgumentMatchers => mc}
 import org.mockito.Mockito.{doAnswer, mock, never, spy, times, verify, when}
 import org.scalatest.PrivateMethodTester
@@ -131,14 +131,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       None
     }
     val bmSecurityMgr = new SecurityManager(bmConf, encryptionKey)
-    val transfer = transferService
-      .getOrElse(new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1))
+    val serializerManager = new SerializerManager(serializer, bmConf, encryptionKey)
+    val transfer = transferService.getOrElse(new NettyBlockTransferService(
+      bmConf, securityMgr, serializerManager, "localhost", "localhost", 0, 1))
     val memManager = UnifiedMemoryManager(bmConf, numCores = 1)
-    val serializerManager = new SerializerManager(serializer, bmConf)
-    val externalShuffleClient = if (conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
-      val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", 0)
+    val externalShuffleClient = if (bmConf.get(config.SHUFFLE_SERVICE_ENABLED)) {
+      val transConf = SparkTransportConf.fromSparkConf(bmConf, "shuffle", 0)
       Some(new ExternalBlockStoreClient(transConf, bmSecurityMgr,
-        bmSecurityMgr.isAuthenticationEnabled(), conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT)))
+        bmSecurityMgr.isAuthenticationEnabled(), bmConf.get(config.SHUFFLE_REGISTRATION_TIMEOUT)))
     } else {
       None
     }
@@ -186,8 +186,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     when(sc.conf).thenReturn(conf)
 
     val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
-    liveListenerBus = spy(new LiveListenerBus(conf))
-    master = spy(new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
+    liveListenerBus = spy[LiveListenerBus](new LiveListenerBus(conf))
+    master = spy[BlockManagerMaster](new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
         liveListenerBus, None, blockManagerInfo, mapOutputTracker, shuffleManager,
         isDriver = true)),
@@ -308,6 +308,37 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     // locations to BlockManagerMaster)
     master.updateBlockInfo(bm1Id, RDDBlockId(0, 0), StorageLevel.MEMORY_ONLY, 100, 0)
     master.updateBlockInfo(bm2Id, RDDBlockId(0, 1), StorageLevel.MEMORY_ONLY, 100, 0)
+  }
+
+  Seq(true, false).foreach { shuffleServiceEnabled =>
+    test("SPARK-45310: report shuffle block status should respect " +
+      s"external shuffle service (enabled=$shuffleServiceEnabled)") {
+      val conf = new SparkConf()
+        .set(config.SHUFFLE_SERVICE_ENABLED, shuffleServiceEnabled)
+        .set(config.Tests.TEST_SKIP_ESS_REGISTER, true)
+      val bm = makeBlockManager(1000, "executor", testConf = Some(conf))
+      val blockManagerId = bm.blockManagerId
+      val shuffleServiceId = bm.shuffleServerId
+      bm.reportBlockStatus(BlockId("rdd_0_0"), BlockStatus.empty)
+      eventually(timeout(5.seconds)) {
+        // For non-shuffle blocks, it should just report block manager id.
+        verify(master, times(1))
+          .updateBlockInfo(mc.eq(blockManagerId), mc.any(), mc.any(), mc.any(), mc.any())
+      }
+      bm.reportBlockStatus(BlockId("shuffle_0_0_0.index"), BlockStatus.empty)
+      bm.reportBlockStatus(BlockId("shuffle_0_0_0.data"), BlockStatus.empty)
+      eventually(timeout(5.seconds)) {
+        // For shuffle blocks, it should report shuffle service id (if enabled)
+        // instead of block manager id.
+        val (expectedBMId, expectedTimes) = if (shuffleServiceEnabled) {
+          (shuffleServiceId, 2)
+        } else {
+          (blockManagerId, 3)
+        }
+        verify(master, times(expectedTimes))
+          .updateBlockInfo(mc.eq(expectedBMId), mc.any(), mc.any(), mc.any(), mc.any())
+      }
+    }
   }
 
   test("SPARK-36036: make sure temporary download files are deleted") {
@@ -873,7 +904,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       conf.set("spark.shuffle.io.maxRetries", "0")
       val sameHostBm = makeBlockManager(8000, "sameHost", master)
 
-      val otherHostTransferSrv = spy(sameHostBm.blockTransferService)
+      val otherHostTransferSrv = spy[BlockTransferService](sameHostBm.blockTransferService)
       doAnswer { _ =>
          "otherHost"
       }.when(otherHostTransferSrv).hostName
@@ -888,7 +919,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       val blockId = "list"
       bmToPutBlock.putIterator(blockId, List(array).iterator, storageLevel, tellMaster = true)
 
-      val sameHostTransferSrv = spy(sameHostBm.blockTransferService)
+      val sameHostTransferSrv = spy[BlockTransferService](sameHostBm.blockTransferService)
       doAnswer { _ =>
          fail("Fetching over network is not expected when the block is requested from same host")
       }.when(sameHostTransferSrv).fetchBlockSync(mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
@@ -935,7 +966,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
         }
       }
       val store1 = makeBlockManager(8000, "executor1", this.master, Some(mockTransferService))
-      val spiedStore1 = spy(store1)
+      val spiedStore1 = spy[BlockManager](store1)
       doAnswer { inv =>
         val blockId = inv.getArguments()(0).asInstanceOf[BlockId]
         val localDirs = inv.getArguments()(1).asInstanceOf[Array[String]]
@@ -974,7 +1005,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   }
 
   test("SPARK-14252: getOrElseUpdate should still read from remote storage") {
-    val store = spy(makeBlockManager(8000, "executor1"))
+    val store = spy[BlockManager](makeBlockManager(8000, "executor1"))
     val store2 = makeBlockManager(8000, "executor2")
     val list1 = List(new Array[Byte](4000))
     val blockId = RDDBlockId(0, 0)
@@ -1308,9 +1339,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   test("block store put failure") {
     // Use Java serializer so we can create an unserializable error.
     conf.set(TEST_MEMORY, 1200L)
-    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
-    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(new JavaSerializer(conf), conf)
+    val transfer = new NettyBlockTransferService(
+      conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
+    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       serializerManager, conf, memoryManager, mapOutputTracker,
       shuffleManager, transfer, securityMgr, None)
@@ -1357,8 +1389,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
         if (conf.get(IO_ENCRYPTION_ENABLED)) Some(CryptoStreamUtils.createKey(conf)) else None
       val securityMgr = new SecurityManager(conf, ioEncryptionKey)
       val serializerManager = new SerializerManager(serializer, conf, ioEncryptionKey)
-      val transfer =
-        new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
+      val transfer = new NettyBlockTransferService(
+        conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
       val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
       val blockManager = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
         serializerManager, conf, memoryManager, mapOutputTracker,
@@ -1886,7 +1918,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
         (transCtx.createServer(port, Seq.empty[TransportServerBootstrap].asJava), port)
       }
 
-      val candidatePort = RandomUtils.nextInt(1024, 65536)
+      val candidatePort = ThreadLocalRandom.current().nextInt(1024, 65536)
       val (server, shufflePort) = Utils.startServiceOnPort(candidatePort,
         newShuffleServer, conf, "ShuffleServer")
 
@@ -2032,10 +2064,13 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(master.getLocations(blockIdLarge) === Seq(store1.blockManagerId))
   }
 
-  private def testShuffleBlockDecommissioning(maxShuffleSize: Option[Int], willReject: Boolean) = {
+  private def testShuffleBlockDecommissioning(
+      maxShuffleSize: Option[Int], willReject: Boolean, enableIoEncryption: Boolean) = {
     maxShuffleSize.foreach{ size =>
       conf.set(STORAGE_DECOMMISSION_SHUFFLE_MAX_DISK_SIZE.key, s"${size}b")
     }
+    conf.set(IO_ENCRYPTION_ENABLED, enableIoEncryption)
+
     val shuffleManager1 = makeSortShuffleManager(Some(conf))
     val bm1 = makeBlockManager(3500, "exec1", shuffleManager = shuffleManager1)
     shuffleManager1.shuffleBlockResolver._blockManager = bm1
@@ -2094,15 +2129,30 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   }
 
   test("test migration of shuffle blocks during decommissioning - no limit") {
-    testShuffleBlockDecommissioning(None, true)
+    testShuffleBlockDecommissioning(None, true, false)
+  }
+
+  test("test migration of shuffle blocks during decommissioning - no limit - " +
+      "io.encryption enabled") {
+    testShuffleBlockDecommissioning(None, true, true)
   }
 
   test("test migration of shuffle blocks during decommissioning - larger limit") {
-    testShuffleBlockDecommissioning(Some(10000), true)
+    testShuffleBlockDecommissioning(Some(10000), true, false)
+  }
+
+  test("test migration of shuffle blocks during decommissioning - larger limit - " +
+      "io.encryption enabled") {
+    testShuffleBlockDecommissioning(Some(10000), true, true)
   }
 
   test("[SPARK-34363]test migration of shuffle blocks during decommissioning - small limit") {
-    testShuffleBlockDecommissioning(Some(1), false)
+    testShuffleBlockDecommissioning(Some(1), false, false)
+  }
+
+  test("[SPARK-34363]test migration of shuffle blocks during decommissioning - small limit -" +
+      " io.encryption enabled") {
+    testShuffleBlockDecommissioning(Some(1), false, true)
   }
 
   test("SPARK-32919: Shuffle push merger locations should be bounded with in" +
@@ -2162,7 +2212,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val sortedBlocks = blocks.sortBy(b => (b.shuffleId, b.mapId))
 
     val resolver = mock(classOf[MigratableResolver])
-    when(resolver.getStoredShuffles).thenReturn(blocks)
+    when(resolver.getStoredShuffles()).thenReturn(blocks)
 
     val bm = mock(classOf[BlockManager])
     when(bm.migratableResolver).thenReturn(resolver)
@@ -2193,9 +2243,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     case class User(id: Long, name: String)
 
     conf.set(TEST_MEMORY, 1200L)
-    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
-    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(kryoSerializerWithDiskCorruptedInputStream, conf)
+    val transfer = new NettyBlockTransferService(
+      conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
+    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       serializerManager, conf, memoryManager, mapOutputTracker,
       shuffleManager, transfer, securityMgr, None)
@@ -2216,9 +2267,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       = createKryoSerializerWithDiskCorruptedInputStream()
 
     conf.set(TEST_MEMORY, 1200L)
-    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
-    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(kryoSerializerWithDiskCorruptedInputStream, conf)
+    val transfer = new NettyBlockTransferService(
+      conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
+    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       serializerManager, conf, memoryManager, mapOutputTracker,
       shuffleManager, transfer, securityMgr, None)
@@ -2253,7 +2305,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
         (transCtx.createServer(port, Seq.empty[TransportServerBootstrap].asJava), port)
       }
 
-      val candidatePort = RandomUtils.nextInt(1024, 65536)
+      val candidatePort = ThreadLocalRandom.current().nextInt(1024, 65536)
       val (server, shufflePort) = Utils.startServiceOnPort(candidatePort,
         newShuffleServer, conf, "ShuffleServer")
 

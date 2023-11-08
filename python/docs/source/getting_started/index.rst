@@ -40,3 +40,4 @@ The list below is the contents of this quickstart page:
    quickstart_df
    quickstart_connect
    quickstart_ps
+   testing_pyspark

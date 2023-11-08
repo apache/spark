@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.io.File
+import java.io.{File, PrintStream}
 import java.lang.reflect.InvocationTargetException
 import java.net.{URL, URLClassLoader}
 import java.util
@@ -31,14 +31,14 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.shims.ShimLoader
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.SparkSubmitUtils
+import org.apache.spark.deploy.SparkSubmit
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.NonClosableMutableURLClassLoader
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.{MutableURLClassLoader, Utils, VersionUtils}
+import org.apache.spark.util.{MavenUtils, MutableURLClassLoader, Utils, VersionUtils}
 
 /** Factory for `IsolatedClientLoader` with specific versions of hive. */
 private[hive] object IsolatedClientLoader extends Logging {
@@ -55,8 +55,6 @@ private[hive] object IsolatedClientLoader extends Logging {
       sharedPrefixes: Seq[String] = Seq.empty,
       barrierPrefixes: Seq[String] = Seq.empty): IsolatedClientLoader = synchronized {
     val resolvedVersion = hiveVersion(hiveMetastoreVersion)
-    // We will use Hadoop 3.x if we can't resolve the hadoop artifact
-    // when builtin hadoop is Hadoop 3. Otherwise we will use Hadoop 2.x.
     val files = if (resolvedVersions.contains((resolvedVersion, hadoopVersion))) {
       resolvedVersions((resolvedVersion, hadoopVersion))
     } else {
@@ -68,11 +66,7 @@ private[hive] object IsolatedClientLoader extends Logging {
           case e: RuntimeException if e.getMessage.contains("hadoop") =>
             // If the error message contains hadoop, it is probably because the hadoop
             // version cannot be resolved.
-            val fallbackVersion = if (VersionUtils.isHadoop3) {
-              "3.3.4"
-            } else {
-              "2.7.4"
-            }
+            val fallbackVersion = "3.3.6"
             logWarning(s"Failed to resolve Hadoop artifacts for the version $hadoopVersion. We " +
               s"will change the hadoop version from $hadoopVersion to $fallbackVersion and try " +
               "again. It is recommended to set jars used by Hive metastore client through " +
@@ -96,12 +90,6 @@ private[hive] object IsolatedClientLoader extends Logging {
 
   def hiveVersion(version: String): HiveVersion = {
     VersionUtils.majorMinorPatchVersion(version).flatMap {
-      case (12, _, _) | (0, 12, _) => Some(hive.v12)
-      case (13, _, _) | (0, 13, _) => Some(hive.v13)
-      case (14, _, _) | (0, 14, _) => Some(hive.v14)
-      case (1, 0, _) => Some(hive.v1_0)
-      case (1, 1, _) => Some(hive.v1_1)
-      case (1, 2, _) => Some(hive.v1_2)
       case (2, 0, _) => Some(hive.v2_0)
       case (2, 1, _) => Some(hive.v2_1)
       case (2, 2, _) => Some(hive.v2_2)
@@ -139,10 +127,11 @@ private[hive] object IsolatedClientLoader extends Logging {
         .map(a => s"org.apache.hive:$a:${version.fullVersion}") ++
       Seq("com.google.guava:guava:14.0.1") ++ hadoopJarNames
 
+    implicit val printStream: PrintStream = SparkSubmit.printStream
     val classpaths = quietly {
-      SparkSubmitUtils.resolveMavenCoordinates(
+      MavenUtils.resolveMavenCoordinates(
         hiveArtifacts.mkString(","),
-        SparkSubmitUtils.buildIvySettings(
+        MavenUtils.buildIvySettings(
           Some(remoteRepos),
           ivyPath),
         transitive = true,
@@ -265,10 +254,10 @@ private[hive] class IsolatedClientLoader(
             if (loaded == null) doLoadClass(name, resolve) else loaded
           }
           def doLoadClass(name: String, resolve: Boolean): Class[_] = {
-            val classFileName = name.replaceAll("\\.", "/") + ".class"
             if (isBarrierClass(name)) {
               // For barrier classes, we construct a new copy of the class.
-              val bytes = IOUtils.toByteArray(baseClassLoader.getResourceAsStream(classFileName))
+              val bytes = Utils.tryWithResource(
+                baseClassLoader.getResourceAsStream(classToPath(name)))(IOUtils.toByteArray)
               logDebug(s"custom defining: $name - ${util.Arrays.hashCode(bytes)}")
               defineClass(name, bytes, 0, bytes.length)
             } else if (!isSharedClass(name)) {

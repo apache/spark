@@ -26,6 +26,7 @@ import "spark/connect/catalog.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
+option go_package = "internal/generated";
 
 // The main [[Relation]] type. Fundamentally, a relation is a typed container
 // that has exactly one explicit relation type set.
@@ -63,6 +64,15 @@ message Relation {
     MapPartitions map_partitions = 28;
     CollectMetrics collect_metrics = 29;
     Parse parse = 30;
+    GroupMap group_map = 31;
+    CoGroupMap co_group_map = 32;
+    WithWatermark with_watermark = 33;
+    ApplyInPandasWithState apply_in_pandas_with_state = 34;
+    HtmlString html_string = 35;
+    CachedLocalRelation cached_local_relation = 36;
+    CachedRemoteRelation cached_remote_relation = 37;
+    CommonInlineUserDefinedTableFunction common_inline_user_defined_table_function = 38;
+    AsOfJoin as_of_join = 39;
 
     // NA functions
     NAFill fill_na = 90;
@@ -106,8 +116,19 @@ message SQL {
   // (Required) The SQL query.
   string query = 1;
 
-  // (Optional) A map of parameter names to literal values.
-  map<string, string> args = 2;
+  // (Optional) A map of parameter names to literal expressions.
+  map<string, Expression.Literal> args = 2 [deprecated=true];
+
+  // (Optional) A sequence of literal expressions for positional parameters in the SQL query text.
+  repeated Expression.Literal pos_args = 3 [deprecated=true];
+
+  // (Optional) A map of parameter names to expressions.
+  // It cannot coexist with `pos_arguments`.
+  map<string, Expression> named_arguments = 4;
+
+  // (Optional) A sequence of expressions for positional parameters in the SQL query text.
+  // It cannot coexist with `named_arguments`.
+  repeated Expression pos_arguments = 5;
 }
 
 // Relation that reads from a file / table or other data source. Does not have additional
@@ -118,9 +139,15 @@ message Read {
     DataSource data_source = 2;
   }
 
+  // (Optional) Indicates if this is a streaming read.
+  bool is_streaming = 3;
+
   message NamedTable {
     // (Required) Unparsed identifier for the table.
     string unparsed_identifier = 1;
+
+    // Options for the named table. The map key is case insensitive.
+    map<string, string> options = 2;
   }
 
   message DataSource {
@@ -207,6 +234,16 @@ message Join {
     JOIN_TYPE_LEFT_ANTI = 5;
     JOIN_TYPE_LEFT_SEMI = 6;
     JOIN_TYPE_CROSS = 7;
+  }
+
+  // (Optional) Only used by joinWith. Set the left and right join data types.
+  optional JoinDataType join_data_type = 6;
+
+  message JoinDataType {
+    // If the left data type is a struct.
+    bool is_left_struct = 1;
+    // If the right data type is a struct.
+    bool is_right_struct = 2;
   }
 }
 
@@ -351,6 +388,9 @@ message Deduplicate {
   //
   // This field does not co-use with `column_names`.
   optional bool all_columns_as_keys = 3;
+
+  // (Optional) Deduplicate within the time range of watermark.
+  optional bool within_watermark = 4;
 }
 
 // A relation that does not need to be qualified by name.
@@ -365,6 +405,24 @@ message LocalRelation {
   // The server side will update the column names and data types according to this schema.
   // If the 'data' is not provided, then this schema will be required.
   optional string schema = 2;
+}
+
+// A local relation that has been cached already.
+message CachedLocalRelation {
+  // `userId` and `sessionId` fields are deleted since the server must always use the active
+  // session/user rather than arbitrary values provided by the client. It is never valid to access
+  // a local relation from a different session/user.
+  reserved 1, 2;
+  reserved "userId", "sessionId";
+
+  // (Required) A sha-256 hash of the serialized local relation in proto, see LocalRelation.
+  string hash = 3;
+}
+
+// Represents a remote relation that has been cached on server.
+message CachedRemoteRelation {
+  // (Required) ID of the remote related (assigned by the service).
+  string relation_id = 1;
 }
 
 // Relation of type [[Sample]] that samples a fraction of the dataset.
@@ -445,6 +503,20 @@ message ShowString {
 
   // (Required) If set to true, prints output rows vertically (one line per column value).
   bool vertical = 4;
+}
+
+// Compose the string representing rows for output.
+// It will invoke 'Dataset.htmlString' to compute the results.
+message HtmlString {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) Number of rows to show.
+  int32 num_rows = 2;
+
+  // (Required) If set to more than 0, truncates strings to
+  // `truncate` characters and all cells will be aligned right.
+  int32 truncate = 3;
 }
 
 // Computes specified statistics for numeric and string columns.
@@ -721,6 +793,18 @@ message WithColumns {
   repeated Expression.Alias aliases = 2;
 }
 
+message WithWatermark {
+
+  // (Required) The input relation
+  Relation input = 1;
+
+  // (Required) Name of the column containing event time.
+  string event_time = 2;
+
+  // (Required)
+  string delay_threshold = 3;
+}
+
 // Specify a hint over a relation. Hint should have a name and optional parameters.
 message Hint {
   // (Required) The input relation.
@@ -786,6 +870,115 @@ message MapPartitions {
 
   // (Required) Input user-defined function.
   CommonInlineUserDefinedFunction func = 2;
+
+  // (Optional) Whether to use barrier mode execution or not.
+  optional bool is_barrier = 3;
+}
+
+message GroupMap {
+  // (Required) Input relation for Group Map API: apply, applyInPandas.
+  Relation input = 1;
+
+  // (Required) Expressions for grouping keys.
+  repeated Expression grouping_expressions = 2;
+
+  // (Required) Input user-defined function.
+  CommonInlineUserDefinedFunction func = 3;
+
+  // (Optional) Expressions for sorting. Only used by Scala Sorted Group Map API.
+  repeated Expression sorting_expressions = 4;
+
+  // Below fields are only used by (Flat)MapGroupsWithState
+  // (Optional) Input relation for initial State.
+  Relation initial_input = 5;
+
+  // (Optional) Expressions for grouping keys of the initial state input relation.
+  repeated Expression initial_grouping_expressions = 6;
+
+  // (Optional) True if MapGroupsWithState, false if FlatMapGroupsWithState.
+  optional bool is_map_groups_with_state = 7;
+
+  // (Optional) The output mode of the function.
+  optional string output_mode = 8;
+
+  // (Optional) Timeout configuration for groups that do not receive data for a while.
+  optional string timeout_conf = 9;
+}
+
+message CoGroupMap {
+  // (Required) One input relation for CoGroup Map API - applyInPandas.
+  Relation input = 1;
+
+  // Expressions for grouping keys of the first input relation.
+  repeated Expression input_grouping_expressions = 2;
+
+  // (Required) The other input relation.
+  Relation other = 3;
+
+  // Expressions for grouping keys of the other input relation.
+  repeated Expression other_grouping_expressions = 4;
+
+  // (Required) Input user-defined function.
+  CommonInlineUserDefinedFunction func = 5;
+
+  // (Optional) Expressions for sorting. Only used by Scala Sorted CoGroup Map API.
+  repeated Expression input_sorting_expressions = 6;
+
+  // (Optional) Expressions for sorting. Only used by Scala Sorted CoGroup Map API.
+  repeated Expression other_sorting_expressions = 7;
+}
+
+message ApplyInPandasWithState {
+  // (Required) Input relation for applyInPandasWithState.
+  Relation input = 1;
+
+  // (Required) Expressions for grouping keys.
+  repeated Expression grouping_expressions = 2;
+
+  // (Required) Input user-defined function.
+  CommonInlineUserDefinedFunction func = 3;
+
+  // (Required) Schema for the output DataFrame.
+  string output_schema = 4;
+
+  // (Required) Schema for the state.
+  string state_schema = 5;
+
+  // (Required) The output mode of the function.
+  string output_mode = 6;
+
+  // (Required) Timeout configuration for groups that do not receive data for a while.
+  string timeout_conf = 7;
+}
+
+message CommonInlineUserDefinedTableFunction {
+  // (Required) Name of the user-defined table function.
+  string function_name = 1;
+
+  // (Optional) Whether the user-defined table function is deterministic.
+  bool deterministic = 2;
+
+  // (Optional) Function input arguments. Empty arguments are allowed.
+  repeated Expression arguments = 3;
+
+  // (Required) Type of the user-defined table function.
+  oneof function {
+    PythonUDTF python_udtf = 4;
+  }
+}
+
+message PythonUDTF {
+  // (Optional) Return type of the Python UDTF.
+  optional DataType return_type = 1;
+
+  // (Required) EvalType of the Python UDTF.
+  int32 eval_type = 2;
+
+  // (Required) The encoded commands of the Python UDTF.
+  bytes command = 3;
+
+  // (Required) Python version being used in the client.
+  string python_ver = 4;
 }
 
 // Collect arbitrary (named) metrics from a dataset.
@@ -816,4 +1009,45 @@ message Parse {
     PARSE_FORMAT_CSV = 1;
     PARSE_FORMAT_JSON = 2;
   }
+}
+
+// Relation of type [[AsOfJoin]].
+//
+// `left` and `right` must be present.
+message AsOfJoin {
+  // (Required) Left input relation for a Join.
+  Relation left = 1;
+
+  // (Required) Right input relation for a Join.
+  Relation right = 2;
+
+  // (Required) Field to join on in left DataFrame
+  Expression left_as_of = 3;
+
+  // (Required) Field to join on in right DataFrame
+  Expression right_as_of = 4;
+
+  // (Optional) The join condition. Could be unset when `using_columns` is utilized.
+  //
+  // This field does not co-exist with using_columns.
+  Expression join_expr = 5;
+
+  // Optional. using_columns provides a list of columns that should present on both sides of
+  // the join inputs that this Join will join on. For example A JOIN B USING col_name is
+  // equivalent to A JOIN B on A.col_name = B.col_name.
+  //
+  // This field does not co-exist with join_condition.
+  repeated string using_columns = 6;
+
+  // (Required) The join type.
+  string join_type = 7;
+
+  // (Optional) The asof tolerance within this range.
+  Expression tolerance = 8;
+
+  // (Required) Whether allow matching with the same value or not.
+  bool allow_exact_matches = 9;
+
+  // (Required) Whether to search for prior, subsequent, or closest matches.
+  string direction = 10;
 }

@@ -188,6 +188,7 @@ trait FlatMapGroupsWithStateExecBase
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
+    stateManager // force lazy init at driver
     metrics // force lazy init at driver
 
     // Throw errors early if parameters are not as expected

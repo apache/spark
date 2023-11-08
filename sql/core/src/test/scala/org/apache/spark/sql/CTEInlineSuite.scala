@@ -44,7 +44,7 @@ abstract class CTEInlineSuiteBase
       checkAnswer(df, Nil)
 
       val r = df.queryExecution.optimizedPlan.find {
-        case RepartitionByExpression(p, _, None) => p.isEmpty
+        case RepartitionByExpression(p, _, None, _) => p.isEmpty
         case _ => false
       }
       assert(
@@ -643,6 +643,39 @@ abstract class CTEInlineSuiteBase
         case WithCTE(_, cteDefs) => assert(cteDefs.length == 2)
         case other => fail(s"Expect pattern WithCTE(_) but got $other")
       }
+    }
+  }
+
+  test("SPARK-44934: CTE column pruning handles duplicate exprIds in CTE") {
+    withTempView("t") {
+      Seq((0, 1, 2), (1, 2, 3)).toDF("c1", "c2", "c3").createOrReplaceTempView("t")
+      val query =
+        """
+          |with cte as (
+          |  select c1, c1, c2, c3 from t where random() > 0
+          |)
+          |select cte.c1, cte2.c1, cte.c2, cte2.c3 from
+          |  (select c1, c2 from cte) cte
+          |    inner join
+          |  (select c1, c3 from cte) cte2
+          |    on cte.c1 = cte2.c1
+          """.stripMargin
+
+      val df = sql(query)
+      checkAnswer(df, Row(0, 0, 1, 2) :: Row(1, 1, 2, 3) :: Nil)
+      assert(
+        df.queryExecution.analyzed.collect {
+          case WithCTE(_, cteDefs) => cteDefs
+        }.head.length == 1,
+        "With-CTE should contain 1 CTE def after analysis.")
+      val cteRepartitions = df.queryExecution.optimizedPlan.collect {
+        case r: RepartitionOperation => r
+      }
+      assert(cteRepartitions.length == 2,
+        "CTE should not be inlined after optimization.")
+      assert(cteRepartitions.head.collectFirst {
+        case p: Project if p.projectList.length == 4 => p
+      }.isDefined, "CTE columns should not be pruned.")
     }
   }
 }

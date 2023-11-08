@@ -101,6 +101,11 @@ SELECT * FROM t1 WHERE c1 = (SELECT MIN(a) FROM t2, LATERAL (SELECT c1 AS a));
 -- lateral join inside correlated subquery
 SELECT * FROM t1 WHERE c1 = (SELECT MIN(a) FROM t2, LATERAL (SELECT c1 AS a) WHERE c1 = t1.c1);
 
+-- join condition has a correlated reference to the left side of the lateral join
+SELECT * FROM t1 JOIN lateral (SELECT * FROM t2 JOIN t4 ON t2.c1 = t4.c1 AND t2.c1 = t1.c1);
+SELECT * FROM t1 JOIN lateral (SELECT * FROM t2 JOIN t4 ON t2.c1 != t4.c1 AND t2.c1 != t1.c1);
+SELECT * FROM t1 LEFT JOIN lateral (SELECT * FROM t4 LEFT JOIN t2 ON t2.c1 = t4.c1 AND t2.c1 = t1.c1);
+
 -- COUNT bug with a single aggregate expression
 SELECT * FROM t1, LATERAL (SELECT COUNT(*) cnt FROM t2 WHERE c1 = t1.c1);
 
@@ -178,7 +183,7 @@ SELECT * FROM t3 JOIN LATERAL (SELECT EXPLODE_OUTER(c2));
 SELECT * FROM t3 JOIN LATERAL (SELECT EXPLODE(c2)) t(c3) ON c1 = c3;
 SELECT * FROM t3 LEFT JOIN LATERAL (SELECT EXPLODE(c2)) t(c3) ON c1 = c3;
 
--- Window func - unsupported
+-- Window func
 SELECT * FROM t1 JOIN LATERAL
   (SELECT sum(t2.c2) over (order by t2.c1)
   FROM   t2
@@ -498,6 +503,33 @@ SELECT t.* FROM t1 JOIN LATERAL stack(1, c1, c2) t(x, y);
 SELECT t.* FROM t1 JOIN t3 ON t1.c1 = t3.c1 JOIN LATERAL stack(1, t1.c2, t3.c2) t;
 -- expect error
 SELECT t.* FROM t1, LATERAL stack(c1, c2);
+
+-- SPARK-36191: ORDER BY/LIMIT in the correlated subquery
+select * from t1 join lateral (select * from t2 where t1.c1 = t2.c1 and t1.c2 < t2.c2 limit 1);
+
+select * from t1 join lateral (select * from t4 where t1.c1 <= t4.c1 order by t4.c2 limit 10);
+
+select * from t1 join lateral (select c1, min(c2) as m
+                               from t2 where t1.c1 = t2.c1 and t1.c2 < t2.c2
+                               group by t2.c1
+                               order by m);
+
+select * from t1 join lateral (select c1, min(c2) as m
+                               from t4 where t1.c1 = t4.c1
+                               group by t4.c1
+                               limit 1);
+
+select * from t1 join lateral
+  ((select t4.c2 from t4 where t1.c1 <= t4.c1 order by t4.c2 limit 1)
+   union all
+   (select t4.c1 from t4 where t1.c1 = t4.c1 order by t4.c1 limit 3));
+
+select * from t1 join lateral
+  (select * from
+   ((select t4.c2 as t from t4 where t1.c1 <= t4.c1)
+   union all
+   (select t4.c1 as t from t4 where t1.c1 = t4.c1)) as foo
+   order by foo.t limit 5);
 
 -- clean up
 DROP VIEW t1;

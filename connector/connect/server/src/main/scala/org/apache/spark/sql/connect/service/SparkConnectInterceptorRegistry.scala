@@ -35,7 +35,7 @@ object SparkConnectInterceptorRegistry {
 
   // Contains the list of configured interceptors.
   private lazy val interceptorChain: Seq[InterceptorBuilder] = Seq(
-    // Adding a new interceptor at compile time works like the eaxmple below with the dummy
+    // Adding a new interceptor at compile time works like the example below with the dummy
     // interceptor:
     // interceptor[DummyInterceptor](classOf[DummyInterceptor])
   )
