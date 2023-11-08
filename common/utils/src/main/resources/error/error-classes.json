@@ -850,6 +850,12 @@
     ],
     "sqlState" : "42710"
   },
+  "DATA_SOURCE_NOT_EXIST" : {
+    "message" : [
+      "Data source '<provider>' not found. Please make sure the data source is registered."
+    ],
+    "sqlState" : "42704"
+  },
   "DATA_SOURCE_NOT_FOUND" : {
     "message" : [
       "Failed to find the data source: <provider>. Please find packages at `https://spark.apache.org/third-party-projects.html`."
@@ -1094,6 +1100,12 @@
       "The operation <statement> is not allowed on the <objectType>: <objectName>."
     ],
     "sqlState" : "42809"
+  },
+  "FOUND_MULTIPLE_DATA_SOURCES" : {
+    "message" : [
+      "Detected multiple data sources with the name '<provider>'. Please check the data source isn't simultaneously registered and located in the classpath."
+    ],
+    "sqlState" : "42710"
   },
   "GENERATED_COLUMN_WITH_DEFAULT_VALUE" : {
     "message" : [
