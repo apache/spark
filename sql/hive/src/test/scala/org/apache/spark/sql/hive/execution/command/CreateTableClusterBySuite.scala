@@ -30,5 +30,10 @@ class CreateTableClusterBySuite extends v1.CreateTableClusterBySuiteBase with Co
   override protected val nestedClusteringColumns: Seq[String] =
     Seq("col2.col3")
 
+  // Hive catalog doesn't support column names with commas.
+  override def excluded: Seq[String] = Seq(
+    s"$command using Hive V1 catalog V1 command: test clustering columns with comma",
+    s"$command using Hive V1 catalog V2 command: test clustering columns with comma")
+
   override def commandVersion: String = super[CreateTableClusterBySuiteBase].commandVersion
 }

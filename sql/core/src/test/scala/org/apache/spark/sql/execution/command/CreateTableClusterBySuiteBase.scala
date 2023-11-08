@@ -49,8 +49,6 @@ trait CreateTableClusterBySuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   test("test clustering columns with comma") {
-    assume(!catalogVersion.contains("Hive")) // Hive catalog doesn't support column names with dots.
-
     withNamespaceAndTable("ns", "table") { tbl =>
       spark.sql(s"CREATE TABLE $tbl (`i,d` INT, data STRING) $defaultUsing " +
         "CLUSTER BY (`i,d`, data)")
