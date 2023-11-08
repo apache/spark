@@ -124,6 +124,11 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
     val df2 = Seq.tabulate(20)(x => (x, x * x - 2 * x + 3.5)).toDF("a", "b")
     val corr3 = df2.stat.corr("a", "b", "pearson")
     assert(math.abs(corr3 - 0.95723391394758572) < 1e-12)
+
+    val tinyDouble = Seq(1e-200, 1e-200, 1e-100)
+    val df3 = tinyDouble.zip(tinyDouble).toDF("a", "b")
+    val corr4 = df3.stat.corr("a", "b", "pearson")
+    assert(math.abs(corr4 - 1.0) < 1e-12)
   }
 
   test("SPARK-30532 stat functions to understand fully-qualified column name") {

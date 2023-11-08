@@ -338,7 +338,7 @@ SELECT corr(DISTINCT x, y), corr(DISTINCT y, x), count(*)
 -- !query schema
 struct<corr(DISTINCT x, y):double,corr(DISTINCT y, x):double,count(1):bigint>
 -- !query output
-1.0	1.0	3
+0.9999999999999999	0.9999999999999999	3
 
 
 -- !query
