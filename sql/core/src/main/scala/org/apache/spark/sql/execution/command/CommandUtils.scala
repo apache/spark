@@ -231,6 +231,7 @@ object CommandUtils extends Logging {
       tableIdent: TableIdentifier,
       noScan: Boolean): Unit = {
     val sessionState = sparkSession.sessionState
+    val partitionStatsEnabled = sessionState.conf.analyzePartitionStatsEnabled
     val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
     val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
     val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
@@ -249,7 +250,7 @@ object CommandUtils extends Logging {
     } else {
       // Compute stats for the whole table
       val rowCounts: Map[TablePartitionSpec, BigInt] =
-        if (noScan) {
+        if (noScan || !partitionStatsEnabled) {
           Map.empty
         } else {
           calculateRowCountsPerPartition(sparkSession, tableMeta, None)
@@ -266,8 +267,8 @@ object CommandUtils extends Logging {
       if (newStats.isDefined) {
         sessionState.catalog.alterTableStats(tableIdentWithDB, newStats)
       }
-      // Also update partition stats
-      if (newPartitions.nonEmpty) {
+      // Also update partition stats when the config is enabled
+      if (newPartitions.nonEmpty && partitionStatsEnabled) {
         sessionState.catalog.alterPartitions(tableIdentWithDB, newPartitions)
       }
     }

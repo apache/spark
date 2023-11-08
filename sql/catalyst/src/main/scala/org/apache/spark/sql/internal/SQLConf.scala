@@ -2671,6 +2671,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ANALYZE_PARTITION_STATS_ENABLED =
+    buildConf("spark.sql.statistics.update.partitionStats.enabled")
+      .doc("When this config is enabled, Spark will also update partition statistics in analyze " +
+          "table command (i.e., ANALYZE TABLE .. COMPUTE STATISTICS [NOSCAN]). Note the command " +
+          "will also become more expensive. When this config is disabled, Spark will only " +
+          "update table level statistics.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val CBO_ENABLED =
     buildConf("spark.sql.cbo.enabled")
       .doc("Enables CBO for estimation of plan statistics when set true.")
@@ -5098,6 +5108,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def planStatsEnabled: Boolean = getConf(SQLConf.PLAN_STATS_ENABLED)
 
   def autoSizeUpdateEnabled: Boolean = getConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED)
+
+  def analyzePartitionStatsEnabled: Boolean = getConf(SQLConf.ANALYZE_PARTITION_STATS_ENABLED)
 
   def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
 
