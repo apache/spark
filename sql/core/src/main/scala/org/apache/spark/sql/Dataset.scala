@@ -3065,7 +3065,7 @@ class Dataset[T] private[sql](
   @scala.annotation.varargs
   def drop(col: Column, cols: Column*): DataFrame = withOrigin {
     withPlan {
-      UnresolvedDropColumns((col +: cols).map(_.expr), logicalPlan)
+      DataFrameDropColumns((col +: cols).map(_.expr), logicalPlan)
     }
   }
 

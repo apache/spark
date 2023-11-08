@@ -235,18 +235,17 @@ object Project {
   }
 }
 
-case class UnresolvedDropColumns(dropList: Seq[Expression], child: LogicalPlan)
-  extends UnaryNode {
+case class DataFrameDropColumns(dropList: Seq[Expression], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = Nil
 
   override def maxRows: Option[Long] = child.maxRows
   override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(DROP_COLUMNS)
+  final override val nodePatterns: Seq[TreePattern] = Seq(DF_DROP_COLUMNS)
 
   override lazy val resolved: Boolean = false
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedDropColumns =
+  override protected def withNewChildInternal(newChild: LogicalPlan): DataFrameDropColumns =
     copy(child = newChild)
 }
 

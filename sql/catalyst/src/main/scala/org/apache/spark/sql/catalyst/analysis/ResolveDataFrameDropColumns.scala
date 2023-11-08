@@ -17,22 +17,23 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, UnresolvedDropColumns}
+import org.apache.spark.sql.catalyst.plans.logical.{DataFrameDropColumns, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.DROP_COLUMNS
+import org.apache.spark.sql.catalyst.trees.TreePattern.DF_DROP_COLUMNS
 import org.apache.spark.sql.connector.catalog.CatalogManager
 
 /**
  * A rule that rewrites DropColumns to Project.
  */
-class ResolveDropColumns(val catalogManager: CatalogManager)
+class ResolveDataFrameDropColumns(val catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with ColumnResolutionHelper  {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
-    _.containsPattern(DROP_COLUMNS)) {
-    case d: UnresolvedDropColumns if d.childrenResolved =>
+    _.containsPattern(DF_DROP_COLUMNS)) {
+    case d: DataFrameDropColumns if d.childrenResolved && d.expressions.forall(_.resolved) =>
       val dropped = d.dropList.map {
-        case u: UnresolvedAttribute => resolveExpressionByPlanChildren(u, d.child)
+        case u: UnresolvedAttribute =>
+          resolveExpressionByPlanChildren(u, d.child)
         case e => e
       }
       val remaining = d.child.output.filterNot(attr => dropped.exists(_.semanticEquals(attr)))
