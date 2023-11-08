@@ -30,7 +30,7 @@ class ResolveDataFrameDropColumns(val catalogManager: CatalogManager)
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(DF_DROP_COLUMNS)) {
-    case d: DataFrameDropColumns if d.childrenResolved && d.expressions.forall(_.resolved) =>
+    case d: DataFrameDropColumns if d.childrenResolved =>
       val dropped = d.dropList.map {
         case u: UnresolvedAttribute =>
           resolveExpressionByPlanChildren(u, d.child)
