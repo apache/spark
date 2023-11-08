@@ -775,6 +775,14 @@ case class Cast(
       buildCast[Int](_, i => yearMonthIntervalToInt(i, x.startField, x.endField).toLong)
   }
 
+  private def errorOrNull(t: Any, from: DataType, to: DataType) = {
+    if (ansiEnabled) {
+      throw QueryExecutionErrors.castingCauseOverflowError(t, from, to)
+    } else {
+      null
+    }
+  }
+
   // IntConverter
   private[this] def castToInt(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
@@ -792,11 +800,7 @@ case class Cast(
         if (longValue == longValue.toInt) {
           longValue.toInt
         } else {
-          if (ansiEnabled) {
-            throw QueryExecutionErrors.castingCauseOverflowError(t, from, IntegerType)
-          } else {
-            null
-          }
+          errorOrNull(t, from, IntegerType)
         }
       })
     case x: NumericType if ansiEnabled =>
@@ -832,11 +836,7 @@ case class Cast(
         if (longValue == longValue.toShort) {
           longValue.toShort
         } else {
-          if (ansiEnabled) {
-            throw QueryExecutionErrors.castingCauseOverflowError(t, from, ShortType)
-          } else {
-            null
-          }
+          errorOrNull(t, from, ShortType)
         }
       })
     case x: NumericType if ansiEnabled =>
@@ -883,11 +883,7 @@ case class Cast(
         if (longValue == longValue.toByte) {
           longValue.toByte
         } else {
-          if (ansiEnabled) {
-            throw QueryExecutionErrors.castingCauseOverflowError(t, from, ByteType)
-          } else {
-            null
-          }
+          errorOrNull(t, from, ByteType)
         }
       })
     case x: NumericType if ansiEnabled =>
@@ -1686,7 +1682,6 @@ case class Cast(
           }
         """
   }
-
 
   private[this] def castDayTimeIntervalToIntegralTypeCode(
       startField: Byte,
