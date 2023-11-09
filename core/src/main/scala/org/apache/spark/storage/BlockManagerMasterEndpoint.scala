@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 
 import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext}
+import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.RDD_CACHE_VISIBILITY_TRACKING_ENABLED
@@ -37,6 +37,7 @@ import org.apache.spark.network.shuffle.{ExternalBlockStoreClient, RemoteBlockPu
 import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
+import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
 
@@ -53,9 +54,11 @@ class BlockManagerMasterEndpoint(
     externalBlockStoreClient: Option[ExternalBlockStoreClient],
     blockManagerInfo: mutable.Map[BlockManagerId, BlockManagerInfo],
     mapOutputTracker: MapOutputTrackerMaster,
-    shuffleBlockGetter: (Int, Long) => Seq[BlockId],
+    private val _shuffleManager: ShuffleManager,
     isDriver: Boolean)
   extends IsolatedThreadSafeRpcEndpoint with Logging {
+
+  private lazy val shuffleManager = Option(_shuffleManager).getOrElse(SparkEnv.get.shuffleManager)
 
   // Mapping from executor id to the block manager's local disk directories.
   private val executorIdToLocalDirs =
@@ -408,10 +411,8 @@ class BlockManagerMasterEndpoint(
           mapStatuses.foreach { mapStatus =>
             // Check if the executor has been deallocated
             if (!blockManagerIdByExecutor.contains(mapStatus.location.executorId)) {
-              // we get blocks from the `shuffleBlockGetter` function, which reaches
-              // into the ShuffleManager. This is done with a function because `ShuffleManager`
-              // is not initialized when `BlockManagerMasterEndpoint` is created.
-              val blocksToDel = shuffleBlockGetter(shuffleId, mapStatus.mapId)
+              val blocksToDel =
+                shuffleManager.shuffleBlockResolver.getBlocksForShuffle(shuffleId, mapStatus.mapId)
               if (blocksToDel.nonEmpty) {
                 val blocks = blocksToDeleteByShuffleService.getOrElseUpdate(mapStatus.location,
                   new mutable.HashSet[BlockId])

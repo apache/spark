@@ -24,6 +24,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Properties
 
+import com.google.common.base.Preconditions
 import com.google.common.cache.CacheBuilder
 import org.apache.hadoop.conf.Configuration
 
@@ -69,7 +70,7 @@ class SparkEnv (
     val outputCommitCoordinator: OutputCommitCoordinator,
     val conf: SparkConf) extends Logging {
 
-  // We initialize the ShuffleManager later, in SparkContext and Executor, to allow
+  // We initialize the ShuffleManager later in the Executor, to allow
   // user jars to define custom ShuffleManagers.
   private var _shuffleManager: ShuffleManager = _
 
@@ -192,8 +193,14 @@ class SparkEnv (
       pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, worker)
   }
 
-  private[spark] def setShuffleManager(shuffleManager: ShuffleManager): Unit = {
-    _shuffleManager = shuffleManager
+  def initializeShuffleManager(): Unit = {
+    Preconditions.checkState(null == _shuffleManager,
+      "Shuffle manager already initialized to %s", _shuffleManager)
+    // Must not be driver
+    if (executorId == SparkContext.DRIVER_IDENTIFIER) {
+      throw new IllegalArgumentException("Should not be called from the driver")
+    }
+    _shuffleManager = ShuffleManager.create(conf, executorId == SparkContext.DRIVER_IDENTIFIER)
   }
 }
 
@@ -287,11 +294,6 @@ object SparkEnv extends Logging {
       hostname, numCores, ioEncryptionKey, isLocal)
   }
 
-  private def shuffleBlockGetterFn(shuffleId: Int, mapId: Long): Seq[BlockId] = {
-    val env = SparkEnv.get
-    env.shuffleManager.shuffleBlockResolver.getBlocksForShuffle(shuffleId, mapId)
-  }
-
   /**
    * Helper method to create a SparkEnv for a driver or an executor.
    */
@@ -370,6 +372,12 @@ object SparkEnv extends Logging {
       new MapOutputTrackerMasterEndpoint(
         rpcEnv, mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
 
+    val shuffleManager: ShuffleManager = if (isDriver) {
+      ShuffleManager.create(conf, true)
+    } else {
+      null
+    }
+
     val memoryManager: MemoryManager = UnifiedMemoryManager(conf, numUsableCores)
 
     val blockManagerPort = if (isDriver) {
@@ -407,7 +415,7 @@ object SparkEnv extends Logging {
             None
           }, blockManagerInfo,
           mapOutputTracker.asInstanceOf[MapOutputTrackerMaster],
-          shuffleBlockGetterFn,
+          shuffleManager,
           isDriver)),
       registerOrLookupEndpoint(
         BlockManagerMaster.DRIVER_HEARTBEAT_ENDPOINT_NAME,
@@ -421,9 +429,9 @@ object SparkEnv extends Logging {
 
     // NB: blockManager is not valid until initialize() is called later.
     //     SPARK-45762 introduces a change where the ShuffleManager is initialized later
-    //     in the SparkContext and Executor, to allow for custom ShuffleManagers defined
-    //     in user jars. After initialize(), the `BlockManager`'s shuffleManager reference
-    //     isn't set yet. It is only available after `BlockManager.setShuffleManager` is invoked.
+    //     in the Executor, to allow for custom ShuffleManagers defined
+    //     in user jars. In the executor, the BlockManager uses a lazy val to obtain the shuffleManager
+    //     from the SparkEnv. In the driver, the SparkEnv's shuffleManager is set at this point.
     val blockManager = new BlockManager(
       executorId,
       rpcEnv,
@@ -432,6 +440,7 @@ object SparkEnv extends Logging {
       conf,
       memoryManager,
       mapOutputTracker,
+      shuffleManager,
       blockTransferService,
       securityManager,
       externalShuffleClient)
@@ -484,6 +493,7 @@ object SparkEnv extends Logging {
     if (isDriver) {
       val sparkFilesDir = Utils.createTempDir(Utils.getLocalDir(conf), "userFiles").getAbsolutePath
       envInstance.driverTmpDir = Some(sparkFilesDir)
+      envInstance._shuffleManager = shuffleManager
     }
 
     envInstance

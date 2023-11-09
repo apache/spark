@@ -63,7 +63,7 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
-import org.apache.spark.shuffle.{ShuffleDataIOUtils, ShuffleManager}
+import org.apache.spark.shuffle.ShuffleDataIOUtils
 import org.apache.spark.shuffle.api.ShuffleDriverComponents
 import org.apache.spark.status.{AppStatusSource, AppStatusStore}
 import org.apache.spark.status.api.v1.ThreadStackTrace
@@ -553,15 +553,6 @@ class SparkContext(config: SparkConf) extends Logging {
       value <- Option(System.getenv(envKey)).orElse(Option(System.getProperty(propKey)))} {
       executorEnvs(envKey) = value
     }
-
-    // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
-    // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
-    _heartbeatReceiver = env.rpcEnv.setupEndpoint(
-      HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
-
-    // Initialize any plugins before the task scheduler is initialized.
-    _plugins = PluginContainer(this, _resources.asJava)
-
     Option(System.getenv("SPARK_PREPEND_CLASSES")).foreach { v =>
       executorEnvs("SPARK_PREPEND_CLASSES") = v
     }
@@ -578,8 +569,13 @@ class SparkContext(config: SparkConf) extends Logging {
       executorEnvs.put("OMP_NUM_THREADS", _conf.get("spark.task.cpus", "1"))
     }
 
-    val shuffleManager = ShuffleManager.create(_conf, true)
-    _env.setShuffleManager(shuffleManager)
+    // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
+    // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
+    _heartbeatReceiver = env.rpcEnv.setupEndpoint(
+      HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
+
+    // Initialize any plugins before the task scheduler is initialized.
+    _plugins = PluginContainer(this, _resources.asJava)
 
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master)
@@ -631,7 +627,6 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     _ui.foreach(_.setAppId(_applicationId))
     _env.blockManager.initialize(_applicationId)
-    _env.blockManager.setShuffleManager(shuffleManager)
     FallbackStorage.registerBlockManagerIfNeeded(_env.blockManager.master, _conf)
 
     // The metrics system for Driver need to be set spark.app.id to app ID.
