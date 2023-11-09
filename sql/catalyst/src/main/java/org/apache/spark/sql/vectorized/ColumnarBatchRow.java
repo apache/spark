@@ -188,6 +188,8 @@ public final class ColumnarBatchRow extends InternalRow {
       return getStruct(ordinal, ((StructType)dataType).fields().length);
     } else if (dataType instanceof MapType) {
       return getMap(ordinal);
+    } else if (dataType instanceof VariantType) {
+      return getVariant(ordinal);
     } else {
       throw new UnsupportedOperationException("Datatype not supported " + dataType);
     }
