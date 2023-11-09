@@ -636,7 +636,7 @@ object SparkConnectClient {
       metadata: Map[String, String] = Map.empty,
       userAgent: String = genUserAgent(
         sys.env.getOrElse("SPARK_CONNECT_USER_AGENT", DEFAULT_USER_AGENT)),
-      retryPolicies: Seq[GrpcRetryHandler.RetryPolicy] = List(GrpcRetryHandler.RetryPolicy()),
+      retryPolicies: Seq[GrpcRetryHandler.RetryPolicy] = GrpcRetryHandler.defaultPolicies(),
       useReattachableExecute: Boolean = true,
       interceptors: List[ClientInterceptor] = List.empty,
       sessionId: Option[String] = None) {

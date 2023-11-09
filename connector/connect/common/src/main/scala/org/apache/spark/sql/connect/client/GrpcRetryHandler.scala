@@ -192,8 +192,9 @@ private[sql] object GrpcRetryHandler extends Logging {
       logWarning(s"Non-Fatal error during RPC execution: $lastException, exceeded retries " +
         s"(currentRetryNum=$currentRetryNum)")
 
-      exceptionList.tail.foreach(lastException.addSuppressed)
-      throw lastException
+      val error = new RetriesExceeded()
+      exceptionList.foreach(error.addSuppressed)
+      throw error
     }
 
     def retry(): T = {
@@ -217,6 +218,7 @@ private[sql] object GrpcRetryHandler extends Logging {
    */
   private[client] def retryException(e: Throwable): Boolean = {
     e match {
+      case _: RetryException => true
       case e: StatusRuntimeException =>
         val statusCode: Status.Code = e.getStatus.getCode
 
@@ -280,6 +282,8 @@ private[sql] object GrpcRetryHandler extends Logging {
     canRetry = retryException
   )
 
+  def defaultPolicies(): Seq[RetryPolicy] = List(defaultPolicy())
+
   class RetryPolicyState(val policy: RetryPolicy) {
     private var numberAttempts = 0
     private var nextWait: Duration = policy.initialBackoff
@@ -309,8 +313,9 @@ private[sql] object GrpcRetryHandler extends Logging {
   }
 
   /**
-   * An exception that can be thrown upstream when inside retry and which will be retryable
-   * regardless of policy.
+   * An exception that can be thrown upstream when inside retry and which will be always retryable
    */
   class RetryException extends Throwable
+
+  class RetriesExceeded extends Throwable
 }

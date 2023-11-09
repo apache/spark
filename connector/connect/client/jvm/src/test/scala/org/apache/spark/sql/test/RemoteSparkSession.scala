@@ -188,7 +188,7 @@ object SparkConnectServerUtils {
           .builder()
           .userId("test")
           .port(port)
-          .retryPolicy(RetryPolicy(maxRetries = 7, maxBackoff = FiniteDuration(10, "s")))
+          .retryPolicy(RetryPolicy(maxRetries = Some(7), maxBackoff = Some(FiniteDuration(10, "s"))))
           .build())
       .create()
 
