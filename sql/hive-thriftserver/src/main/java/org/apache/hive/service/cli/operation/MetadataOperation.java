@@ -29,7 +29,6 @@ import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.cli.OperationState;
 import org.apache.hive.service.cli.OperationType;
-import org.apache.hive.service.cli.TableSchema;
 import org.apache.hive.service.cli.session.HiveSession;
 
 /**
@@ -39,8 +38,6 @@ import org.apache.hive.service.cli.session.HiveSession;
 public abstract class MetadataOperation extends Operation {
 
   protected static final String DEFAULT_HIVE_CATALOG = "";
-  protected static TableSchema RESULT_SET_SCHEMA;
-  private static final char SEARCH_STRING_ESCAPE = '\\';
 
   protected MetadataOperation(HiveSession parentSession, OperationType opType) {
     super(parentSession, opType);
@@ -58,7 +55,7 @@ public abstract class MetadataOperation extends Operation {
   }
 
   /**
-   * Convert wildchars and escape sequence from JDBC format to datanucleous/regex
+   * Convert wildcards and escape sequence from JDBC format to datanucleus/regex
    */
   protected String convertIdentifierPattern(final String pattern, boolean datanucleusFormat) {
     if (pattern == null) {
@@ -69,8 +66,8 @@ public abstract class MetadataOperation extends Operation {
   }
 
   /**
-   * Convert wildchars and escape sequence of schema pattern from JDBC format to datanucleous/regex
-   * The schema pattern treats empty string also as wildchar
+   * Convert wildcards and escape sequence of schema pattern from JDBC format to datanucleus/regex
+   * The schema pattern treats empty string also as wildcard
    */
   protected String convertSchemaPattern(final String pattern) {
     if ((pattern == null) || pattern.isEmpty()) {
@@ -84,13 +81,12 @@ public abstract class MetadataOperation extends Operation {
    * Convert a pattern containing JDBC catalog search wildcards into
    * Java regex patterns.
    *
-   * @param pattern input which may contain '%' or '_' wildcard characters, or
-   * these characters escaped using {@link #getSearchStringEscape()}.
+   * @param pattern input which may contain '%' or '_' wildcard characters
    * @return replace %/_ with regex search characters, also handle escaped
    * characters.
    *
-   * The datanucleus module expects the wildchar as '*'. The columns search on the
-   * other hand is done locally inside the hive code and that requires the regex wildchar
+   * The datanucleus module expects the wildcard as '*'. The columns search on the
+   * other hand is done locally inside the hive code and that requires the regex wildcard
    * format '.*'  This is driven by the datanucleusFormat flag.
    */
   private String convertPattern(final String pattern, boolean datanucleusFormat) {
