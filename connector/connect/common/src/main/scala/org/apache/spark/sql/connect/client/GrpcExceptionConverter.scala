@@ -226,10 +226,9 @@ private[client] object GrpcExceptionConverter {
         params.cause)),
     errorConstructor(params =>
       new NoSuchTableException(
-        params.message,
-        params.cause,
-        params.errorClass,
-        params.messageParameters)),
+        params.errorClass.orNull,
+        params.messageParameters,
+        params.cause)),
     errorConstructor[NumberFormatException](params =>
       new SparkNumberFormatException(
         params.message,
