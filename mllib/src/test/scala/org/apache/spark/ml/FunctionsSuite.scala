@@ -131,6 +131,11 @@ class FunctionsSuite extends MLTest {
         vector_to_array(col("vector"))
         array_to_vector(col("array"))
       }
+
+      // this UT should be the last one in this test suite, since it uses
+      // a different `sc` from the standard one.
+      // stop it here in case new UTs are added after this one.
+      sc.stop()
     }
   }
 }
