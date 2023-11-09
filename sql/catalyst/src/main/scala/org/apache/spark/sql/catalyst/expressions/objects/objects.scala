@@ -898,9 +898,9 @@ case class MapObjects private(
     }
   }
 
-  private lazy val convertToSeq: Any => scala.collection.Seq[_] = inputDataType match {
-    case ObjectType(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
-      _.asInstanceOf[scala.collection.Seq[_]].toSeq
+  private lazy val convertToIterable: Any => scala.collection.Iterable[_] = inputDataType match {
+    case ObjectType(cls) if classOf[scala.collection.Iterable[_]].isAssignableFrom(cls) =>
+      _.asInstanceOf[scala.collection.Iterable[_]]
     case ObjectType(cls) if cls.isArray =>
       _.asInstanceOf[Array[_]].toSeq
     case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
@@ -910,7 +910,7 @@ case class MapObjects private(
         if (inputCollection.getClass.isArray) {
           inputCollection.asInstanceOf[Array[_]].toSeq
         } else {
-          inputCollection.asInstanceOf[scala.collection.Seq[_]]
+          inputCollection.asInstanceOf[scala.collection.Iterable[_]]
         }
       }
     case ArrayType(et, _) =>
@@ -926,7 +926,7 @@ case class MapObjects private(
     ClassTag(clazz).asInstanceOf[ClassTag[Any]]
   }
 
-  private lazy val mapElements: scala.collection.Seq[_] => Any = customCollectionCls match {
+  private lazy val mapElements: scala.collection.Iterable[_] => Any = customCollectionCls match {
     case Some(cls) if classOf[mutable.ArraySeq[_]].isAssignableFrom(cls) =>
       // The implicit tag is a workaround to deal with a small change in the
       // (scala) signature of ArrayBuilder.make between Scala 2.12 and 2.13.
@@ -967,7 +967,7 @@ case class MapObjects private(
         // Specifying concrete implementations of `java.util.List`
         (inputs) => {
           val results = executeFuncOnCollection(inputs)
-          val builder = constructor(inputs.length).asInstanceOf[java.util.List[Any]]
+          val builder = constructor(inputs.size).asInstanceOf[java.util.List[Any]]
           results.foreach(builder.add(_))
           builder
         }
@@ -985,7 +985,7 @@ case class MapObjects private(
     if (inputCollection == null) {
       return null
     }
-    mapElements(convertToSeq(inputCollection))
+    mapElements(convertToIterable(inputCollection))
   }
 
   override def dataType: DataType =
@@ -1037,7 +1037,7 @@ case class MapObjects private(
     // need to take care of Seq and List because they may have O(n) complexity for indexed accessing
     // like `list.get(1)`. Here we use Iterator to traverse Seq and List.
     val (getLength, prepareLoop, getLoopVar) = inputDataType match {
-      case ObjectType(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
+      case ObjectType(cls) if classOf[scala.collection.Iterable[_]].isAssignableFrom(cls) =>
         val it = ctx.freshName("it")
         (
           s"${genInputData.value}.size()",

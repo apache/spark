@@ -325,14 +325,7 @@ object SerializerBuildHelper {
       }
 
     case IterableEncoder(ctag, elementEncoder, containsNull, lenientSerialization) =>
-      val getter = if (classOf[scala.collection.Set[_]].isAssignableFrom(ctag.runtimeClass)) {
-        // There's no corresponding Catalyst type for `Set`, we serialize a `Set` to Catalyst array.
-        // Note that the property of `Set` is only kept when manipulating the data as domain object.
-        Invoke(input, "toSeq", ObjectType(classOf[scala.collection.Seq[_]]))
-      } else {
-        input
-      }
-      serializerForArray(elementEncoder, containsNull, getter, lenientSerialization)
+      serializerForArray(elementEncoder, containsNull, input, lenientSerialization)
 
     case MapEncoder(_, keyEncoder, valueEncoder, valueContainsNull) =>
       createSerializerForMap(
