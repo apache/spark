@@ -78,6 +78,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   private[sql] def sessionState: SessionState = sparkSession.sessionState
   private[sql] def sharedState: SharedState = sparkSession.sharedState
+  @deprecated("Use SparkSession.sessionState.conf instead", "4.0.0")
   private[sql] def conf: SQLConf = sessionState.conf
 
   def sparkContext: SparkContext = sparkSession.sparkContext
