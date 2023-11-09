@@ -98,11 +98,4 @@ class PartitionsAlreadyExistException private(
 
   def this(tableName: String, partitionIdent: InternalRow, partitionSchema: StructType) =
     this(tableName, Seq(partitionIdent), partitionSchema)
-
-  def this(message: String) = {
-    this(
-      message,
-      errorClass = Some("PARTITIONS_ALREADY_EXIST"),
-      messageParameters = Map.empty[String, String])
-  }
 }
