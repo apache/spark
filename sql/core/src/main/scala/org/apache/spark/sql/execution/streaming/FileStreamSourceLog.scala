@@ -117,7 +117,7 @@ class FileStreamSourceLog(
   }
 
   def restore(): Array[FileEntry] = {
-    val files: Array[FileEntry] = allFiles()
+    val files = allFiles()
 
     // When restarting the query, there is a case which the query starts from compaction batch,
     // and the batch has source metadata file to read. One case is that the previous query

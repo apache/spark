@@ -274,7 +274,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
                     s"(latestId: $latestId, compactInterval: $compactInterval)")
               }
             }
-          return logs.toArray[T]
+          return logs.toArray
         } catch {
           case e: IOException =>
             // Another process using `CompactibleFileStreamLog` may delete the batch files when
@@ -288,10 +288,10 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
             }
         }
       } else {
-        return Array.empty[T]
+        return Array.empty
       }
     }
-    Array.empty[T]
+    Array.empty
   }
 
   /**

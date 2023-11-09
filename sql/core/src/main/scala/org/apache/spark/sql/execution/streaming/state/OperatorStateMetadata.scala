@@ -66,8 +66,14 @@ object OperatorStateMetadataV1 {
 
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
-  private implicit val manifest: Manifest[OperatorStateMetadataV1] = Manifest
-    .classType[OperatorStateMetadataV1](implicitly[ClassTag[OperatorStateMetadataV1]].runtimeClass)
+  private implicit val manifest: Manifest[OperatorStateMetadataV1] = {
+    val classTag = implicitly[ClassTag[OperatorStateMetadataV1]]
+    if (classTag == null) {
+      Manifest.classType[OperatorStateMetadataV1](classOf[AnyRef])
+    } else {
+      Manifest.classType[OperatorStateMetadataV1](classTag.runtimeClass)
+    }
+  }
 
   def metadataFilePath(stateCheckpointPath: Path): Path =
     new Path(new Path(stateCheckpointPath, "_metadata"), "metadata")
