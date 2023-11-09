@@ -22,9 +22,6 @@ import java.util.Map.Entry
 
 import scala.collection.mutable
 
-import org.json4s.{Formats, NoTypeHints}
-import org.json4s.jackson.Serialization
-
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.FileStreamSource.FileEntry
 import org.apache.spark.sql.internal.SQLConf
@@ -51,8 +48,6 @@ class FileStreamSourceLog(
     sparkSession.sessionState.conf.fileSourceLogCleanupDelay
 
   protected override val isDeletingExpiredLog = sparkSession.sessionState.conf.fileSourceLogDeletion
-
-  private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
   // A fixed size log entry cache to cache the file entries belong to the compaction batch. It is
   // used to avoid scanning the compacted log file to retrieve it's own batch data.
@@ -122,7 +117,7 @@ class FileStreamSourceLog(
   }
 
   def restore(): Array[FileEntry] = {
-    val files = allFiles()
+    val files: Array[FileEntry] = allFiles()
 
     // When restarting the query, there is a case which the query starts from compaction batch,
     // and the batch has source metadata file to read. One case is that the previous query
