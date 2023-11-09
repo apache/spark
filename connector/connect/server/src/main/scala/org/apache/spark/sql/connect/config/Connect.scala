@@ -206,20 +206,6 @@ object Connect {
       .intConf
       .createWithDefault(1024)
 
-  val CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL =
-    buildStaticConf("spark.connect.copyFromLocalToFs.allowDestLocal")
-      .internal()
-      .doc("""
-            |Allow `spark.copyFromLocalToFs` destination to be local file system
-            | path on spark driver node when
-            |`spark.connect.copyFromLocalToFs.allowDestLocal` is true.
-            |This will allow user to overwrite arbitrary file on spark
-            |driver node we should only enable it for testing purpose.
-            |""".stripMargin)
-      .version("3.5.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val CONNECT_UI_STATEMENT_LIMIT =
     buildStaticConf("spark.sql.connect.ui.retainedStatements")
       .doc("The number of statements kept in the Spark Connect UI history.")

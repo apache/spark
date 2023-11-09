@@ -30,8 +30,8 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
-import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
-import org.apache.spark.sql.connect.artifact.util.ArtifactUtils
+import org.apache.spark.sql.artifact.ArtifactManager
+import org.apache.spark.sql.artifact.util.ArtifactUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -102,7 +102,7 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
       // summary and it is up to the client to decide whether to retry sending the artifact.
       if (artifact.getCrcStatus.contains(true)) {
         if (artifact.path.startsWith(
-            SparkConnectArtifactManager.forwardToFSPrefix + File.separator)) {
+            ArtifactManager.forwardToFSPrefix + File.separator)) {
           holder.artifactManager.uploadArtifactToFs(artifact.path, artifact.stagedPath)
         } else {
           addStagedArtifactToArtifactManager(artifact)

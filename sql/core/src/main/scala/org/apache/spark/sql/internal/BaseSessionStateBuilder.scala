@@ -18,6 +18,7 @@ package org.apache.spark.sql.internal
 
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
+import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, ReplaceCharWithVarchar, ResolveSessionCatalog, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{FunctionExpressionBuilder, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -350,6 +351,12 @@ abstract class BaseSessionStateBuilder(
   }
 
   /**
+   * Resource manager that handles the storage of artifacts as well as preparing the artifacts for
+   * use.
+   */
+  protected def artifactManager: ArtifactManager = new ArtifactManager(session)
+
+  /**
    * Function used to make clones of the session state.
    */
   protected def createClone: (SparkSession, SessionState) => SessionState = {
@@ -381,7 +388,8 @@ abstract class BaseSessionStateBuilder(
       createClone,
       columnarRules,
       adaptiveRulesHolder,
-      planNormalizationRules)
+      planNormalizationRules,
+      () => artifactManager)
   }
 }
 

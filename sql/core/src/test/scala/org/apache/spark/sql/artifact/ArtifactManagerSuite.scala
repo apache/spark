@@ -14,37 +14,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.connect.artifact
+package org.apache.spark.sql.artifact
 
+import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
-import java.util.UUID
 
-import io.grpc.StatusRuntimeException
 import org.apache.commons.io.FileUtils
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
-import org.apache.spark.sql.connect.ResourceHelper
-import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.storage.CacheId
 import org.apache.spark.util.Utils
 
-class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
+class ArtifactManagerSuite extends SharedSparkSession {
 
   override protected def sparkConf: SparkConf = {
     val conf = super.sparkConf
-    conf
-      .set("spark.plugins", "org.apache.spark.sql.connect.SparkConnectPlugin")
-      .set("spark.connect.copyFromLocalToFs.allowDestLocal", "true")
+    conf.set("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
   }
 
-  private val artifactPath = commonResourcePath.resolve("artifact-tests")
-  private def sessionHolder(): SessionHolder = {
-    SessionHolder("test", spark.sessionUUID, spark)
-  }
-  private lazy val artifactManager = new SparkConnectArtifactManager(sessionHolder())
+  private val artifactPath = new File("src/test/resources/artifact-tests").toPath
+
+  private lazy val artifactManager = spark.artifactManager
 
   private def sessionUUID: String = spark.sessionUUID
 
@@ -61,7 +55,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     assert(stagingPath.toFile.exists())
     artifactManager.addArtifact(remotePath, stagingPath, None)
 
-    val movedClassFile = SparkConnectArtifactManager.artifactRootPath
+    val movedClassFile = ArtifactManager.artifactRootDirectory
       .resolve(s"$sessionUUID/classes/smallClassFile.class")
       .toFile
     assert(movedClassFile.exists())
@@ -75,7 +69,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     assert(stagingPath.toFile.exists())
     artifactManager.addArtifact(remotePath, stagingPath, None)
 
-    val movedClassFile = SparkConnectArtifactManager.artifactRootPath
+    val movedClassFile = ArtifactManager.artifactRootDirectory
       .resolve(s"$sessionUUID/classes/Hello.class")
       .toFile
     assert(movedClassFile.exists())
@@ -98,16 +92,14 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     val remotePath = Paths.get("classes/Hello.class")
     assert(stagingPath.toFile.exists())
 
-    val sessionHolder =
-      SparkConnectService.getOrCreateIsolatedSession("c1", UUID.randomUUID.toString())
-    sessionHolder.addArtifact(remotePath, stagingPath, None)
+    artifactManager.addArtifact(remotePath, stagingPath, None)
 
-    val movedClassFile = SparkConnectArtifactManager.artifactRootPath
-      .resolve(s"${sessionHolder.session.sessionUUID}/classes/Hello.class")
+    val movedClassFile = ArtifactManager.artifactRootDirectory
+      .resolve(s"${spark.sessionUUID}/classes/Hello.class")
       .toFile
     assert(movedClassFile.exists())
 
-    val classLoader = sessionHolder.classloader
+    val classLoader = spark.artifactManager.classloader
     val instance = classLoader
       .loadClass("Hello")
       .getDeclaredConstructor(classOf[String])
@@ -115,8 +107,8 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
       .asInstanceOf[String => String]
     val udf = org.apache.spark.sql.functions.udf(instance)
 
-    sessionHolder.withSession { session =>
-      session.range(10).select(udf(col("id").cast("string"))).collect()
+    spark.artifactManager.withResources {
+      spark.range(10).select(udf(col("id").cast("string"))).collect()
     }
   }
 
@@ -125,9 +117,8 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
       val stagingPath = path.toPath
       Files.write(path.toPath, "test".getBytes(StandardCharsets.UTF_8))
       val remotePath = Paths.get("cache/abc")
-      val session = sessionHolder()
       val blockManager = spark.sparkContext.env.blockManager
-      val blockId = CacheId(session.userId, session.sessionId, "abc")
+      val blockId = CacheId(spark.sessionUUID, "abc")
       try {
         artifactManager.addArtifact(remotePath, stagingPath, None)
         val bytes = blockManager.getLocalBytes(blockId)
@@ -136,7 +127,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
         assert(readback === "test")
       } finally {
         blockManager.releaseLock(blockId)
-        blockManager.removeCache(session.userId, session.sessionId)
+        blockManager.removeCache(spark.sessionUUID)
       }
     }
   }
@@ -147,7 +138,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
       Files.write(path.toPath, "test".getBytes(StandardCharsets.UTF_8))
       val remotePath = Paths.get("pyfiles/abc.zip")
       artifactManager.addArtifact(remotePath, stagingPath, None)
-      assert(artifactManager.getSparkConnectPythonIncludes == Seq("abc.zip"))
+      assert(artifactManager.getPythonIncludes == Seq("abc.zip"))
     }
   }
 
@@ -167,7 +158,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
 
     withTempPath { path =>
       Files.write(path.toPath, "updated file".getBytes(StandardCharsets.UTF_8))
-      assertThrows[StatusRuntimeException] {
+      assertThrows[RuntimeException] {
         artifactManager.addArtifact(remotePath, path.toPath, None)
       }
     }
@@ -193,9 +184,8 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
       val stagingPath = path.toPath
       Files.write(path.toPath, "test".getBytes(StandardCharsets.UTF_8))
       val remotePath = Paths.get("cache/abc")
-      val session = sessionHolder()
       val blockManager = spark.sparkContext.env.blockManager
-      val blockId = CacheId(session.userId, session.sessionId, "abc")
+      val blockId = CacheId(spark.sessionUUID, "abc")
       // Setup artifact dir
       val copyDir = Utils.createTempDir().toPath
       FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
@@ -209,7 +199,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
         val bytes = blockManager.getLocalBytes(blockId)
         assert(bytes.isDefined)
         blockManager.releaseLock(blockId)
-        val expectedPath = SparkConnectArtifactManager.artifactRootPath
+        val expectedPath = ArtifactManager.artifactRootDirectory
           .resolve(s"$sessionUUID/classes/smallClassFile.class")
         assert(expectedPath.toFile.exists())
 
@@ -226,32 +216,30 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
           case throwable: Throwable => throw throwable
         } finally {
           FileUtils.deleteDirectory(copyDir.toFile)
-          blockManager.removeCache(session.userId, session.sessionId)
+          blockManager.removeCache(spark.sessionUUID)
         }
       }
     }
   }
 
   test("Classloaders for spark sessions are isolated") {
-    // use same sessionId - different users should still make it isolated.
-    val sessionId = UUID.randomUUID.toString()
-    val holder1 = SparkConnectService.getOrCreateIsolatedSession("c1", sessionId)
-    val holder2 = SparkConnectService.getOrCreateIsolatedSession("c2", sessionId)
-    val holder3 = SparkConnectService.getOrCreateIsolatedSession("c3", sessionId)
+    val session1 = spark.newSession()
+    val session2 = spark.newSession()
+    val session3 = spark.newSession()
 
-    def addHelloClass(holder: SessionHolder): Unit = {
+    def addHelloClass(session: SparkSession): Unit = {
       val copyDir = Utils.createTempDir().toPath
       FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
       val stagingPath = copyDir.resolve("Hello.class")
       val remotePath = Paths.get("classes/Hello.class")
       assert(stagingPath.toFile.exists())
-      holder.addArtifact(remotePath, stagingPath, None)
+      session.artifactManager.addArtifact(remotePath, stagingPath, None)
     }
 
     // Add the "Hello" classfile for the first user
-    addHelloClass(holder1)
+    addHelloClass(session1)
 
-    val classLoader1 = holder1.classloader
+    val classLoader1 = session1.artifactManager.classloader
     val instance1 = classLoader1
       .loadClass("Hello")
       .getDeclaredConstructor(classOf[String])
@@ -259,13 +247,13 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
       .asInstanceOf[String => String]
     val udf1 = org.apache.spark.sql.functions.udf(instance1)
 
-    holder1.withSession { session =>
-      val result = session.range(10).select(udf1(col("id").cast("string"))).collect()
-      assert(result.forall(_.getString(0).contains("Talon")))
+    session1.artifactManager.withResources {
+      val result1 = session1.range(10).select(udf1(col("id").cast("string"))).collect()
+      assert(result1.forall(_.getString(0).contains("Talon")))
     }
 
     assertThrows[ClassNotFoundException] {
-      val classLoader2 = holder2.classloader
+      val classLoader2 = session2.artifactManager.classloader
       val instance2 = classLoader2
         .loadClass("Hello")
         .getDeclaredConstructor(classOf[String])
@@ -274,17 +262,19 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     }
 
     // Add the "Hello" classfile for the third user
-    addHelloClass(holder3)
-    val instance3 = holder3.classloader
+    addHelloClass(session3)
+
+    val classLoader3 = session3.artifactManager.classloader
+    val instance3 = classLoader3
       .loadClass("Hello")
       .getDeclaredConstructor(classOf[String])
       .newInstance("Ahri")
       .asInstanceOf[String => String]
     val udf3 = org.apache.spark.sql.functions.udf(instance3)
 
-    holder3.withSession { session =>
-      val result = session.range(10).select(udf3(col("id").cast("string"))).collect()
-      assert(result.forall(_.getString(0).contains("Ahri")))
+    session3.artifactManager.withResources {
+      val result3 = session3.range(10).select(udf3(col("id").cast("string"))).collect()
+      assert(result3.forall(_.getString(0).contains("Ahri")))
     }
   }
 
@@ -294,36 +284,13 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     val stagingPath = copyDir.resolve("Hello.class")
     val remotePath = Paths.get("classes/Hello.class")
 
-    val sessionHolder =
-      SparkConnectService.getOrCreateIsolatedSession("c1", UUID.randomUUID.toString)
-    sessionHolder.addArtifact(remotePath, stagingPath, None)
+    artifactManager.addArtifact(remotePath, stagingPath, None)
 
-    val sessionDirectory =
-      SparkConnectArtifactManager.getArtifactDirectoryAndUriForSession(sessionHolder)._1.toFile
+    val sessionDirectory = artifactManager.artifactPath.toFile
     assert(sessionDirectory.exists())
 
-    sessionHolder.artifactManager.cleanUpResources()
+    artifactManager.cleanUpResources()
     assert(!sessionDirectory.exists())
-    assert(SparkConnectArtifactManager.artifactRootPath.toFile.exists())
-  }
-}
-
-class ArtifactUriSuite extends SparkFunSuite with LocalSparkContext {
-
-  private def createSparkContext(): Unit = {
-    resetSparkContext()
-    sc = new SparkContext("local[4]", "test", new SparkConf())
-
-  }
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    createSparkContext()
-  }
-
-  test("Artifact URI is reset when SparkContext is restarted") {
-    val oldUri = SparkConnectArtifactManager.artifactRootURI
-    createSparkContext()
-    val newUri = SparkConnectArtifactManager.artifactRootURI
-    assert(newUri != oldUri)
+    assert(ArtifactManager.artifactRootDirectory.toFile.exists())
   }
 }
