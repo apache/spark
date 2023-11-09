@@ -91,11 +91,4 @@ class NoSuchPartitionsException private(
           .mkString(", ")).mkString("), PARTITION (") + ")"),
         "tableName" -> quoteNameParts(UnresolvedAttribute.parseAttributeName(tableName))))
   }
-
-  def this(message: String) = {
-    this(
-      message,
-      errorClass = Some("PARTITIONS_NOT_FOUND"),
-      messageParameters = Map.empty[String, String])
-  }
 }
