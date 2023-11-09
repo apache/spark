@@ -3817,4 +3817,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "FOUND_MULTIPLE_DATA_SOURCES",
       messageParameters = Map("provider" -> provider))
   }
+
+  def invalidUDFClassError(invalidClass: String): Throwable = {
+    new InvalidUDFClassException(
+      errorClass = "_LEGACY_ERROR_TEMP_2450",
+      messageParameters = Map("invalidClass" -> invalidClass))
+  }
 }
