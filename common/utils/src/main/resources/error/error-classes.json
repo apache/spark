@@ -2963,6 +2963,18 @@
     ],
     "sqlState" : "42601"
   },
+  "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot specify both CLUSTER BY and CLUSTERED BY INTO BUCKETS."
+    ],
+    "sqlState" : "42908"
+  },
+  "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot specify both CLUSTER BY and PARTITIONED BY."
+    ],
+    "sqlState" : "42908"
+  },
   "SPECIFY_PARTITION_IS_NOT_ALLOWED" : {
     "message" : [
       "A CREATE TABLE without explicit column list cannot specify PARTITIONED BY.",
