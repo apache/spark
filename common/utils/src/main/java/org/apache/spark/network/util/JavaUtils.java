@@ -202,27 +202,27 @@ public class JavaUtils {
   private static final Map<String, ByteUnit> byteSuffixes;
 
   static {
-      timeSuffixes = Map.of(
-        "us", TimeUnit.MICROSECONDS,
-        "ms", TimeUnit.MILLISECONDS,
-        "s", TimeUnit.SECONDS,
-        "m", TimeUnit.MINUTES,
-        "min", TimeUnit.MINUTES,
-        "h", TimeUnit.HOURS,
-        "d", TimeUnit.DAYS);
+    timeSuffixes = Map.of(
+      "us", TimeUnit.MICROSECONDS,
+      "ms", TimeUnit.MILLISECONDS,
+      "s", TimeUnit.SECONDS,
+      "m", TimeUnit.MINUTES,
+      "min", TimeUnit.MINUTES,
+      "h", TimeUnit.HOURS,
+      "d", TimeUnit.DAYS);
 
-      byteSuffixes = Map.ofEntries(
-        Map.entry("b", ByteUnit.BYTE),
-        Map.entry("k", ByteUnit.KiB),
-        Map.entry("kb", ByteUnit.KiB),
-        Map.entry("m", ByteUnit.MiB),
-        Map.entry("mb", ByteUnit.MiB),
-        Map.entry("g", ByteUnit.GiB),
-        Map.entry("gb", ByteUnit.GiB),
-        Map.entry("t", ByteUnit.TiB),
-        Map.entry("tb", ByteUnit.TiB),
-        Map.entry("p", ByteUnit.PiB),
-        Map.entry("pb", ByteUnit.PiB));
+    byteSuffixes = Map.ofEntries(
+      Map.entry("b", ByteUnit.BYTE),
+      Map.entry("k", ByteUnit.KiB),
+      Map.entry("kb", ByteUnit.KiB),
+      Map.entry("m", ByteUnit.MiB),
+      Map.entry("mb", ByteUnit.MiB),
+      Map.entry("g", ByteUnit.GiB),
+      Map.entry("gb", ByteUnit.GiB),
+      Map.entry("t", ByteUnit.TiB),
+      Map.entry("tb", ByteUnit.TiB),
+      Map.entry("p", ByteUnit.PiB),
+      Map.entry("pb", ByteUnit.PiB));
   }
 
   /**
