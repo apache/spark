@@ -373,6 +373,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
 
     val partitionDates = List("2010-01-01", "2010-01-02", "2010-01-03")
+    val expectedRowCount = 500
 
     Seq(true, false).foreach { partitionStatsEnabled =>
       withSQLConf(SQLConf.UPDATE_PART_STATS_IN_ANALYZE_TABLE_ENABLED.key ->
@@ -382,8 +383,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             // Create a table with 3 partitions all located under a directory 'path'
             sql(
               s"""
-                 |CREATE TABLE $tableName (key STRING, value STRING)
-                 |USING hive
+                 |CREATE TABLE $tableName (key INT, value STRING)
+                 |USING parquet
                  |PARTITIONED BY (ds STRING)
                  |LOCATION '${path.toURI}'
                """.stripMargin)
@@ -391,7 +392,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             partitionDates.foreach { ds =>
               sql(s"ALTER TABLE $tableName ADD PARTITION (ds='$ds') LOCATION '$path/ds=$ds'")
               sql("SELECT * FROM src").write.mode(SaveMode.Overwrite)
-                  .format("parquet").save(s"$path/ds=$ds")
+                .format("parquet").save(s"$path/ds=$ds")
             }
 
             assert(getCatalogTable(tableName).stats.isEmpty)
@@ -421,7 +422,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
             assert(getTableStats(tableName).sizeInBytes > 0)
             // Table row count should be updated
-            assert(getTableStats(tableName).rowCount.get > 0)
+            assert(getTableStats(tableName).rowCount.get == 3 * expectedRowCount)
 
             partitionDates.foreach { ds =>
               val partStats = queryStats(ds)
@@ -429,7 +430,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
                 assert(partStats.nonEmpty)
                 // The scan option should update partition row count
                 assert(partStats.get.sizeInBytes > 0)
-                assert(partStats.get.rowCount.get > 0)
+                assert(partStats.get.rowCount.get == expectedRowCount)
               } else {
                 assert(partStats.isEmpty)
               }
