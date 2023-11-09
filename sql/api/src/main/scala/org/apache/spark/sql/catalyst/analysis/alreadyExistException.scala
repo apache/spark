@@ -195,12 +195,4 @@ class IndexAlreadyExistsException private(
   def this(indexName: String, tableName: String, cause: Option[Throwable]) = {
     this("INDEX_ALREADY_EXISTS", Map("indexName" -> indexName, "tableName" -> tableName), cause)
   }
-
-  def this(message: String, cause: Option[Throwable] = None) = {
-    this(
-      message,
-      cause,
-      errorClass = Some("INDEX_ALREADY_EXISTS"),
-      messageParameters = Map.empty[String, String])
-  }
 }
