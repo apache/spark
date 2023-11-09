@@ -84,16 +84,14 @@ object CommandUtils extends Logging {
   (BigInt, Seq[CatalogTablePartition]) = {
     val sessionState = spark.sessionState
     val startTime = System.nanoTime()
-    val (totalSize, newPartitions) = if (catalogTable.partitionColumnNames.isEmpty) {
+    val (totalSize: BigInt, newPartitions) = if (catalogTable.partitionColumnNames.isEmpty) {
       (calculateSingleLocationSize(sessionState, catalogTable.identifier,
         catalogTable.storage.locationUri), Seq())
     } else {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
       logInfo(s"Starting to calculate sizes for ${partitions.length} partitions.")
-      val (sizes, newPartitions) = calculatePartitionStats(spark, catalogTable, partitions,
-        partitionRowCount)
-      (sizes.sum, newPartitions)
+      calculatePartitionStats(spark, catalogTable, partitions, partitionRowCount)
     }
     logInfo(s"It took ${(System.nanoTime() - startTime) / (1000 * 1000)} ms to calculate" +
       s" the total size for table ${catalogTable.identifier}.")
@@ -105,7 +103,7 @@ object CommandUtils extends Logging {
       catalogTable: CatalogTable,
       partitions: Seq[CatalogTablePartition],
       partitionRowCount: Option[Map[TablePartitionSpec, BigInt]] = None):
-  (Seq[Long], Seq[CatalogTablePartition]) = {
+  (BigInt, Seq[CatalogTablePartition]) = {
     val paths = partitions.map(_.storage.locationUri)
     val sizes = calculateMultipleLocationSizes(spark, catalogTable.identifier, paths)
     val newPartitions = partitions.zipWithIndex.flatMap { case (p, idx) =>
@@ -113,7 +111,7 @@ object CommandUtils extends Logging {
       val newStats = CommandUtils.compareAndGetNewStats(p.stats, sizes(idx), newRowCount)
       newStats.map(_ => p.copy(stats = newStats))
     }
-    (sizes, newPartitions)
+    (sizes.sum, newPartitions)
   }
 
   def calculateSingleLocationSize(

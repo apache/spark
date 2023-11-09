@@ -372,9 +372,12 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       partition.stats
     }
 
+    val partitionDates = List("2010-01-01", "2010-01-02", "2010-01-03")
+    val expectedRowCount = 25
+
     Seq(true, false).foreach { partitionStatsEnabled =>
       withSQLConf(SQLConf.UPDATE_PART_STATS_IN_ANALYZE_TABLE_ENABLED.key ->
-          partitionStatsEnabled.toString) {
+        partitionStatsEnabled.toString) {
         withTable(tableName) {
           withTempPath { path =>
             // Create a table with 3 partitions all located under a directory 'path'
@@ -384,9 +387,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
                  |USING hive
                  |PARTITIONED BY (ds STRING)
                  |LOCATION '${path.toURI}'
-              """.stripMargin)
-
-            val partitionDates = List("2010-01-01", "2010-01-02", "2010-01-03")
+               """.stripMargin)
 
             partitionDates.foreach { ds =>
               sql(s"ALTER TABLE $tableName ADD PARTITION (ds='$ds') LOCATION '$path/ds=$ds'")
@@ -400,8 +401,6 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             }
 
             sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS NOSCAN")
-
-            val expectedRowCount = 25
 
             // Table size should also have been updated
             assert(getTableStats(tableName).sizeInBytes > 0)
