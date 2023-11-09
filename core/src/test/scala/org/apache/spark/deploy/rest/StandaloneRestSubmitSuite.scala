@@ -228,6 +228,24 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     assert(statusResponse.submissionId === doesNotExist)
   }
 
+  test("SPARK-45819: clear") {
+    val masterUrl = startDummyServer()
+    val response = new RestSubmissionClient(masterUrl).clear()
+    val clearResponse = getClearResponse(response)
+    assert(clearResponse.action === Utils.getFormattedClassName(clearResponse))
+    assert(clearResponse.serverSparkVersion === SPARK_VERSION)
+    assert(clearResponse.success)
+  }
+
+  test("SPARK-45843: killAll") {
+    val masterUrl = startDummyServer()
+    val response = new RestSubmissionClient(masterUrl).killAllSubmissions()
+    val killAllResponse = getKillAllResponse(response)
+    assert(killAllResponse.action === Utils.getFormattedClassName(killAllResponse))
+    assert(killAllResponse.serverSparkVersion === SPARK_VERSION)
+    assert(killAllResponse.success)
+  }
+
   /* ---------------------------------------- *
    |     Aberrant client / server behavior    |
    * ---------------------------------------- */
@@ -506,6 +524,25 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     }
   }
 
+  /** Return the response as a killAll response, or fail with error otherwise. */
+  private def getKillAllResponse(response: SubmitRestProtocolResponse)
+    : KillAllSubmissionResponse = {
+    response match {
+      case k: KillAllSubmissionResponse => k
+      case e: ErrorResponse => fail(s"Server returned error: ${e.message}")
+      case r => fail(s"Expected killAll response. Actual: ${r.toJson}")
+    }
+  }
+
+  /** Return the response as a clear response, or fail with error otherwise. */
+  private def getClearResponse(response: SubmitRestProtocolResponse): ClearResponse = {
+    response match {
+      case k: ClearResponse => k
+      case e: ErrorResponse => fail(s"Server returned error: ${e.message}")
+      case r => fail(s"Expected clear response. Actual: ${r.toJson}")
+    }
+  }
+
   /** Return the response as a status response, or fail with error otherwise. */
   private def getStatusResponse(response: SubmitRestProtocolResponse): SubmissionStatusResponse = {
     response match {
@@ -573,8 +610,12 @@ private class DummyMaster(
       context.reply(SubmitDriverResponse(self, success = true, Some(submitId), submitMessage))
     case RequestKillDriver(driverId) =>
       context.reply(KillDriverResponse(self, driverId, success = true, killMessage))
+    case RequestKillAllDrivers =>
+      context.reply(KillAllDriversResponse(self, success = true, killMessage))
     case RequestDriverStatus(driverId) =>
       context.reply(DriverStatusResponse(found = true, Some(state), None, None, exception))
+    case RequestClearCompletedDriversAndApps =>
+      context.reply(true)
   }
 }
 
@@ -617,7 +658,9 @@ private class SmarterMaster(override val rpcEnv: RpcEnv) extends ThreadSafeRpcEn
  *
  * When handling a submit request, the server returns a malformed JSON.
  * When handling a kill request, the server returns an invalid JSON.
+ * When handling a killAll request, the server returns an invalid JSON.
  * When handling a status request, the server throws an internal exception.
+ * When handling a clear request, the server throws an internal exception.
  * The purpose of this class is to test that client handles these cases gracefully.
  */
 private class FaultyStandaloneRestServer(
@@ -630,7 +673,9 @@ private class FaultyStandaloneRestServer(
 
   protected override val submitRequestServlet = new MalformedSubmitServlet
   protected override val killRequestServlet = new InvalidKillServlet
+  protected override val killAllRequestServlet = new InvalidKillAllServlet
   protected override val statusRequestServlet = new ExplodingStatusServlet
+  protected override val clearRequestServlet = new ExplodingClearServlet
 
   /** A faulty servlet that produces malformed responses. */
   class MalformedSubmitServlet
@@ -652,12 +697,31 @@ private class FaultyStandaloneRestServer(
     }
   }
 
+  /** A faulty servlet that produces invalid responses. */
+  class InvalidKillAllServlet extends StandaloneKillAllRequestServlet(masterEndpoint, masterConf) {
+    protected override def handleKillAll(): KillAllSubmissionResponse = {
+      val k = super.handleKillAll()
+      k
+    }
+  }
+
   /** A faulty status servlet that explodes. */
   class ExplodingStatusServlet extends StandaloneStatusRequestServlet(masterEndpoint, masterConf) {
     private def explode: Int = 1 / 0
     protected override def handleStatus(submissionId: String): SubmissionStatusResponse = {
       val s = super.handleStatus(submissionId)
       s.workerId = explode.toString
+      s
+    }
+  }
+
+  /** A faulty clear servlet that explodes. */
+  class ExplodingClearServlet extends StandaloneClearRequestServlet(masterEndpoint, masterConf) {
+    private def explode: Int = 1 / 0
+
+    protected override def handleClear(): ClearResponse = {
+      val s = super.handleClear()
+      s.message = explode.toString
       s
     }
   }

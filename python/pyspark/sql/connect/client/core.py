@@ -1564,6 +1564,14 @@ class SparkConnectClient(object):
         except grpc.RpcError:
             return None
 
+    def _display_server_stack_trace(self) -> bool:
+        from pyspark.sql.connect.conf import RuntimeConf
+
+        conf = RuntimeConf(self)
+        if conf.get("spark.sql.connect.serverStacktrace.enabled") == "true":
+            return True
+        return conf.get("spark.sql.pyspark.jvmStacktrace.enabled") == "true"
+
     def _handle_rpc_error(self, rpc_error: grpc.RpcError) -> NoReturn:
         """
         Error handling helper for dealing with GRPC Errors. On the server side, certain
@@ -1594,7 +1602,10 @@ class SparkConnectClient(object):
                     d.Unpack(info)
 
                     raise convert_exception(
-                        info, status.message, self._fetch_enriched_error(info)
+                        info,
+                        status.message,
+                        self._fetch_enriched_error(info),
+                        self._display_server_stack_trace(),
                     ) from None
 
             raise SparkConnectGrpcException(status.message) from None

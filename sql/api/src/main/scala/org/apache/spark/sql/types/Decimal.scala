@@ -499,7 +499,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def / (that: Decimal): Decimal =
     if (that.isZero) null else Decimal(toJavaBigDecimal.divide(that.toJavaBigDecimal,
-      DecimalType.MAX_SCALE, MATH_CONTEXT.getRoundingMode))
+      DecimalType.MAX_SCALE + 1, MATH_CONTEXT.getRoundingMode))
 
   def % (that: Decimal): Decimal =
     if (that.isZero) null
@@ -547,7 +547,11 @@ object Decimal {
 
   val POW_10 = Array.tabulate[Long](MAX_LONG_DIGITS + 1)(i => math.pow(10, i).toLong)
 
-  private val MATH_CONTEXT = new MathContext(DecimalType.MAX_PRECISION, RoundingMode.HALF_UP)
+  // SPARK-45786 Using RoundingMode.HALF_UP with MathContext may cause inaccurate SQL results
+  // because TypeCoercion later rounds again. Instead, always round down and use 1 digit longer
+  // precision than DecimalType.MAX_PRECISION. Then, TypeCoercion will properly round up/down
+  // the last extra digit.
+  private val MATH_CONTEXT = new MathContext(DecimalType.MAX_PRECISION + 1, RoundingMode.DOWN)
 
   private[sql] val ZERO = Decimal(0)
   private[sql] val ONE = Decimal(1)
