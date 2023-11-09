@@ -373,7 +373,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
 
     Seq(true, false).foreach { partitionStatsEnabled =>
-      withSQLConf(SQLConf.ANALYZE_PARTITION_STATS_ENABLED.key -> partitionStatsEnabled.toString) {
+      withSQLConf(SQLConf.UPDATE_PART_STATS_IN_ANALYZE_TABLE_ENABLED.key ->
+          partitionStatsEnabled.toString) {
         withTable(tableName) {
           withTempPath { path =>
             // Create a table with 3 partitions all located under a directory 'path'
@@ -389,7 +390,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
             partitionDates.foreach { ds =>
               sql(s"ALTER TABLE $tableName ADD PARTITION (ds='$ds') LOCATION '$path/ds=$ds'")
-              sql("SELECT * from src").write.mode(SaveMode.Overwrite)
+              sql("SELECT * FROM src").write.mode(SaveMode.Overwrite)
                   .format("parquet").save(s"$path/ds=$ds")
             }
 

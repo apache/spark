@@ -231,7 +231,7 @@ object CommandUtils extends Logging {
       tableIdent: TableIdentifier,
       noScan: Boolean): Unit = {
     val sessionState = sparkSession.sessionState
-    val partitionStatsEnabled = sessionState.conf.analyzePartitionStatsEnabled
+    val partitionStatsEnabled = sessionState.conf.updatePartStatsInAnalyzeTableEnabled
     val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
     val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
     val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
