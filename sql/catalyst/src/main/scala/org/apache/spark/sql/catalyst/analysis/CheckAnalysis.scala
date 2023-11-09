@@ -173,7 +173,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       try {
         // If a CTE relation ref count is 0, the other CTE relations that reference it
         // should also be checked by checkAnalysis0. This code will also guarantee the leaf
-        // relations that are not referenced by any others are checked first.
+        // relations that do not reference any others are checked first.
         val visited: mutable.Map[Long, Boolean] = mutable.Map.empty.withDefaultValue(false)
         cteMap.foreach { case (cteId, _) =>
           val (_, refCount, _) = cteMap(cteId)
