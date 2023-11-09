@@ -1796,7 +1796,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     }
 
     checkXmlOptionErrorMessage(Map.empty,
-      "[XML_ROW_TAG_OPTION_REQUIRED] `rowTag` option is required for reading files in XML format.",
+      "[XML_ROW_TAG_MISSING] `rowTag` option is required for reading files in XML format.",
       QueryCompilationErrors.xmlRowTagRequiredError(XmlOptions.ROW_TAG).getCause)
     checkXmlOptionErrorMessage(Map("rowTag" -> ""),
       "'rowTag' option should not be an empty string.")

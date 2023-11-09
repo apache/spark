@@ -2358,7 +2358,7 @@ The `<functionName>` requires `<expectedNum>` parameters but the actual number i
 
 For more details see [WRONG_NUM_ARGS](sql-error-conditions-wrong-num-args-error-class.html)
 
-### XML_ROW_TAG_OPTION_REQUIRED
+### XML_ROW_TAG_MISSING
 
 [SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 

@@ -3899,7 +3899,7 @@
     },
     "sqlState" : "42605"
   },
-  "XML_ROW_TAG_OPTION_REQUIRED" : {
+  "XML_ROW_TAG_MISSING" : {
     "message" : [
       "<rowTag> option is required for reading files in XML format."
     ],

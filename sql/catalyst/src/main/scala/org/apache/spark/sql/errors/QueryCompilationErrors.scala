@@ -3820,7 +3820,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def xmlRowTagRequiredError(optionName: String): Throwable = {
     new AnalysisException(
-      errorClass = "XML_ROW_TAG_OPTION_REQUIRED",
+      errorClass = "XML_ROW_TAG_MISSING",
       messageParameters = Map("rowTag" -> toSQLId(optionName))
     )
   }
