@@ -2674,9 +2674,9 @@ object SQLConf {
   val UPDATE_PART_STATS_IN_ANALYZE_TABLE_ENABLED =
     buildConf("spark.sql.statistics.updatePartitionStatsInAnalyzeTable.enabled")
       .doc("When this config is enabled, Spark will also update partition statistics in analyze " +
-          "table command (i.e., ANALYZE TABLE .. COMPUTE STATISTICS [NOSCAN]). Note the command " +
-          "will also become more expensive. When this config is disabled, Spark will only " +
-          "update table level statistics.")
+        "table command (i.e., ANALYZE TABLE .. COMPUTE STATISTICS [NOSCAN]). Note the command " +
+        "will also become more expensive. When this config is disabled, Spark will only " +
+        "update table level statistics.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
