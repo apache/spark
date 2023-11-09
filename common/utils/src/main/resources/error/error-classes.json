@@ -31,6 +31,15 @@
     ],
     "sqlState" : "42702"
   },
+  "AMBIGUOUS_COLUMN_REFERENCE" : {
+    "message" : [
+      "Column <name> is ambiguous. It's because you joined several DataFrame together, and some of these DataFrames are the same.",
+      "This column points to one of the DataFrame but Spark is unable to figure out which one.",
+      "Please alias the DataFrames with different names via `DataFrame.alias` before joining them,",
+      "and specify the column using qualified name, e.g. `df.alias(\"a\").join(df.alias(\"b\"), col(\"a.id\") > col(\"b.id\"))`."
+    ],
+    "sqlState" : "42702"
+  },
   "AMBIGUOUS_LATERAL_COLUMN_ALIAS" : {
     "message" : [
       "Lateral column alias <name> is ambiguous and has <n> matches."
@@ -841,6 +850,12 @@
     ],
     "sqlState" : "42710"
   },
+  "DATA_SOURCE_NOT_EXIST" : {
+    "message" : [
+      "Data source '<provider>' not found. Please make sure the data source is registered."
+    ],
+    "sqlState" : "42704"
+  },
   "DATA_SOURCE_NOT_FOUND" : {
     "message" : [
       "Failed to find the data source: <provider>. Please find packages at `https://spark.apache.org/third-party-projects.html`."
@@ -1085,6 +1100,12 @@
       "The operation <statement> is not allowed on the <objectType>: <objectName>."
     ],
     "sqlState" : "42809"
+  },
+  "FOUND_MULTIPLE_DATA_SOURCES" : {
+    "message" : [
+      "Detected multiple data sources with the name '<provider>'. Please check the data source isn't simultaneously registered and located in the classpath."
+    ],
+    "sqlState" : "42710"
   },
   "GENERATED_COLUMN_WITH_DEFAULT_VALUE" : {
     "message" : [
@@ -2941,6 +2962,18 @@
       "Alternatively, allow bucketing information to be inferred by omitting the clause."
     ],
     "sqlState" : "42601"
+  },
+  "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot specify both CLUSTER BY and CLUSTERED BY INTO BUCKETS."
+    ],
+    "sqlState" : "42908"
+  },
+  "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot specify both CLUSTER BY and PARTITIONED BY."
+    ],
+    "sqlState" : "42908"
   },
   "SPECIFY_PARTITION_IS_NOT_ALLOWED" : {
     "message" : [

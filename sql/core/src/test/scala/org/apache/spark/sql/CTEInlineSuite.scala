@@ -678,6 +678,17 @@ abstract class CTEInlineSuiteBase
       }.isDefined, "CTE columns should not be pruned.")
     }
   }
+
+  test("SPARK-45752: Unreferenced CTE should all be checked by CheckAnalysis0") {
+    val e = intercept[AnalysisException](sql(
+      s"""
+        |with
+        |a as (select * from non_exist),
+        |b as (select * from a)
+        |select 2
+        |""".stripMargin))
+    checkErrorTableNotFound(e, "`non_exist`", ExpectedContext("non_exist", 26, 34))
+  }
 }
 
 class CTEInlineSuiteAEOff extends CTEInlineSuiteBase with DisableAdaptiveExecutionSuite

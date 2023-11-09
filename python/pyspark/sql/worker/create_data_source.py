@@ -14,13 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import inspect
 import os
 import sys
 from typing import IO, List
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.errors import PySparkAssertionError, PySparkRuntimeError
+from pyspark.errors import PySparkAssertionError, PySparkRuntimeError, PySparkTypeError
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_bool,
@@ -84,8 +84,20 @@ def main(infile: IO, outfile: IO) -> None:
                 },
             )
 
+        # Check the name method is a class method.
+        if not inspect.ismethod(data_source_cls.name):
+            raise PySparkTypeError(
+                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
+                message_parameters={
+                    "expected": "'name()' method to be a classmethod",
+                    "actual": f"'{type(data_source_cls.name).__name__}'",
+                },
+            )
+
         # Receive the provider name.
         provider = utf8_deserializer.loads(infile)
+
+        # Check if the provider name matches the data source's name.
         if provider.lower() != data_source_cls.name().lower():
             raise PySparkAssertionError(
                 error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
