@@ -100,11 +100,11 @@ class TableAlreadyExistsException private(
   }
 }
 
-class TempTableAlreadyExistsException private[sql](
-  message: String,
-  cause: Option[Throwable],
-  errorClass: Option[String],
-  messageParameters: Map[String, String])
+class TempTableAlreadyExistsException private(
+    message: String,
+    cause: Option[Throwable],
+    errorClass: Option[String],
+    messageParameters: Map[String, String])
   extends AnalysisException(
     message,
     cause = cause,
@@ -127,14 +127,6 @@ class TempTableAlreadyExistsException private[sql](
       errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
       messageParameters = Map("relationName"
         -> quoteNameParts(AttributeNameParser.parseAttributeName(table))))
-  }
-
-  def this(message: String, cause: Option[Throwable]) = {
-    this(
-      message,
-      cause,
-      errorClass = Some("TEMP_TABLE_OR_VIEW_ALREADY_EXISTS"),
-      messageParameters = Map.empty[String, String])
   }
 }
 
