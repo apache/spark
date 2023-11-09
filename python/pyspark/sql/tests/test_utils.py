@@ -1614,6 +1614,28 @@ class UtilsTestsMixin:
             message_parameters={"error_msg": error_msg},
         )
 
+    def test_dataframe_include_diff_rows(self):
+        df1 = self.spark.createDataFrame(
+            [("1", 1000.00), ("2", 3000.00), ("3", 2000.00)], ["id", "amount"]
+        )
+        df2 = self.spark.createDataFrame(
+            [("1", 1001.00), ("2", 3000.00), ("3", 2003.00)], ["id", "amount"]
+        )
+
+        with self.assertRaises(PySparkAssertionError) as context:
+            assertDataFrameEqual(df1, df2, includeDiffRows=True)
+
+        # Extracting the differing rows data from the exception
+        error_data = context.exception.data
+
+        # Expected differences
+        expected_diff = [
+            (Row(id="1", amount=1000.0), Row(id="1", amount=1001.0)),
+            (Row(id="3", amount=2000.0), Row(id="3", amount=2003.0)),
+        ]
+
+        self.assertEqual(error_data, expected_diff)
+
     def test_dataframe_ignore_column_order(self):
         df1 = self.spark.createDataFrame([Row(A=1, B=2), Row(A=3, B=4)])
         df2 = self.spark.createDataFrame([Row(B=2, A=1), Row(B=4, A=3)])

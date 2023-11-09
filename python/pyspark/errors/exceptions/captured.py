@@ -107,7 +107,7 @@ class CapturedException(PySparkException):
         else:
             return None
 
-    def getSqlState(self) -> Optional[str]:  # type: ignore[override]
+    def getSqlState(self) -> Optional[str]:
         assert SparkContext._gateway is not None
         gw = SparkContext._gateway
         if self._origin is not None and is_instance_of(

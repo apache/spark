@@ -121,7 +121,9 @@ object TextInputXmlDataSource extends XmlDataSource {
   def inferFromDataset(
       xml: Dataset[String],
       parsedOptions: XmlOptions): StructType = {
-    XmlInferSchema.infer(xml.rdd, parsedOptions)
+    SQLExecution.withSQLConfPropagated(xml.sparkSession) {
+      new XmlInferSchema(parsedOptions).infer(xml.rdd)
+    }
   }
 
   private def createBaseDataset(
@@ -177,7 +179,7 @@ object MultiLineXmlDataSource extends XmlDataSource {
         parsedOptions)
     }
     SQLExecution.withSQLConfPropagated(sparkSession) {
-      val schema = XmlInferSchema.infer(tokenRDD, parsedOptions)
+      val schema = new XmlInferSchema(parsedOptions).infer(tokenRDD)
       schema
     }
   }
