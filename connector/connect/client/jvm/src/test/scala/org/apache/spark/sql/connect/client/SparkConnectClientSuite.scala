@@ -333,7 +333,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
       }
 
       val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE), numFails = 100)
-      val retryHandler = new GrpcRetryHandler(GrpcRetryHandler.RetryPolicy(), sleep)
+      val retryHandler = new GrpcRetryHandler(GrpcRetryHandler.defaultPolicy(), sleep)
 
       assertThrows[StatusRuntimeException] {
         retryHandler.retry {

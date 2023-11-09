@@ -50,9 +50,14 @@ import org.apache.spark.internal.Logging
 class ExecutePlanResponseReattachableIterator(
     request: proto.ExecutePlanRequest,
     channel: ManagedChannel,
-    retryPolicy: GrpcRetryHandler.RetryPolicy)
+    retryHandler: GrpcRetryHandler)
     extends WrappedCloseableIterator[proto.ExecutePlanResponse]
     with Logging {
+
+  /**
+   * Retries the given function with exponential backoff according to the client's retryPolicy.
+   */
+  private def retry[T](fn: => T): T = retryHandler.retry(fn)
 
   val operationId = if (request.hasOperationId) {
     request.getOperationId
@@ -96,6 +101,7 @@ class ExecutePlanResponseReattachableIterator(
   // Visible for testing.
   private[connect] var iter: Option[java.util.Iterator[proto.ExecutePlanResponse]] =
     Some(rawBlockingStub.executePlan(initialRequest))
+
 
   override def innerIterator: Iterator[proto.ExecutePlanResponse] = iter match {
     case Some(it) => it.asScala
@@ -300,10 +306,4 @@ class ExecutePlanResponseReattachableIterator(
 
     release.build()
   }
-
-  /**
-   * Retries the given function with exponential backoff according to the client's retryPolicy.
-   */
-  private def retry[T](fn: => T): T =
-    GrpcRetryHandler.retry(retryPolicy)(fn)
 }
