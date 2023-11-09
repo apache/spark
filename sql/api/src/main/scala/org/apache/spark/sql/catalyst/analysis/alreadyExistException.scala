@@ -54,7 +54,7 @@ class NamespaceAlreadyExistsException private(
 }
 
 // any changes to this class should be backward compatible as it may be used by external connectors
-class TableAlreadyExistsException private[sql](
+class TableAlreadyExistsException private(
     message: String,
     cause: Option[Throwable],
     errorClass: Option[String],
@@ -97,14 +97,6 @@ class TableAlreadyExistsException private[sql](
     this(errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
       messageParameters = Map("relationName" -> quoted(tableIdent)),
       cause = None)
-  }
-
-  def this(message: String, cause: Option[Throwable] = None) = {
-    this(
-      message,
-      cause,
-      errorClass = Some("TABLE_OR_VIEW_ALREADY_EXISTS"),
-      messageParameters = Map.empty[String, String])
   }
 }
 
