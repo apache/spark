@@ -31,7 +31,7 @@ class DatabaseAlreadyExistsException(db: String)
   extends NamespaceAlreadyExistsException(Array(db))
 
 // any changes to this class should be backward compatible as it may be used by external connectors
-class NamespaceAlreadyExistsException private[sql](
+class NamespaceAlreadyExistsException private(
     message: String,
     errorClass: Option[String],
     messageParameters: Map[String, String])
@@ -50,13 +50,6 @@ class NamespaceAlreadyExistsException private[sql](
   def this(namespace: Array[String]) = {
     this(errorClass = "SCHEMA_ALREADY_EXISTS",
       Map("schemaName" -> quoteNameParts(namespace)))
-  }
-
-  def this(message: String) = {
-    this(
-      message,
-      errorClass = Some("SCHEMA_ALREADY_EXISTS"),
-      messageParameters = Map.empty[String, String])
   }
 }
 

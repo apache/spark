@@ -205,8 +205,7 @@ private[client] object GrpcExceptionConverter {
         context = params.queryContext)),
     errorConstructor(params =>
       new NamespaceAlreadyExistsException(
-        params.message,
-        params.errorClass,
+        params.errorClass.orNull,
         params.messageParameters)),
     errorConstructor(params =>
       new TableAlreadyExistsException(
