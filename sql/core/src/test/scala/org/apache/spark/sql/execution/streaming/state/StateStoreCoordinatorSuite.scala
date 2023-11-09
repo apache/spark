@@ -123,8 +123,9 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       SparkSession.setActiveSession(spark)
       import spark.implicits._
+      import org.apache.spark.sql.SQLContext
       coordRef = spark.streams.stateStoreCoordinator
-      implicit val sqlContext = spark.sqlContext
+      implicit val sqlContext: SQLContext = spark.sqlContext
       spark.conf.set(SHUFFLE_PARTITIONS.key, "1")
 
       // Start a query and run a batch to load state stores
