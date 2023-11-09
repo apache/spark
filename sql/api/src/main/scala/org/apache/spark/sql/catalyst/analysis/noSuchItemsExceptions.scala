@@ -82,14 +82,6 @@ class NoSuchNamespaceException private(
     this(errorClass = "SCHEMA_NOT_FOUND",
       Map("schemaName" -> quoteNameParts(namespace)))
   }
-
-  def this(message: String, cause: Option[Throwable] = None) = {
-    this(
-      message,
-      cause,
-      errorClass = Some("SCHEMA_NOT_FOUND"),
-      messageParameters = Map.empty[String, String])
-  }
 }
 
 // any changes to this class should be backward compatible as it may be used by external connectors
