@@ -178,14 +178,6 @@ class NoSuchFunctionException private(
   def this(identifier: Identifier) = {
     this(errorClass = "ROUTINE_NOT_FOUND", Map("routineName" -> quoted(identifier)))
   }
-
-  def this(message: String, cause: Option[Throwable] = None) = {
-    this(
-      message,
-      cause,
-      errorClass = Some("ROUTINE_NOT_FOUND"),
-      messageParameters = Map.empty[String, String])
-  }
 }
 
 class NoSuchTempFunctionException(func: String)
