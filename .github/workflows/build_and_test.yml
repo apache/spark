@@ -555,6 +555,81 @@ jobs:
       with:
         name: test-results-sparkr--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
+        
+  kinesis-asl:
+    needs: [precondition, infra-image]
+    # always run if sparkr == 'true', even infra-image is skip (such as non-master job)
+#    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).sparkr == 'true'
+    name: "Build modules: spark-streaming-kinesis-asl"
+    runs-on: ubuntu-22.04
+    timeout-minutes: 300
+    container:
+      image: ${{ needs.precondition.outputs.image_url }}
+    env:
+      HADOOP_PROFILE: ${{ inputs.hadoop }}
+      HIVE_PROFILE: hive2.3
+      GITHUB_PREV_SHA: ${{ github.event.before }}
+      SPARK_LOCAL_IP: localhost
+      SKIP_UNIDOC: true
+      SKIP_MIMA: true
+      SKIP_PACKAGING: true
+    steps:
+      - name: Checkout Spark repository
+        uses: actions/checkout@v3
+        # In order to fetch changed files
+        with:
+          fetch-depth: 0
+          repository: apache/spark
+          ref: ${{ inputs.branch }}
+      - name: Add GITHUB_WORKSPACE to git trust safe.directory
+        run: |
+          git config --global --add safe.directory ${GITHUB_WORKSPACE}
+      - name: Sync the current branch with the latest in Apache Spark
+        if: github.repository != 'apache/spark'
+        run: |
+          echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+      # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
+      - name: Cache Scala, SBT and Maven
+        uses: actions/cache@v3
+        with:
+          path: |
+            build/apache-maven-*
+            build/scala-*
+            build/*.jar
+            ~/.sbt
+          key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+          restore-keys: |
+            build-
+      - name: Cache Coursier local repository
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/coursier
+          key: sparkr-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          restore-keys: |
+            sparkr-coursier-
+      - name: Free up disk space
+        run: |
+          if [ -f ./dev/free_disk_space_container ]; then
+            ./dev/free_disk_space_container
+          fi
+      - name: Install Java ${{ inputs.java }}
+        uses: actions/setup-java@v3
+        with:
+          distribution: zulu
+          java-version: ${{ inputs.java }}
+      - name: Run tests
+        env: ${{ fromJSON(inputs.envs) }}
+        run: |
+          ./dev/run-tests --parallelism 1 --modules streaming-kinesis-asl
+      - name: Upload test results to report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results-sparkr--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
+          path: "**/target/test-reports/*.xml"
 
   breaking-changes-buf:
     needs: [precondition]
@@ -989,7 +1064,7 @@ jobs:
 
   k8s-integration-tests:
     needs: precondition
-    if: fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
+      # if: fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
     name: Run Spark on Kubernetes Integration test
     runs-on: ubuntu-22.04
     timeout-minutes: 300
@@ -1039,7 +1114,7 @@ jobs:
           sudo install minikube-linux-amd64 /usr/local/bin/minikube
           rm minikube-linux-amd64
           # Github Action limit cpu:2, memory: 6947MB, limit to 2U6G for better resource statistic
-          minikube start --cpus 2 --memory 6144
+          minikube start --cpus 2 --memory 6144 --force
       - name: Print K8S pods and nodes info
         run: |
           kubectl get pods -A
