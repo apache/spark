@@ -17,11 +17,12 @@
 
 package org.apache.spark.storage
 
-import java.lang.invoke.{MethodHandle, MethodHandles, MethodType}
 import java.nio.{ByteBuffer, MappedByteBuffer}
 
 import scala.collection.Map
 import scala.collection.mutable
+
+import sun.misc.Unsafe
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.{config, Logging}
@@ -196,17 +197,10 @@ private[spark] class StorageStatus(
 private[spark] object StorageUtils extends Logging {
 
   private val bufferCleaner: ByteBuffer => Unit = {
-    val cleanerClass = Utils.classForName("jdk.internal.ref.Cleaner")
-    val directBufferClass = Utils.classForName("sun.nio.ch.DirectBuffer")
-    val byteBufferLookup: MethodHandles.Lookup =
-      MethodHandles.privateLookupIn(directBufferClass, MethodHandles.lookup())
-    val cleanerMethod: MethodHandle = byteBufferLookup
-      .findVirtual(directBufferClass, "cleaner", MethodType.methodType(cleanerClass))
-    val cleanerLookup: MethodHandles.Lookup =
-      MethodHandles.privateLookupIn(cleanerClass, MethodHandles.lookup())
-    val cleanMethod: MethodHandle =
-      cleanerLookup.findVirtual(cleanerClass, "clean", MethodType.methodType(classOf[Unit]))
-    buffer: ByteBuffer => cleanMethod.invoke(cleanerMethod.invoke(buffer))
+    val unsafeField = classOf[Unsafe].getDeclaredField("theUnsafe")
+    unsafeField.setAccessible(true)
+    val unsafe = unsafeField.get(null).asInstanceOf[Unsafe]
+    buffer: ByteBuffer => unsafe.invokeCleaner(buffer)
   }
 
   /**
