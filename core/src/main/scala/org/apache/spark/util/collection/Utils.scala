@@ -19,7 +19,7 @@ package org.apache.spark.util.collection
 
 import scala.collection.JavaConverters._
 
-import com.google.common.collect.{Ordering => GuavaOrdering}
+import org.apache.spark.util.collection.{GuavaOrderingSnippet => GuavaOrdering}
 
 /**
  * Utility functions for collections.
