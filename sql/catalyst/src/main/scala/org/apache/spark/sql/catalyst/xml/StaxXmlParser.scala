@@ -88,7 +88,13 @@ class StaxXmlParser(
     }
   }
 
-  private val caseSensitive: Boolean = SQLConf.get.caseSensitiveAnalysis
+  private def getFieldNameToIndex(schema: StructType): Map[String, Int] = {
+    if (SQLConf.get.caseSensitiveAnalysis) {
+      schema.map(_.name).zipWithIndex.toMap
+    } else {
+      CaseInsensitiveMap(schema.map(_.name).zipWithIndex.toMap)
+    }
+  }
 
   def parseStream(
       inputStream: InputStream,
@@ -277,11 +283,7 @@ class StaxXmlParser(
     val convertedValuesMap = collection.mutable.Map.empty[String, Any]
     val valuesMap = StaxXmlParserUtils.convertAttributesToValuesMap(attributes, options)
     valuesMap.foreach { case (f, v) =>
-      val nameToIndex = if (caseSensitive) {
-        schema.map(_.name).zipWithIndex.toMap
-      } else {
-        CaseInsensitiveMap(schema.map(_.name).zipWithIndex.toMap)
-      }
+      val nameToIndex = getFieldNameToIndex(schema)
       nameToIndex.get(f).foreach { i =>
         convertedValuesMap(f) = convertTo(v, schema(i).dataType)
       }
@@ -320,11 +322,7 @@ class StaxXmlParser(
     // Here we merge both to a row.
     val valuesMap = fieldsMap ++ attributesMap
     valuesMap.foreach { case (f, v) =>
-      val nameToIndex = if (caseSensitive) {
-        schema.map(_.name).zipWithIndex.toMap
-      } else {
-        CaseInsensitiveMap(schema.map(_.name).zipWithIndex.toMap)
-      }
+      val nameToIndex = getFieldNameToIndex(schema)
       nameToIndex.get(f).foreach { row(_) = v }
     }
 
@@ -346,11 +344,7 @@ class StaxXmlParser(
       rootAttributes: Array[Attribute] = Array.empty,
       isRootAttributesOnly: Boolean = false): InternalRow = {
     val row = new Array[Any](schema.length)
-    val nameToIndex = if (caseSensitive) {
-      schema.map(_.name).zipWithIndex.toMap
-    } else {
-      CaseInsensitiveMap(schema.map(_.name).zipWithIndex.toMap)
-    }
+    val nameToIndex = getFieldNameToIndex(schema)
     // If there are attributes, then we process them first.
     convertAttributes(rootAttributes, schema).toSeq.foreach { case (f, v) =>
       nameToIndex.get(f).foreach { row(_) = v }
