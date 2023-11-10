@@ -25,10 +25,13 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{RuntimeConfig, SparkSession}
+import org.apache.spark.sql.catalyst.DataSourceOptions
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.datasources.v2.state.StateDataSource.JoinSideValues.JoinSideValues
+import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
+import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues.JoinSideValues
 import org.apache.spark.sql.execution.streaming.{CommitLog, OffsetSeqLog, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.state.{StateSchemaCompatibilityChecker, StateStore, StateStoreConf, StateStoreId, StateStoreProviderId}
 import org.apache.spark.sql.sources.DataSourceRegister
@@ -39,8 +42,6 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * An implementation of [[TableProvider]] with [[DataSourceRegister]] for State Store data source.
  */
 class StateDataSource extends TableProvider with DataSourceRegister {
-  import StateDataSource._
-
   private lazy val session: SparkSession = SparkSession.active
 
   private lazy val hadoopConf: Configuration = session.sessionState.newHadoopConf()
@@ -59,14 +60,8 @@ class StateDataSource extends TableProvider with DataSourceRegister {
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
     val partitionId = StateStore.PARTITION_ID_TO_CHECK_SCHEMA
     val sourceOptions = StateSourceOptions.apply(session, hadoopConf, options)
-    if (sourceOptions.joinSide != JoinSideValues.none &&
-        sourceOptions.storeName != StateStoreId.DEFAULT_STORE_NAME) {
-      throw new IllegalArgumentException(s"The options '$PARAM_JOIN_SIDE' and " +
-        s"'$PARAM_STORE_NAME' cannot be specified together. Please specify either one.")
-    }
 
     val stateCheckpointLocation = sourceOptions.stateCheckpointLocation
-
     try {
       val (keySchema, valueSchema) = sourceOptions.joinSide match {
         case JoinSideValues.left =>
@@ -96,7 +91,8 @@ class StateDataSource extends TableProvider with DataSourceRegister {
   }
 
   private def buildStateStoreConf(checkpointLocation: String, batchId: Long): StateStoreConf = {
-    val offsetLog = new OffsetSeqLog(session, new Path(checkpointLocation, "offsets").toString)
+    val offsetLog = new OffsetSeqLog(session,
+      new Path(checkpointLocation, DIR_NAME_OFFSETS).toString)
     offsetLog.get(batchId) match {
       case Some(value) =>
         val metadata = value.metadata.getOrElse(
@@ -117,100 +113,100 @@ class StateDataSource extends TableProvider with DataSourceRegister {
   override def supportsExternalMetadata(): Boolean = false
 }
 
-object StateDataSource {
-  val PARAM_PATH = "path"
-  val PARAM_BATCH_ID = "batchId"
-  val PARAM_OPERATOR_ID = "operatorId"
-  val PARAM_STORE_NAME = "storeName"
-  val PARAM_JOIN_SIDE = "joinSide"
+case class StateSourceOptions(
+    resolvedCpLocation: String,
+    batchId: Long,
+    operatorId: Int,
+    storeName: String,
+    joinSide: JoinSideValues) {
+  def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
+}
+
+object StateSourceOptions extends DataSourceOptions {
+  val PATH = newOption("path")
+  val BATCH_ID = newOption("batchId")
+  val OPERATOR_ID = newOption("operatorId")
+  val STORE_NAME = newOption("storeName")
+  val JOIN_SIDE = newOption("joinSide")
 
   object JoinSideValues extends Enumeration {
     type JoinSideValues = Value
     val left, right, none = Value
   }
 
-  case class StateSourceOptions(
-      resolvedCpLocation: String,
-      batchId: Long,
-      operatorId: Int,
-      storeName: String,
-      joinSide: JoinSideValues) {
-    def stateCheckpointLocation: Path = new Path(resolvedCpLocation, "state")
+  def apply(
+      sparkSession: SparkSession,
+      hadoopConf: Configuration,
+      properties: util.Map[String, String]): StateSourceOptions = {
+    apply(sparkSession, hadoopConf, new CaseInsensitiveStringMap(properties))
   }
 
-  object StateSourceOptions {
-    def apply(
-        sparkSession: SparkSession,
-        hadoopConf: Configuration,
-        properties: util.Map[String, String]): StateSourceOptions = {
-      apply(sparkSession, hadoopConf, new CaseInsensitiveStringMap(properties))
+  def apply(
+      sparkSession: SparkSession,
+      hadoopConf: Configuration,
+      options: CaseInsensitiveStringMap): StateSourceOptions = {
+    val checkpointLocation = Option(options.get(PATH)).orElse {
+      throw new IllegalArgumentException(s"'$PATH' must be specified.")
+    }.get
+
+    val resolvedCpLocation = resolvedCheckpointLocation(hadoopConf, checkpointLocation)
+
+    val batchId = Option(options.get(BATCH_ID)).map(_.toLong).orElse {
+      Some(getLastCommittedBatch(sparkSession, resolvedCpLocation))
+    }.get
+
+    if (batchId < 0) {
+      throw new IllegalArgumentException(s"'$BATCH_ID' cannot be negative.")
     }
 
-    def apply(
-        sparkSession: SparkSession,
-        hadoopConf: Configuration,
-        options: CaseInsensitiveStringMap): StateSourceOptions = {
-      val checkpointLocation = Option(options.get(PARAM_PATH)).orElse {
-        throw new IllegalArgumentException(s"'$PARAM_PATH' must be specified.")
-      }.get
+    val operatorId = Option(options.get(OPERATOR_ID)).map(_.toInt)
+      .orElse(Some(0)).get
 
-      val resolvedCpLocation = resolvedCheckpointLocation(hadoopConf, checkpointLocation)
-
-      val batchId = Option(options.get(PARAM_BATCH_ID)).map(_.toLong).orElse {
-        Some(getLastCommittedBatch(sparkSession, resolvedCpLocation))
-      }.get
-
-      if (batchId < 0) {
-        throw new IllegalArgumentException(s"'${PARAM_BATCH_ID}' cannot be negative.")
-      }
-
-      val operatorId = Option(options.get(PARAM_OPERATOR_ID)).map(_.toInt)
-        .orElse(Some(0)).get
-
-      if (operatorId < 0) {
-        throw new IllegalArgumentException(s"'${PARAM_OPERATOR_ID}' cannot be negative.")
-      }
-
-      val storeName = Option(options.get(PARAM_STORE_NAME))
-        .getOrElse(StateStoreId.DEFAULT_STORE_NAME)
-
-      if (storeName.isEmpty) {
-        throw new IllegalArgumentException(s"'${PARAM_STORE_NAME}' cannot be an empty string.")
-      }
-
-      val joinSide = try {
-        Option(options.get(PARAM_JOIN_SIDE))
-          .map(JoinSideValues.withName).getOrElse(JoinSideValues.none)
-      } catch {
-        case _: NoSuchElementException =>
-          // convert to IllegalArgumentException
-          throw new IllegalArgumentException(s"Incorrect value of the option " +
-            s"'$PARAM_JOIN_SIDE'. Valid values are ${JoinSideValues.values.mkString(",")}")
-      }
-
-      if (joinSide != JoinSideValues.none && storeName != StateStoreId.DEFAULT_STORE_NAME) {
-        throw new IllegalArgumentException(s"The options '$PARAM_JOIN_SIDE' and " +
-          s"'$PARAM_STORE_NAME' cannot be specified together. Please specify either one.")
-      }
-
-      StateSourceOptions(resolvedCpLocation, batchId, operatorId, storeName, joinSide)
+    if (operatorId < 0) {
+      throw new IllegalArgumentException(s"'$OPERATOR_ID' cannot be negative.")
     }
 
-    private def resolvedCheckpointLocation(
-        hadoopConf: Configuration,
-        checkpointLocation: String): String = {
-      val checkpointPath = new Path(checkpointLocation)
-      val fs = checkpointPath.getFileSystem(hadoopConf)
-      checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toUri.toString
+    val storeName = Option(options.get(STORE_NAME))
+      .map(_.trim)
+      .getOrElse(StateStoreId.DEFAULT_STORE_NAME)
+
+    if (storeName.isEmpty) {
+      throw new IllegalArgumentException(s"'$STORE_NAME' cannot be an empty string.")
     }
 
-    private def getLastCommittedBatch(session: SparkSession, checkpointLocation: String): Long = {
-      val commitLog = new CommitLog(session, new Path(checkpointLocation, "commits").toString)
-      commitLog.getLatest() match {
-        case Some((lastId, _)) => lastId
-        case None => throw new IllegalStateException("No committed batch found, " +
-          s"checkpoint location: $checkpointLocation")
-      }
+    val joinSide = try {
+      Option(options.get(JOIN_SIDE))
+        .map(JoinSideValues.withName).getOrElse(JoinSideValues.none)
+    } catch {
+      case _: NoSuchElementException =>
+        // convert to IllegalArgumentException
+        throw new IllegalArgumentException(s"Incorrect value of the option " +
+          s"'$JOIN_SIDE'. Valid values are ${JoinSideValues.values.mkString(",")}")
+    }
+
+    if (joinSide != JoinSideValues.none && storeName != StateStoreId.DEFAULT_STORE_NAME) {
+      throw new IllegalArgumentException(s"The options '$JOIN_SIDE' and " +
+        s"'$STORE_NAME' cannot be specified together. Please specify either one.")
+    }
+
+    StateSourceOptions(resolvedCpLocation, batchId, operatorId, storeName, joinSide)
+  }
+
+  private def resolvedCheckpointLocation(
+      hadoopConf: Configuration,
+      checkpointLocation: String): String = {
+    val checkpointPath = new Path(checkpointLocation)
+    val fs = checkpointPath.getFileSystem(hadoopConf)
+    checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toUri.toString
+  }
+
+  private def getLastCommittedBatch(session: SparkSession, checkpointLocation: String): Long = {
+    val commitLog = new CommitLog(session,
+      new Path(checkpointLocation, DIR_NAME_COMMITS).toString)
+    commitLog.getLatest() match {
+      case Some((lastId, _)) => lastId
+      case None => throw new IllegalStateException("No committed batch found, " +
+        s"checkpoint location: $checkpointLocation")
     }
   }
 }
