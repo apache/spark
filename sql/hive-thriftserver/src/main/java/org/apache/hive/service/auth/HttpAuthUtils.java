@@ -117,7 +117,7 @@ public final class HttpAuthUtils {
 
   /**
    * Splits the cookie token into attributes pairs.
-   * @param str input token.
+   * @param tokenStr input token.
    * @return a map with the attribute pairs of the token if the input is valid.
    * Else, returns null.
    */
@@ -149,16 +149,13 @@ public final class HttpAuthUtils {
    * can be read from the Subject
    */
   public static class HttpKerberosClientAction implements PrivilegedExceptionAction<String> {
-    public static final String HTTP_RESPONSE = "HTTP_RESPONSE";
     public static final String SERVER_HTTP_URL = "SERVER_HTTP_URL";
     private final String serverPrincipal;
-    private final String serverHttpUrl;
     private final Base64 base64codec;
     private final HttpContext httpContext;
 
     public HttpKerberosClientAction(String serverPrincipal, String serverHttpUrl) {
       this.serverPrincipal = serverPrincipal;
-      this.serverHttpUrl = serverHttpUrl;
       base64codec = new Base64(0);
       httpContext = new BasicHttpContext();
       httpContext.setAttribute(SERVER_HTTP_URL, serverHttpUrl);
