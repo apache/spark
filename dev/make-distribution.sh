@@ -37,6 +37,7 @@ MAKE_PIP=false
 MAKE_R=false
 NAME=none
 MVN="$SPARK_HOME/build/mvn"
+# export SPARK_PROTOC_EXEC_PATH=/usr/local/opt/protobuf@3/bin/protoc
 
 function exit_with_usage {
   set +x
