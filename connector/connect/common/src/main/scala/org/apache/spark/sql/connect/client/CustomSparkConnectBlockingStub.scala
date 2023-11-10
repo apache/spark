@@ -62,6 +62,7 @@ private[connect] class CustomSparkConnectBlockingStub(
         request.getUserContext,
         request.getClientType,
         stubState.responseValidator.wrapIterator(
+          // ExecutePlanResponseReattachableIterator does all retries by itself, don't wrap it here
           new ExecutePlanResponseReattachableIterator(request, channel, stubState.retryHandler)))
     }
   }

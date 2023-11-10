@@ -154,29 +154,29 @@ private[sql] class GrpcRetryHandler(
 private[sql] object GrpcRetryHandler extends Logging {
   /**
    * Class managing the state of the retrying logic.
-   * @param retryPolicies, list of policies to apply (in order)
-   * @param sleep, typically Thread.sleep
-   * @param fn, the function to compute
-   * @tparam T, result of function fn
+   * @param retryPolicies list of policies to apply (in order)
+   * @param sleep typically Thread.sleep
+   * @param fn the function to compute
+   * @tparam T result of function fn
    */
   class Retrying[T](retryPolicies: Seq[RetryPolicy], sleep: Long => Unit, fn: => T) {
     private var currentRetryNum: Int = 0
     private var exceptionList: Seq[Throwable] = Seq.empty
     private val policies: Seq[RetryPolicyState] = retryPolicies.map(_.toState)
-    private var result: Option[T] = None
 
     def canRetry(throwable: Throwable): Boolean = {
       return policies.exists(p => p.canRetry(throwable))
     }
 
-    def makeAttempt(): Unit = {
+    def makeAttempt(): Option[T] = {
       try {
-        result = Some(fn)
+        return Some(fn)
       } catch {
         case NonFatal(e) if canRetry(e) =>
           currentRetryNum += 1
           exceptionList = e +: exceptionList
       }
+      return None
     }
 
     def waitAfterAttempt(): Unit = {
@@ -205,11 +205,11 @@ private[sql] object GrpcRetryHandler extends Logging {
     }
 
     def retry(): T = {
-      makeAttempt()
+      var result = makeAttempt()
 
       while (result.isEmpty) {
         waitAfterAttempt()
-        makeAttempt()
+        result = makeAttempt()
       }
 
       return result.get
