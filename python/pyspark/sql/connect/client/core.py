@@ -95,8 +95,7 @@ from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_sch
 from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
-from pyspark.errors import PySparkValueError
-
+from pyspark.errors import PySparkValueError, PySparkAssertionError
 
 if TYPE_CHECKING:
     from google.rpc.error_details_pb2 import ErrorInfo
@@ -676,6 +675,10 @@ class SparkConnectClient(object):
         self._use_reattachable_execute = use_reattachable_execute
         # Configure logging for the SparkConnect client.
 
+        # Capture the server-side session ID and set it to None initially. It will
+        # be updated on the first response received.
+        self._server_session_id: Optional[str] = None
+
     def _retrying(self) -> "Retrying":
         return Retrying(
             can_retry=SparkConnectClient.retry_exception, **self._retry_policy  # type: ignore
@@ -1121,11 +1124,7 @@ class SparkConnectClient(object):
             for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
-                    if resp.session_id != self._session_id:
-                        raise SparkConnectException(
-                            "Received incorrect session identifier for request:"
-                            f"{resp.session_id} != {self._session_id}"
-                        )
+                    self._verify_response_integrity(resp)
                     return AnalyzeResult.fromProto(resp)
             raise SparkConnectException("Invalid state during retry exception handling.")
         except Exception as error:
@@ -1144,11 +1143,7 @@ class SparkConnectClient(object):
         logger.info("Execute")
 
         def handle_response(b: pb2.ExecutePlanResponse) -> None:
-            if b.session_id != self._session_id:
-                raise SparkConnectException(
-                    "Received incorrect session identifier for request: "
-                    f"{b.session_id} != {self._session_id}"
-                )
+            self._verify_response_integrity(b)
 
         try:
             if self._use_reattachable_execute:
@@ -1193,11 +1188,8 @@ class SparkConnectClient(object):
             ]
         ]:
             nonlocal num_records
-            if b.session_id != self._session_id:
-                raise SparkConnectException(
-                    "Received incorrect session identifier for request: "
-                    f"{b.session_id} != {self._session_id}"
-                )
+            # The session ID is the local session ID and should match what we expect.
+            self._verify_response_integrity(b)
             if b.HasField("metrics"):
                 logger.debug("Received metric batch.")
                 yield from self._build_metrics(b.metrics)
@@ -1387,11 +1379,7 @@ class SparkConnectClient(object):
             for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.Config(req, metadata=self._builder.metadata())
-                    if resp.session_id != self._session_id:
-                        raise SparkConnectException(
-                            "Received incorrect session identifier for request:"
-                            f"{resp.session_id} != {self._session_id}"
-                        )
+                    self._verify_response_integrity(resp)
                     return ConfigResult.fromProto(resp)
             raise SparkConnectException("Invalid state during retry exception handling.")
         except Exception as error:
@@ -1430,11 +1418,7 @@ class SparkConnectClient(object):
             for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
-                    if resp.session_id != self._session_id:
-                        raise SparkConnectException(
-                            "Received incorrect session identifier for request:"
-                            f"{resp.session_id} != {self._session_id}"
-                        )
+                    self._verify_response_integrity(resp)
                     return list(resp.interrupted_ids)
             raise SparkConnectException("Invalid state during retry exception handling.")
         except Exception as error:
@@ -1446,11 +1430,7 @@ class SparkConnectClient(object):
             for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
-                    if resp.session_id != self._session_id:
-                        raise SparkConnectException(
-                            "Received incorrect session identifier for request:"
-                            f"{resp.session_id} != {self._session_id}"
-                        )
+                    self._verify_response_integrity(resp)
                     return list(resp.interrupted_ids)
             raise SparkConnectException("Invalid state during retry exception handling.")
         except Exception as error:
@@ -1462,11 +1442,7 @@ class SparkConnectClient(object):
             for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
-                    if resp.session_id != self._session_id:
-                        raise SparkConnectException(
-                            "Received incorrect session identifier for request:"
-                            f"{resp.session_id} != {self._session_id}"
-                        )
+                    self._verify_response_integrity(resp)
                     return list(resp.interrupted_ids)
             raise SparkConnectException("Invalid state during retry exception handling.")
         except Exception as error:
@@ -1482,11 +1458,7 @@ class SparkConnectClient(object):
             for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.ReleaseSession(req, metadata=self._builder.metadata())
-                    if resp.session_id != self._session_id:
-                        raise SparkConnectException(
-                            "Received incorrect session identifier for request:"
-                            f"{resp.session_id} != {self._session_id}"
-                        )
+                    self._verify_response_integrity(resp)
                     return
             raise SparkConnectException("Invalid state during retry exception handling.")
         except Exception as error:
@@ -1630,6 +1602,42 @@ class SparkConnectClient(object):
             with attempt:
                 return self._artifact_manager.cache_artifact(blob)
         raise SparkConnectException("Invalid state during retry exception handling.")
+
+    def _verify_response_integrity(
+        self,
+        response: Union[
+            pb2.ConfigResponse,
+            pb2.ExecutePlanResponse,
+            pb2.InterruptResponse,
+            pb2.ReleaseExecuteResponse,
+            pb2.AddArtifactsResponse,
+            pb2.AnalyzePlanResponse,
+            pb2.FetchErrorDetailsResponse,
+            pb2.ReleaseSessionResponse,
+        ],
+    ) -> None:
+        """
+        Verifies the integrity of the response. This method checks if the session ID and the
+        server-side session ID match. If not, it throws an exception.
+        Parameters
+        ----------
+        response - One of the different response types handled by the Spark Connect service
+        """
+        if self._session_id != response.session_id:
+            raise PySparkAssertionError(
+                "Received incorrect session identifier for request:"
+                f"{response.session_id} != {self._session_id}"
+            )
+        if self._server_session_id is not None:
+            if response.server_side_session_id != self._server_session_id:
+                raise PySparkAssertionError(
+                    "Received incorrect server side session identifier for request. "
+                    "Please create a new Spark Session to reconnect. ("
+                    f"{response.server_side_session_id} != {self._server_session_id})"
+                )
+        else:
+            # Update the server side session ID.
+            self._server_session_id = response.server_side_session_id
 
 
 class RetryState:
