@@ -317,8 +317,7 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     // This can be inferred as ArrayType.
     nameToDataType.foreach {
       case (field, dataTypes) if dataTypes.length > 1 =>
-        val elementType = dataTypes
-          .reduceLeft(compatibleType(caseSensitive))
+        val elementType = dataTypes.reduceLeft(compatibleType)
         builder += StructField(field, ArrayType(elementType), nullable = true)
       case (field, dataTypes) =>
         builder += StructField(field, dataTypes.head, nullable = true)
@@ -467,7 +466,7 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
             .map {
             case (_: String, fields: Array[(String, StructField)]) =>
               val fieldTypes = fields.map(_._2)
-              val dataType = fieldTypes.map(_.dataType).reduce(compatibleType(caseSensitive))
+              val dataType = fieldTypes.map(_.dataType).reduce(compatibleType)
               // we pick up the first field name that we've encountered for the field
               StructField(fields(0)._2.name, dataType)
           }

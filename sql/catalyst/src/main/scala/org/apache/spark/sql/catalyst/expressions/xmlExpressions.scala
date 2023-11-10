@@ -189,7 +189,8 @@ case class SchemaOfXml(
   private lazy val xmlFactory = xmlOptions.buildXmlFactory()
 
   @transient
-  private lazy val xmlInferSchema = new XmlInferSchema(xmlOptions)
+  private lazy val xmlInferSchema =
+    new XmlInferSchema(xmlOptions, caseSensitive = SQLConf.get.caseSensitiveAnalysis)
 
   @transient
   private lazy val xml = child.eval().asInstanceOf[UTF8String]
@@ -212,8 +213,7 @@ case class SchemaOfXml(
   }
 
   override def eval(v: InternalRow): Any = {
-    val dataType = xmlInferSchema
-      .infer(xml.toString, SQLConf.get.caseSensitiveAnalysis).get match {
+    val dataType = xmlInferSchema.infer(xml.toString).get match {
       case st: StructType =>
         xmlInferSchema.canonicalizeType(st).getOrElse(StructType(Nil))
       case at: ArrayType if at.elementType.isInstanceOf[StructType] =>
