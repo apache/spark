@@ -2758,4 +2758,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "upper" -> size.toString,
         "invalidValue" -> pos.toString))
   }
+
+  def invalidCharsetError(functionName: String, charset: String): RuntimeException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_PARAMETER_VALUE.CHARSET",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "parameter" -> toSQLId("charset"),
+        "charset" -> charset))
+  }
 }
