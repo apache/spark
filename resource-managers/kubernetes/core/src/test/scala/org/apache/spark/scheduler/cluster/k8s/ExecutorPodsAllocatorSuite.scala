@@ -117,6 +117,8 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
   val appId = "testapp"
 
+  private val numRegisteredExecutors = new AtomicInteger(2)
+
   before {
     MockitoAnnotations.openMocks(this).close()
     when(kubernetesClient.pods()).thenReturn(podOperations)
@@ -138,6 +140,15 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
       conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
     when(schedulerBackend.getExecutorIds()).thenReturn(Seq.empty)
+    when(schedulerBackend.insufficientResourcesRetained()).thenCallRealMethod()
+    val totalRegisteredExecutors =
+      PrivateMethod[AtomicInteger](Symbol("totalRegisteredExecutors"))()
+    val maxExecutors = PrivateMethod[Int](Symbol("maxExecutors"))()
+    val minSurviveRatio = PrivateMethod[Double](Symbol("minSurviveRatio"))()
+    when(schedulerBackend.invokePrivate[AtomicInteger](totalRegisteredExecutors))
+      .thenReturn(numRegisteredExecutors)
+    when(schedulerBackend.invokePrivate(maxExecutors)).thenReturn(6)
+    when(schedulerBackend.invokePrivate(minSurviveRatio)).thenReturn(0.5)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
     when(kubernetesClient.persistentVolumeClaims()).thenReturn(persistentVolumeClaims)
     when(persistentVolumeClaims.inNamespace("default")).thenReturn(pvcWithNamespace)
@@ -185,6 +196,35 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     snapshotsStore.notifySubscribers()
     assert(podsAllocatorUnderTest.getNumExecutorsFailed === 3)
     assert(_exitCode === SparkExitCode.EXCEED_MAX_EXECUTOR_FAILURES)
+  }
+
+  test("SPARK-45873: Make FailureTracker more tolerant when app remains sufficient resources") {
+    var _exitCode = 0
+    val _conf = conf.clone
+      .set(MAX_EXECUTOR_FAILURES.key, "2")
+      .set(EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS.key, "2s")
+    podsAllocatorUnderTest = new ExecutorPodsAllocator(_conf, secMgr,
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock) {
+      override private[spark] def stopApplication(exitCode: Int): Unit = {
+        _exitCode = exitCode
+      }
+    }
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3))
+    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+    numRegisteredExecutors.incrementAndGet()
+    (1 to 3).foreach(i => snapshotsStore.updatePod(failedExecutorWithoutDeletion(i)))
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.getNumExecutorsFailed === 3)
+    assert(!schedulerBackend.insufficientResourcesRetained())
+    assert(_exitCode === 0,
+      "although we hit max executor failure, but we still have sufficient executors")
+
+    numRegisteredExecutors.decrementAndGet()
+    assert(schedulerBackend.insufficientResourcesRetained())
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.getNumExecutorsFailed === 3)
+    assert(_exitCode === 11,
+      "we hit max executor failure and do not have enough executors")
   }
 
   test("SPARK-36052: test splitSlots") {
