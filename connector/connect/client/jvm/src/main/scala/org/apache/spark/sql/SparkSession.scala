@@ -250,7 +250,7 @@ class SparkSession private[sql] (
           .setSql(sqlText)
           .addAllPosArguments(args.map(lit(_).expr).toImmutableArraySeq.asJava)))
     val plan = proto.Plan.newBuilder().setCommand(cmd)
-    // .toBuffer forces that the iterator is consumed and closed
+    // .toSeq forces that the iterator is consumed and closed
     val responseSeq = client.execute(plan.build()).toSeq
 
     val response = responseSeq
@@ -309,7 +309,7 @@ class SparkSession private[sql] (
             .setSql(sqlText)
             .putAllNamedArguments(args.asScala.view.mapValues(lit(_).expr).toMap.asJava)))
       val plan = proto.Plan.newBuilder().setCommand(cmd)
-      // .toBuffer forces that the iterator is consumed and closed
+      // .toSeq forces that the iterator is consumed and closed
       val responseSeq = client.execute(plan.build()).toSeq
 
       val response = responseSeq
@@ -549,7 +549,7 @@ class SparkSession private[sql] (
 
   private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
-    // .toBuffer forces that the iterator is consumed and closed
+    // .toSeq forces that the iterator is consumed and closed
     client.execute(plan).toSeq
   }
 
