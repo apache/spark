@@ -2191,6 +2191,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               if hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
             resolveBuiltinOrTempFunction(nameParts, arguments, Some(u)).map {
               case func: HigherOrderFunction => func
+              case aggExpr: AggregateExpression
+                if aggExpr.aggregateFunction.isInstanceOf[HigherOrderFunction] => aggExpr
               case other => other.failAnalysis(
                 errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
                 messageParameters = Map(
