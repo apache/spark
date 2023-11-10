@@ -403,12 +403,8 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
           .setSql("select * from range(10000000)")))
     val plan = proto.Plan.newBuilder().setCommand(cmd)
     val iter = client.execute(plan.build())
-    val reattachableIter = iter
-      .asInstanceOf[WrappedCloseableIterator[proto.ExecutePlanResponse]]
-      .innerIterator
-      .asInstanceOf[WrappedCloseableIterator[proto.ExecutePlanResponse]]
-      .innerIterator
-      .asInstanceOf[ExecutePlanResponseReattachableIterator]
+    val reattachableIter =
+      ExecutePlanResponseReattachableIterator.fromIterator(iter)
     iter.toSeq
     // If this assertion fails, we need to double check the correctness
     // of the return value from the SparkSession.sql
