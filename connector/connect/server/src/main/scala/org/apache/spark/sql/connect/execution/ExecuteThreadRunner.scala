@@ -169,8 +169,12 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
           }.toSeq
           name -> values
         }.toMap
-        executeHolder.responseObserver.onNext(SparkConnectPlanExecution
-          .createObservedMetricsResponse(executeHolder.sessionHolder.sessionId, observedMetrics))
+        executeHolder.responseObserver.onNext(
+          SparkConnectPlanExecution
+            .createObservedMetricsResponse(
+              executeHolder.sessionHolder.sessionId,
+              executeHolder.sessionHolder.serverSessionId,
+              observedMetrics))
       }
 
       lock.synchronized {

@@ -65,8 +65,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         tracker)
     responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(dataframe, responseObserver, executeHolder)
-    responseObserver.onNext(
-      MetricGenerator.createMetricsResponse(request.getSessionId, dataframe))
+    responseObserver.onNext(MetricGenerator.createMetricsResponse(sessionHolder, dataframe))
     createObservedMetricsResponse(request.getSessionId, dataframe).foreach(
       responseObserver.onNext)
   }
@@ -110,7 +109,11 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
 
     var numSent = 0
     def sendBatch(bytes: Array[Byte], count: Long, startOffset: Long): Unit = {
-      val response = proto.ExecutePlanResponse.newBuilder().setSessionId(sessionId)
+      val response = proto.ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setServerSideSessionId(sessionHolder.serverSessionId)
+
       val batch = proto.ExecutePlanResponse.ArrowBatch
         .newBuilder()
         .setRowCount(count)
@@ -234,6 +237,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     ExecutePlanResponse
       .newBuilder()
       .setSessionId(sessionId)
+      .setServerSideSessionId(sessionHolder.serverSessionId)
       .setSchema(DataTypeProtoConverter.toConnectProtoType(schema))
       .build()
   }
@@ -249,7 +253,8 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         name -> values
     }
     if (observedMetrics.nonEmpty) {
-      Some(SparkConnectPlanExecution.createObservedMetricsResponse(sessionId, observedMetrics))
+      Some(SparkConnectPlanExecution
+        .createObservedMetricsResponse(sessionId, sessionHolder.serverSessionId, observedMetrics))
     } else None
   }
 }
@@ -257,6 +262,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
 object SparkConnectPlanExecution {
   def createObservedMetricsResponse(
       sessionId: String,
+      serverSessionId: String,
       metrics: Map[String, Seq[(Option[String], Any)]]): ExecutePlanResponse = {
     val observedMetrics = metrics.map { case (name, values) =>
       val metrics = ExecutePlanResponse.ObservedMetrics
@@ -272,6 +278,7 @@ object SparkConnectPlanExecution {
     ExecutePlanResponse
       .newBuilder()
       .setSessionId(sessionId)
+      .setServerSideSessionId(serverSessionId)
       .addAllObservedMetrics(observedMetrics.asJava)
       .build()
   }
