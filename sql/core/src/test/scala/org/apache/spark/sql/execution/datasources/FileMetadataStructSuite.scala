@@ -1083,7 +1083,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       // Transform the result into a literal that can be used in an expression.
       val metadataColumnFields = metadataColumnRow.schema.fields
         .map(field => lit(metadataColumnRow.getAs[Any](field.name)).as(field.name))
-      val metadataColumnStruct = struct(metadataColumnFields: _*)
+      import org.apache.spark.util.ArrayImplicits._
+      val metadataColumnStruct = struct(metadataColumnFields.toImmutableArraySeq: _*)
 
       val selectSingleRowDf = spark.read.load(dir.getAbsolutePath)
         .where(col("_metadata").equalTo(lit(metadataColumnStruct)))

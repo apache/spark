@@ -149,8 +149,9 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
         case _: NumericType | BooleanType => dataset(c).cast(DoubleType).as(s"${c}_double_$uid")
       }
     }
-
-    filteredDataset.select(col("*"), assembleFunc(struct(args: _*)).as($(outputCol), metadata))
+    import org.apache.spark.util.ArrayImplicits._
+    filteredDataset.select(col("*"),
+      assembleFunc(struct(args.toImmutableArraySeq: _*)).as($(outputCol), metadata))
   }
 
   @Since("1.4.0")
