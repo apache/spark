@@ -96,6 +96,35 @@ class CatalogSuite extends SparkFunSuite {
     assert(catalog.listTables(Array("ns2")).toSet == Set(ident3))
   }
 
+  test("listTables by pattern") {
+    val catalog = newCatalog()
+    val ident1 = Identifier.of(Array("ns"), "test_table_1")
+    val ident2 = Identifier.of(Array("ns"), "test_table_2")
+    val ident3 = Identifier.of(Array("ns2"), "test_table_1")
+
+    intercept[NoSuchNamespaceException](catalog.listTables(Array("ns", "*test*")))
+
+    catalog.createTable(ident1, schema, emptyTrans, emptyProps)
+
+    assert(catalog.listTables(Array("ns"), "*test*").toSet == Set(ident1))
+    intercept[NoSuchNamespaceException](catalog.listTables(Array("ns2")))
+
+    catalog.createTable(ident3, schema, emptyTrans, emptyProps)
+    catalog.createTable(ident2, schema, emptyTrans, emptyProps)
+
+    assert(catalog.listTables(Array("ns"), "*test*").toSet == Set(ident1, ident2))
+    assert(catalog.listTables(Array("ns2")).toSet == Set(ident3))
+
+    catalog.dropTable(ident1)
+
+    assert(catalog.listTables(Array("ns"), "*test*").toSet == Set(ident2))
+
+    catalog.dropTable(ident2)
+
+    assert(catalog.listTables(Array("ns"), "*test*").isEmpty)
+    assert(catalog.listTables(Array("ns2"), "*test*").toSet == Set(ident3))
+  }
+
   test("createTable") {
     val catalog = newCatalog()
 

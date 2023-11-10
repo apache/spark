@@ -17,7 +17,16 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import scala.jdk.javaapi.CollectionConverters;
+
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.catalyst.util.StringUtils;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
@@ -25,10 +34,6 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
 import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.StructType;
-
-import java.util.Collections;
-import java.util.Map;
-import java.util.Set;
 
 /**
  * Catalog methods for working with Tables.
@@ -96,6 +101,26 @@ public interface TableCatalog extends CatalogPlugin {
    * @throws NoSuchNamespaceException If the namespace does not exist (optional).
    */
   Identifier[] listTables(String[] namespace) throws NoSuchNamespaceException;
+
+  /**
+   * List the tables in a namespace from the catalog by pattern string.
+   * <p>
+   * If the catalog supports views, this must return identifiers for only tables and not views.
+   *
+   * @param namespace a multi-part namespace
+   * @param pattern the filter pattern, only '*' and '|' are allowed as wildcards, others will
+   *                follow regular expression convention, case-insensitive match and white spaces
+   *                on both ends will be ignored
+   * @return an array of Identifiers for tables
+   * @throws NoSuchNamespaceException If the namespace does not exist (optional).
+   */
+  default Identifier[] listTables(String[] namespace, String pattern)
+      throws NoSuchNamespaceException {
+    List<String> tableNames = Arrays.stream(listTables(namespace)).map(Identifier::name).toList();
+    return CollectionConverters.asJava(StringUtils.filterPattern(
+        CollectionConverters.asScala(tableNames).toSeq(), pattern)).stream().map(
+            name -> Identifier.of(namespace, name)).toArray(Identifier[]::new);
+  }
 
   /**
    * Load table metadata by {@link Identifier identifier} from the catalog.
