@@ -19,7 +19,10 @@ package org.apache.spark.sql
 
 import java.io.File
 
+import scala.util.Random
+
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.VariantVal
 
 class VariantSuite extends QueryTest with SharedSparkSession {
@@ -43,5 +46,31 @@ class VariantSuite extends QueryTest with SharedSparkSession {
       query.write.parquet(tempDir)
       verifyResult(spark.read.parquet(tempDir))
     }
+  }
+
+  test("round trip tests") {
+    val rand = new Random(42)
+    val input = Seq.fill(50) {
+      if (rand.nextInt(10) == 0) {
+        null
+      } else {
+        val value = new Array[Byte](rand.nextInt(50))
+        rand.nextBytes(value)
+        val metadata = new Array[Byte](rand.nextInt(50))
+        rand.nextBytes(metadata)
+        new VariantVal(value, metadata)
+      }
+    }
+
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(input.map(Row(_))),
+      StructType.fromDDL("v variant")
+    )
+    val result = df.collect().map(_.get(0).asInstanceOf[VariantVal])
+
+    def prepareAnswer(values: Seq[VariantVal]): Unit = {
+      values.map(v => if (v == null) "null" else v.debugString()).sorted
+    }
+    assert(prepareAnswer(input) == prepareAnswer(result))
   }
 }
