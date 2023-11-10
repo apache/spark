@@ -100,7 +100,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       probabilities: Array[Double],
       relativeError: Double): Array[Array[Double]] = withOrigin {
     StatFunctions.multipleApproxQuantiles(
-      df.select(cols.map(col): _*),
+      df.select(cols.map(col).toImmutableArraySeq: _*),
       cols.toImmutableArraySeq,
       probabilities.toImmutableArraySeq,
       relativeError).map(_.toArray).toArray

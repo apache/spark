@@ -21,7 +21,7 @@ import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -533,7 +533,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     } else {
       CatalogTableType.MANAGED
     }
-    val (partitionColumns, maybeBucketSpec) = partitioning.convertTransforms
+    val (partitionColumns, maybeBucketSpec, maybeClusterBySpec) = partitioning.convertTransforms
 
     CatalogTable(
       identifier = table,
@@ -543,7 +543,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       provider = Some(provider),
       partitionColumnNames = partitionColumns,
       bucketSpec = maybeBucketSpec,
-      properties = properties,
+      properties = properties ++
+        maybeClusterBySpec.map(
+          clusterBySpec => ClusterBySpec.toProperty(schema, clusterBySpec, conf.resolver)),
       comment = comment)
   }
 

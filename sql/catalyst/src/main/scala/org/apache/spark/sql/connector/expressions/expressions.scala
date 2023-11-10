@@ -54,6 +54,9 @@ private[sql] object LogicalExpressions {
     SortedBucketTransform(literal(numBuckets, IntegerType),
       references.toImmutableArraySeq, sortedCols.toImmutableArraySeq)
 
+  def clusterBy(references: Array[NamedReference]): ClusterByTransform =
+    ClusterByTransform(references)
+
   def identity(reference: NamedReference): IdentityTransform = IdentityTransform(reference)
 
   def years(reference: NamedReference): YearsTransform = YearsTransform(reference)
@@ -150,6 +153,39 @@ private[sql] object BucketTransform {
     case _ =>
       None
   }
+}
+
+/**
+ * This class represents a transform for [[ClusterBySpec]]. This is used to bundle
+ * ClusterBySpec in CreateTable's partitioning transforms to pass it down to analyzer.
+ */
+final case class ClusterByTransform(
+    columnNames: Seq[NamedReference]) extends RewritableTransform {
+
+  override val name: String = "cluster_by"
+
+  override def references: Array[NamedReference] = columnNames.toArray
+
+  override def arguments: Array[Expression] = columnNames.toArray
+
+  override def toString: String = s"$name(${arguments.map(_.describe).mkString(", ")})"
+
+  override def withReferences(newReferences: Seq[NamedReference]): Transform = {
+    this.copy(columnNames = newReferences)
+  }
+}
+
+/**
+ * Convenience extractor for ClusterByTransform.
+ */
+object ClusterByTransform {
+  def unapply(transform: Transform): Option[Seq[NamedReference]] =
+    transform match {
+      case NamedTransform("cluster_by", arguments) =>
+        Some(arguments.map(_.asInstanceOf[NamedReference]))
+      case _ =>
+        None
+    }
 }
 
 private[sql] final case class SortedBucketTransform(

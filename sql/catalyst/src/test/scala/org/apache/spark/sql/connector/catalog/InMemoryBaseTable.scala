@@ -91,6 +91,7 @@ abstract class InMemoryBaseTable(
     case _: HoursTransform =>
     case _: BucketTransform =>
     case _: SortedBucketTransform =>
+    case _: ClusterByTransform =>
     case NamedTransform("truncate", Seq(_: NamedReference, _: Literal[_])) =>
     case t if !allowUnsupportedTransforms =>
       throw new IllegalArgumentException(s"Transform $t is not a supported transform")

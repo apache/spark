@@ -121,6 +121,7 @@ private[deploy] class Master(
   private val defaultCores = conf.get(DEFAULT_CORES)
   val reverseProxy = conf.get(UI_REVERSE_PROXY)
   val historyServerUrl = conf.get(MASTER_UI_HISTORY_SERVER_URL)
+  val useAppNameAsAppId = conf.get(MASTER_USE_APP_NAME_AS_APP_ID)
 
   // Alternative application submission gateway that is stable across Spark versions
   private val restServerEnabled = conf.get(MASTER_REST_SERVER_ENABLED)
@@ -1043,7 +1044,11 @@ private[deploy] class Master(
       ApplicationInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
-    val appId = newApplicationId(date)
+    val appId = if (useAppNameAsAppId) {
+      desc.name.toLowerCase().replaceAll("\\s+", "")
+    } else {
+      newApplicationId(date)
+    }
     new ApplicationInfo(now, appId, desc, date, driver, defaultCores)
   }
 

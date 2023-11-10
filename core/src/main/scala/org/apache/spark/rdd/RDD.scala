@@ -1045,7 +1045,8 @@ abstract class RDD[T: ClassTag](
    */
   def collect(): Array[T] = withScope {
     val results = sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
-    Array.concat(results: _*)
+    import org.apache.spark.util.ArrayImplicits._
+    Array.concat(results.toImmutableArraySeq: _*)
   }
 
   /**

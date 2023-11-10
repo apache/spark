@@ -109,9 +109,11 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
         case _: NumericType | BooleanType => dataset(f.name).cast(DoubleType)
       }
     }
+    import org.apache.spark.util.ArrayImplicits._
     dataset.select(
       col("*"),
-      interactFunc(struct(featureCols: _*)).as($(outputCol), featureAttrs.toMetadata()))
+      interactFunc(struct(featureCols.toImmutableArraySeq: _*))
+        .as($(outputCol), featureAttrs.toMetadata()))
   }
 
   /**

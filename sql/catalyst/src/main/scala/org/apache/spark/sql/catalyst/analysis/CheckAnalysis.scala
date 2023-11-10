@@ -149,20 +149,40 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       errorClass, missingCol, orderedCandidates, a.origin)
   }
 
+  private def checkUnreferencedCTERelations(
+      cteMap: mutable.Map[Long, (CTERelationDef, Int, mutable.Map[Long, Int])],
+      visited: mutable.Map[Long, Boolean],
+      cteId: Long): Unit = {
+    if (visited(cteId)) {
+      return
+    }
+    val (cteDef, _, refMap) = cteMap(cteId)
+    refMap.foreach { case (id, _) =>
+      checkUnreferencedCTERelations(cteMap, visited, id)
+    }
+    checkAnalysis0(cteDef.child)
+    visited(cteId) = true
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
     val inlineCTE = InlineCTE(alwaysInline = true)
     val cteMap = mutable.HashMap.empty[Long, (CTERelationDef, Int, mutable.Map[Long, Int])]
     inlineCTE.buildCTEMap(plan, cteMap)
-    cteMap.values.foreach { case (relation, refCount, _) =>
+    val visited: mutable.Map[Long, Boolean] = mutable.Map.empty.withDefaultValue(false)
+    cteMap.foreach { case (cteId, (relation, refCount, _)) =>
       // If a CTE relation is never used, it will disappear after inline. Here we explicitly check
       // analysis for it, to make sure the entire query plan is valid.
       try {
-        if (refCount == 0) checkAnalysis0(relation.child)
+        // If a CTE relation ref count is 0, the other CTE relations that reference it
+        // should also be checked by checkAnalysis0. This code will also guarantee the leaf
+        // relations that do not reference any others are checked first.
+        if (refCount == 0) {
+          checkUnreferencedCTERelations(cteMap, visited, cteId)
+        }
       } catch {
         case e: AnalysisException =>
           throw new ExtendedAnalysisException(e, relation.child)
       }
-
     }
     // Inline all CTEs in the plan to help check query plan structures in subqueries.
     var inlinedPlan: Option[LogicalPlan] = None
