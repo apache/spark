@@ -198,7 +198,7 @@ class CliSuite extends SparkFunSuite {
       ThreadUtils.awaitResult(foundAllExpectedAnswers.future, timeoutForQuery)
       log.info("Found all expected output.")
     } catch { case cause: Throwable =>
-      val message =
+      val message = lock.synchronized {
         s"""
            |=======================
            |CliSuite failure output
@@ -212,6 +212,7 @@ class CliSuite extends SparkFunSuite {
            |End CliSuite failure output
            |===========================
          """.stripMargin
+      }
       logError(message, cause)
       fail(message, cause)
     } finally {
