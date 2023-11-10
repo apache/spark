@@ -23,7 +23,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.DF_DROP_COLUMNS
 import org.apache.spark.sql.connector.catalog.CatalogManager
 
 /**
- * A rule that rewrites DropColumns to Project.
+ * A rule that rewrites DataFrameDropColumns to Project.
+ * Note that DataFrameDropColumns allows and ignores non-existing columns.
  */
 class ResolveDataFrameDropColumns(val catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with ColumnResolutionHelper  {
@@ -31,6 +32,8 @@ class ResolveDataFrameDropColumns(val catalogManager: CatalogManager)
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(DF_DROP_COLUMNS)) {
     case d: DataFrameDropColumns if d.childrenResolved =>
+      // expressions in dropList can be unresolved, e.g.
+      //   df.drop(col("non-existing-column"))
       val dropped = d.dropList.map {
         case u: UnresolvedAttribute =>
           resolveExpressionByPlanChildren(u, d.child)
