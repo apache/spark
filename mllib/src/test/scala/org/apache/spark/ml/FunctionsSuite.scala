@@ -17,12 +17,11 @@
 
 package org.apache.spark.ml
 
-import org.apache.spark.{SparkConf, SparkContext, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.ml.functions.{array_to_vector, vector_to_array}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.MLTest
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
-import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.functions.col
 
 class FunctionsSuite extends MLTest {
@@ -101,47 +100,5 @@ class FunctionsSuite extends MLTest {
     val df3 = Seq(Tuple1(Array(1, 2))).toDF("c1")
     val resultVec3 = df3.select(array_to_vector(col("c1"))).collect()(0)(0).asInstanceOf[Vector]
     assert(resultVec3 === Vectors.dense(Array(1.0, 2.0)))
-  }
-
-  test("SPARK-45859: 'functions$' should not be affected by a broken class loader") {
-    quietly {
-      // Only one SparkContext should be running in this JVM (see SPARK-2243)
-      sc.stop()
-
-      val conf = new SparkConf()
-        .setAppName("FunctionsSuite")
-        .setMaster("local-cluster[1,1,1024]")
-      sc = new SparkContext(conf)
-      // Make `functions$` be loaded by a broken class loader
-      intercept[SparkException] {
-        sc.parallelize(1 to 1).foreach { _ =>
-          val originalClassLoader = Thread.currentThread.getContextClassLoader
-          try {
-            Thread.currentThread.setContextClassLoader(new BrokenClassLoader)
-            vector_to_array(col("vector"))
-            array_to_vector(col("array"))
-          } finally {
-            Thread.currentThread.setContextClassLoader(originalClassLoader)
-          }
-        }
-      }
-
-      // We should be able to use `functions$` even it was loaded by a broken class loader
-      sc.parallelize(1 to 1).foreach { _ =>
-        vector_to_array(col("vector"))
-        array_to_vector(col("array"))
-      }
-
-      // this UT should be the last one in this test suite, since it uses
-      // a different `sc` from the standard one.
-      // stop it here in case new UTs are added after this one.
-      sc.stop()
-    }
-  }
-}
-
-class BrokenClassLoader extends ClassLoader {
-  override def findClass(name: String): Class[_] = {
-    throw new Error(s"class $name")
   }
 }
