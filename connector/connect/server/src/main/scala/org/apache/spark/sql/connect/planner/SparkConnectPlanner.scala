@@ -53,7 +53,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CoGroup, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeserializeToObject, Except, FlatMapGroupsWithState, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeserializeToObject, Except, FlatMapGroupsWithState, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
@@ -181,7 +181,7 @@ class SparkConnectPlanner(
       case proto.Relation.RelTypeCase.CACHED_REMOTE_RELATION =>
         transformCachedRemoteRelation(rel.getCachedRemoteRelation)
       case proto.Relation.RelTypeCase.COLLECT_METRICS =>
-        transformCollectMetrics(rel.getCollectMetrics)
+        transformCollectMetrics(rel.getCollectMetrics, rel.getCommon.getPlanId)
       case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
@@ -1065,19 +1065,20 @@ class SparkConnectPlanner(
       numPartitionsOpt)
   }
 
-  private def transformCollectMetrics(rel: proto.CollectMetrics): LogicalPlan = {
+  private def transformCollectMetrics(rel: proto.CollectMetrics, planId: Long): LogicalPlan = {
     val metrics = rel.getMetricsList.asScala.toSeq.map { expr =>
       Column(transformExpression(expr))
     }
     val name = rel.getName
-    val dataset = Dataset.ofRows(session, transformRelation(rel.getInput))
+    val input = transformRelation(rel.getInput)
 
-    if (dataset.isStreaming || executeHolderOpt.isEmpty) {
-      dataset.observe(name, metrics.head, metrics.tail: _*).logicalPlan
+    if (input.isStreaming || executeHolderOpt.isEmpty) {
+      CollectMetrics(name, metrics.map(_.named), transformRelation(rel.getInput), planId)
     } else {
       val observation = Observation(name)
+      observation.register(session, planId)
       executeHolderOpt.get.addObservation(name, observation)
-      dataset.observe(observation, metrics.head, metrics.tail: _*).logicalPlan
+      CollectMetrics(name, metrics.map(_.named), transformRelation(rel.getInput), planId)
     }
   }
 

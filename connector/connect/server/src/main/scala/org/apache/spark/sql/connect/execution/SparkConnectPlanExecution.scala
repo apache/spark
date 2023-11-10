@@ -67,7 +67,8 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     processAsArrowBatches(dataframe, responseObserver, executeHolder)
     responseObserver.onNext(
       MetricGenerator.createMetricsResponse(request.getSessionId, dataframe))
-    createObservedMetricsResponse(request.getSessionId, dataframe).foreach(responseObserver.onNext)
+    createObservedMetricsResponse(request.getSessionId, dataframe).foreach(
+      responseObserver.onNext)
   }
 
   type Batch = (Array[Byte], Long)
