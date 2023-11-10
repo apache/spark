@@ -341,10 +341,10 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
 
         val stateReadDf = spark.read
           .format("statestore")
-          .option(StateDataSource.PARAM_PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
           // explicitly specifying batch ID and operator ID to test out the functionality
-          .option(StateDataSource.PARAM_BATCH_ID, batchId)
-          .option(StateDataSource.PARAM_OPERATOR_ID, operatorId)
+          .option(StateSourceOptions.BATCH_ID, batchId)
+          .option(StateSourceOptions.OPERATOR_ID, operatorId)
           .load()
 
         val resultDf = stateReadDf
@@ -377,7 +377,7 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
 
         val stateReadDf = spark.read
           .format("statestore")
-          .option(StateDataSource.PARAM_PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
           // skip version and operator ID to test out functionalities
           .load()
 
@@ -407,7 +407,7 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
 
       val stateReadDf = spark.read
         .format("statestore")
-        .option(StateDataSource.PARAM_PATH, tempDir.getAbsolutePath)
+        .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
         // skip version and operator ID to test out functionalities
         .load()
 
@@ -418,8 +418,8 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
 
       val stateReadDf2 = spark.read
         .format("statestore")
-        .option(StateDataSource.PARAM_PATH, tempDir.getAbsolutePath)
-        .option(StateDataSource.PARAM_BATCH_ID, 0)
+        .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+        .option(StateSourceOptions.BATCH_ID, 0)
         .load()
 
       val resultDf2 = stateReadDf2
@@ -437,7 +437,7 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
 
       val stateReadDf = spark.read
         .format("statestore")
-        .option(StateDataSource.PARAM_PATH, tempDir.getAbsolutePath)
+        .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
         // skip version and operator ID to test out functionalities
         .load()
 
@@ -448,8 +448,8 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
 
       val stateReadDf2 = spark.read
         .format("statestore")
-        .option(StateDataSource.PARAM_PATH, tempDir.getAbsolutePath)
-        .option(StateDataSource.PARAM_BATCH_ID, 0)
+        .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+        .option(StateSourceOptions.BATCH_ID, 0)
         .load()
 
       val resultDf2 = stateReadDf2
@@ -465,7 +465,7 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
 
       val stateReadDf = spark.read
         .format("statestore")
-        .option(StateDataSource.PARAM_PATH, tempDir.getAbsolutePath)
+        .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
         // skip version and operator ID to test out functionalities
         .load()
 
@@ -477,8 +477,8 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
 
       val stateReadDf2 = spark.read
         .format("statestore")
-        .option(StateDataSource.PARAM_PATH, tempDir.getAbsolutePath)
-        .option(StateDataSource.PARAM_BATCH_ID, 4)
+        .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+        .option(StateSourceOptions.BATCH_ID, 4)
         .load()
 
       val resultDf2 = stateReadDf2
@@ -509,7 +509,7 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
 
         val stateReadDf = spark.read
           .format("statestore")
-          .option(StateDataSource.PARAM_PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
           .load()
 
         val resultDf = if (stateVersion == 1) {
@@ -576,8 +576,8 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
         runStreamStreamJoinQuery(tempDir.getAbsolutePath)
         val stateReaderForLeft = spark.read
           .format("statestore")
-          .option(StateDataSource.PARAM_PATH, tempDir.getAbsolutePath)
-          .option(StateDataSource.PARAM_JOIN_SIDE, "left")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.JOIN_SIDE, "left")
 
         val stateReadDfForLeft = stateReaderForLeft.load()
         assertInternalColumnIsNotExposed(stateReadDfForLeft)
@@ -593,8 +593,8 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
 
         val stateReaderForRight = spark.read
           .format("statestore")
-          .option(StateDataSource.PARAM_PATH, tempDir.getAbsolutePath)
-          .option(StateDataSource.PARAM_JOIN_SIDE, "right")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.JOIN_SIDE, "right")
 
         val stateReadDfForRight = stateReaderForRight.load()
         assertInternalColumnIsNotExposed(stateReadDfForRight)
@@ -610,8 +610,8 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
 
         val stateReaderForRightKeyToNumValues = spark.read
           .format("statestore")
-          .option(StateDataSource.PARAM_PATH, tempDir.getAbsolutePath)
-          .option(StateDataSource.PARAM_STORE_NAME,
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STORE_NAME,
             "right-keyToNumValues")
 
         val stateReadDfForRightKeyToNumValues = stateReaderForRightKeyToNumValues.load()
@@ -625,8 +625,8 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
 
         val stateReaderForRightKeyWithIndexToValue = spark.read
           .format("statestore")
-          .option(StateDataSource.PARAM_PATH, tempDir.getAbsolutePath)
-          .option(StateDataSource.PARAM_STORE_NAME,
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STORE_NAME,
             "right-keyWithIndexToValue")
 
         val stateReadDfForRightKeyWithIndexToValue = stateReaderForRightKeyWithIndexToValue.load()
@@ -677,7 +677,7 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
 
       val stateReadDf = spark.read
         .format("statestore")
-        .option(StateDataSource.PARAM_PATH, tempDir.getAbsolutePath)
+        .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
         // skip version and operator ID to test out functionalities
         .load()
 
@@ -744,8 +744,8 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
       def testForSide(side: String): Unit = {
         val stateReaderForLeft = spark.read
           .format("statestore")
-          .option(StateDataSource.PARAM_PATH, tempDir.getAbsolutePath)
-          .option(StateDataSource.PARAM_JOIN_SIDE, side)
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.JOIN_SIDE, side)
           .load()
 
         assertPartitionIdColumnIsNotExposedByDefault(stateReaderForLeft)
@@ -753,8 +753,8 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
 
         val stateReaderForKeyToNumValues = spark.read
           .format("statestore")
-          .option(StateDataSource.PARAM_PATH, tempDir.getAbsolutePath)
-          .option(StateDataSource.PARAM_STORE_NAME,
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STORE_NAME,
             s"$side-keyToNumValues")
           .load()
 
@@ -763,8 +763,8 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
 
         val stateReaderForKeyWithIndexToValue = spark.read
           .format("statestore")
-          .option(StateDataSource.PARAM_PATH, tempDir.getAbsolutePath)
-          .option(StateDataSource.PARAM_STORE_NAME,
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STORE_NAME,
             s"$side-keyWithIndexToValue")
           .load()
 
