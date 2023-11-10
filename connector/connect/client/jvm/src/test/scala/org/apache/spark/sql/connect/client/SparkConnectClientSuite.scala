@@ -406,8 +406,12 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     val reattachableIter =
       ExecutePlanResponseReattachableIterator.fromIterator(iter)
     iter.toSeq
-    // If this assertion fails, we need to double check the correctness
-    // of the return value from the SparkSession.sql
+    // In several places in SparkSession, we depend on `.toSeq` to consume and close the iterator.
+    // If this assertion fails, we need to double check the correctness of that.
+    // In scala 2.12 `s.c.TraversableOnce#toSeq` builds an `immutable.Stream`,
+    // which is a tail lazy structure and this would fail.
+    // In scala 2.13 `s.c.IterableOnceOps#toSeq` builds an `immutable.Seq` which is not
+    // lazy and will consume and close the iterator.
     assert(reattachableIter.resultComplete)
   }
 }
