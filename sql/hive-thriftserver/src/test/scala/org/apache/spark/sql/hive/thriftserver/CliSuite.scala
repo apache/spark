@@ -202,7 +202,7 @@ class CliSuite extends SparkFunSuite {
            |Exception: $cause
            |Failed to capture next expected output "${expectedAnswers(next)}" within $timeout.
            |
-           |${buffer.mkString("\n")}
+           |${buffer.toSeq.mkString("\n")}
            |===========================
            |End CliSuite failure output
            |===========================
