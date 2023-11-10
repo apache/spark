@@ -4650,6 +4650,11 @@
       "Unsupported data type <dataType>."
     ]
   },
+  "_LEGACY_ERROR_TEMP_1176" : {
+    "message" : [
+      "Cannot save variant data type into external storage."
+    ]
+  },
   "_LEGACY_ERROR_TEMP_1181" : {
     "message" : [
       "Stream-stream join without equality predicate is not supported."

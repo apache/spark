@@ -29,7 +29,7 @@ import org.apache.spark.unsafe.types._
     """
     Examples:
   """,
-  since = "3.4.0",
+  since = "4.0.0",
   group = "variant_funcs"
 )
 // scalastyle:on line.size.limit
