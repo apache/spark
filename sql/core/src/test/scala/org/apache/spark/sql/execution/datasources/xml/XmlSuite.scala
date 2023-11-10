@@ -1979,12 +1979,12 @@ class XmlSuite extends QueryTest with SharedSparkSession {
         new StructType()
           .add("_Attr2", LongType)
           .add("_VALUE", LongType)
-          .add("_aTTr2", LongType)))
-          .add("_attr2", LongType)
+          .add("_aTTr2", LongType)
+          .add("_attr2", LongType)))
       .add("struct", new StructType()
-        .add("_Attr1", LongType))
+        .add("_Attr1", LongType)
         .add("_VALUE", LongType)
-        .add("_attr1", LongType)
+        .add("_attr1", LongType))
 
     val dfCaseSensitive = Seq(
       Row(
@@ -2028,7 +2028,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       .add("A1", LongType)
       .add("a1", LongType),
     expectedSchema = new StructType()
-      .add("a1", LongType),
+      .add("A1", LongType),
     readDataCaseInsensitive = Seq(Row(1L), Row(2L)))
 
   testCaseSensitivity(
@@ -2038,7 +2038,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       .add("A1", new StructType().add("B1", LongType))
       .add("a1", new StructType().add("b1", LongType)),
     expectedSchema = new StructType()
-      .add("a1", new StructType().add("b1", LongType)),
+      .add("A1", new StructType().add("B1", LongType)),
     readDataCaseInsensitive = Seq(Row(Row(1L)), Row(Row(2L)))
   )
 
@@ -2078,8 +2078,8 @@ class XmlSuite extends QueryTest with SharedSparkSession {
             .add("c", LongType)
             .add("d", LongType))),
     readDataCaseInsensitive = Seq(
-      Row(Array(Row(1L, 2L, null), Row(3L, 4L, null))),
-      Row(Array(Row(5L, null, 6L), Row(7L, null, 8L)))))
+      Row(Array(Row(1L, null, 2L), Row(3L, null, 4L))),
+      Row(Array(Row(5L, 6L, null), Row(7L, 8L, null)))))
 
   def testCaseSensitivity(
       name: String,
