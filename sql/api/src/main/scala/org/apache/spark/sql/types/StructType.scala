@@ -588,7 +588,7 @@ object StructType extends AbstractDataType {
             .map { case rightField @ StructField(rightName, rightType, rightNullable, _) =>
               try {
                 leftField.copy(
-                  dataType = merge(leftType, rightType, caseSensitive),
+                  dataType = merge(leftType, rightType),
                   nullable = leftNullable || rightNullable)
               } catch {
                 case NonFatal(e) =>
