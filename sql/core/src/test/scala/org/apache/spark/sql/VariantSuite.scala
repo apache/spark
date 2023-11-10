@@ -68,7 +68,7 @@ class VariantSuite extends QueryTest with SharedSparkSession {
     )
     val result = df.collect().map(_.get(0).asInstanceOf[VariantVal])
 
-    def prepareAnswer(values: Seq[VariantVal]): Unit = {
+    def prepareAnswer(values: Seq[VariantVal]): Seq[String] = {
       values.map(v => if (v == null) "null" else v.debugString()).sorted
     }
     assert(prepareAnswer(input) == prepareAnswer(result))
