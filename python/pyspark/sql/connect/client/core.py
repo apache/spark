@@ -935,7 +935,10 @@ class SparkConnectClient(object):
         -------
         Single line string of the serialized proto message.
         """
-        return text_format.MessageToString(p, as_one_line=True)
+        try:
+            return text_format.MessageToString(p, as_one_line=True)
+        except RecursionError:
+            return "<Truncated message due to recursion error>"
 
     def schema(self, plan: pb2.Plan) -> StructType:
         """

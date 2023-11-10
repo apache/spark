@@ -159,6 +159,19 @@ class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSpark
 
 
 class SparkConnectBasicTests(SparkConnectSQLTestCase):
+    def test_recursion_handling_for_plan_logging(self):
+        """SPARK-45852 - Test that we can handle recursion in plan logging."""
+        cdf = self.connect.range(1)
+        for x in range(400):
+            cdf = cdf.withColumn(f"col_{x}", CF.lit(x))
+
+        # Calling schema will trigger logging the message that will in turn trigger the message
+        # conversion into protobuf that will then trigger the recursion error.
+        self.assertIsNotNone(cdf.schema)
+
+        result = self.connect._client._proto_to_string(cdf._plan.to_proto(self.connect._client))
+        self.assertIn("recursion", result)
+
     def test_df_getattr_behavior(self):
         cdf = self.connect.range(10)
         sdf = self.spark.range(10)
