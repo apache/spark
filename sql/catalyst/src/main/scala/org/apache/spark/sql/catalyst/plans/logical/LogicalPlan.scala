@@ -413,7 +413,7 @@ object LogicalPlanIntegrity {
     }
     validation = validation
       .orElse(LogicalPlanIntegrity.validateExprIdUniqueness(currentPlan))
-      .orElse(validateSchemaOutput(previousPlan, currentPlan))
+      .orElse(LogicalPlanIntegrity.validateSchemaOutput(previousPlan, currentPlan))
       .orElse(LogicalPlanIntegrity.validateNoDanglingReferences(currentPlan))
       .orElse(LogicalPlanIntegrity.validateGroupByTypes(currentPlan))
       .orElse(LogicalPlanIntegrity.validateAggregateExpressions(currentPlan))
