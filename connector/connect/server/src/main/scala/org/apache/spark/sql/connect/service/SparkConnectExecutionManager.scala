@@ -144,7 +144,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     if (executions.isEmpty) {
       Left(lastExecutionTime.get)
     } else {
-      Right(executions.values.map(_.getExecuteInfo).toSeq)
+      Right(executions.values.map(_.getExecuteInfo).toBuffer.toSeq)
     }
   }
 
