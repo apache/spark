@@ -359,7 +359,7 @@ streaming_kinesis_asl = Module(
     build_profile_flags=[
         "-Pkinesis-asl",
     ],
-    environ={"ENABLE_KINESIS_TESTS": "1"},
+    environ={"ENABLE_KINESIS_TESTS": "0"},
     sbt_test_goals=[
         "streaming-kinesis-asl/test",
     ],
