@@ -414,6 +414,27 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     // lazy and will consume and close the iterator.
     assert(reattachableIter.resultComplete)
   }
+
+  test("SPARK-45871: Client execute iterator.foreach consumes the reattachable iterator") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .enableReattachableExecute()
+      .build()
+    val session = SparkSession.builder().client(client).create()
+    val cmd = session.newCommand(b =>
+      b.setSqlCommand(
+        proto.SqlCommand
+          .newBuilder()
+          .setSql("select * from range(10000000)")))
+    val plan = proto.Plan.newBuilder().setCommand(cmd)
+    val iter = client.execute(plan.build())
+    val reattachableIter =
+      ExecutePlanResponseReattachableIterator.fromIterator(iter)
+    iter.foreach(_ => ())
+    assert(reattachableIter.resultComplete)
+  }
 }
 
 class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectServiceImplBase {
