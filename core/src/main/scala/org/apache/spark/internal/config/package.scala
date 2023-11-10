@@ -1846,6 +1846,14 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val MASTER_USE_APP_NAME_AS_APP_ID =
+    ConfigBuilder("spark.master.useAppNameAsAppId.enabled")
+      .internal()
+      .doc("(Experimental) If true, Spark master uses the user-provided appName for appId.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val IO_COMPRESSION_SNAPPY_BLOCKSIZE =
     ConfigBuilder("spark.io.compression.snappy.blockSize")
       .doc("Block size in bytes used in Snappy compression, in the case when " +
