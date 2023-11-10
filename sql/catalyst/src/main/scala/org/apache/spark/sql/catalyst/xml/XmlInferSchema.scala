@@ -436,6 +436,11 @@ private[sql] class XmlInferSchema(options: XmlOptions) extends Serializable with
   private[xml] def compatibleType(caseSensitive: Boolean)(
       t1: DataType,
       t2: DataType): DataType = {
+
+    def normalize(name: String): String = {
+      if (caseSensitive) name else name.toLowerCase(Locale.ROOT)
+    }
+
     // TODO: Optimise this logic.
     findTightestCommonTypeOfTwo(t1, t2).getOrElse {
       // t1 or t2 is a StructType, ArrayType, or an unexpected type.
@@ -456,8 +461,19 @@ private[sql] class XmlInferSchema(options: XmlOptions) extends Serializable with
             DecimalType(range + scale, scale)
           }
 
-        case (struct1: StructType, struct2: StructType) =>
-          struct1.merge(struct2, caseSensitive)
+        case (StructType(fields1), StructType(fields2)) =>
+          val newFields = (fields1 ++ fields2)
+            // normalize field name and pair it with original field
+            .map(field => (normalize(field.name), field))
+            .groupBy(_._1) // group by normalized field name
+            .map {
+            case (_: String, fields: Array[(String, StructField)]) =>
+              val fieldTypes = fields.map(_._2)
+              val dataType = fieldTypes.map(_.dataType).reduce(compatibleType(caseSensitive))
+              // we pick up the first field name that we've encountered for the field
+              StructField(fields(0)._2.name, dataType)
+          }
+          StructType(newFields.toArray.sortBy(_.name))
 
         case (ArrayType(elementType1, containsNull1), ArrayType(elementType2, containsNull2)) =>
           ArrayType(

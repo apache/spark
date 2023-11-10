@@ -1977,14 +1977,15 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     val schemaCaseSensitive = new StructType()
       .add("array", ArrayType(
         new StructType()
-          .add("_VALUE", LongType)
-          .add("_attr2", LongType)
           .add("_Attr2", LongType)
+          .add("_VALUE", LongType)
           .add("_aTTr2", LongType)))
+          .add("_attr2", LongType)
       .add("struct", new StructType()
+        .add("_Attr1", LongType))
         .add("_VALUE", LongType)
         .add("_attr1", LongType)
-        .add("_Attr1", LongType))
+
     val dfCaseSensitive = Seq(
       Row(
         Array(
@@ -2024,8 +2025,8 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     "basic",
     writeData = Seq(Row(1L, null), Row(null, 2L)),
     writeSchema = new StructType()
-      .add("a1", LongType)
-      .add("A1", LongType),
+      .add("A1", LongType)
+      .add("a1", LongType),
     expectedSchema = new StructType()
       .add("a1", LongType),
     readDataCaseInsensitive = Seq(Row(1L), Row(2L)))
@@ -2034,8 +2035,8 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     "nested struct",
     writeData = Seq(Row(Row(1L), null), Row(null, Row(2L))),
     writeSchema = new StructType()
-      .add("a1", new StructType().add("b1", LongType))
-      .add("A1", new StructType().add("B1", LongType)),
+      .add("A1", new StructType().add("B1", LongType))
+      .add("a1", new StructType().add("b1", LongType)),
     expectedSchema = new StructType()
       .add("a1", new StructType().add("b1", LongType)),
     readDataCaseInsensitive = Seq(Row(Row(1L)), Row(Row(2L)))
@@ -2074,8 +2075,8 @@ class XmlSuite extends QueryTest with SharedSparkSession {
         ArrayType(
           new StructType()
             .add("B1", LongType)
-            .add("d", LongType)
-            .add("c", LongType))),
+            .add("c", LongType)
+            .add("d", LongType))),
     readDataCaseInsensitive = Seq(
       Row(Array(Row(1L, 2L, null), Row(3L, 4L, null))),
       Row(Array(Row(5L, null, 6L), Row(7L, null, 8L)))))
