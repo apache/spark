@@ -77,7 +77,7 @@ private[sql] object ArrowConverters extends Logging {
       schema: StructType,
       maxRecordsPerBatch: Long,
       timeZoneId: String,
-      context: TaskContext) extends Iterator[Array[Byte]] {
+      context: TaskContext) extends Iterator[Array[Byte]] with AutoCloseable {
 
     protected val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
     private val allocator =
@@ -89,13 +89,11 @@ private[sql] object ArrowConverters extends Logging {
     protected val arrowWriter = ArrowWriter.create(root)
 
     Option(context).foreach {_.addTaskCompletionListener[Unit] { _ =>
-      root.close()
-      allocator.close()
+      close()
     }}
 
     override def hasNext: Boolean = rowIter.hasNext || {
-      root.close()
-      allocator.close()
+      close()
       false
     }
 
@@ -119,6 +117,11 @@ private[sql] object ArrowConverters extends Logging {
       }
 
       out.toByteArray
+    }
+
+    override def close(): Unit = {
+      root.close()
+      allocator.close()
     }
   }
 
@@ -217,10 +220,18 @@ private[sql] object ArrowConverters extends Logging {
   private[sql] def createEmptyArrowBatch(
       schema: StructType,
       timeZoneId: String): Array[Byte] = {
-    new ArrowBatchWithSchemaIterator(
+    val batches = new ArrowBatchWithSchemaIterator(
         Iterator.empty, schema, 0L, 0L, timeZoneId, TaskContext.get) {
       override def hasNext: Boolean = true
-    }.next()
+    }
+    Utils.tryWithSafeFinally {
+      batches.next()
+    } {
+      // If taskContext is null, `batches.close()` should be called to avoid memory leak.
+      if (TaskContext.get() == null) {
+        batches.close()
+      }
+    }
   }
 
   /**
