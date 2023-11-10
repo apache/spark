@@ -379,7 +379,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
     val columns = sparkSession.sessionState.executePlan(plan).analyzed match {
       case ResolvedTable(_, _, table, _) =>
-        val (partitionColumnNames, bucketSpecOpt) = table.partitioning.toSeq.convertTransforms
+        // TODO (SPARK-45787): Support clusterBySpec for listColumns().
+        val (partitionColumnNames, bucketSpecOpt, _) = table.partitioning.toSeq.convertTransforms
         val bucketColumnNames = bucketSpecOpt.map(_.bucketColumnNames).getOrElse(Nil)
         schemaToColumns(table.schema(), partitionColumnNames.contains, bucketColumnNames.contains)
 

@@ -28,4 +28,5 @@ class CannotReplaceMissingTableException(
   extends AnalysisException(
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
       messageParameters = Map("relationName"
-        -> quoteNameParts(tableIdentifier.namespace :+ tableIdentifier.name)))
+        -> quoteNameParts(tableIdentifier.namespace :+ tableIdentifier.name)),
+      cause = cause)
