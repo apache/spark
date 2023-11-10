@@ -46,6 +46,8 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
 
       // Close session
       client.releaseSession()
+      // Calling release session again should be a no-op.
+      client.releaseSession()
 
       // Check that queries get cancelled
       Eventually.eventually(timeout(eventuallyTimeout)) {

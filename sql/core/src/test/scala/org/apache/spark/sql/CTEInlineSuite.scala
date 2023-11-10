@@ -683,11 +683,25 @@ abstract class CTEInlineSuiteBase
     val e = intercept[AnalysisException](sql(
       s"""
         |with
-        |a as (select * from non_exist),
+        |a as (select * from tab_non_exists),
         |b as (select * from a)
         |select 2
         |""".stripMargin))
-    checkErrorTableNotFound(e, "`non_exist`", ExpectedContext("non_exist", 26, 34))
+    checkErrorTableNotFound(e, "`tab_non_exists`", ExpectedContext("tab_non_exists", 26, 39))
+
+    withTable("tab_exists") {
+      spark.sql("CREATE TABLE tab_exists(id INT) using parquet")
+      val e = intercept[AnalysisException](sql(
+        s"""
+           |with
+           |a as (select * from tab_exists),
+           |b as (select * from a),
+           |c as (select * from tab_non_exists),
+           |d as (select * from c)
+           |select 2
+           |""".stripMargin))
+      checkErrorTableNotFound(e, "`tab_non_exists`", ExpectedContext("tab_non_exists", 83, 96))
+    }
   }
 }
 

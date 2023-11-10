@@ -253,9 +253,10 @@ object StatFunctions extends Logging {
       val valueColumns = columnNames.map { columnName =>
         new Column(ElementAt(col(columnName).expr, col("summary").expr)).as(columnName)
       }
+      import org.apache.spark.util.ArrayImplicits._
       ds.select(mapColumns: _*)
         .withColumn("summary", explode(lit(selectedStatistics)))
-        .select(Array(col("summary")) ++ valueColumns: _*)
+        .select((Array(col("summary")) ++ valueColumns).toImmutableArraySeq: _*)
     }
   }
 }

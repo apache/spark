@@ -169,7 +169,8 @@ class TPCDSTables(spark: SparkSession, dsdgenDir: String, scaleFactor: Int)
           }
           c.as(f.name)
         }
-        stringData.select(columns: _*)
+        import org.apache.spark.util.ArrayImplicits._
+        stringData.select(columns.toImmutableArraySeq: _*)
       }
 
       convertedData
