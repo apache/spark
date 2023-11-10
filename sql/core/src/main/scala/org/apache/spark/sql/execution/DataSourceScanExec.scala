@@ -687,7 +687,7 @@ case class FileSourceScanExec(
    * @param selectedPartitions Hive-style partition that are part of the read.
    */
   private def createReadRDD(
-      readFile: (PartitionedFile) => Iterator[InternalRow],
+      readFile: PartitionedFile => Iterator[InternalRow],
       selectedPartitions: Array[PartitionDirectory]): RDD[InternalRow] = {
     val openCostInBytes = relation.sparkSession.sessionState.conf.filesOpenCostInBytes
     val maxSplitBytes =
@@ -711,7 +711,6 @@ case class FileSourceScanExec(
           val isSplitable = relation.fileFormat.isSplitable(
               relation.sparkSession, relation.options, file.getPath)
           PartitionedFileUtil.splitFiles(
-            sparkSession = relation.sparkSession,
             file = file,
             isSplitable = isSplitable,
             maxSplitBytes = maxSplitBytes,

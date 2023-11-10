@@ -62,6 +62,7 @@ private[deploy] class Worker(
 
   private val host = rpcEnv.address.host
   private val port = rpcEnv.address.port
+  private val workerIdPattern = conf.get(config.Worker.WORKER_ID_PATTERN)
 
   Utils.checkHost(host)
   assert (port > 0)
@@ -813,7 +814,7 @@ private[deploy] class Worker(
   }
 
   private def generateWorkerId(): String = {
-    "worker-%s-%s-%d".format(createDateFormat.format(new Date), host, port)
+    workerIdPattern.format(createDateFormat.format(new Date), host, port)
   }
 
   override def onStop(): Unit = {

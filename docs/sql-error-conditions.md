@@ -454,6 +454,12 @@ DataType `<type>` requires a length parameter, for example `<type>`(10). Please 
 
 Data source '`<provider>`' already exists in the registry. Please use a different name for the new data source.
 
+### DATA_SOURCE_NOT_EXIST
+
+[SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Data source '`<provider>`' not found. Please make sure the data source is registered.
+
 ### DATA_SOURCE_NOT_FOUND
 
 [SQLSTATE: 42K02](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -668,6 +674,12 @@ No such struct field `<fieldName>` in `<fields>`.
 [SQLSTATE: 42809](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The operation `<statement>` is not allowed on the `<objectType>`: `<objectName>`.
+
+### FOUND_MULTIPLE_DATA_SOURCES
+
+[SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Detected multiple data sources with the name '`<provider>`'. Please check the data source isn't simultaneously registered and located in the classpath.
 
 ### GENERATED_COLUMN_WITH_DEFAULT_VALUE
 
@@ -1839,6 +1851,18 @@ sortBy must be used together with bucketBy.
 A CREATE TABLE without explicit column list cannot specify bucketing information.
 Please use the form with explicit column list and specify bucketing information.
 Alternatively, allow bucketing information to be inferred by omitting the clause.
+
+### SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED
+
+[SQLSTATE: 42908](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot specify both CLUSTER BY and CLUSTERED BY INTO BUCKETS.
+
+### SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED
+
+[SQLSTATE: 42908](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot specify both CLUSTER BY and PARTITIONED BY.
 
 ### SPECIFY_PARTITION_IS_NOT_ALLOWED
 
