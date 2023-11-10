@@ -152,7 +152,13 @@ private[sql] class GrpcRetryHandler(
 }
 
 private[sql] object GrpcRetryHandler extends Logging {
-
+  /**
+   * Class managing the state of the retrying logic.
+   * @param retryPolicies, list of policies to apply (in order)
+   * @param sleep, typically Thread.sleep
+   * @param fn, the function to compute
+   * @tparam T, result of function fn
+   */
   class Retrying[T](retryPolicies: Seq[RetryPolicy], sleep: Long => Unit, fn: => T) {
     private var currentRetryNum: Int = 0
     private var exceptionList: Seq[Throwable] = Seq.empty
@@ -174,6 +180,7 @@ private[sql] object GrpcRetryHandler extends Logging {
     }
 
     def waitAfterAttempt(): Unit = {
+      // find policy which will accept this exception
       val lastException = exceptionList.head
 
       for (policy <- policies if policy.canRetry(lastException)) {
@@ -282,12 +289,16 @@ private[sql] object GrpcRetryHandler extends Logging {
     canRetry = retryException
   )
 
+  // list of policies to be used by this client
   def defaultPolicies(): Seq[RetryPolicy] = List(defaultPolicy())
 
+  // represents a state of the specific policy
+  // (how many retries have happened and how much to wait until next one)
   class RetryPolicyState(val policy: RetryPolicy) {
     private var numberAttempts = 0
     private var nextWait: Duration = policy.initialBackoff
 
+    // return waiting time until next attempt, or None if has exceeded max retries
     def nextAttempt(): Option[Duration] = {
       if (policy.maxRetries.isDefined && numberAttempts >= policy.maxRetries.get) {
         return None
@@ -317,5 +328,9 @@ private[sql] object GrpcRetryHandler extends Logging {
    */
   class RetryException extends Throwable
 
+  /**
+   * Represents an exception which was considered retriable
+   * but has exceeded retry limits
+   */
   class RetriesExceeded extends Throwable
 }
