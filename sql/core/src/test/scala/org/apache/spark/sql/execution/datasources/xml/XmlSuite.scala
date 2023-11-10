@@ -1989,14 +1989,14 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     val dfCaseSensitive = Seq(
       Row(
         Array(
-          Row(2, 2, null, null),
-          Row(3, null, 3, null),
-          Row(4, null, null, 4)),
-        Row(1, 1, null)
+          Row(null, 2, null, 2),
+          Row(3, 3, null, null),
+          Row(null, 4, 4, null)),
+        Row(null, 1, 1)
       ),
       Row(
         null,
-        Row(5, null, 5)
+        Row(5, 5, null)
       )
     )
     val schemaCaseInSensitive = new StructType()
