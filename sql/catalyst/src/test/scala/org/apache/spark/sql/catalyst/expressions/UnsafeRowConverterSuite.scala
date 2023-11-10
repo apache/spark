@@ -101,7 +101,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     val fieldTypes: Array[DataType] = Array(LongType, StringType, DateType, TimestampType)
     val converter = factory.create(fieldTypes)
 
-    val row = new SpecificInternalRow(fieldTypes)
+    val row = new SpecificInternalRow(fieldTypes.toImmutableArraySeq)
     row.setLong(0, 0)
     row.update(1, UTF8String.fromString("Hello"))
     row.update(2, DateTimeUtils.fromJavaDate(Date.valueOf("1970-01-01")))
@@ -176,7 +176,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     val converter = factory.create(fieldTypes)
 
     val rowWithAllNullColumns: InternalRow = {
-      val r = new SpecificInternalRow(fieldTypes)
+      val r = new SpecificInternalRow(fieldTypes.toImmutableArraySeq)
       for (i <- fieldTypes.indices) {
         r.setNullAt(i)
       }
@@ -318,7 +318,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
 
     row.update(0, createArray(values.toImmutableArraySeq: _*))
     val unsafeRow: UnsafeRow = converter.apply(row)
-    testArrayInterval(unsafeRow.getArray(0), values)
+    testArrayInterval(unsafeRow.getArray(0), values.toImmutableArraySeq)
   }
 
   testBothCodegenAndInterpreted("basic conversion with struct type") {

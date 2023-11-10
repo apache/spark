@@ -47,6 +47,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
+import org.apache.spark.util.ArrayImplicits._
 
 
 /**
@@ -212,7 +213,7 @@ object ClusterBySpec {
       resolver: Resolver): ClusterBySpec = {
     val normalizedColumns = clusterBySpec.columnNames.map { columnName =>
       val position = SchemaUtils.findColumnPosition(
-        columnName.fieldNames(), schema, resolver)
+        columnName.fieldNames().toImmutableArraySeq, schema, resolver)
       FieldReference(SchemaUtils.getColumnName(position, schema))
     }
 

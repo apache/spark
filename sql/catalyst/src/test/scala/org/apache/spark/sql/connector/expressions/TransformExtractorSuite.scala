@@ -249,7 +249,7 @@ class TransformExtractorSuite extends SparkFunSuite {
     assert(arguments.length == 2)
     assert(arguments(0).asInstanceOf[NamedReference].fieldNames() === Seq("a a", "b"))
     assert(arguments(1).asInstanceOf[NamedReference].fieldNames() === Seq("ts"))
-    val copied = clusterByTransform.withReferences(reference)
+    val copied = clusterByTransform.withReferences(reference.toImmutableArraySeq)
     assert(copied.equals(clusterByTransform))
   }
 }

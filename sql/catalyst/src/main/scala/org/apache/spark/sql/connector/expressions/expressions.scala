@@ -55,7 +55,7 @@ private[sql] object LogicalExpressions {
       references.toImmutableArraySeq, sortedCols.toImmutableArraySeq)
 
   def clusterBy(references: Array[NamedReference]): ClusterByTransform =
-    ClusterByTransform(references)
+    ClusterByTransform(references.toImmutableArraySeq)
 
   def identity(reference: NamedReference): IdentityTransform = IdentityTransform(reference)
 
