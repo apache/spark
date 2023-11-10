@@ -683,4 +683,12 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx
     )
   }
+
+  def clusterByWithPartitionedBy(ctx: ParserRuleContext): Throwable = {
+    new ParseException(errorClass = "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED", ctx)
+  }
+
+  def clusterByWithBucketing(ctx: ParserRuleContext): Throwable = {
+    new ParseException(errorClass = "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED", ctx)
+  }
 }

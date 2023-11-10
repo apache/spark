@@ -295,6 +295,7 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
         executePlanResponse
           .toBuilder()
           .setSessionId(executeHolder.sessionHolder.sessionId)
+          .setServerSideSessionId(executeHolder.sessionHolder.serverSessionId)
           .setOperationId(executeHolder.operationId)
           .setResponseId(UUID.randomUUID.toString)
           .build()

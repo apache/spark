@@ -135,6 +135,35 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
     response
   }
 
+  /** Request that the server kill all submissions. */
+  def killAllSubmissions(): SubmitRestProtocolResponse = {
+    logInfo(s"Submitting a request to kill all submissions in $master.")
+    var handled: Boolean = false
+    var response: SubmitRestProtocolResponse = null
+    for (m <- masters if !handled) {
+      validateMaster(m)
+      val url = getKillAllUrl(m)
+      try {
+        response = post(url)
+        response match {
+          case k: KillAllSubmissionResponse =>
+            if (!Utils.responseFromBackup(k.message)) {
+              handleRestResponse(k)
+              handled = true
+            }
+          case unexpected =>
+            handleUnexpectedRestResponse(unexpected)
+        }
+      } catch {
+        case e: SubmitRestConnectionException =>
+          if (handleConnectionException(m)) {
+            throw new SubmitRestConnectionException("Unable to connect to server", e)
+          }
+      }
+    }
+    response
+  }
+
   /** Request that the server clears all submissions and applications. */
   def clear(): SubmitRestProtocolResponse = {
     logInfo(s"Submitting a request to clear $master.")
@@ -327,6 +356,12 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
   private def getKillUrl(master: String, submissionId: String): URL = {
     val baseUrl = getBaseUrl(master)
     new URL(s"$baseUrl/kill/$submissionId")
+  }
+
+  /** Return the REST URL for killing all submissions. */
+  private def getKillAllUrl(master: String): URL = {
+    val baseUrl = getBaseUrl(master)
+    new URL(s"$baseUrl/killall")
   }
 
   /** Return the REST URL for clear all existing submissions and applications. */

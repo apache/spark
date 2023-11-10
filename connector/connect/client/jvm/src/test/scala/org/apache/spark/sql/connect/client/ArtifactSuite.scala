@@ -44,6 +44,7 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
   private var channel: ManagedChannel = _
   private var bstub: CustomSparkConnectBlockingStub = _
   private var stub: CustomSparkConnectStub = _
+  private var state: SparkConnectStubState = _
 
   private def startDummyServer(): Unit = {
     service = new DummySparkConnectService()
@@ -56,9 +57,9 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   private def createArtifactManager(): Unit = {
     channel = InProcessChannelBuilder.forName(getClass.getName).directExecutor().build()
-    val retryHandler = new GrpcRetryHandler(GrpcRetryHandler.defaultPolicies())
-    bstub = new CustomSparkConnectBlockingStub(channel, retryHandler)
-    stub = new CustomSparkConnectStub(channel, retryHandler)
+    state = new SparkConnectStubState(channel, GrpcRetryHandler.defaultPolicies())
+    bstub = new CustomSparkConnectBlockingStub(channel, state)
+    stub = new CustomSparkConnectStub(channel, state)
     artifactManager = new ArtifactManager(Configuration(), "", bstub, stub)
   }
 

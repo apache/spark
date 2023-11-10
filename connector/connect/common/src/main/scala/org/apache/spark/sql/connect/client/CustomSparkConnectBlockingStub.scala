@@ -24,12 +24,14 @@ import org.apache.spark.connect.proto._
 
 private[connect] class CustomSparkConnectBlockingStub(
     channel: ManagedChannel,
-    retryHandler: GrpcRetryHandler) {
+    stubState: SparkConnectStubState) {
 
   private val stub = SparkConnectServiceGrpc.newBlockingStub(channel)
 
+  private val retryHandler = stubState.retryHandler
+
   // GrpcExceptionConverter with a GRPC stub for fetching error details from server.
-  private val grpcExceptionConverter = new GrpcExceptionConverter(stub)
+  private val grpcExceptionConverter = stubState.exceptionConverter
 
   def executePlan(request: ExecutePlanRequest): CloseableIterator[ExecutePlanResponse] = {
     grpcExceptionConverter.convert(
@@ -42,7 +44,10 @@ private[connect] class CustomSparkConnectBlockingStub(
         request.getClientType,
         retryHandler.RetryIterator[ExecutePlanRequest, ExecutePlanResponse](
           request,
-          r => CloseableIterator(stub.executePlan(r).asScala)))
+          r => {
+            stubState.responseValidator.wrapIterator(
+              CloseableIterator(stub.executePlan(r).asScala))
+          }))
     }
   }
 
@@ -56,7 +61,9 @@ private[connect] class CustomSparkConnectBlockingStub(
         request.getSessionId,
         request.getUserContext,
         request.getClientType,
-        new ExecutePlanResponseReattachableIterator(request, channel, retryHandler))
+        // Don't use retryHandler - own retry handling is inside.
+        stubState.responseValidator.wrapIterator(
+          new ExecutePlanResponseReattachableIterator(request, channel, stubState.retryHandler)))
     }
   }
 
@@ -66,7 +73,9 @@ private[connect] class CustomSparkConnectBlockingStub(
       request.getUserContext,
       request.getClientType) {
       retryHandler.retry {
-        stub.analyzePlan(request)
+        stubState.responseValidator.verifyResponse {
+          stub.analyzePlan(request)
+        }
       }
     }
   }
@@ -77,7 +86,9 @@ private[connect] class CustomSparkConnectBlockingStub(
       request.getUserContext,
       request.getClientType) {
       retryHandler.retry {
-        stub.config(request)
+        stubState.responseValidator.verifyResponse {
+          stub.config(request)
+        }
       }
     }
   }
@@ -88,7 +99,9 @@ private[connect] class CustomSparkConnectBlockingStub(
       request.getUserContext,
       request.getClientType) {
       retryHandler.retry {
-        stub.interrupt(request)
+        stubState.responseValidator.verifyResponse {
+          stub.interrupt(request)
+        }
       }
     }
   }
@@ -99,7 +112,9 @@ private[connect] class CustomSparkConnectBlockingStub(
       request.getUserContext,
       request.getClientType) {
       retryHandler.retry {
-        stub.releaseSession(request)
+        stubState.responseValidator.verifyResponse {
+          stub.releaseSession(request)
+        }
       }
     }
   }
@@ -110,7 +125,9 @@ private[connect] class CustomSparkConnectBlockingStub(
       request.getUserContext,
       request.getClientType) {
       retryHandler.retry {
-        stub.artifactStatus(request)
+        stubState.responseValidator.verifyResponse {
+          stub.artifactStatus(request)
+        }
       }
     }
   }
