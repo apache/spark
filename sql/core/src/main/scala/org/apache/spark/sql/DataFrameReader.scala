@@ -210,7 +210,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
 
     val isUserDefinedDataSource =
-      sparkSession.sharedState.dataSourceManager.dataSourceExists(source)
+      sparkSession.sessionState.dataSourceManager.dataSourceExists(source)
 
     Try(DataSource.lookupDataSourceV2(source, sparkSession.sessionState.conf)) match {
       case Success(providerOpt) =>
@@ -243,7 +243,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   private def loadUserDefinedDataSource(paths: Seq[String]): DataFrame = {
-    val builder = sparkSession.sharedState.dataSourceManager.lookupDataSource(source)
+    val builder = sparkSession.sessionState.dataSourceManager.lookupDataSource(source)
     // Add `path` and `paths` options to the extra options if specified.
     val optionsWithPath = DataSourceV2Utils.getOptionsWithPaths(extraOptions, paths: _*)
     val plan = builder(sparkSession, source, userSpecifiedSchema, optionsWithPath)
