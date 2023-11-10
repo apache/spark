@@ -50,7 +50,7 @@ import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.MiscellaneousProcessDetails
-import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util._
 
@@ -562,10 +562,15 @@ private[spark] class ApplicationMaster(
   private def allocationThreadImpl(): Unit = {
     // The number of failures in a row until the allocation thread gives up.
     val reporterMaxFailures = sparkConf.get(MAX_REPORTER_THREAD_FAILURES)
+    val maxExecutors = SchedulerBackendUtils.getMaxTargetExecutorNumber(sparkConf)
+    val minSurviveRatio: Double = sparkConf.get(SCHEDULER_MIN_RESOURCES_TO_SURVIVE_RATIO)
+    def insufficientResources: Boolean = {
+      allocator.getNumExecutorsRunning < maxExecutors * minSurviveRatio
+    }
     var failureCount = 0
     while (!finished) {
       try {
-        if (allocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
+        if (allocator.getNumExecutorsFailed >= maxNumExecutorFailures && insufficientResources) {
           finish(FinalApplicationStatus.FAILED,
             ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
             s"Max number of executor failures ($maxNumExecutorFailures) reached")

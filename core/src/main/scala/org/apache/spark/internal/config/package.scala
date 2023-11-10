@@ -2079,6 +2079,17 @@ package object config {
       .doubleConf
       .createOptional
 
+  private[spark] val SCHEDULER_MIN_RESOURCES_TO_SURVIVE_RATIO =
+    ConfigBuilder("spark.scheduler.minResourcesToSurviveRatio")
+      .doc("When encountering max number of executor failures, if the scheduler still has " +
+        "sufficient resources, which means live executors >= max number of executor * ratio. " +
+        "The application will not fail immediately. The smaller the ratio is, the more tolerant " +
+        "the application will be to executor failures.")
+      .version("4.0.0")
+      .doubleConf
+      .checkValue(x => x > 0, "must be positive")
+      .createWithDefault(0.5)
+
   private[spark] val SCHEDULER_MAX_REGISTERED_RESOURCE_WAITING_TIME =
     ConfigBuilder("spark.scheduler.maxRegisteredResourcesWaitingTime")
       .version("1.1.1")

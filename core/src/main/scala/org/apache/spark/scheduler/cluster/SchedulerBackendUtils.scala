@@ -44,4 +44,12 @@ private[spark] object SchedulerBackendUtils {
       conf.get(EXECUTOR_INSTANCES).getOrElse(numExecutors)
     }
   }
+
+  def getMaxTargetExecutorNumber(conf: SparkConf): Int = {
+    if (Utils.isDynamicAllocationEnabled(conf)) {
+      conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
+    } else {
+      conf.get(EXECUTOR_INSTANCES).getOrElse(0)
+    }
+  }
 }

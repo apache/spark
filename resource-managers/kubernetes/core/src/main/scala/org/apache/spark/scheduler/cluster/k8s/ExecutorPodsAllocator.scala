@@ -142,7 +142,8 @@ class ExecutorPodsAllocator(
     }
     snapshotsStore.addSubscriber(podAllocationDelay) { executorPodsSnapshot =>
       onNewSnapshots(applicationId, schedulerBackend, executorPodsSnapshot)
-      if (failureTracker.numFailedExecutors > maxNumExecutorFailures) {
+      if (getNumExecutorsFailed > maxNumExecutorFailures &&
+          schedulerBackend.insufficientResourcesRetained()) {
         logError(s"Max number of executor failures ($maxNumExecutorFailures) reached")
         stopApplication(EXCEED_MAX_EXECUTOR_FAILURES)
       }
