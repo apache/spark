@@ -120,6 +120,7 @@ private[deploy] class Master(
   private val defaultCores = conf.get(DEFAULT_CORES)
   val reverseProxy = conf.get(UI_REVERSE_PROXY)
   val historyServerUrl = conf.get(MASTER_UI_HISTORY_SERVER_URL)
+  val useAppNameAsAppId = conf.get(MASTER_USE_APP_NAME_AS_APP_ID)
 
   // Alternative application submission gateway that is stable across Spark versions
   private val restServerEnabled = conf.get(MASTER_REST_SERVER_ENABLED)
@@ -459,6 +460,39 @@ private[deploy] class Master(
             context.reply(KillDriverResponse(self, driverId, success = false, msg))
         }
       }
+
+    case RequestKillAllDrivers =>
+      if (state != RecoveryState.ALIVE) {
+        val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
+          s"Can only kill drivers in ALIVE state."
+        context.reply(KillAllDriversResponse(self, success = false, msg))
+      } else {
+        logInfo("Asked to kill all drivers")
+        drivers.foreach { d =>
+          val driverId = d.id
+          if (waitingDrivers.contains(d)) {
+            waitingDrivers -= d
+            self.send(DriverStateChanged(driverId, DriverState.KILLED, None))
+          } else {
+            // We just notify the worker to kill the driver here. The final bookkeeping occurs
+            // on the return path when the worker submits a state change back to the master
+            // to notify it that the driver was successfully killed.
+            d.worker.foreach { w =>
+              w.endpoint.send(KillDriver(driverId))
+            }
+          }
+          logInfo(s"Kill request for $driverId submitted")
+        }
+        context.reply(KillAllDriversResponse(self, true, "Kill request for all drivers submitted"))
+      }
+
+    case RequestClearCompletedDriversAndApps =>
+      val numDrivers = completedDrivers.length
+      val numApps = completedApps.length
+      logInfo(s"Asked to clear $numDrivers completed drivers and $numApps completed apps.")
+      completedDrivers.clear()
+      completedApps.clear()
+      context.reply(true)
 
     case RequestDriverStatus(driverId) =>
       if (state != RecoveryState.ALIVE) {
@@ -1008,7 +1042,11 @@ private[deploy] class Master(
       ApplicationInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
-    val appId = newApplicationId(date)
+    val appId = if (useAppNameAsAppId) {
+      desc.name.toLowerCase().replaceAll("\\s+", "")
+    } else {
+      newApplicationId(date)
+    }
     new ApplicationInfo(now, appId, desc, date, driver, defaultCores)
   }
 

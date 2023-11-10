@@ -884,6 +884,10 @@ class SparkSession(SparkConversionMixin):
         Returns
         -------
         :class:`DataSourceRegistration`
+
+        Notes
+        -----
+        This feature is experimental and unstable.
         """
         from pyspark.sql.datasource import DataSourceRegistration
 

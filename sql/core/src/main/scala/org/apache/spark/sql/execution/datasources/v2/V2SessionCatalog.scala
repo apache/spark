@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, SessionCatalog}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableCatalogCapability, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
@@ -114,7 +114,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TransformHelper
-    val (partitionColumns, maybeBucketSpec) = partitions.toSeq.convertTransforms
+    val (partitionColumns, maybeBucketSpec, maybeClusterBySpec) = partitions.toSeq.convertTransforms
     val provider = properties.getOrDefault(TableCatalog.PROP_PROVIDER, conf.defaultDataSourceName)
     val tableProperties = properties.asScala
     val location = Option(properties.get(TableCatalog.PROP_LOCATION))
@@ -135,7 +135,9 @@ class V2SessionCatalog(catalog: SessionCatalog)
       provider = Some(provider),
       partitionColumnNames = partitionColumns,
       bucketSpec = maybeBucketSpec,
-      properties = tableProperties.toMap,
+      properties = tableProperties.toMap ++
+        maybeClusterBySpec.map(
+          clusterBySpec => ClusterBySpec.toProperty(schema, clusterBySpec, conf.resolver)),
       tracksPartitionsInCatalog = conf.manageFilesourcePartitions,
       comment = Option(properties.get(TableCatalog.PROP_COMMENT)))
 

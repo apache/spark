@@ -32,7 +32,7 @@ There can be more than one policy defined at the same time. Each policy
 determines which error types it can retry and how exactly.
 
 For instance, networking errors should likely be retried differently that
-remote resource being available.
+remote resource being unavailable.
 
 Given a sequence of policies, retry logic applies all of them in sequential
 order, keeping track of different policies budgets.

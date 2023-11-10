@@ -511,6 +511,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.pandas.test_pandas_udf_window",
         "pyspark.sql.tests.pandas.test_converter",
         "pyspark.sql.tests.test_pandas_sqlmetrics",
+        "pyspark.sql.tests.test_python_datasource",
         "pyspark.sql.tests.test_readwriter",
         "pyspark.sql.tests.test_serde",
         "pyspark.sql.tests.test_session",
