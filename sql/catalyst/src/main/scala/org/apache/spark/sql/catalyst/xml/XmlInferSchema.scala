@@ -211,13 +211,9 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       rootAttributes: Array[Attribute] = Array.empty): DataType = {
     val builder = ArrayBuffer[StructField]()
     val nameToDataType = collection.mutable.Map.empty[String, ArrayBuffer[DataType]]
-    // Initialize a map to hold field names with case sensitivity based on configuration.
+    // Initialize a map to hold field names ignoring cases
     // The map is only used in case *insensitive* mode
-    var fieldNames = if (caseSensitive) {
-      Map.empty[String, String]
-    } else {
-      CaseInsensitiveMap[String](Map.empty)
-    }
+    var caseInsensitiveFieldNames = CaseInsensitiveMap[String](Map.empty)
 
     /**
      * Retrieves the field name with respect to the case sensitivity setting.
@@ -240,10 +236,10 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       if (caseSensitive) {
         return fieldName
       }
-      if (!fieldNames.contains(fieldName)) {
-        fieldNames = fieldNames.updated(fieldName, fieldName)
+      if (!caseInsensitiveFieldNames.contains(fieldName)) {
+        caseInsensitiveFieldNames = caseInsensitiveFieldNames.updated(fieldName, fieldName)
       }
-      fieldNames(fieldName)
+      caseInsensitiveFieldNames(fieldName)
     }
     // If there are attributes, then we should process them first.
     val rootValuesMap =
