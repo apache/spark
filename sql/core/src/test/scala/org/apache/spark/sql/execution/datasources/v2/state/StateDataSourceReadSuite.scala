@@ -114,9 +114,9 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
     withTempDir { tempDir =>
       intercept[IllegalArgumentException] {
         spark.read.format("statestore")
-          .option(StateDataSource.PARAM_OPERATOR_ID, -1)
+          .option(StateSourceOptions.OPERATOR_ID, -1)
           // trick to bypass getting the last committed batch before validating operator ID
-          .option(StateDataSource.PARAM_BATCH_ID, 0)
+          .option(StateSourceOptions.BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
     }
@@ -126,7 +126,7 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
     withTempDir { tempDir =>
       intercept[IllegalArgumentException] {
         spark.read.format("statestore")
-          .option(StateDataSource.PARAM_BATCH_ID, -1)
+          .option(StateSourceOptions.BATCH_ID, -1)
           .load(tempDir.getAbsolutePath)
       }
     }
@@ -136,9 +136,9 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
     withTempDir { tempDir =>
       intercept[IllegalArgumentException] {
         spark.read.format("statestore")
-          .option(StateDataSource.PARAM_STORE_NAME, "")
+          .option(StateSourceOptions.STORE_NAME, "")
           // trick to bypass getting the last committed batch before validating operator ID
-          .option(StateDataSource.PARAM_BATCH_ID, 0)
+          .option(StateSourceOptions.BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
     }
@@ -148,9 +148,9 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
     withTempDir { tempDir =>
       intercept[IllegalArgumentException] {
         spark.read.format("statestore")
-          .option(StateDataSource.PARAM_JOIN_SIDE, "both")
+          .option(StateSourceOptions.JOIN_SIDE, "both")
           // trick to bypass getting the last committed batch before validating operator ID
-          .option(StateDataSource.PARAM_BATCH_ID, 0)
+          .option(StateSourceOptions.BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
     }
@@ -160,10 +160,10 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
     withTempDir { tempDir =>
       intercept[IllegalArgumentException] {
         spark.read.format("statestore")
-          .option(StateDataSource.PARAM_JOIN_SIDE, "right")
-          .option(StateDataSource.PARAM_STORE_NAME, "right-keyToNumValues")
+          .option(StateSourceOptions.JOIN_SIDE, "right")
+          .option(StateSourceOptions.STORE_NAME, "right-keyToNumValues")
           // trick to bypass getting the last committed batch before validating operator ID
-          .option(StateDataSource.PARAM_BATCH_ID, 0)
+          .option(StateSourceOptions.BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
     }
@@ -257,10 +257,10 @@ class StateDataSourceSQLConfigSuite extends StateDataSourceTestBase {
 
     val stateReadDf = spark.read
       .format("statestore")
-      .option(StateDataSource.PARAM_PATH, checkpointLocation)
+      .option(StateSourceOptions.PATH, checkpointLocation)
       // explicitly specifying batch ID and operator ID to test out the functionality
-      .option(StateDataSource.PARAM_BATCH_ID, batchId)
-      .option(StateDataSource.PARAM_OPERATOR_ID, operatorId)
+      .option(StateSourceOptions.BATCH_ID, batchId)
+      .option(StateSourceOptions.OPERATOR_ID, operatorId)
       .load()
 
     val resultDf = stateReadDf
