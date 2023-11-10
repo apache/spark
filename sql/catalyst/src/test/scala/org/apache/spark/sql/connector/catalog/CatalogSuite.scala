@@ -107,13 +107,13 @@ class CatalogSuite extends SparkFunSuite {
     catalog.createTable(ident1, schema, emptyTrans, emptyProps)
 
     assert(catalog.listTables(Array("ns"), "*test*").toSet == Set(ident1))
-    intercept[NoSuchNamespaceException](catalog.listTables(Array("ns2")))
+    intercept[NoSuchNamespaceException](catalog.listTables(Array("ns2"), "*test*"))
 
     catalog.createTable(ident3, schema, emptyTrans, emptyProps)
     catalog.createTable(ident2, schema, emptyTrans, emptyProps)
 
     assert(catalog.listTables(Array("ns"), "*test*").toSet == Set(ident1, ident2))
-    assert(catalog.listTables(Array("ns2")).toSet == Set(ident3))
+    assert(catalog.listTables(Array("ns2"), "*test*").toSet == Set(ident3))
 
     catalog.dropTable(ident1)
 
