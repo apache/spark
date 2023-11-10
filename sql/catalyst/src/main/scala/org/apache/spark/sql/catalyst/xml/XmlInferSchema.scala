@@ -41,7 +41,9 @@ import org.apache.spark.sql.catalyst.util.{
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.types._
 
-private[sql] class XmlInferSchema(options: XmlOptions) extends Serializable with Logging {
+private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
+    extends Serializable
+    with Logging {
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
@@ -50,7 +52,8 @@ private[sql] class XmlInferSchema(options: XmlOptions) extends Serializable with
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
-    isParsing = true)
+    isParsing = true
+  )
 
   private val timestampNTZFormatter = TimestampFormatter(
     options.timestampNTZFormatInRead,
@@ -97,20 +100,21 @@ private[sql] class XmlInferSchema(options: XmlOptions) extends Serializable with
    *   2. Merge types by choosing the lowest type necessary to cover equal keys
    *   3. Replace any remaining null fields with string, the top type
    */
-  def infer(xml: RDD[String], caseSensitive: Boolean): StructType = {
+  def infer(xml: RDD[String]): StructType = {
     val schemaData = if (options.samplingRatio < 1.0) {
       xml.sample(withReplacement = false, options.samplingRatio, 1)
     } else {
       xml
     }
     // perform schema inference on each row and merge afterwards
-    val rootType = schemaData.mapPartitions { iter =>
-      val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
+    val rootType = schemaData
+      .mapPartitions { iter =>
+        val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
 
-      iter.flatMap { xml =>
-        infer(xml, caseSensitive, xsdSchema)
+        iter.flatMap { xml =>
+          infer(xml, xsdSchema)
       }
-    }.fold(StructType(Seq()))(compatibleType(caseSensitive))
+    }.fold(StructType(Seq()))(compatibleType)
 
     canonicalizeType(rootType) match {
       case Some(st: StructType) => st
@@ -122,7 +126,6 @@ private[sql] class XmlInferSchema(options: XmlOptions) extends Serializable with
 
   def infer(
       xml: String,
-      caseSensitive: Boolean,
       xsdSchema: Option[Schema] = None): Option[DataType] = {
     try {
       val xsd = xsdSchema.orElse(Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema))
@@ -131,7 +134,7 @@ private[sql] class XmlInferSchema(options: XmlOptions) extends Serializable with
       }
       val parser = StaxXmlParserUtils.filteredReader(xml)
       val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
-      Some(inferObject(parser, caseSensitive, rootAttributes))
+      Some(inferObject(parser, rootAttributes))
     } catch {
       case NonFatal(_) if options.parseMode == PermissiveMode =>
         Some(StructType(Seq(StructField(options.columnNameOfCorruptRecord, StringType))))
@@ -165,23 +168,21 @@ private[sql] class XmlInferSchema(options: XmlOptions) extends Serializable with
   }
 
   @tailrec
-  private def inferField(
-      parser: XMLEventReader,
-      caseSensitive: Boolean): DataType = {
+  private def inferField(parser: XMLEventReader): DataType = {
     parser.peek match {
       case _: EndElement => NullType
-      case _: StartElement => inferObject(parser, caseSensitive)
+      case _: StartElement => inferObject(parser)
       case c: Characters if c.isWhiteSpace =>
         // When `Characters` is found, we need to look further to decide
         // if this is really data or space between other elements.
         val data = c.getData
         parser.nextEvent()
         parser.peek match {
-          case _: StartElement => inferObject(parser, caseSensitive)
+          case _: StartElement => inferObject(parser)
           case _: EndElement if data.isEmpty => NullType
           case _: EndElement if options.treatEmptyValuesAsNulls => NullType
           case _: EndElement => StringType
-          case _ => inferField(parser, caseSensitive)
+          case _ => inferField(parser)
         }
       case c: Characters if !c.isWhiteSpace =>
         // This could be the characters of a character-only element, or could have mixed
@@ -192,7 +193,7 @@ private[sql] class XmlInferSchema(options: XmlOptions) extends Serializable with
           case _: StartElement =>
             // Some more elements follow; so ignore the characters.
             // Use the schema of the rest
-            inferObject(parser, caseSensitive).asInstanceOf[StructType]
+            inferObject(parser).asInstanceOf[StructType]
           case _ =>
             // That's all, just the character-only body; use that as the type
             characterType
@@ -207,7 +208,6 @@ private[sql] class XmlInferSchema(options: XmlOptions) extends Serializable with
    */
   private def inferObject(
       parser: XMLEventReader,
-      caseSensitive: Boolean,
       rootAttributes: Array[Attribute] = Array.empty): DataType = {
     val builder = ArrayBuffer[StructField]()
     val nameToDataType = collection.mutable.Map.empty[String, ArrayBuffer[DataType]]
@@ -258,7 +258,7 @@ private[sql] class XmlInferSchema(options: XmlOptions) extends Serializable with
         case e: StartElement =>
           val attributes = e.getAttributes.asScala.map(_.asInstanceOf[Attribute]).toArray
           val valuesMap = StaxXmlParserUtils.convertAttributesToValuesMap(attributes, options)
-          val inferredType = inferField(parser, caseSensitive) match {
+          val inferredType = inferField(parser) match {
             case st: StructType if valuesMap.nonEmpty =>
               // Merge attributes to the field
               val nestedBuilder = ArrayBuffer[StructField]()
@@ -433,9 +433,7 @@ private[sql] class XmlInferSchema(options: XmlOptions) extends Serializable with
   /**
    * Returns the most general data type for two given data types.
    */
-  private[xml] def compatibleType(caseSensitive: Boolean)(
-      t1: DataType,
-      t2: DataType): DataType = {
+  private[xml] def compatibleType(t1: DataType, t2: DataType): DataType = {
 
     def normalize(name: String): String = {
       if (caseSensitive) name else name.toLowerCase(Locale.ROOT)
@@ -477,16 +475,15 @@ private[sql] class XmlInferSchema(options: XmlOptions) extends Serializable with
 
         case (ArrayType(elementType1, containsNull1), ArrayType(elementType2, containsNull2)) =>
           ArrayType(
-            compatibleType(caseSensitive)
-            (elementType1, elementType2), containsNull1 || containsNull2)
+            compatibleType(elementType1, elementType2), containsNull1 || containsNull2)
 
         // In XML datasource, since StructType can be compared with ArrayType.
         // In this case, ArrayType wraps the StructType.
         case (ArrayType(ty1, _), ty2) =>
-          ArrayType(compatibleType(caseSensitive)(ty1, ty2))
+          ArrayType(compatibleType(ty1, ty2))
 
         case (ty1, ArrayType(ty2, _)) =>
-          ArrayType(compatibleType(caseSensitive)(ty1, ty2))
+          ArrayType(compatibleType(ty1, ty2))
 
         // As this library can infer an element with attributes as StructType whereas
         // some can be inferred as other non-structural data types, this case should be
@@ -494,14 +491,14 @@ private[sql] class XmlInferSchema(options: XmlOptions) extends Serializable with
         case (st: StructType, dt: DataType) if st.fieldNames.contains(options.valueTag) =>
           val valueIndex = st.fieldNames.indexOf(options.valueTag)
           val valueField = st.fields(valueIndex)
-          val valueDataType = compatibleType(caseSensitive)(valueField.dataType, dt)
+          val valueDataType = compatibleType(valueField.dataType, dt)
           st.fields(valueIndex) = StructField(options.valueTag, valueDataType, nullable = true)
           st
 
         case (dt: DataType, st: StructType) if st.fieldNames.contains(options.valueTag) =>
           val valueIndex = st.fieldNames.indexOf(options.valueTag)
           val valueField = st.fields(valueIndex)
-          val valueDataType = compatibleType(caseSensitive)(dt, valueField.dataType)
+          val valueDataType = compatibleType(dt, valueField.dataType)
           st.fields(valueIndex) = StructField(options.valueTag, valueDataType, nullable = true)
           st
 
