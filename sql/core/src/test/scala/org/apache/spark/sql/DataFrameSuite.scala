@@ -1182,8 +1182,9 @@ class DataFrameSuite extends QueryTest
   }
 
   test("summary advanced") {
+    import org.apache.spark.util.ArrayImplicits._
     val stats = Array("count", "50.01%", "max", "mean", "min", "25%")
-    val orderMatters = person2.summary(stats: _*)
+    val orderMatters = person2.summary(stats.toImmutableArraySeq: _*)
     assert(orderMatters.collect().map(_.getString(0)) === stats)
 
     val onlyPercentiles = person2.summary("0.1%", "99.9%")

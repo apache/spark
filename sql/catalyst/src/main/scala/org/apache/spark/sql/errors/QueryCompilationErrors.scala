@@ -3817,4 +3817,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "FOUND_MULTIPLE_DATA_SOURCES",
       messageParameters = Map("provider" -> provider))
   }
+
+  def xmlRowTagRequiredError(optionName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "XML_ROW_TAG_MISSING",
+      messageParameters = Map("rowTag" -> toSQLId(optionName))
+    )
+  }
 }

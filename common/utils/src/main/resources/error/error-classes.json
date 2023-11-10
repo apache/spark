@@ -3911,6 +3911,12 @@
     },
     "sqlState" : "42605"
   },
+  "XML_ROW_TAG_MISSING" : {
+    "message" : [
+      "<rowTag> option is required for reading files in XML format."
+    ],
+    "sqlState" : "42000"
+  },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
       "Invalid InsertIntoContext."

@@ -167,25 +167,21 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     val inlineCTE = InlineCTE(alwaysInline = true)
     val cteMap = mutable.HashMap.empty[Long, (CTERelationDef, Int, mutable.Map[Long, Int])]
     inlineCTE.buildCTEMap(plan, cteMap)
-    cteMap.values.foreach { case (relation, _, _) =>
+    val visited: mutable.Map[Long, Boolean] = mutable.Map.empty.withDefaultValue(false)
+    cteMap.foreach { case (cteId, (relation, refCount, _)) =>
       // If a CTE relation is never used, it will disappear after inline. Here we explicitly check
       // analysis for it, to make sure the entire query plan is valid.
       try {
         // If a CTE relation ref count is 0, the other CTE relations that reference it
         // should also be checked by checkAnalysis0. This code will also guarantee the leaf
         // relations that do not reference any others are checked first.
-        val visited: mutable.Map[Long, Boolean] = mutable.Map.empty.withDefaultValue(false)
-        cteMap.foreach { case (cteId, _) =>
-          val (_, refCount, _) = cteMap(cteId)
-          if (refCount == 0) {
-            checkUnreferencedCTERelations(cteMap, visited, cteId)
-          }
+        if (refCount == 0) {
+          checkUnreferencedCTERelations(cteMap, visited, cteId)
         }
       } catch {
         case e: AnalysisException =>
           throw new ExtendedAnalysisException(e, relation.child)
       }
-
     }
     // Inline all CTEs in the plan to help check query plan structures in subqueries.
     var inlinedPlan: Option[LogicalPlan] = None

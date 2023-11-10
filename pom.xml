@@ -1279,8 +1279,8 @@
       </dependency>
       <dependency>
         <groupId>com.oracle.database.jdbc</groupId>
-        <artifactId>ojdbc8</artifactId>
-        <version>23.2.0.0</version>
+        <artifactId>ojdbc11</artifactId>
+        <version>23.3.0.23.09</version>
         <scope>test</scope>
       </dependency>
       <dependency>
