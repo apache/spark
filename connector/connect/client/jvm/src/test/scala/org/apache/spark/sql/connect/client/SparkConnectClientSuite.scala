@@ -387,6 +387,33 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     }
     assert(dummyFn.counter == 2)
   }
+
+  test("SPARK-45871: Client execute iterator.toSeq consumes the reattachable iterator") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .enableReattachableExecute()
+      .build()
+    val session = SparkSession.builder().client(client).create()
+    val cmd = session.newCommand(b =>
+      b.setSqlCommand(
+        proto.SqlCommand
+          .newBuilder()
+          .setSql("select * from range(10000000)")))
+    val plan = proto.Plan.newBuilder().setCommand(cmd)
+    val iter = client.execute(plan.build())
+    val reattachableIter = iter
+      .asInstanceOf[WrappedCloseableIterator[proto.ExecutePlanResponse]]
+      .innerIterator
+      .asInstanceOf[WrappedCloseableIterator[proto.ExecutePlanResponse]]
+      .innerIterator
+      .asInstanceOf[ExecutePlanResponseReattachableIterator]
+    iter.toSeq
+    // If this assertion fails, we need to double check the correctness
+    // of the return value from the SparkSession.sql
+    assert(reattachableIter.resultComplete)
+  }
 }
 
 class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectServiceImplBase {
