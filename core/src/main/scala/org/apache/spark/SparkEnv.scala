@@ -430,8 +430,9 @@ object SparkEnv extends Logging {
     // NB: blockManager is not valid until initialize() is called later.
     //     SPARK-45762 introduces a change where the ShuffleManager is initialized later
     //     in the Executor, to allow for custom ShuffleManagers defined
-    //     in user jars. In the executor, the BlockManager uses a lazy val to obtain the shuffleManager
-    //     from the SparkEnv. In the driver, the SparkEnv's shuffleManager is set at this point.
+    //     in user jars. In the executor, the BlockManager uses a lazy val to obtain the
+    //     shuffleManager from the SparkEnv. In the driver, the SparkEnv's shuffleManager
+    //     is set at this point.
     val blockManager = new BlockManager(
       executorId,
       rpcEnv,
