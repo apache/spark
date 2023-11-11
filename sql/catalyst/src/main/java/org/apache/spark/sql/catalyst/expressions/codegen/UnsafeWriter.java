@@ -151,11 +151,22 @@ public abstract class UnsafeWriter {
   }
 
   public void write(int ordinal, VariantVal input) {
-    int totalSize = 4 + input.getValue().length + input.getMetadata().length;
+    // See the class comment of VariantVal for the format of the binary content.
+    byte[] value = input.getValue();
+    byte[] metadata = input.getMetadata();
+    int totalSize = 4 + value.length + metadata.length;
     int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(totalSize);
     grow(roundedSize);
     zeroOutPaddingBytes(totalSize);
-    input.writeIntoUnsafeRow(getBuffer(), cursor());
+    Platform.putInt(getBuffer(), cursor(), value.length);
+    Platform.copyMemory(value, Platform.BYTE_ARRAY_OFFSET, getBuffer(), cursor() + 4, value.length);
+    Platform.copyMemory(
+        metadata,
+        Platform.BYTE_ARRAY_OFFSET,
+        getBuffer(),
+        cursor() + 4 + value.length,
+        metadata.length
+    );
     setOffsetAndSize(ordinal, totalSize);
     increaseCursor(roundedSize);
   }

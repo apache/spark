@@ -25,9 +25,10 @@ import org.apache.spark.unsafe.types._
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(jsonStr) - Parse a JSON string as an Variant value. Throw an exception when the string is not valid JSON value.",
-  examples =
-    """
+  examples = """
     Examples:
+      > SELECT _FUNC_('{"a":1,"b":0.8}');
+       {"a":1,"b":0.8}
   """,
   since = "4.0.0",
   group = "variant_funcs"
@@ -38,8 +39,6 @@ case class ParseJson(child: Expression) extends UnaryExpression
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
 
   override def dataType: DataType = VariantType
-
-  override def nullable: Boolean = false
 
   override def prettyName: String = "parse_json"
 

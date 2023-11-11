@@ -60,27 +60,13 @@ public class VariantVal implements Serializable {
   }
 
   /**
-   * This function writes the binary content into {@code buffer} starting from {@code cursor}, as
-   * described in the class comment. The caller should guarantee there is enough space in `buffer`.
-   */
-  public void writeIntoUnsafeRow(byte[] buffer, long cursor) {
-    Platform.putInt(buffer, cursor, value.length);
-    Platform.copyMemory(value, Platform.BYTE_ARRAY_OFFSET, buffer, cursor + 4, value.length);
-    Platform.copyMemory(
-        metadata,
-        Platform.BYTE_ARRAY_OFFSET,
-        buffer,
-        cursor + 4 + value.length,
-        metadata.length
-    );
-  }
-
-  /**
    * This function reads the binary content described in `writeIntoUnsafeRow` from `baseObject`. The
    * offset is computed by adding the offset in {@code offsetAndSize} and {@code baseOffset}.
    */
-  public static VariantVal readFromUnsafeRow(long offsetAndSize, Object baseObject,
-                                             long baseOffset) {
+  public static VariantVal readFromUnsafeRow(
+      long offsetAndSize,
+      Object baseObject,
+      long baseOffset) {
     // offset and totalSize is the upper/lower 32 bits in offsetAndSize.
     int offset = (int) (offsetAndSize >> 32);
     int totalSize = (int) offsetAndSize;

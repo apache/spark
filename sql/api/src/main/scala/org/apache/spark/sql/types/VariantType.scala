@@ -17,15 +17,16 @@
 
 package org.apache.spark.sql.types
 
-import org.apache.spark.annotation.Stable
+import org.apache.spark.annotation.Unstable
 
 /**
- * The data type representing semi-structured values with arbitrary hierarchical data structures. At
- * this moment, it is intended to store parsed JSON values and almost any other data types in the
- * system (e.g., we don't plan to let it store a map with a non-string key type). In the future, we
- * may also extend it to store other semi-structured data representation like XML.
+ * The data type representing semi-structured values with arbitrary hierarchical data structures. It
+ * is intended to store parsed JSON values and most other data types in the system (e.g., it cannot
+ * store a map with a non-string key type).
+ *
+ * @since 4.0.0
  */
-@Stable
+@Unstable
 class VariantType private () extends AtomicType {
   // The default size is used in query planning to drive optimization decisions. 2048 is arbitrarily
   // picked and we currently don't have any data to support it. This may need revisiting later.
@@ -35,5 +36,8 @@ class VariantType private () extends AtomicType {
   private[spark] override def asNullable: VariantType = this
 }
 
-@Stable
+/**
+ * @since 4.0.0
+ */
+@Unstable
 case object VariantType extends VariantType
