@@ -1564,6 +1564,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
+  def cannotSaveVariantIntoExternalStorageError(): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_SAVE_VARIANT",
+      messageParameters = Map.empty)
+  }
+
   def cannotResolveAttributeError(name: String, outputStr: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1137",
@@ -1856,12 +1862,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1175",
       messageParameters = Map("dataType" -> field.dataType.catalogString))
-  }
-
-  def cannotSaveVariantIntoExternalStorageError(): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1176",
-      messageParameters = Map.empty)
   }
 
   def incompatibleViewSchemaChangeError(
