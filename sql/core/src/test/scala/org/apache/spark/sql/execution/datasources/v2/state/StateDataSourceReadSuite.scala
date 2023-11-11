@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.{CommitLog, MemoryStream, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider, StateStore}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -315,6 +316,8 @@ class RocksDBWithChangelogCheckpointStateDataSourceReaderSuite extends StateData
 
 abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Assertions {
 
+  import testImplicits._
+
   test("simple aggregation, state ver 1") {
     testStreamingAggregation(1)
   }
@@ -491,6 +494,48 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
           Row("c", 23000000)
         )
       )
+    }
+  }
+
+  test("Session window aggregation") {
+    withTempDir { checkpointDir =>
+      val input = MemoryStream[(String, Long)]
+      val sessionWindow = session_window($"eventTime", "10 seconds")
+
+      val events = input.toDF()
+        .select($"_1".as("value"), $"_2".as("timestamp"))
+        .withColumn("eventTime", $"timestamp".cast("timestamp"))
+        .withWatermark("eventTime", "30 seconds")
+        .selectExpr("explode(split(value, ' ')) AS sessionId", "eventTime")
+
+      val streamingDf = events
+        .groupBy(sessionWindow as Symbol("session"), $"sessionId")
+        .agg(count("*").as("numEvents"))
+        .selectExpr("sessionId", "CAST(session.start AS LONG)", "CAST(session.end AS LONG)",
+          "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
+          "numEvents")
+
+      testStream(streamingDf, OutputMode.Complete())(
+        StartStream(checkpointLocation = checkpointDir.toString),
+        AddData(input,
+          ("hello world spark streaming", 40L),
+          ("world hello structured streaming", 41L)
+        ),
+        CheckNewAnswer(
+          ("hello", 40, 51, 11, 2),
+          ("world", 40, 51, 11, 2),
+          ("streaming", 40, 51, 11, 2),
+          ("spark", 40, 50, 10, 1),
+          ("structured", 41, 51, 10, 1)
+        ),
+        StopStream
+      )
+
+
+      val df = spark.read.format("statestore").load(checkpointDir.toString)
+        .selectExpr("key.sessionId as sessionId", "value.count as count")
+      checkAnswer(df, Seq(Row("hello", 2), Row("spark", 1), Row("streaming", 2),
+        Row("structured", 1), Row("world", 2)))
     }
   }
 
