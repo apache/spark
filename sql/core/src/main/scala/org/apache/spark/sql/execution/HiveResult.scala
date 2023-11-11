@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedComm
 import org.apache.spark.sql.execution.datasources.v2.{DescribeTableExec, ShowTablesExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -131,6 +131,7 @@ object HiveResult {
         HIVE_STYLE,
         startField,
         endField)
+    case (v: VariantVal, VariantType) => v.toString
     case (other, _: UserDefinedType[_]) => other.toString
   }
 }
