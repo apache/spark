@@ -52,6 +52,7 @@ import org.apache.spark.status.api.v1.JobData
 import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ResetSystemProperties, ShutdownHookManager, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A collection of tests against the historyserver, including comparing responses from the json
@@ -408,7 +409,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     def listDir(dir: Path): Seq[FileStatus] = {
       val statuses = fs.listStatus(dir)
       statuses.flatMap(
-        stat => if (stat.isDirectory) listDir(stat.getPath) else Seq(stat))
+        stat => if (stat.isDirectory) listDir(stat.getPath) else Seq(stat)).toImmutableArraySeq
     }
 
     def dumpLogDir(msg: String = ""): Unit = {

@@ -35,6 +35,7 @@ import org.apache.spark.sql.streaming.StreamingQueryStatusAndProgressSuite._
 import org.apache.spark.sql.streaming.StreamingQuerySuite.clock
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
   test("StreamingQueryProgress - prettyJson") {
@@ -278,7 +279,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
         p.sources.size >= 1 && p.stateOperators.size >= 1 && p.sink != null
       })
 
-      val array = spark.sparkContext.parallelize(progress).collect()
+      val array = spark.sparkContext.parallelize(progress.toImmutableArraySeq).collect()
       assert(array.length === progress.length)
       array.zip(progress).foreach { case (p1, p2) =>
         // Make sure we did serialize and deserialize the object

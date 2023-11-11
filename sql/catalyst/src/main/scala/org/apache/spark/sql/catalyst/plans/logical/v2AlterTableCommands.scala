@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{TableCatalog, TableChange}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The base trait for commands that need to alter a v2 table with [[TableChange]]s.
@@ -158,7 +159,7 @@ case class ReplaceColumns(
         null,
         col.getV2Default)
     }
-    deleteChanges ++ addChanges
+    (deleteChanges ++ addChanges).toImmutableArraySeq
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =

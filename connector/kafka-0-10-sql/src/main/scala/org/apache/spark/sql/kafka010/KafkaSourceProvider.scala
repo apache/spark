@@ -41,6 +41,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The provider class for all Kafka readers and writers. It is designed such that it throws
@@ -204,7 +205,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       case (ASSIGN, value) =>
         AssignStrategy(JsonUtils.partitions(value))
       case (SUBSCRIBE, value) =>
-        SubscribeStrategy(value.split(",").map(_.trim()).filter(_.nonEmpty))
+        SubscribeStrategy(value.split(",").map(_.trim()).filter(_.nonEmpty).toImmutableArraySeq)
       case (SUBSCRIBE_PATTERN, value) =>
         SubscribePatternStrategy(value.trim())
       case _ =>

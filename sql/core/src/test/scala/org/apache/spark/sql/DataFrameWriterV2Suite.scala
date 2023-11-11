@@ -39,6 +39,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with BeforeAndAfter {
@@ -717,7 +718,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       .asInstanceOf[InMemoryTable]
 
     assert(table.name === "testcat.table_name")
-    assert(table.partitioning === Seq(IdentityTransform(FieldReference(Array("ts", "timezone")))))
+    assert(table.partitioning ===
+      Seq(IdentityTransform(FieldReference(Array("ts", "timezone").toImmutableArraySeq))))
     checkAnswer(spark.table(table.name), data)
     assert(table.dataMap.toArray.length == 2)
     assert(table.dataMap(Seq(UTF8String.fromString("America/Los_Angeles"))).head.rows.size == 2)
@@ -745,14 +747,14 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     assert(table.name === "testcat.table_name")
     assert(table.partitioning === Seq(
-      YearsTransform(FieldReference(Array("ts", "created"))),
-      MonthsTransform(FieldReference(Array("ts", "created"))),
-      DaysTransform(FieldReference(Array("ts", "created"))),
-      HoursTransform(FieldReference(Array("ts", "created"))),
-      YearsTransform(FieldReference(Array("ts", "modified"))),
-      MonthsTransform(FieldReference(Array("ts", "modified"))),
-      DaysTransform(FieldReference(Array("ts", "modified"))),
-      HoursTransform(FieldReference(Array("ts", "modified")))))
+      YearsTransform(FieldReference(Array("ts", "created").toImmutableArraySeq)),
+      MonthsTransform(FieldReference(Array("ts", "created").toImmutableArraySeq)),
+      DaysTransform(FieldReference(Array("ts", "created").toImmutableArraySeq)),
+      HoursTransform(FieldReference(Array("ts", "created").toImmutableArraySeq)),
+      YearsTransform(FieldReference(Array("ts", "modified").toImmutableArraySeq)),
+      MonthsTransform(FieldReference(Array("ts", "modified").toImmutableArraySeq)),
+      DaysTransform(FieldReference(Array("ts", "modified").toImmutableArraySeq)),
+      HoursTransform(FieldReference(Array("ts", "modified").toImmutableArraySeq))))
   }
 
   test("SPARK-30289 Create: partitioned by bucket(4, ts.timezone)") {

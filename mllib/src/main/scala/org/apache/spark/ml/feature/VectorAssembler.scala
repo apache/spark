@@ -32,6 +32,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A feature transformer that merges multiple columns into a vector column.
@@ -92,7 +93,8 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
         case _ => false
       }
     }
-    val vectorColsLengths = VectorAssembler.getLengths(dataset, vectorCols, $(handleInvalid))
+    val vectorColsLengths = VectorAssembler.getLengths(
+      dataset, vectorCols.toImmutableArraySeq, $(handleInvalid))
 
     val featureAttributesMap = $(inputCols).map { c =>
       val field = schema(c)

@@ -938,7 +938,7 @@ class SparkConnectPlanner(
 
   private def transformPythonTableFunction(fun: proto.PythonUDTF): SimplePythonFunction = {
     SimplePythonFunction(
-      command = fun.getCommand.toByteArray,
+      command = fun.getCommand.toByteArray.toImmutableArraySeq,
       // Empty environment variables
       envVars = Maps.newHashMap(),
       pythonIncludes = sessionHolder.artifactManager.getSparkConnectPythonIncludes.asJava,
@@ -1030,7 +1030,7 @@ class SparkConnectPlanner(
 
     if (!rel.hasValues) {
       Unpivot(
-        Some(ids.map(_.named)),
+        Some(ids.map(_.named).toImmutableArraySeq),
         None,
         None,
         rel.getVariableColumnName,
@@ -1042,8 +1042,8 @@ class SparkConnectPlanner(
       }
 
       Unpivot(
-        Some(ids.map(_.named)),
-        Some(values.map(v => Seq(v.named))),
+        Some(ids.map(_.named).toImmutableArraySeq),
+        Some(values.map(v => Seq(v.named)).toImmutableArraySeq),
         None,
         rel.getVariableColumnName,
         Seq(rel.getValueColumnName),
@@ -1624,7 +1624,7 @@ class SparkConnectPlanner(
 
   private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
     SimplePythonFunction(
-      command = fun.getCommand.toByteArray,
+      command = fun.getCommand.toByteArray.toImmutableArraySeq,
       // Empty environment variables
       envVars = Maps.newHashMap(),
       pythonIncludes = sessionHolder.artifactManager.getSparkConnectPythonIncludes.asJava,

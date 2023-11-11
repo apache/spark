@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, B
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A factory for constructing encoders that convert external row to/from the Spark SQL
@@ -121,6 +122,6 @@ object RowEncoder {
           encoderForDataType(field.dataType, lenient),
           field.nullable,
           field.metadata)
-      })
+      }.toImmutableArraySeq)
   }
 }

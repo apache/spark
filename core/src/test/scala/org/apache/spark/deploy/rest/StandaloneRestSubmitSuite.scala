@@ -32,6 +32,7 @@ import org.apache.spark.deploy.{SparkSubmit, SparkSubmitArguments}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState._
 import org.apache.spark.rpc._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -499,7 +500,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
       "--name", mainClass,
       "--class", mainClass,
       mainJar) ++ appArgs
-    val args = new SparkSubmitArguments(commandLineArgs)
+    val args = new SparkSubmitArguments(commandLineArgs.toImmutableArraySeq)
     val (_, _, sparkConf, _) = new SparkSubmit().prepareSubmitEnvironment(args)
     new RestSubmissionClient("spark://host:port").constructSubmitRequest(
       mainJar, mainClass, appArgs, sparkConf.getAll.toMap, Map.empty)

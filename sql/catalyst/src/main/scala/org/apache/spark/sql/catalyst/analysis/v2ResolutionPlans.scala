@@ -30,6 +30,7 @@ import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Holds the name of a namespace that has yet to be looked up in a catalog. It will be resolved to
@@ -152,7 +153,7 @@ case class ResolvedTable(
   extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = {
     val qualifier = catalog.name +: identifier.namespace :+ identifier.name
-    outputAttributes.map(_.withQualifier(qualifier))
+    outputAttributes.map(_.withQualifier(qualifier.toImmutableArraySeq))
   }
   def name: String = (catalog.name +: identifier.namespace() :+ identifier.name()).quoted
 }

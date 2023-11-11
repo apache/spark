@@ -41,6 +41,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.util.{ByteBufferOutputStream, SizeEstimator, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 
 /**
@@ -398,7 +399,8 @@ private[sql] object ArrowConverters extends Logging {
     if (shouldUseRDD) {
       logDebug("Using RDD-based createDataFrame with Arrow optimization.")
       val timezone = session.sessionState.conf.sessionLocalTimeZone
-      val rdd = session.sparkContext.parallelize(batchesInDriver, batchesInDriver.length)
+      val rdd = session.sparkContext
+        .parallelize(batchesInDriver.toImmutableArraySeq, batchesInDriver.length)
         .mapPartitions { batchesInExecutors =>
           ArrowConverters.fromBatchIterator(
             batchesInExecutors,
@@ -419,7 +421,8 @@ private[sql] object ArrowConverters extends Logging {
 
       // Project/copy it. Otherwise, the Arrow column vectors will be closed and released out.
       val proj = UnsafeProjection.create(attrs, attrs)
-      Dataset.ofRows(session, LocalRelation(attrs, data.map(r => proj(r).copy()).toArray))
+      Dataset.ofRows(session,
+        LocalRelation(attrs, data.map(r => proj(r).copy()).toArray.toImmutableArraySeq))
     }
   }
 

@@ -33,6 +33,7 @@ import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.planner.{PythonStreamingQueryListener, StreamingForeachBatchHelper}
 import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper.RunnerCleaner
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.ArrayImplicits._
 
 class SparkConnectSessionHolderSuite extends SharedSparkSession {
 
@@ -160,7 +161,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
       s"${IntegratedUDFTestUtils.pysparkPythonPath}:${IntegratedUDFTestUtils.pythonPath}"
 
     SimplePythonFunction(
-      command = fcn(sparkPythonPath),
+      command = fcn(sparkPythonPath).toImmutableArraySeq,
       envVars = mutable.Map("PYTHONPATH" -> sparkPythonPath).asJava,
       pythonIncludes = sessionHolder.artifactManager.getSparkConnectPythonIncludes.asJava,
       pythonExec = IntegratedUDFTestUtils.pythonExec,
