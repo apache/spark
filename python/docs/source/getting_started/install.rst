@@ -119,7 +119,7 @@ While using pip in a conda environment is technically feasible (with the same co
 because pip does not interoperate with conda.
 
 For a short summary about useful conda commands, see their
-`cheat sheet <https://docs.conda.io/projects/conda/en/latest/user-guide/cheatsheet.html/>`_.
+`cheat sheet <https://docs.conda.io/projects/conda/en/latest/user-guide/cheatsheet.html>`_.
 
 
 Manually Downloading
