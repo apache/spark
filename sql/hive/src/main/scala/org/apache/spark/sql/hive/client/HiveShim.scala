@@ -32,10 +32,13 @@ import org.apache.hadoop.hive.metastore.api.{Database, EnvironmentContext, Funct
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.io.AcidUtils
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition, Table}
-import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
+import org.apache.hadoop.hive.ql.parse.DDLSemanticAnalyzer.makeBinaryPredicate
+import org.apache.hadoop.hive.ql.plan.{AddPartitionDesc, ExprNodeColumnDesc, ExprNodeConstantDesc}
+import org.apache.hadoop.hive.ql.plan.DropTableDesc.PartSpec
 import org.apache.hadoop.hive.ql.processors.{CommandProcessor, CommandProcessorFactory}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
@@ -219,12 +222,13 @@ private[client] sealed abstract class Shim {
       ignoreIfNotExists: Boolean,
       purge: Boolean): Unit
 
-  def dropPartition(
+  def dropPartitions(
       hive: Hive,
       dbName: String,
       tableName: String,
-      part: JList[String],
+      specs: Seq[TablePartitionSpec],
       deleteData: Boolean,
+      ignoreIfNotExists: Boolean,
       purge: Boolean): Unit
 
   def getDatabaseOwnerName(db: Database): String
@@ -535,18 +539,38 @@ private[client] class Shim_v2_0 extends Shim with Logging {
     alterPartitionsMethod.invoke(hive, tableName, newParts)
   }
 
-  override def dropPartition(
+  override def dropPartitions(
       hive: Hive,
       dbName: String,
       tableName: String,
-      part: JList[String],
+      specs: Seq[TablePartitionSpec],
       deleteData: Boolean,
+      ignoreIfNotExists: Boolean,
       purge: Boolean): Unit = {
     val dropOptions = new PartitionDropOptions
     dropOptions.deleteData(deleteData)
     dropOptions.purgeData(purge)
+    dropOptions.ifExists(ignoreIfNotExists)
     recordHiveCall()
-    hive.dropPartition(dbName, tableName, part, dropOptions)
+    val table = hive.getTable(dbName, tableName)
+    val partSpecs = createPartSpecs(table, specs)
+    hive.dropPartitions(dbName, tableName, partSpecs, dropOptions)
+  }
+
+  private def createPartSpecs(table: Table, specs: Seq[TablePartitionSpec]): JList[PartSpec] = {
+    val colTypes = table.getPartitionKeys.asScala.map(f => (f.getName, f.getType)).toMap
+    val expressions = specs.map { case partSpec =>
+      val expressions = partSpec.map { case (partKey, partVal) =>
+        val colType = colTypes.get(partKey)
+        assert(colType.isDefined, s"`$partKey` is not partition key.")
+        val typeInfo = TypeInfoFactory.getPrimitiveTypeInfo(colType.get)
+        val column = new ExprNodeColumnDesc(typeInfo, partKey, null, true)
+        makeBinaryPredicate("=", column, new ExprNodeConstantDesc(typeInfo, partVal))
+      }.toSeq
+      expressions.tail.foldLeft(expressions.head)(makeBinaryPredicate("and", _, _))
+    }
+    val expr = expressions.tail.foldLeft(expressions.head)(makeBinaryPredicate("or", _, _))
+    Seq(new PartSpec(expr, specs.size)).toList.asJava
   }
 
   private def toHiveFunction(f: CatalogFunction, db: String): HiveFunction = {

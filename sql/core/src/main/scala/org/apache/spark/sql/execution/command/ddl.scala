@@ -627,9 +627,15 @@ case class AlterTableDropPartitionCommand(
         sparkSession.sessionState.conf.resolver)
     }
 
-    catalog.dropPartitions(
-      table.identifier, normalizedSpecs, ignoreIfNotExists = ifExists, purge = purge,
-      retainData = retainData)
+    // Hive metastore may not have enough memory to handle millions of partitions in single RPC.
+    // Also the request to metastore times out when dropping lot of partitions in one shot.
+    // we should split them into smaller batches
+    val batchSize = conf.getConf(SQLConf.DROP_PARTITION_BATCH_SIZE)
+    normalizedSpecs.iterator.grouped(batchSize).foreach { batch =>
+      catalog.dropPartitions(
+        table.identifier, batch, ignoreIfNotExists = ifExists, purge = purge,
+        retainData = retainData)
+    }
 
     sparkSession.catalog.refreshTable(table.identifier.quotedString)
     CommandUtils.updateTableStats(sparkSession, table)
@@ -871,14 +877,20 @@ case class RepairTableCommand(
         if (fs.exists(new Path(uri))) None else Some(partition.spec)
       }
     }.flatten
-    catalog.dropPartitions(
-      tableName,
-      dropPartSpecs,
-      ignoreIfNotExists = true,
-      purge = false,
-      // Since we have already checked that partition directories do not exist, we can avoid
-      // additional calls to the file system at the catalog side by setting this flag.
-      retainData = true)
+    // Hive metastore may not have enough memory to handle millions of partitions in single RPC.
+    // Also the request to metastore times out when dropping lot of partitions in one shot.
+    // we should split them into smaller batches
+    val batchSize = conf.getConf(SQLConf.DROP_PARTITION_BATCH_SIZE)
+    dropPartSpecs.iterator.grouped(batchSize).foreach { batch =>
+      catalog.dropPartitions(
+        tableName,
+        batch,
+        ignoreIfNotExists = true,
+        purge = false,
+        // Since we have already checked that partition directories do not exist, we can avoid
+        // additional calls to the file system at the catalog side by setting this flag.
+        retainData = true)
+    }
     dropPartSpecs.length
   }
 }

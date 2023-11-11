@@ -4016,6 +4016,18 @@ object SQLConf {
       .checkValue(_ > 0, "The value of spark.sql.addPartitionInBatch.size must be positive")
       .createWithDefault(100)
 
+  val DROP_PARTITION_BATCH_SIZE =
+    buildConf("spark.sql.dropPartitionInBatch.size")
+      .internal()
+      .doc("The number of partitions to be dropped in one turn when use " +
+        "`AlterTableDropPartitionCommand` or `RepairTableCommand` to drop partitions from table. " +
+        "The smaller batch size is, the less memory is required for the real handler, e.g. " +
+        "Hive Metastore.")
+      .version("4.0.0")
+      .intConf
+      .checkValue(_ > 0, "The value of spark.sql.dropPartitionInBatch.size must be positive")
+      .createWithDefault(100)
+
   val LEGACY_ALLOW_HASH_ON_MAPTYPE = buildConf("spark.sql.legacy.allowHashOnMapType")
     .internal()
     .doc("When set to true, hash expressions can be applied on elements of MapType. Otherwise, " +
