@@ -431,8 +431,12 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def sqlStatementUnsupportedError(sqlText: String, position: Origin): Throwable = {
-    new ParseException(Option(sqlText), "Unsupported SQL statement", position, position,
-      Some("_LEGACY_ERROR_TEMP_0039"))
+    new ParseException(
+      command = Option(sqlText),
+      start = position,
+      stop = position,
+      errorClass = "_LEGACY_ERROR_TEMP_0039",
+      messageParameters = Map.empty)
   }
 
   def invalidIdentifierError(ident: String, ctx: ErrorIdentContext): Throwable = {
@@ -678,5 +682,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
         "argumentName" -> toSQLId(argumentName)),
       ctx
     )
+  }
+
+  def clusterByWithPartitionedBy(ctx: ParserRuleContext): Throwable = {
+    new ParseException(errorClass = "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED", ctx)
+  }
+
+  def clusterByWithBucketing(ctx: ParserRuleContext): Throwable = {
+    new ParseException(errorClass = "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED", ctx)
   }
 }

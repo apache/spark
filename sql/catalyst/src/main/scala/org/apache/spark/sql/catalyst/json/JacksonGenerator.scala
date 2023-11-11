@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * `JackGenerator` can only be initialized with a `StructType`, a `MapType` or an `ArrayType`.
@@ -283,7 +284,7 @@ private[sql] class JacksonGenerator(
    */
   def write(row: InternalRow): Unit = {
     writeObject(writeFields(
-      fieldWriters = rootFieldWriters,
+      fieldWriters = rootFieldWriters.toImmutableArraySeq,
       row = row,
       schema = dataType.asInstanceOf[StructType]))
   }

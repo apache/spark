@@ -64,7 +64,7 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
   // The base directory/URI where all class file artifacts are stored for this `sessionUUID`.
   val (classDir, classURI): (Path, String) = getClassfileDirectoryAndUriForSession(sessionHolder)
   val state: JobArtifactState =
-    JobArtifactState(sessionHolder.session.sessionUUID, Option(classURI))
+    JobArtifactState(sessionHolder.serverSessionId, Option(classURI))
 
   private val jarsList = new CopyOnWriteArrayList[Path]
   private val pythonIncludeList = new CopyOnWriteArrayList[String]

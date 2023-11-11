@@ -24,6 +24,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Evolving
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Class to hold information about a type of Resource. A resource could be a GPU, FPGA, etc.
@@ -57,7 +58,7 @@ class ResourceInformation(
 
   // TODO(SPARK-39658): reconsider whether we want to expose a third-party library's
   // symbols as part of a public API:
-  final def toJson(): JValue = ResourceInformationJson(name, addresses).toJValue
+  final def toJson(): JValue = ResourceInformationJson(name, addresses.toImmutableArraySeq).toJValue
 }
 
 private[spark] object ResourceInformation {

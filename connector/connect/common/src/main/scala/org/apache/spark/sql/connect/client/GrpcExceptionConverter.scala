@@ -22,14 +22,13 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import com.google.rpc.ErrorInfo
-import io.grpc.StatusRuntimeException
+import io.grpc.{ManagedChannel, StatusRuntimeException}
 import io.grpc.protobuf.StatusProto
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{QueryContext, QueryContextType, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
-import org.apache.spark.connect.proto.{FetchErrorDetailsRequest, FetchErrorDetailsResponse, UserContext}
-import org.apache.spark.connect.proto.SparkConnectServiceGrpc.SparkConnectServiceBlockingStub
+import org.apache.spark.connect.proto.{FetchErrorDetailsRequest, FetchErrorDetailsResponse, SparkConnectServiceGrpc, UserContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException, TempTableAlreadyExistsException}
@@ -49,9 +48,10 @@ import org.apache.spark.util.ArrayImplicits._
  * the ErrorInfo is missing, the exception will be constructed based on the StatusRuntimeException
  * itself.
  */
-private[client] class GrpcExceptionConverter(grpcStub: SparkConnectServiceBlockingStub)
-    extends Logging {
+private[client] class GrpcExceptionConverter(channel: ManagedChannel) extends Logging {
   import GrpcExceptionConverter._
+
+  val grpcStub = SparkConnectServiceGrpc.newBlockingStub(channel)
 
   def convert[T](sessionId: String, userContext: UserContext, clientType: String)(f: => T): T = {
     try {
@@ -191,10 +191,9 @@ private[client] object GrpcExceptionConverter {
     errorConstructor(params =>
       new ParseException(
         None,
-        params.message,
         Origin(),
         Origin(),
-        errorClass = params.errorClass,
+        errorClass = params.errorClass.orNull,
         messageParameters = params.messageParameters,
         queryContext = params.queryContext)),
     errorConstructor(params =>

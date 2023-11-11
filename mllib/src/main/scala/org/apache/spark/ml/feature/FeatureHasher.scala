@@ -187,7 +187,9 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
     }
 
     val metadata = outputSchema($(outputCol)).metadata
-    dataset.withColumn($(outputCol), hashFeatures(struct($(inputCols).map(col): _*)), metadata)
+    import org.apache.spark.util.ArrayImplicits._
+    dataset.withColumn($(outputCol),
+      hashFeatures(struct($(inputCols).map(col).toImmutableArraySeq: _*)), metadata)
   }
 
   @Since("2.3.0")

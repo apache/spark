@@ -22,10 +22,14 @@ import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
+/**
+ * A manager for user-defined data sources. It is used to register and lookup data sources by
+ * their short names or fully qualified names.
+ */
 class DataSourceManager {
 
   private type DataSourceBuilder = (
@@ -33,22 +37,41 @@ class DataSourceManager {
     String,  // provider name
     Seq[String],  // paths
     Option[StructType],  // user specified schema
-    CaseInsensitiveStringMap  // options
+    CaseInsensitiveMap[String]  // options
   ) => LogicalPlan
 
   private val dataSourceBuilders = new ConcurrentHashMap[String, DataSourceBuilder]()
 
   private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
 
+  /**
+   * Register a data source builder for the given provider.
+   * Note that the provider name is case-insensitive.
+   */
   def registerDataSource(name: String, builder: DataSourceBuilder): Unit = {
     val normalizedName = normalize(name)
     if (dataSourceBuilders.containsKey(normalizedName)) {
       throw QueryCompilationErrors.dataSourceAlreadyExists(name)
     }
-    // TODO(SPARK-45639): check if the data source is a DSv1 or DSv2 using loadDataSource.
     dataSourceBuilders.put(normalizedName, builder)
   }
 
-  def dataSourceExists(name: String): Boolean =
+  /**
+   * Returns a data source builder for the given provider and throw an exception if
+   * it does not exist.
+   */
+  def lookupDataSource(name: String): DataSourceBuilder = {
+    if (dataSourceExists(name)) {
+      dataSourceBuilders.get(normalize(name))
+    } else {
+      throw QueryCompilationErrors.dataSourceDoesNotExist(name)
+    }
+  }
+
+  /**
+   * Checks if a data source with the specified name exists (case-insensitive).
+   */
+  def dataSourceExists(name: String): Boolean = {
     dataSourceBuilders.containsKey(normalize(name))
+  }
 }

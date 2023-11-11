@@ -32,6 +32,7 @@ import org.apache.spark.deploy.{SparkSubmit, SparkSubmitArguments}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState._
 import org.apache.spark.rpc._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -234,6 +235,15 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     assert(clearResponse.action === Utils.getFormattedClassName(clearResponse))
     assert(clearResponse.serverSparkVersion === SPARK_VERSION)
     assert(clearResponse.success)
+  }
+
+  test("SPARK-45843: killAll") {
+    val masterUrl = startDummyServer()
+    val response = new RestSubmissionClient(masterUrl).killAllSubmissions()
+    val killAllResponse = getKillAllResponse(response)
+    assert(killAllResponse.action === Utils.getFormattedClassName(killAllResponse))
+    assert(killAllResponse.serverSparkVersion === SPARK_VERSION)
+    assert(killAllResponse.success)
   }
 
   /* ---------------------------------------- *
@@ -490,7 +500,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
       "--name", mainClass,
       "--class", mainClass,
       mainJar) ++ appArgs
-    val args = new SparkSubmitArguments(commandLineArgs)
+    val args = new SparkSubmitArguments(commandLineArgs.toImmutableArraySeq)
     val (_, _, sparkConf, _) = new SparkSubmit().prepareSubmitEnvironment(args)
     new RestSubmissionClient("spark://host:port").constructSubmitRequest(
       mainJar, mainClass, appArgs, sparkConf.getAll.toMap, Map.empty)
@@ -511,6 +521,16 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
       case k: KillSubmissionResponse => k
       case e: ErrorResponse => fail(s"Server returned error: ${e.message}")
       case r => fail(s"Expected kill response. Actual: ${r.toJson}")
+    }
+  }
+
+  /** Return the response as a killAll response, or fail with error otherwise. */
+  private def getKillAllResponse(response: SubmitRestProtocolResponse)
+    : KillAllSubmissionResponse = {
+    response match {
+      case k: KillAllSubmissionResponse => k
+      case e: ErrorResponse => fail(s"Server returned error: ${e.message}")
+      case r => fail(s"Expected killAll response. Actual: ${r.toJson}")
     }
   }
 
@@ -590,6 +610,8 @@ private class DummyMaster(
       context.reply(SubmitDriverResponse(self, success = true, Some(submitId), submitMessage))
     case RequestKillDriver(driverId) =>
       context.reply(KillDriverResponse(self, driverId, success = true, killMessage))
+    case RequestKillAllDrivers =>
+      context.reply(KillAllDriversResponse(self, success = true, killMessage))
     case RequestDriverStatus(driverId) =>
       context.reply(DriverStatusResponse(found = true, Some(state), None, None, exception))
     case RequestClearCompletedDriversAndApps =>
@@ -636,6 +658,7 @@ private class SmarterMaster(override val rpcEnv: RpcEnv) extends ThreadSafeRpcEn
  *
  * When handling a submit request, the server returns a malformed JSON.
  * When handling a kill request, the server returns an invalid JSON.
+ * When handling a killAll request, the server returns an invalid JSON.
  * When handling a status request, the server throws an internal exception.
  * When handling a clear request, the server throws an internal exception.
  * The purpose of this class is to test that client handles these cases gracefully.
@@ -650,6 +673,7 @@ private class FaultyStandaloneRestServer(
 
   protected override val submitRequestServlet = new MalformedSubmitServlet
   protected override val killRequestServlet = new InvalidKillServlet
+  protected override val killAllRequestServlet = new InvalidKillAllServlet
   protected override val statusRequestServlet = new ExplodingStatusServlet
   protected override val clearRequestServlet = new ExplodingClearServlet
 
@@ -669,6 +693,14 @@ private class FaultyStandaloneRestServer(
     protected override def handleKill(submissionId: String): KillSubmissionResponse = {
       val k = super.handleKill(submissionId)
       k.submissionId = null
+      k
+    }
+  }
+
+  /** A faulty servlet that produces invalid responses. */
+  class InvalidKillAllServlet extends StandaloneKillAllRequestServlet(masterEndpoint, masterConf) {
+    protected override def handleKillAll(): KillAllSubmissionResponse = {
+      val k = super.handleKillAll()
       k
     }
   }

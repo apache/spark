@@ -134,15 +134,26 @@ case class SQLQueryContext(
   override def callSite: String = throw new UnsupportedOperationException
 }
 
-case class DataFrameQueryContext(
-    override val fragment: String,
-    override val callSite: String) extends QueryContext {
+case class DataFrameQueryContext(stackTrace: Seq[StackTraceElement]) extends QueryContext {
   override val contextType = QueryContextType.DataFrame
 
   override def objectType: String = throw new UnsupportedOperationException
   override def objectName: String = throw new UnsupportedOperationException
   override def startIndex: Int = throw new UnsupportedOperationException
   override def stopIndex: Int = throw new UnsupportedOperationException
+
+  override val fragment: String = {
+    stackTrace.headOption.map { firstElem =>
+      val methodName = firstElem.getMethodName
+      if (methodName.length > 1 && methodName(0) == '$') {
+        methodName.substring(1)
+      } else {
+        methodName
+      }
+    }.getOrElse("")
+  }
+
+  override val callSite: String = stackTrace.tail.headOption.map(_.toString).getOrElse("")
 
   override lazy val summary: String = {
     val builder = new StringBuilder
@@ -155,21 +166,5 @@ case class DataFrameQueryContext(
     builder ++= callSite
     builder += '\n'
     builder.result()
-  }
-}
-
-object DataFrameQueryContext {
-  def apply(elements: Array[StackTraceElement]): DataFrameQueryContext = {
-    val fragment = elements.headOption.map { firstElem =>
-      val methodName = firstElem.getMethodName
-      if (methodName.length > 1 && methodName(0) == '$') {
-        methodName.substring(1)
-      } else {
-        methodName
-      }
-    }.getOrElse("")
-    val callSite = elements.tail.headOption.map(_.toString).getOrElse("")
-
-    DataFrameQueryContext(fragment, callSite)
   }
 }
