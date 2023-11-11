@@ -299,6 +299,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             // 2. The current join is a shuffle join or a broadcast join that
             //    has a shuffle below it
             // 3. There is no bloom filter on the left key yet
+            val hasShuffle = isProbablyShuffleJoin(left, right, hint, joinType)
             if (canPruneLeft(joinType) && (hasShuffle || probablyHasShuffle(left)) &&
               !hasBloomFilter(newLeft, l)) {
               extractBeneficialFilterCreatePlan(left, right, l, r).foreach {
