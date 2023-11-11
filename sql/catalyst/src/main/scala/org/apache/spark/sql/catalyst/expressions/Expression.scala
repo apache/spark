@@ -554,7 +554,7 @@ abstract class UnaryExpression extends Expression with UnaryLike[Expression] {
    * of evaluation process, we should override [[eval]].
    */
   protected def nullSafeEval(input: Any): Any =
-    throw QueryExecutionErrors.notOverrideExpectedMethodsError("UnaryExpressions",
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("UnaryExpression",
       "eval", "nullSafeEval")
 
   /**

@@ -329,6 +329,12 @@ Checkpoint block `<rddBlockId>` not found!
 Either the executor that originally checkpointed this partition is no longer alive, or the original RDD is unpersisted.
 If this problem persists, you may consider using `rdd.checkpoint()` instead, which is slower than local checkpointing but more fault-tolerant.
 
+### CLASS_NOT_OVERRIDE_EXPECTED_METHOD
+
+[SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
+
+`<className>` must override either `<m1>` or `<m2>`.
+
 ### CLASS_UNSUPPORTED_BY_MAP_OBJECTS
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
@@ -1504,6 +1510,12 @@ For more details see [NOT_A_CONSTANT_STRING](sql-error-conditions-not-a-constant
 
 Operation `<operation>` is not allowed for `<tableIdentWithDB>` because it is not a partitioned table.
 
+### NOT_A_UNRESOLVED_ENCODER
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Unresolved encoder expected, but `<attr>` was found.
+
 ### [NOT_NULL_CONSTRAINT_VIOLATION](sql-error-conditions-not-null-constraint-violation-error-class.html)
 
 [SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2183,6 +2195,12 @@ For more details see [UNSUPPORTED_DEFAULT_VALUE](sql-error-conditions-unsupporte
 The deserializer is not supported:
 
 For more details see [UNSUPPORTED_DESERIALIZER](sql-error-conditions-unsupported-deserializer-error-class.html)
+
+### UNSUPPORTED_ENCODER
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Only expression encoders are supported for now.
 
 ### UNSUPPORTED_EXPRESSION_GENERATED_COLUMN
 
