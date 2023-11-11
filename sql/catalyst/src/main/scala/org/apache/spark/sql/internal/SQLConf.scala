@@ -245,6 +245,13 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
+  val MAPRED_MAX_SPLIT_SIZE_BY_TABLE =
+    buildConf("spark.hadoop.mapred.max.split.size.by.table")
+      .doc("Set hdfs sharding size through table. eg tablename1:size1;tablename2:size2.")
+      .version("3.2.0")
+      .stringConf
+      .createOptional
+
   val MULTI_COMMUTATIVE_OP_OPT_THRESHOLD =
     buildConf("spark.sql.analyzer.canonicalization.multiCommutativeOpMemoryOptThreshold")
       .internal()
@@ -4761,6 +4768,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def streamingNoDataMicroBatchesEnabled: Boolean =
     getConf(STREAMING_NO_DATA_MICRO_BATCHES_ENABLED)
+
+  def mapredMaxSplitSizeByTable: Option[String] = getConf(MAPRED_MAX_SPLIT_SIZE_BY_TABLE)
 
   def streamingMetricsEnabled: Boolean = getConf(STREAMING_METRICS_ENABLED)
 

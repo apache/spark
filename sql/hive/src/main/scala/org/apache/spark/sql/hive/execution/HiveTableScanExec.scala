@@ -101,6 +101,16 @@ case class HiveTableScanExec(
     val c = sparkSession.sessionState.newHadoopConf()
     // append columns ids and names before broadcast
     addColumnMetadataToConf(c)
+
+    conf.mapredMaxSplitSizeByTable.getOrElse("").split(";").map {
+      tableSize =>
+        val tableSizeList = tableSize.split(":")
+        if (tableSizeList.size == 2) {
+          if (relation.tableMeta.qualifiedName.equals(tableSizeList(0))) {
+            c.set("mapreduce.input.fileinputformat.split.maxsize", tableSizeList(1))
+          }
+        }
+    }
     c
   }
 
