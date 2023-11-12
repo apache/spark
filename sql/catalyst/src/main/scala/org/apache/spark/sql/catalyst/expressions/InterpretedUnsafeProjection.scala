@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{UserDefinedType, _}
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * An interpreted unsafe projection. This class reuses the [[UnsafeRow]] it produces, a consumer
@@ -35,7 +36,8 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
   import InterpretedUnsafeProjection._
 
   private[this] val subExprEliminationEnabled = SQLConf.get.subexpressionEliminationEnabled
-  private[this] val exprs = prepareExpressions(expressions, subExprEliminationEnabled)
+  private[this] val exprs =
+    prepareExpressions(expressions.toImmutableArraySeq, subExprEliminationEnabled)
 
   /** Number of (top level) fields in the resulting row. */
   private[this] val numFields = expressions.length

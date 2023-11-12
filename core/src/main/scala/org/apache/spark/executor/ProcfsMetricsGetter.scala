@@ -28,6 +28,7 @@ import scala.util.Try
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 
@@ -72,7 +73,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       // This can be simplified in java9:
       // https://docs.oracle.com/javase/9/docs/api/java/lang/ProcessHandle.html
       val cmd = Array("bash", "-c", "echo $PPID")
-      val out = Utils.executeAndGetOutput(cmd)
+      val out = Utils.executeAndGetOutput(cmd.toImmutableArraySeq)
       Integer.parseInt(out.split("\n")(0))
     }
     catch {
@@ -90,7 +91,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
     }
     try {
       val cmd = Array("getconf", "PAGESIZE")
-      val out = Utils.executeAndGetOutput(cmd)
+      val out = Utils.executeAndGetOutput(cmd.toImmutableArraySeq)
       Integer.parseInt(out.split("\n")(0))
     } catch {
       case e: Exception =>

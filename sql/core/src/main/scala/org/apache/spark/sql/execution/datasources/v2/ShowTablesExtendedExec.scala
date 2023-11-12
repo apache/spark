@@ -32,7 +32,6 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits.TableHelper
-import org.apache.spark.sql.types.StructType
 
 /**
  * Physical plan node for showing tables without partition, Show the information of tables.
@@ -109,9 +108,7 @@ case class ShowTablesExtendedExec(
     }
 
     // Partition Provider & Partition Columns
-    var partitionColumns = new StructType()
     if (table.supportsPartitions && table.asPartitionable.partitionSchema().nonEmpty) {
-      partitionColumns = table.asPartitionable.partitionSchema()
       results.put("Partition Provider", "Catalog")
       results.put("Partition Columns", table.asPartitionable.partitionSchema().map(
         field => quoteIdentifier(field.name)).mkString("[", ", ", "]"))

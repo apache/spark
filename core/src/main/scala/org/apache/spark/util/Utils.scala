@@ -77,6 +77,7 @@ import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, Serializer, SerializerInstance}
 import org.apache.spark.status.api.v1.{StackTrace, ThreadStackTrace}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.{Utils => CUtils}
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
@@ -839,7 +840,7 @@ private[spark] object Utils
    * uses a local random number generator, avoiding inter-thread contention.
    */
   def randomize[T: ClassTag](seq: IterableOnce[T]): Seq[T] = {
-    randomizeInPlace(seq.iterator.toArray)
+    randomizeInPlace(seq.iterator.toArray).toImmutableArraySeq
   }
 
   /**
@@ -2092,7 +2093,7 @@ private[spark] object Utils
       } else ""
       val locking = monitors.get(idx).map(mi => s"\t-  locked $mi\n").getOrElse("")
       s"${frame.toString}\n$locked$locking"
-    })
+    }.toImmutableArraySeq)
 
     val synchronizers = threadInfo.getLockedSynchronizers.map(_.toString)
     val monitorStrs = monitors.values.toSeq
@@ -2103,8 +2104,8 @@ private[spark] object Utils
       stackTrace,
       if (threadInfo.getLockOwnerId < 0) None else Some(threadInfo.getLockOwnerId),
       Option(threadInfo.getLockInfo).map(_.lockString).getOrElse(""),
-      synchronizers ++ monitorStrs,
-      synchronizers,
+      (synchronizers ++ monitorStrs).toImmutableArraySeq,
+      synchronizers.toImmutableArraySeq,
       monitorStrs,
       Option(threadInfo.getLockName),
       Option(threadInfo.getLockOwnerName),
@@ -2121,6 +2122,7 @@ private[spark] object Utils
     conf.getAll
       .filter { case (k, _) => filterKey(k) }
       .map { case (k, v) => s"-D$k=$v" }
+      .toImmutableArraySeq
   }
 
   /**
@@ -2691,7 +2693,7 @@ private[spark] object Utils
   }
 
   def stringToSeq(str: String): Seq[String] = {
-    str.split(",").map(_.trim()).filter(_.nonEmpty)
+    str.split(",").map(_.trim()).filter(_.nonEmpty).toImmutableArraySeq
   }
 
   /**

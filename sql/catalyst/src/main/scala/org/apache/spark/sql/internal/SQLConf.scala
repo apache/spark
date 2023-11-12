@@ -34,6 +34,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
@@ -1997,7 +1998,7 @@ object SQLConf {
         "use fully qualified class names to specify the codec. Default codec is lz4.")
       .version("3.1.0")
       .stringConf
-      .createWithDefault("lz4")
+      .createWithDefault(CompressionCodec.LZ4)
 
   val CHECKPOINT_RENAMEDFILE_CHECK_ENABLED =
     buildConf("spark.sql.streaming.checkpoint.renamedFileCheck.enabled")
@@ -2660,6 +2661,16 @@ object SQLConf {
         "the total number of files of the table is very large, this can be expensive and slow " +
         "down data change commands.")
       .version("2.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val UPDATE_PART_STATS_IN_ANALYZE_TABLE_ENABLED =
+    buildConf("spark.sql.statistics.updatePartitionStatsInAnalyzeTable.enabled")
+      .doc("When this config is enabled, Spark will also update partition statistics in analyze " +
+        "table command (i.e., ANALYZE TABLE .. COMPUTE STATISTICS [NOSCAN]). Note the command " +
+        "will also become more expensive. When this config is disabled, Spark will only " +
+        "update table level statistics.")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -5111,6 +5122,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def planStatsEnabled: Boolean = getConf(SQLConf.PLAN_STATS_ENABLED)
 
   def autoSizeUpdateEnabled: Boolean = getConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED)
+
+  def updatePartStatsInAnalyzeTableEnabled: Boolean =
+    getConf(SQLConf.UPDATE_PART_STATS_IN_ANALYZE_TABLE_ENABLED)
 
   def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
 

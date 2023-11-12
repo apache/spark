@@ -139,7 +139,13 @@ class SparkConnectSessionManager extends Logging {
   }
 
   private def newIsolatedSession(): SparkSession = {
-    SparkSession.active.newSession()
+    val active = SparkSession.active
+    if (active.sparkContext.isStopped) {
+      assert(SparkSession.getDefaultSession.nonEmpty)
+      SparkSession.getDefaultSession.get.newSession()
+    } else {
+      active.newSession()
+    }
   }
 
   private def validateSessionCreate(key: SessionKey): Unit = {

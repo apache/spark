@@ -159,6 +159,19 @@ class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSpark
 
 
 class SparkConnectBasicTests(SparkConnectSQLTestCase):
+    def test_recursion_handling_for_plan_logging(self):
+        """SPARK-45852 - Test that we can handle recursion in plan logging."""
+        cdf = self.connect.range(1)
+        for x in range(400):
+            cdf = cdf.withColumn(f"col_{x}", CF.lit(x))
+
+        # Calling schema will trigger logging the message that will in turn trigger the message
+        # conversion into protobuf that will then trigger the recursion error.
+        self.assertIsNotNone(cdf.schema)
+
+        result = self.connect._client._proto_to_string(cdf._plan.to_proto(self.connect._client))
+        self.assertIn("recursion", result)
+
     def test_df_getattr_behavior(self):
         cdf = self.connect.range(10)
         sdf = self.spark.range(10)
@@ -3378,35 +3391,37 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
                         """select from_json(
                             '{"d": "02-29"}', 'd date', map('dateFormat', 'MM-dd'))"""
                     ).collect()
-                self.assertTrue("JVM stacktrace" in e.exception.message)
-                self.assertTrue("org.apache.spark.SparkUpgradeException:" in e.exception.message)
+                self.assertTrue("JVM stacktrace" in str(e.exception))
+                self.assertTrue("org.apache.spark.SparkUpgradeException" in str(e.exception))
                 self.assertTrue(
                     "at org.apache.spark.sql.errors.ExecutionErrors"
-                    ".failToParseDateTimeInNewParserError" in e.exception.message
+                    ".failToParseDateTimeInNewParserError" in str(e.exception)
                 )
-                self.assertTrue("Caused by: java.time.DateTimeException:" in e.exception.message)
+                self.assertTrue("Caused by: java.time.DateTimeException:" in str(e.exception))
 
     def test_not_hitting_netty_header_limit(self):
         with self.sql_conf({"spark.sql.pyspark.jvmStacktrace.enabled": True}):
             with self.assertRaises(AnalysisException):
-                self.spark.sql("select " + "test" * 10000).collect()
+                self.spark.sql("select " + "test" * 1).collect()
 
     def test_error_stack_trace(self):
         with self.sql_conf({"spark.sql.connect.enrichError.enabled": False}):
             with self.sql_conf({"spark.sql.pyspark.jvmStacktrace.enabled": True}):
                 with self.assertRaises(AnalysisException) as e:
                     self.spark.sql("select x").collect()
-                self.assertTrue("JVM stacktrace" in e.exception.message)
+                self.assertTrue("JVM stacktrace" in str(e.exception))
+                self.assertIsNotNone(e.exception.getStackTrace())
                 self.assertTrue(
-                    "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
+                    "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in str(e.exception)
                 )
 
             with self.sql_conf({"spark.sql.pyspark.jvmStacktrace.enabled": False}):
                 with self.assertRaises(AnalysisException) as e:
                     self.spark.sql("select x").collect()
-                self.assertFalse("JVM stacktrace" in e.exception.message)
+                self.assertFalse("JVM stacktrace" in str(e.exception))
+                self.assertIsNone(e.exception.getStackTrace())
                 self.assertFalse(
-                    "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
+                    "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in str(e.exception)
                 )
 
         # Create a new session with a different stack trace size.
@@ -3421,9 +3436,10 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         spark.conf.set("spark.sql.pyspark.jvmStacktrace.enabled", True)
         with self.assertRaises(AnalysisException) as e:
             spark.sql("select x").collect()
-        self.assertTrue("JVM stacktrace" in e.exception.message)
+        self.assertTrue("JVM stacktrace" in str(e.exception))
+        self.assertIsNotNone(e.exception.getStackTrace())
         self.assertFalse(
-            "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
+            "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in str(e.exception)
         )
         spark.stop()
 

@@ -484,6 +484,7 @@ def assertDataFrameEqual(
     ignoreColumnType: bool = False,
     maxErrors: Optional[int] = None,
     showOnlyDiff: bool = False,
+    includeDiffRows=False,
 ):
     r"""
     A util function to assert equality between `actual` and `expected`
@@ -559,6 +560,11 @@ def assertDataFrameEqual(
         If set to `True`, the error message will only include rows that are different.
         If set to `False` (default), the error message will include all rows
         (when there is at least one row that is different).
+
+        .. versionadded:: 4.0.0
+    includeDiffRows: bool, False
+        If set to `True`, the unequal rows are included in PySparkAssertionError for further
+        debugging. If set to `False` (default), the unequal rows are not returned as a data set.
 
         .. versionadded:: 4.0.0
 
@@ -704,6 +710,24 @@ def assertDataFrameEqual(
     *** expected ***
     ! Row(_1=2, _2='X')
     ! Row(_1=3, _2='Y')
+
+    The `includeDiffRows` parameter can be used to include the rows that did not match
+    in the PySparkAssertionError. This can be useful for debugging or further analysis.
+
+    >>> df1 = spark.createDataFrame(
+    ...     data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)], schema=["id", "amount"])
+    >>> df2 = spark.createDataFrame(
+    ...     data=[("1", 1001.00), ("2", 3000.00), ("3", 2003.00)], schema=["id", "amount"])
+    >>> try:
+    ...     assertDataFrameEqual(df1, df2, includeDiffRows=True)
+    ... except PySparkAssertionError as e:
+    ...     spark.createDataFrame(e.data).show()  # doctest: +NORMALIZE_WHITESPACE
+    +-----------+-----------+
+    |         _1|         _2|
+    +-----------+-----------+
+    |{1, 1000.0}|{1, 1001.0}|
+    |{3, 2000.0}|{3, 2003.0}|
+    +-----------+-----------+
     """
     if actual is None and expected is None:
         return True
@@ -843,7 +867,8 @@ def assertDataFrameEqual(
     ):
         zipped = list(zip_longest(rows1, rows2))
         diff_rows_cnt = 0
-        diff_rows = False
+        diff_rows = []
+        has_diff_rows = False
 
         rows_str1 = ""
         rows_str2 = ""
@@ -852,7 +877,9 @@ def assertDataFrameEqual(
         for r1, r2 in zipped:
             if not compare_rows(r1, r2):
                 diff_rows_cnt += 1
-                diff_rows = True
+                has_diff_rows = True
+                if includeDiffRows:
+                    diff_rows.append((r1, r2))
                 rows_str1 += str(r1) + "\n"
                 rows_str2 += str(r2) + "\n"
                 if maxErrors is not None and diff_rows_cnt >= maxErrors:
@@ -865,14 +892,14 @@ def assertDataFrameEqual(
             actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=len(zipped)
         )
 
-        if diff_rows:
+        if has_diff_rows:
             error_msg = "Results do not match: "
             percent_diff = (diff_rows_cnt / len(zipped)) * 100
             error_msg += "( %.5f %% )" % percent_diff
             error_msg += "\n" + "\n".join(generated_diff)
+            data = diff_rows if includeDiffRows else None
             raise PySparkAssertionError(
-                error_class="DIFFERENT_ROWS",
-                message_parameters={"error_msg": error_msg},
+                error_class="DIFFERENT_ROWS", message_parameters={"error_msg": error_msg}, data=data
             )
 
     # only compare schema if expected is not a List

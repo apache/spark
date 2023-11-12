@@ -35,6 +35,7 @@ import org.apache.spark.api.java.function.{Function => JFunction, Function2 => J
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -375,7 +376,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def collectPartitions(partitionIds: Array[Int]): Array[JList[T]] = {
     // This is useful for implementing `take` from other language frontends
     // like Python where the data is serialized.
-    val res = context.runJob(rdd, (it: Iterator[T]) => it.toArray, partitionIds)
+    val res = context.runJob(rdd, (it: Iterator[T]) => it.toArray, partitionIds.toImmutableArraySeq)
     res.map(_.toSeq.asJava)
   }
 

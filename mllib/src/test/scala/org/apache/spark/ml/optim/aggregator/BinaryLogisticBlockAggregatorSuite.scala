@@ -22,6 +22,7 @@ import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.util.ArrayImplicits._
 
 class BinaryLogisticBlockAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -57,7 +58,7 @@ class BinaryLogisticBlockAggregatorSuite extends SparkFunSuite with MLlibTestSpa
       fitIntercept: Boolean,
       fitWithMean: Boolean): BinaryLogisticBlockAggregator = {
     val (featuresSummarizer, _) =
-      Summarizer.getClassificationSummarizers(sc.parallelize(instances))
+      Summarizer.getClassificationSummarizers(sc.parallelize(instances.toImmutableArraySeq))
     val featuresStd = featuresSummarizer.std.toArray
     val featuresMean = featuresSummarizer.mean.toArray
     val inverseStd = featuresStd.map(std => if (std != 0) 1.0 / std else 0.0)
@@ -115,7 +116,7 @@ class BinaryLogisticBlockAggregatorSuite extends SparkFunSuite with MLlibTestSpa
     val numFeatures = instances.head.features.size
     val coefWithIntercept = Vectors.dense(Array.fill(numFeatures + 1)(rng.nextDouble()))
     val coefWithoutIntercept = Vectors.dense(Array.fill(numFeatures)(rng.nextDouble()))
-    val block = InstanceBlock.fromInstances(instances)
+    val block = InstanceBlock.fromInstances(instances.toImmutableArraySeq)
 
     val aggIntercept = getNewAggregator(instances, coefWithIntercept,
       fitIntercept = true, fitWithMean = false)
@@ -132,7 +133,7 @@ class BinaryLogisticBlockAggregatorSuite extends SparkFunSuite with MLlibTestSpa
     val coefVec = Vectors.dense(1.0, 2.0)
     val numFeatures = instances.head.features.size
     val (featuresSummarizer, _) =
-      Summarizer.getClassificationSummarizers(sc.parallelize(instances))
+      Summarizer.getClassificationSummarizers(sc.parallelize(instances.toImmutableArraySeq))
     val featuresStd = featuresSummarizer.std
     val stdCoefVec = Vectors.dense(Array.tabulate(coefVec.size)(i => coefVec(i) / featuresStd(i)))
     val weightSum = instances.map(_.weight).sum
@@ -154,7 +155,7 @@ class BinaryLogisticBlockAggregatorSuite extends SparkFunSuite with MLlibTestSpa
     Seq(1, 2, 4).foreach { blockSize =>
       val blocks1 = scaledInstances
         .grouped(blockSize)
-        .map(seq => InstanceBlock.fromInstances(seq))
+        .map(seq => InstanceBlock.fromInstances(seq.toImmutableArraySeq))
         .toArray
       val blocks2 = blocks1.map { block =>
         new InstanceBlock(block.labels, block.weights, block.matrix.toSparseRowMajor)
@@ -175,7 +176,7 @@ class BinaryLogisticBlockAggregatorSuite extends SparkFunSuite with MLlibTestSpa
     val interceptValue = 1.0
     val numFeatures = instances.head.features.size
     val (featuresSummarizer, _) =
-      Summarizer.getClassificationSummarizers(sc.parallelize(instances))
+      Summarizer.getClassificationSummarizers(sc.parallelize(instances.toImmutableArraySeq))
     val featuresStd = featuresSummarizer.std
     val stdCoefVec = Vectors.dense(Array.tabulate(coefVec.size)(i => coefVec(i) / featuresStd(i)))
     val weightSum = instances.map(_.weight).sum
@@ -199,7 +200,7 @@ class BinaryLogisticBlockAggregatorSuite extends SparkFunSuite with MLlibTestSpa
     Seq(1, 2, 4).foreach { blockSize =>
       val blocks1 = scaledInstances
         .grouped(blockSize)
-        .map(seq => InstanceBlock.fromInstances(seq))
+        .map(seq => InstanceBlock.fromInstances(seq.toImmutableArraySeq))
         .toArray
       val blocks2 = blocks1.map { block =>
         new InstanceBlock(block.labels, block.weights, block.matrix.toSparseRowMajor)
@@ -220,7 +221,7 @@ class BinaryLogisticBlockAggregatorSuite extends SparkFunSuite with MLlibTestSpa
     val interceptValue = 1.0
     val numFeatures = instances.head.features.size
     val (featuresSummarizer, _) =
-      Summarizer.getClassificationSummarizers(sc.parallelize(instances))
+      Summarizer.getClassificationSummarizers(sc.parallelize(instances.toImmutableArraySeq))
     val featuresStd = featuresSummarizer.std
     val featuresMean = featuresSummarizer.mean
     val stdCoefVec = Vectors.dense(Array.tabulate(coefVec.size)(i => coefVec(i) / featuresStd(i)))
@@ -247,7 +248,7 @@ class BinaryLogisticBlockAggregatorSuite extends SparkFunSuite with MLlibTestSpa
     Seq(1, 2, 4).foreach { blockSize =>
       val blocks1 = scaledInstances
         .grouped(blockSize)
-        .map(seq => InstanceBlock.fromInstances(seq))
+        .map(seq => InstanceBlock.fromInstances(seq.toImmutableArraySeq))
         .toArray
       val blocks2 = blocks1.map { block =>
         new InstanceBlock(block.labels, block.weights, block.matrix.toSparseRowMajor)
@@ -277,7 +278,7 @@ class BinaryLogisticBlockAggregatorSuite extends SparkFunSuite with MLlibTestSpa
       val aggConstantFeature = getNewAggregator(instancesConstantFeature,
         coefVec, fitIntercept = fitIntercept, fitWithMean = fitWithMean)
       aggConstantFeature
-        .add(InstanceBlock.fromInstances(standardize(instancesConstantFeature)))
+        .add(InstanceBlock.fromInstances(standardize(instancesConstantFeature).toImmutableArraySeq))
       val grad = aggConstantFeature.gradient
 
       val coefVecFiltered = if (fitIntercept) {
@@ -288,7 +289,8 @@ class BinaryLogisticBlockAggregatorSuite extends SparkFunSuite with MLlibTestSpa
       val aggConstantFeatureFiltered = getNewAggregator(instancesConstantFeatureFiltered,
         coefVecFiltered, fitIntercept = fitIntercept, fitWithMean = fitWithMean)
       aggConstantFeatureFiltered
-        .add(InstanceBlock.fromInstances(standardize(instancesConstantFeatureFiltered)))
+        .add(InstanceBlock.fromInstances(standardize(instancesConstantFeatureFiltered)
+          .toImmutableArraySeq))
       val gradFiltered = aggConstantFeatureFiltered.gradient
 
       // constant features should not affect gradient

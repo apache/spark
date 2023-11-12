@@ -31,7 +31,6 @@ import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.test.ConnectFunSuite
 
@@ -210,19 +209,15 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
   }
 
   for ((name, constructor) <- GrpcExceptionConverter.errorFactory) {
-    test(s"error framework parameters - ${name}") {
+    test(s"error framework parameters - $name") {
       val testParams = GrpcExceptionConverter.ErrorParams(
-        message = "test message",
+        message = "Found duplicate keys `abc`",
         cause = None,
-        errorClass = Some("test error class"),
-        messageParameters = Map("key" -> "value"),
+        errorClass = Some("DUPLICATE_KEY"),
+        messageParameters = Map("keyColumn" -> "`abc`"),
         queryContext = Array.empty)
       val error = constructor(testParams)
-      if (!error.isInstanceOf[ParseException]) {
-        assert(error.getMessage == testParams.message)
-      } else {
-        assert(error.getMessage == s"\n${testParams.message}")
-      }
+      assert(error.getMessage.contains(testParams.message))
       assert(error.getCause == null)
       error match {
         case sparkThrowable: SparkThrowable =>
@@ -391,6 +386,54 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
       retryHandler.retry { dummyFn.fn() }
     }
     assert(dummyFn.counter == 2)
+  }
+
+  test("SPARK-45871: Client execute iterator.toSeq consumes the reattachable iterator") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .enableReattachableExecute()
+      .build()
+    val session = SparkSession.builder().client(client).create()
+    val cmd = session.newCommand(b =>
+      b.setSqlCommand(
+        proto.SqlCommand
+          .newBuilder()
+          .setSql("select * from range(10000000)")))
+    val plan = proto.Plan.newBuilder().setCommand(cmd)
+    val iter = client.execute(plan.build())
+    val reattachableIter =
+      ExecutePlanResponseReattachableIterator.fromIterator(iter)
+    iter.toSeq
+    // In several places in SparkSession, we depend on `.toSeq` to consume and close the iterator.
+    // If this assertion fails, we need to double check the correctness of that.
+    // In scala 2.12 `s.c.TraversableOnce#toSeq` builds an `immutable.Stream`,
+    // which is a tail lazy structure and this would fail.
+    // In scala 2.13 `s.c.IterableOnceOps#toSeq` builds an `immutable.Seq` which is not
+    // lazy and will consume and close the iterator.
+    assert(reattachableIter.resultComplete)
+  }
+
+  test("SPARK-45871: Client execute iterator.foreach consumes the reattachable iterator") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .enableReattachableExecute()
+      .build()
+    val session = SparkSession.builder().client(client).create()
+    val cmd = session.newCommand(b =>
+      b.setSqlCommand(
+        proto.SqlCommand
+          .newBuilder()
+          .setSql("select * from range(10000000)")))
+    val plan = proto.Plan.newBuilder().setCommand(cmd)
+    val iter = client.execute(plan.build())
+    val reattachableIter =
+      ExecutePlanResponseReattachableIterator.fromIterator(iter)
+    iter.foreach(_ => ())
+    assert(reattachableIter.resultComplete)
   }
 }
 

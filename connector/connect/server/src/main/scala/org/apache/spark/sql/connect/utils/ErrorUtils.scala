@@ -164,6 +164,20 @@ private[connect] object ErrorUtils extends Logging {
         "classes",
         JsonMethods.compact(JsonMethods.render(allClasses(st.getClass).map(_.getName))))
 
+    // Add the SQL State and Error Class to the response metadata of the ErrorInfoObject.
+    st match {
+      case e: SparkThrowable =>
+        val state = e.getSqlState
+        if (state != null && state.nonEmpty) {
+          errorInfo.putMetadata("sqlState", state)
+        }
+        val errorClass = e.getErrorClass
+        if (errorClass != null && errorClass.nonEmpty) {
+          errorInfo.putMetadata("errorClass", errorClass)
+        }
+      case _ =>
+    }
+
     if (sessionHolderOpt.exists(_.session.conf.get(Connect.CONNECT_ENRICH_ERROR_ENABLED))) {
       // Generate a new unique key for this exception.
       val errorId = UUID.randomUUID().toString

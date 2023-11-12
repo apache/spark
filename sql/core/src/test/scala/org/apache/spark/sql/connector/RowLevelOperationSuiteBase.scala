@@ -35,6 +35,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 abstract class RowLevelOperationSuiteBase
   extends QueryTest with SharedSparkSession with BeforeAndAfter with AdaptiveSparkPlanHelper {
@@ -91,7 +92,7 @@ abstract class RowLevelOperationSuiteBase
 
   private def toDF(jsonData: String, schemaString: String = null): DataFrame = {
     val jsonRows = jsonData.split("\\n").filter(str => str.trim.nonEmpty)
-    val jsonDS = spark.createDataset(jsonRows)(Encoders.STRING)
+    val jsonDS = spark.createDataset(jsonRows.toImmutableArraySeq)(Encoders.STRING)
     if (schemaString == null) {
       spark.read.json(jsonDS)
     } else {

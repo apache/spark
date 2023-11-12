@@ -31,6 +31,7 @@ import org.apache.spark.sql.internal.SQLConf.STATE_STORE_PROVIDER_CLASS
 import org.apache.spark.sql.internal.StaticSQLConf.ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST
 import org.apache.spark.sql.streaming.ui.UIUtils._
 import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}
+import org.apache.spark.util.ArrayImplicits._
 
 private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
   extends WebUIPage("statistics") with Logging {
@@ -166,7 +167,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
           new GraphUIData(
             "watermark-gap-timeline",
             "watermark-gap-histogram",
-            watermarkData,
+            watermarkData.toImmutableArraySeq,
             minBatchTime,
             maxBatchTime,
             0,
@@ -222,7 +223,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         new GraphUIData(
           "aggregated-num-total-state-rows-timeline",
           "aggregated-num-total-state-rows-histogram",
-          numRowsTotalData,
+          numRowsTotalData.toImmutableArraySeq,
           minBatchTime,
           maxBatchTime,
           0,
@@ -234,7 +235,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         new GraphUIData(
           "aggregated-num-updated-state-rows-timeline",
           "aggregated-num-updated-state-rows-histogram",
-          numRowsUpdatedData,
+          numRowsUpdatedData.toImmutableArraySeq,
           minBatchTime,
           maxBatchTime,
           0,
@@ -246,7 +247,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         new GraphUIData(
           "aggregated-state-memory-used-bytes-timeline",
           "aggregated-state-memory-used-bytes-histogram",
-          memoryUsedBytesData,
+          memoryUsedBytesData.toImmutableArraySeq,
           minBatchTime,
           maxBatchTime,
           0,
@@ -258,7 +259,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         new GraphUIData(
           "aggregated-num-rows-dropped-by-watermark-timeline",
           "aggregated-num-rows-dropped-by-watermark-histogram",
-          numRowsDroppedByWatermarkData,
+          numRowsDroppedByWatermarkData.toImmutableArraySeq,
           minBatchTime,
           maxBatchTime,
           0,
@@ -335,7 +336,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
           new GraphUIData(
             s"aggregated-$metricName-timeline",
             s"aggregated-$metricName-histogram",
-            data,
+            data.toImmutableArraySeq,
             minBatchTime,
             maxBatchTime,
             0,
@@ -408,7 +409,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
       new GraphUIData(
         "input-rate-timeline",
         "input-rate-histogram",
-        inputRateData,
+        inputRateData.toImmutableArraySeq,
         minBatchTime,
         maxBatchTime,
         minRecordRate,
@@ -420,7 +421,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
       new GraphUIData(
         "process-rate-timeline",
         "process-rate-histogram",
-        processRateData,
+        processRateData.toImmutableArraySeq,
         minBatchTime,
         maxBatchTime,
         minProcessRate,
@@ -432,7 +433,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
       new GraphUIData(
         "input-rows-timeline",
         "input-rows-histogram",
-        inputRowsData,
+        inputRowsData.toImmutableArraySeq,
         minBatchTime,
         maxBatchTime,
         minRows,
@@ -444,7 +445,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
       new GraphUIData(
         "batch-duration-timeline",
         "batch-duration-histogram",
-        batchDurations,
+        batchDurations.toImmutableArraySeq,
         minBatchTime,
         maxBatchTime,
         minBatchDuration,
@@ -531,7 +532,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
 
     generateTimeToValues(operationDurationData) ++
       generateFormattedTimeTipStrings(batchToTimestamps) ++
-      generateTimeMap(batchTimes) ++ generateTimeTipStrings(batchToTimestamps) ++
+      generateTimeMap(batchTimes.toImmutableArraySeq) ++
+      generateTimeTipStrings(batchToTimestamps) ++
       table ++ jsCollector.toHtml
   }
 }
