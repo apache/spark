@@ -375,9 +375,10 @@ private[client] object GrpcExceptionConverter {
 
     if (errorClass != null) {
       builder.setSparkThrowable(
-        FetchErrorDetailsResponse.SparkThrowable.newBuilder()
-        .setErrorClass(errorClass)
-        .build())
+        FetchErrorDetailsResponse.SparkThrowable
+          .newBuilder()
+          .setErrorClass(errorClass)
+          .build())
     }
 
     errorsToThrowable(0, Seq(builder.build()))
