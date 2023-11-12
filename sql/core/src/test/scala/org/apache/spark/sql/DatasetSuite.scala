@@ -270,6 +270,13 @@ class DatasetSuite extends QueryTest
       (ClassData("one", 2), 1L), (ClassData("two", 3), 1L))
   }
 
+  test("SPARK-45896: seq of option of seq") {
+    val ds = Seq(DataSeqOptSeq(Seq(Some(Seq(0))))).toDS()
+    checkDataset(
+      ds,
+      DataSeqOptSeq(Seq(Some(List(0)))))
+  }
+
   test("select") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkDataset(
@@ -2560,6 +2567,8 @@ case class ClassNullableData(a: String, b: Integer)
 
 case class NestedStruct(f: ClassData)
 case class DeepNestedStruct(f: NestedStruct)
+
+case class DataSeqOptSeq(a: Seq[Option[Seq[Int]]])
 
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using
