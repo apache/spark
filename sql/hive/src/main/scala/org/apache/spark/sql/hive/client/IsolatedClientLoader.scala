@@ -25,7 +25,6 @@ import java.util
 import scala.util.Try
 
 import org.apache.commons.io.{FileUtils, IOUtils}
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.shims.ShimLoader
@@ -233,22 +232,16 @@ private[hive] class IsolatedClientLoader(
   private[hive] val classLoader: MutableURLClassLoader = {
     val isolatedClassLoader =
       if (isolationOn) {
-        val rootClassLoader: ClassLoader =
-          if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-            // In Java 9, the boot classloader can see few JDK classes. The intended parent
-            // classloader for delegation is now the platform classloader.
-            // See http://java9.wtf/class-loading/
-            val platformCL =
-            classOf[ClassLoader].getMethod("getPlatformClassLoader").
-              invoke(null).asInstanceOf[ClassLoader]
-            // Check to make sure that the root classloader does not know about Hive.
-            assert(Try(platformCL.loadClass("org.apache.hadoop.hive.conf.HiveConf")).isFailure)
-            platformCL
-          } else {
-            // The boot classloader is represented by null (the instance itself isn't accessible)
-            // and before Java 9 can see all JDK classes
-            null
-          }
+        val rootClassLoader: ClassLoader = {
+          // In Java 9, the boot classloader can see few JDK classes. The intended parent
+          // classloader for delegation is now the platform classloader.
+          // See http://java9.wtf/class-loading/
+          val platformCL = classOf[ClassLoader].getMethod("getPlatformClassLoader")
+            .invoke(null).asInstanceOf[ClassLoader]
+          // Check to make sure that the root classloader does not know about Hive.
+          assert(Try(platformCL.loadClass("org.apache.hadoop.hive.conf.HiveConf")).isFailure)
+          platformCL
+        }
         new URLClassLoader(allJars, rootClassLoader) {
           override def loadClass(name: String, resolve: Boolean): Class[_] = {
             val loaded = findLoadedClass(name)
