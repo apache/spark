@@ -204,34 +204,24 @@ private[client] object GrpcExceptionConverter {
         messageParameters = params.messageParameters,
         context = params.queryContext)),
     errorConstructor(params =>
-      new NamespaceAlreadyExistsException(
-        params.message,
-        params.errorClass,
-        params.messageParameters)),
+      new NamespaceAlreadyExistsException(params.errorClass.orNull, params.messageParameters)),
     errorConstructor(params =>
       new TableAlreadyExistsException(
-        params.message,
-        params.cause,
-        params.errorClass,
-        params.messageParameters)),
+        params.errorClass.orNull,
+        params.messageParameters,
+        params.cause)),
     errorConstructor(params =>
       new TempTableAlreadyExistsException(
-        params.message,
-        params.cause,
-        params.errorClass,
-        params.messageParameters)),
+        params.errorClass.orNull,
+        params.messageParameters,
+        params.cause)),
     errorConstructor(params =>
       new NoSuchDatabaseException(
-        params.message,
-        params.cause,
-        params.errorClass,
-        params.messageParameters)),
+        params.errorClass.orNull,
+        params.messageParameters,
+        params.cause)),
     errorConstructor(params =>
-      new NoSuchTableException(
-        params.message,
-        params.cause,
-        params.errorClass,
-        params.messageParameters)),
+      new NoSuchTableException(params.errorClass.orNull, params.messageParameters, params.cause)),
     errorConstructor[NumberFormatException](params =>
       new SparkNumberFormatException(
         params.message,
