@@ -24,6 +24,7 @@ import scala.jdk.CollectionConverters.MapHasAsJava
 import org.apache.spark.sql.catalyst.plans.logical.CollectMetrics
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
+import org.apache.spark.util.ArrayImplicits._
 
 
 /**
@@ -142,7 +143,7 @@ class Observation(val name: String) {
         case _ => false
       }) {
         val row = qe.observedMetrics.get(name)
-        this.metrics = row.map(r => r.getValuesMap[Any](r.schema.fieldNames))
+        this.metrics = row.map(r => r.getValuesMap[Any](r.schema.fieldNames.toImmutableArraySeq))
         if (metrics.isDefined) {
           notifyAll()
           unregister()

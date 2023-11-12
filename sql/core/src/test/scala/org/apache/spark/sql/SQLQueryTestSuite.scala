@@ -36,6 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 // scalastyle:off line.size.limit
@@ -401,7 +402,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       }
       queries.toSeq
     } else {
-      splitWithSemicolon(allCode).toSeq
+      splitWithSemicolon(allCode.toImmutableArraySeq).toSeq
     }
 
     // List of SQL queries to run
@@ -416,7 +417,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     })
 
     if (regenerateGoldenFiles) {
-      runQueries(queries, testCase, settings)
+      runQueries(queries, testCase, settings.toImmutableArraySeq)
     } else {
       // A config dimension has multiple config sets, and a config set has multiple configs.
       // - config dim:     Seq[Seq[(String, String)]]
@@ -438,7 +439,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
       configSets.foreach { configSet =>
         try {
-          runQueries(queries, testCase, settings ++ configSet)
+          runQueries(queries, testCase, (settings ++ configSet).toImmutableArraySeq)
         } catch {
           case e: Throwable =>
             val configs = configSet.map {
@@ -700,7 +701,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     // Filter out test files with invalid extensions such as temp files created
     // by vi (.swp), Mac (.DS_Store) etc.
     val filteredFiles = files.filter(_.getName.endsWith(validFileExtensions))
-    filteredFiles ++ dirs.flatMap(listFilesRecursively)
+    (filteredFiles ++ dirs.flatMap(listFilesRecursively)).toImmutableArraySeq
   }
 
   /** Load built-in test tables into the SparkSession. */

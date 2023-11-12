@@ -34,6 +34,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.receiver.WriteAheadLogBasedBlockHandler._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /** Testsuite for testing the network receiver behavior */
@@ -223,6 +224,7 @@ class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
       try {
         if (logDirectory.exists()) {
           logDirectory.listFiles().filter { _.getName.startsWith("log") }.map { _.toString }
+            .toImmutableArraySeq
         } else {
           Seq.empty
         }

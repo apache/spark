@@ -596,7 +596,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
     // Ensure that if all of the splits are empty, we remove the splits correctly
     testIgnoreEmptySplits(
-      data = Array.empty[Tuple2[String, String]],
+      data = Seq.empty[Tuple2[String, String]],
       actualPartitionNum = 1,
       expectedPartitionNum = 0)
 
@@ -639,7 +639,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
     // Ensure that if all of the splits are empty, we remove the splits correctly
     testIgnoreEmptySplits(
-      data = Array.empty[Tuple2[String, String]],
+      data = Seq.empty[Tuple2[String, String]],
       actualPartitionNum = 1,
       expectedPartitionNum = 0)
 

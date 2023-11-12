@@ -31,6 +31,7 @@ import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -440,7 +441,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
   /** Get all executor environment variables set on this SparkConf */
   def getExecutorEnv: Seq[(String, String)] = {
-    getAllWithPrefix("spark.executorEnv.")
+    getAllWithPrefix("spark.executorEnv.").toImmutableArraySeq
   }
 
   /**

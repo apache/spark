@@ -44,6 +44,7 @@ import org.apache.spark.sql.streaming.util.{MockSourceProvider, StreamManualCloc
 import org.apache.spark.sql.types.{StructType, TimestampType}
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
 import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 object FailureSingleton {
@@ -211,7 +212,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       }
 
       def stateOperatorProgresses: Seq[StateOperatorProgress] = {
-        lastExecutedBatch.stateOperators
+        lastExecutedBatch.stateOperators.toImmutableArraySeq
       }
     }
 

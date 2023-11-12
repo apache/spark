@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * An abstract class for row used internally in Spark SQL, which only contains the columns as
@@ -92,7 +93,7 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
       values(i) = get(i, fieldTypes(i))
       i += 1
     }
-    values
+    values.toImmutableArraySeq
   }
 
   def toSeq(schema: StructType): Seq[Any] = toSeq(schema.map(_.dataType))

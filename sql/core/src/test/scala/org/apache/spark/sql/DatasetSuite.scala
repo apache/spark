@@ -49,6 +49,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 
 case class TestDataPoint(x: Int, y: Double, s: String, t: TestDataPoint2)
 case class TestDataPoint2(x: Int, s: String)
@@ -1638,7 +1639,7 @@ class DatasetSuite extends QueryTest
       Route("b", "a", 1),
       Route("b", "a", 5),
       Route("b", "c", 6))
-    val ds = sparkContext.parallelize(data).toDF().as[Route]
+    val ds = sparkContext.parallelize(data.toImmutableArraySeq).toDF().as[Route]
 
     val grouped = ds.map(r => GroupedRoutes(r.src, r.dest, Seq(r)))
       .groupByKey(r => (r.src, r.dest))
@@ -2058,13 +2059,14 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-24569: Option of primitive types are mistakenly mapped to struct type") {
+    import org.apache.spark.util.ArrayImplicits._
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       val a = Seq(Some(1)).toDS()
       val b = Seq(Some(1.2)).toDS()
       val expected = Seq((Some(1), Some(1.2))).toDS()
       val joined = a.joinWith(b, lit(true))
       assert(joined.schema == expected.schema)
-      checkDataset(joined, expected.collect(): _*)
+      checkDataset(joined, expected.collect().toImmutableArraySeq: _*)
     }
   }
 
@@ -2078,7 +2080,8 @@ class DatasetSuite extends QueryTest
     val ds1 = spark.createDataset(rdd)
     val ds2 = spark.createDataset(rdd)(encoder)
     assert(ds1.schema == ds2.schema)
-    checkDataset(ds1.select("_2._2"), ds2.select("_2._2").collect(): _*)
+    import org.apache.spark.util.ArrayImplicits._
+    checkDataset(ds1.select("_2._2"), ds2.select("_2._2").collect().toImmutableArraySeq: _*)
   }
 
   test("SPARK-23862: Spark ExpressionEncoder should support Java Enum type from Scala") {

@@ -325,3 +325,13 @@ class ExecutePlanResponseReattachableIterator(
     release.build()
   }
 }
+
+private[connect] object ExecutePlanResponseReattachableIterator {
+  @scala.annotation.tailrec
+  private[connect] def fromIterator(
+      iter: Iterator[proto.ExecutePlanResponse]): ExecutePlanResponseReattachableIterator =
+    iter match {
+      case e: ExecutePlanResponseReattachableIterator => e
+      case w: WrappedCloseableIterator[proto.ExecutePlanResponse] => fromIterator(w.innerIterator)
+    }
+}

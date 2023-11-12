@@ -32,6 +32,7 @@ import org.apache.spark.sql.connect.client.GrpcRetryHandler.RetryPolicy
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.test.IntegrationTestUtils._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * An util class to start a local spark connect server in a different process for local E2E tests.
@@ -175,7 +176,7 @@ object SparkConnectServerUtils {
         (fileName.startsWith("scalatest") || fileName.startsWith("scalactic"))
       }
       .map(e => Paths.get(e).toUri)
-    spark.client.artifactManager.addArtifacts(jars)
+    spark.client.artifactManager.addArtifacts(jars.toImmutableArraySeq)
   }
 
   def createSparkSession(): SparkSession = {
