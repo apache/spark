@@ -165,7 +165,7 @@ private[sql] object GrpcRetryHandler extends Logging {
     private val policies: Seq[RetryPolicyState] = retryPolicies.map(_.toState)
 
     def canRetry(throwable: Throwable): Boolean = {
-      return policies.exists(p => p.canRetry(throwable))
+      policies.exists(p => p.canRetry(throwable))
     }
 
     def makeAttempt(): Option[T] = {
