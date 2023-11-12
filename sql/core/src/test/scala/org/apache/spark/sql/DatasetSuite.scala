@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
+import java.util.UUID
 
 import scala.util.Random
 
@@ -2460,6 +2461,34 @@ class DatasetSuite extends QueryTest
         new GenericRowWithSchema(Array("x", 2), rightFieldSchema)
     )
     assert(result == expected)
+  }
+
+  test("SPARK-45282: Coaleasced shuffle read is not compatible with hash partitioning") {
+
+    withSQLConf(
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key  -> "33554432",
+        SQLConf.COALESCE_PARTITIONS_PARALLELISM_FIRST.key -> "false",
+        SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
+      val data = (1 to 1000000).toDS().map(i => UUID.randomUUID().toString).persist()
+
+      val left = data.map(k => (k, 1))
+      val right = data.map(k => (k, k))
+
+      val left1 = left
+        .toDF("key", "value1")
+        .repartition(col("key"))
+        .persist()
+      left1.count()
+
+      val right1 = right
+        .toDF("key", "value2")
+        .repartition(col("key"))
+        .persist()
+
+      val join = left1.join(right1, "key")
+
+      assert(join.count() == 1000000)
+    }
   }
 }
 
