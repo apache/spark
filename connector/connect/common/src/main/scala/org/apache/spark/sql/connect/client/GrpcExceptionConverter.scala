@@ -168,7 +168,7 @@ private[client] object GrpcExceptionConverter {
   private[client] case class ErrorParams(
       message: String,
       cause: Option[Throwable],
-      // errorClass will only be set if the error is both enriched and SparkThrowable.
+      // errorClass will only be set if the error is SparkThrowable.
       errorClass: Option[String],
       // messageParameters will only be set if the error is both enriched and SparkThrowable.
       messageParameters: Map[String, String],
