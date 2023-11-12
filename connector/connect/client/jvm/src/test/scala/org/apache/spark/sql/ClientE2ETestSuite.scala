@@ -85,6 +85,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
                 |""".stripMargin)
             .collect()
         }
+        assert(ex.getErrorClass != null)
         if (enrichErrorEnabled) {
           assert(ex.getCause.isInstanceOf[DateTimeException])
         } else {

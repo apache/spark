@@ -168,7 +168,7 @@ private[client] object GrpcExceptionConverter {
   private[client] case class ErrorParams(
       message: String,
       cause: Option[Throwable],
-      // errorClass will only be set if the error is both enriched and SparkThrowable.
+      // errorClass will only be set if the error is SparkThrowable.
       errorClass: Option[String],
       // messageParameters will only be set if the error is both enriched and SparkThrowable.
       messageParameters: Map[String, String],
@@ -357,14 +357,20 @@ private[client] object GrpcExceptionConverter {
     implicit val formats = DefaultFormats
     val classes =
       JsonMethods.parse(info.getMetadataOrDefault("classes", "[]")).extract[Array[String]]
+    val errorClass = info.getMetadataOrDefault("errorClass", null)
+    val builder = FetchErrorDetailsResponse.Error
+      .newBuilder()
+      .setMessage(message)
+      .addAllErrorTypeHierarchy(classes.toImmutableArraySeq.asJava)
 
-    errorsToThrowable(
-      0,
-      Seq(
-        FetchErrorDetailsResponse.Error
+    if (errorClass != null) {
+      builder.setSparkThrowable(
+        FetchErrorDetailsResponse.SparkThrowable
           .newBuilder()
-          .setMessage(message)
-          .addAllErrorTypeHierarchy(classes.toImmutableArraySeq.asJava)
-          .build()))
+          .setErrorClass(errorClass)
+          .build())
+    }
+
+    errorsToThrowable(0, Seq(builder.build()))
   }
 }
