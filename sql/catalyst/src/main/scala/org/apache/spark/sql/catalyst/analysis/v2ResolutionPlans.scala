@@ -188,14 +188,15 @@ case class ResolvedFieldPosition(position: ColumnPosition) extends FieldPosition
 case class ResolvedPersistentView(
     catalog: CatalogPlugin,
     identifier: Identifier,
-    viewSchema: StructType) extends LeafNodeWithoutStats {
+    viewSchema: StructType,
+    comment: Option[String]) extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = Nil
 }
 
 /**
  * A plan containing resolved (global) temp views.
  */
-case class ResolvedTempView(identifier: Identifier, viewSchema: StructType)
+case class ResolvedTempView(identifier: Identifier, viewSchema: StructType, comment: Option[String])
   extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = Nil
 }

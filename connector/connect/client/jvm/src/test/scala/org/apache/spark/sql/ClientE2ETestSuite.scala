@@ -156,8 +156,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(ex.getErrorClass != null)
   }
 
-  test("throw NoSuchTableException") {
-    val ex = intercept[NoSuchTableException] {
+  test("table not found for spark.catalog.getTable") {
+    val ex = intercept[AnalysisException] {
       spark.catalog.getTable("test_table")
     }
     assert(ex.getErrorClass != null)

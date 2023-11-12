@@ -551,12 +551,12 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
   object ResolvedViewIdentifier {
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
-      case ResolvedPersistentView(catalog, ident, _) =>
+      case ResolvedPersistentView(catalog, ident, _, _) =>
         assert(isSessionCatalog(catalog))
         assert(ident.namespace().length == 1)
         Some(TableIdentifier(ident.name, Some(ident.namespace.head), Some(catalog.name)))
 
-      case ResolvedTempView(ident, _) => Some(ident.asTableIdentifier)
+      case ResolvedTempView(ident, _, _) => Some(ident.asTableIdentifier)
 
       case _ => None
     }
