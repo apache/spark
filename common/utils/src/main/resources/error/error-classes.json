@@ -6334,6 +6334,11 @@
       "Operation not allowed: <cmd> only works on table with location provided: <tableIdentWithDB>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_2450" : {
+    "message" : [
+      "No handler for UDF/UDAF/UDTF '<clazz>'"
+    ]
+  },
   "_LEGACY_ERROR_TEMP_3000" : {
     "message" : [
       "Unexpected Py4J server <class>."
