@@ -38,18 +38,21 @@ import org.apache.hadoop.hive.ql.plan.DropTableDesc.PartSpec
 import org.apache.hadoop.hive.ql.processors.{CommandProcessor, CommandProcessorFactory}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorConverters
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionsException, NoSuchPermanentFunctionException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTable, CatalogTablePartition, CatalogUtils, ExternalCatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateFormatter, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AtomicType, DateType, IntegralType, IntegralTypeExpression, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -552,18 +555,59 @@ private[client] class Shim_v2_0 extends Shim with Logging {
     dropOptions.purgeData(purge)
     dropOptions.ifExists(ignoreIfNotExists)
     recordHiveCall()
-    val table = hive.getTable(dbName, tableName)
-    val partSpecs = createPartSpecs(table, specs)
-    hive.dropPartitions(dbName, tableName, partSpecs, dropOptions)
+    try {
+      val table = hive.getTable(dbName, tableName)
+      val partSpecs = createPartSpecs(table, specs)
+      hive.dropPartitions(dbName, tableName, partSpecs, dropOptions)
+    } catch {
+      case e: IllegalArgumentException =>
+        logWarning(s"${e.getMessage}, falling back to drop partitions one by one.")
+        val matchingParts =
+          specs.flatMap { s =>
+            assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
+            // The provided spec here can be a partial spec, i.e. it will match all partitions
+            // whose specs are supersets of this partial spec. E.g. If a table has partitions
+            // (b='1', c='1') and (b='1', c='2'), a partial spec of (b='1') will match both.
+            val dropPartitionByName = SQLConf.get.metastoreDropPartitionsByName
+            if (dropPartitionByName) {
+              val partitionNames = hive.getPartitionNames(dbName, tableName, s.asJava, -1).asScala
+              if (partitionNames.isEmpty && !ignoreIfNotExists) {
+                throw new NoSuchPartitionsException(dbName, tableName, Seq(s))
+              }
+              partitionNames.map(HiveUtils.partitionNameToValues(_).toList.asJava)
+            } else {
+              val hiveTable = hive.getTable(dbName, tableName, true /* throw exception */)
+              val parts = hive.getPartitions(hiveTable, s.asJava).asScala
+              if (parts.isEmpty && !ignoreIfNotExists) {
+                throw new NoSuchPartitionsException(dbName, tableName, Seq(s))
+              }
+              parts.map(_.getValues)
+            }
+          }.distinct
+        matchingParts.foreach { partition =>
+          hive.dropPartition(dbName, tableName, partition, dropOptions)
+        }
+    }
   }
 
   private def createPartSpecs(table: Table, specs: Seq[TablePartitionSpec]): JList[PartSpec] = {
+    val inputOI = PrimitiveObjectInspectorFactory.javaStringObjectInspector
     val colTypes = table.getPartitionKeys.asScala.map(f => (f.getName, f.getType)).toMap
+    val partKeyToTypeInfoAndConverter = colTypes.map { case (partKey, partType) =>
+      val typeInfo = TypeInfoFactory.getPrimitiveTypeInfo(partType)
+      val outputOI = PrimitiveObjectInspectorFactory.getPrimitiveJavaObjectInspector(typeInfo)
+      (partKey, (typeInfo, ObjectInspectorConverters.getConverter(inputOI, outputOI)))
+    }
     val expressions = specs.map { case partSpec =>
       val expressions = partSpec.map { case (partKey, partVal) =>
         val colType = colTypes.get(partKey)
         assert(colType.isDefined, s"`$partKey` is not partition key.")
-        val typeInfo = TypeInfoFactory.getPrimitiveTypeInfo(colType.get)
+        val (typeInfo, converter) = partKeyToTypeInfoAndConverter.get(partKey).get
+        if (SQLConf.get.getConf(SQLConf.SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION)
+          && null == converter.convert(partVal)) {
+          throw new IllegalArgumentException(
+            s"Partition value '$partVal' cannot be cast to type '${colType.get}'")
+        }
         val column = new ExprNodeColumnDesc(typeInfo, partKey, null, true)
         makeBinaryPredicate("=", column, new ExprNodeConstantDesc(typeInfo, partVal))
       }.toSeq
