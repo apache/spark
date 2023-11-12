@@ -367,14 +367,19 @@ private[client] object GrpcExceptionConverter {
     implicit val formats = DefaultFormats
     val classes =
       JsonMethods.parse(info.getMetadataOrDefault("classes", "[]")).extract[Array[String]]
+    val errorClass = info.getMetadataOrDefault("errorClass", null)
+    val builder = FetchErrorDetailsResponse.Error
+      .newBuilder()
+      .setMessage(message)
+      .addAllErrorTypeHierarchy(classes.toImmutableArraySeq.asJava)
 
-    errorsToThrowable(
-      0,
-      Seq(
-        FetchErrorDetailsResponse.Error
-          .newBuilder()
-          .setMessage(message)
-          .addAllErrorTypeHierarchy(classes.toImmutableArraySeq.asJava)
-          .build()))
+    if (errorClass != null) {
+      builder.setSparkThrowable(
+        FetchErrorDetailsResponse.SparkThrowable.newBuilder()
+        .setErrorClass(errorClass)
+        .build())
+    }
+
+    errorsToThrowable(0, Seq(builder.build()))
   }
 }
