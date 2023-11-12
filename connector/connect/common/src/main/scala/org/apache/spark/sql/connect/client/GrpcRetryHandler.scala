@@ -170,13 +170,13 @@ private[sql] object GrpcRetryHandler extends Logging {
 
     def makeAttempt(): Option[T] = {
       try {
-        return Some(fn)
+        Some(fn)
       } catch {
         case NonFatal(e) if canRetry(e) =>
           currentRetryNum += 1
           exceptionList = e +: exceptionList
       }
-      return None
+      None
     }
 
     def waitAfterAttempt(): Unit = {
@@ -212,7 +212,7 @@ private[sql] object GrpcRetryHandler extends Logging {
         result = makeAttempt()
       }
 
-      return result.get
+      result.get
     }
   }
 
