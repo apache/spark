@@ -106,7 +106,7 @@ To implement a Python UDTF, you first need to define a class implementing the me
             - It is possible for the `analyze` method to accept the exact arguments expected,
               mapping 1:1 with the arguments provided to the UDTF call.
             - The `analyze` method can instead choose ot accept positional arguments if desired
-              (with `*args`) or keyword arguments (with `**kwargs`).
+              (using `*args`) or keyword arguments (using `**kwargs`).
 
             Examples
             --------
