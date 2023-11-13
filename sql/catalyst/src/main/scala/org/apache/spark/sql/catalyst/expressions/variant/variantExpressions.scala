@@ -45,6 +45,7 @@ case class ParseJson(child: Expression) extends UnaryExpression
   protected override def nullSafeEval(input: Any): Any = {
     // A dummy implementation: the value is the raw bytes of the input string. This is not the final
     // implementation, but only intended for debugging.
+    // TODO(SPARK-45891): Have an actual parse_json implementation.
     new VariantVal(input.asInstanceOf[UTF8String].toString.getBytes, Array())
   }
 

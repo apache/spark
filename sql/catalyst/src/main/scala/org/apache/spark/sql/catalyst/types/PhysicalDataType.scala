@@ -332,6 +332,7 @@ class PhysicalVariantType extends PhysicalDataType {
   private[sql] type InternalType = VariantVal
   @transient private[sql] lazy val tag = typeTag[InternalType]
 
+  // TODO(SPARK-45891): Support comparison for the Variant type.
   override private[sql] def ordering =
     throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(
       "PhysicalVariantType")

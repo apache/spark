@@ -32,7 +32,8 @@ class VariantSuite extends QueryTest with SharedSparkSession {
         .map(_.get(0).asInstanceOf[VariantVal].toString)
         .sorted
         .toSeq
-      assert(result == (1 until 10).map(id => "1" * id))
+      val expected = (1 until 10).map(id => "1" * id)
+      assert(result == expected)
     }
 
     // At this point, JSON parsing logic is not really implemented. We just construct some number
