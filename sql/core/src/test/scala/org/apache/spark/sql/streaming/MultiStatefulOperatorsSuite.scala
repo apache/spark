@@ -878,25 +878,28 @@ class MultiStatefulOperatorsSuite
     testOutputWatermarkInJoin(join3, input1, -40L * 1000 - 1)
   }
 
-  test("SPARK-45637 Time window aggregation in separate streams followed by " +
-      "stream-stream join should return results") {
-    val impressions = MemoryStream[(Int, Timestamp)]
-    val clicks = MemoryStream[(Int, Timestamp)]
+  test("SPARK-45637 window agg + window agg -> join on window, append mode") {
+    val impressions = MemoryStream[Int]
+    val clicks = MemoryStream[Int]
 
     val impressionsWithWatermark = impressions.toDF()
-      .selectExpr("_1 as impressionAdId", "_2 as impressionTime")
-      .withWatermark("impressionTime", "10 seconds")
+      .withColumn("impressionTime", timestamp_seconds($"value"))
+      .withColumnRenamed("value", "impressionAdId")
+      .withWatermark("impressionTime", "0 seconds")
 
+    // clickTime is always later than impressionTime for clickAdId = impressionAdId
+    // Here we manually set the difference to 2 seconds (see the (Multi)AddData below)
     val clicksWithWatermark = clicks.toDF()
-      .selectExpr("_1 as clickAdId", "_2 as clickTime")
-      .withWatermark("clickTime", "10 seconds")
+      .withColumn("clickTime", timestamp_seconds($"value"))
+      .withWatermark("clickTime", "0 seconds")
+      .selectExpr("value as clickAdId", "clickTime + INTERVAL 2 seconds as clickTime")
 
     val clicksWindow = clicksWithWatermark.groupBy(
-      window($"clickTime", "1 minute")
+      window($"clickTime", "5 seconds")
     ).count()
 
     val impressionsWindow = impressionsWithWatermark.groupBy(
-      window($"impressionTime", "1 minute")
+      window($"impressionTime", "5 seconds")
     ).count()
 
     val clicksAndImpressions = clicksWindow.join(impressionsWindow, "window", "inner")
@@ -904,26 +907,106 @@ class MultiStatefulOperatorsSuite
     withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "1")) {
       testStream(clicksAndImpressions)(
         MultiAddData(
-          (impressions, Seq(
-            (1, Timestamp.valueOf("2023-01-01 01:00:10")),
-            (2, Timestamp.valueOf("2023-01-01 01:00:30")),
-            (3, Timestamp.valueOf("2023-01-01 01:00:30")),
-            (4, Timestamp.valueOf("2023-01-01 01:00:30")),
-            (5, Timestamp.valueOf("2023-01-01 01:00:30")),
-            (6, Timestamp.valueOf("2023-01-01 01:00:30")),
-            (7, Timestamp.valueOf("2023-01-01 01:00:30")),
-            (8, Timestamp.valueOf("2023-01-01 01:00:30")),
-            (9, Timestamp.valueOf("2023-01-01 01:00:30")),
-            (10, Timestamp.valueOf("2023-01-01 01:00:30")),
-          )
-          ),
-          (clicks, Seq(
-            (1, Timestamp.valueOf("2023-01-01 01:00:20"))))
+          (impressions, 0 to 9: _*),
+          (clicks, Seq(1))
         ),
-        AddData(impressions, (1, Timestamp.valueOf("2023-01-01 01:00:00"))),
-        AddData(clicks, (1, Timestamp.valueOf("2023-01-01 01:00:00"))),
+        // data batch triggered
+
+        // global watermark: (0, 0) (drop, evict)
+        // impression:
+        //    input:  (0, 0), (1, 1), (2, 2), (3, 3), ..., (9, 9)
+        //    wm:     (0, 0)
+        //    agg:    [0, 5) -> 5, [5, 10) -> 5
+        //    state:  [0, 5) -> 5, [5, 10) -> 5
+        //    output: None
+        // click:
+        //    input:  (1, 3)
+        //    wm:     (0, 0)
+        //    agg:    [0, 5) -> 1
+        //    state:  [0, 5) -> 1
+        //    output: None
+        // join:
+        //    all None
+
+        // no-data batch triggered // TODO: why is there a no-data batch? where in the code
+
+        // global watermark: (0, 3) (default is min across multiple watermarks)
+        // impression:
+        //    input:  None
+        //    wm:     (0, 3)
+        //    agg:    None
+        //    state:  [0, 5) -> 5, [5, 10) -> 5
+        //    output: None
+        // click:
+        //    input:  None
+        //    wm:     (0, 3)
+        //    agg:    None
+        //    state:  None
+        //    output: [0, 5) -> 1
+        // join:
+        //    input
+        //        impression: None
+        //        click:      [0, 5) -> 1
+        //    state:
+        //        impression: None
+        //        click:      [0, 5) -> 1
+
+        CheckAnswer(),
+        // assertNumStateRows()
+        // assert
+
+
+        AddData(impressions, (1, Timestamp.valueOf("2024-01-01 01:00:00"))),
+        AddData(clicks, (1, Timestamp.valueOf("2024-01-01 01:00:00"))),
         CheckAnswer(),
       )
+//  test("SPARK-45637 window agg + window agg -> join on window, append mode") {
+//    val impressions = MemoryStream[(Int, Timestamp)]
+//    val clicks = MemoryStream[(Int, Timestamp)]
+//
+//    val impressionsWithWatermark = impressions.toDF()
+//      .selectExpr("_1 as impressionAdId", "_2 as impressionTime")
+//      .withWatermark("impressionTime", "10 seconds")
+//
+//    // clickTime is always later than impressionTime for clickAdId = impressionAdId
+//    // Here we manually set the difference to 2 seconds (see the (Multi)AddData below)
+//    val clicksWithWatermark = clicks.toDF()
+//      .selectExpr("_1 as clickAdId", "_2 as clickTime")
+//      .withWatermark("clickTime", "10 seconds")
+//
+//    val clicksWindow = clicksWithWatermark.groupBy(
+//      window($"clickTime", "1 minute")
+//    ).count()
+//
+//    val impressionsWindow = impressionsWithWatermark.groupBy(
+//      window($"impressionTime", "1 minute")
+//    ).count()
+//
+//    val clicksAndImpressions = clicksWindow.join(impressionsWindow, "window", "inner")
+//
+//    withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "1")) {
+//      testStream(clicksAndImpressions)(
+//        MultiAddData(
+//          (impressions, Seq(
+//            (1, Timestamp.valueOf("2024-01-01 01:00:10")),
+////            (2, Timestamp.valueOf("2024-01-01 01:00:30")),
+////            (3, Timestamp.valueOf("2024-01-01 01:00:30")),
+////            (4, Timestamp.valueOf("2024-01-01 01:00:30")),
+////            (5, Timestamp.valueOf("2024-01-01 01:00:30")),
+////            (6, Timestamp.valueOf("2024-01-01 01:00:30")),
+////            (7, Timestamp.valueOf("2024-01-01 01:00:30")),
+////            (8, Timestamp.valueOf("2024-01-01 01:00:30")),
+////            (9, Timestamp.valueOf("2024-01-01 01:00:30")),
+////            (10, Timestamp.valueOf("2024-01-01 01:00:30")),
+//          )
+//          ),
+//          (clicks, Seq(
+//            (1, Timestamp.valueOf("2024-01-01 01:00:12"))))
+//        ),
+//        AddData(impressions, (1, Timestamp.valueOf("2024-01-01 01:00:00"))),
+//        AddData(clicks, (1, Timestamp.valueOf("2024-01-01 01:00:00"))),
+//        CheckAnswer(),
+//      )
       /**
        * spark.conf.set("spark.sql.shuffle.partitions", "1")
        *
