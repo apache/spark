@@ -2512,8 +2512,7 @@ class BaseUDTFTestsMixin:
                 ORDER BY ALL
                 """
             ),
-            [Row(id_divided_by_ten=0, total=4),
-             Row(id_divided_by_ten=1, total=4)],
+            [Row(id_divided_by_ten=0, total=4), Row(id_divided_by_ten=1, total=4)],
         )
 
 

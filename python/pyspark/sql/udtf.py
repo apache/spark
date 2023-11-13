@@ -131,6 +131,7 @@ class SkipRestOfInputTableException(Exception):
     consuming rows from the current partition of the input table. Then the UDTF's 'terminate'
     method runs (if any).
     """
+
     pass
 
 
