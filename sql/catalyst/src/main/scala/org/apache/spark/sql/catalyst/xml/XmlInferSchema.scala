@@ -119,9 +119,7 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
   }
 
-  def infer(
-      xml: String,
-      xsdSchema: Option[Schema] = None): Option[DataType] = {
+  def infer(xml: String, xsdSchema: Option[Schema] = None): Option[DataType] = {
     try {
       val xsd = xsdSchema.orElse(Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema))
       xsd.foreach { schema =>
