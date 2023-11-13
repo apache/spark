@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql
 
-import java.util.{Locale, Properties, ServiceConfigurationError}
+import java.util.{Locale, Properties}
 
 import scala.jdk.CollectionConverters._
-import scala.util.{Failure, Success, Try}
 
-import org.apache.spark.{Partition, SparkClassNotFoundException, SparkThrowable}
+import org.apache.spark.Partition
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
