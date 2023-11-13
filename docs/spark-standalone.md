@@ -408,6 +408,16 @@ SPARK_WORKER_OPTS supports the following system properties:
   </td>
   <td>2.0.2</td>
 </tr>
+<tr>
+  <td><code>spark.worker.idPattern</code></td>
+  <td>worker-%s-%s-%d</td>
+  <td>
+    The pattern for worker ID generation based on Java `String.format` method.
+    The default value is `worker-%s-%s-%d` which represents the existing worker id string, e.g.,
+    `worker-20231109183042-[fe80::1%lo0]-39729`. Please be careful to generate unique IDs
+  </td>
+  <td>4.0.0</td>
+</tr>
 </table>
 
 # Resource Allocation and Configuration Overview
