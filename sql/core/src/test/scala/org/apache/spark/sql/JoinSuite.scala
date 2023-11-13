@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrd
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.python.BatchEvalPythonExec
 import org.apache.spark.sql.internal.SQLConf
@@ -1562,6 +1562,32 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       val expected = Seq(Row(null), Row(1), Row(2))
 
       checkAnswer(sql(query), expected)
+    }
+  }
+
+  test("SPARK-45882: BroadcastHashJoinExec propagate partitioning should respect " +
+    "CoalescedHashPartitioning") {
+    val cached = spark.sql(
+      """
+        |select /*+ broadcast(testData) */ key, value, a
+        |from testData join (
+        | select a from testData2 group by a
+        |)tmp on key = a
+        |""".stripMargin).cache()
+    try {
+      val df = cached.groupBy("key").count()
+      val expected = Seq(Row(1, 1), Row(2, 1), Row(3, 1))
+      assert(find(df.queryExecution.executedPlan) {
+        case _: ShuffleExchangeLike => true
+        case _ => false
+      }.size == 1, df.queryExecution)
+      checkAnswer(df, expected)
+      assert(find(df.queryExecution.executedPlan) {
+        case _: ShuffleExchangeLike => true
+        case _ => false
+      }.isEmpty, df.queryExecution)
+    } finally {
+      cached.unpersist()
     }
   }
 }
