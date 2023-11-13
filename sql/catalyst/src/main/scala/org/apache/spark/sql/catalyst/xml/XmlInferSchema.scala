@@ -200,8 +200,6 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
   private def inferObject(
       parser: XMLEventReader,
       rootAttributes: Array[Attribute] = Array.empty): DataType = {
-    val builder = ArrayBuffer[StructField]()
-
     /**
      * Retrieves the field name with respect to the case sensitivity setting.
      * We pick the first name we encountered.
@@ -224,14 +222,33 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       }
 
     val nameToDataType =
-      collection.mutable.TreeMap.empty[String, ArrayBuffer[DataType]](caseSensitivityOrdering)
+      collection.mutable.TreeMap.empty[String, DataType](caseSensitivityOrdering)
+
+    /**
+     * Add or update key data type pair
+     * If the field name exists in the map,
+     * merge the type and infer the combined field as an array type if necessary
+     * @param fieldName field name
+     * @param newType the data type to associate with the field.
+     */
+    def addOrUpdateType(fieldName: String, newType: DataType): Unit = {
+      val oldTypeOpt = nameToDataType.get(fieldName)
+      oldTypeOpt match {
+        case Some(oldType) if !oldType.isInstanceOf[ArrayType] =>
+          nameToDataType.update(fieldName, ArrayType(compatibleType(oldType, newType)))
+        case Some(oldType) =>
+          nameToDataType.update(fieldName, compatibleType(oldType, newType))
+        case None =>
+          nameToDataType.put(fieldName, newType)
+      }
+    }
 
     // If there are attributes, then we should process them first.
     val rootValuesMap =
       StaxXmlParserUtils.convertAttributesToValuesMap(rootAttributes, options)
     rootValuesMap.foreach {
       case (f, v) =>
-        nameToDataType += (f -> ArrayBuffer(inferFrom(v)))
+        addOrUpdateType(f, inferFrom(v))
     }
     var shouldStop = false
     while (!shouldStop) {
@@ -264,14 +281,12 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           }
           // Add the field and datatypes so that we can check if this is ArrayType.
           val field = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
-          val dataTypes = nameToDataType.getOrElse(field, ArrayBuffer.empty[DataType])
-          dataTypes += inferredType
-          nameToDataType += (field -> dataTypes)
+          addOrUpdateType(field, inferredType)
 
         case c: Characters if !c.isWhiteSpace =>
           // This can be an attribute-only object
           val valueTagType = inferFrom(c.getData)
-          nameToDataType += options.valueTag -> ArrayBuffer(valueTagType)
+          addOrUpdateType(options.valueTag, valueTagType)
 
         case _: EndElement =>
           shouldStop = StaxXmlParserUtils.checkEndElement(parser)
@@ -283,25 +298,17 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     // if it only consists of attributes and valueTags.
     // If not, we will remove the valueTag field from the schema
     val attributesOnly = nameToDataType.forall {
-      case (fieldName, dataTypes) =>
-        dataTypes.length == 1 &&
-        (fieldName == options.valueTag || fieldName.startsWith(options.attributePrefix))
+      case (fieldName, _) =>
+        fieldName == options.valueTag || fieldName.startsWith(options.attributePrefix)
     }
     if (!attributesOnly) {
       nameToDataType -= options.valueTag
     }
-    // We need to manually merges the fields having the sames so that
-    // This can be inferred as ArrayType.
-    nameToDataType.foreach {
-      case (field, dataTypes) if dataTypes.length > 1 =>
-        val elementType = dataTypes.reduceLeft(compatibleType)
-        builder += StructField(field, ArrayType(elementType), nullable = true)
-      case (field, dataTypes) =>
-        builder += StructField(field, dataTypes.head, nullable = true)
-    }
 
     // Note: other code relies on this sorting for correctness, so don't remove it!
-    StructType(builder.sortBy(_.name).toArray)
+    StructType(nameToDataType.map{
+      case (name, dataType) => StructField(name, dataType)
+    }.toList.sortBy(_.name))
   }
 
   /**
