@@ -16,17 +16,20 @@
  */
 package org.apache.spark.sql.execution.datasources.xml
 
-import java.io.{File, FileInputStream, InputStreamReader, StringReader}
-import java.nio.charset.StandardCharsets
-import java.nio.file.Path
+import java.io.StringReader
 
-import scala.jdk.CollectionConverters._
+import scala.collection.JavaConverters._
+import scala.xml.InputSource
 
+import org.apache.hadoop.fs.Path
 import org.apache.ws.commons.schema._
 import org.apache.ws.commons.schema.constants.Constants
 
+import org.apache.spark.SparkFiles
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.catalyst.xml.XmlOptions
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * Utility to generate a Spark schema from an XSD. Not all XSD schemas are simple tabular schemas,
@@ -35,33 +38,31 @@ import org.apache.spark.sql.types._
 object XSDToSchema {
 
   /**
-   * Reads a schema from an XSD file.
+   * Reads a schema from an XSD path.
    * Note that if the schema consists of one complex parent type which you want to use as
    * the row tag schema, then you will need to extract the schema of the single resulting
    * struct in the resulting StructType, and use its StructType as your schema.
    *
-   * @param xsdFile XSD file
+   * @param xsdPath XSD path
    * @return Spark-compatible schema
    */
-  def read(xsdFile: File): StructType = {
+  def read(xsdPath: Path): StructType = {
+    val in = try {
+      // Handle case where file exists as specified
+      val fs = xsdPath.getFileSystem(SparkHadoopUtil.get.conf)
+      fs.open(xsdPath)
+    } catch {
+      case _: Throwable =>
+        // Handle case where it was added with sc.addFile
+        val addFileUrl = SparkFiles.get(xsdPath.toString)
+        val fs = Utils.getHadoopFileSystem(addFileUrl, SparkHadoopUtil.get.conf)
+        fs.open(new Path(addFileUrl))
+    }
     val xmlSchemaCollection = new XmlSchemaCollection()
-    xmlSchemaCollection.setBaseUri(xsdFile.getParent)
-    val xmlSchema = xmlSchemaCollection.read(
-      new InputStreamReader(new FileInputStream(xsdFile), StandardCharsets.UTF_8))
-
+    val xmlSchema = xmlSchemaCollection.read(new InputSource(in))
+    xmlSchemaCollection.setBaseUri(xsdPath.getParent.toString)
     getStructType(xmlSchema)
   }
-
-  /**
-   * Reads a schema from an XSD file.
-   * Note that if the schema consists of one complex parent type which you want to use as
-   * the row tag schema, then you will need to extract the schema of the single resulting
-   * struct in the resulting StructType, and use its StructType as your schema.
-   *
-   * @param xsdFile XSD file
-   * @return Spark-compatible schema
-   */
-  def read(xsdFile: Path): StructType = read(xsdFile.toFile)
 
   /**
    * Reads a schema from an XSD as a string.
