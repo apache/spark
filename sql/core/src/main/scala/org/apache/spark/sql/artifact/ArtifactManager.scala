@@ -41,12 +41,12 @@ import org.apache.spark.util.{ChildFirstURLClassLoader, StubClassLoader, Utils}
 /**
  * This class handles the storage of artifacts as well as preparing the artifacts for use.
  *
- * Artifacts belonging to different [[SparkSession]]s are segregated and isolated from each other
- * with the help of the `sessionUUID`.
+ * Artifacts belonging to different SparkSessions are isolated from each other with the help of the
+ * `sessionUUID`.
  *
  * Jars and classfile artifacts are stored under "jars", "classes" and "pyfiles" sub-directories
  * respectively while other types of artifacts are stored under the root directory for that
- * particular [[SparkSession]].
+ * particular SparkSession.
  *
  * @param session The object used to hold the Spark Connect session state.
  */
