@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.xml
 
 import java.io.StringReader
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.xml.InputSource
 
 import org.apache.hadoop.fs.Path
