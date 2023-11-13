@@ -125,10 +125,12 @@ class AnalyzeResult:
     orderBy: Sequence[OrderingColumn] = field(default_factory=tuple)
 
 
-# This represents an exception that the 'eval' method may raise to indicate that it is done
-# consuming rows from the current partition of the input table. Then the UDTF's 'terminate' method
-# runs (if any).
 class SkipRestOfInputTableException(Exception):
+    """
+    This represents an exception that the 'eval' method may raise to indicate that it is done
+    consuming rows from the current partition of the input table. Then the UDTF's 'terminate'
+    method runs (if any).
+    """
     pass
 
 

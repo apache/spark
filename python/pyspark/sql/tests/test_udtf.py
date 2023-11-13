@@ -2469,16 +2469,10 @@ class BaseUDTFTestsMixin:
         )
 
     def test_udtf_with_skip_rest_of_input_table_exception(self):
-        @udtf
+        @udtf(returnType="total: int")
         class TestUDTF:
             def __init__(self):
                 self._total = 0
-
-            @staticmethod
-            def analyze(_):
-                return AnalyzeResult(
-                    schema=StructType().add("total", IntegerType()), withSinglePartition=True
-                )
 
             def eval(self, _: Row):
                 self._total += 1
@@ -2490,6 +2484,8 @@ class BaseUDTFTestsMixin:
 
         self.spark.udtf.register("test_udtf", TestUDTF)
 
+        # Run a test case including WITH SINGLE PARTITION on the UDTF call. The
+        # SkipRestOfInputTableException stops scanning rows after the fourth input row is consumed.
         assertDataFrameEqual(
             self.spark.sql(
                 """
@@ -2497,10 +2493,27 @@ class BaseUDTFTestsMixin:
                   SELECT id FROM range(1, 21)
                 )
                 SELECT total
-                FROM test_udtf(TABLE(t))
+                FROM test_udtf(TABLE(t) WITH SINGLE PARTITION)
                 """
             ),
             [Row(total=4)],
+        )
+        # Run a test case including WITH SINGLE PARTITION on the UDTF call. The
+        # SkipRestOfInputTableException stops scanning rows for each of the two partitions
+        # separately.
+        assertDataFrameEqual(
+            self.spark.sql(
+                """
+                WITH t AS (
+                  SELECT id FROM range(1, 21)
+                )
+                SELECT id / 10 AS id_divided_by_ten, total
+                FROM test_udtf(TABLE(t) PARTITION BY id / 10)
+                ORDER BY ALL
+                """
+            ),
+            [Row(id_divided_by_ten=0, total=4),
+             Row(id_divided_by_ten=1, total=4)],
         )
 
 
