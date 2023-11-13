@@ -3013,10 +3013,8 @@ class Dataset[T] private[sql](
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def drop(col: Column, cols: Column*): DataFrame = withOrigin {
-    withPlan {
-      DataFrameDropColumns((col +: cols).map(_.expr), logicalPlan)
-    }
+  def drop(col: Column, cols: Column*): DataFrame = withPlan {
+    DataFrameDropColumns((col +: cols).map(_.expr), logicalPlan)
   }
 
   /**
