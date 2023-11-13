@@ -403,9 +403,9 @@ public class LevelDBSuite {
       assertNotNull(reference);
       LevelDBIterator.ResourceCleaner resourceCleaner = levelDBIterator.getResourceCleaner();
       assertFalse(resourceCleaner.isCompleted());
-      // Manually set rocksDBIterator to null, to be GC.
+      // Manually set levelDBIterator to null, to be GC.
       levelDBIterator = null;
-      // 100 times gc, the rocksDBIterator should be GCed.
+      // 100 times gc, the levelDBIterator should be GCed.
       int count = 0;
       while (count < 100 && !reference.refersTo(null)) {
         System.gc();
