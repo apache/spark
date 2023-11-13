@@ -447,8 +447,7 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
             // normalize field name and pair it with original field
             .map(field => (normalize(field.name), field))
             .groupBy(_._1) // group by normalized field name
-            .map {
-            case (_: String, fields: Array[(String, StructField)]) =>
+            .map { case (_: String, fields: Array[(String, StructField)]) =>
               val fieldTypes = fields.map(_._2)
               val dataType = fieldTypes.map(_.dataType).reduce(compatibleType)
               // we pick up the first field name that we've encountered for the field
