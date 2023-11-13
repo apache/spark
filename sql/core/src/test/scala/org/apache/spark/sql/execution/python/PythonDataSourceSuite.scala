@@ -216,9 +216,17 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
     spark.dataSource.registerPython("test", dataSource)
+
     checkAnswer(spark.read.format("test").load(), Seq(Row(null, 1)))
     checkAnswer(spark.read.format("test").load("1"), Seq(Row("1", 1)))
     checkAnswer(spark.read.format("test").load("1", "2"), Seq(Row("1", 1), Row("2", 1)))
+
+    // Test SQL
+    withTable("tblA") {
+      sql("CREATE TABLE tblA USING test")
+      // The path will be the actual temp path.
+      checkAnswer(spark.table("tblA").selectExpr("value"), Seq(Row(1)))
+    }
   }
 
   test("reader not implemented") {
