@@ -3774,7 +3774,7 @@ def kurtosis(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def collect_list(col: "ColumnOrName") -> Column:
     """
-    Aggregate function: Collects the values from a column into a list,
+    Aggregate function: Collects the values from a column into a list (array),
     maintaining duplicates, and returns this list of objects.
 
     .. versionadded:: 1.6.0
@@ -3790,7 +3790,7 @@ def collect_list(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        A new Column object representing a list of collected values, with duplicate values included.
+        A new Column object representing an array of collected values, with duplicate values included.
 
     Notes
     -----
