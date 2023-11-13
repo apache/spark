@@ -564,10 +564,15 @@ object ScalaReflection extends ScalaReflection {
   private def validateAndSerializeElement(
       enc: AgnosticEncoder[_],
       nullable: Boolean): Expression => Expression = { input =>
+    val expected = enc match {
+      case OptionEncoder(_) => lenientExternalDataTypeFor(enc)
+      case _ => enc.dataType
+    }
+
     expressionWithNullSafety(
       serializerFor(
         enc,
-        ValidateExternalType(input, enc.dataType, lenientExternalDataTypeFor(enc))),
+        ValidateExternalType(input, expected, lenientExternalDataTypeFor(enc))),
       nullable,
       WalkedTypePath())
   }
