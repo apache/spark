@@ -49,6 +49,8 @@ class ResourceProfile(
     val executorResources: Map[String, ExecutorResourceRequest],
     val taskResources: Map[String, TaskResourceRequest]) extends Serializable with Logging {
 
+  validate()
+
   // _id is only a var for testing purposes
   private var _id = ResourceProfile.getNextProfileId
   // This is used for any resources that use fractional amounts, the key is the resource name
@@ -58,6 +60,19 @@ class ResourceProfile(
   private var _limitingResource: Option[String] = None
   private var _maxTasksPerExecutor: Option[Int] = None
   private var _coresLimitKnown: Boolean = false
+
+  /**
+   * Validate the ResourceProfile
+   */
+  protected def validate(): Unit = {
+    // The task.amount in ResourceProfile falls within the range of 0 to 0.5,
+    // or it's a whole number
+    for ((_, taskReq) <- taskResources) {
+      val taskAmount = taskReq.amount
+      assert(taskAmount <= 0.5 || taskAmount % 1 == 0,
+        s"The task resource amount ${taskAmount} must be either <= 0.5, or a whole number.")
+    }
+  }
 
   /**
    * A unique id of this ResourceProfile
@@ -279,6 +294,11 @@ class ResourceProfile(
 private[spark] class TaskResourceProfile(
     override val taskResources: Map[String, TaskResourceRequest])
   extends ResourceProfile(Map.empty, taskResources) {
+
+  // The task.amount in TaskResourceProfile falls within the range of 0 to 1.0,
+  // or it's a whole number, and it has been checked in the TaskResourceRequest.
+  // Therefore, we can safely skip this check.
+  override protected def validate(): Unit = {}
 
   override protected[spark] def getCustomExecutorResources()
       : Map[String, ExecutorResourceRequest] = {
