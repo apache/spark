@@ -393,7 +393,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
     scalarSubqueryReplaced.filterNot(_.references.exists {
       case FileSourceConstantMetadataAttribute(_) => true
       case _ => false
-    }).flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
+    }).flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown, true))
   }
 
   // This field may execute subquery expressions and should not be accessed during planning.

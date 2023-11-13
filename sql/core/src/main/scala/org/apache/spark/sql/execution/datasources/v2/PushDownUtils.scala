@@ -54,7 +54,7 @@ object PushDownUtils {
         for (filterExpr <- filters) {
           val translated =
             DataSourceStrategy.translateFilterWithMapping(filterExpr, Some(translatedFilterToExpr),
-              nestedPredicatePushdownEnabled = true)
+              nestedPredicatePushdownEnabled = true, canPartialPushDown = false)
           if (translated.isEmpty) {
             untranslatableExprs += filterExpr
           } else {

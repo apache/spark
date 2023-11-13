@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.sources
+import org.apache.spark.sql.sources.AlwaysFalse
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
@@ -277,6 +278,71 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
         // Functions such as 'Abs' are not supported
         EqualTo(Abs(attrInt), 6),
         IsNotNull(attrInt))), None)
+
+    // (aint > 1 AND Abs(aint) < 10) OR (aint > 50 AND aint < 100)
+    testTranslateFilter(Or(
+      And(
+        GreaterThan(attrInt, 1),
+        // Functions such as 'Abs' are not supported
+        LessThan(Abs(attrInt), 10)
+      ),
+      And(
+        GreaterThan(attrInt, 50),
+        LessThan(attrInt, 100))),
+      Some(sources.Or(
+        sources.GreaterThan(intColName, 1),
+        sources.And(
+          sources.GreaterThan(intColName, 50),
+          sources.LessThan(intColName, 100)))),
+      canPartialPushDown = true)
+
+    // (aint > 1 AND aint < 10) AND (Abs(aint) = 6 OR aint IS NOT NULL)
+    testTranslateFilter(And(
+      And(
+        GreaterThan(attrInt, 1),
+        LessThan(attrInt, 10)
+      ),
+      And(
+        // Functions such as 'Abs' are not supported
+        EqualTo(Abs(attrInt), 6),
+        IsNotNull(attrInt))),
+      Some(sources.And(
+        sources.And(
+          sources.GreaterThan(intColName, 1),
+          sources.LessThan(intColName, 10)),
+        sources.IsNotNull(intColName))),
+      canPartialPushDown = true)
+
+    // (aint > 1 OR aint < 10) AND (Abs(aint) = 6 OR aint IS NOT NULL)
+    testTranslateFilter(And(
+      Or(
+        GreaterThan(attrInt, 1),
+        LessThan(attrInt, 10)
+      ),
+      Or(
+        // Functions such as 'Abs' are not supported
+        EqualTo(Abs(attrInt), 6),
+        IsNotNull(attrInt))),
+      Some(
+        sources.Or(
+          sources.GreaterThan(intColName, 1),
+          sources.LessThan(intColName, 10))),
+      canPartialPushDown = true)
+
+    // Not((cint > 1) OR (Abs(cint) = 6 AND cint < 1))
+    testTranslateFilter(
+      Not(Or(
+        GreaterThan(attrInt, 1),
+        And(EqualTo(Abs(attrInt), 6), LessThanOrEqual(attrInt, 1)))),
+      None,
+      canPartialPushDown = true)
+
+    // (1 > 1 AND Abs(cint) > 1) OR (2 > 2 AND Abs(cint) > 2)
+    testTranslateFilter(
+      Or(And(1 > 1, EqualTo(Abs(attrInt), 1)),
+        And(2 > 2, EqualTo(Abs(attrInt), 2))),
+      Some(sources.Or(AlwaysFalse, AlwaysFalse)),
+      canPartialPushDown = true)
   }}
 
   test("SPARK-26865 DataSourceV2Strategy should push normalized filters") {
@@ -319,14 +385,16 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
    * Translate the given Catalyst [[Expression]] into data source [[sources.Filter]]
    * then verify against the given [[sources.Filter]].
    */
-  def testTranslateFilter(catalystFilter: Expression, result: Option[sources.Filter]): Unit = {
+  def testTranslateFilter(
+      catalystFilter: Expression,
+      result: Option[sources.Filter],
+      canPartialPushDown: Boolean = false): Unit = {
     assertResult(result) {
-      DataSourceStrategy.translateFilter(catalystFilter, true)
+      DataSourceStrategy.translateFilter(catalystFilter, true, canPartialPushDown)
     }
   }
 
   test("SPARK-41636: selectFilters returns predicates in deterministic order") {
-
     val predicates = Seq(EqualTo($"id", 1), EqualTo($"id", 2),
       EqualTo($"id", 3), EqualTo($"id", 4), EqualTo($"id", 5), EqualTo($"id", 6))
 

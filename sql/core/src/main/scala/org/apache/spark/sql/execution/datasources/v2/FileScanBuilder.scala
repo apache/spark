@@ -77,7 +77,7 @@ abstract class FileScanBuilder(
     this.dataFilters = dataFilters
     val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
     for (filterExpr <- dataFilters) {
-      val translated = DataSourceStrategy.translateFilter(filterExpr, true)
+      val translated = DataSourceStrategy.translateFilter(filterExpr, true, true)
       if (translated.nonEmpty) {
         translatedFilters += translated.get
       }

@@ -33,18 +33,21 @@ import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.{SparkConf, SparkException, SparkFileNotFoundException, SparkRuntimeException, SparkUpgradeException, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal, StringTrim}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, HadoopCompressionCodec}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLType
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, InMemoryFileIndex, NoopCache}
-import org.apache.spark.sql.execution.datasources.v2.json.JsonScanBuilder
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.json.{JsonScan, JsonScanBuilder}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.StructType.fromDDL
 import org.apache.spark.sql.types.TestUDT.{MyDenseVector, MyDenseVectorUDT}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -3741,6 +3744,38 @@ class JsonV2Suite extends JsonSuite {
       withTempPath { file =>
         val scanBuilder = getBuilder(file.getCanonicalPath)
         assert(scanBuilder.pushDataFilters(filters) === Array.empty[sources.Filter])
+      }
+    }
+  }
+
+  test("SPARK-44493: Push partial predicates are supported") {
+    import testImplicits._
+    withTempPath { path =>
+      Seq(
+        """{"NAME": "fred", "THEID": 1}""",
+        s"""{"NAME": "mary", "THEID": 2}""",
+        s"""{"NAME": "joe 'foo' \\"bar\\"", "THEID": 3}""").toDF("data")
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+      withSQLConf(SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+        Seq("PERMISSIVE", "DROPMALFORMED", "FAILFAST").foreach { mode =>
+          val df = spark.read
+            .option("mode", mode)
+            .schema("NAME string, THEID integer")
+            .json(path.getAbsolutePath)
+            .where($"THEID" > 0 &&
+              Column(EqualTo(StringTrim($"NAME".expr), Literal(UTF8String.fromString("mary")))) ||
+              ($"THEID" > 10))
+
+          assert(getPhysicalFilters(df) contains resolve(df,
+            "(THEID > 0 AND TRIM(NAME) = 'mary') OR (THEID > 10)"))
+
+          val pushedFilters = df.queryExecution.executedPlan.collect {
+            case BatchScanExec(_, j: JsonScan, _, _, _, _) => j.pushedFilters
+          }
+          assert(pushedFilters.flatten.contains(
+            sources.Or(sources.GreaterThan("THEID", 0), sources.GreaterThan("THEID", 10))))
+        }
       }
     }
   }
