@@ -46,7 +46,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
   private val testing = Utils.isTesting
   private val pageSize = computePageSize()
   private var isAvailable: Boolean = isProcfsAvailable
-  private val pid = ProcessHandle.current()
+  private val currentProcessHandle = ProcessHandle.current()
 
   private lazy val isProcfsAvailable: Boolean = {
     if (testing) {
@@ -130,8 +130,8 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
     if (!isAvailable) {
       Set.empty
     } else {
-      val children = pid.descendants().map(_.pid()).toList.asScala.toSet
-      children + pid.pid()
+      val children = currentProcessHandle.descendants().map(_.pid()).toList.asScala.toSet
+      children + currentProcessHandle.pid()
     }
   }
 
