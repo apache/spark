@@ -2666,7 +2666,8 @@ class DatasetSuite extends QueryTest
       // `minNbrs1` will start with 20 partitions and without the fix would coalesce to ~10
       // partitions.
       val minNbrs1 = ee
-        .groupBy("_2").agg(min(col("_1")).as("min_number")).select('_2 as "_1", 'min_number)
+        .groupBy("_2").agg(min(col("_1")).as("min_number"))
+        .select(col("_2") as "_1", col("min_number"))
         .persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
       minNbrs1.count()
 
