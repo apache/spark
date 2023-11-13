@@ -675,7 +675,7 @@ object SQLConf {
       .internal()
       .doc("Configures whether adaptive query execution (if enabled) should apply shuffle " +
         "coalescing and local shuffle read optimization for the final query stage.")
-      .version("3.5.0")
+      .version("3.4.2")
       .booleanConf
       .createWithDefault(true)
 
