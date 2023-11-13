@@ -32,11 +32,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
-import org.apache.spark.sql.catalyst.util.{
-  DateFormatter,
-  PermissiveMode,
-  TimestampFormatter
-}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, PermissiveMode, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.types._
 
@@ -220,12 +216,12 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
      * In case-insensitive mode, we will infer an array named by foo
      * (as it's the first one we encounter)
      */
-      val caseSensitivityOrdering: Ordering[String] = (x: String, y: String) =>
-        if (caseSensitive) {
-          x.compareTo(y)
-        } else {
-        x.compareToIgnoreCase(y)
-        }
+    val caseSensitivityOrdering: Ordering[String] = (x: String, y: String) =>
+      if (caseSensitive) {
+        x.compareTo(y)
+      } else {
+      x.compareToIgnoreCase(y)
+      }
 
     val nameToDataType =
       collection.mutable.TreeMap.empty[String, ArrayBuffer[DataType]](caseSensitivityOrdering)
@@ -250,8 +246,7 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
               nestedBuilder ++= st.fields
               valuesMap.foreach {
                 case (f, v) =>
-                  nestedBuilder +=
-                    StructField(f, inferFrom(v), nullable = true)
+                  nestedBuilder += StructField(f, inferFrom(v), nullable = true)
               }
               StructType(nestedBuilder.sortBy(_.name).toArray)
 
@@ -261,8 +256,7 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
               nestedBuilder += StructField(options.valueTag, dt, nullable = true)
               valuesMap.foreach {
                 case (f, v) =>
-                  nestedBuilder +=
-                    StructField(f, inferFrom(v), nullable = true)
+                  nestedBuilder += StructField(f, inferFrom(v), nullable = true)
               }
               StructType(nestedBuilder.sortBy(_.name).toArray)
 
@@ -270,8 +264,7 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           }
           // Add the field and datatypes so that we can check if this is ArrayType.
           val field = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
-          val dataTypes =
-            nameToDataType.getOrElse(field, ArrayBuffer.empty[DataType])
+          val dataTypes = nameToDataType.getOrElse(field, ArrayBuffer.empty[DataType])
           dataTypes += inferredType
           nameToDataType += (field -> dataTypes)
 
