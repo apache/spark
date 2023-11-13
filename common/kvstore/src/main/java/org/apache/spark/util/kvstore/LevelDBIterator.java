@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -44,6 +45,8 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   private final byte[] indexKeyPrefix;
   private final byte[] end;
   private final long max;
+
+  private final ResourceCleaner resourceCleaner;
   private final Cleaner.Cleanable cleanable;
 
   private boolean checkedNext;
@@ -59,7 +62,8 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     this.ti = db.getTypeInfo(type);
     this.index = ti.index(params.index);
     this.max = params.max;
-    this.cleanable = CLEANER.register(this, new ResourceCleaner(it, db));
+    this.resourceCleaner = new ResourceCleaner(it, db);
+    this.cleanable = CLEANER.register(this, this.resourceCleaner);
 
     Preconditions.checkArgument(!index.isChild() || params.parent != null,
       "Cannot iterate over child index %s without parent value.", params.index);
@@ -189,21 +193,33 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
 
   @Override
   public synchronized void close() throws IOException {
+    db.notifyIteratorClosed(it);
     if (!closed) {
       try {
-        cleanable.clean();
+        it.close();
       } catch (UncheckedIOException uncheckedIOException) {
         throw uncheckedIOException.getCause();
       } finally {
         closed = true;
         next = null;
+        cancelResourceClean();
       }
     }
+  }
+
+  private void cancelResourceClean() {
+    this.resourceCleaner.setStartedToFalse();
+    this.cleanable.clean();
   }
 
   @VisibleForTesting
   DBIterator internalIterator() {
     return it;
+  }
+
+  @VisibleForTesting
+  ResourceCleaner getResourceCleaner() {
+    return resourceCleaner;
   }
 
   private byte[] loadNext() {
@@ -285,23 +301,43 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     return a.length - b.length;
   }
 
-  private record ResourceCleaner(DBIterator dbIterator, LevelDB levelDB) implements Runnable {
+  static class ResourceCleaner implements Runnable {
+
+    private final DBIterator dbIterator;
+
+    private final LevelDB levelDB;
+
+    private final AtomicBoolean started = new AtomicBoolean(true);
+
+    public ResourceCleaner(DBIterator dbIterator, LevelDB levelDB) {
+      this.dbIterator = dbIterator;
+      this.levelDB = levelDB;
+    }
+
     @Override
     public void run() {
-      levelDB.getIteratorTracker().removeIf(ref -> {
-        LevelDBIterator<?> levelDBIterator = ref.get();
-        return levelDBIterator != null && dbIterator.equals(levelDBIterator.it);
-      });
-      synchronized (levelDB.getLevelDB()) {
-        DB _db = levelDB.getLevelDB().get();
-        if (_db != null) {
-          try {
-            dbIterator.close();
-          } catch (IOException e) {
-            throw new UncheckedIOException(e);
+      if (started.compareAndSet(true, false)) {
+        levelDB.notifyIteratorClosed(dbIterator);
+        synchronized (levelDB.getLevelDB()) {
+          DB _db = levelDB.getLevelDB().get();
+          if (_db != null) {
+            try {
+              dbIterator.close();
+            } catch (IOException e) {
+              throw new UncheckedIOException(e);
+            }
           }
         }
       }
+    }
+
+    void setStartedToFalse() {
+      started.set(false);
+    }
+
+    @VisibleForTesting
+    boolean isCompleted() {
+      return !started.get();
     }
   }
 }

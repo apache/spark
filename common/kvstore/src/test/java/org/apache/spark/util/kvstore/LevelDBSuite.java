@@ -19,6 +19,7 @@ package org.apache.spark.util.kvstore;
 
 import java.io.File;
 import java.lang.ref.Reference;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -401,15 +402,10 @@ public class LevelDBSuite {
       }
       LevelDBIterator<CustomType1> levelDBIterator =
         (LevelDBIterator<CustomType1>) dbForCleanerTest.view(CustomType1.class).iterator();
-      Reference<LevelDBIterator<?>> reference =
-        getRocksDBIteratorRef(levelDBIterator, dbForCleanerTest);
+      Reference<LevelDBIterator<?>> reference = new WeakReference<>(levelDBIterator);
       assertNotNull(reference);
-      JniDBIterator it = (JniDBIterator) levelDBIterator.internalIterator();
-      Field iteratorField = it.getClass().getDeclaredField("iterator");
-      iteratorField.setAccessible(true);
-      NativeIterator nativeIterator = (NativeIterator) iteratorField.get(it);
-      // it has not been closed yet, isAllocated is true.
-      assertTrue(nativeIterator.isAllocated());
+      LevelDBIterator.ResourceCleaner resourceCleaner = levelDBIterator.getResourceCleaner();
+      assertFalse(resourceCleaner.isCompleted());
       // Manually set rocksDBIterator to null, to be GC.
       levelDBIterator = null;
       // 100 times gc, the rocksDBIterator should be GCed.
@@ -422,22 +418,11 @@ public class LevelDBSuite {
       // check rocksDBIterator should be GCed
       assertTrue(reference.refersTo(null));
       // Verify that the Cleaner will be executed after a period of time, isAllocated is true.
-      assertFalse(nativeIterator.isAllocated());
+      assertTrue(resourceCleaner.isCompleted());
     } finally {
       dbForCleanerTest.close();
       FileUtils.deleteQuietly(dbPathForCleanerTest);
     }
-  }
-
-  private Reference<LevelDBIterator<?>> getRocksDBIteratorRef(
-      LevelDBIterator<?> rocksDBIterator,
-      LevelDB levelDB) {
-    for (Reference<LevelDBIterator<?>> levelDBIteratorReference : levelDB.getIteratorTracker()) {
-      if (rocksDBIterator == levelDBIteratorReference.get()) {
-        return levelDBIteratorReference;
-      }
-    }
-    return null;
   }
 
   private CustomType1 createCustomType1(int i) {

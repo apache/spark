@@ -34,6 +34,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import org.fusesource.leveldbjni.JniDBFactory;
 import org.iq80.leveldb.DB;
+import org.iq80.leveldb.DBIterator;
 import org.iq80.leveldb.Options;
 import org.iq80.leveldb.WriteBatch;
 
@@ -322,6 +323,17 @@ public class LevelDB implements KVStore {
     }
   }
 
+  /**
+   * Remove iterator from iterator tracker. `LevelDBIterator` calls it to notify
+   * iterator is closed.
+   */
+  void notifyIteratorClosed(DBIterator dbIterator) {
+    iteratorTracker.removeIf(ref -> {
+        LevelDBIterator<?> it = ref.get();
+        return it != null && it.equals(it.internalIterator());
+    });
+  }
+
   /** Returns metadata about indices for the given type. */
   LevelDBTypeInfo getTypeInfo(Class<?> type) throws Exception {
     LevelDBTypeInfo ti = types.get(type);
@@ -348,12 +360,12 @@ public class LevelDB implements KVStore {
     return _db;
   }
 
+  /**
+   * Return the reference of org.iq80.leveldb.DB. The org.apache.spark.util.kvstore.LevelDBIterator
+   *  will add a lock to avoid use-after close since that has the tendency of crashing the JVM.
+   */
   AtomicReference<DB> getLevelDB() {
     return _db;
-  }
-
-  ConcurrentLinkedQueue<Reference<LevelDBIterator<?>>> getIteratorTracker() {
-    return iteratorTracker;
   }
 
   private byte[] getTypeAlias(Class<?> klass) throws Exception {
