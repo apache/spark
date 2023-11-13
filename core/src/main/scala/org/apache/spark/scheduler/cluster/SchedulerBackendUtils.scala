@@ -17,7 +17,8 @@
 package org.apache.spark.scheduler.cluster
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.config.{DYN_ALLOCATION_MAX_EXECUTORS, DYN_ALLOCATION_MIN_EXECUTORS, EXECUTOR_INSTANCES}
+import org.apache.spark.internal.config.{DYN_ALLOCATION_MAX_EXECUTORS, DYN_ALLOCATION_MIN_EXECUTORS, EXECUTOR_INSTANCES, MAX_EXECUTOR_FAILURES, SCHEDULER_MIN_RESOURCES_TO_SURVIVE_RATIO}
+import org.apache.spark.internal.config.Streaming.STREAMING_DYN_ALLOCATION_MAX_EXECUTORS
 import org.apache.spark.util.Utils
 
 private[spark] object SchedulerBackendUtils {
@@ -46,10 +47,23 @@ private[spark] object SchedulerBackendUtils {
   }
 
   def getMaxTargetExecutorNumber(conf: SparkConf): Int = {
-    if (Utils.isDynamicAllocationEnabled(conf)) {
+    if (Utils.isStreamingDynamicAllocationEnabled(conf)) {
+      conf.get(STREAMING_DYN_ALLOCATION_MAX_EXECUTORS)
+    } else if (Utils.isDynamicAllocationEnabled(conf)) {
       conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
     } else {
       conf.get(EXECUTOR_INSTANCES).getOrElse(0)
     }
+  }
+
+  def formatExecutorFailureError(
+      maxNumExecutorFailures: Int,
+      numOfExecutorRunning: Int,
+      maxExecutors: Int): String = {
+    s"Max number of executor failures ($maxNumExecutorFailures) reached and the current running " +
+      s"executors ratio $numOfExecutorRunning/$maxExecutors is insufficient. Consider " +
+      s"increasing ${MAX_EXECUTOR_FAILURES.key} or " +
+      s"${SCHEDULER_MIN_RESOURCES_TO_SURVIVE_RATIO.key} for app being more tolerant to " +
+      s"executor failures"
   }
 }

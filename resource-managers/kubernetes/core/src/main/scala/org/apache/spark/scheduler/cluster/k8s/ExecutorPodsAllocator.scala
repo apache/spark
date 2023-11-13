@@ -36,6 +36,7 @@ import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.scheduler.cluster.SchedulerBackendUtils
 import org.apache.spark.scheduler.cluster.SchedulerBackendUtils.DEFAULT_NUMBER_EXECUTORS
 import org.apache.spark.util.{Clock, Utils}
 import org.apache.spark.util.SparkExitCode.EXCEED_MAX_EXECUTOR_FAILURES
@@ -144,7 +145,11 @@ class ExecutorPodsAllocator(
       onNewSnapshots(applicationId, schedulerBackend, executorPodsSnapshot)
       if (getNumExecutorsFailed > maxNumExecutorFailures &&
           schedulerBackend.insufficientResourcesRetained()) {
-        logError(s"Max number of executor failures ($maxNumExecutorFailures) reached")
+        val errorMsg = SchedulerBackendUtils.formatExecutorFailureError(
+          maxNumExecutorFailures,
+          schedulerBackend.getNumExecutorsRunning,
+          schedulerBackend.maxExecutors)
+        logError(errorMsg)
         stopApplication(EXCEED_MAX_EXECUTOR_FAILURES)
       }
     }

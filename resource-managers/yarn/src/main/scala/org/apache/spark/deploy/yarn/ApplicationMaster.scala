@@ -571,9 +571,12 @@ private[spark] class ApplicationMaster(
     while (!finished) {
       try {
         if (allocator.getNumExecutorsFailed >= maxNumExecutorFailures && insufficientResources) {
+          val errorMsg = SchedulerBackendUtils.formatExecutorFailureError(
+            maxNumExecutorFailures,
+            allocator.getNumExecutorsRunning,
+            maxExecutors)
           finish(FinalApplicationStatus.FAILED,
-            ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
-            s"Max number of executor failures ($maxNumExecutorFailures) reached")
+            ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES, errorMsg)
         } else if (allocator.isAllNodeExcluded) {
           finish(FinalApplicationStatus.FAILED,
             ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,

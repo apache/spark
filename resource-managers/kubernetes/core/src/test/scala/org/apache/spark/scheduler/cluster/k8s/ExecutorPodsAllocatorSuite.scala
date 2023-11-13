@@ -143,11 +143,10 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(schedulerBackend.insufficientResourcesRetained()).thenCallRealMethod()
     val totalRegisteredExecutors =
       PrivateMethod[AtomicInteger](Symbol("totalRegisteredExecutors"))()
-    val maxExecutors = PrivateMethod[Int](Symbol("maxExecutors"))()
     val minSurviveRatio = PrivateMethod[Double](Symbol("minSurviveRatio"))()
     when(schedulerBackend.invokePrivate[AtomicInteger](totalRegisteredExecutors))
       .thenReturn(numRegisteredExecutors)
-    when(schedulerBackend.invokePrivate(maxExecutors)).thenReturn(6)
+    when(schedulerBackend.maxExecutors).thenReturn(6)
     when(schedulerBackend.invokePrivate(minSurviveRatio)).thenReturn(0.5)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
     when(kubernetesClient.persistentVolumeClaims()).thenReturn(persistentVolumeClaims)
