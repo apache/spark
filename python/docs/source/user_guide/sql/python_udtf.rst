@@ -190,6 +190,13 @@ To implement a Python UDTF, you first need to define a class implementing the me
             - It is also possible for UDTFs to accept the exact arguments expected, along with
               their types.
             - UDTFs can instead accept keyword arguments during the function call if needed.
+            - The `eval` method can raise a `SkipRestOfInputTableException` to indicate that the
+              UDTF wants to skip consuming all remaining rows from the current partition of the
+              input table. This will cause the UDTF to proceed directly to the `terminate` method.
+            - The `eval` method can raise any other exception to indicate that the UDTF should be
+              aborted entirely. This will cause the UDTF to skip the `terminate` method and proceed
+              directly to the `cleanup` method, and then the exception will be propagated to the
+              query processor causing the invoking query to fail.
 
             Examples
             --------
