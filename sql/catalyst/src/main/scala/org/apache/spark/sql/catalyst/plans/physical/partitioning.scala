@@ -321,15 +321,12 @@ case class CoalescedBoundary(startReducerIndex: Int, endReducerIndex: Int)
 case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[CoalescedBoundary])
   extends HashPartitioningLike {
 
-  override val expressions: Seq[Expression] = from.expressions
+  override def expressions: Seq[Expression] = from.expressions
 
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
     CoalescedHashShuffleSpec(from.createShuffleSpec(distribution), partitions)
 
   override val numPartitions: Int = partitions.length
-
-  override def toString: String = from.toString
-  override def sql: String = from.sql
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): CoalescedHashPartitioning =
