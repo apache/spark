@@ -329,8 +329,8 @@ public class LevelDB implements KVStore {
    */
   void notifyIteratorClosed(DBIterator dbIterator) {
     iteratorTracker.removeIf(ref -> {
-        LevelDBIterator<?> it = ref.get();
-        return it != null && it.equals(it.internalIterator());
+      LevelDBIterator<?> it = ref.get();
+      return it != null && dbIterator.equals(it.internalIterator());
     });
   }
 
