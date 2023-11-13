@@ -18,7 +18,8 @@ import os
 import time
 import unittest
 
-from pyspark.sql.functions import array, ceil, col, explode, lit, mean, stddev
+from pyspark.sql import Row
+from pyspark.sql.functions import array, col, explode, lit, mean, stddev
 from pyspark.sql.utils import PythonException
 from pyspark.sql.window import Window
 from pyspark.testing.sqlutils import (
