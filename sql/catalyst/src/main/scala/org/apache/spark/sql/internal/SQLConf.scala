@@ -4541,6 +4541,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_RETAIN_FRACTION_DIGITS_FIRST =
+    buildConf("spark.sql.legacy.decimalLeastCommonType.retainFractionDigitsFirst")
+      .internal()
+      .doc("When set to true, we will try to retain the fraction digits first rather than " +
+        "integral digits, when getting a least common type between decimal types, and the " +
+        "result decimal precision exceeds the max precision.")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -5425,7 +5434,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   }
 
   def legacyRaiseErrorWithoutErrorClass: Boolean =
-      getConf(SQLConf.LEGACY_RAISE_ERROR_WITHOUT_ERROR_CLASS)
+    getConf(SQLConf.LEGACY_RAISE_ERROR_WITHOUT_ERROR_CLASS)
 
   /** ********************** SQLConf functionality methods ************ */
 
