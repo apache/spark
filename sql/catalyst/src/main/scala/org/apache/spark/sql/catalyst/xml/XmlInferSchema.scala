@@ -207,10 +207,6 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       parser: XMLEventReader,
       rootAttributes: Array[Attribute] = Array.empty): DataType = {
     val builder = ArrayBuffer[StructField]()
-    val nameToDataType = collection.mutable.Map.empty[String, ArrayBuffer[DataType]]
-    // Initialize a map to hold field names ignoring cases
-    // The map is only used in case *insensitive* mode
-    var caseInsensitiveFieldNames = CaseInsensitiveMap[String](Map.empty)
 
     /**
      * Retrieves the field name with respect to the case sensitivity setting.
@@ -225,25 +221,23 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
      * In case-sensitive mode: we will infer three fields: foo, Foo, FOO
      * In case-insensitive mode, we will infer an array named by foo
      * (as it's the first one we encounter)
-     *
-     * @param fieldName The field name to retrieve.
-     * @return The field name managed according to case sensitivity rules.
      */
-    def getCaseSensitiveName(fieldName: String): String = {
-      if (caseSensitive) {
-        return fieldName
-      }
-      if (!caseInsensitiveFieldNames.contains(fieldName)) {
-        caseInsensitiveFieldNames = caseInsensitiveFieldNames.updated(fieldName, fieldName)
-      }
-      caseInsensitiveFieldNames(fieldName)
-    }
+      val caseSensitivityOrdering: Ordering[String] = (x: String, y: String) =>
+        if (caseSensitive) {
+          x.compareTo(y)
+        } else {
+        x.compareToIgnoreCase(y)
+        }
+
+    val nameToDataType =
+      collection.mutable.TreeMap.empty[String, ArrayBuffer[DataType]](caseSensitivityOrdering)
+
     // If there are attributes, then we should process them first.
     val rootValuesMap =
       StaxXmlParserUtils.convertAttributesToValuesMap(rootAttributes, options)
     rootValuesMap.foreach {
       case (f, v) =>
-        nameToDataType += (getCaseSensitiveName(f) -> ArrayBuffer(inferFrom(v)))
+        nameToDataType += (f -> ArrayBuffer(inferFrom(v)))
     }
     var shouldStop = false
     while (!shouldStop) {
@@ -259,7 +253,7 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
               valuesMap.foreach {
                 case (f, v) =>
                   nestedBuilder +=
-                    StructField(getCaseSensitiveName(f), inferFrom(v), nullable = true)
+                    StructField(f, inferFrom(v), nullable = true)
               }
               StructType(nestedBuilder.sortBy(_.name).toArray)
 
@@ -270,7 +264,7 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
               valuesMap.foreach {
                 case (f, v) =>
                   nestedBuilder +=
-                    StructField(getCaseSensitiveName(f), inferFrom(v), nullable = true)
+                    StructField(f, inferFrom(v), nullable = true)
               }
               StructType(nestedBuilder.sortBy(_.name).toArray)
 
@@ -279,14 +273,13 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           // Add the field and datatypes so that we can check if this is ArrayType.
           val field = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
           val dataTypes =
-            nameToDataType.getOrElse(getCaseSensitiveName(field), ArrayBuffer.empty[DataType])
+            nameToDataType.getOrElse(field, ArrayBuffer.empty[DataType])
           dataTypes += inferredType
-          nameToDataType += (getCaseSensitiveName(field) -> dataTypes)
+          nameToDataType += (field -> dataTypes)
 
         case c: Characters if !c.isWhiteSpace =>
           // This can be an attribute-only object
           val valueTagType = inferFrom(c.getData)
-          // the valueTag is unique and thus we don't need to take case of case-insensitivity
           nameToDataType += options.valueTag -> ArrayBuffer(valueTagType)
 
         case _: EndElement =>
