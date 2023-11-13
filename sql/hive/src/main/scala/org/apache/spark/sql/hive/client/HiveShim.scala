@@ -603,8 +603,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
         val colType = colTypes.get(partKey)
         assert(colType.isDefined, s"`$partKey` is not partition key.")
         val (typeInfo, converter) = partKeyToTypeInfoAndConverter.get(partKey).get
-        if (SQLConf.get.getConf(SQLConf.SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION)
-          && null == converter.convert(partVal)) {
+        if (null == converter.convert(partVal)) {
           throw new IllegalArgumentException(
             s"Partition value '$partVal' cannot be cast to type '${colType.get}'")
         }
