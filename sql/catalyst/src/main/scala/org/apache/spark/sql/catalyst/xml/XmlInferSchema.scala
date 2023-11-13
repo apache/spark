@@ -224,16 +224,11 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     val nameToDataType =
       collection.mutable.TreeMap.empty[String, DataType](caseSensitivityOrdering)
 
-    /**
-     * Add or update key data type pair
-     * If the field name exists in the map,
-     * merge the type and infer the combined field as an array type if necessary
-     * @param fieldName field name
-     * @param newType the data type to associate with the field.
-     */
     def addOrUpdateType(fieldName: String, newType: DataType): Unit = {
       val oldTypeOpt = nameToDataType.get(fieldName)
       oldTypeOpt match {
+        // If the field name exists in the map,
+        // merge the type and infer the combined field as an array type if necessary
         case Some(oldType) if !oldType.isInstanceOf[ArrayType] =>
           nameToDataType.update(fieldName, ArrayType(compatibleType(oldType, newType)))
         case Some(oldType) =>
