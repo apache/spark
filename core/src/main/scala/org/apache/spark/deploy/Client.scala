@@ -36,6 +36,7 @@ import org.apache.spark.internal.config.Network.RPC_ASK_TIMEOUT
 import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.util.{SparkExitCode, ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Proxy that relays messages to the driver.
@@ -290,7 +291,8 @@ private[spark] class ClientApp extends SparkApplication {
 
     val masterEndpoints = driverArgs.masters.map(RpcAddress.fromSparkURL).
       map(rpcEnv.setupEndpointRef(_, Master.ENDPOINT_NAME))
-    rpcEnv.setupEndpoint("client", new ClientEndpoint(rpcEnv, driverArgs, masterEndpoints, conf))
+    rpcEnv.setupEndpoint("client",
+      new ClientEndpoint(rpcEnv, driverArgs, masterEndpoints.toImmutableArraySeq, conf))
 
     rpcEnv.awaitTermination()
   }

@@ -22,20 +22,20 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import com.google.rpc.ErrorInfo
-import io.grpc.StatusRuntimeException
+import io.grpc.{ManagedChannel, StatusRuntimeException}
 import io.grpc.protobuf.StatusProto
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods
 
-import org.apache.spark.{QueryContext, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
-import org.apache.spark.connect.proto.{FetchErrorDetailsRequest, FetchErrorDetailsResponse, UserContext}
-import org.apache.spark.connect.proto.SparkConnectServiceGrpc.SparkConnectServiceBlockingStub
+import org.apache.spark.{QueryContext, QueryContextType, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.connect.proto.{FetchErrorDetailsRequest, FetchErrorDetailsResponse, SparkConnectServiceGrpc, UserContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.streaming.StreamingQueryException
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * GrpcExceptionConverter handles the conversion of StatusRuntimeExceptions into Spark exceptions.
@@ -48,9 +48,10 @@ import org.apache.spark.sql.streaming.StreamingQueryException
  * the ErrorInfo is missing, the exception will be constructed based on the StatusRuntimeException
  * itself.
  */
-private[client] class GrpcExceptionConverter(grpcStub: SparkConnectServiceBlockingStub)
-    extends Logging {
+private[client] class GrpcExceptionConverter(channel: ManagedChannel) extends Logging {
   import GrpcExceptionConverter._
+
+  val grpcStub = SparkConnectServiceGrpc.newBlockingStub(channel)
 
   def convert[T](sessionId: String, userContext: UserContext, clientType: String)(f: => T): T = {
     try {
@@ -167,7 +168,7 @@ private[client] object GrpcExceptionConverter {
   private[client] case class ErrorParams(
       message: String,
       cause: Option[Throwable],
-      // errorClass will only be set if the error is both enriched and SparkThrowable.
+      // errorClass will only be set if the error is SparkThrowable.
       errorClass: Option[String],
       // messageParameters will only be set if the error is both enriched and SparkThrowable.
       messageParameters: Map[String, String],
@@ -190,10 +191,9 @@ private[client] object GrpcExceptionConverter {
     errorConstructor(params =>
       new ParseException(
         None,
-        params.message,
         Origin(),
         Origin(),
-        errorClass = params.errorClass,
+        errorClass = params.errorClass.orNull,
         messageParameters = params.messageParameters,
         queryContext = params.queryContext)),
     errorConstructor(params =>
@@ -204,34 +204,24 @@ private[client] object GrpcExceptionConverter {
         messageParameters = params.messageParameters,
         context = params.queryContext)),
     errorConstructor(params =>
-      new NamespaceAlreadyExistsException(
-        params.message,
-        params.errorClass,
-        params.messageParameters)),
+      new NamespaceAlreadyExistsException(params.errorClass.orNull, params.messageParameters)),
     errorConstructor(params =>
       new TableAlreadyExistsException(
-        params.message,
-        params.cause,
-        params.errorClass,
-        params.messageParameters)),
+        params.errorClass.orNull,
+        params.messageParameters,
+        params.cause)),
     errorConstructor(params =>
       new TempTableAlreadyExistsException(
-        params.message,
-        params.cause,
-        params.errorClass,
-        params.messageParameters)),
+        params.errorClass.orNull,
+        params.messageParameters,
+        params.cause)),
     errorConstructor(params =>
       new NoSuchDatabaseException(
-        params.message,
-        params.cause,
-        params.errorClass,
-        params.messageParameters)),
+        params.errorClass.orNull,
+        params.messageParameters,
+        params.cause)),
     errorConstructor(params =>
-      new NoSuchTableException(
-        params.message,
-        params.cause,
-        params.errorClass,
-        params.messageParameters)),
+      new NoSuchTableException(params.errorClass.orNull, params.messageParameters, params.cause)),
     errorConstructor[NumberFormatException](params =>
       new SparkNumberFormatException(
         params.message,
@@ -323,15 +313,18 @@ private[client] object GrpcExceptionConverter {
 
     val queryContext = error.getSparkThrowable.getQueryContextsList.asScala.map { queryCtx =>
       new QueryContext {
+        override def contextType(): QueryContextType = queryCtx.getContextType match {
+          case FetchErrorDetailsResponse.QueryContext.ContextType.DATAFRAME =>
+            QueryContextType.DataFrame
+          case _ => QueryContextType.SQL
+        }
         override def objectType(): String = queryCtx.getObjectType
-
         override def objectName(): String = queryCtx.getObjectName
-
         override def startIndex(): Int = queryCtx.getStartIndex
-
         override def stopIndex(): Int = queryCtx.getStopIndex
-
         override def fragment(): String = queryCtx.getFragment
+        override def callSite(): String = queryCtx.getCallSite
+        override def summary(): String = queryCtx.getSummary
       }
     }.toArray
 
@@ -364,14 +357,20 @@ private[client] object GrpcExceptionConverter {
     implicit val formats = DefaultFormats
     val classes =
       JsonMethods.parse(info.getMetadataOrDefault("classes", "[]")).extract[Array[String]]
+    val errorClass = info.getMetadataOrDefault("errorClass", null)
+    val builder = FetchErrorDetailsResponse.Error
+      .newBuilder()
+      .setMessage(message)
+      .addAllErrorTypeHierarchy(classes.toImmutableArraySeq.asJava)
 
-    errorsToThrowable(
-      0,
-      Seq(
-        FetchErrorDetailsResponse.Error
+    if (errorClass != null) {
+      builder.setSparkThrowable(
+        FetchErrorDetailsResponse.SparkThrowable
           .newBuilder()
-          .setMessage(message)
-          .addAllErrorTypeHierarchy(classes.toIterable.asJava)
-          .build()))
+          .setErrorClass(errorClass)
+          .build())
+    }
+
+    errorsToThrowable(0, Seq(builder.build()))
   }
 }

@@ -22,6 +22,7 @@ import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A tokenizer that converts the input string to lowercase and then splits it by white spaces.
@@ -37,7 +38,7 @@ class Tokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   override protected def createTransformFunc: String => Seq[String] = {
     // scalastyle:off caselocale
-    _.toLowerCase.split("\\s")
+    _.toLowerCase.split("\\s").toImmutableArraySeq
     // scalastyle:on caselocale
   }
 

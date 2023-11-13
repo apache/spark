@@ -97,6 +97,10 @@ class ExecutePlanResponseReattachableIterator(
   private[connect] var iter: Option[java.util.Iterator[proto.ExecutePlanResponse]] =
     Some(rawBlockingStub.executePlan(initialRequest))
 
+  // Server side session ID, used to detect if the server side session changed. This is set upon
+  // receiving the first response from the server.
+  private var serverSideSessionId: Option[String] = None
+
   override def innerIterator: Iterator[proto.ExecutePlanResponse] = iter match {
     case Some(it) => it.asScala
     case None =>
@@ -114,8 +118,21 @@ class ExecutePlanResponseReattachableIterator(
 
     try {
       // Get next response, possibly triggering reattach in case of stream error.
-      val ret = retry {
+      val ret: proto.ExecutePlanResponse = retry {
         callIter(_.next())
+      }
+
+      // Check if the server-side session state has changed. If this is the case, immediately
+      // abandon execution.
+      serverSideSessionId match {
+        case Some(id) =>
+          if (id != ret.getServerSideSessionId) {
+            throw new IllegalStateException(
+              s"Server side session ID changed. Create a new SparkSession to continue. " +
+                s"(Old: $id, New: ${ret.getServerSideSessionId})")
+          }
+        case None =>
+          serverSideSessionId = Some(ret.getServerSideSessionId)
       }
 
       // Record last returned response, to know where to restart in case of reattach.
@@ -219,7 +236,9 @@ class ExecutePlanResponseReattachableIterator(
         }
         // Try a new ExecutePlan, and throw upstream for retry.
         iter = Some(rawBlockingStub.executePlan(initialRequest))
-        throw new GrpcRetryHandler.RetryException
+        val error = new GrpcRetryHandler.RetryException()
+        error.addSuppressed(ex)
+        throw error
       case NonFatal(e) =>
         // Remove the iterator, so that a new one will be created after retry.
         iter = None
@@ -306,4 +325,14 @@ class ExecutePlanResponseReattachableIterator(
    */
   private def retry[T](fn: => T): T =
     GrpcRetryHandler.retry(retryPolicy)(fn)
+}
+
+private[connect] object ExecutePlanResponseReattachableIterator {
+  @scala.annotation.tailrec
+  private[connect] def fromIterator(
+      iter: Iterator[proto.ExecutePlanResponse]): ExecutePlanResponseReattachableIterator =
+    iter match {
+      case e: ExecutePlanResponseReattachableIterator => e
+      case w: WrappedCloseableIterator[proto.ExecutePlanResponse] => fromIterator(w.innerIterator)
+    }
 }

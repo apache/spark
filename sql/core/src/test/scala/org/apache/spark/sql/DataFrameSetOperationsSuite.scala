@@ -30,6 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession, SQLTestData}
 import org.apache.spark.sql.test.SQLTestData.NullStrings
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 class DataFrameSetOperationsSuite extends QueryTest
   with SharedSparkSession with AdaptiveSparkPlanHelper {
@@ -321,7 +322,7 @@ class DataFrameSetOperationsSuite extends QueryTest
         case (data, index) =>
           val rng = new org.apache.spark.util.random.XORShiftRandom(7 + index)
           data.map(_ => rng.nextDouble()).map(i => Row(i))
-      }
+      }.toImmutableArraySeq
     )
 
     val intersect = df1.intersect(df2)
@@ -373,7 +374,10 @@ class DataFrameSetOperationsSuite extends QueryTest
       errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
       parameters = Map(
         "colName" -> "`m`",
-        "dataType" -> "\"MAP<STRING, BIGINT>\"")
+        "dataType" -> "\"MAP<STRING, BIGINT>\""),
+      context = ExpectedContext(
+        fragment = "distinct",
+        callSitePattern = getCurrentClassCallSitePattern)
     )
     withTempView("v") {
       df.createOrReplaceTempView("v")

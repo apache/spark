@@ -84,11 +84,11 @@ class AttributeSet private (private val baseSet: mutable.LinkedHashSet[Attribute
 
   /** Returns a new [[AttributeSet]] that contains `elem` in addition to the current elements. */
   def +(elem: Attribute): AttributeSet =  // scalastyle:ignore
-    new AttributeSet(baseSet + new AttributeEquals(elem))
+    new AttributeSet(baseSet.union(Set(new AttributeEquals(elem))))
 
   /** Returns a new [[AttributeSet]] that does not contain `elem`. */
   def -(elem: Attribute): AttributeSet =
-    new AttributeSet(baseSet - new AttributeEquals(elem))
+    new AttributeSet(baseSet.diff(Set(new AttributeEquals(elem))))
 
   /** Returns an iterator containing all of the attributes in the set. */
   def iterator: Iterator[Attribute] = baseSet.map(_.a).iterator

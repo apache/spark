@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A base class for generated/interpreted predicate
@@ -173,7 +174,7 @@ trait PredicateHelper extends AliasHelper with Logging {
         }
         i += 2
       }
-      currentResult = nextResult
+      currentResult = nextResult.toImmutableArraySeq
     }
     currentResult.head
   }
@@ -1312,7 +1313,7 @@ object IsUnknown {
   def apply(child: Expression): Predicate = {
     new IsNull(child) with ExpectsInputTypes {
       override def inputTypes: Seq[DataType] = Seq(BooleanType)
-      override def sql: String = s"(${child.sql} IS UNKNOWN)"
+      override def sql: String = s"(${this.child.sql} IS UNKNOWN)"
     }
   }
 }
@@ -1321,7 +1322,7 @@ object IsNotUnknown {
   def apply(child: Expression): Predicate = {
     new IsNotNull(child) with ExpectsInputTypes {
       override def inputTypes: Seq[DataType] = Seq(BooleanType)
-      override def sql: String = s"(${child.sql} IS NOT UNKNOWN)"
+      override def sql: String = s"(${this.child.sql} IS NOT UNKNOWN)"
     }
   }
 }

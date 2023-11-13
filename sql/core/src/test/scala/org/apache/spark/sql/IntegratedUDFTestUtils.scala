@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.python.{UserDefinedPythonDataSource, UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * This object targets to integrate various UDF test cases so that Scalar UDF, Python UDF,
@@ -232,8 +233,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
             "from pyspark.serializers import CloudPickleSerializer; " +
               s"f = open('$path', 'wb');" +
               s"exec(open('$codePath', 'r').read());" +
-              s"ds = $dataSourceName(options=dict());" +
-              "f.write(CloudPickleSerializer().dumps(ds))"),
+              s"dataSourceCls = $dataSourceName;" +
+              "f.write(CloudPickleSerializer().dumps(dataSourceCls))"),
           None,
           "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
         binaryPythonDataSource = Files.readAllBytes(path.toPath)
@@ -393,7 +394,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
-        command = pythonFunc,
+        command = pythonFunc.toImmutableArraySeq,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
         pythonExec = pythonExec,
@@ -425,19 +426,16 @@ object IntegratedUDFTestUtils extends SQLHelper {
 
   def createUserDefinedPythonDataSource(
       name: String,
-      pythonScript: String,
-      schema: StructType): UserDefinedPythonDataSource = {
+      pythonScript: String): UserDefinedPythonDataSource = {
     UserDefinedPythonDataSource(
-      dataSource = SimplePythonFunction(
-        command = createPythonDataSource(name, pythonScript),
+      dataSourceCls = SimplePythonFunction(
+        command = createPythonDataSource(name, pythonScript).toImmutableArraySeq,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
         pythonExec = pythonExec,
         pythonVer = pythonVer,
         broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
-        accumulator = null),
-      schema = schema
-    )
+        accumulator = null))
   }
 
   def createUserDefinedPythonTableFunction(
@@ -449,7 +447,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     UserDefinedPythonTableFunction(
       name = name,
       func = SimplePythonFunction(
-        command = createPythonUDTF(name, pythonScript),
+        command = createPythonUDTF(name, pythonScript).toImmutableArraySeq,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
         pythonExec = pythonExec,
@@ -1168,7 +1166,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
-        command = pandasFunc,
+        command = pandasFunc.toImmutableArraySeq,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
         pythonExec = pythonExec,
@@ -1222,7 +1220,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
-        command = pandasGroupedAggFunc,
+        command = pandasGroupedAggFunc.toImmutableArraySeq,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
         pythonExec = pythonExec,
@@ -1257,7 +1255,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
-        command = createPandasGroupedMapFuncWithState(pythonScript),
+        command = createPandasGroupedMapFuncWithState(pythonScript).toImmutableArraySeq,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
         pythonExec = pythonExec,

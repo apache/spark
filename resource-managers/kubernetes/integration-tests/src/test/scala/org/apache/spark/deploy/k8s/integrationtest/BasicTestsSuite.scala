@@ -25,6 +25,7 @@ import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.{SparkFunSuite, TestUtils}
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.SPARK_PI_MAIN_CLASS
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.launcher.SparkLauncher
 
 private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
@@ -93,7 +94,7 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
   test("Run SparkPi with an argument.", k8sTestTag) {
     // This additional configuration with snappy is for SPARK-26995
     sparkAppConf
-      .set("spark.io.compression.codec", "snappy")
+      .set("spark.io.compression.codec", CompressionCodec.SNAPPY)
     runSparkPiAndVerifyCompletion(appArgs = Array("5"))
   }
 

@@ -696,7 +696,9 @@ class QueryCompilationErrorsSuite
         Seq("""{"a":1}""").toDF("a").select(from_json($"a", IntegerType)).collect()
       },
       errorClass = "DATATYPE_MISMATCH.INVALID_JSON_SCHEMA",
-      parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""))
+      parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""),
+      context =
+        ExpectedContext(fragment = "from_json", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("WRONG_NUM_ARGS.WITHOUT_SUGGESTION: wrong args of CAST(parameter types contains DataType)") {
@@ -767,7 +769,8 @@ class QueryCompilationErrorsSuite
       },
       errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
       sqlState = "42000",
-      parameters = Map("field" -> "`firstname`", "count" -> "2")
+      parameters = Map("field" -> "`firstname`", "count" -> "2"),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -780,7 +783,9 @@ class QueryCompilationErrorsSuite
       },
       errorClass = "INVALID_EXTRACT_BASE_FIELD_TYPE",
       sqlState = "42000",
-      parameters = Map("base" -> "\"firstname\"", "other" -> "\"STRING\""))
+      parameters = Map("base" -> "\"firstname\"", "other" -> "\"STRING\""),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern)
+    )
   }
 
   test("INVALID_EXTRACT_FIELD_TYPE: extract not string literal field") {

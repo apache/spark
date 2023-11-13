@@ -234,13 +234,15 @@ case class Stack(children: Seq[Expression]) extends Generator {
 
   override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     val values = children.tail.map(_.eval(input)).toArray
+
+    import org.apache.spark.util.ArrayImplicits._
     for (row <- 0 until numRows) yield {
       val fields = new Array[Any](numFields)
       for (col <- 0 until numFields) {
         val index = row * numFields + col
         fields.update(col, if (index < values.length) values(index) else null)
       }
-      InternalRow(fields: _*)
+      InternalRow(fields.toImmutableArraySeq: _*)
     }
   }
 
@@ -293,12 +295,14 @@ case class ReplicateRows(children: Seq[Expression]) extends Generator with Codeg
   override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     val numRows = children.head.eval(input).asInstanceOf[Long]
     val values = children.tail.map(_.eval(input)).toArray
+
+    import org.apache.spark.util.ArrayImplicits._
     Range.Long(0, numRows, 1).map { _ =>
       val fields = new Array[Any](numColumns)
       for (col <- 0 until numColumns) {
         fields.update(col, values(col))
       }
-      InternalRow(fields: _*)
+      InternalRow(fields.toImmutableArraySeq: _*)
     }
   }
 

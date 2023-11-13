@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.Column
+import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
@@ -53,6 +53,15 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       val operatorMetadata = OperatorStateMetadataV1(operatorInfo, stateStoreInfo.toArray)
       new OperatorStateMetadataWriter(statePath, hadoopConf).write(operatorMetadata)
       checkOperatorStateMetadata(checkpointDir.toString, 0, operatorMetadata)
+      val df = spark.read.format("state-metadata").load(checkpointDir.toString)
+      // Commit log is empty, there is no available batch id.
+      checkAnswer(df, Seq(Row(1, "Join", "store1", 200, -1L, -1L),
+          Row(1, "Join", "store2", 200, -1L, -1L),
+          Row(1, "Join", "store3", 200, -1L, -1L),
+          Row(1, "Join", "store4", 200, -1L, -1L)
+        ))
+      checkAnswer(df.select(df.metadataColumn("_numColsPrefixKey")),
+        Seq(Row(1), Row(1), Row(1), Row(1)))
     }
   }
 
@@ -105,6 +114,16 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       val expectedMetadata = OperatorStateMetadataV1(
         OperatorInfoV1(0, "symmetricHashJoin"), expectedStateStoreInfo)
       checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata)
+
+      val df = spark.read.format("state-metadata")
+        .load(checkpointDir.toString)
+      checkAnswer(df, Seq(Row(0, "symmetricHashJoin", "left-keyToNumValues", 5, 0L, 1L),
+          Row(0, "symmetricHashJoin", "left-keyWithIndexToValue", 5, 0L, 1L),
+          Row(0, "symmetricHashJoin", "right-keyToNumValues", 5, 0L, 1L),
+          Row(0, "symmetricHashJoin", "right-keyWithIndexToValue", 5, 0L, 1L)
+        ))
+      checkAnswer(df.select(df.metadataColumn("_numColsPrefixKey")),
+        Seq(Row(0), Row(0), Row(0), Row(0)))
     }
   }
 
@@ -147,6 +166,10 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
         Array(StateStoreMetadataV1("default", 1, spark.sessionState.conf.numShufflePartitions))
       )
       checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata)
+
+      val df = spark.read.format("state-metadata").load(checkpointDir.toString)
+      checkAnswer(df, Seq(Row(0, "sessionWindowStateStoreSaveExec", "default", 5, 0L, 0L)))
+      checkAnswer(df.select(df.metadataColumn("_numColsPrefixKey")), Seq(Row(1)))
     }
   }
 
@@ -176,6 +199,18 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
         Array(StateStoreMetadataV1("default", 0, numShufflePartitions)))
       checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata0)
       checkOperatorStateMetadata(checkpointDir.toString, 1, expectedMetadata1)
+
+      val df = spark.read.format("state-metadata").load(checkpointDir.toString)
+      checkAnswer(df, Seq(Row(0, "stateStoreSave", "default", 5, 0L, 1L),
+          Row(1, "stateStoreSave", "default", 5, 0L, 1L)))
+      checkAnswer(df.select(df.metadataColumn("_numColsPrefixKey")), Seq(Row(0), Row(0)))
     }
+  }
+
+  test("State metadata data source handle missing argument") {
+    val e = intercept[IllegalArgumentException] {
+      spark.read.format("state-metadata").load().collect()
+    }
+    assert(e.getMessage == "Checkpoint path is not specified for state metadata data source.")
   }
 }

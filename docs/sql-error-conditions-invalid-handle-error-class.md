@@ -45,6 +45,10 @@ Operation not found.
 
 Session already exists.
 
+## SESSION_CLOSED
+
+Session was closed.
+
 ## SESSION_NOT_FOUND
 
 Session not found.

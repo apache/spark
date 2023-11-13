@@ -19,9 +19,8 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
-import org.apache.spark.sql.catalyst.optimizer.{ColumnPruning, MergeScalarSubqueries}
-import org.apache.spark.sql.catalyst.plans.LeftSemi
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan}
+import org.apache.spark.sql.catalyst.optimizer.MergeScalarSubqueries
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan}
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SubqueryExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.internal.SQLConf
@@ -225,58 +224,28 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
     super.afterAll()
   }
 
-  private def ensureLeftSemiJoinExists(plan: LogicalPlan): Unit = {
-    assert(
-      plan.find {
-        case j: Join if j.joinType == LeftSemi => true
-        case _ => false
-      }.isDefined
-    )
-  }
-
-  def checkWithAndWithoutFeatureEnabled(query: String, testSemiJoin: Boolean,
-      shouldReplace: Boolean, runtimeFilterNum: Int = 1): Unit = {
+  def checkWithAndWithoutFeatureEnabled(
+      query: String,
+      shouldReplace: Boolean,
+      runtimeFilterNum: Int = 1): Unit = {
     var planDisabled: LogicalPlan = null
     var planEnabled: LogicalPlan = null
     var expectedAnswer: Array[Row] = null
 
-    withSQLConf(SQLConf.RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED.key -> "false",
-      SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
       planDisabled = sql(query).queryExecution.optimizedPlan
       expectedAnswer = sql(query).collect()
     }
 
-    if (testSemiJoin) {
-      withSQLConf(SQLConf.RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED.key -> "true",
-        SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
-        planEnabled = sql(query).queryExecution.optimizedPlan
-        checkAnswer(sql(query), expectedAnswer)
-      }
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true") {
+      planEnabled = sql(query).queryExecution.optimizedPlan
+      checkAnswer(sql(query), expectedAnswer)
+      assert(getNumBloomFilters(planDisabled) == 0)
       if (shouldReplace) {
-        val normalizedEnabled = normalizePlan(normalizeExprIds(planEnabled))
-        val normalizedDisabled = normalizePlan(normalizeExprIds(planDisabled))
-        ensureLeftSemiJoinExists(planEnabled)
-        assert(normalizedEnabled != normalizedDisabled)
-        val agg = planEnabled.collect {
-          case Join(_, agg: Aggregate, LeftSemi, _, _) => agg
-        }
-        assert(agg.size == runtimeFilterNum)
-        assert(agg.head.fastEquals(ColumnPruning(agg.head)))
+        assert(!columnPruningTakesEffect(planEnabled))
+        assert(getNumBloomFilters(planEnabled) == runtimeFilterNum)
       } else {
-        comparePlans(planDisabled, planEnabled)
-      }
-    } else {
-      withSQLConf(SQLConf.RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED.key -> "false",
-        SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true") {
-        planEnabled = sql(query).queryExecution.optimizedPlan
-        checkAnswer(sql(query), expectedAnswer)
-        assert(getNumBloomFilters(planDisabled) == 0)
-        if (shouldReplace) {
-          assert(!columnPruningTakesEffect(planEnabled))
-          assert(getNumBloomFilters(planEnabled) == runtimeFilterNum)
-        } else {
-          assert(getNumBloomFilters(planEnabled) == getNumBloomFilters(planDisabled))
-        }
+        assert(getNumBloomFilters(planEnabled) == getNumBloomFilters(planDisabled))
       }
     }
   }
@@ -320,62 +289,12 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
     }.nonEmpty
   }
 
-  def assertRewroteSemiJoin(query: String, runtimeFilterNum: Int = 1): Unit = {
-    checkWithAndWithoutFeatureEnabled(
-      query, testSemiJoin = true, shouldReplace = true, runtimeFilterNum)
-  }
-
-  def assertDidNotRewriteSemiJoin(query: String): Unit = {
-    checkWithAndWithoutFeatureEnabled(query, testSemiJoin = true, shouldReplace = false)
-  }
-
   def assertRewroteWithBloomFilter(query: String, runtimeFilterNum: Int = 1): Unit = {
-    checkWithAndWithoutFeatureEnabled(
-      query, testSemiJoin = false, shouldReplace = true, runtimeFilterNum)
+    checkWithAndWithoutFeatureEnabled(query, shouldReplace = true, runtimeFilterNum)
   }
 
   def assertDidNotRewriteWithBloomFilter(query: String): Unit = {
-    checkWithAndWithoutFeatureEnabled(query, testSemiJoin = false, shouldReplace = false)
-  }
-
-  test("Runtime semi join reduction: simple") {
-    // Filter creation side is 3409 bytes
-    // Filter application side scan is 3362 bytes
-    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-      assertRewroteSemiJoin("select * from bf1 join bf2 on bf1.c1 = bf2.c2 where bf2.a2 = 62")
-      assertDidNotRewriteSemiJoin("select * from bf1 join bf2 on bf1.c1 = bf2.c2")
-    }
-  }
-
-  test("Runtime semi join reduction: two joins") {
-    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-      assertRewroteSemiJoin("select * from bf1 join bf2 join bf3 on bf1.c1 = bf2.c2 " +
-        "and bf3.c3 = bf2.c2 where bf2.a2 = 5", 2)
-    }
-  }
-
-  test("Runtime semi join reduction: three joins") {
-    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-      assertRewroteSemiJoin("select * from bf1 join bf2 join bf3 join bf4 on " +
-        "bf1.c1 = bf2.c2 and bf2.c2 = bf3.c3 and bf3.c3 = bf4.c4 where bf1.a1 = 5", 3)
-    }
-  }
-
-  test("Runtime semi join reduction: simple expressions only") {
-    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-      val squared = (s: Long) => {
-        s * s
-      }
-      spark.udf.register("square", squared)
-      assertDidNotRewriteSemiJoin("select * from bf1 join bf2 on " +
-        "bf1.c1 = bf2.c2 where square(bf2.a2) = 62")
-      assertDidNotRewriteSemiJoin("select * from bf1 join bf2 on " +
-        "bf1.c1 = square(bf2.c2) where bf2.a2= 62")
-    }
+    checkWithAndWithoutFeatureEnabled(query, shouldReplace = false)
   }
 
   test("Runtime bloom filter join: simple") {
@@ -416,14 +335,12 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
         "bf1.c1 = bf2.c2 where bf2.a2 = 5) as a join bf3 on bf3.c3 = a.c1", 2)
       assertRewroteWithBloomFilter("select * from (select * from bf1 right join bf2 on " +
         "bf1.c1 = bf2.c2 where bf2.a2 = 5) as a join bf3 on bf3.c3 = a.c1", 2)
-      // Can't leverage the transitivity of join keys due to runtime filters already exists.
-      // bf2 as creation side and inject runtime filter for bf1.
       assertRewroteWithBloomFilter("select * from bf1 join bf2 join bf3 on bf1.c1 = bf2.c2 " +
-        "and bf3.c3 = bf1.c1 where bf2.a2 = 5")
+        "and bf3.c3 = bf1.c1 where bf2.a2 = 5", 2)
       assertRewroteWithBloomFilter("select * from bf1 left outer join bf2 join bf3 on " +
-        "bf1.c1 = bf2.c2 and bf3.c3 = bf1.c1 where bf2.a2 = 5")
+        "bf1.c1 = bf2.c2 and bf3.c3 = bf1.c1 where bf2.a2 = 5", 2)
       assertRewroteWithBloomFilter("select * from bf1 right outer join bf2 join bf3 on " +
-        "bf1.c1 = bf2.c2 and bf3.c3 = bf1.c1 where bf2.a2 = 5")
+        "bf1.c1 = bf2.c2 and bf3.c3 = bf1.c1 where bf2.a2 = 5", 2)
     }
 
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
@@ -457,14 +374,12 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
       val query = "select * from bf1 join bf2 on bf1.c1 = bf2.c2 and " +
         "bf1.b1 = bf2.b2 where bf2.a2 = 62"
 
-      withSQLConf(SQLConf.RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED.key -> "false",
-        SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
+      withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
         planDisabled = sql(query).queryExecution.optimizedPlan
         expectedAnswer = sql(query).collect()
       }
 
-      withSQLConf(SQLConf.RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED.key -> "false",
-        SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true") {
+      withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true") {
         planEnabled = sql(query).queryExecution.optimizedPlan
         checkAnswer(sql(query), expectedAnswer)
       }
@@ -482,15 +397,13 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
       val query = "select * from bf1 join bf2 on bf1.c1 = bf2.c2 and " +
         "bf1.b1 = bf2.b2 where bf2.a2 = 62"
 
-      withSQLConf(SQLConf.RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED.key -> "false",
-        SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
+      withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
         planDisabled = sql(query).queryExecution.optimizedPlan
         expectedAnswer = sql(query).collect()
       }
 
       for (numFilterThreshold <- 0 to 3) {
-        withSQLConf(SQLConf.RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED.key -> "false",
-          SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true",
+        withSQLConf( SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true",
           SQLConf.RUNTIME_FILTER_NUMBER_THRESHOLD.key -> numFilterThreshold.toString) {
           planEnabled = sql(query).queryExecution.optimizedPlan
           checkAnswer(sql(query), expectedAnswer)
@@ -515,14 +428,12 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
       val query = "select * from bf1 join bf2 on bf1.c1 = bf2.c2 and " +
         "bf1.c1 = bf2.b2 where bf2.a2 = 62"
 
-      withSQLConf(SQLConf.RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED.key -> "false",
-        SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
+      withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
         planDisabled = sql(query).queryExecution.optimizedPlan
         expectedAnswer = sql(query).collect()
       }
 
-      withSQLConf(SQLConf.RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED.key -> "false",
-        SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true") {
+      withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true") {
         planEnabled = sql(query).queryExecution.optimizedPlan
         checkAnswer(sql(query), expectedAnswer)
       }
@@ -648,7 +559,6 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
   test("Merge runtime bloom filters") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000",
-      SQLConf.RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED.key -> "false",
       SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true",
       // Re-enable `MergeScalarSubqueries`
       SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "",

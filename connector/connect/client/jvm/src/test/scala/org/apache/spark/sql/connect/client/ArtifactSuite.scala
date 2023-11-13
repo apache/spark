@@ -17,6 +17,7 @@
 package org.apache.spark.sql.connect.client
 
 import java.io.InputStream
+import java.net.URI
 import java.nio.file.{Files, Path, Paths}
 import java.util.concurrent.TimeUnit
 
@@ -31,6 +32,8 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.connect.proto.AddArtifactsRequest
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.test.ConnectFunSuite
+import org.apache.spark.util.IvyTestUtils
+import org.apache.spark.util.MavenUtils.MavenCoordinate
 
 class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
@@ -42,6 +45,7 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
   private var retryPolicy: GrpcRetryHandler.RetryPolicy = _
   private var bstub: CustomSparkConnectBlockingStub = _
   private var stub: CustomSparkConnectStub = _
+  private var state: SparkConnectStubState = _
 
   private def startDummyServer(): Unit = {
     service = new DummySparkConnectService()
@@ -55,8 +59,9 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
   private def createArtifactManager(): Unit = {
     channel = InProcessChannelBuilder.forName(getClass.getName).directExecutor().build()
     retryPolicy = GrpcRetryHandler.RetryPolicy()
-    bstub = new CustomSparkConnectBlockingStub(channel, retryPolicy)
-    stub = new CustomSparkConnectStub(channel, retryPolicy)
+    state = new SparkConnectStubState(channel, retryPolicy)
+    bstub = new CustomSparkConnectBlockingStub(channel, state)
+    stub = new CustomSparkConnectStub(channel, state)
     artifactManager = new ArtifactManager(Configuration(), "", bstub, stub)
   }
 
@@ -267,5 +272,18 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
     val receivedRequests = service.getAndClearLatestAddArtifactRequests()
     assert(receivedRequests.size == 1)
+  }
+
+  test("resolve ivy") {
+    val main = new MavenCoordinate("my.great.lib", "mylib", "0.1")
+    val dep = "my.great.dep:mydep:0.5"
+    IvyTestUtils.withRepository(main, Some(dep), None) { repo =>
+      val artifacts =
+        Artifact.newIvyArtifacts(URI.create(s"ivy://my.great.lib:mylib:0.1?repos=$repo"))
+      assert(artifacts.exists(_.path.toString.contains("jars/my.great.lib_mylib-0.1.jar")))
+      // transitive dependency
+      assert(artifacts.exists(_.path.toString.contains("jars/my.great.dep_mydep-0.5.jar")))
+    }
+
   }
 }

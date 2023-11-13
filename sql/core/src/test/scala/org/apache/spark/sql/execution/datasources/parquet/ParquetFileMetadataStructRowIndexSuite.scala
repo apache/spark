@@ -22,6 +22,7 @@ import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 class ParquetFileMetadataStructRowIndexSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -75,7 +76,7 @@ class ParquetFileMetadataStructRowIndexSuite extends QueryTest with SharedSparkS
       case s: StructType => collectMetadataCols(s)
       case _ if allMetadataCols.contains(field.name) => Some(field.name)
       case _ => None
-    }}
+    }}.toImmutableArraySeq
   }
 
   for (useVectorizedReader <- Seq(false, true))
@@ -133,7 +134,8 @@ class ParquetFileMetadataStructRowIndexSuite extends QueryTest with SharedSparkS
         parameters = Map(
           "fieldName" -> "`row_index`",
           "fields" -> ("`file_path`, `file_name`, `file_size`, " +
-            "`file_block_start`, `file_block_length`, `file_modification_time`")))
+            "`file_block_start`, `file_block_length`, `file_modification_time`")),
+        context = ExpectedContext(fragment = "select", getCurrentClassCallSitePattern))
     }
   }
 

@@ -41,8 +41,6 @@ object AttributeMap {
 class AttributeMap[A](val baseMap: Map[ExprId, (Attribute, A)])
   extends Map[Attribute, A] with Serializable {
 
-  //  Note: this class supports Scala 2.13. A parallel source tree has a 2.12 implementation.
-
   override def get(k: Attribute): Option[A] = baseMap.get(k.exprId).map(_._2)
 
   override def getOrElse[B1 >: A](k: Attribute, default: => B1): B1 = get(k).getOrElse(default)

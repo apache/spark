@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.mllib.tree.EnsembleTestHelper
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Test suite for [[BaggedPoint]].
@@ -31,7 +32,7 @@ class BaggedPointSuite extends SparkFunSuite with MLlibTestSparkContext  {
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(1, 1000).map { lp =>
       Instance(lp.label, 0.5, lp.features.asML)
     }
-    val rdd = sc.parallelize(arr)
+    val rdd = sc.parallelize(arr.toImmutableArraySeq)
     val baggedRDD = BaggedPoint.convertToBaggedRDD(rdd, 1.0, 1, false,
       (instance: Instance) => instance.weight * 4.0, seed = 42)
     baggedRDD.collect().foreach { baggedPoint =>
@@ -46,7 +47,7 @@ class BaggedPointSuite extends SparkFunSuite with MLlibTestSparkContext  {
 
     val seeds = Array(123, 5354, 230, 349867, 23987)
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(1, 1000).map(_.asML)
-    val rdd = sc.parallelize(arr)
+    val rdd = sc.parallelize(arr.toImmutableArraySeq)
     seeds.foreach { seed =>
       val baggedRDD = BaggedPoint.convertToBaggedRDD(rdd, 1.0, numSubsamples, true,
         (_: LabeledPoint) => 2.0, seed)
@@ -65,7 +66,7 @@ class BaggedPointSuite extends SparkFunSuite with MLlibTestSparkContext  {
 
     val seeds = Array(123, 5354, 230, 349867, 23987)
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(1, 1000)
-    val rdd = sc.parallelize(arr)
+    val rdd = sc.parallelize(arr.toImmutableArraySeq)
     seeds.foreach { seed =>
       val baggedRDD =
         BaggedPoint.convertToBaggedRDD(rdd, subsample, numSubsamples, true, seed = seed)
@@ -82,7 +83,7 @@ class BaggedPointSuite extends SparkFunSuite with MLlibTestSparkContext  {
 
     val seeds = Array(123, 5354, 230, 349867, 23987)
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(1, 1000).map(_.asML)
-    val rdd = sc.parallelize(arr)
+    val rdd = sc.parallelize(arr.toImmutableArraySeq)
     seeds.foreach { seed =>
       val baggedRDD = BaggedPoint.convertToBaggedRDD(rdd, 1.0, numSubsamples, false,
         (_: LabeledPoint) => 2.0, seed)
@@ -101,7 +102,7 @@ class BaggedPointSuite extends SparkFunSuite with MLlibTestSparkContext  {
 
     val seeds = Array(123, 5354, 230, 349867, 23987)
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(1, 1000)
-    val rdd = sc.parallelize(arr)
+    val rdd = sc.parallelize(arr.toImmutableArraySeq)
     seeds.foreach { seed =>
       val baggedRDD = BaggedPoint.convertToBaggedRDD(rdd, subsample, numSubsamples, false,
         seed = seed)

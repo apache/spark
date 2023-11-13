@@ -36,6 +36,7 @@ import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
@@ -64,11 +65,12 @@ sealed trait Vector extends Serializable {
         if (this.size != v2.size) return false
         (this, v2) match {
           case (s1: SparseVector, s2: SparseVector) =>
-            Vectors.equals(s1.indices, s1.values, s2.indices, s2.values)
+            Vectors.equals(
+              s1.indices.toImmutableArraySeq, s1.values, s2.indices.toImmutableArraySeq, s2.values)
           case (s1: SparseVector, d1: DenseVector) =>
-            Vectors.equals(s1.indices, s1.values, 0 until d1.size, d1.values)
+            Vectors.equals(s1.indices.toImmutableArraySeq, s1.values, 0 until d1.size, d1.values)
           case (d1: DenseVector, s1: SparseVector) =>
-            Vectors.equals(0 until d1.size, d1.values, s1.indices, s1.values)
+            Vectors.equals(0 until d1.size, d1.values, s1.indices.toImmutableArraySeq, s1.values)
           case (_, _) => util.Arrays.equals(this.toArray, v2.toArray)
         }
       case _ => false

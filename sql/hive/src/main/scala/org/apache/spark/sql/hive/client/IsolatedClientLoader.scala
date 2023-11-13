@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.io.File
+import java.io.{File, PrintStream}
 import java.lang.reflect.InvocationTargetException
 import java.net.{URL, URLClassLoader}
 import java.util
@@ -25,20 +25,20 @@ import java.util
 import scala.util.Try
 
 import org.apache.commons.io.{FileUtils, IOUtils}
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.shims.ShimLoader
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.SparkSubmitUtils
+import org.apache.spark.deploy.SparkSubmit
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.NonClosableMutableURLClassLoader
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.{MutableURLClassLoader, Utils, VersionUtils}
+import org.apache.spark.util.{MavenUtils, MutableURLClassLoader, Utils, VersionUtils}
+import org.apache.spark.util.ArrayImplicits._
 
 /** Factory for `IsolatedClientLoader` with specific versions of hive. */
 private[hive] object IsolatedClientLoader extends Logging {
@@ -127,10 +127,11 @@ private[hive] object IsolatedClientLoader extends Logging {
         .map(a => s"org.apache.hive:$a:${version.fullVersion}") ++
       Seq("com.google.guava:guava:14.0.1") ++ hadoopJarNames
 
+    implicit val printStream: PrintStream = SparkSubmit.printStream
     val classpaths = quietly {
-      SparkSubmitUtils.resolveMavenCoordinates(
+      MavenUtils.resolveMavenCoordinates(
         hiveArtifacts.mkString(","),
-        SparkSubmitUtils.buildIvySettings(
+        MavenUtils.buildIvySettings(
           Some(remoteRepos),
           ivyPath),
         transitive = true,
@@ -142,7 +143,7 @@ private[hive] object IsolatedClientLoader extends Logging {
     val tempDir = Utils.createTempDir(namePrefix = s"hive-${version}")
     allFiles.foreach(f => FileUtils.copyFileToDirectory(f, tempDir))
     logInfo(s"Downloaded metastore jars to ${tempDir.getCanonicalPath}")
-    tempDir.listFiles().map(_.toURI.toURL)
+    tempDir.listFiles().map(_.toURI.toURL).toImmutableArraySeq
   }
 
   // A map from a given pair of HiveVersion and Hadoop version to jar files.
@@ -231,22 +232,16 @@ private[hive] class IsolatedClientLoader(
   private[hive] val classLoader: MutableURLClassLoader = {
     val isolatedClassLoader =
       if (isolationOn) {
-        val rootClassLoader: ClassLoader =
-          if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-            // In Java 9, the boot classloader can see few JDK classes. The intended parent
-            // classloader for delegation is now the platform classloader.
-            // See http://java9.wtf/class-loading/
-            val platformCL =
-            classOf[ClassLoader].getMethod("getPlatformClassLoader").
-              invoke(null).asInstanceOf[ClassLoader]
-            // Check to make sure that the root classloader does not know about Hive.
-            assert(Try(platformCL.loadClass("org.apache.hadoop.hive.conf.HiveConf")).isFailure)
-            platformCL
-          } else {
-            // The boot classloader is represented by null (the instance itself isn't accessible)
-            // and before Java 9 can see all JDK classes
-            null
-          }
+        val rootClassLoader: ClassLoader = {
+          // In Java 9, the boot classloader can see few JDK classes. The intended parent
+          // classloader for delegation is now the platform classloader.
+          // See http://java9.wtf/class-loading/
+          val platformCL = classOf[ClassLoader].getMethod("getPlatformClassLoader")
+            .invoke(null).asInstanceOf[ClassLoader]
+          // Check to make sure that the root classloader does not know about Hive.
+          assert(Try(platformCL.loadClass("org.apache.hadoop.hive.conf.HiveConf")).isFailure)
+          platformCL
+        }
         new URLClassLoader(allJars, rootClassLoader) {
           override def loadClass(name: String, resolve: Boolean): Class[_] = {
             val loaded = findLoadedClass(name)

@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoders, ExpressionEncod
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.BoxedIntEncoder
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
+import org.apache.spark.sql.catalyst.trees.DataFrameQueryContext
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -48,6 +49,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 
 case class TestDataPoint(x: Int, y: Double, s: String, t: TestDataPoint2)
 case class TestDataPoint2(x: Int, s: String)
@@ -270,6 +272,13 @@ class DatasetSuite extends QueryTest
     checkDatasetUnorderly(
       ds,
       (ClassData("one", 2), 1L), (ClassData("two", 3), 1L))
+  }
+
+  test("SPARK-45896: seq of option of seq") {
+    val ds = Seq(DataSeqOptSeq(Seq(Some(Seq(0))))).toDS()
+    checkDataset(
+      ds,
+      DataSeqOptSeq(Seq(Some(List(0)))))
   }
 
   test("select") {
@@ -606,7 +615,8 @@ class DatasetSuite extends QueryTest
         }
       },
       errorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
-      parameters = Map("elem" -> "'*'", "prettyName" -> "MapGroups"))
+      parameters = Map("elem" -> "'*'", "prettyName" -> "MapGroups"),
+      context = ExpectedContext(fragment = "$", getCurrentClassCallSitePattern))
   }
 
   test("groupBy function, flatMapSorted") {
@@ -634,7 +644,8 @@ class DatasetSuite extends QueryTest
         }
       },
       errorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
-      parameters = Map("elem" -> "'*'", "prettyName" -> "MapGroups"))
+      parameters = Map("elem" -> "'*'", "prettyName" -> "MapGroups"),
+      context = ExpectedContext(fragment = "$", getCurrentClassCallSitePattern))
   }
 
   test("groupBy, flatMapSorted desc") {
@@ -1635,7 +1646,7 @@ class DatasetSuite extends QueryTest
       Route("b", "a", 1),
       Route("b", "a", 5),
       Route("b", "c", 6))
-    val ds = sparkContext.parallelize(data).toDF().as[Route]
+    val ds = sparkContext.parallelize(data.toImmutableArraySeq).toDF().as[Route]
 
     val grouped = ds.map(r => GroupedRoutes(r.src, r.dest, Seq(r)))
       .groupByKey(r => (r.src, r.dest))
@@ -2055,13 +2066,14 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-24569: Option of primitive types are mistakenly mapped to struct type") {
+    import org.apache.spark.util.ArrayImplicits._
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       val a = Seq(Some(1)).toDS()
       val b = Seq(Some(1.2)).toDS()
       val expected = Seq((Some(1), Some(1.2))).toDS()
       val joined = a.joinWith(b, lit(true))
       assert(joined.schema == expected.schema)
-      checkDataset(joined, expected.collect(): _*)
+      checkDataset(joined, expected.collect().toImmutableArraySeq: _*)
     }
   }
 
@@ -2075,7 +2087,8 @@ class DatasetSuite extends QueryTest
     val ds1 = spark.createDataset(rdd)
     val ds2 = spark.createDataset(rdd)(encoder)
     assert(ds1.schema == ds2.schema)
-    checkDataset(ds1.select("_2._2"), ds2.select("_2._2").collect(): _*)
+    import org.apache.spark.util.ArrayImplicits._
+    checkDataset(ds1.select("_2._2"), ds2.select("_2._2").collect().toImmutableArraySeq: _*)
   }
 
   test("SPARK-23862: Spark ExpressionEncoder should support Java Enum type from Scala") {
@@ -2290,7 +2303,8 @@ class DatasetSuite extends QueryTest
           sqlState = None,
           parameters = Map(
             "objectName" -> s"`${colName.replace(".", "`.`")}`",
-            "proposal" -> "`field.1`, `field 2`"))
+            "proposal" -> "`field.1`, `field 2`"),
+          context = ExpectedContext(fragment = "select", getCurrentClassCallSitePattern))
       }
     }
   }
@@ -2304,7 +2318,8 @@ class DatasetSuite extends QueryTest
       sqlState = None,
       parameters = Map(
         "objectName" -> "`the`.`id`",
-        "proposal" -> "`the.id`"))
+        "proposal" -> "`the.id`"),
+      context = ExpectedContext(fragment = "select", getCurrentClassCallSitePattern))
   }
 
   test("SPARK-39783: backticks in error message for map candidate key with dots") {
@@ -2318,7 +2333,8 @@ class DatasetSuite extends QueryTest
       sqlState = None,
       parameters = Map(
         "objectName" -> "`nonexisting`",
-        "proposal" -> "`map`, `other.column`"))
+        "proposal" -> "`map`, `other.column`"),
+      context = ExpectedContext(fragment = "$", getCurrentClassCallSitePattern))
   }
 
   test("groupBy.as") {
@@ -2645,6 +2661,38 @@ class DatasetSuite extends QueryTest
     val ds = Seq(1, 2).toDS().persist(StorageLevel.NONE)
     assert(ds.count() == 2)
   }
+
+  test("SPARK-45592: Coaleasced shuffle read is not compatible with hash partitioning") {
+    val ee = spark.range(0, 1000000, 1, 5).map(l => (l, l)).toDF()
+      .persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
+    ee.count()
+
+    val minNbrs1 = ee
+      .groupBy("_1").agg(min(col("_2")).as("min_number"))
+      .persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
+
+    val join = ee.join(minNbrs1, "_1")
+    assert(join.count() == 1000000)
+  }
+
+  test("SPARK-45022: exact DatasetQueryContext call site") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val df = Seq(1).toDS()
+      var callSitePattern: String = null
+      val exception = intercept[AnalysisException] {
+        callSitePattern = getNextLineCallSitePattern()
+        val c = col("a")
+        df.select(c)
+      }
+      checkError(
+        exception,
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map("objectName" -> "`a`", "proposal" -> "`value`"),
+        context = ExpectedContext(fragment = "col", callSitePattern = callSitePattern))
+      assert(exception.context.head.asInstanceOf[DataFrameQueryContext].stackTrace.length == 2)
+    }
+  }
 }
 
 class DatasetLargeResultCollectingSuite extends QueryTest
@@ -2718,6 +2766,8 @@ case class ClassNullableData(a: String, b: Integer)
 
 case class NestedStruct(f: ClassData)
 case class DeepNestedStruct(f: NestedStruct)
+
+case class DataSeqOptSeq(a: Seq[Option[Seq[Int]]])
 
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using
