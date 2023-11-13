@@ -60,7 +60,6 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
       Manifest.classType[T](classTag.runtimeClass)
     }
   }
-
   protected val minBatchesToRetain = sparkSession.sessionState.conf.minBatchesToRetain
 
   /**
