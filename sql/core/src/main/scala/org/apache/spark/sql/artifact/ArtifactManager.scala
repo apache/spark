@@ -91,7 +91,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
   def getAddedJars: Seq[URL] = jarsList.asScala.map(_.toUri.toURL).toSeq
 
   /**
-   * Get the py-file names added through the [[SparkConnectService]].
+   * Get the py-file names added to this SparkSession.
    *
    * @return
    */
