@@ -764,21 +764,24 @@ def abs(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
+def mode(col: "ColumnOrName", is_sort_asc: Optional[bool] = None) -> Column:
     """
-    Returns the most frequent value in a group.
+    Returns the most frequent value in a group. If there are multiple values with the greatest
+    frequency only one value will be returned. The value will be chosen based on optional sort
+    direction. Use ascending order to get smallest value or descending order to get largest value
+    from multiple values with the same frequency.
 
     .. versionadded:: 3.4.0
 
     .. versionchanged:: 4.0.0
-            Supports deterministic argument.
+        Supports is_sort_asc argument.
 
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to compute on.
-    deterministic : bool, optional
-        if there are multiple equally-frequent results then return the lowest (defaults to false).
+    is_sort_asc : bool, optional
+        The value will be chosen based on optional sort direction.
 
     Returns
     -------
@@ -797,26 +800,25 @@ def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
     ...     schema=("course", "year", "earnings"))
     >>> df.groupby("course").agg(mode("year")).show()
-    +------+-----------------+
-    |course|mode(year, false)|
-    +------+-----------------+
-    |  Java|             2012|
-    |dotNET|             2012|
-    +------+-----------------+
-
-    When multiple values have the same greatest frequency then either any of values is returned if
-    deterministic is false or is not defined, or the lowest value is returned if deterministic is
-    true.
+    +------+----------+
+    |course|mode(year)|
+    +------+----------+
+    |  Java|      2012|
+    |dotNET|      2012|
+    +------+----------+
 
     >>> df2 = spark.createDataFrame([(-10,), (0,), (10,)], ["col"])
     >>> df2.select(mode("col", False), mode("col", True)).show()
     +----------------+---------------+
     |mode(col, false)|mode(col, true)|
     +----------------+---------------+
-    |               0|            -10|
+    |              10|            -10|
     +----------------+---------------+
     """
-    return _invoke_function("mode", _to_java_column(col), deterministic)
+    if is_sort_asc is None:
+        return _invoke_function_over_columns("mode", col)
+    else:
+        return _invoke_function("mode", _to_java_column(col), is_sort_asc)
 
 
 @_try_remote_functions

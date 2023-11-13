@@ -433,13 +433,13 @@ class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
     checkDataset(agg, "3")
   }
 
-  test("SPARK-45034: Support deterministic mode function") {
+  test("SPARK-45904: mode function supports sort direction") {
     val df = Seq(-10, 0, 10).toDF("col")
 
-    val agg = df.select(mode(col("col"), false))
-    checkAnswer(agg, Row(0))
+    val agg = df.select(mode(col("col"), true))
+    checkAnswer(agg, Row(-10))
 
-    val agg2 = df.select(mode(col("col"), true))
-    checkAnswer(agg2, Row(-10))
+    val agg2 = df.select(mode(col("col"), false))
+    checkAnswer(agg2, Row(10))
   }
 }

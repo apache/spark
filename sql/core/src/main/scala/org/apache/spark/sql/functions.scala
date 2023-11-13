@@ -875,14 +875,15 @@ object functions {
   /**
    * Aggregate function: returns the most frequent value in a group.
    *
-   * When multiple values have the same greatest frequency then either any of values is returned
-   * if deterministic is false or is not defined, or the lowest value is returned if deterministic
-   * is true.
+   * If there are multiple values with the greatest frequency only one value will be returned.
+   * The value will be chosen based on optional sort direction. Use ascending order to get smallest
+   * value or descending order to get largest value from multiple values with the same frequency.
+   * If this clause is not specified the exact chosen value is not determined.
    *
    * @group agg_funcs
    * @since 4.0.0
    */
-  def mode(e: Column, deterministic: Boolean): Column = Column.fn("mode", e, lit(deterministic))
+  def mode(e: Column, isSortAsc: Boolean): Column = Column.fn("mode", e, lit(isSortAsc))
 
   /**
    * Aggregate function: returns the maximum value of the expression in a group.

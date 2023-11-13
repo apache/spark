@@ -1089,7 +1089,7 @@ struct<a:int,collect_list(b):array<int>,collect_list(b):array<int>>
 -- !query
 SELECT mode(a), mode(b) FROM testData
 -- !query schema
-struct<mode(a, false):int,mode(b, false):int>
+struct<mode(a):int,mode(b):int>
 -- !query output
 3	1
 
@@ -1097,7 +1097,7 @@ struct<mode(a, false):int,mode(b, false):int>
 -- !query
 SELECT a, mode(b) FROM testData GROUP BY a ORDER BY a
 -- !query schema
-struct<a:int,mode(b, false):int>
+struct<a:int,mode(b):int>
 -- !query output
 NULL	1
 1	1
@@ -1126,7 +1126,7 @@ struct<d:int>
 -- !query
 SELECT mode(col) FROM VALUES (-10), (0), (10) AS tab(col)
 -- !query schema
-struct<mode(col, false):int>
+struct<mode(col):int>
 -- !query output
 0
 
@@ -1136,7 +1136,7 @@ SELECT mode(col, false) FROM VALUES (-10), (0), (10) AS tab(col)
 -- !query schema
 struct<mode(col, false):int>
 -- !query output
-0
+10
 
 
 -- !query
@@ -1152,16 +1152,12 @@ SELECT mode(col, 'true') FROM VALUES (-10), (0), (10) AS tab(col)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
+  "errorClass" : "FAILED_FUNCTION_CALL",
+  "sqlState" : "38000",
   "messageParameters" : {
-    "inputSql" : "\"true\"",
-    "inputType" : "\"STRING\"",
-    "paramIndex" : "2",
-    "requiredType" : "\"BOOLEAN\"",
-    "sqlExpr" : "\"mode(col, true)\""
+    "funcName" : "`mode`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1178,13 +1174,12 @@ SELECT mode(col, null) FROM VALUES (-10), (0), (10) AS tab(col)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
+  "errorClass" : "FAILED_FUNCTION_CALL",
+  "sqlState" : "38000",
   "messageParameters" : {
-    "exprName" : "`deterministic`",
-    "sqlExpr" : "\"mode(col, NULL)\""
+    "funcName" : "`mode`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1201,15 +1196,12 @@ SELECT mode(col, b) FROM VALUES (-10, false), (0, false), (10, false) AS tab(col
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
-  "sqlState" : "42K09",
+  "errorClass" : "FAILED_FUNCTION_CALL",
+  "sqlState" : "38000",
   "messageParameters" : {
-    "inputExpr" : "\"b\"",
-    "inputName" : "`deterministic`",
-    "inputType" : "\"BOOLEAN\"",
-    "sqlExpr" : "\"mode(col, b)\""
+    "funcName" : "`mode`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1224,7 +1216,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT mode(col) FROM VALUES (map(1, 'a')) AS tab(col)
 -- !query schema
-struct<mode(col, false):map<int,string>>
+struct<mode(col):map<int,string>>
 -- !query output
 {1:"a"}
 
@@ -1232,9 +1224,15 @@ struct<mode(col, false):map<int,string>>
 -- !query
 SELECT mode(col, false) FROM VALUES (map(1, 'a')) AS tab(col)
 -- !query schema
-struct<mode(col, false):map<int,string>>
+struct<>
 -- !query output
-{1:"a"}
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2005",
+  "messageParameters" : {
+    "dataType" : "PhysicalMapType"
+  }
+}
 
 
 -- !query
