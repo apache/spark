@@ -42,7 +42,7 @@ object TableCapabilityCheck extends (LogicalPlan => Unit) {
         throw QueryCompilationErrors.unsupportedBatchReadError(r.table)
 
       case r: StreamingRelationV2 if !r.table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
-        throw QueryCompilationErrors.unsupportedMicroBatchOrContinuousScanError(r.table)
+        throw QueryCompilationErrors.unsupportedStreamingScanError(r.table)
 
       // TODO: check STREAMING_WRITE capability. It's not doable now because we don't have a
       //       a logical plan for streaming write.

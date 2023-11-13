@@ -32,7 +32,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.sql.{Dataset, Encoder, QueryTest, Row}
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.AllTuples
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
@@ -147,7 +147,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
   private def createToExternalRowConverter[A : Encoder](): A => Row = {
     val encoder = encoderFor[A]
     val toInternalRow = encoder.createSerializer()
-    val toExternalRow = RowEncoder(encoder.schema).resolveAndBind().createDeserializer()
+    val toExternalRow = ExpressionEncoder(encoder.schema).resolveAndBind().createDeserializer()
     toExternalRow.compose(toInternalRow)
   }
 

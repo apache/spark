@@ -118,7 +118,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     Seq("json", "parquet").foreach { testFileFormat =>
       test(s"metadata struct ($testFileFormat): " + testName) {
         withTempDir { dir =>
-          import scala.collection.JavaConverters._
+          import scala.jdk.CollectionConverters._
 
           // 1. create df0 and df1 and save under /data/f0 and /data/f1
           val df0 = spark.createDataFrame(data0.asJava, fileSchema)
@@ -244,7 +244,9 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
         df.select("name", METADATA_FILE_NAME).collect()
       },
       errorClass = "FIELD_NOT_FOUND",
-      parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"))
+      parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"),
+      context =
+        ExpectedContext(fragment = "select", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   metadataColumnsTest("SPARK-42683: df metadataColumn - schema conflict",
@@ -522,14 +524,20 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
               df.select("name", "_metadata.file_name").collect()
             },
             errorClass = "FIELD_NOT_FOUND",
-            parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"))
+            parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"),
+            context = ExpectedContext(
+              fragment = "select",
+              callSitePattern = getCurrentClassCallSitePattern))
 
           checkError(
             exception = intercept[AnalysisException] {
               df.select("name", "_METADATA.file_NAME").collect()
             },
             errorClass = "FIELD_NOT_FOUND",
-            parameters = Map("fieldName" -> "`file_NAME`", "fields" -> "`id`, `university`"))
+            parameters = Map("fieldName" -> "`file_NAME`", "fields" -> "`id`, `university`"),
+            context = ExpectedContext(
+              fragment = "select",
+              callSitePattern = getCurrentClassCallSitePattern))
         }
       }
     }
@@ -1035,10 +1043,10 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       spark.range(end = 10).write.format("parquet").save(path.toString)
 
       // Add the tag to the base Dataframe before selecting a metadata column.
-      val customTag = TreeNodeTag[Boolean]("customTag")
+      val customTag = TreeNodeTag[Unit]("customTag")
       val baseDf = spark.read.format("parquet").load(path.toString)
       val tagsPut = baseDf.queryExecution.analyzed.collect {
-        case rel: LogicalRelation => rel.setTagValue(customTag, true)
+        case rel: LogicalRelation => rel.setTagValue(customTag, ())
       }
 
       assert(tagsPut.nonEmpty)
@@ -1047,7 +1055,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
 
       // Expect the tag in the analyzed and optimized plan after querying a metadata column.
       def isTaggedRelation(plan: LogicalPlan): Boolean = plan match {
-        case rel: LogicalRelation => rel.getTagValue(customTag).getOrElse(false)
+        case rel: LogicalRelation => rel.getTagValue(customTag).isDefined
         case _ => false
       }
 
@@ -1075,7 +1083,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       // Transform the result into a literal that can be used in an expression.
       val metadataColumnFields = metadataColumnRow.schema.fields
         .map(field => lit(metadataColumnRow.getAs[Any](field.name)).as(field.name))
-      val metadataColumnStruct = struct(metadataColumnFields: _*)
+      import org.apache.spark.util.ArrayImplicits._
+      val metadataColumnStruct = struct(metadataColumnFields.toImmutableArraySeq: _*)
 
       val selectSingleRowDf = spark.read.load(dir.getAbsolutePath)
         .where(col("_metadata").equalTo(lit(metadataColumnStruct)))

@@ -102,7 +102,7 @@ object StructuredComplexSessionization {
     val port = args(1).toInt
 
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("StructuredComplexSessionization")
       .getOrCreate()
 

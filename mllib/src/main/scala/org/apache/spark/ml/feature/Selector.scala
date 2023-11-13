@@ -207,7 +207,7 @@ private[ml] abstract class Selector[T <: SelectorModel[T]]
     import spark.implicits._
 
     val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
-    val resultDF = getSelectionTestResult(dataset.toDF)
+    val resultDF = getSelectionTestResult(dataset.toDF())
 
     def getTopIndices(k: Int): Array[Int] = {
       resultDF.sort("pValue", "featureIndex")
@@ -233,7 +233,7 @@ private[ml] abstract class Selector[T <: SelectorModel[T]]
         val maxIndex = resultDF.sort("pValue", "featureIndex")
           .select("pValue")
           .as[Double].rdd
-          .zipWithIndex
+          .zipWithIndex()
           .flatMap { case (pValue, index) =>
             if (pValue <= f * (index + 1)) {
               Iterator.single(index.toInt)

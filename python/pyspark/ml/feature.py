@@ -1219,7 +1219,7 @@ class CountVectorizerModel(
         model._set(vocabSize=len(vocabulary))
         return model
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.6.0")
     def vocabulary(self) -> List[str]:
         """
@@ -1889,7 +1889,7 @@ class IDFModel(JavaModel, _IDFParams, JavaMLReadable["IDFModel"], JavaMLWritable
         """
         return self._set(outputCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def idf(self) -> Vector:
         """
@@ -1897,7 +1897,7 @@ class IDFModel(JavaModel, _IDFParams, JavaMLReadable["IDFModel"], JavaMLWritable
         """
         return self._call_java("idf")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.0.0")
     def docFreq(self) -> List[int]:
         """
@@ -1905,7 +1905,7 @@ class IDFModel(JavaModel, _IDFParams, JavaMLReadable["IDFModel"], JavaMLWritable
         """
         return self._call_java("docFreq")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.0.0")
     def numDocs(self) -> int:
         """
@@ -2255,7 +2255,7 @@ class ImputerModel(JavaModel, _ImputerParams, JavaMLReadable["ImputerModel"], Ja
         """
         return self._set(outputCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.2.0")
     def surrogateDF(self) -> DataFrame:
         """
@@ -2470,7 +2470,7 @@ class MaxAbsScalerModel(
         """
         return self._set(outputCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def maxAbs(self) -> Vector:
         """
@@ -2820,7 +2820,7 @@ class MinMaxScalerModel(
         """
         return self._set(max=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def originalMin(self) -> Vector:
         """
@@ -2828,7 +2828,7 @@ class MinMaxScalerModel(
         """
         return self._call_java("originalMin")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def originalMax(self) -> Vector:
         """
@@ -3329,7 +3329,7 @@ class OneHotEncoderModel(
         """
         return self._set(handleInvalid=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.3.0")
     def categorySizes(self) -> List[int]:
         """
@@ -4007,7 +4007,7 @@ class RobustScalerModel(
         """
         return self._set(outputCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.0.0")
     def median(self) -> Vector:
         """
@@ -4015,7 +4015,7 @@ class RobustScalerModel(
         """
         return self._call_java("median")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.0.0")
     def range(self) -> Vector:
         """
@@ -4459,7 +4459,7 @@ class StandardScalerModel(
         """
         return self._set(outputCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def std(self) -> Vector:
         """
@@ -4467,7 +4467,7 @@ class StandardScalerModel(
         """
         return self._call_java("std")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def mean(self) -> Vector:
         """
@@ -4832,7 +4832,7 @@ class StringIndexerModel(
             model.setHandleInvalid(handleInvalid)
         return model
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.5.0")
     def labels(self) -> List[str]:
         """
@@ -4843,7 +4843,7 @@ class StringIndexerModel(
         """
         return self._call_java("labels")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.0.2")
     def labelsArray(self) -> List[str]:
         """
@@ -5627,7 +5627,7 @@ class VectorIndexerModel(
         """
         return self._set(outputCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def numFeatures(self) -> int:
         """
@@ -5635,7 +5635,7 @@ class VectorIndexerModel(
         """
         return self._call_java("numFeatures")
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def categoryMaps(self) -> Dict[int, Tuple[float, int]]:
         """
@@ -6263,7 +6263,7 @@ class PCAModel(JavaModel, _PCAParams, JavaMLReadable["PCAModel"], JavaMLWritable
         """
         return self._set(outputCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def pc(self) -> DenseMatrix:
         """
@@ -6272,7 +6272,7 @@ class PCAModel(JavaModel, _PCAParams, JavaMLReadable["PCAModel"], JavaMLWritable
         """
         return self._call_java("pc")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def explainedVariance(self) -> DenseVector:
         """
@@ -6729,7 +6729,7 @@ class _SelectorModel(JavaModel, _SelectorParams):
         """
         return self._set(outputCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def selectedFeatures(self) -> List[int]:
         """
@@ -7144,7 +7144,7 @@ class VarianceThresholdSelectorModel(
         """
         return self._set(outputCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def selectedFeatures(self) -> List[int]:
         """
@@ -7419,7 +7419,7 @@ class UnivariateFeatureSelectorModel(
         """
         return self._set(outputCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.1")
     def selectedFeatures(self) -> List[int]:
         """

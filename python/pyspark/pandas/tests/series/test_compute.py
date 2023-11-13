@@ -15,13 +15,13 @@
 # limitations under the License.
 #
 import unittest
-from distutils.version import LooseVersion
 from itertools import product
 
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.errors import PySparkValueError
 from pyspark.testing.pandasutils import ComparisonTestBase
 from pyspark.testing.sqlutils import SQLTestUtils
 
@@ -113,40 +113,20 @@ class SeriesComputeMixin:
         self.assert_eq(str_psser.clip(1, 3), str_psser)
 
     def test_compare(self):
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
-            pser = pd.Series([1, 2])
-            psser = ps.from_pandas(pser)
+        pser = pd.Series([1, 2])
+        psser = ps.from_pandas(pser)
 
-            res_psdf = psser.compare(psser)
-            self.assertTrue(res_psdf.empty)
-            self.assert_eq(res_psdf.columns, pd.Index(["self", "other"]))
+        res_psdf = psser.compare(psser)
+        self.assertTrue(res_psdf.empty)
+        self.assert_eq(res_psdf.columns, pd.Index(["self", "other"]))
 
-            self.assert_eq(
-                pser.compare(pser + 1).sort_index(), psser.compare(psser + 1).sort_index()
-            )
+        self.assert_eq(pser.compare(pser + 1).sort_index(), psser.compare(psser + 1).sort_index())
 
-            pser = pd.Series([1, 2], index=["x", "y"])
-            psser = ps.from_pandas(pser)
-            self.assert_eq(
-                pser.compare(pser + 1).sort_index(), psser.compare(psser + 1).sort_index()
-            )
-        else:
-            psser = ps.Series([1, 2])
-            res_psdf = psser.compare(psser)
-            self.assertTrue(res_psdf.empty)
-            self.assert_eq(res_psdf.columns, pd.Index(["self", "other"]))
-            expected = ps.DataFrame([[1, 2], [2, 3]], columns=["self", "other"])
-            self.assert_eq(expected, psser.compare(psser + 1).sort_index())
+        pser = pd.Series([1, 2], index=["x", "y"])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.compare(pser + 1).sort_index(), psser.compare(psser + 1).sort_index())
 
-            psser = ps.Series([1, 2], index=["x", "y"])
-            expected = ps.DataFrame([[1, 2], [2, 3]], index=["x", "y"], columns=["self", "other"])
-            self.assert_eq(expected, psser.compare(psser + 1).sort_index())
-
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43465): Enable SeriesTests.test_append for pandas 2.0.0.",
-    )
-    def test_append(self):
+    def test_concat(self):
         pser1 = pd.Series([1, 2, 3], name="0")
         pser2 = pd.Series([4, 5, 6], name="0")
         pser3 = pd.Series([4, 5, 6], index=[3, 4, 5], name="0")
@@ -154,16 +134,12 @@ class SeriesComputeMixin:
         psser2 = ps.from_pandas(pser2)
         psser3 = ps.from_pandas(pser3)
 
-        self.assert_eq(psser1.append(psser2), pser1.append(pser2))
-        self.assert_eq(psser1.append(psser3), pser1.append(pser3))
+        self.assert_eq(ps.concat([psser1, psser2]), pd.concat([pser1, pser2]))
+        self.assert_eq(ps.concat([psser1, psser3]), pd.concat([pser1, pser3]))
         self.assert_eq(
-            psser1.append(psser2, ignore_index=True), pser1.append(pser2, ignore_index=True)
+            ps.concat([psser1, psser2], ignore_index=True),
+            pd.concat([pser1, pser2], ignore_index=True),
         )
-
-        psser1.append(psser3, verify_integrity=True)
-        msg = "Indices have overlapping values"
-        with self.assertRaises(ValueError, msg=msg):
-            psser1.append(psser2, verify_integrity=True)
 
     def test_shift(self):
         pser = pd.Series([10, 20, 15, 30, 45], name="x")
@@ -299,27 +275,11 @@ class SeriesComputeMixin:
         pser = pd.Series(["a", "b", "c", "a"], dtype="category")
         psser = ps.from_pandas(pser)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
-            self.assert_eq(psser.pop(0), pser.pop(0))
-            self.assert_eq(psser, pser)
+        self.assert_eq(psser.pop(0), pser.pop(0))
+        self.assert_eq(psser, pser)
 
-            self.assert_eq(psser.pop(3), pser.pop(3))
-            self.assert_eq(psser, pser)
-        else:
-            # Before pandas 1.3.0, `pop` modifies the dtype of categorical series wrongly.
-            self.assert_eq(psser.pop(0), "a")
-            self.assert_eq(
-                psser,
-                pd.Series(
-                    pd.Categorical(["b", "c", "a"], categories=["a", "b", "c"]), index=[1, 2, 3]
-                ),
-            )
-
-            self.assert_eq(psser.pop(3), "a")
-            self.assert_eq(
-                psser,
-                pd.Series(pd.Categorical(["b", "c"], categories=["a", "b", "c"]), index=[1, 2]),
-            )
+        self.assert_eq(psser.pop(3), pser.pop(3))
+        self.assert_eq(psser, pser)
 
     def test_duplicates(self):
         psers = {
@@ -350,14 +310,8 @@ class SeriesComputeMixin:
         self.assert_eq(psser1.truncate(after=5), pser1.truncate(after=5))
         self.assert_eq(psser1.truncate(copy=False), pser1.truncate(copy=False))
         self.assert_eq(psser1.truncate(2, 5, copy=False), pser1.truncate(2, 5, copy=False))
-        # The bug for these tests has been fixed in pandas 1.1.0.
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
-            self.assert_eq(psser2.truncate(4, 6), pser2.truncate(4, 6))
-            self.assert_eq(psser2.truncate(4, 6, copy=False), pser2.truncate(4, 6, copy=False))
-        else:
-            expected_psser = ps.Series([20, 30, 40], index=[6, 5, 4])
-            self.assert_eq(psser2.truncate(4, 6), expected_psser)
-            self.assert_eq(psser2.truncate(4, 6, copy=False), expected_psser)
+        self.assert_eq(psser2.truncate(4, 6), pser2.truncate(4, 6))
+        self.assert_eq(psser2.truncate(4, 6, copy=False), pser2.truncate(4, 6, copy=False))
 
         psser = ps.Series([10, 20, 30, 40, 50, 60, 70], index=[1, 2, 3, 4, 3, 2, 1])
         msg = "truncate requires a sorted index"
@@ -415,10 +369,6 @@ class SeriesComputeMixin:
         self.assert_eq(abs(psser), abs(pser))
         self.assert_eq(np.abs(psser), np.abs(pser))
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43550): Enable SeriesTests.test_factorize for pandas 2.0.0.",
-    )
     def test_factorize(self):
         pser = pd.Series(["a", "b", "a", "b"])
         psser = ps.from_pandas(pser)
@@ -479,7 +429,7 @@ class SeriesComputeMixin:
         pcodes, puniques = pser.factorize()
         kcodes, kuniques = psser.factorize()
         self.assert_eq(pcodes, kcodes.to_list())
-        # pandas: Float64Index([], dtype='float64')
+        # pandas: Index([], dtype='float64')
         self.assert_eq(pd.Index([]), kuniques)
 
         pser = pd.Series([np.nan, np.nan])
@@ -487,42 +437,38 @@ class SeriesComputeMixin:
         pcodes, puniques = pser.factorize()
         kcodes, kuniques = psser.factorize()
         self.assert_eq(pcodes, kcodes.to_list())
-        # pandas: Float64Index([], dtype='float64')
+        # pandas: Index([], dtype='float64')
         self.assert_eq(pd.Index([]), kuniques)
 
         #
         # Deals with na_sentinel
         #
-        # pandas >= 1.1.2 support na_sentinel=None
-        #
-        pd_below_1_1_2 = LooseVersion(pd.__version__) < LooseVersion("1.1.2")
 
         pser = pd.Series(["a", "b", "a", np.nan, None])
         psser = ps.from_pandas(pser)
 
-        pcodes, puniques = pser.factorize(sort=True, na_sentinel=-2)
-        kcodes, kuniques = psser.factorize(na_sentinel=-2)
+        pcodes, puniques = pser.factorize(sort=True, use_na_sentinel=-2)
+        kcodes, kuniques = psser.factorize(use_na_sentinel=-2)
         self.assert_eq(pcodes.tolist(), kcodes.to_list())
         self.assert_eq(puniques, kuniques)
 
-        pcodes, puniques = pser.factorize(sort=True, na_sentinel=2)
-        kcodes, kuniques = psser.factorize(na_sentinel=2)
+        pcodes, puniques = pser.factorize(sort=True, use_na_sentinel=2)
+        kcodes, kuniques = psser.factorize(use_na_sentinel=2)
         self.assert_eq(pcodes.tolist(), kcodes.to_list())
         self.assert_eq(puniques, kuniques)
 
-        if not pd_below_1_1_2:
-            pcodes, puniques = pser.factorize(sort=True, na_sentinel=None)
-            kcodes, kuniques = psser.factorize(na_sentinel=None)
-            self.assert_eq(pcodes.tolist(), kcodes.to_list())
-            # puniques is Index(['a', 'b', nan], dtype='object')
-            self.assert_eq(ps.Index(["a", "b", None]), kuniques)
+        pcodes, puniques = pser.factorize(sort=True, use_na_sentinel=None)
+        kcodes, kuniques = psser.factorize(use_na_sentinel=None)
+        self.assert_eq(pcodes.tolist(), kcodes.to_list())
+        # puniques is Index(['a', 'b', nan], dtype='object')
+        self.assert_eq(ps.Index(["a", "b", None]), kuniques)
 
-            psser = ps.Series([1, 2, np.nan, 4, 5])  # Arrow takes np.nan as null
-            psser.loc[3] = np.nan  # Spark takes np.nan as NaN
-            kcodes, kuniques = psser.factorize(na_sentinel=None)
-            pcodes, puniques = psser._to_pandas().factorize(sort=True, na_sentinel=None)
-            self.assert_eq(pcodes.tolist(), kcodes.to_list())
-            self.assert_eq(puniques, kuniques)
+        psser = ps.Series([1, 2, np.nan, 4, 5])  # Arrow takes np.nan as null
+        psser.loc[3] = np.nan  # Spark takes np.nan as NaN
+        kcodes, kuniques = psser.factorize(use_na_sentinel=None)
+        pcodes, puniques = psser._to_pandas().factorize(sort=True, use_na_sentinel=None)
+        self.assert_eq(pcodes.tolist(), kcodes.to_list())
+        self.assert_eq(puniques, kuniques)
 
     def test_explode(self):
         pser = pd.Series([[1, 2, 3], [], None, [3, 4]])
@@ -539,10 +485,6 @@ class SeriesComputeMixin:
         psser = ps.from_pandas(pser)
         self.assert_eq(pser.explode(), psser.explode())
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43467): Enable SeriesTests.test_between for pandas 2.0.0.",
-    )
     def test_between(self):
         pser = pd.Series([np.nan, 1, 2, 3, 4])
         psser = ps.from_pandas(pser)
@@ -562,15 +504,11 @@ class SeriesComputeMixin:
             psser.between(1, 4, inclusive="middle")
 
         # Test for backward compatibility
-        self.assert_eq(psser.between(1, 4, inclusive=True), pser.between(1, 4, inclusive=True))
-        self.assert_eq(psser.between(1, 4, inclusive=False), pser.between(1, 4, inclusive=False))
-        with self.assertWarns(FutureWarning):
-            psser.between(1, 4, inclusive=True)
+        self.assert_eq(psser.between(1, 4, inclusive="both"), pser.between(1, 4, inclusive="both"))
+        self.assert_eq(
+            psser.between(1, 4, inclusive="neither"), pser.between(1, 4, inclusive="neither")
+        )
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43479): Enable SeriesTests.test_between_time for pandas 2.0.0.",
-    )
     def test_between_time(self):
         idx = pd.date_range("2018-04-09", periods=4, freq="1D20min")
         pser = pd.Series([1, 2, 3, 4], index=idx)
@@ -592,6 +530,33 @@ class SeriesComputeMixin:
         self.assert_eq(
             pser.between_time("0:15", "0:45").sort_index(),
             psser.between_time("0:15", "0:45").sort_index(),
+        )
+
+        self.assert_eq(
+            pser.between_time("0:15", "0:45", inclusive="neither").sort_index(),
+            psser.between_time("0:15", "0:45", inclusive="neither").sort_index(),
+        )
+
+        self.assert_eq(
+            pser.between_time("0:15", "0:45", inclusive="left").sort_index(),
+            psser.between_time("0:15", "0:45", inclusive="left").sort_index(),
+        )
+
+        self.assert_eq(
+            pser.between_time("0:15", "0:45", inclusive="right").sort_index(),
+            psser.between_time("0:15", "0:45", inclusive="right").sort_index(),
+        )
+
+        with self.assertRaises(PySparkValueError) as ctx:
+            psser.between_time("0:15", "0:45", inclusive="")
+
+        self.check_error(
+            exception=ctx.exception,
+            error_class="VALUE_NOT_ALLOWED",
+            message_parameters={
+                "arg_name": "inclusive",
+                "allowed_values": str(["left", "right", "both", "neither"]),
+            },
         )
 
     def test_at_time(self):

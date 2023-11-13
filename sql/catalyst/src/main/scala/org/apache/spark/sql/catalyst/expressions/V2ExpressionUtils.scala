@@ -21,8 +21,9 @@ import java.lang.reflect.{Method, Modifier}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection, SQLConfHelper}
+import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
+import org.apache.spark.sql.catalyst.encoders.EncoderUtils
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier}
@@ -31,6 +32,7 @@ import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_MET
 import org.apache.spark.sql.connector.expressions.{BucketTransform, Expression => V2Expression, FieldReference, IdentityTransform, Literal => V2Literal, NamedReference, NamedTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortOrder => V2SortOrder, SortValue, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A utility class that converts public connector expressions into Catalyst expressions.
@@ -39,7 +41,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 
   def resolveRef[T <: NamedExpression](ref: NamedReference, plan: LogicalPlan): T = {
-    plan.resolve(ref.fieldNames, conf.resolver) match {
+    plan.resolve(ref.fieldNames.toImmutableArraySeq, conf.resolver) match {
       case Some(namedExpr) =>
         namedExpr.asInstanceOf[T]
       case None =>
@@ -60,7 +62,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       ordering: Array[V2SortOrder],
       query: LogicalPlan,
       funCatalogOpt: Option[FunctionCatalog] = None): Seq[SortOrder] = {
-    ordering.map(toCatalyst(_, query, funCatalogOpt).asInstanceOf[SortOrder])
+    ordering.map(toCatalyst(_, query, funCatalogOpt).asInstanceOf[SortOrder]).toImmutableArraySeq
   }
 
   def toCatalyst(
@@ -152,13 +154,13 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       scalarFunc: ScalarFunction[_],
       arguments: Seq[Expression]): Expression = {
     val declaredInputTypes = scalarFunc.inputTypes().toSeq
-    val argClasses = declaredInputTypes.map(ScalaReflection.dataTypeJavaClass)
+    val argClasses = declaredInputTypes.map(EncoderUtils.dataTypeJavaClass)
     findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
       case Some(m) if Modifier.isStatic(m.getModifiers) =>
         StaticInvoke(scalarFunc.getClass, scalarFunc.resultType(),
           MAGIC_METHOD_NAME, arguments, inputTypes = declaredInputTypes,
           propagateNull = false, returnNullable = scalarFunc.isResultNullable,
-          isDeterministic = scalarFunc.isDeterministic)
+          isDeterministic = scalarFunc.isDeterministic, scalarFunction = Some(scalarFunc))
       case Some(_) =>
         val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
         Invoke(caller, MAGIC_METHOD_NAME, scalarFunc.resultType(),

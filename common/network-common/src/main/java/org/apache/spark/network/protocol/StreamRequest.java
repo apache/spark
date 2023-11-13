@@ -61,8 +61,7 @@ public final class StreamRequest extends AbstractMessage implements RequestMessa
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof StreamRequest) {
-      StreamRequest o = (StreamRequest) other;
+    if (other instanceof StreamRequest o) {
       return streamId.equals(o.streamId);
     }
     return false;

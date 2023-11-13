@@ -98,7 +98,7 @@ Project [(true = cast(cast(1 as string) as boolean)) AS (true = CAST(1 AS STRING
 -- !query
 SELECT true = cast('1' as binary) FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -131,7 +131,7 @@ Project [(true = cast(1 as boolean)) AS (true = CAST(1 AS BOOLEAN))#x]
 -- !query
 SELECT true = cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -153,7 +153,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT true = cast('2017-12-11 09:30:00' as date) FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -263,7 +263,7 @@ Project [(true <=> cast(cast(1 as string) as boolean)) AS (true <=> CAST(1 AS ST
 -- !query
 SELECT true <=> cast('1' as binary) FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -296,7 +296,7 @@ Project [(true <=> cast(1 as boolean)) AS (true <=> CAST(1 AS BOOLEAN))#x]
 -- !query
 SELECT true <=> cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -318,7 +318,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT true <=> cast('2017-12-11 09:30:00' as date) FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -428,7 +428,7 @@ Project [(cast(cast(1 as string) as boolean) = true) AS (CAST(1 AS STRING) = tru
 -- !query
 SELECT cast('1' as binary) = true FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -461,7 +461,7 @@ Project [(cast(1 as boolean) = true) AS (CAST(1 AS BOOLEAN) = true)#x]
 -- !query
 SELECT cast('2017-12-11 09:30:00.0' as timestamp) = true FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -483,7 +483,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast('2017-12-11 09:30:00' as date) = true FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -593,7 +593,7 @@ Project [(cast(cast(1 as string) as boolean) <=> true) AS (CAST(1 AS STRING) <=>
 -- !query
 SELECT cast('1' as binary) <=> true FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -626,7 +626,7 @@ Project [(cast(1 as boolean) <=> true) AS (CAST(1 AS BOOLEAN) <=> true)#x]
 -- !query
 SELECT cast('2017-12-11 09:30:00.0' as timestamp) <=> true FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -648,7 +648,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast('2017-12-11 09:30:00' as date) <=> true FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -758,7 +758,7 @@ Project [(false = cast(cast(0 as string) as boolean)) AS (false = CAST(0 AS STRI
 -- !query
 SELECT false = cast('0' as binary) FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -791,7 +791,7 @@ Project [(false = cast(0 as boolean)) AS (false = CAST(0 AS BOOLEAN))#x]
 -- !query
 SELECT false = cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -813,7 +813,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT false = cast('2017-12-11 09:30:00' as date) FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -923,7 +923,7 @@ Project [(false <=> cast(cast(0 as string) as boolean)) AS (false <=> CAST(0 AS 
 -- !query
 SELECT false <=> cast('0' as binary) FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -956,7 +956,7 @@ Project [(false <=> cast(0 as boolean)) AS (false <=> CAST(0 AS BOOLEAN))#x]
 -- !query
 SELECT false <=> cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -978,7 +978,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT false <=> cast('2017-12-11 09:30:00' as date) FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -1088,7 +1088,7 @@ Project [(cast(cast(0 as string) as boolean) = false) AS (CAST(0 AS STRING) = fa
 -- !query
 SELECT cast('0' as binary) = false FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -1121,7 +1121,7 @@ Project [(cast(0 as boolean) = false) AS (CAST(0 AS BOOLEAN) = false)#x]
 -- !query
 SELECT cast('2017-12-11 09:30:00.0' as timestamp) = false FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -1143,7 +1143,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast('2017-12-11 09:30:00' as date) = false FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -1253,7 +1253,7 @@ Project [(cast(cast(0 as string) as boolean) <=> false) AS (CAST(0 AS STRING) <=
 -- !query
 SELECT cast('0' as binary) <=> false FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -1286,7 +1286,7 @@ Project [(cast(0 as boolean) <=> false) AS (CAST(0 AS BOOLEAN) <=> false)#x]
 -- !query
 SELECT cast('2017-12-11 09:30:00.0' as timestamp) <=> false FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -1308,7 +1308,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT cast('2017-12-11 09:30:00' as date) <=> false FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",

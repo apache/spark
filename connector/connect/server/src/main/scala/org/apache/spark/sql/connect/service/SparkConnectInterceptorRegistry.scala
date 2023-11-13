@@ -24,6 +24,7 @@ import io.grpc.netty.NettyServerBuilder
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.sql.connect.config.Connect
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -35,7 +36,7 @@ object SparkConnectInterceptorRegistry {
 
   // Contains the list of configured interceptors.
   private lazy val interceptorChain: Seq[InterceptorBuilder] = Seq(
-    // Adding a new interceptor at compile time works like the eaxmple below with the dummy
+    // Adding a new interceptor at compile time works like the example below with the dummy
     // interceptor:
     // interceptor[DummyInterceptor](classOf[DummyInterceptor])
   )
@@ -64,7 +65,8 @@ object SparkConnectInterceptorRegistry {
         .map(_.trim)
         .filter(_.nonEmpty)
         .map(Utils.classForName[ServerInterceptor](_))
-        .map(createInstance(_))
+        .map(createInstance)
+        .toImmutableArraySeq
     } else {
       Seq.empty
     }

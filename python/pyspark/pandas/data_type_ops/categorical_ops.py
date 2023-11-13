@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-from itertools import chain
 from typing import cast, Any, Union
 
 import pandas as pd
@@ -117,15 +116,15 @@ def _compare(
         if hash(left.dtype) != hash(right.dtype):
             raise TypeError("Categoricals can only be compared if 'categories' are the same.")
         if cast(CategoricalDtype, left.dtype).ordered:
-            return pyspark_column_op(func_name)(left, right)
+            return pyspark_column_op(func_name, left, right)
         else:
-            return pyspark_column_op(func_name)(_to_cat(left), _to_cat(right))
+            return pyspark_column_op(func_name, _to_cat(left), _to_cat(right))
     elif not is_list_like(right):
         categories = cast(CategoricalDtype, left.dtype).categories
         if right not in categories:
             raise TypeError("Cannot compare a Categorical with a scalar, which is not a category.")
         right_code = categories.get_loc(right)
-        return pyspark_column_op(func_name)(left, right_code)
+        return pyspark_column_op(func_name, left, right_code)
     else:
         raise TypeError("Cannot compare a Categorical with the given type.")
 
@@ -135,7 +134,7 @@ def _to_cat(index_ops: IndexOpsLike) -> IndexOpsLike:
     if len(categories) == 0:
         scol = F.lit(None)
     else:
-        kvs = chain(*[(F.lit(code), F.lit(category)) for code, category in enumerate(categories)])
-        map_scol = F.create_map(*kvs)
-        scol = map_scol[index_ops.spark.column]
+        scol = F.lit(None)
+        for code, category in reversed(list(enumerate(categories))):
+            scol = F.when(index_ops.spark.column == F.lit(code), F.lit(category)).otherwise(scol)
     return index_ops._with_new_scol(scol)

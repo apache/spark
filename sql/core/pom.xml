@@ -21,12 +21,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.12</artifactId>
-    <version>3.5.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.13</artifactId>
+    <version>4.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-sql_2.12</artifactId>
+  <artifactId>spark-sql_2.13</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project SQL</name>
   <url>https://spark.apache.org/</url>
@@ -89,12 +89,10 @@
       <scope>test</scope>
     </dependency>
 
-    <!-- #if scala-2.13 --><!--
     <dependency>
       <groupId>org.scala-lang.modules</groupId>
       <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
     </dependency>
-    --><!-- #endif scala-2.13 -->
     <dependency>
       <groupId>org.apache.orc</groupId>
       <artifactId>orc-core</artifactId>
@@ -144,6 +142,10 @@
       <artifactId>jackson-databind</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.apache.ws.xmlschema</groupId>
+      <artifactId>xmlschema-core</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.apache.xbean</groupId>
       <artifactId>xbean-asm9-shaded</artifactId>
     </dependency>
@@ -159,7 +161,7 @@
     <dependency>
       <groupId>com.h2database</groupId>
       <artifactId>h2</artifactId>
-      <version>2.1.214</version>
+      <version>2.2.220</version>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -184,7 +186,7 @@
     </dependency>
     <dependency>
       <groupId>com.oracle.database.jdbc</groupId>
-      <artifactId>ojdbc8</artifactId>
+      <artifactId>ojdbc11</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -255,18 +257,6 @@
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>build-helper-maven-plugin</artifactId>
         <executions>
-          <execution>
-            <id>add-sources</id>
-            <phase>generate-sources</phase>
-            <goals>
-              <goal>add-source</goal>
-            </goals>
-            <configuration>
-              <sources>
-                <source>src/main/scala-${scala.binary.version}</source>
-              </sources>
-            </configuration>
-          </execution>
           <execution>
             <id>add-scala-test-sources</id>
             <phase>generate-test-sources</phase>

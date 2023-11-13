@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import java.util.concurrent.LinkedBlockingQueue
 
-import scala.collection.immutable.Stream
 import scala.sys.process._
 import scala.util.Try
 
@@ -27,7 +26,9 @@ import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions.{col, rpad}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{CharType, StringType, StructField, StructType, VarcharType}
+import org.apache.spark.util.ArrayImplicits._
 
 // The classes in this file are basically moved from https://github.com/databricks/spark-sql-perf
 
@@ -45,7 +46,7 @@ object BlockingLineStream {
   private final class BlockingStreamed[T](
     val process: T => Unit,
     val done: Int => Unit,
-    val stream: () => Stream[T])
+    val stream: () => LazyList[T])
 
   // See scala.sys.process.Streamed
   private object BlockingStreamed {
@@ -56,11 +57,11 @@ object BlockingLineStream {
     def apply[T](nonzeroException: Boolean): BlockingStreamed[T] = {
       val q = new LinkedBlockingQueue[Either[Int, T]](maxQueueSize)
 
-      def next(): Stream[T] = q.take match {
-        case Left(0) => Stream.empty
+      def next(): LazyList[T] = q.take match {
+        case Left(0) => LazyList.empty
         case Left(code) =>
-          if (nonzeroException) scala.sys.error("Nonzero exit code: " + code) else Stream.empty
-        case Right(s) => Stream.cons(s, next())
+          if (nonzeroException) scala.sys.error("Nonzero exit code: " + code) else LazyList.empty
+        case Right(s) => LazyList.cons(s, next())
       }
 
       new BlockingStreamed((s: T) => q put Right(s), code => q put Left(code), () => next())
@@ -78,7 +79,7 @@ object BlockingLineStream {
     }
   }
 
-  def apply(command: Seq[String]): Stream[String] = {
+  def apply(command: Seq[String]): LazyList[String] = {
     val streamed = BlockingStreamed[String](true)
     val process = command.run(BasicIO(false, streamed.process, None))
     Spawn(streamed.done(process.exitValue()))
@@ -120,7 +121,7 @@ class Dsdgen(dsdgenDir: String) extends Serializable {
   }
 }
 
-class TPCDSTables(sqlContext: SQLContext, dsdgenDir: String, scaleFactor: Int)
+class TPCDSTables(spark: SparkSession, dsdgenDir: String, scaleFactor: Int)
   extends TPCDSSchema with Logging with Serializable {
 
   private val dataGenerator = new Dsdgen(dsdgenDir)
@@ -138,7 +139,7 @@ class TPCDSTables(sqlContext: SQLContext, dsdgenDir: String, scaleFactor: Int)
 
     private def df(numPartition: Int) = {
       val generatedData = dataGenerator.generate(
-        sqlContext.sparkContext, name, numPartition, scaleFactor)
+        spark.sparkContext, name, numPartition, scaleFactor)
       val rows = generatedData.mapPartitions { iter =>
         iter.map { l =>
           val values = l.split("\\|", -1).dropRight(1).map { v =>
@@ -149,12 +150,12 @@ class TPCDSTables(sqlContext: SQLContext, dsdgenDir: String, scaleFactor: Int)
               v
             }
           }
-          Row.fromSeq(values)
+          Row.fromSeq(values.toImmutableArraySeq)
         }
       }
 
       val stringData =
-        sqlContext.createDataFrame(
+        spark.createDataFrame(
           rows,
           StructType(schema.fields.map(f => StructField(f.name, StringType))))
 
@@ -169,7 +170,8 @@ class TPCDSTables(sqlContext: SQLContext, dsdgenDir: String, scaleFactor: Int)
           }
           c.as(f.name)
         }
-        stringData.select(columns: _*)
+        import org.apache.spark.util.ArrayImplicits._
+        stringData.select(columns.toImmutableArraySeq: _*)
       }
 
       convertedData
@@ -210,7 +212,7 @@ class TPCDSTables(sqlContext: SQLContext, dsdgenDir: String, scaleFactor: Int)
                |DISTRIBUTE BY
                |  $partitionColumnString
             """.stripMargin
-          val grouped = sqlContext.sql(query)
+          val grouped = spark.sql(query)
           logInfo(s"Pre-clustering with partitioning columns with query $query.")
           grouped.write
         } else {
@@ -222,10 +224,8 @@ class TPCDSTables(sqlContext: SQLContext, dsdgenDir: String, scaleFactor: Int)
           // in case data has more than maxRecordsPerFile, split into multiple writers to improve
           // datagen speed files will be truncated to maxRecordsPerFile value, so the final
           // result will be the same.
-          val numRows = data.count
-          val maxRecordPerFile = Try {
-            sqlContext.getConf("spark.sql.files.maxRecordsPerFile").toInt
-          }.getOrElse(0)
+          val numRows = data.count()
+          val maxRecordPerFile = spark.conf.get(SQLConf.MAX_RECORDS_PER_FILE)
 
           if (maxRecordPerFile > 0 && numRows > maxRecordPerFile) {
             val numFiles = (numRows.toDouble/maxRecordPerFile).ceil.toInt
@@ -244,7 +244,7 @@ class TPCDSTables(sqlContext: SQLContext, dsdgenDir: String, scaleFactor: Int)
       }
       logInfo(s"Generating table $name in database to $location with save mode $mode.")
       writer.save(location)
-      sqlContext.dropTempTable(tempTableName)
+      spark.catalog.dropTempView(tempTableName)
     }
   }
 
@@ -429,7 +429,7 @@ object GenTPCDSData {
       .getOrCreate()
 
     val tables = new TPCDSTables(
-      spark.sqlContext,
+      spark,
       dsdgenDir = config.dsdgenDir,
       scaleFactor = config.scaleFactor)
 

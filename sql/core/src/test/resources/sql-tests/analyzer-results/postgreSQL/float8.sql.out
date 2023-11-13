@@ -743,4 +743,5 @@ Project [cast(cast(-9223372036854780000 as double) as bigint) AS -92233720368547
 -- !query
 DROP TABLE FLOAT8_TBL
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`FLOAT8_TBL`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.FLOAT8_TBL

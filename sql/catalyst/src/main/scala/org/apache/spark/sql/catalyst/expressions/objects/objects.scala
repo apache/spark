@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.expressions.objects
 
 import java.lang.reflect.{Method, Modifier}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.{Builder, WrappedArray}
+import scala.collection.mutable.Builder
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Try
 
@@ -31,14 +31,18 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.encoders.EncoderUtils
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TernaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -47,6 +51,19 @@ import org.apache.spark.util.Utils
 trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInputTypes {
 
   def arguments: Seq[Expression]
+  protected def argumentTypes: Seq[AbstractDataType] = inputTypes
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!argumentTypes.isEmpty && argumentTypes.length != arguments.length) {
+      TypeCheckResult.DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_ARG_TYPES",
+        messageParameters = Map(
+          "expectedNum" -> arguments.length.toString,
+          "actualNum" -> argumentTypes.length.toString))
+    } else {
+      super.checkInputDataTypes()
+    }
+  }
 
   def propagateNull: Boolean
 
@@ -58,10 +75,10 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
   protected lazy val needNullCheck: Boolean = needNullCheckForIndex.contains(true)
   protected lazy val needNullCheckForIndex: Array[Boolean] =
     arguments.map(a => a.nullable && (propagateNull ||
-        ScalaReflection.dataTypeJavaClass(a.dataType).isPrimitive)).toArray
+        EncoderUtils.dataTypeJavaClass(a.dataType).isPrimitive)).toArray
   protected lazy val evaluatedArgs: Array[Object] = new Array[Object](arguments.length)
   private lazy val boxingFn: Any => Any =
-    ScalaReflection.typeBoxedJavaMapping
+    EncoderUtils.typeBoxedJavaMapping
       .get(dataType)
       .map(cls => v => cls.cast(v))
       .getOrElse(identity)
@@ -170,7 +187,7 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
   final def findMethod(cls: Class[_], functionName: String, argClasses: Seq[Class[_]]): Method = {
     val method = MethodUtils.getMatchingAccessibleMethod(cls, functionName, argClasses: _*)
     if (method == null) {
-      throw QueryExecutionErrors.methodNotDeclaredError(functionName)
+      throw QueryExecutionErrors.methodNotFoundError(cls, functionName, argClasses)
     } else {
       method
     }
@@ -255,6 +272,8 @@ object SerializerSupport {
  *                       non-null value.
  * @param isDeterministic Whether the method invocation is deterministic or not. If false, Spark
  *                        will not apply certain optimizations such as constant folding.
+ * @param scalarFunction the [[ScalarFunction]] object if this is calling the magic method of the
+ *                       [[ScalarFunction]] otherwise is unset.
  */
 case class StaticInvoke(
     staticObject: Class[_],
@@ -264,7 +283,8 @@ case class StaticInvoke(
     inputTypes: Seq[AbstractDataType] = Nil,
     propagateNull: Boolean = true,
     returnNullable: Boolean = true,
-    isDeterministic: Boolean = true) extends InvokeLike {
+    isDeterministic: Boolean = true,
+    scalarFunction: Option[ScalarFunction[_]] = None) extends InvokeLike {
 
   val objectName = staticObject.getName.stripSuffix("$")
   val cls = if (staticObject.getName == objectName) {
@@ -277,7 +297,7 @@ case class StaticInvoke(
   override def children: Seq[Expression] = arguments
   override lazy val deterministic: Boolean = isDeterministic && arguments.forall(_.deterministic)
 
-  lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
+  lazy val argClasses = EncoderUtils.expressionJavaClasses(arguments)
   @transient lazy val method = findMethod(cls, functionName, argClasses)
 
   override def eval(input: InternalRow): Any = {
@@ -331,6 +351,14 @@ case class StaticInvoke(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(arguments = newChildren)
+
+  override protected def stringArgs: Iterator[Any] = {
+    if (scalarFunction.nonEmpty) {
+      super.stringArgs
+    } else {
+      super.stringArgs.toSeq.dropRight(1).iterator
+    }
+  }
 }
 
 /**
@@ -370,7 +398,7 @@ case class Invoke(
     returnNullable : Boolean = true,
     isDeterministic: Boolean = true) extends InvokeLike {
 
-  lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
+  lazy val argClasses = EncoderUtils.expressionJavaClasses(arguments)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(INVOKE)
 
@@ -383,6 +411,7 @@ case class Invoke(
     } else {
       Nil
     }
+  override protected def argumentTypes: Seq[AbstractDataType] = methodInputTypes
 
   private lazy val encodedFunctionName = ScalaReflection.encodeFieldNameToIdentifier(functionName)
 
@@ -541,12 +570,12 @@ case class NewInstance(
     // Note that static inner classes (e.g., inner classes within Scala objects) don't need
     // outer pointer registration.
     val needOuterPointer =
-      outerPointer.isEmpty && Utils.isMemberClass(cls) && !Modifier.isStatic(cls.getModifiers)
+      outerPointer.isEmpty && cls.isMemberClass && !Modifier.isStatic(cls.getModifiers)
     childrenResolved && !needOuterPointer
   }
 
   @transient private lazy val constructor: (Seq[AnyRef]) => Any = {
-    val paramTypes = ScalaReflection.expressionJavaClasses(arguments)
+    val paramTypes = EncoderUtils.expressionJavaClasses(arguments)
     val getConstructor = (paramClazz: Seq[Class[_]]) => {
       ScalaReflection.findConstructor(cls, paramClazz).getOrElse {
         throw QueryExecutionErrors.constructorNotFoundError(cls.toString)
@@ -581,7 +610,7 @@ case class NewInstance(
       null
     } else {
       try {
-        constructor(evaluatedArgs)
+        constructor(evaluatedArgs.toImmutableArraySeq)
       } catch {
         // Re-throw the original exception.
         case e: java.lang.reflect.InvocationTargetException if e.getCause != null =>
@@ -783,7 +812,7 @@ case class UnresolvedMapObjects(
   override lazy val resolved = false
 
   override def dataType: DataType = customCollectionCls.map(ObjectType.apply).getOrElse {
-    throw QueryExecutionErrors.customCollectionClsNotResolvedError
+    throw QueryExecutionErrors.customCollectionClsNotResolvedError()
   }
 
   override protected def withNewChildInternal(newChild: Expression): UnresolvedMapObjects =
@@ -892,14 +921,14 @@ case class MapObjects private(
   private def elementClassTag(): ClassTag[Any] = {
     val clazz = lambdaFunction.dataType match {
       case ObjectType(cls) => cls
-      case dt if lambdaFunction.nullable => ScalaReflection.javaBoxedType(dt)
-      case dt => ScalaReflection.dataTypeJavaClass(dt)
+      case dt if lambdaFunction.nullable => EncoderUtils.javaBoxedType(dt)
+      case dt => EncoderUtils.dataTypeJavaClass(dt)
     }
     ClassTag(clazz).asInstanceOf[ClassTag[Any]]
   }
 
   private lazy val mapElements: scala.collection.Seq[_] => Any = customCollectionCls match {
-    case Some(cls) if classOf[WrappedArray[_]].isAssignableFrom(cls) =>
+    case Some(cls) if classOf[mutable.ArraySeq[_]].isAssignableFrom(cls) =>
       // The implicit tag is a workaround to deal with a small change in the
       // (scala) signature of ArrayBuilder.make between Scala 2.12 and 2.13.
       implicit val tag: ClassTag[Any] = elementClassTag()
@@ -907,7 +936,7 @@ case class MapObjects private(
         val builder = mutable.ArrayBuilder.make[Any]
         builder.sizeHint(input.size)
         executeFuncOnCollection(input).foreach(builder += _)
-        mutable.WrappedArray.make(builder.result())
+        mutable.ArraySeq.make(builder.result())
       }
     case Some(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
       // Scala sequence
@@ -1013,7 +1042,7 @@ case class MapObjects private(
         val it = ctx.freshName("it")
         (
           s"${genInputData.value}.size()",
-          s"scala.collection.Iterator $it = ${genInputData.value}.toIterator();",
+          s"scala.collection.Iterator $it = ${genInputData.value}.iterator();",
           s"$it.next()"
         )
       case ObjectType(cls) if cls.isArray =>
@@ -1039,7 +1068,7 @@ case class MapObjects private(
         val it = ctx.freshName("it")
         (
           s"$seq == null ? $array.length : $seq.size()",
-          s"scala.collection.Iterator $it = $seq == null ? null : $seq.toIterator();",
+          s"scala.collection.Iterator $it = $seq == null ? null : $seq.iterator();",
           s"$it == null ? $array[$loopIndex] : $it.next()"
         )
     }
@@ -1065,7 +1094,7 @@ case class MapObjects private(
 
     val (initCollection, addElement, getResult): (String, String => String, String) =
       customCollectionCls match {
-        case Some(cls) if classOf[WrappedArray[_]].isAssignableFrom(cls) =>
+        case Some(cls) if classOf[mutable.ArraySeq[_]].isAssignableFrom(cls) =>
           val tag = ctx.addReferenceObj("tag", elementClassTag())
           val builderClassName = classOf[mutable.ArrayBuilder[_]].getName
           val getBuilder = s"$builderClassName$$.MODULE$$.make($tag)"
@@ -1076,7 +1105,7 @@ case class MapObjects private(
                  $builder.sizeHint($dataLength);
                """,
             (genValue: String) => s"$builder.$$plus$$eq($genValue);",
-            s"(${cls.getName}) ${classOf[WrappedArray[_]].getName}$$." +
+            s"(${cls.getName}) ${classOf[mutable.ArraySeq[_]].getName}$$." +
               s"MODULE$$.make($builder.result());"
           )
 
@@ -1413,7 +1442,7 @@ case class ExternalMapToCatalyst private(
     keyConverter.dataType, valueConverter.dataType, valueContainsNull = valueConverter.nullable)
 
   private lazy val mapCatalystConverter: Any => (Array[Any], Array[Any]) = {
-    val rowBuffer = InternalRow.fromSeq(Array[Any](1))
+    val rowBuffer = InternalRow.fromSeq(Array[Any](1).toImmutableArraySeq)
     def rowWrapper(data: Any): InternalRow = {
       rowBuffer.update(0, data)
       rowBuffer
@@ -1433,7 +1462,7 @@ case class ExternalMapToCatalyst private(
             keys(i) = if (key != null) {
               keyConverter.eval(rowWrapper(key))
             } else {
-              throw QueryExecutionErrors.nullAsMapKeyNotAllowedError
+              throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
             }
             values(i) = if (value != null) {
               valueConverter.eval(rowWrapper(value))
@@ -1455,7 +1484,7 @@ case class ExternalMapToCatalyst private(
             keys(i) = if (key != null) {
               keyConverter.eval(rowWrapper(key))
             } else {
-              throw QueryExecutionErrors.nullAsMapKeyNotAllowedError
+              throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
             }
             values(i) = if (value != null) {
               valueConverter.eval(rowWrapper(value))
@@ -1729,7 +1758,8 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
       case (name, expr) =>
         // Looking for known type mapping.
         // But also looking for general `Object`-type parameter for generic methods.
-        val paramTypes = ScalaReflection.expressionJavaClasses(Seq(expr)) ++ Seq(classOf[Object])
+        val paramTypes = EncoderUtils.expressionJavaClasses(Seq(expr)) :+
+          classOf[Object]
         val methods = paramTypes.flatMap { fieldClass =>
           try {
             Some(beanClass.getDeclaredMethod(name, fieldClass))
@@ -1869,7 +1899,7 @@ case class GetExternalRowField(
   override def eval(input: InternalRow): Any = {
     val inputRow = child.eval(input).asInstanceOf[Row]
     if (inputRow == null) {
-      throw QueryExecutionErrors.inputExternalRowCannotBeNullError
+      throw QueryExecutionErrors.inputExternalRowCannotBeNullError()
     }
     if (inputRow.isNullAt(index)) {
       throw QueryExecutionErrors.fieldCannotBeNullError(index, fieldName)
@@ -1939,7 +1969,7 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
         value.isInstanceOf[java.sql.Timestamp] || value.isInstanceOf[java.time.Instant]
       }
     case _ =>
-      val dataTypeClazz = ScalaReflection.javaBoxedType(dataType)
+      val dataTypeClazz = EncoderUtils.javaBoxedType(dataType)
       (value: Any) => {
         dataTypeClazz.isInstance(value)
       }

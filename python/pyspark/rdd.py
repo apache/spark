@@ -94,6 +94,9 @@ if TYPE_CHECKING:
     import socket
     import io
 
+    from py4j.java_gateway import JavaObject
+    from py4j.java_collections import JavaArray
+
     from pyspark._typing import NonUDFType
     from pyspark._typing import S, NumberOrArray
     from pyspark.context import SparkContext
@@ -110,10 +113,14 @@ if TYPE_CHECKING:
     )
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.types import AtomicType, StructType
-    from pyspark.sql._typing import AtomicValue, RowLike, SQLArrowBatchedUDFType, SQLBatchedUDFType
-
-    from py4j.java_gateway import JavaObject
-    from py4j.java_collections import JavaArray
+    from pyspark.sql._typing import (
+        AtomicValue,
+        RowLike,
+        SQLArrowBatchedUDFType,
+        SQLArrowTableUDFType,
+        SQLBatchedUDFType,
+        SQLTableUDFType,
+    )
 
 T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)
@@ -151,6 +158,9 @@ class PythonEvalType:
     SQL_COGROUPED_MAP_PANDAS_UDF: "PandasCogroupedMapUDFType" = 206
     SQL_MAP_ARROW_ITER_UDF: "ArrowMapIterUDFType" = 207
     SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE: "PandasGroupedMapUDFWithStateType" = 208
+
+    SQL_TABLE_UDF: "SQLTableUDFType" = 300
+    SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301
 
 
 def portable_hash(x: Hashable) -> int:
@@ -280,7 +290,6 @@ def _local_iterator_from_socket(sock_info: "JavaArray", serializer: Serializer) 
                 # If response is 1 then there is a partition to read, if 0 then fully consumed
                 self._read_status = read_int(self._sockfile)
                 if self._read_status == 1:
-
                     # Load the partition data as a stream and read each item
                     self._read_iter = self._serializer.load_stream(self._sockfile)
                     for item in self._read_iter:
@@ -821,6 +830,7 @@ class RDD(Generic[T_co]):
         --------
         >>> rdd = sc.parallelize([1, 2, 3, 4], 2)
         >>> def f(iterator): yield sum(iterator)
+        ...
         >>> rdd.mapPartitions(f).collect()
         [3, 7]
         """
@@ -866,6 +876,7 @@ class RDD(Generic[T_co]):
         --------
         >>> rdd = sc.parallelize([1, 2, 3, 4], 4)
         >>> def f(splitIndex, iterator): yield splitIndex
+        ...
         >>> rdd.mapPartitionsWithIndex(f).sum()
         6
         """
@@ -909,6 +920,7 @@ class RDD(Generic[T_co]):
         --------
         >>> rdd = sc.parallelize([1, 2, 3, 4], 4)
         >>> def f(splitIndex, iterator): yield splitIndex
+        ...
         >>> rdd.mapPartitionsWithSplit(f).sum()
         6
         """
@@ -1740,6 +1752,7 @@ class RDD(Generic[T_co]):
         Examples
         --------
         >>> def f(x): print(x)
+        ...
         >>> sc.parallelize([1, 2, 3, 4, 5]).foreach(f)
         """
         f = fail_on_stopiteration(f)
@@ -1773,6 +1786,7 @@ class RDD(Generic[T_co]):
         >>> def f(iterator):
         ...     for x in iterator:
         ...          print(x)
+        ...
         >>> sc.parallelize([1, 2, 3, 4, 5]).foreachPartition(f)
         """
 
@@ -3844,7 +3858,6 @@ class RDD(Generic[T_co]):
         limit = self._memory_limit() / 2
 
         def add_shuffle_key(split: int, iterator: Iterable[Tuple[K, V]]) -> Iterable[bytes]:
-
             buckets = defaultdict(list)
             c, batch = 0, min(10 * numPartitions, 1000)  # type: ignore[operator]
 
@@ -4199,6 +4212,7 @@ class RDD(Generic[T_co]):
         --------
         >>> rdd = sc.parallelize([("a", ["x", "y", "z"]), ("b", ["p", "r"])])
         >>> def f(x): return x
+        ...
         >>> rdd.flatMapValues(f).collect()
         [('a', 'x'), ('a', 'y'), ('a', 'z'), ('b', 'p'), ('b', 'r')]
         """
@@ -4235,6 +4249,7 @@ class RDD(Generic[T_co]):
         --------
         >>> rdd = sc.parallelize([("a", ["apple", "banana", "lemon"]), ("b", ["grapes"])])
         >>> def f(x): return len(x)
+        ...
         >>> rdd.mapValues(f).collect()
         [('a', 3), ('b', 1)]
         """
@@ -5313,6 +5328,7 @@ class RDDBarrier(Generic[T]):
         --------
         >>> rdd = sc.parallelize([1, 2, 3, 4], 2)
         >>> def f(iterator): yield sum(iterator)
+        ...
         >>> barrier = rdd.barrier()
         >>> barrier
         <pyspark.rdd.RDDBarrier ...>
@@ -5364,6 +5380,7 @@ class RDDBarrier(Generic[T]):
         --------
         >>> rdd = sc.parallelize([1, 2, 3, 4], 4)
         >>> def f(splitIndex, iterator): yield splitIndex
+        ...
         >>> barrier = rdd.barrier()
         >>> barrier
         <pyspark.rdd.RDDBarrier ...>

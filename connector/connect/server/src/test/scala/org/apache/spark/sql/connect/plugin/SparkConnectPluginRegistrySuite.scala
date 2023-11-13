@@ -92,7 +92,7 @@ class ExampleCommandPlugin extends CommandPlugin {
     val cmd = command.unpack(classOf[proto.ExamplePluginCommand])
     assert(planner.session != null)
     SparkContext.getActive.get.setLocalProperty("testingProperty", cmd.getCustomField)
-    Some()
+    Some(())
   }
 }
 
@@ -195,7 +195,9 @@ class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConne
               .build()))
         .build()
 
-      new SparkConnectPlanner(spark).process(plan, "clientId", "sessionId", new MockObserver())
+      val executeHolder = buildExecutePlanHolder(plan)
+      new SparkConnectPlanner(executeHolder)
+        .process(plan, new MockObserver())
       assert(spark.sparkContext.getLocalProperty("testingProperty").equals("Martin"))
     }
   }
@@ -224,7 +226,7 @@ class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConne
     }
   }
 
-  test("Emtpy registries are really empty and work") {
+  test("Empty registries are really empty and work") {
     assert(SparkConnectPluginRegistry.loadRelationPlugins().isEmpty)
     assert(SparkConnectPluginRegistry.loadExpressionPlugins().isEmpty)
     assert(SparkConnectPluginRegistry.loadCommandPlugins().isEmpty)

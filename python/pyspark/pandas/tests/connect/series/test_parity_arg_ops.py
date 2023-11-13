@@ -22,11 +22,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class SeriesParityArgOpsTests(SeriesArgOpsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_argsort(self):
-        super().test_argsort()
+    pass
 
 
 if __name__ == "__main__":

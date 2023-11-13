@@ -14,9 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import inspect
 import functools
 import os
-from typing import Any, Callable, Optional, Sequence, TYPE_CHECKING, cast, TypeVar
+from typing import Any, Callable, Optional, Sequence, TYPE_CHECKING, cast, TypeVar, Union, Type
 
 from py4j.java_collections import JavaArray
 from py4j.java_gateway import (
@@ -45,7 +46,9 @@ from pyspark.find_spark_home import _find_spark_home
 if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
-    from pyspark.pandas._typing import SeriesOrIndex
+    from pyspark.sql.column import Column
+    from pyspark.sql.window import Window
+    from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 
 has_numpy = False
 try:
@@ -137,13 +140,41 @@ def is_timestamp_ntz_preferred() -> bool:
     """
     Return a bool if TimestampNTZType is preferred according to the SQL configuration set.
     """
-    jvm = SparkContext._jvm
-    return jvm is not None and jvm.PythonSQLUtils.isTimestampNTZPreferred()
+    if is_remote():
+        from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
+
+        session = ConnectSparkSession.getActiveSession()
+        if session is None:
+            return False
+        else:
+            return session.conf.get("spark.sql.timestampType", None) == "TIMESTAMP_NTZ"
+    else:
+        jvm = SparkContext._jvm
+        return jvm is not None and jvm.PythonSQLUtils.isTimestampNTZPreferred()
 
 
 def is_remote() -> bool:
     """
     Returns if the current running environment is for Spark Connect.
+
+    .. versionadded:: 4.0.0
+
+    Notes
+    -----
+    This will only return ``True`` if there is a remote session running.
+    Otherwise, it returns ``False``.
+
+    This API is unstable, and for developers.
+
+    Returns
+    -------
+    bool
+
+    Examples
+    --------
+    >>> from pyspark.sql import is_remote
+    >>> is_remote()
+    False
     """
     return "SPARK_CONNECT_MODE_ENABLED" in os.environ
 
@@ -153,7 +184,6 @@ def try_remote_functions(f: FuncT) -> FuncT:
 
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
-
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.sql.connect import functions
 
@@ -169,9 +199,23 @@ def try_remote_avro_functions(f: FuncT) -> FuncT:
 
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
-
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.sql.connect.avro import functions
+
+            return getattr(functions, f.__name__)(*args, **kwargs)
+        else:
+            return f(*args, **kwargs)
+
+    return cast(FuncT, wrapped)
+
+
+def try_remote_protobuf_functions(f: FuncT) -> FuncT:
+    """Mark API supported from Spark Connect."""
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.sql.connect.protobuf import functions
 
             return getattr(functions, f.__name__)(*args, **kwargs)
         else:
@@ -185,9 +229,8 @@ def try_remote_window(f: FuncT) -> FuncT:
 
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
-
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            from pyspark.sql.connect.window import Window
+            from pyspark.sql.connect.window import Window  # type: ignore[misc]
 
             return getattr(Window, f.__name__)(*args, **kwargs)
         else:
@@ -201,7 +244,6 @@ def try_remote_windowspec(f: FuncT) -> FuncT:
 
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
-
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.sql.connect.window import WindowSpec
 
@@ -221,28 +263,31 @@ def get_active_spark_context() -> SparkContext:
     return sc
 
 
-def try_remote_observation(f: FuncT) -> FuncT:
+def try_remote_session_classmethod(f: FuncT) -> FuncT:
     """Mark API supported from Spark Connect."""
 
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
-        # TODO(SPARK-41527): Add the support of Observation.
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            raise PySparkNotImplementedError(
-                error_class="NOT_IMPLEMENTED",
-                message_parameters={"feature": "Observation support for Spark Connect"},
-            )
-        return f(*args, **kwargs)
+            from pyspark.sql.connect.session import SparkSession  # type: ignore[misc]
+
+            assert inspect.isclass(args[0])
+            return getattr(SparkSession, f.__name__)(*args[1:], **kwargs)
+        else:
+            return f(*args, **kwargs)
 
     return cast(FuncT, wrapped)
 
 
-def pyspark_column_op(func_name: str) -> Callable[..., "SeriesOrIndex"]:
+def pyspark_column_op(
+    func_name: str, left: "IndexOpsLike", right: Any, fillna: Any = None
+) -> Union["SeriesOrIndex", None]:
     """
     Wrapper function for column_op to get proper Column class.
     """
     from pyspark.pandas.base import column_op
     from pyspark.sql.column import Column as PySparkColumn
+    from pyspark.pandas.data_type_ops.base import _is_extension_dtypes
 
     if is_remote():
         from pyspark.sql.connect.column import Column as ConnectColumn
@@ -250,4 +295,42 @@ def pyspark_column_op(func_name: str) -> Callable[..., "SeriesOrIndex"]:
         Column = ConnectColumn
     else:
         Column = PySparkColumn  # type: ignore[assignment]
-    return column_op(getattr(Column, func_name))
+    result = column_op(getattr(Column, func_name))(left, right)
+    # It works as expected on extension dtype, so we don't need to call `fillna` for this case.
+    if (fillna is not None) and (_is_extension_dtypes(left) or _is_extension_dtypes(right)):
+        fillna = None
+    # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
+    return result.fillna(fillna) if fillna is not None else result
+
+
+def get_column_class() -> Type["Column"]:
+    from pyspark.sql.column import Column as PySparkColumn
+
+    if is_remote():
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        return ConnectColumn  # type: ignore[return-value]
+    else:
+        return PySparkColumn
+
+
+def get_dataframe_class() -> Type["DataFrame"]:
+    from pyspark.sql.dataframe import DataFrame as PySparkDataFrame
+
+    if is_remote():
+        from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+
+        return ConnectDataFrame  # type: ignore[return-value]
+    else:
+        return PySparkDataFrame
+
+
+def get_window_class() -> Type["Window"]:
+    from pyspark.sql.window import Window as PySparkWindow
+
+    if is_remote():
+        from pyspark.sql.connect.window import Window as ConnectWindow
+
+        return ConnectWindow  # type: ignore[return-value]
+    else:
+        return PySparkWindow

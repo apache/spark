@@ -16,10 +16,8 @@
 #
 
 import datetime
-import unittest
 
-from distutils.version import LooseVersion
-
+import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
@@ -73,10 +71,6 @@ class DatetimeIndexTestsMixin:
         ):
             ps.DatetimeIndex(["2004-01-01", "2002-12-31", "2000-04-01"]).all()
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43608): Enable DatetimeIndexTests.test_properties for pandas 2.0.0.",
-    )
     def test_properties(self):
         for psidx, pidx in self.idx_pairs:
             self.assert_eq(psidx.year, pidx.year)
@@ -86,8 +80,6 @@ class DatetimeIndexTestsMixin:
             self.assert_eq(psidx.minute, pidx.minute)
             self.assert_eq(psidx.second, pidx.second)
             self.assert_eq(psidx.microsecond, pidx.microsecond)
-            self.assert_eq(psidx.week, pidx.week)
-            self.assert_eq(psidx.weekofyear, pidx.weekofyear)
             self.assert_eq(psidx.dayofweek, pidx.dayofweek)
             self.assert_eq(psidx.weekday, pidx.weekday)
             self.assert_eq(psidx.dayofyear, pidx.dayofyear)
@@ -102,9 +94,8 @@ class DatetimeIndexTestsMixin:
             self.assert_eq(psidx.is_year_end, pd.Index(pidx.is_year_end))
             self.assert_eq(psidx.is_leap_year, pd.Index(pidx.is_leap_year))
 
-            if LooseVersion(pd.__version__) >= LooseVersion("1.2.0"):
-                self.assert_eq(psidx.day_of_year, pidx.day_of_year)
-                self.assert_eq(psidx.day_of_week, pidx.day_of_week)
+            self.assert_eq(psidx.day_of_year, pidx.day_of_year)
+            self.assert_eq(psidx.day_of_week, pidx.day_of_week)
 
     def test_ceil(self):
         for psidx, pidx in self.idx_pairs:
@@ -145,11 +136,6 @@ class DatetimeIndexTestsMixin:
                 psidx.strftime(date_format="%B %d, %Y"), pidx.strftime(date_format="%B %d, %Y")
             )
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43644): Enable DatetimeIndexTests.test_indexer_between_time "
-        "for pandas 2.0.0.",
-    )
     def test_indexer_between_time(self):
         for psidx, pidx in self.idx_pairs:
             self.assert_eq(
@@ -257,6 +243,11 @@ class DatetimeIndexTestsMixin:
 
         mapper_pser = pd.Series([1, 2, 3], index=pidx)
         self.assert_eq(psidx.map(mapper_pser), pidx.map(mapper_pser))
+
+    def test_isocalendar(self):
+        for psidx, pidx in self.idx_pairs:
+            self.assert_eq(psidx.isocalendar().astype(int), pidx.isocalendar().astype(int))
+            self.assert_eq(psidx.isocalendar().week, pidx.isocalendar().week.astype(np.int64))
 
 
 class DatetimeIndexTests(DatetimeIndexTestsMixin, PandasOnSparkTestCase, TestUtils):

@@ -20,16 +20,14 @@ package org.apache.spark.sql.catalyst
 import java.io._
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.concurrent.atomic.AtomicBoolean
 
 import com.google.common.io.ByteStreams
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{MetadataBuilder, NumericType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkErrorUtils, Utils}
 
 package object util extends Logging {
 
@@ -83,27 +81,14 @@ package object util extends Logging {
   }
 
   def sideBySide(left: String, right: String): Seq[String] = {
-    sideBySide(left.split("\n"), right.split("\n"))
+    SparkStringUtils.sideBySide(left, right)
   }
 
   def sideBySide(left: Seq[String], right: Seq[String]): Seq[String] = {
-    val maxLeftSize = left.map(_.length).max
-    val leftPadded = left ++ Seq.fill(math.max(right.size - left.size, 0))("")
-    val rightPadded = right ++ Seq.fill(math.max(left.size - right.size, 0))("")
-
-    leftPadded.zip(rightPadded).map {
-      case (l, r) => (if (l == r) " " else "!") + l + (" " * ((maxLeftSize - l.length) + 3)) + r
-    }
+    SparkStringUtils.sideBySide(left, right)
   }
 
-  def stackTraceToString(t: Throwable): String = {
-    val out = new java.io.ByteArrayOutputStream
-    Utils.tryWithResource(new PrintWriter(out)) { writer =>
-      t.printStackTrace(writer)
-      writer.flush()
-    }
-    new String(out.toByteArray, UTF_8)
-  }
+  def stackTraceToString(t: Throwable): String = SparkErrorUtils.stackTraceToString(t)
 
   // Replaces attributes, string literals, complex type extractors with their pretty form so that
   // generated column names don't contain back-ticks or double-quotes.
@@ -116,47 +101,31 @@ package object util extends Logging {
       val name = e.name.getOrElse(e.childSchema(e.ordinal).name)
       PrettyAttribute(usePrettyExpression(e.child).sql + "." + name, e.dataType)
     case e: GetArrayStructFields =>
-      PrettyAttribute(usePrettyExpression(e.child) + "." + e.field.name, e.dataType)
+      PrettyAttribute(s"${usePrettyExpression(e.child)}.${e.field.name}", e.dataType)
     case r: InheritAnalysisRules =>
       PrettyAttribute(r.makeSQLString(r.parameters.map(toPrettySQL)), r.dataType)
-    case c: Cast if !c.getTagValue(Cast.USER_SPECIFIED_CAST).getOrElse(false) =>
+    case c: Cast if c.getTagValue(Cast.USER_SPECIFIED_CAST).isEmpty =>
       PrettyAttribute(usePrettyExpression(c.child).sql, c.dataType)
     case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
   }
 
   def quoteIdentifier(name: String): String = {
-    // Escapes back-ticks within the identifier name with double-back-ticks, and then quote the
-    // identifier with back-ticks.
-    "`" + name.replace("`", "``") + "`"
+    QuotingUtils.quoteIdentifier(name)
   }
 
   def quoteNameParts(name: Seq[String]): String = {
-    name.map(part => quoteIdentifier(part)).mkString(".")
+    QuotingUtils.quoteNameParts(name)
   }
 
   def quoteIfNeeded(part: String): String = {
-    if (part.matches("[a-zA-Z0-9_]+") && !part.matches("\\d+")) {
-      part
-    } else {
-      s"`${part.replace("`", "``")}`"
-    }
+    QuotingUtils.quoteIfNeeded(part)
   }
 
   def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
 
   def escapeSingleQuotedString(str: String): String = {
-    val builder = new StringBuilder
-
-    str.foreach {
-      case '\'' => builder ++= s"\\\'"
-      case ch => builder += ch
-    }
-
-    builder.toString()
+    QuotingUtils.escapeSingleQuotedString(str)
   }
-
-  /** Whether we have warned about plan string truncation yet. */
-  private val truncationWarningPrinted = new AtomicBoolean(false)
 
   /**
    * Format a sequence with semantics similar to calling .mkString(). Any elements beyond
@@ -170,23 +139,12 @@ package object util extends Logging {
       sep: String,
       end: String,
       maxFields: Int): String = {
-    if (seq.length > maxFields) {
-      if (truncationWarningPrinted.compareAndSet(false, true)) {
-        logWarning(
-          "Truncated the string representation of a plan since it was too large. This " +
-            s"behavior can be adjusted by setting '${SQLConf.MAX_TO_STRING_FIELDS.key}'.")
-      }
-      val numFields = math.max(0, maxFields - 1)
-      seq.take(numFields).mkString(
-        start, sep, sep + "... " + (seq.length - numFields) + " more fields" + end)
-    } else {
-      seq.mkString(start, sep, end)
-    }
+    SparkStringUtils.truncatedString(seq, start, sep, end, maxFields)
   }
 
   /** Shorthand for calling truncatedString() without start or end strings. */
   def truncatedString[T](seq: Seq[T], sep: String, maxFields: Int): String = {
-    truncatedString(seq, "", sep, "", maxFields)
+    SparkStringUtils.truncatedString(seq, "", sep, "", maxFields)
   }
 
   val METADATA_COL_ATTR_KEY = "__metadata_col"

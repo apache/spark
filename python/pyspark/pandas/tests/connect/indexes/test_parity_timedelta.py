@@ -24,9 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class TimedeltaIndexParityTests(
     TimedeltaIndexTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("TODO(SPARK-43710): Support functions.date_part for Spark Connect.")
-    def test_properties(self):
-        super().test_properties()
+    pass
 
 
 if __name__ == "__main__":

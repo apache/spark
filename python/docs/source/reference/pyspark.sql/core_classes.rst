@@ -39,4 +39,6 @@ Core Classes
     DataFrameWriter
     DataFrameWriterV2
     UDFRegistration
+    UDTFRegistration
     udf.UserDefinedFunction
+    udtf.UserDefinedTableFunction

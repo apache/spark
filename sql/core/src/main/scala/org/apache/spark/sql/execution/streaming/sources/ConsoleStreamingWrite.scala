@@ -20,10 +20,12 @@ package org.apache.spark.sql.execution.streaming.sources
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.write.{PhysicalWriteInfo, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /** Common methods used to create writes for the console sink */
 class ConsoleWrite(schema: StructType, options: CaseInsensitiveStringMap)
@@ -64,7 +66,7 @@ class ConsoleWrite(schema: StructType, options: CaseInsensitiveStringMap)
     println(printMessage)
     println("-------------------------------------------")
     // scalastyle:off println
-    Dataset.ofRows(spark, LocalRelation(schema.toAttributes, rows))
+    Dataset.ofRows(spark, LocalRelation(toAttributes(schema), rows.toImmutableArraySeq))
       .show(numRowsToShow, isTruncated)
   }
 

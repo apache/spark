@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution
 
-import scala.concurrent.{ExecutionContext, Future}
+import java.util.concurrent.{Future => JFuture}
+
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
 
 import org.apache.spark.rdd.RDD
@@ -27,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.joins.{HashedRelation, HashJoin, LongHashedRelation}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -70,10 +73,11 @@ case class SubqueryBroadcastExec(
   }
 
   @transient
-  private lazy val relationFuture: Future[Array[InternalRow]] = {
+  private lazy val relationFuture: JFuture[Array[InternalRow]] = {
     // relationFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    Future {
+    SQLExecution.withThreadLocalCaptured[Array[InternalRow]](
+      session, SubqueryBroadcastExec.executionContext) {
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
       SQLExecution.withExecutionId(session, executionId) {
@@ -104,7 +108,7 @@ case class SubqueryBroadcastExec(
 
         rows
       }
-    }(SubqueryBroadcastExec.executionContext)
+    }
   }
 
   protected override def doPrepare(): Unit = {
@@ -127,5 +131,6 @@ case class SubqueryBroadcastExec(
 
 object SubqueryBroadcastExec {
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("dynamicpruning", 16))
+    ThreadUtils.newDaemonCachedThreadPool("dynamicpruning",
+      SQLConf.get.getConf(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD)))
 }

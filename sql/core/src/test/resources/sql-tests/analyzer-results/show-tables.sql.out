@@ -184,13 +184,15 @@ org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 -- !query
 DROP TABLE show_t1
 -- !query analysis
-DropTableCommand `spark_catalog`.`showdb`.`show_t1`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), showdb.show_t1
 
 
 -- !query
 DROP TABLE show_t2
 -- !query analysis
-DropTableCommand `spark_catalog`.`showdb`.`show_t2`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), showdb.show_t2
 
 
 -- !query

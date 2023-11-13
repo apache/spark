@@ -199,7 +199,7 @@ SELECT * FROM tab1
 EXCEPT ALL
 SELECT array(1)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
@@ -376,7 +376,7 @@ SELECT k FROM tab3
 EXCEPT ALL
 SELECT k, v FROM tab4
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "NUM_COLUMNS_MISMATCH",
   "sqlState" : "42826",

@@ -14,7 +14,7 @@ SELECT a, COUNT(b) FROM testData
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_GROUP_BY",
   "sqlState" : "42803",
@@ -52,7 +52,7 @@ SELECT a, COUNT(b) FROM testData GROUP BY b
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
@@ -123,7 +123,7 @@ SELECT a + 2, COUNT(b) FROM testData GROUP BY a + 1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
@@ -198,7 +198,7 @@ SELECT a AS k, COUNT(non_existing) FROM testData GROUP BY k
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -221,7 +221,7 @@ SELECT COUNT(b) AS k FROM testData GROUP BY k
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "GROUP_BY_AGGREGATE",
   "sqlState" : "42903",
@@ -252,7 +252,7 @@ SELECT k AS a, COUNT(v) FROM testDataHasSameNameWithAlias GROUP BY a
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
@@ -276,7 +276,7 @@ SELECT a AS k, COUNT(b) FROM testData GROUP BY k
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -362,7 +362,7 @@ SELECT id FROM range(10) HAVING id > 0
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_GROUP_BY",
   "sqlState" : "42803",
@@ -406,7 +406,7 @@ SELECT 1 FROM range(10) HAVING MAX(id) > 0
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WHERE_CONDITION",
   "sqlState" : "42903",
@@ -550,7 +550,7 @@ SELECT every(1)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -576,7 +576,7 @@ SELECT some(1S)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -602,7 +602,7 @@ SELECT any(1L)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -628,7 +628,7 @@ SELECT every("true")
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -654,7 +654,7 @@ SELECT bool_and(1.0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -680,7 +680,7 @@ SELECT bool_or(1.0D)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -817,7 +817,7 @@ SELECT count(*) FROM test_agg WHERE count(*) > 1L
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WHERE_CONDITION",
   "sqlState" : "42903",
@@ -840,7 +840,7 @@ SELECT count(*) FROM test_agg WHERE count(*) + 1L > 1L
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WHERE_CONDITION",
   "sqlState" : "42903",
@@ -863,7 +863,7 @@ SELECT count(*) FROM test_agg WHERE k = 1 or k = 2 or count(*) + 1L > 1L or max(
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WHERE_CONDITION",
   "sqlState" : "42903",
@@ -1089,7 +1089,7 @@ struct<a:int,collect_list(b):array<int>,collect_list(b):array<int>>
 -- !query
 SELECT mode(a), mode(b) FROM testData
 -- !query schema
-struct<mode(a):int,mode(b):int>
+struct<mode(a, false):int,mode(b, false):int>
 -- !query output
 3	1
 
@@ -1097,9 +1097,155 @@ struct<mode(a):int,mode(b):int>
 -- !query
 SELECT a, mode(b) FROM testData GROUP BY a ORDER BY a
 -- !query schema
-struct<a:int,mode(b):int>
+struct<a:int,mode(b, false):int>
 -- !query output
 NULL	1
 1	1
 2	1
 3	1
+
+
+-- !query
+SELECT c * 2 AS d
+FROM (
+         SELECT if(b > 1, 1, b) AS c
+         FROM (
+                  SELECT if(a < 0, 0, a) AS b
+                  FROM VALUES (-1), (1), (2) AS t1(a)
+              ) t2
+         GROUP BY b
+     ) t3
+GROUP BY c
+-- !query schema
+struct<d:int>
+-- !query output
+0
+2
+
+
+-- !query
+SELECT mode(col) FROM VALUES (-10), (0), (10) AS tab(col)
+-- !query schema
+struct<mode(col, false):int>
+-- !query output
+0
+
+
+-- !query
+SELECT mode(col, false) FROM VALUES (-10), (0), (10) AS tab(col)
+-- !query schema
+struct<mode(col, false):int>
+-- !query output
+0
+
+
+-- !query
+SELECT mode(col, true) FROM VALUES (-10), (0), (10) AS tab(col)
+-- !query schema
+struct<mode(col, true):int>
+-- !query output
+-10
+
+
+-- !query
+SELECT mode(col, 'true') FROM VALUES (-10), (0), (10) AS tab(col)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"true\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"mode(col, true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "mode(col, 'true')"
+  } ]
+}
+
+
+-- !query
+SELECT mode(col, null) FROM VALUES (-10), (0), (10) AS tab(col)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprName" : "`deterministic`",
+    "sqlExpr" : "\"mode(col, NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "mode(col, null)"
+  } ]
+}
+
+
+-- !query
+SELECT mode(col, b) FROM VALUES (-10, false), (0, false), (10, false) AS tab(col, b)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "\"b\"",
+    "inputName" : "`deterministic`",
+    "inputType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"mode(col, b)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "mode(col, b)"
+  } ]
+}
+
+
+-- !query
+SELECT mode(col) FROM VALUES (map(1, 'a')) AS tab(col)
+-- !query schema
+struct<mode(col, false):map<int,string>>
+-- !query output
+{1:"a"}
+
+
+-- !query
+SELECT mode(col, false) FROM VALUES (map(1, 'a')) AS tab(col)
+-- !query schema
+struct<mode(col, false):map<int,string>>
+-- !query output
+{1:"a"}
+
+
+-- !query
+SELECT mode(col, true) FROM VALUES (map(1, 'a')) AS tab(col)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2005",
+  "messageParameters" : {
+    "dataType" : "PhysicalMapType"
+  }
+}

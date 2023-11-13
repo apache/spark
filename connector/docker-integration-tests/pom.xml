@@ -21,29 +21,18 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.12</artifactId>
-    <version>3.5.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.13</artifactId>
+    <version>4.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-docker-integration-tests_2.12</artifactId>
+  <artifactId>spark-docker-integration-tests_2.13</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Docker Integration Tests</name>
   <url>https://spark.apache.org/</url>
   <properties>
     <sbt.project.name>docker-integration-tests</sbt.project.name>
   </properties>
-
-  <repositories>
-    <repository>
-      <id>db</id>
-      <url>https://app.camunda.com/nexus/content/repositories/public/</url>
-      <releases>
-        <enabled>true</enabled>
-        <checksumPolicy>warn</checksumPolicy>
-      </releases>
-    </repository>
-  </repositories>
 
   <dependencies>
     <dependency>
@@ -132,26 +121,9 @@
     </dependency>
     <dependency>
       <groupId>com.oracle.database.jdbc</groupId>
-      <artifactId>ojdbc8</artifactId>
+      <artifactId>ojdbc11</artifactId>
       <scope>test</scope>
     </dependency>
-
-    <!-- DB2 JCC driver manual installation instructions
-
-       You can build this datasource if you:
-        1) have the DB2 artifacts installed in a local repo and supply the URL:
-          -Dmaven.repo.drivers=http://my.local.repo
-
-        2) have a copy of the DB2 JCC driver and run the following commands :
-          mvn install:install-file -Dfile=${path to jcc.jar} \
-            -DgroupId=com.ibm.db2 \
-            -DartifactId=jcc \
-            -Dversion=11.5 \
-            -Dpackaging=jar
-
-       Note: IBM DB2 JCC driver is available for download at
-          http://www-01.ibm.com/support/docview.wss?uid=swg21363866
-     -->
     <dependency>
       <groupId>com.ibm.db2</groupId>
       <artifactId>jcc</artifactId>

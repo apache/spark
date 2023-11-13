@@ -67,7 +67,7 @@ AS DEPT(dept_id, dept_name, state), false, true, LocalTempView, true
 -- !query
 SELECT a, COUNT(b) FILTER (WHERE a >= 2) FROM testData
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_GROUP_BY",
   "sqlState" : "42803",
@@ -324,7 +324,7 @@ Aggregate [a#x], [a#x, count(b#x) FILTER (WHERE (a#x >= 2)) AS count(b) FILTER (
 -- !query
 SELECT a, COUNT(b) FILTER (WHERE a != 2) FROM testData GROUP BY b
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
@@ -754,7 +754,7 @@ Aggregate [(a#x + b#x)], [(a#x + b#x) AS (a + b)#x, count(b#x) FILTER (WHERE (b#
 -- !query
 SELECT a + 2, COUNT(b) FILTER (WHERE b IN (1, 2)) FROM testData GROUP BY a + 1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42803",

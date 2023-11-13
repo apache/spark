@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.execution
 import java.io._
 import java.util.Properties
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration

@@ -22,8 +22,8 @@ import java.util.concurrent.{CountDownLatch, Delayed, ScheduledFuture, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
 
 import scala.annotation.meta.param
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
+import scala.jdk.CollectionConverters._
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
 
@@ -49,6 +49,7 @@ import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, Clock, LongAccumulator, SystemClock, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
   extends DAGSchedulerEventProcessLoop(dagScheduler) {
@@ -457,7 +458,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
    * directly through CompletionEvents.
    */
   private val jobComputeFunc = (context: TaskContext, it: Iterator[(_)]) =>
-    it.next.asInstanceOf[Tuple2[_, _]]._1
+    it.next().asInstanceOf[Tuple2[_, _]]._1
 
   /** Send the given CompletionEvent messages for the tasks in the TaskSet. */
   private def complete(taskSet: TaskSet, taskEndInfos: Seq[(TaskEndReason, Any)]): Unit = {
@@ -491,18 +492,21 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       partitions: Array[Int],
       func: (TaskContext, Iterator[_]) => _ = jobComputeFunc,
       listener: JobListener = jobListener,
+      artifacts: JobArtifactSet = JobArtifactSet.getActiveOrDefault(sc),
       properties: Properties = null): Int = {
     val jobId = scheduler.nextJobId.getAndIncrement()
-    runEvent(JobSubmitted(jobId, rdd, func, partitions, CallSite("", ""), listener, properties))
+    runEvent(JobSubmitted(jobId, rdd, func, partitions, CallSite("", ""), listener, artifacts,
+      properties))
     jobId
   }
 
   /** Submits a map stage to the scheduler and returns the job id. */
   private def submitMapStage(
       shuffleDep: ShuffleDependency[_, _, _],
-      listener: JobListener = jobListener): Int = {
+      listener: JobListener = jobListener,
+      artifacts: JobArtifactSet = JobArtifactSet.getActiveOrDefault(sc)): Int = {
     val jobId = scheduler.nextJobId.getAndIncrement()
-    runEvent(MapStageSubmitted(jobId, shuffleDep, CallSite("", ""), listener))
+    runEvent(MapStageSubmitted(jobId, shuffleDep, CallSite("", ""), listener, artifacts))
     jobId
   }
 
@@ -2785,7 +2789,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     "still behave correctly on fetch failures") {
     // Runs a job that always encounters a fetch failure, so should eventually be aborted
     def runJobWithPersistentFetchFailure: Unit = {
-      val rdd1 = sc.makeRDD(Array(1, 2, 3, 4), 2).map(x => (x, 1)).groupByKey()
+      val rdd1 = sc.makeRDD(Array(1, 2, 3, 4).toImmutableArraySeq, 2).map(x => (x, 1)).groupByKey()
       val shuffleHandle =
         rdd1.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
       rdd1.map {
@@ -2798,7 +2802,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     // Runs a job that encounters a single fetch failure but succeeds on the second attempt
     def runJobWithTemporaryFetchFailure: Unit = {
-      val rdd1 = sc.makeRDD(Array(1, 2, 3, 4), 2).map(x => (x, 1)).groupByKey()
+      val rdd1 = sc.makeRDD(Array(1, 2, 3, 4).toImmutableArraySeq, 2).map(x => (x, 1)).groupByKey()
       val shuffleHandle =
         rdd1.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
       rdd1.map {
@@ -3038,6 +3042,27 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     (shuffleId1, shuffleId2)
   }
 
+  private def constructTwoIndeterminateStage(): (Int, Int) = {
+    val shuffleMapRdd1 = new MyRDD(sc, 2, Nil, indeterminate = true)
+
+    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(2))
+    val shuffleId1 = shuffleDep1.shuffleId
+    val shuffleMapRdd2 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker,
+      indeterminate = true)
+
+    val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, new HashPartitioner(2))
+    val shuffleId2 = shuffleDep2.shuffleId
+    val finalRdd = new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
+
+    submit(finalRdd, Array(0, 1))
+
+    // Finish the first shuffle map stage.
+    completeShuffleMapStageSuccessfully(0, 0, 2)
+    assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
+
+    (shuffleId1, shuffleId2)
+  }
+
   test("SPARK-25341: abort stage while using old fetch protocol") {
     conf.set(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL.key, "true")
     // Construct the scenario of indeterminate stage fetch failed.
@@ -3091,6 +3116,92 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     complete(taskSets(6), Seq((Success, 11), (Success, 12)))
 
     // Job successful ended.
+    assert(results === Map(0 -> 11, 1 -> 12))
+    results.clear()
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-45182: Ignore task completion from old stage after retrying indeterminate stages") {
+    val (shuffleId1, shuffleId2) = constructTwoIndeterminateStage()
+
+    // shuffleMapStage0 -> shuffleId1 -> shuffleMapStage1 -> shuffleId2 -> resultStage
+    val shuffleMapStage1 = scheduler.stageIdToStage(1).asInstanceOf[ShuffleMapStage]
+    val resultStage = scheduler.stageIdToStage(2).asInstanceOf[ResultStage]
+
+    // Shuffle map stage 0 is done
+    assert(mapOutputTracker.findMissingPartitions(shuffleId1) == Some(Seq.empty))
+    // Shuffle map stage 1 is still waiting for its 2 tasks to complete
+    assert(mapOutputTracker.findMissingPartitions(shuffleId2) == Some(Seq(0, 1)))
+    // The result stage is still waiting for its 2 tasks to complete
+    assert(resultStage.findMissingPartitions() == Seq(0, 1))
+
+    scheduler.resubmitFailedStages()
+
+    // The first task of the shuffle map stage 1 fails with fetch failure
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0L, 0, 0, "ignored"),
+      null))
+
+    // Both the stages should have been resubmitted
+    val newFailedStages = scheduler.failedStages.toSeq
+    assert(newFailedStages.map(_.id) == Seq(0, 1))
+
+    scheduler.resubmitFailedStages()
+
+    // Since shuffleId1 is indeterminate, all tasks of shuffle map stage 0 should be ran
+    assert(taskSets(2).stageId == 0)
+    assert(taskSets(2).stageAttemptId == 1)
+    assert(taskSets(2).tasks.length == 2)
+
+    // Complete the re-attempt of shuffle map stage 0
+    completeShuffleMapStageSuccessfully(0, 1, 2)
+    assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
+
+    // Since shuffleId2 is indeterminate, all tasks of shuffle map stage 1 should be ran
+    assert(taskSets(3).stageId == 1)
+    assert(taskSets(3).stageAttemptId == 1)
+    assert(taskSets(3).tasks.length == 2)
+
+    // The first task of the shuffle map stage 1 from 2nd attempt succeeds
+    runEvent(makeCompletionEvent(
+      taskSets(3).tasks(0),
+      Success,
+      makeMapStatus("hostB",
+        2)))
+
+    // The second task of the shuffle map stage 1 from 1st attempt succeeds
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1),
+      Success,
+      makeMapStatus("hostC",
+        2)))
+
+    // Above task completion should not mark the partition 1 complete from 2nd attempt
+    assert(!tasksMarkedAsCompleted.contains(taskSets(3).tasks(1)))
+
+    // This task completion should get ignored and partition 1 should be missing
+    // for shuffle map stage 1
+    assert(mapOutputTracker.findMissingPartitions(shuffleId2) == Some(Seq(1)))
+
+    // The second task of the shuffle map stage 1 from 2nd attempt succeeds
+    runEvent(makeCompletionEvent(
+      taskSets(3).tasks(1),
+      Success,
+      makeMapStatus("hostD",
+        2)))
+
+    // The shuffle map stage 1 should be done
+    assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
+
+    // The shuffle map outputs for shuffleId1 should be from latest attempt of shuffle map stage 1
+    assert(mapOutputTracker.getMapLocation(shuffleMapStage1.shuffleDep, 0, 2)
+      === Seq("hostB", "hostD"))
+
+    // Complete result stage
+    complete(taskSets(4), Seq((Success, 11), (Success, 12)))
+
+    // Job successfully ended
     assert(results === Map(0 -> 11, 1 -> 12))
     results.clear()
     assertDataStructuresEmpty()
@@ -3339,12 +3450,12 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("test 1 resource profile") {
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
-    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
+    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
 
     val rdd = sc.parallelize(1 to 10).map(x => (x, x)).withResources(rp1)
     val (shuffledeps, resourceprofiles) = scheduler.getShuffleDependenciesAndResourceProfiles(rdd)
     val rpMerged = scheduler.mergeResourceProfilesForStage(resourceprofiles)
-    val expectedid = Option(rdd.getResourceProfile).map(_.id)
+    val expectedid = Option(rdd.getResourceProfile()).map(_.id)
     assert(expectedid.isDefined)
     assert(expectedid.get != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     assert(rpMerged.id == expectedid.get)
@@ -3354,11 +3465,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     import org.apache.spark.resource._
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
-    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
+    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
 
     val ereqs2 = new ExecutorResourceRequests().cores(2)
     val treqs2 = new TaskResourceRequests().cpus(2)
-    val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build
+    val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build()
 
     val rdd = sc.parallelize(1 to 10).withResources(rp1).map(x => (x, x)).withResources(rp2)
     val error = intercept[IllegalArgumentException] {
@@ -3374,11 +3485,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
-    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
+    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
 
     val ereqs2 = new ExecutorResourceRequests().cores(2)
     val treqs2 = new TaskResourceRequests().cpus(2)
-    val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build
+    val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build()
 
     val rdd = sc.parallelize(1 to 10).withResources(rp1).map(x => (x, x)).withResources(rp2)
     val (shuffledeps, resourceprofiles) = scheduler.getShuffleDependenciesAndResourceProfiles(rdd)
@@ -3392,11 +3503,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
-    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
+    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
 
     val ereqs2 = new ExecutorResourceRequests().cores(2)
     val treqs2 = new TaskResourceRequests().cpus(2)
-    val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build
+    val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build()
 
     val rdd = sc.parallelize(1 to 10).withResources(rp1).map(x => (x, x)).withResources(rp2)
     val (_, resourceprofiles) = scheduler.getShuffleDependenciesAndResourceProfiles(rdd)
@@ -3532,10 +3643,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     import org.apache.spark.resource._
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
-    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
+    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
     val ereqs2 = new ExecutorResourceRequests().cores(6)
     val treqs2 = new TaskResourceRequests().cpus(2)
-    val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build
+    val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build()
 
     val rddWithRp = new MyRDD(sc, 2, Nil).withResources(rp1)
     val rddA = new MyRDD(sc, 2, Nil).withResources(rp1)

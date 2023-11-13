@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, Metadata, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -36,6 +37,18 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class UnresolvedException(function: String)
   extends AnalysisException(s"Invalid call to $function on unresolved object")
 
+/** Parent trait for unresolved node types */
+trait UnresolvedNode extends LogicalPlan {
+  override def output: Seq[Attribute] = Nil
+  override lazy val resolved: Boolean = false
+}
+
+/** Parent trait for unresolved leaf node types */
+trait UnresolvedLeafNode extends LeafNode with UnresolvedNode
+
+/** Parent trait for unresolved unary node types */
+trait UnresolvedUnaryNode extends UnaryNode with UnresolvedNode
+
 /**
  * A logical plan placeholder that holds the identifier clause string expression. It will be
  * replaced by the actual logical plan with the evaluated identifier string.
@@ -43,9 +56,7 @@ class UnresolvedException(function: String)
 case class PlanWithUnresolvedIdentifier(
     identifierExpr: Expression,
     planBuilder: Seq[String] => LogicalPlan)
-  extends LeafNode {
-  override def output: Seq[Attribute] = Nil
-  override lazy val resolved = false
+  extends UnresolvedLeafNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER)
 }
 
@@ -77,17 +88,13 @@ case class UnresolvedRelation(
     multipartIdentifier: Seq[String],
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
     override val isStreaming: Boolean = false)
-  extends LeafNode with NamedRelation {
+  extends UnresolvedLeafNode with NamedRelation {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   /** Returns a `.` separated name for this relation. */
   def tableName: String = multipartIdentifier.quoted
 
   override def name: String = tableName
-
-  override def output: Seq[Attribute] = Nil
-
-  override lazy val resolved = false
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_RELATION)
 }
@@ -97,12 +104,11 @@ object UnresolvedRelation {
       tableIdentifier: TableIdentifier,
       extraOptions: CaseInsensitiveStringMap,
       isStreaming: Boolean): UnresolvedRelation = {
-    UnresolvedRelation(
-      tableIdentifier.database.toSeq :+ tableIdentifier.table, extraOptions, isStreaming)
+    UnresolvedRelation(tableIdentifier.nameParts, extraOptions, isStreaming)
   }
 
   def apply(tableIdentifier: TableIdentifier): UnresolvedRelation =
-    UnresolvedRelation(tableIdentifier.database.toSeq :+ tableIdentifier.table)
+    UnresolvedRelation(tableIdentifier.nameParts)
 }
 
 /**
@@ -115,11 +121,9 @@ object UnresolvedRelation {
 case class UnresolvedInlineTable(
     names: Seq[String],
     rows: Seq[Seq[Expression]])
-  extends LeafNode {
+  extends UnresolvedLeafNode {
 
   lazy val expressionsResolved: Boolean = rows.forall(_.forall(_.resolved))
-  override lazy val resolved = false
-  override def output: Seq[Attribute] = Nil
 }
 
 /**
@@ -134,11 +138,7 @@ case class UnresolvedInlineTable(
 case class UnresolvedTableValuedFunction(
     name: Seq[String],
     functionArgs: Seq[Expression])
-  extends LeafNode {
-
-  override def output: Seq[Attribute] = Nil
-
-  override lazy val resolved = false
+  extends UnresolvedLeafNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_TABLE_VALUED_FUNCTION)
 }
@@ -174,11 +174,7 @@ object UnresolvedTableValuedFunction {
 case class UnresolvedTVFAliases(
     name: Seq[String],
     child: LogicalPlan,
-    outputNames: Seq[String]) extends UnaryNode {
-
-  override def output: Seq[Attribute] = Nil
-
-  override lazy val resolved = false
+    outputNames: Seq[String]) extends UnresolvedUnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_TVF_ALIASES)
 
@@ -240,7 +236,7 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
   }
 }
 
-object UnresolvedAttribute {
+object UnresolvedAttribute extends AttributeNameParser {
   /**
    * Creates an [[UnresolvedAttribute]], parsing segments separated by dots ('.').
    */
@@ -260,51 +256,6 @@ object UnresolvedAttribute {
    */
   def quotedString(name: String): UnresolvedAttribute =
     new UnresolvedAttribute(parseAttributeName(name))
-
-  /**
-   * Used to split attribute name by dot with backticks rule.
-   * Backticks must appear in pairs, and the quoted string must be a complete name part,
-   * which means `ab..c`e.f is not allowed.
-   * We can use backtick only inside quoted name parts.
-   */
-  def parseAttributeName(name: String): Seq[String] = {
-    def e = QueryCompilationErrors.attributeNameSyntaxError(name)
-    val nameParts = scala.collection.mutable.ArrayBuffer.empty[String]
-    val tmp = scala.collection.mutable.ArrayBuffer.empty[Char]
-    var inBacktick = false
-    var i = 0
-    while (i < name.length) {
-      val char = name(i)
-      if (inBacktick) {
-        if (char == '`') {
-          if (i + 1 < name.length && name(i + 1) == '`') {
-            tmp += '`'
-            i += 1
-          } else {
-            inBacktick = false
-            if (i + 1 < name.length && name(i + 1) != '.') throw e
-          }
-        } else {
-          tmp += char
-        }
-      } else {
-        if (char == '`') {
-          if (tmp.nonEmpty) throw e
-          inBacktick = true
-        } else if (char == '.') {
-          if (name(i - 1) == '.' || i == name.length - 1) throw e
-          nameParts += tmp.mkString
-          tmp.clear()
-        } else {
-          tmp += char
-        }
-      }
-      i += 1
-    }
-    if (inBacktick) throw e
-    nameParts += tmp.mkString
-    nameParts.toSeq
-  }
 }
 
 /**
@@ -324,13 +275,13 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
   override def prettyName: String = name.unquotedString
   override def toString: String = s"'$name(${children.mkString(", ")})"
 
-  override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =
+  override def eval(input: InternalRow = null): IterableOnce[InternalRow] =
     throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 
-  override def terminate(): TraversableOnce[InternalRow] =
+  override def terminate(): IterableOnce[InternalRow] =
     throw QueryExecutionErrors.cannotTerminateGeneratorError(this)
 
   override protected def withNewChildrenInternal(
@@ -483,7 +434,7 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
           throw QueryCompilationErrors.starExpandDataTypeNotSupportedError(target.get)
       }
     } else {
-      val from = input.inputSet.map(_.name).mkString(", ")
+      val from = input.inputSet.map(_.name).map(toSQLId).mkString(", ")
       val targetString = target.get.mkString(".")
       throw QueryCompilationErrors.cannotResolveStarExpandGivenInputColumnsError(
         targetString, from)
@@ -634,11 +585,7 @@ case class UnresolvedAlias(
 case class UnresolvedSubqueryColumnAliases(
     outputColumnNames: Seq[String],
     child: LogicalPlan)
-  extends UnaryNode {
-
-  override def output: Seq[Attribute] = Nil
-
-  override lazy val resolved = false
+  extends UnresolvedUnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_SUBQUERY_COLUMN_ALIAS)
 
@@ -717,9 +664,7 @@ case class UnresolvedOrdinal(ordinal: Int)
 case class UnresolvedHaving(
     havingCondition: Expression,
     child: LogicalPlan)
-  extends UnaryNode {
-  override lazy val resolved: Boolean = false
-  override def output: Seq[Attribute] = child.output
+  extends UnresolvedUnaryNode {
   override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedHaving =
     copy(child = newChild)
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_HAVING)

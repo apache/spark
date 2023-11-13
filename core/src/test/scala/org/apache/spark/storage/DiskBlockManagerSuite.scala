@@ -83,7 +83,7 @@ class DiskBlockManagerSuite extends SparkFunSuite {
     val ids = (1 to 100).map(i => TestBlockId("test_" + i))
     val files = ids.map(id => diskBlockManager.getFile(id))
     files.foreach(file => writeToFile(file, 10))
-    assert(diskBlockManager.getAllBlocks.toSet === ids.toSet)
+    assert(diskBlockManager.getAllBlocks().toSet === ids.toSet)
   }
 
   test("SPARK-22227: non-block files are skipped") {
@@ -108,8 +108,8 @@ class DiskBlockManagerSuite extends SparkFunSuite {
     assert(Utils.getConfiguredLocalDirs(testConf).map(
       rootDir => new File(rootDir, DiskBlockManager.MERGE_DIRECTORY))
       .filter(mergeDir => mergeDir.exists()).length === 2)
-    // mergeDir0 will be skipped as it already exists
-    assert(mergeDir0.list().length === 0)
+    // mergeDir0 can not be skipped even if it already exists
+    assert(mergeDir0.list().length === testConf.get(config.DISKSTORE_SUB_DIRECTORIES))
     // Sub directories get created under mergeDir1
     assert(mergeDir1.list().length === testConf.get(config.DISKSTORE_SUB_DIRECTORIES))
   }

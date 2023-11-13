@@ -542,6 +542,104 @@ cancelJobGroup <- function(groupId) {
   invisible(callJMethod(sc, "cancelJobGroup", groupId))
 }
 
+#' Set the behavior of job cancellation from jobs started in this thread.
+#'
+#' @param interruptOnCancel If true, then job cancellation will result in `Thread.interrupt()`
+#' being called on the job's executor threads. This is useful to help ensure that the tasks
+#' are actually stopped in a timely manner, but is off by default due to HDFS-1208, where HDFS
+#' may respond to Thread.interrupt() by marking nodes as dead.
+#' @rdname setInterruptOnCancel
+#' @name setInterruptOnCancel
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' setInterruptOnCancel(true)
+#'}
+#' @note cancelJobGroup since 3.5.0
+setInterruptOnCancel <- function(interruptOnCancel) {
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "setInterruptOnCancel", interruptOnCancel))
+}
+
+#' Add a tag to be assigned to all the jobs started by this thread.
+#'
+#' @param tag The tag to be added. Cannot contain ',' (comma) character.
+#' @rdname addJobTAg
+#' @name addJobTag
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' addJobTag("myJobTag")
+#'}
+#' @note addJobTag since 3.5.0
+addJobTag <- function(tag) {
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "addJobTag", tag))
+}
+
+#' Remove a tag previously added to be assigned to all the jobs started by this thread.
+#' Noop if such a tag was not added earlier.
+#'
+#' @param tag The tag to be removed. Cannot contain ',' (comma) character.
+#' @rdname removeJobTAg
+#' @name removeJobTag
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' removeJobTag("myJobTag")
+#'}
+#' @note cancelJobGroup since 3.5.0
+removeJobTag <- function(tag) {
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "removeJobTag", tag))
+}
+
+#' Get the tags that are currently set to be assigned to all the jobs started by this thread.
+#'
+#' @rdname getJobTags
+#' @name getJobTags
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' tags <- getJobTags()
+#'}
+#' @note getJobTags since 3.5.0
+getJobTags <- function() {
+  sc <- getSparkContext()
+  callJStatic("org.apache.spark.api.r.RUtils", "getJobTags", sc)
+}
+
+#' Clear the current thread's job tags.
+#'
+#' @rdname clearJobTags
+#' @name clearJobTags
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' clearJobTags()
+#'}
+#' @note clearJobTags since 3.5.0
+clearJobTags <- function() {
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "clearJobTags"))
+}
+
+#' Cancel active jobs that have the specified tag.
+#'
+#' @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
+#' @rdname cancelJobsWithTag
+#' @name cancelJobsWithTag
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' cancelJobsWithTag("myTag")
+#'}
+#' @note cancelJobGroup since 3.5.0
+cancelJobsWithTag <- function(tag) {
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "cancelJobsWithTag", tag))
+}
+
 #' Set a human readable description of the current job.
 #'
 #' Set a description that is shown as a job description in UI.
@@ -564,6 +662,7 @@ setJobDescription <- function(value) {
 
 #' Set a local property that affects jobs submitted from this thread, such as the
 #' Spark fair scheduler pool.
+#' To remove/unset property simply set `value` to NULL e.g. setLocalProperty("key", NULL)
 #'
 #' @param key The key for a local property.
 #' @param value The value for a local property.

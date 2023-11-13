@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<ROWSET>
+    <ROW>
+        <col1>00010</col1> <!--We like to treat this column as text instead of integer-->
+        <col2>value1</col2>
+        <col3>0.00100</col3>
+    </ROW>
+    <ROW>
+        <col1>00023</col1>
+        <col2>value2</col2>
+        <col3>0.00200</col3>
+    </ROW>
+    <ROW>
+        <col1>00025</col1>
+        <col2>value3</col2>
+        <col3>0.00300</col3>
+    </ROW>
+</ROWSET>

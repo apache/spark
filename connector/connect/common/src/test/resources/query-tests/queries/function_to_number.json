@@ -13,7 +13,7 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "to_char",
+        "functionName": "to_number",
         "arguments": [{
           "unresolvedAttribute": {
             "unparsedIdentifier": "g"

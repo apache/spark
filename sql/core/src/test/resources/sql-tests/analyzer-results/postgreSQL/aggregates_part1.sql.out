@@ -503,7 +503,7 @@ select
   (select max((select i.unique2 from tenk1 i where i.unique1 = o.unique1)))
 from tenk1 o
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",

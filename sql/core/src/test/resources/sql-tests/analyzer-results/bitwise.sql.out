@@ -128,7 +128,7 @@ Project [bit_count(-9223372036854775808) AS bit_count(-9223372036854775808)#x]
 -- !query
 select bit_count("bit count")
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -152,7 +152,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select bit_count('a')
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",

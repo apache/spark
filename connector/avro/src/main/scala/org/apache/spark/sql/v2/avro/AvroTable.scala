@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.v2.avro
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.FileStatus
 

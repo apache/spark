@@ -31,6 +31,7 @@ import org.apache.spark.api.resource.ResourceDiscoveryPlugin
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{EXECUTOR_CORES, RESOURCES_DISCOVERY_PLUGIN, SPARK_TASK_PREFIX}
 import org.apache.spark.internal.config.Tests.RESOURCES_WARNING_TESTING
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -155,7 +156,7 @@ private[spark] object ResourceUtils extends Logging {
           s"config: $componentName.$RESOURCE_PREFIX.$key")
       }
       key.substring(0, index)
-    }.distinct.map(name => new ResourceID(componentName, name))
+    }.distinct.map(name => new ResourceID(componentName, name)).toImmutableArraySeq
   }
 
   def parseAllResourceRequests(
@@ -190,12 +191,15 @@ private[spark] object ResourceUtils extends Logging {
   def addTaskResourceRequests(
       sparkConf: SparkConf,
       treqs: TaskResourceRequests): Unit = {
-    listResourceIds(sparkConf, SPARK_TASK_PREFIX).map { resourceId =>
+    val nonZeroTaskReqs = listResourceIds(sparkConf, SPARK_TASK_PREFIX).map { resourceId =>
       val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
       val amountDouble = settings.getOrElse(AMOUNT,
         throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
       ).toDouble
-      treqs.resource(resourceId.resourceName, amountDouble)
+      (resourceId.resourceName, amountDouble)
+    }.toMap.filter { case (_, amount) => amount > 0.0 }
+    nonZeroTaskReqs.foreach { case (resourceName, amount) =>
+      treqs.resource(resourceName, amount)
     }
   }
 
@@ -270,7 +274,8 @@ private[spark] object ResourceUtils extends Logging {
     val otherResources = otherResourceIds.flatMap { id =>
       val request = parseResourceRequest(sparkConf, id)
       if (request.amount > 0) {
-        Some(ResourceAllocation(id, discoverResource(sparkConf, request).addresses))
+        Some(ResourceAllocation(id,
+          discoverResource(sparkConf, request).addresses.toImmutableArraySeq))
       } else {
         None
       }

@@ -19,13 +19,13 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.12</artifactId>
-    <version>3.5.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.13</artifactId>
+    <version>4.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <!-- Kinesis integration is not included by default due to ASL-licensed code. -->
-  <artifactId>spark-streaming-kinesis-asl_2.12</artifactId>
+  <artifactId>spark-streaming-kinesis-asl_2.13</artifactId>
   <packaging>jar</packaging>
   <name>Spark Kinesis Integration</name>
 

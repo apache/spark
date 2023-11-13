@@ -27,7 +27,7 @@ import scala.collection.mutable.HashMap
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.{config, Logging}
@@ -36,6 +36,7 @@ import org.apache.spark.storage.DiskBlockManager.ATTEMPT_ID_KEY
 import org.apache.spark.storage.DiskBlockManager.MERGE_DIR_KEY
 import org.apache.spark.storage.DiskBlockManager.MERGE_DIRECTORY
 import org.apache.spark.util.{ShutdownHookManager, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Creates and maintains the logical mapping between logical blocks and physical on-disk
@@ -79,9 +80,9 @@ private[spark] class DiskBlockManager(
   private val shutdownHook = addShutdownHook()
 
   // If either of these features are enabled, we must change permissions on block manager
-  // directories and files to accomodate the shuffle service deleting files in a secure environment.
-  // Parent directories are assumed to be restrictive to prevent unauthorized users from accessing
-  // or modifying world readable files.
+  // directories and files to accommodate the shuffle service deleting files in a secure
+  // environment. Parent directories are assumed to be restrictive to prevent unauthorized users
+  // from accessing or modifying world readable files.
   private val permissionChangingRequired = conf.get(config.SHUFFLE_SERVICE_ENABLED) && (
     conf.get(config.SHUFFLE_SERVICE_REMOVE_SHUFFLE_ENABLED) ||
     conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
@@ -139,15 +140,15 @@ private[spark] class DiskBlockManager(
       case mergedMetaBlockId: ShuffleMergedMetaBlockId =>
         getMergedShuffleFile(mergedMetaBlockId.name, dirs)
       case _ =>
-        throw new IllegalArgumentException(
-          s"Only merged block ID is supported, but got $blockId")
+        throw SparkException.internalError(
+          s"Only merged block ID is supported, but got $blockId", category = "STORAGE")
     }
   }
 
   private def getMergedShuffleFile(filename: String, dirs: Option[Array[String]]): File = {
     if (!dirs.exists(_.nonEmpty)) {
-      throw new IllegalArgumentException(
-        s"Cannot read $filename because merged shuffle dirs is empty")
+      throw SparkException.internalError(
+        s"Cannot read $filename because merged shuffle dirs is empty", category = "STORAGE")
     }
     new File(ExecutorDiskUtils.getFilePath(dirs.get, subDirsPerLocalDir, filename))
   }
@@ -168,7 +169,7 @@ private[spark] class DiskBlockManager(
     }.filter(_ != null).flatMap { dir =>
       val files = dir.listFiles()
       if (files != null) files.toSeq else Seq.empty
-    }
+    }.toImmutableArraySeq
   }
 
   /** List all the blocks currently stored on disk by the disk manager. */
@@ -273,7 +274,7 @@ private[spark] class DiskBlockManager(
       Utils.getConfiguredLocalDirs(conf).foreach { rootDir =>
         try {
           val mergeDir = new File(rootDir, mergeDirName)
-          if (!mergeDir.exists()) {
+          if (!mergeDir.exists() || mergeDir.listFiles().length < subDirsPerLocalDir) {
             // This executor does not find merge_manager directory, it will try to create
             // the merge_manager directory and the sub directories.
             logDebug(s"Try to create $mergeDir and its sub dirs since the " +

@@ -45,7 +45,7 @@ SCALA_ARG="-Pscala-${SCALA_BINARY_VER}"
 SCBUILD="${SCBUILD:-1}"
 if [ "$SCBUILD" -eq "1" ]; then
   # Build the jars needed for spark connect JVM client
-  build/sbt "${SCALA_ARG}" "sql/package;connect-client-jvm/assembly" || exit 1
+  build/sbt "${SCALA_ARG}" "connect-client-jvm/package" || exit 1
 fi
 
 if [ -z "$SCCLASSPATH" ]; then

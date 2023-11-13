@@ -24,14 +24,18 @@ import scala.language.implicitConversions
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
+import org.rocksdb.CompressionType
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.CreateAtomicTestManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 trait RocksDBStateStoreChangelogCheckpointingTestUtil {
   val rocksdbChangelogCheckpointingConfKey: String = RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX +
@@ -45,6 +49,7 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
       .map(_.getName.stripSuffix(".zip"))
       .map(_.toLong)
       .sorted
+      .toImmutableArraySeq
   }
 
   def changelogVersionsPresent(dir: File): Seq[Long] = {
@@ -52,6 +57,7 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
       .map(_.getName.stripSuffix(".changelog"))
       .map(_.toLong)
       .sorted
+      .toImmutableArraySeq
   }
 }
 
@@ -94,6 +100,7 @@ trait AlsoTestWithChangelogCheckpointingEnabled
   }
 }
 
+@SlowSQLTest
 class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with SharedSparkSession {
 
   sqlConf.setConf(SQLConf.STATE_STORE_PROVIDER_CLASS, classOf[RocksDBStateStoreProvider].getName)
@@ -121,12 +128,37 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   test("RocksDB: load version that doesn't exist") {
+    val provider = new RocksDBStateStoreProvider()
+    var ex = intercept[SparkException] {
+      provider.getStore(-1)
+    }
+    checkError(
+      ex,
+      errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+      parameters = Map.empty
+    )
+    ex = intercept[SparkException] {
+      provider.getReadStore(-1)
+    }
+    checkError(
+      ex,
+      errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+      parameters = Map.empty
+    )
+
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete()  // to make sure that the directory gets created
     withDB(remoteDir) { db =>
-      intercept[IllegalStateException] {
+      ex = intercept[SparkException] {
         db.load(1)
       }
+      checkError(
+        ex,
+        errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
+        parameters = Map(
+          "fileToRead" -> s"$remoteDir/1.changelog"
+        )
+      )
     }
   }
 
@@ -209,6 +241,35 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       }
       db.doMaintenance()
       assert(snapshotVersionsPresent(remoteDir) === Seq(3, 4, 7, 19))
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("SPARK-45419: Do not reuse SST files" +
+    " in different RocksDB instances") {
+    val remoteDir = Utils.createTempDir().toString
+    val conf = dbConf.copy(minDeltasForSnapshot = 0, compactOnCommit = false)
+    new File(remoteDir).delete()  // to make sure that the directory gets created
+    withDB(remoteDir, conf = conf) { db =>
+      for (version <- 0 to 2) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+      // upload snapshot 3.zip
+      db.doMaintenance()
+      // Roll back to version 1 and start to process data.
+      for (version <- 1 to 3) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+      // Upload snapshot 4.zip, should not reuse the SST files in 3.zip
+      db.doMaintenance()
+    }
+
+    withDB(remoteDir, conf = conf) { db =>
+      // Open the db to verify that the state in 4.zip is no corrupted.
+      db.load(4)
     }
   }
 
@@ -313,6 +374,21 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.load(version, readOnly = true)
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
       }
+    }
+  }
+
+  test("RocksDB: compression conf") {
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete()  // to make sure that the directory gets created
+
+    val conf = RocksDBConf().copy(compression = "zstd")
+    withDB(remoteDir, conf = conf) { db =>
+      assert(db.columnFamilyOptions.compressionType() == CompressionType.ZSTD_COMPRESSION)
+    }
+
+    // Test the default is LZ4
+    withDB(remoteDir, conf = RocksDBConf().copy()) { db =>
+      assert(db.columnFamilyOptions.compressionType() == CompressionType.LZ4_COMPRESSION)
     }
   }
 
@@ -702,12 +778,21 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.load(0)  // Current thread should be able to load again
 
         // Another thread should not be able to load while current thread is using it
-        val ex = intercept[IllegalStateException] {
+        var ex = intercept[SparkException] {
           ThreadUtils.runInNewThread("concurrent-test-thread-1") { db.load(0) }
         }
-        // Assert that the error message contains the stack trace
-        assert(ex.getMessage.contains("Thread holding the lock has trace:"))
-        assert(ex.getMessage.contains("runInNewThread"))
+        checkError(
+          ex,
+          errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
+          parameters = Map(
+            "loggingId" -> "\\[Thread-\\d+\\]",
+            "newAcquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
+            "acquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
+            "timeWaitedMs" -> "\\d+",
+            "stackTraceOutput" -> "(?s).*"
+          ),
+          matchPVals = true
+        )
 
         // Commit should release the instance allowing other threads to load new version
         db.commit()
@@ -718,9 +803,21 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
         // Another thread should not be able to load while current thread is using it
         db.load(2)
-        intercept[IllegalStateException] {
+        ex = intercept[SparkException] {
           ThreadUtils.runInNewThread("concurrent-test-thread-2") { db.load(2) }
         }
+        checkError(
+          ex,
+          errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
+          parameters = Map(
+            "loggingId" -> "\\[Thread-\\d+\\]",
+            "newAcquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
+            "acquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
+            "timeWaitedMs" -> "\\d+",
+            "stackTraceOutput" -> "(?s).*"
+          ),
+          matchPVals = true
+        )
 
         // Rollback should release the instance allowing other threads to load new version
         db.rollback()
@@ -750,6 +847,24 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   test("checkpoint metadata serde roundtrip") {
+    // expect read metadata error when metadata uses unsupported version
+    withTempDir { dir =>
+      val file2 = new File(dir, "json")
+      val json2 = """{"sstFiles":[],"numKeys":0}"""
+      FileUtils.write(file2, s"v2\n$json2")
+      val e = intercept[SparkException] {
+        RocksDBCheckpointMetadata.readFromFile(file2)
+      }
+      checkError(
+        e,
+        errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_CHECKPOINT",
+        parameters = Map(
+          "expectedVersion" -> "v2",
+          "actualVersion" -> "v1"
+        )
+      )
+    }
+
     def checkJsonRoundtrip(metadata: RocksDBCheckpointMetadata, json: String): Unit = {
       assert(metadata.json == json)
       withTempDir { dir =>
@@ -944,6 +1059,12 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  test("Verify that fallocate is allowed by default") {
+     val sqlConf = new SQLConf
+     val dbConf = RocksDBConf(StateStoreConf(sqlConf))
+     assert(dbConf.allowFAllocate == true)
+  }
+
  /** RocksDB memory management tests for bounded memory usage */
   test("Memory mgmt - invalid config") {
     withTempDir { dir =>
@@ -998,7 +1119,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
               db.load(0)
               db.put("a", "1")
               db.commit()
-              db.getWriteBufferManagerAndCache
+              db.getWriteBufferManagerAndCache()
             }
 
             val remoteDir2 = dir2.getCanonicalPath
@@ -1006,7 +1127,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
               db.load(0)
               db.put("a", "1")
               db.commit()
-              db.getWriteBufferManagerAndCache
+              db.getWriteBufferManagerAndCache()
             }
 
             if (boundedMemoryUsage == "true") {
@@ -1189,6 +1310,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   def listFiles(file: File): Seq[File] = {
     if (!file.exists()) return Seq.empty
     file.listFiles.filter(file => !file.getName.endsWith("crc") && !file.isDirectory)
+      .toImmutableArraySeq
   }
 
   def listFiles(file: String): Seq[File] = listFiles(new File(file))

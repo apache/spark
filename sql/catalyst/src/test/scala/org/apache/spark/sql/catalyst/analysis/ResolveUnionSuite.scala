@@ -69,7 +69,7 @@ class ResolveUnionSuite extends AnalysisTest {
     val nullAttr2 = Alias(Literal(null, DoubleType), "d")()
     val projected3 =
       Project(Seq(table2.output(3), table2.output(0), nullAttr1, nullAttr2), table4)
-    val expected3 = Union(table1 :: projected2 :: projected3 :: Nil)
+    val expected3 = Union(Union(table1 :: projected2 :: Nil) :: projected3 :: Nil)
     comparePlans(analyzed3, expected3)
   }
 }

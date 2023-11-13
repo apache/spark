@@ -155,7 +155,7 @@ org.apache.spark.SparkArithmeticException
     "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "38",
     "scale" : "6",
-    "value" : "1000000000000000000000000000000000000.00000000000000000000000000000000000000"
+    "value" : "1000000000000000000000000000000000000.000000000000000000000000000000000000000"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -204,7 +204,7 @@ org.apache.spark.SparkArithmeticException
     "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "38",
     "scale" : "6",
-    "value" : "10123456789012345678901234567890123456.00000000000000000000000000000000000000"
+    "value" : "10123456789012345678901234567890123456.000000000000000000000000000000000000000"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -229,7 +229,7 @@ org.apache.spark.SparkArithmeticException
     "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "38",
     "scale" : "6",
-    "value" : "101234567890123456789012345678901234.56000000000000000000000000000000000000"
+    "value" : "101234567890123456789012345678901234.560000000000000000000000000000000000000"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -254,7 +254,7 @@ org.apache.spark.SparkArithmeticException
     "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "38",
     "scale" : "6",
-    "value" : "10123456789012345678901234567890123.45600000000000000000000000000000000000"
+    "value" : "10123456789012345678901234567890123.456000000000000000000000000000000000000"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -279,7 +279,7 @@ org.apache.spark.SparkArithmeticException
     "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "38",
     "scale" : "6",
-    "value" : "1012345678901234567890123456789012.34560000000000000000000000000000000000"
+    "value" : "1012345678901234567890123456789012.345600000000000000000000000000000000000"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -304,7 +304,7 @@ org.apache.spark.SparkArithmeticException
     "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "38",
     "scale" : "6",
-    "value" : "101234567890123456789012345678901.23456000000000000000000000000000000000"
+    "value" : "101234567890123456789012345678901.234560000000000000000000000000000000000"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -337,7 +337,7 @@ org.apache.spark.SparkArithmeticException
     "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "38",
     "scale" : "6",
-    "value" : "101234567890123456789012345678901.23456000000000000000000000000000000000"
+    "value" : "101234567890123456789012345678901.234560000000000000000000000000000000000"
   },
   "queryContext" : [ {
     "objectType" : "",

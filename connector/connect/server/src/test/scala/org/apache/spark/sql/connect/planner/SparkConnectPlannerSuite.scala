@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.planner
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
@@ -31,8 +31,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
+import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteStatus, SessionHolder, SessionStatus, SparkConnectService}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -51,11 +53,13 @@ trait SparkConnectPlanTest extends SharedSparkSession {
   }
 
   def transform(rel: proto.Relation): logical.LogicalPlan = {
-    new SparkConnectPlanner(spark).transformRelation(rel)
+    new SparkConnectPlanner(SessionHolder.forTesting(spark)).transformRelation(rel)
   }
 
   def transform(cmd: proto.Command): Unit = {
-    new SparkConnectPlanner(spark).process(cmd, "clientId", "sessionId", new MockObserver())
+    val executeHolder = buildExecutePlanHolder(cmd)
+    new SparkConnectPlanner(executeHolder)
+      .process(cmd, new MockObserver())
   }
 
   def readRel: proto.Relation =
@@ -67,6 +71,20 @@ trait SparkConnectPlanTest extends SharedSparkSession {
           .setNamedTable(proto.Read.NamedTable.newBuilder().setUnparsedIdentifier("table"))
           .build())
       .build()
+
+  /**
+   * Creates a local relation for testing purposes. The local relation is mapped to it's
+   * equivalent in Catalyst and can be easily used for planner testing.
+   *
+   * @param schema
+   *   the schema of LocalRelation
+   * @param data
+   *   the data of LocalRelation
+   * @return
+   */
+  def createLocalRelationProto(schema: StructType, data: Seq[InternalRow]): proto.Relation = {
+    createLocalRelationProto(DataTypeUtils.toAttributes(schema), data)
+  }
 
   /**
    * Creates a local relation for testing purposes. The local relation is mapped to it's
@@ -86,7 +104,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
     val bytes = ArrowConverters
       .toBatchWithSchemaIterator(
         data.iterator,
-        StructType.fromAttributes(attrs.map(_.toAttribute)),
+        DataTypeUtils.fromAttributes(attrs.map(_.toAttribute)),
         Long.MaxValue,
         Long.MaxValue,
         null,
@@ -95,6 +113,29 @@ trait SparkConnectPlanTest extends SharedSparkSession {
 
     localRelationBuilder.setData(ByteString.copyFrom(bytes))
     proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
+  }
+
+  def buildExecutePlanHolder(command: proto.Command): ExecuteHolder = {
+    val sessionHolder = SessionHolder.forTesting(spark)
+    sessionHolder.eventManager.status_(SessionStatus.Started)
+
+    val context = proto.UserContext
+      .newBuilder()
+      .setUserId(sessionHolder.userId)
+      .build()
+    val plan = proto.Plan
+      .newBuilder()
+      .setCommand(command)
+      .build()
+    val request = proto.ExecutePlanRequest
+      .newBuilder()
+      .setPlan(plan)
+      .setSessionId(sessionHolder.sessionId)
+      .setUserContext(context)
+      .build()
+    val executeHolder = SparkConnectService.executionManager.createExecuteHolder(request)
+    executeHolder.eventsManager.status_(ExecuteStatus.Started)
+    executeHolder
   }
 }
 
@@ -107,7 +148,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Simple Limit") {
     assertThrows[IndexOutOfBoundsException] {
-      new SparkConnectPlanner(None.orNull)
+      new SparkConnectPlanner(SessionHolder.forTesting(None.orNull))
         .transformRelation(
           proto.Relation.newBuilder
             .setLimit(proto.Limit.newBuilder.setLimit(10))
@@ -118,10 +159,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("InvalidInputs") {
     // No Relation Set
     intercept[IndexOutOfBoundsException](
-      new SparkConnectPlanner(None.orNull).transformRelation(proto.Relation.newBuilder().build()))
+      new SparkConnectPlanner(SessionHolder.forTesting(None.orNull))
+        .transformRelation(proto.Relation.newBuilder().build()))
 
     intercept[InvalidPlanInput](
-      new SparkConnectPlanner(None.orNull)
+      new SparkConnectPlanner(SessionHolder.forTesting(None.orNull))
         .transformRelation(
           proto.Relation.newBuilder.setUnknown(proto.Unknown.newBuilder().build()).build()))
   }
@@ -451,7 +493,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       proj(row).copy()
     }
 
-    val localRelation = createLocalRelationProto(schema.toAttributes, inputRows)
+    val localRelation = createLocalRelationProto(schema, inputRows)
     val df = Dataset.ofRows(spark, transform(localRelation))
     val array = df.collect()
     assertResult(10)(array.length)
@@ -590,7 +632,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       proj(row).copy()
     }
 
-    val localRelation = createLocalRelationProto(schema.toAttributes, inputRows)
+    val localRelation = createLocalRelationProto(schema, inputRows)
 
     val project =
       proto.Project

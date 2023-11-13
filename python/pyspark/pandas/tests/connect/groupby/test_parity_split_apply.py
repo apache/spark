@@ -24,11 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 class GroupbyParitySplitApplyTests(
     GroupbySplitApplyMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip(
-        "TODO(SPARK-43653): Enable GroupBySlowParityTests.test_split_apply_combine_on_series."
-    )
-    def test_split_apply_combine_on_series(self):
-        super().test_split_apply_combine_on_series()
+    pass
 
 
 if __name__ == "__main__":

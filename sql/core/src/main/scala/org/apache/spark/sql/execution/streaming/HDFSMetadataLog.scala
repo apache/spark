@@ -21,7 +21,7 @@ import java.io._
 import java.nio.charset.StandardCharsets
 import java.util.{Collections, LinkedHashMap => JLinkedHashMap}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.commons.io.IOUtils
@@ -33,6 +33,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.ArrayImplicits._
 
 
 /**
@@ -61,7 +62,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   val metadataPath = new Path(path)
 
   protected val fileManager =
-    CheckpointFileManager.create(metadataPath, sparkSession.sessionState.newHadoopConf)
+    CheckpointFileManager.create(metadataPath, sparkSession.sessionState.newHadoopConf())
 
   if (!fileManager.exists(metadataPath)) {
     fileManager.mkdirs(metadataPath)
@@ -254,7 +255,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
       (endId.isEmpty || batchId <= endId.get) && (startId.isEmpty || batchId >= startId.get)
     }.sorted
 
-    HDFSMetadataLog.verifyBatchIds(batchIds, startId, endId)
+    HDFSMetadataLog.verifyBatchIds(batchIds.toImmutableArraySeq, startId, endId)
     batchIds.map(batchId => (batchId, getExistingBatch(batchId)))
   }
 

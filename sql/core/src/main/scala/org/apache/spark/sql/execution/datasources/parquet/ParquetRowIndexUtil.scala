@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.IOException
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.mapreduce.{InputSplit, RecordReader, TaskAttemptContext}
 import org.apache.parquet.column.page.PageReadStore
@@ -124,10 +124,6 @@ object ParquetRowIndexUtil {
         idx
       case _ => -1
     }
-  }
-
-  def isNeededForSchema(sparkSchema: StructType): Boolean = {
-    findRowIndexColumnIndexInSchema(sparkSchema) >= 0
   }
 
   def isRowIndexColumn(column: ParquetColumn): Boolean = {

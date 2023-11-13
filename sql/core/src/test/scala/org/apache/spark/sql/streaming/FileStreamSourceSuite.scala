@@ -44,7 +44,9 @@ import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StructType, _}
+import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 abstract class FileStreamSourceTest
@@ -226,6 +228,7 @@ abstract class FileStreamSourceTest
   val valueSchema = new StructType().add("value", StringType)
 }
 
+@SlowSQLTest
 class FileStreamSourceSuite extends FileStreamSourceTest {
 
   import testImplicits._
@@ -1302,7 +1305,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       try {
         assert(q.awaitTermination(streamingTimeout.toMillis))
         assert(q.recentProgress.count(_.numInputRows != 0) == 1) // only one trigger was run
-        checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 3).map(_.toString).toDF)
+        checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 3).map(_.toString).toDF())
       } finally {
         q.stop()
       }
@@ -1315,7 +1318,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       try {
         assert(q2.awaitTermination(streamingTimeout.toMillis))
         assert(q2.recentProgress.count(_.numInputRows != 0) == 1) // only one trigger was run
-        checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 5).map(_.toString).toDF)
+        checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 5).map(_.toString).toDF())
       } finally {
         q2.stop()
       }
@@ -1409,7 +1412,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     withTempDirs { case (src, tmp) =>
       src.mkdirs()
 
-      val df = spark.readStream.format("text").load(src.getCanonicalPath).map(_ + "-x")
+      val df = spark.readStream.format("text").load(src.getCanonicalPath).map(_.toString + "-x")
       // Test `explain` not throwing errors
       df.explain()
 
@@ -1697,7 +1700,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   private def readLogFromResource(dir: String): Seq[FileEntry] = {
     val input = getClass.getResource(s"/structured-streaming/$dir")
     val log = new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark, input.toString)
-    log.allFiles()
+    log.allFiles().toImmutableArraySeq
   }
 
   private def readOffsetFromResource(file: String): SerializedOffset = {
@@ -2362,6 +2365,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 }
 
+@SlowSQLTest
 class FileStreamSourceStressTestSuite extends FileStreamSourceTest {
 
   import testImplicits._
@@ -2405,7 +2409,7 @@ class ExistsThrowsExceptionFileSystem extends RawLocalFileSystem {
 }
 
 object ExistsThrowsExceptionFileSystem {
-  val scheme = s"FileStreamSourceSuite${math.abs(Random.nextInt)}fs"
+  val scheme = s"FileStreamSourceSuite${math.abs(Random.nextInt())}fs"
 }
 
 class CountListingLocalFileSystem extends RawLocalFileSystem {
@@ -2423,7 +2427,7 @@ class CountListingLocalFileSystem extends RawLocalFileSystem {
 }
 
 object CountListingLocalFileSystem {
-  val scheme = s"CountListingLocalFileSystem${math.abs(Random.nextInt)}fs"
+  val scheme = s"CountListingLocalFileSystem${math.abs(Random.nextInt())}fs"
   val pathToNumListStatusCalled = new mutable.HashMap[String, AtomicLong]
 
   def resetCount(): Unit = pathToNumListStatusCalled.clear()

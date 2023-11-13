@@ -36,6 +36,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
+import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.util.{Clock, ManualClock, ThreadUtils}
 
 class FakeSchedulerBackend extends SchedulerBackend {
@@ -44,6 +45,8 @@ class FakeSchedulerBackend extends SchedulerBackend {
   def reviveOffers(): Unit = {}
   def defaultParallelism(): Int = 1
   def maxNumConcurrentTasks(rp: ResourceProfile): Int = 0
+
+  override def getTaskThreadDump(taskId: Long, executorId: String): Option[ThreadStackTrace] = None
 }
 
 class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
@@ -2155,11 +2158,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       new WorkerOffer("executor1", "host1", 1))
     val task1 = new ShuffleMapTask(1, 0, null, new Partition {
       override def index: Int = 0
-    }, 1, Seq(TaskLocation("host0", "executor0")), new Properties, null)
+    }, 1, Seq(TaskLocation("host0", "executor0")),
+      JobArtifactSet.getActiveOrDefault(sc), new Properties, null)
 
     val task2 = new ShuffleMapTask(1, 0, null, new Partition {
       override def index: Int = 1
-    }, 1, Seq(TaskLocation("host1", "executor1")), new Properties, null)
+    }, 1, Seq(TaskLocation("host1", "executor1")),
+      JobArtifactSet.getActiveOrDefault(sc), new Properties, null)
 
     val taskSet = new TaskSet(Array(task1, task2), 0, 0, 0, null, 0, Some(0))
 

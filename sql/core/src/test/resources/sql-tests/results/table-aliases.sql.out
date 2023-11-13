@@ -40,10 +40,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1028",
+  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "sqlState" : "42802",
   "messageParameters" : {
-    "columnSize" : "3",
-    "outputSize" : "2"
+    "numExpr" : "3",
+    "numTarget" : "2"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -62,10 +63,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1028",
+  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "sqlState" : "42802",
   "messageParameters" : {
-    "columnSize" : "1",
-    "outputSize" : "2"
+    "numExpr" : "1",
+    "numTarget" : "2"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -82,7 +84,7 @@ SELECT a AS col1, b AS col2 FROM testData AS t(c, d)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",

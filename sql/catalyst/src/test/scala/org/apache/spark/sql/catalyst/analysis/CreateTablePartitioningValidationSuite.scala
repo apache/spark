@@ -20,17 +20,20 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util
 
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, LeafNode, UnresolvedTableSpec}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, LeafNode, OptionList, UnresolvedTableSpec}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.{InMemoryTableCatalog, Table, TableCapability, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Expressions
 import org.apache.spark.sql.types.{DoubleType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 class CreateTablePartitioningValidationSuite extends AnalysisTest {
-  val tableSpec = UnresolvedTableSpec(Map.empty, None, None, None, None, false)
+  val tableSpec =
+    UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), None, None, None, false)
   test("CreateTableAsSelect: fail missing top-level column") {
     val plan = CreateTableAsSelect(
-      UnresolvedIdentifier(Array("table_name")),
+      UnresolvedIdentifier(Array("table_name").toImmutableArraySeq),
       Expressions.bucket(4, "does_not_exist") :: Nil,
       TestRelation2,
       tableSpec,
@@ -45,7 +48,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
 
   test("CreateTableAsSelect: fail missing top-level column nested reference") {
     val plan = CreateTableAsSelect(
-      UnresolvedIdentifier(Array("table_name")),
+      UnresolvedIdentifier(Array("table_name").toImmutableArraySeq),
       Expressions.bucket(4, "does_not_exist.z") :: Nil,
       TestRelation2,
       tableSpec,
@@ -60,7 +63,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
 
   test("CreateTableAsSelect: fail missing nested column") {
     val plan = CreateTableAsSelect(
-      UnresolvedIdentifier(Array("table_name")),
+      UnresolvedIdentifier(Array("table_name").toImmutableArraySeq),
       Expressions.bucket(4, "point.z") :: Nil,
       TestRelation2,
       tableSpec,
@@ -75,7 +78,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
 
   test("CreateTableAsSelect: fail with multiple errors") {
     val plan = CreateTableAsSelect(
-      UnresolvedIdentifier(Array("table_name")),
+      UnresolvedIdentifier(Array("table_name").toImmutableArraySeq),
       Expressions.bucket(4, "does_not_exist", "point.z") :: Nil,
       TestRelation2,
       tableSpec,
@@ -90,7 +93,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
 
   test("CreateTableAsSelect: success with top-level column") {
     val plan = CreateTableAsSelect(
-      UnresolvedIdentifier(Array("table_name")),
+      UnresolvedIdentifier(Array("table_name").toImmutableArraySeq),
       Expressions.bucket(4, "id") :: Nil,
       TestRelation2,
       tableSpec,
@@ -102,7 +105,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
 
   test("CreateTableAsSelect: success using nested column") {
     val plan = CreateTableAsSelect(
-      UnresolvedIdentifier(Array("table_name")),
+      UnresolvedIdentifier(Array("table_name").toImmutableArraySeq),
       Expressions.bucket(4, "point.x") :: Nil,
       TestRelation2,
       tableSpec,
@@ -114,7 +117,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
 
   test("CreateTableAsSelect: success using complex column") {
     val plan = CreateTableAsSelect(
-      UnresolvedIdentifier(Array("table_name")),
+      UnresolvedIdentifier(Array("table_name").toImmutableArraySeq),
       Expressions.bucket(4, "point") :: Nil,
       TestRelation2,
       tableSpec,
@@ -141,7 +144,7 @@ private[sql] object CreateTablePartitioningValidationSuite {
 private[sql] case object TestRelation2 extends LeafNode with NamedRelation {
   override def name: String = "source_relation"
   override def output: Seq[AttributeReference] =
-    CreateTablePartitioningValidationSuite.schema.toAttributes
+    DataTypeUtils.toAttributes(CreateTablePartitioningValidationSuite.schema)
 }
 
 private[sql] case object TestTable2 extends Table {

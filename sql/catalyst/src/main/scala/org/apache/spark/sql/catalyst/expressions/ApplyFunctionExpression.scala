@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.types.{AbstractDataType, DataType}
+import org.apache.spark.util.ArrayImplicits._
 
 case class ApplyFunctionExpression(
     function: ScalarFunction[_],
@@ -33,8 +34,9 @@ case class ApplyFunctionExpression(
   override def inputTypes: Seq[AbstractDataType] = function.inputTypes().toSeq
   override lazy val deterministic: Boolean = function.isDeterministic &&
       children.forall(_.deterministic)
+  override def foldable: Boolean = deterministic && children.forall(_.foldable)
 
-  private lazy val reusedRow = new SpecificInternalRow(function.inputTypes())
+  private lazy val reusedRow = new SpecificInternalRow(function.inputTypes().toImmutableArraySeq)
 
   /** Returns the result of evaluating this expression on a given input Row */
   override def eval(input: InternalRow): Any = {

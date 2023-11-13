@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.{Locale, ServiceConfigurationError, ServiceLoader}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.conf.Configuration
@@ -29,9 +29,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{Resolver, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
-import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, TypeUtils}
 import org.apache.spark.sql.connector.catalog.TableProvider
@@ -44,6 +43,7 @@ import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
+import org.apache.spark.sql.execution.datasources.xml.XmlFileFormat
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
 import org.apache.spark.sql.internal.SQLConf
@@ -52,6 +52,7 @@ import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.{HadoopFSUtils, ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The main class responsible for representing a pluggable Data Source in Spark SQL. In addition to
@@ -104,7 +105,7 @@ case class DataSource(
     // [[FileDataSourceV2]] will still be used if we call the load()/save() method in
     // [[DataFrameReader]]/[[DataFrameWriter]], since they use method `lookupDataSource`
     // instead of `providingClass`.
-    cls.newInstance() match {
+    cls.getDeclaredConstructor().newInstance() match {
       case f: FileDataSourceV2 => f.fallbackFileFormat
       case _ => cls
     }
@@ -269,7 +270,7 @@ case class DataSource(
         SourceInfo(
           s"FileSource[$path]",
           StructType(sourceDataSchema ++ partitionSchema),
-          partitionSchema.fieldNames)
+          partitionSchema.fieldNames.toImmutableArraySeq)
 
       case _ =>
         throw QueryExecutionErrors.streamedOperatorUnsupportedByDataSourceError(
@@ -567,6 +568,7 @@ object DataSource extends Logging {
   private val backwardCompatibilityMap: Map[String, String] = {
     val jdbc = classOf[JdbcRelationProvider].getCanonicalName
     val json = classOf[JsonFileFormat].getCanonicalName
+    val xml = classOf[XmlFileFormat].getCanonicalName
     val parquet = classOf[ParquetFileFormat].getCanonicalName
     val csv = classOf[CSVFileFormat].getCanonicalName
     val libsvm = "org.apache.spark.ml.source.libsvm.LibSVMFileFormat"
@@ -595,6 +597,8 @@ object DataSource extends Logging {
       "org.apache.spark.ml.source.libsvm.DefaultSource" -> libsvm,
       "org.apache.spark.ml.source.libsvm" -> libsvm,
       "com.databricks.spark.csv" -> csv,
+      "com.databricks.spark.xml" -> xml,
+      "org.apache.spark.sql.execution.datasources.xml" -> xml,
       "org.apache.spark.sql.execution.streaming.TextSocketSourceProvider" -> socket,
       "org.apache.spark.sql.execution.streaming.RateSourceProvider" -> rate
     )
@@ -695,7 +699,13 @@ object DataSource extends Logging {
     val useV1Sources = conf.getConf(SQLConf.USE_V1_SOURCE_LIST).toLowerCase(Locale.ROOT)
       .split(",").map(_.trim)
     val cls = lookupDataSource(provider, conf)
-    cls.newInstance() match {
+    val instance = try {
+      cls.getDeclaredConstructor().newInstance()
+    } catch {
+      // Throw the original error from the data source implementation.
+      case e: java.lang.reflect.InvocationTargetException => throw e.getCause
+    }
+    instance match {
       case d: DataSourceRegister if useV1Sources.contains(d.shortName()) => None
       case t: TableProvider
           if !useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
@@ -786,7 +796,7 @@ object DataSource extends Logging {
    */
   def buildStorageFormatFromOptions(options: Map[String, String]): CatalogStorageFormat = {
     val path = CaseInsensitiveMap(options).get("path")
-    val optionsWithoutPath = options.filterKeys(_.toLowerCase(Locale.ROOT) != "path")
+    val optionsWithoutPath = options.view.filterKeys(_.toLowerCase(Locale.ROOT) != "path")
     CatalogStorageFormat.empty.copy(
       locationUri = path.map(CatalogUtils.stringToURI), properties = optionsWithoutPath.toMap)
   }
@@ -809,28 +819,6 @@ object DataSource extends Logging {
 
     if (!shouldAllowEmptySchema && hasEmptySchema(schema)) {
       throw QueryCompilationErrors.writeEmptySchemasUnsupportedByDataSourceError()
-    }
-  }
-
-  /**
-   * Resolve partition columns using output columns of the query plan.
-   */
-  def resolvePartitionColumns(
-      partitionColumns: Seq[Attribute],
-      outputColumns: Seq[Attribute],
-      plan: LogicalPlan,
-      resolver: Resolver): Seq[Attribute] = {
-    partitionColumns.map { col =>
-      // The partition columns created in `planForWritingFileFormat` should always be
-      // `UnresolvedAttribute` with a single name part.
-      assert(col.isInstanceOf[UnresolvedAttribute])
-      val unresolved = col.asInstanceOf[UnresolvedAttribute]
-      assert(unresolved.nameParts.length == 1)
-      val name = unresolved.nameParts.head
-      outputColumns.find(a => resolver(a.name, name)).getOrElse {
-        throw QueryCompilationErrors.cannotResolveAttributeError(
-          name, plan.output.map(_.name).mkString(", "))
-      }
     }
   }
 }

@@ -96,6 +96,17 @@ that these options will be deprecated in future release as more optimizations ar
     <td>3.1.0</td>
   </tr>
   <tr>
+    <td><code>spark.sql.files.maxPartitionNum</code></td>
+    <td>None</td>
+    <td>
+      The suggested (not guaranteed) maximum number of split file partitions. If it is set,
+      Spark will rescale each partition to make the number of partitions is close to this
+      value if the initial number of partitions exceeds this value. This configuration is
+      effective only when using file-based sources such as Parquet, JSON and ORC.
+    </td>
+    <td>3.5.0</td>
+  </tr>
+  <tr>
     <td><code>spark.sql.broadcastTimeout</code></td>
     <td>300</td>
     <td>

@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The generator is not supported:
 

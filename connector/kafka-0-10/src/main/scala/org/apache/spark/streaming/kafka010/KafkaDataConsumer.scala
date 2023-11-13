@@ -20,7 +20,7 @@ package org.apache.spark.streaming.kafka010
 import java.{util => ju}
 import java.time.Duration
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaConsumer}
 import org.apache.kafka.common.{KafkaException, TopicPartition}
@@ -293,7 +293,7 @@ private[kafka010] object KafkaDataConsumer extends Logging {
 
     lazy val newInternalConsumer = new InternalKafkaConsumer[K, V](topicPartition, kafkaParams)
 
-    if (context != null && context.attemptNumber >= 1) {
+    if (context != null && context.attemptNumber() >= 1) {
       // If this is reattempt at running the task, then invalidate cached consumers if any and
       // start with a new one. If prior attempt failures were cache related then this way old
       // problematic consumers can be removed.

@@ -23,6 +23,7 @@ import java.nio.channels.WritableByteChannel
 
 import com.google.common.io.ByteStreams
 import com.google.common.primitives.UnsignedBytes
+import io.netty.handler.stream.ChunkedStream
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark.SparkEnv
@@ -129,6 +130,14 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
    */
   def toNetty: ChunkedByteBufferFileRegion = {
     new ChunkedByteBufferFileRegion(this, bufferWriteChunkSize)
+  }
+
+  /**
+   * Wrap this in a ChunkedStream which allows us to provide the data in a manner
+   * compatible with SSL encryption
+   */
+  def toNettyForSsl: ChunkedStream = {
+    new ChunkedStream(toInputStream(), bufferWriteChunkSize)
   }
 
   /**
@@ -281,6 +290,17 @@ private[spark] class ChunkedByteBufferInputStream(
       chunks.next()
     } else {
       null
+    }
+  }
+
+  override def available(): Int = {
+    if (currentChunk != null && !currentChunk.hasRemaining && chunks.hasNext) {
+      currentChunk = chunks.next()
+    }
+    if (currentChunk != null && currentChunk.hasRemaining) {
+      currentChunk.remaining
+    } else {
+      0
     }
   }
 

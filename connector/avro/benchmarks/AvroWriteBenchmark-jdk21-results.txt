@@ -1,0 +1,16 @@
+OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+Avro writer benchmark:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Output Single Int Column                           2430           2450          29          6.5         154.5       1.0X
+Output Single Double Column                        2609           2618          12          6.0         165.9       0.9X
+Output Int and String Column                       5321           5359          54          3.0         338.3       0.5X
+Output Partitions                                  4199           4331         187          3.7         267.0       0.6X
+Output Buckets                                     5511           5533          31          2.9         350.4       0.4X
+
+OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+Write wide rows into 20 files:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Write wide rows                                   35195          35378         259          0.0       70390.7       1.0X
+

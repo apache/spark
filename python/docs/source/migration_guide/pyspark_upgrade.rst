@@ -19,6 +19,52 @@
 Upgrading PySpark
 ==================
 
+Upgrading from PySpark 3.5 to 4.0
+---------------------------------
+
+* In Spark 4.0, it is recommended to use Pandas version 2.0.0 or above with PySpark for optimal compatibility.
+* In Spark 4.0, the minimum supported version for Pandas has been raised from 1.0.5 to 1.4.4 in PySpark.
+* In Spark 4.0, the minimum supported version for Numpy has been raised from 1.15 to 1.21 in PySpark.
+* In Spark 4.0, ``Int64Index`` and ``Float64Index`` have been removed from pandas API on Spark, ``Index`` should be used directly.
+* In Spark 4.0, ``DataFrame.iteritems`` has been removed from pandas API on Spark, use ``DataFrame.items`` instead.
+* In Spark 4.0, ``Series.iteritems`` has been removed from pandas API on Spark, use ``Series.items`` instead.
+* In Spark 4.0, ``DataFrame.append`` has been removed from pandas API on Spark, use ``ps.concat`` instead.
+* In Spark 4.0, ``Series.append`` has been removed from pandas API on Spark, use ``ps.concat`` instead.
+* In Spark 4.0, ``DataFrame.mad`` has been removed from pandas API on Spark.
+* In Spark 4.0, ``Series.mad`` has been removed from pandas API on Spark.
+* In Spark 4.0, ``na_sentinel`` parameter from ``Index.factorize`` and ``Series.factorize`` has been removed from pandas API on Spark, use ``use_na_sentinel`` instead.
+* In Spark 4.0, ``inplace`` parameter from ``Categorical.add_categories``, ``Categorical.remove_categories``, ``Categorical.set_categories``, ``Categorical.rename_categories``, ``Categorical.reorder_categories``, ``Categorical.as_ordered``, ``Categorical.as_unordered`` have been removed from pandas API on Spark.
+* In Spark 4.0, ``inplace`` parameter from ``CategoricalIndex.add_categories``, ``CategoricalIndex.remove_categories``, ``CategoricalIndex.remove_unused_categories``, ``CategoricalIndex.set_categories``, ``CategoricalIndex.rename_categories``, ``CategoricalIndex.reorder_categories``, ``CategoricalIndex.as_ordered``, ``CategoricalIndex.as_unordered`` have been removed from pandas API on Spark.
+* In Spark 4.0, ``closed`` parameter from ``ps.date_range`` has been removed from pandas API on Spark.
+* In Spark 4.0, ``include_start`` and ``include_end`` parameters from ``DataFrame.between_time`` have been removed from pandas API on Spark, use ``inclusive`` instead.
+* In Spark 4.0, ``include_start`` and ``include_end`` parameters from ``Series.between_time`` have been removed from pandas API on Spark, use ``inclusive`` instead.
+* In Spark 4.0, the various datetime attributes of ``DatetimeIndex`` (``day``, ``month``, ``year`` etc.) are now ``int32`` instead of ``int64`` from pandas API on Spark.
+* In Spark 4.0, ``sort_columns`` parameter from ``DataFrame.plot`` and `Series.plot`` has been removed from pandas API on Spark.
+* In Spark 4.0, the default value of ``regex`` parameter for ``Series.str.replace`` has been changed from ``True`` to ``False`` from pandas API on Spark. Additionally, a single character ``pat`` with ``regex=True`` is now treated as a regular expression instead of a string literal.
+* In Spark 4.0, the resulting name from ``value_counts`` for all objects sets to ``'count'`` (or ``'proportion'`` if ``normalize=True`` was passed) from pandas API on Spark, and the index will be named after the original object.
+* In Spark 4.0, ``squeeze`` parameter from ``ps.read_csv`` and ``ps.read_excel`` has been removed from pandas API on Spark.
+* In Spark 4.0, ``null_counts`` parameter from ``DataFrame.info`` has been removed from pandas API on Spark, use ``show_counts`` instead.
+* In Spark 4.0, the result of ``MultiIndex.append`` does not keep the index names from pandas API on Spark.
+* In Spark 4.0, ``DataFrameGroupBy.agg`` with lists respecting ``as_index=False`` from pandas API on Spark.
+* In Spark 4.0, ``DataFrame.stack`` guarantees the order of existing columns instead of sorting them lexicographically from pandas API on Spark.
+* In Spark 4.0, ``True`` or ``False`` to ``inclusive`` parameter from ``Series.between`` has been removed from pandas API on Spark, use ``both`` or ``neither`` instead respectively.
+* In Spark 4.0, ``Index.asi8`` has been removed from pandas API on Spark, use ``Index.astype`` instead.
+* In Spark 4.0, ``Index.is_type_compatible`` has been removed from pandas API on Spark, use ``Index.isin`` instead.
+* In Spark 4.0, ``col_space`` parameter from ``DataFrame.to_latex`` and ``Series.to_latex`` has been removed from pandas API on Spark.
+* In Spark 4.0, ``DataFrame.to_spark_io`` has been removed from pandas API on Spark, use ``DataFrame.spark.to_spark_io`` instead.
+* In Spark 4.0, ``Series.is_monotonic`` and ``Index.is_monotonic`` have been removed from pandas API on Spark, use ``Series.is_monotonic_increasing`` or ``Index.is_monotonic_increasing`` instead respectively.
+* In Spark 4.0, ``DataFrame.get_dtype_counts`` has been removed from pandas API on Spark, use ``DataFrame.dtypes.value_counts()`` instead.
+* In Spark 4.0, ``encoding`` parameter from ``DataFrame.to_excel`` and ``Series.to_excel`` have been removed from pandas API on Spark.
+* In Spark 4.0, ``verbose`` parameter from ``DataFrame.to_excel`` and ``Series.to_excel`` have been removed from pandas API on Spark.
+* In Spark 4.0, ``mangle_dupe_cols`` parameter from ``read_csv`` has been removed from pandas API on Spark.
+* In Spark 4.0, ``DataFrameGroupBy.backfill`` has been removed from pandas API on Spark, use ``DataFrameGroupBy.bfill`` instead.
+* In Spark 4.0, ``DataFrameGroupBy.pad`` has been removed from pandas API on Spark, use ``DataFrameGroupBy.ffill`` instead.
+* In Spark 4.0, ``Index.is_all_dates`` has been removed from pandas API on Spark.
+* In Spark 4.0, ``convert_float`` parameter from ``read_excel`` has been removed from pandas API on Spark.
+* In Spark 4.0, ``mangle_dupe_cols`` parameter from ``read_excel`` has been removed from pandas API on Spark.
+
+
+
 Upgrading from PySpark 3.3 to 3.4
 ---------------------------------
 
@@ -49,7 +95,7 @@ Upgrading from PySpark 3.2 to 3.3
 Upgrading from PySpark 3.1 to 3.2
 ---------------------------------
 
-* In Spark 3.2, the PySpark methods from sql, ml, spark_on_pandas modules raise the ``TypeError`` instead of ``ValueError`` when are applied to an param of inappropriate type.
+* In Spark 3.2, the PySpark methods from sql, ml, spark_on_pandas modules raise the ``TypeError`` instead of ``ValueError`` when are applied to a param of inappropriate type.
 * In Spark 3.2, the traceback from Python UDFs, pandas UDFs and pandas function APIs are simplified by default without the traceback from the internal Python workers. In Spark 3.1 or earlier, the traceback from Python workers was printed out. To restore the behavior before Spark 3.2, you can set ``spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled`` to ``false``.
 * In Spark 3.2, pinned thread mode is enabled by default to map each Python thread to the corresponding JVM thread. Previously,
   one JVM thread could be reused for multiple Python threads, which resulted in one JVM thread local being shared to multiple Python threads.

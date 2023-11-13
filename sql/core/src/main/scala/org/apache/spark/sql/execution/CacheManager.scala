@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint, SubqueryAlias, View}
@@ -36,6 +37,7 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, File
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
+import org.apache.spark.util.ArrayImplicits._
 
 /** Holds a cached logical plan and its data */
 case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryRelation)
@@ -112,7 +114,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       planToCache: LogicalPlan,
       tableName: Option[String],
       storageLevel: StorageLevel): Unit = {
-    if (lookupCachedData(planToCache).nonEmpty) {
+    if (storageLevel == StorageLevel.NONE) {
+      // Do nothing for StorageLevel.NONE since it will not actually cache any data.
+    } else if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
@@ -183,9 +187,14 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
       case SubqueryAlias(ident, DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _)) =>
         isSameName(ident.qualifier :+ ident.name) &&
-          isSameName(catalog.name() +: v2Ident.namespace() :+ v2Ident.name())
+          isSameName((catalog.name() +: v2Ident.namespace() :+ v2Ident.name()).toImmutableArraySeq)
 
       case SubqueryAlias(ident, View(catalogTable, _, _)) =>
+        val v1Ident = catalogTable.identifier
+        isSameName(ident.qualifier :+ ident.name) &&
+          isSameName(v1Ident.catalog.toSeq ++ v1Ident.database :+ v1Ident.table)
+
+      case SubqueryAlias(ident, HiveTableRelation(catalogTable, _, _, _, _)) =>
         val v1Ident = catalogTable.identifier
         isSameName(ident.qualifier :+ ident.name) &&
           isSameName(v1Ident.catalog.toSeq ++ v1Ident.database :+ v1Ident.table)
@@ -353,27 +362,49 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Refresh the given [[FileIndex]] if any of its root paths starts with `qualifiedPath`.
+   * Refresh the given [[FileIndex]] if any of its root paths is a subdirectory
+   * of the `qualifiedPath`.
    * @return whether the [[FileIndex]] is refreshed.
    */
   private def refreshFileIndexIfNecessary(
       fileIndex: FileIndex,
       fs: FileSystem,
       qualifiedPath: Path): Boolean = {
-    val prefixToInvalidate = qualifiedPath.toString
     val needToRefresh = fileIndex.rootPaths
-      .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory).toString)
-      .exists(_.startsWith(prefixToInvalidate))
+      .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
+      .exists(isSubDir(qualifiedPath, _))
     if (needToRefresh) fileIndex.refresh()
     needToRefresh
   }
 
   /**
-   * If CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING is enabled, just return original session.
+   * Checks if the given child path is a sub-directory of the given parent path.
+   * @param qualifiedPathChild:
+   *   Fully qualified child path
+   * @param qualifiedPathParent:
+   *   Fully qualified parent path.
+   * @return
+   *   True if the child path is a sub-directory of the given parent path. Otherwise, false.
+   */
+  def isSubDir(qualifiedPathParent: Path, qualifiedPathChild: Path): Boolean = {
+    Iterator
+      .iterate(qualifiedPathChild)(_.getParent)
+      .takeWhile(_ != null)
+      .exists(_.equals(qualifiedPathParent))
+  }
+
+  /**
+   * If `CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING` is enabled, return the session with disabled
+   * `AUTO_BUCKETED_SCAN_ENABLED`.
+   * If `CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING` is disabled, return the session with disabled
+   * `AUTO_BUCKETED_SCAN_ENABLED` and `ADAPTIVE_EXECUTION_ENABLED`.
    */
   private def getOrCloneSessionWithConfigsOff(session: SparkSession): SparkSession = {
     if (session.conf.get(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
-      session
+      // Bucketed scan only has one time overhead but can have multi-times benefits in cache,
+      // so we always do bucketed scan in a cached plan.
+      SparkSession.getOrCloneSessionWithConfigsOff(
+        session, SQLConf.AUTO_BUCKETED_SCAN_ENABLED :: Nil)
     } else {
       SparkSession.getOrCloneSessionWithConfigsOff(session, forceDisableConfigs)
     }

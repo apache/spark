@@ -30,8 +30,9 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.{truncatedString, CaseInsensitiveMap}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource, ParquetRowIndexUtil}
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
@@ -39,6 +40,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
@@ -163,8 +165,10 @@ case class RowDataSourceScanExec(
     Map("ReadSchema" -> requiredSchema.catalogString,
       "PushedFilters" -> pushedFilters) ++
       pushedDownOperators.aggregation.fold(Map[String, String]()) { v =>
-        Map("PushedAggregates" -> seqToString(v.aggregateExpressions.map(_.describe())),
-          "PushedGroupByExpressions" -> seqToString(v.groupByExpressions.map(_.describe())))} ++
+        Map("PushedAggregates" -> seqToString(
+          v.aggregateExpressions.map(_.describe()).toImmutableArraySeq),
+          "PushedGroupByExpressions" ->
+            seqToString(v.groupByExpressions.map(_.describe()).toImmutableArraySeq))} ++
       topNOrLimitInfo ++
       offsetInfo ++
       pushedDownOperators.sample.map(v => "PushedSample" ->
@@ -248,12 +252,18 @@ trait FileSourceScanLike extends DataSourceScanExec {
   private def isDynamicPruningFilter(e: Expression): Boolean =
     e.exists(_.isInstanceOf[PlanExpression[_]])
 
+
+  // This field will be accessed during planning (e.g., `outputPartitioning` relies on it), and can
+  // only use static filters.
   @transient lazy val selectedPartitions: Array[PartitionDirectory] = {
     val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
     val startTime = System.nanoTime()
-    val ret =
-      relation.location.listFiles(
-        partitionFilters.filterNot(isDynamicPruningFilter), dataFilters)
+    // The filters may contain subquery expressions which can't be evaluated during planning.
+    // Here we filter out subquery expressions and get the static data/partition filters, so that
+    // they can be used to do pruning at the planning phase.
+    val staticDataFilters = dataFilters.filterNot(isDynamicPruningFilter)
+    val staticPartitionFilters = partitionFilters.filterNot(isDynamicPruningFilter)
+    val ret = relation.location.listFiles(staticPartitionFilters, staticDataFilters)
     setFilesNumAndSizeMetric(ret, true)
     val timeTakenMs = NANOSECONDS.toMillis(
       (System.nanoTime() - startTime) + optimizerMetadataTimeNs)
@@ -265,6 +275,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
   // present. This is because such a filter relies on information that is only available at run
   // time (for instance the keys used in the other side of a join).
   @transient protected lazy val dynamicallySelectedPartitions: Array[PartitionDirectory] = {
+    val dynamicDataFilters = dataFilters.filter(isDynamicPruningFilter)
     val dynamicPartitionFilters = partitionFilters.filter(isDynamicPruningFilter)
 
     if (dynamicPartitionFilters.nonEmpty) {
@@ -277,22 +288,18 @@ trait FileSourceScanLike extends DataSourceScanExec {
           val index = partitionColumns.indexWhere(a.name == _.name)
           BoundReference(index, partitionColumns(index).dataType, nullable = true)
       }, Nil)
-      val ret = selectedPartitions.filter(p => boundPredicate.eval(p.values))
-      setFilesNumAndSizeMetric(ret, false)
+      var ret = selectedPartitions.filter(p => boundPredicate.eval(p.values))
+      if (dynamicDataFilters.nonEmpty) {
+        val filePruningRunner = new FilePruningRunner(dynamicDataFilters)
+        ret = ret.map(filePruningRunner.prune)
+      }
+      setFilesNumAndSizeMetric(ret.toImmutableArraySeq, false)
       val timeTakenMs = (System.nanoTime() - startTime) / 1000 / 1000
       driverMetrics("pruningTime").set(timeTakenMs)
       ret
     } else {
       selectedPartitions
     }
-  }
-
-  /**
-   * [[partitionFilters]] can contain subqueries whose results are available only at runtime so
-   * accessing [[selectedPartitions]] should be guarded by this method during planning
-   */
-  private def hasPartitionsAvailableAtRunTime: Boolean = {
-    partitionFilters.exists(ExecSubqueryExpression.hasSubquery)
   }
 
   private def toAttribute(colName: String): Option[Attribute] =
@@ -338,8 +345,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
         spec.sortColumnNames.map(x => toAttribute(x)).takeWhile(x => x.isDefined).map(_.get)
       val shouldCalculateSortOrder =
         conf.getConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING) &&
-          sortColumns.nonEmpty &&
-          !hasPartitionsAvailableAtRunTime
+          sortColumns.nonEmpty
 
       val sortOrder = if (shouldCalculateSortOrder) {
         // In case of bucketing, its possible to have multiple files belonging to the
@@ -370,18 +376,29 @@ trait FileSourceScanLike extends DataSourceScanExec {
     }
   }
 
-  @transient
-  protected lazy val pushedDownFilters = {
+  private def translateToV1Filters(
+      dataFilters: Seq[Expression],
+      scalarSubqueryToLiteral: execution.ScalarSubquery => Literal): Seq[Filter] = {
+    val scalarSubqueryReplaced = dataFilters.map(_.transform {
+      // Replace scalar subquery to literal so that `DataSourceStrategy.translateFilter` can
+      // support translating it.
+      case scalarSubquery: execution.ScalarSubquery => scalarSubqueryToLiteral(scalarSubquery)
+    })
+
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
     // `dataFilters` should not include any constant metadata col filters
     // because the metadata struct has been flatted in FileSourceStrategy
     // and thus metadata col filters are invalid to be pushed down. Metadata that is generated
     // during the scan can be used for filters.
-    dataFilters.filterNot(_.references.exists {
+    scalarSubqueryReplaced.filterNot(_.references.exists {
       case FileSourceConstantMetadataAttribute(_) => true
       case _ => false
     }).flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
   }
+
+  // This field may execute subquery expressions and should not be accessed during planning.
+  @transient
+  protected lazy val pushedDownFilters: Seq[Filter] = translateToV1Filters(dataFilters, _.toLiteral)
 
   override lazy val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
@@ -389,13 +406,17 @@ trait FileSourceScanLike extends DataSourceScanExec {
     val locationDesc =
       location.getClass.getSimpleName +
         Utils.buildLocationMetadata(location.rootPaths, maxMetadataValueLength)
+    // `metadata` is accessed during planning and the scalar subquery is not executed yet. Here
+    // we get the pretty string of the scalar subquery, for display purpose only.
+    val pushedFiltersForDisplay = translateToV1Filters(
+      dataFilters, s => Literal("ScalarSubquery#" + s.exprId.id))
     val metadata =
       Map(
         "Format" -> relation.fileFormat.toString,
         "ReadSchema" -> requiredSchema.catalogString,
         "Batched" -> supportsColumnar.toString,
         "PartitionFilters" -> seqToString(partitionFilters),
-        "PushedFilters" -> seqToString(pushedDownFilters),
+        "PushedFilters" -> seqToString(pushedFiltersForDisplay),
         "DataFilters" -> seqToString(dataFilters),
         "Location" -> locationDesc)
 
@@ -624,9 +645,7 @@ case class FileSourceScanExec(
     logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
     val filesGroupedToBuckets =
       selectedPartitions.flatMap { p =>
-        p.files.map { f =>
-          PartitionedFileUtil.getPartitionedFile(f, f.getPath, p.values)
-        }
+        p.files.map(f => PartitionedFileUtil.getPartitionedFile(f, p.values))
       }.groupBy { f =>
         BucketingUtils
           .getBucketId(f.toPath.getName)
@@ -671,11 +690,11 @@ case class FileSourceScanExec(
    * @param selectedPartitions Hive-style partition that are part of the read.
    */
   private def createReadRDD(
-      readFile: (PartitionedFile) => Iterator[InternalRow],
+      readFile: PartitionedFile => Iterator[InternalRow],
       selectedPartitions: Array[PartitionDirectory]): RDD[InternalRow] = {
     val openCostInBytes = relation.sparkSession.sessionState.conf.filesOpenCostInBytes
     val maxSplitBytes =
-      FilePartition.maxSplitBytes(relation.sparkSession, selectedPartitions)
+      FilePartition.maxSplitBytes(relation.sparkSession, selectedPartitions.toImmutableArraySeq)
     logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
       s"open cost is considered as scanning $openCostInBytes bytes.")
 
@@ -691,20 +710,11 @@ case class FileSourceScanExec(
 
     val splitFiles = selectedPartitions.flatMap { partition =>
       partition.files.flatMap { file =>
-        // getPath() is very expensive so we only want to call it once in this block:
-        val filePath = file.getPath
-
-        if (shouldProcess(filePath)) {
+        if (shouldProcess(file.getPath)) {
           val isSplitable = relation.fileFormat.isSplitable(
-              relation.sparkSession, relation.options, filePath) &&
-            // SPARK-39634: Allow file splitting in combination with row index generation once
-            // the fix for PARQUET-2161 is available.
-            (!relation.fileFormat.isInstanceOf[ParquetSource]
-              || !ParquetRowIndexUtil.isNeededForSchema(requiredSchema))
+              relation.sparkSession, relation.options, file.getPath)
           PartitionedFileUtil.splitFiles(
-            sparkSession = relation.sparkSession,
             file = file,
-            filePath = filePath,
             isSplitable = isSplitable,
             maxSplitBytes = maxSplitBytes,
             partitionValues = partition.values
@@ -715,8 +725,8 @@ case class FileSourceScanExec(
       }
     }.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
 
-    val partitions =
-      FilePartition.getFilePartitions(relation.sparkSession, splitFiles, maxSplitBytes)
+    val partitions = FilePartition
+      .getFilePartitions(relation.sparkSession, splitFiles.toImmutableArraySeq, maxSplitBytes)
 
     new FileScanRDD(relation.sparkSession, readFile, partitions,
       new StructType(requiredSchema.fields ++ relation.partitionSchema.fields),

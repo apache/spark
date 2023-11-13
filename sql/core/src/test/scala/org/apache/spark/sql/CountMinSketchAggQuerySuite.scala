@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.functions.{count_min_sketch, lit}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.sketch.CountMinSketch
 
@@ -35,6 +36,24 @@ class CountMinSketchAggQuerySuite extends QueryTest with SharedSparkSession {
     val items = Seq(1, 1, 2, 2, 2, 2, 3, 4, 5)
     val sketch = CountMinSketch.readFrom(items.toDF("id")
       .selectExpr(s"count_min_sketch(id, ${eps}d, ${confidence}d, $seed)")
+      .head().get(0).asInstanceOf[Array[Byte]])
+
+    val reference = CountMinSketch.create(eps, confidence, seed)
+    items.foreach(reference.add)
+
+    assert(sketch == reference)
+  }
+
+  test("function count_min_sketch") {
+    import testImplicits._
+
+    val eps = 0.1
+    val confidence = 0.95
+    val seed = 11
+
+    val items = Seq(1, 1, 2, 2, 2, 2, 3, 4, 5)
+    val sketch = CountMinSketch.readFrom(items.toDF("id")
+      .select(count_min_sketch($"id", lit(eps), lit(confidence), lit(seed)))
       .head().get(0).asInstanceOf[Array[Byte]])
 
     val reference = CountMinSketch.create(eps, confidence, seed)

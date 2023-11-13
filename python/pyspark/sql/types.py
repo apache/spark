@@ -77,6 +77,7 @@ __all__ = [
     "LongType",
     "DayTimeIntervalType",
     "YearMonthIntervalType",
+    "CalendarIntervalType",
     "Row",
     "ShortType",
     "ArrayType",
@@ -138,6 +139,57 @@ class DataType:
         """
         return obj
 
+    def _as_nullable(self) -> "DataType":
+        return self
+
+    @classmethod
+    def fromDDL(cls, ddl: str) -> "DataType":
+        """
+        Creates :class:`DataType` for a given DDL-formatted string.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        ddl : str
+            DDL-formatted string representation of types, e.g.
+            :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct
+            type can omit the ``struct<>`` for the compatibility reason with
+            ``spark.createDataFrame`` and Python UDFs.
+
+        Returns
+        -------
+        :class:`DataType`
+
+        Examples
+        --------
+        Create a StructType by the corresponding DDL formatted string.
+
+        >>> from pyspark.sql.types import DataType
+        >>> DataType.fromDDL("b string, a int")
+        StructType([StructField('b', StringType(), True), StructField('a', IntegerType(), True)])
+
+        Create a single DataType by the corresponding DDL formatted string.
+
+        >>> DataType.fromDDL("decimal(10,10)")
+        DecimalType(10,10)
+
+        Create a StructType by the legacy string format.
+
+        >>> DataType.fromDDL("b: string, a: int")
+        StructType([StructField('b', StringType(), True), StructField('a', IntegerType(), True)])
+        """
+        from pyspark.sql import SparkSession
+        from pyspark.sql.functions import udf
+
+        # Intentionally uses SparkSession so one implementation can be shared with/without
+        # Spark Connect.
+        schema = (
+            SparkSession.active().range(0).select(udf(lambda x: x, returnType=ddl)("id")).schema
+        )
+        assert len(schema) == 1
+        return schema[0].dataType
+
 
 # This singleton pattern does not work with pickle, you will get
 # another object after pickle and unpickle
@@ -146,7 +198,7 @@ class DataTypeSingleton(type):
 
     _instances: ClassVar[Dict[Type["DataTypeSingleton"], "DataTypeSingleton"]] = {}
 
-    def __call__(cls: Type[T]) -> T:  # type: ignore[override]
+    def __call__(cls: Type[T]) -> T:
         if cls not in cls._instances:  # type: ignore[attr-defined]
             cls._instances[cls] = super(  # type: ignore[misc, attr-defined]
                 DataTypeSingleton, cls
@@ -442,7 +494,7 @@ class DayTimeIntervalType(AnsiIntervalType):
 
     def toInternal(self, dt: datetime.timedelta) -> Optional[int]:
         if dt is not None:
-            return (math.floor(dt.total_seconds()) * 1000000) + dt.microseconds
+            return (((dt.days * 86400) + dt.seconds) * 1_000_000) + dt.microseconds
 
     def fromInternal(self, micros: int) -> Optional[datetime.timedelta]:
         if micros is not None:
@@ -493,6 +545,20 @@ class YearMonthIntervalType(AnsiIntervalType):
         return "%s(%d, %d)" % (type(self).__name__, self.startField, self.endField)
 
 
+class CalendarIntervalType(DataType, metaclass=DataTypeSingleton):
+    """The data type representing calendar intervals.
+
+    The calendar interval is stored internally in three components:
+    - an integer value representing the number of `months` in this interval.
+    - an integer value representing the number of `days` in this interval.
+    - a long value representing the number of `microseconds` in this interval.
+    """
+
+    @classmethod
+    def typeName(cls) -> str:
+        return "interval"
+
+
 class ArrayType(DataType):
     """Array data type.
 
@@ -529,6 +595,41 @@ class ArrayType(DataType):
 
     def simpleString(self) -> str:
         return "array<%s>" % self.elementType.simpleString()
+
+    def _as_nullable(self) -> "ArrayType":
+        return ArrayType(self.elementType._as_nullable(), containsNull=True)
+
+    def toNullable(self) -> "ArrayType":
+        """
+        Returns the same data type but set all nullability fields are true
+        (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`ArrayType`
+
+        Examples
+        --------
+        Example 1: Simple nullability conversion
+
+        >>> ArrayType(IntegerType(), containsNull=False).toNullable()
+        ArrayType(IntegerType(), True)
+
+        Example 2: Nested nullability conversion
+
+        >>> ArrayType(
+        ...     StructType([
+        ...         StructField("b", IntegerType(), nullable=False),
+        ...         StructField("c", ArrayType(IntegerType(), containsNull=False))
+        ...     ]),
+        ...     containsNull=False
+        ... ).toNullable()
+        ArrayType(StructType([StructField('b', IntegerType(), True),
+        StructField('c', ArrayType(IntegerType(), True), True)]), True)
+        """
+        return self._as_nullable()
 
     def __repr__(self) -> str:
         return "ArrayType(%s, %s)" % (self.elementType, str(self.containsNull))
@@ -607,6 +708,44 @@ class MapType(DataType):
 
     def simpleString(self) -> str:
         return "map<%s,%s>" % (self.keyType.simpleString(), self.valueType.simpleString())
+
+    def _as_nullable(self) -> "MapType":
+        return MapType(
+            self.keyType._as_nullable(), self.valueType._as_nullable(), valueContainsNull=True
+        )
+
+    def toNullable(self) -> "MapType":
+        """
+        Returns the same data type but set all nullability fields are true
+        (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`MapType`
+
+        Examples
+        --------
+        Example 1: Simple nullability conversion
+
+        >>> MapType(IntegerType(), StringType(), valueContainsNull=False).toNullable()
+        MapType(IntegerType(), StringType(), True)
+
+        Example 2: Nested nullability conversion
+
+        >>> MapType(
+        ...     StringType(),
+        ...     MapType(
+        ...         IntegerType(),
+        ...         ArrayType(IntegerType(), containsNull=False),
+        ...         valueContainsNull=False
+        ...     ),
+        ...     valueContainsNull=False
+        ... ).toNullable()
+        MapType(StringType(), MapType(IntegerType(), ArrayType(IntegerType(), True), True), True)
+        """
+        return self._as_nullable()
 
     def __repr__(self) -> str:
         return "MapType(%s, %s, %s)" % (self.keyType, self.valueType, str(self.valueContainsNull))
@@ -706,8 +845,8 @@ class StructField(DataType):
         return StructField(
             json["name"],
             _parse_datatype_json_value(json["type"]),
-            json["nullable"],
-            json["metadata"],
+            json.get("nullable", True),
+            json.get("metadata"),
         )
 
     def needConversion(self) -> bool:
@@ -914,6 +1053,54 @@ class StructType(DataType):
 
     def simpleString(self) -> str:
         return "struct<%s>" % (",".join(f.simpleString() for f in self))
+
+    def _as_nullable(self) -> "StructType":
+        fields = []
+        for field in self.fields:
+            fields.append(
+                StructField(
+                    field.name,
+                    field.dataType._as_nullable(),
+                    nullable=True,
+                    metadata=field.metadata,
+                )
+            )
+        return StructType(fields)
+
+    def toNullable(self) -> "StructType":
+        """
+        Returns the same data type but set all nullability fields are true
+        (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`StructType`
+
+        Examples
+        --------
+        Example 1: Simple nullability conversion
+
+        >>> StructType([StructField("a", IntegerType(), nullable=False)]).toNullable()
+        StructType([StructField('a', IntegerType(), True)])
+
+        Example 2: Nested nullability conversion
+
+        >>> StructType([
+        ...     StructField("a",
+        ...         StructType([
+        ...             StructField("b", IntegerType(), nullable=False),
+        ...             StructField("c", StructType([
+        ...                 StructField("d", IntegerType(), nullable=False)
+        ...             ]))
+        ...         ]),
+        ...         nullable=False)
+        ... ]).toNullable()
+        StructType([StructField('a', StructType([StructField('b', IntegerType(), True),
+        StructField('c', StructType([StructField('d', IntegerType(), True)]), True)]), True)])
+        """
+        return self._as_nullable()
 
     def __repr__(self) -> str:
         return "StructType([%s])" % ", ".join(str(field) for field in self)
@@ -1331,6 +1518,7 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
     ...     scala_datatype = spark._jsparkSession.parseDataType(datatype.json())
     ...     python_datatype = _parse_datatype_json_string(scala_datatype.json())
     ...     assert datatype == python_datatype
+    ...
     >>> for cls in _all_atomic_types.values():
     ...     if cls is not VarcharType and cls is not CharType:
     ...         check_datatype(cls())
@@ -1401,6 +1589,8 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             if first_field is not None and second_field is None:
                 return YearMonthIntervalType(first_field)
             return YearMonthIntervalType(first_field, second_field)
+        elif json_value == "interval":
+            return CalendarIntervalType()
         elif _LENGTH_CHAR.match(json_value):
             m = _LENGTH_CHAR.match(json_value)
             return CharType(int(m.group(1)))  # type: ignore[union-attr]
@@ -1563,6 +1753,8 @@ def _infer_type(
         return DayTimeIntervalType()
     if dataType is YearMonthIntervalType:
         return YearMonthIntervalType()
+    if dataType is CalendarIntervalType:
+        return CalendarIntervalType()
     elif dataType is not None:
         return dataType()
 
@@ -2401,7 +2593,7 @@ class Row(tuple):
                 "%s=%r" % (k, v) for k, v in zip(self.__fields__, tuple(self))
             )
         else:
-            return "<Row(%s)>" % ", ".join("%r" % field for field in self)
+            return "<Row(%s)>" % ", ".join(repr(field) for field in self)
 
 
 class DateConverter:

@@ -17,15 +17,14 @@
 
 package org.apache.spark.sql.errors
 
-import java.io.{FileNotFoundException, IOException}
+import java.io.{File, FileNotFoundException, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{URISyntaxException, URL}
-import java.time.{DateTimeException, LocalDate}
-import java.time.temporal.ChronoField
+import java.time.DateTimeException
+import java.util.Locale
 import java.util.concurrent.TimeoutException
 
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
-import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FileStatus, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
@@ -34,8 +33,7 @@ import org.apache.spark._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{TableIdentifier, WalkedTypePath}
-import org.apache.spark.sql.catalyst.ScalaReflection.Schema
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
@@ -43,9 +41,9 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
-import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, TreeNode}
-import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, DateTimeUtils, FailFastMode}
-import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Identifier, Table, TableProvider}
+import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
+import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, DateTimeUtils, FailFastMode, MapData}
+import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf
@@ -61,7 +59,7 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  * This does not include exceptions thrown during the eager execution of commands, which are
  * grouped into [[QueryCompilationErrors]].
  */
-private[sql] object QueryExecutionErrors extends QueryErrorsBase {
+private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionErrors {
 
   def cannotEvaluateExpressionError(expression: Expression): Throwable = {
     SparkException.internalError(s"Cannot evaluate expression: $expression")
@@ -106,7 +104,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       value: Decimal,
       decimalPrecision: Int,
       decimalScale: Int,
-      context: SQLQueryContext = null): ArithmeticException = {
+      context: QueryContext = null): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
       messageParameters = Map(
@@ -118,25 +116,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       summary = getSummary(context))
   }
 
-  def invalidInputInCastToDatetimeError(
-      value: Any,
-      from: DataType,
-      to: DataType,
-      context: SQLQueryContext): Throwable = {
-    new SparkDateTimeException(
-      errorClass = "CAST_INVALID_INPUT",
-      messageParameters = Map(
-        "expression" -> toSQLValue(value, from),
-        "sourceType" -> toSQLType(from),
-        "targetType" -> toSQLType(to),
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = getQueryContext(context),
-      summary = getSummary(context))
-  }
-
   def invalidInputSyntaxForBooleanError(
       s: UTF8String,
-      context: SQLQueryContext): SparkRuntimeException = {
+      context: QueryContext): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Map(
@@ -151,7 +133,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def invalidInputInCastToNumberError(
       to: DataType,
       s: UTF8String,
-      context: SQLQueryContext): SparkNumberFormatException = {
+      context: QueryContext): SparkNumberFormatException = {
     new SparkNumberFormatException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Map(
@@ -201,32 +183,26 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def dataTypeUnsupportedError(dataType: String, failure: String): Throwable = {
-    new SparkIllegalArgumentException(
-      errorClass = "UNSUPPORTED_DATATYPE",
-      messageParameters = Map("typeName" -> (dataType + failure)))
-  }
-
-  def failedExecuteUserDefinedFunctionError(funcCls: String, inputTypes: String,
+  def failedExecuteUserDefinedFunctionError(functionName: String, inputTypes: String,
       outputType: String, e: Throwable): Throwable = {
     new SparkException(
       errorClass = "FAILED_EXECUTE_UDF",
       messageParameters = Map(
-        "functionName" -> funcCls,
+        "functionName" -> toSQLId(functionName),
         "signature" -> inputTypes,
         "result" -> outputType),
       cause = e)
   }
 
-  def divideByZeroError(context: SQLQueryContext): ArithmeticException = {
+  def divideByZeroError(context: QueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DIVIDE_BY_ZERO",
       messageParameters = Map("config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = getQueryContext(context),
+      context = Array(context),
       summary = getSummary(context))
   }
 
-  def intervalDividedByZeroError(context: SQLQueryContext): ArithmeticException = {
+  def intervalDividedByZeroError(context: QueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "INTERVAL_DIVIDED_BY_ZERO",
       messageParameters = Map.empty,
@@ -237,7 +213,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def invalidArrayIndexError(
       index: Int,
       numElements: Int,
-      context: SQLQueryContext): ArrayIndexOutOfBoundsException = {
+      context: QueryContext): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "INVALID_ARRAY_INDEX",
       messageParameters = Map(
@@ -251,7 +227,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def invalidElementAtIndexError(
       index: Int,
       numElements: Int,
-      context: SQLQueryContext): ArrayIndexOutOfBoundsException = {
+      context: QueryContext): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
       messageParameters = Map(
@@ -260,6 +236,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
       context = getQueryContext(context),
       summary = getSummary(context))
+  }
+
+  def invalidBitmapPositionError(bitPosition: Long,
+                                 bitmapNumBytes: Long): ArrayIndexOutOfBoundsException = {
+    new SparkArrayIndexOutOfBoundsException(
+      errorClass = "INVALID_BITMAP_POSITION",
+      messageParameters = Map(
+        "bitPosition" -> s"$bitPosition",
+        "bitmapNumBytes" -> s"$bitmapNumBytes",
+        "bitmapNumBits" -> s"${bitmapNumBytes * 8}"),
+      context = Array.empty,
+      summary = "")
   }
 
   def invalidFractionOfSecondError(): DateTimeException = {
@@ -304,15 +292,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     ansiIllegalArgumentError(e.getMessage)
   }
 
-  def overflowInSumOfDecimalError(context: SQLQueryContext): ArithmeticException = {
+  def overflowInSumOfDecimalError(context: QueryContext): ArithmeticException = {
     arithmeticOverflowError("Overflow in sum of decimals", context = context)
   }
 
-  def overflowInIntegralDivideError(context: SQLQueryContext): ArithmeticException = {
+  def overflowInIntegralDivideError(context: QueryContext): ArithmeticException = {
     arithmeticOverflowError("Overflow in integral divide", "try_divide", context)
   }
 
-  def overflowInConvError(context: SQLQueryContext): ArithmeticException = {
+  def overflowInConvError(context: QueryContext): ArithmeticException = {
     arithmeticOverflowError("Overflow in function conv()", context = context)
   }
 
@@ -332,12 +320,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "type" ->  v.getClass.toString))
   }
 
-  def pivotColumnUnsupportedError(v: Any, dataType: DataType): RuntimeException = {
+  def pivotColumnUnsupportedError(v: Any, expr: Expression): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_FEATURE.PIVOT_TYPE",
       messageParameters = Map(
         "value" -> v.toString,
-        "type" ->  toSQLType(dataType)))
+        "type" -> (if (expr.resolved) toSQLType(expr.dataType) else "unknown")))
   }
 
   def noDefaultForDataTypeError(dataType: DataType): SparkException = {
@@ -418,18 +406,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def cannotGenerateCodeForIncomparableTypeError(
-      codeType: String, dataType: DataType): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2015",
-      messageParameters = Map(
-        "codeType" -> codeType,
-        "dataType" -> dataType.catalogString))
+      codeType: String, dataType: DataType): Throwable = {
+    SparkException.internalError(
+      s"Cannot generate $codeType code for incomparable type: ${toSQLType(dataType)}.")
   }
 
-  def cannotInterpolateClassIntoCodeBlockError(arg: Any): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2016",
-      messageParameters = Map("arg" -> arg.getClass.getName))
+  def cannotInterpolateClassIntoCodeBlockError(arg: Any): Throwable = {
+    SparkException.internalError(s"Can not interpolate ${arg.getClass.getName} into code block.")
   }
 
   def customCollectionClsNotResolvedError(): SparkUnsupportedOperationException = {
@@ -440,7 +423,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def classUnsupportedByMapObjectsError(cls: Class[_]): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2018",
+      errorClass = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
       messageParameters = Map("cls" -> cls.getName))
   }
 
@@ -455,16 +438,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       s"""A method named "$name" is not declared in any enclosing class nor any supertype""")
   }
 
+  def methodNotFoundError(
+      cls: Class[_],
+      functionName: String,
+      argClasses: Seq[Class[_]]): Throwable = {
+    SparkException.internalError(
+      s"Couldn't find method $functionName with arguments " +
+        s"${argClasses.mkString("(", ", ", ")")} on $cls.")
+  }
+
   def constructorNotFoundError(cls: String): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2020",
       messageParameters = Map("cls" -> cls))
-  }
-
-  def primaryConstructorNotFoundError(cls: Class[_]): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2021",
-      messageParameters = Map("cls" -> cls.toString()))
   }
 
   def unsupportedNaturalJoinTypeError(joinType: JoinType): SparkException = {
@@ -506,16 +492,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2027",
       messageParameters = Map("op" -> op.toString(), "pos" -> pos))
-  }
-
-  def unreachableError(err: String = ""): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2028",
-      messageParameters = Map("err" -> err))
-  }
-
-  def unsupportedRoundingMode(roundMode: BigDecimal.RoundingMode.Value): SparkException = {
-    SparkException.internalError(s"Not supported rounding mode: ${roundMode.toString}.")
   }
 
   def resolveCannotHandleNestedSchema(plan: LogicalPlan): SparkRuntimeException = {
@@ -626,23 +602,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       summary = "")
   }
 
-  def arithmeticOverflowError(
-      message: String,
-      hint: String = "",
-      context: SQLQueryContext = null): ArithmeticException = {
-    val alternative = if (hint.nonEmpty) {
-      s" Use '$hint' to tolerate overflow and return NULL instead."
-    } else ""
-    new SparkArithmeticException(
-      errorClass = "ARITHMETIC_OVERFLOW",
-      messageParameters = Map(
-        "message" -> message,
-        "alternative" -> alternative,
-        "config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = getQueryContext(context),
-      summary = getSummary(context))
-  }
-
   def unaryMinusCauseOverflowError(originValue: Int): SparkArithmeticException = {
     new SparkArithmeticException(
       errorClass = "_LEGACY_ERROR_TEMP_2043",
@@ -666,7 +625,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def intervalArithmeticOverflowError(
       message: String,
       hint: String = "",
-      context: SQLQueryContext): ArithmeticException = {
+      context: QueryContext): ArithmeticException = {
     val alternative = if (hint.nonEmpty) {
       s" Use '$hint' to tolerate overflow and return NULL instead."
     } else ""
@@ -722,6 +681,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2049",
       messageParameters = Map("className" -> className, "operator" -> operator))
+  }
+
+  def nonTimeWindowNotSupportedInStreamingError(
+      windowFuncList: Seq[String],
+      columnNameList: Seq[String],
+      windowSpecList: Seq[String],
+      origin: Origin): AnalysisException = {
+    new AnalysisException(
+      errorClass = "NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING",
+      messageParameters = Map(
+        "windowFunc" -> windowFuncList.map(toSQLStmt(_)).mkString(","),
+        "columnName" -> columnNameList.map(toSQLId(_)).mkString(","),
+        "windowSpec" -> windowSpecList.map(toSQLStmt(_)).mkString(",")),
+        origin = origin)
   }
 
   def multiplePathsSpecifiedError(allPaths: Seq[String]): SparkIllegalArgumentException = {
@@ -929,13 +902,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
-  def unsupportedTableWritesError(ident: Identifier): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2072",
-      messageParameters = Map("idnt" -> ident.quoted),
-      cause = null)
-  }
-
   def cannotCreateJDBCTableWithPartitionsError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2073",
@@ -1125,25 +1091,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("cost" -> cost))
   }
 
-  def unsupportedArrowTypeError(typeName: ArrowType): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_ARROWTYPE",
-      messageParameters = Map("typeName" -> typeName.toString))
-  }
-
-  def unsupportedDataTypeError(typeName: DataType): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_DATATYPE",
-      messageParameters = Map("typeName" -> toSQLType(typeName)))
-  }
-
-  def duplicatedFieldNameInArrowStructError(
-      fieldNames: Seq[String]): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
-      messageParameters = Map("fieldNames" -> fieldNames.mkString("[", ", ", "]")))
-  }
-
   def notSupportTypeError(dataType: DataType): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2100",
@@ -1254,80 +1201,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("o" -> o.toString()))
   }
 
-  def unscaledValueTooLargeForPrecisionError(
-      value: Decimal,
-      decimalPrecision: Int,
-      decimalScale: Int,
-      context: SQLQueryContext = null): ArithmeticException = {
-    new SparkArithmeticException(
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
-      messageParameters = Map(
-        "value" -> value.toPlainString,
-        "precision" -> decimalPrecision.toString,
-        "scale" -> decimalScale.toString,
-        "config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = getQueryContext(context),
-      summary = getSummary(context))
-  }
-
-  def decimalPrecisionExceedsMaxPrecisionError(
-      precision: Int, maxPrecision: Int): SparkArithmeticException = {
-    new SparkArithmeticException(
-      errorClass = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
-      messageParameters = Map(
-        "precision" -> precision.toString,
-        "maxPrecision" -> maxPrecision.toString
-      ),
-      context = Array.empty,
-      summary = "")
-  }
-
-  def outOfDecimalTypeRangeError(str: UTF8String): SparkArithmeticException = {
-    new SparkArithmeticException(
-      errorClass = "NUMERIC_OUT_OF_SUPPORTED_RANGE",
-      messageParameters = Map(
-        "value" -> str.toString),
-      context = Array.empty,
-      summary = "")
-  }
-
-  def unsupportedArrayTypeError(clazz: Class[_]): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2120",
-      messageParameters = Map("clazz" -> clazz.toString()))
-  }
-
-  def unsupportedJavaTypeError(clazz: Class[_]): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2121",
-      messageParameters = Map("clazz" -> clazz.toString()))
-  }
-
-  def failedParsingStructTypeError(raw: String): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "FAILED_PARSE_STRUCT_TYPE",
-      messageParameters = Map("raw" -> toSQLValue(raw, StringType)))
-  }
-
-  def cannotMergeDecimalTypesWithIncompatibleScaleError(
-      leftScale: Int, rightScale: Int): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2124",
-      messageParameters = Map(
-        "leftScale" -> leftScale.toString(),
-        "rightScale" -> rightScale.toString()),
-      cause = null)
-  }
-
-  def cannotMergeIncompatibleDataTypesError(left: DataType, right: DataType): Throwable = {
-    new SparkException(
-      errorClass = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
-      messageParameters = Map(
-        "left" -> toSQLType(left),
-        "right" -> toSQLType(right)),
-      cause = null)
-  }
-
   def exceedMapSizeLimitError(size: Int): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2126",
@@ -1348,52 +1221,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2128",
       messageParameters = Map.empty)
-  }
-
-  def fieldDiffersFromDerivedLocalDateError(
-      field: ChronoField,
-      actual: Int,
-      expected: Int,
-      candidate: LocalDate): SparkDateTimeException = {
-    new SparkDateTimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2129",
-      messageParameters = Map(
-        "field" -> field.toString(),
-        "actual" -> actual.toString(),
-        "expected" -> expected.toString(),
-        "candidate" -> candidate.toString()),
-      context = Array.empty,
-      summary = "")
-  }
-
-  def failToParseDateTimeInNewParserError(s: String, e: Throwable): Throwable = {
-    new SparkUpgradeException(
-      errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
-      messageParameters = Map(
-        "datetime" -> toSQLValue(s, StringType),
-        "config" -> toSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key)),
-      e)
-  }
-
-  def failToRecognizePatternAfterUpgradeError(
-      pattern: String, e: Throwable, docroot: String): Throwable = {
-    new SparkUpgradeException(
-      errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
-      messageParameters = Map(
-        "pattern" -> toSQLValue(pattern, StringType),
-        "config" -> toSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key),
-        "docroot" -> docroot),
-      e)
-  }
-
-  def failToRecognizePatternError(
-      pattern: String, e: Throwable, docroot: String): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2130",
-      messageParameters = Map(
-        "pattern" -> toSQLValue(pattern, StringType),
-        "docroot" -> docroot),
-      cause = e)
   }
 
   def registeringStreamingQueryListenerError(e: Exception): Throwable = {
@@ -1424,25 +1251,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "failFastMode" -> FailFastMode.name))
   }
 
-  def cannotParseStringAsDataTypeError(parser: JsonParser, token: JsonToken, dataType: DataType)
-  : SparkRuntimeException = {
+  def cannotParseStringAsDataTypeError(
+      recordStr: String,
+      fieldName: String,
+      fieldValue: String,
+      dataType: DataType): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2133",
+      errorClass = "MALFORMED_RECORD_IN_PARSING.CANNOT_PARSE_STRING_AS_DATATYPE",
       messageParameters = Map(
-        "fieldName" -> parser.getCurrentName,
-        "fieldValue" -> parser.getText,
-        "token" -> token.toString(),
-        "dataType" -> dataType.toString()))
-  }
-
-  def cannotParseStringAsDataTypeError(pattern: String, value: String, dataType: DataType)
-  : SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2134",
-      messageParameters = Map(
-        "value" -> toSQLValue(value, StringType),
-        "pattern" -> toSQLValue(pattern, StringType),
-        "dataType" -> dataType.toString()))
+        "badRecord" -> recordStr,
+        "failFastMode" -> FailFastMode.name,
+        "fieldName" -> toSQLId(fieldName),
+        "fieldValue" -> toSQLValue(fieldValue, StringType),
+        "inputType" -> StringType.toString,
+        "targetType" -> dataType.toString))
   }
 
   def emptyJsonFieldValueError(dataType: DataType): SparkRuntimeException = {
@@ -1453,11 +1275,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def cannotParseJSONFieldError(parser: JsonParser, jsonType: JsonToken, dataType: DataType)
   : SparkRuntimeException = {
+    cannotParseJSONFieldError(parser.getCurrentName, parser.getText, jsonType, dataType)
+  }
+
+  def cannotParseJSONFieldError(
+      fieldName: String,
+      fieldValue: String,
+      jsonType: JsonToken,
+      dataType: DataType): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "CANNOT_PARSE_JSON_FIELD",
       messageParameters = Map(
-        "fieldName" -> toSQLValue(parser.getCurrentName, StringType),
-        "fieldValue" -> parser.getText,
+        "fieldName" -> toSQLValue(fieldName, StringType),
+        "fieldValue" -> fieldValue,
         "jsonType" -> jsonType.toString(),
         "dataType" -> toSQLType(dataType)))
   }
@@ -1466,51 +1296,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkRuntimeException(
       errorClass = "INVALID_JSON_ROOT_FIELD",
       messageParameters = Map.empty)
-  }
-
-  def cannotHaveCircularReferencesInBeanClassError(
-      clazz: Class[_]): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2138",
-      messageParameters = Map("clazz" -> clazz.toString()))
-  }
-
-  def cannotHaveCircularReferencesInClassError(t: String): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2139",
-      messageParameters = Map("t" -> t))
-  }
-
-  def cannotUseInvalidJavaIdentifierAsFieldNameError(
-      fieldName: String, walkedTypePath: WalkedTypePath): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2140",
-      messageParameters = Map(
-        "fieldName" -> fieldName,
-        "walkedTypePath" -> walkedTypePath.toString()))
-  }
-
-  def cannotFindEncoderForTypeError(
-      typeName: String, docroot: String): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "ENCODER_NOT_FOUND",
-      messageParameters = Map(
-        "typeName" -> typeName,
-        "docroot" -> docroot))
-  }
-
-  def attributesForTypeUnsupportedError(schema: Schema): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2142",
-      messageParameters = Map(
-        "schema" -> schema.toString()))
-  }
-
-  def cannotFindConstructorForTypeError(tpe: String): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2144",
-      messageParameters = Map(
-        "tpe" -> tpe))
   }
 
   def paramExceedOneCharError(paramName: String): SparkRuntimeException = {
@@ -1557,9 +1342,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def expressionDecodingError(e: Exception, expressions: Seq[Expression]): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2151",
+      errorClass = "EXPRESSION_DECODING_FAILED",
       messageParameters = Map(
-        "e" -> e.toString(),
         "expressions" -> expressions.map(
           _.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")),
       cause = e)
@@ -1567,9 +1351,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def expressionEncodingError(e: Exception, expressions: Seq[Expression]): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2152",
+      errorClass = "EXPRESSION_ENCODING_FAILED",
       messageParameters = Map(
-        "e" -> e.toString(),
         "expressions" -> expressions.map(
           _.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")),
       cause = e)
@@ -1578,50 +1361,37 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def classHasUnexpectedSerializerError(
       clsName: String, objSerializer: Expression): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2153",
+      errorClass = "UNEXPECTED_SERIALIZER_FOR_CLASS",
       messageParameters = Map(
-        "clsName" -> clsName,
-        "objSerializer" -> objSerializer.toString()))
-  }
-
-  def cannotGetOuterPointerForInnerClassError(innerCls: Class[_]): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2154",
-      messageParameters = Map(
-        "innerCls" -> innerCls.getName))
-  }
-
-  def userDefinedTypeNotAnnotatedAndRegisteredError(udt: UserDefinedType[_]): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2155",
-      messageParameters = Map(
-        "userClass" -> udt.userClass.getName),
-      cause = null)
+        "className" -> clsName,
+        "expr" -> toSQLExpr(objSerializer)))
   }
 
   def unsupportedOperandTypeForSizeFunctionError(
-      dataType: DataType): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2156",
-      messageParameters = Map(
-        "dataType" -> dataType.getClass.getCanonicalName))
+      dataType: DataType): Throwable = {
+    SparkException.internalError(
+      s"The size function doesn't support the operand type ${toSQLType(dataType)}")
   }
 
   def unexpectedValueForStartInFunctionError(prettyName: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2157",
+      errorClass = "INVALID_PARAMETER_VALUE.START",
       messageParameters = Map(
-        "prettyName" -> prettyName))
+        "parameter" -> toSQLId("start"),
+        "functionName" -> toSQLId(prettyName)))
   }
 
-  def unexpectedValueForLengthInFunctionError(prettyName: String): SparkRuntimeException = {
+  def unexpectedValueForLengthInFunctionError(
+      prettyName: String, length: Int): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2158",
+      errorClass = "INVALID_PARAMETER_VALUE.LENGTH",
       messageParameters = Map(
-        "prettyName" -> prettyName))
+        "parameter" -> toSQLId("length"),
+        "length" -> length.toString,
+        "functionName" -> toSQLId(prettyName)))
   }
 
-  def invalidIndexOfZeroError(context: SQLQueryContext): RuntimeException = {
+  def invalidIndexOfZeroError(context: QueryContext): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "INVALID_INDEX_OF_ZERO",
       cause = null,
@@ -1630,36 +1400,27 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       summary = getSummary(context))
   }
 
-  def concatArraysWithElementsExceedLimitError(numberOfElements: Long): SparkRuntimeException = {
+  def arrayFunctionWithElementsExceedLimitError(
+    prettyName: String, numberOfElements: Long): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2159",
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
       messageParameters = Map(
         "numberOfElements" -> numberOfElements.toString(),
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
+        "functionName" -> toSQLId(prettyName)
+      ))
   }
 
-  def flattenArraysWithElementsExceedLimitError(numberOfElements: Long): SparkRuntimeException = {
+  def createArrayWithElementsExceedLimitError(
+    prettyName: String, count: Any): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2160",
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
       messageParameters = Map(
-        "numberOfElements" -> numberOfElements.toString(),
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
-  }
-
-  def createArrayWithElementsExceedLimitError(count: Any): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2161",
-      messageParameters = Map(
-        "count" -> count.toString(),
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
-  }
-
-  def unionArrayWithElementsExceedLimitError(length: Int): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2162",
-      messageParameters = Map(
-        "length" -> length.toString(),
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
+        "numberOfElements" -> count.toString,
+        "functionName" -> toSQLId(prettyName),
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
+        "parameter" -> toSQLId("count")
+      ))
   }
 
   def initialTypeNotTargetDataTypeError(
@@ -1754,9 +1515,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def ruleIdNotFoundForRuleError(ruleName: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2175",
-      messageParameters = Map(
-        "ruleName" -> ruleName),
+      errorClass = "RULE_ID_NOT_FOUND",
+      messageParameters = Map("ruleName" -> ruleName),
       cause = null)
   }
 
@@ -1870,19 +1630,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def getTablesByTypeUnsupportedByHiveVersionError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2189",
-      messageParameters = Map.empty)
-  }
-
-  def dropTableWithPurgeUnsupportedError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2190",
-      messageParameters = Map.empty)
-  }
-
-  def alterTableWithDropPartitionAndPurgeUnsupportedError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2191",
+      errorClass = "GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION",
       messageParameters = Map.empty)
   }
 
@@ -1892,7 +1640,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def getPartitionMetadataByFilterError(e: InvocationTargetException): SparkRuntimeException = {
+  def getPartitionMetadataByFilterError(e: Exception): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2193",
       messageParameters = Map(
@@ -1926,17 +1674,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def cannotFetchTablesOfDatabaseError(dbName: String, e: Exception): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2196",
+      errorClass = "UNABLE_TO_FETCH_HIVE_TABLES",
       messageParameters = Map(
         "dbName" -> dbName),
       cause = e)
-  }
-
-  def illegalLocationClauseForViewPartitionError(): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2197",
-      messageParameters = Map.empty,
-      cause = null)
   }
 
   def renamePathAsExistsPathError(srcPath: Path, dstPath: Path): Throwable = {
@@ -1962,7 +1703,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def failedRenameTempFileError(srcPath: Path, dstPath: Path): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2199",
+      errorClass = "FAILED_RENAME_TEMP_FILE",
       messageParameters = Map(
         "srcPath" -> srcPath.toString(),
         "dstPath" -> dstPath.toString()),
@@ -2175,37 +1916,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
-  def unsupportedOperationExceptionError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2225",
-      messageParameters = Map.empty)
-  }
-
-  def nullLiteralsCannotBeCastedError(name: String): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2226",
-      messageParameters = Map(
-        "name" -> name))
-  }
-
-  def notUserDefinedTypeError(name: String, userClass: String): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2227",
-      messageParameters = Map(
-        "name" -> name,
-        "userClass" -> userClass),
-      cause = null)
-  }
-
-  def cannotLoadUserDefinedTypeError(name: String, userClass: String): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2228",
-      messageParameters = Map(
-        "name" -> name,
-        "userClass" -> userClass),
-      cause = null)
-  }
-
   def notPublicClassError(name: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2229",
@@ -2217,20 +1927,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2230",
       messageParameters = Map.empty)
-  }
-
-  def fieldIndexOnRowWithoutSchemaError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2231",
-      messageParameters = Map.empty)
-  }
-
-  def valueIsNullError(index: Int): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2232",
-      messageParameters = Map(
-        "index" -> toSQLValue(index, IntegerType)),
-      cause = null)
   }
 
   def onlySupportDataSourcesProvidingFileFormatError(providingClass: String): Throwable = {
@@ -2468,24 +2164,69 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         s"but it's ${endSeconds.toString} now.")
   }
 
-  def failedToReadDeltaFileError(fileToRead: Path, clazz: String, keySize: Int): Throwable = {
+  def failedToReadDeltaFileKeySizeError(
+      fileToRead: Path,
+      clazz: String,
+      keySize: Int): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2258",
+      errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_KEY_SIZE",
       messageParameters = Map(
         "fileToRead" -> fileToRead.toString(),
         "clazz" -> clazz,
-        "keySize" -> keySize.toString()),
+        "keySize" -> keySize.toString),
       cause = null)
   }
 
-  def failedToReadSnapshotFileError(fileToRead: Path, clazz: String, message: String): Throwable = {
+  def failedToReadDeltaFileNotExistsError(
+      fileToRead: Path,
+      clazz: String,
+      f: Throwable): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2259",
+      errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
+      messageParameters = Map(
+        "fileToRead" -> fileToRead.toString(),
+        "clazz" -> clazz),
+      cause = f)
+  }
+
+  def failedToReadSnapshotFileKeySizeError(
+      fileToRead: Path,
+      clazz: String,
+      keySize: Int): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_SNAPSHOT_FILE_KEY_SIZE",
       messageParameters = Map(
         "fileToRead" -> fileToRead.toString(),
         "clazz" -> clazz,
-        "message" -> message),
+        "keySize" -> keySize.toString),
       cause = null)
+  }
+
+  def failedToReadSnapshotFileValueSizeError(
+      fileToRead: Path,
+      clazz: String,
+      valueSize: Int): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_SNAPSHOT_FILE_VALUE_SIZE",
+      messageParameters = Map(
+        "fileToRead" -> fileToRead.toString(),
+        "clazz" -> clazz,
+        "valueSize" -> valueSize.toString),
+      cause = null)
+  }
+
+  def failedToReadStreamingStateFileError(fileToRead: Path, f: Throwable): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
+      messageParameters = Map("fileToRead" -> fileToRead.toString()),
+      cause = f)
+  }
+
+  def failedToCommitStateFileError(providerClass: String, f: Throwable): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_WRITE_STATE_STORE.CANNOT_COMMIT",
+      messageParameters = Map("providerClass" -> providerClass),
+      cause = f)
   }
 
   def cannotPurgeAsBreakInternalStateError(): SparkUnsupportedOperationException = {
@@ -2611,14 +2352,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def nestedFieldUnsupportedError(colName: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2274",
-      messageParameters = Map(
-        "colName" -> colName))
+      errorClass = "UNSUPPORTED_FEATURE.REPLACE_NESTED_COLUMN",
+      messageParameters = Map("colName" -> toSQLId(colName)))
   }
 
   def transformationsAndActionsNotInvokedByDriverError(): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2275",
+      errorClass = "CANNOT_INVOKE_IN_TRANSFORMATIONS",
       messageParameters = Map.empty,
       cause = null)
   }
@@ -2690,10 +2430,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "functionName" -> toSQLId("aes_encrypt")))
   }
 
-  def hiveTableWithAnsiIntervalsError(tableName: String): SparkUnsupportedOperationException = {
+  def hiveTableWithAnsiIntervalsError(
+      table: TableIdentifier): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2276",
-      messageParameters = Map("tableName" -> tableName))
+      errorClass = "UNSUPPORTED_FEATURE.HIVE_WITH_ANSI_INTERVALS",
+      messageParameters = Map("tableName" -> toSQLId(table.nameParts)))
   }
 
   def cannotConvertOrcTimestampToTimestampNTZError(): Throwable = {
@@ -2727,11 +2468,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def invalidNumberFormatError(
-      valueType: String, input: String, format: String): SparkIllegalArgumentException = {
+      dataType: DataType, input: String, format: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2278",
+      errorClass = "INVALID_FORMAT.MISMATCH_INPUT",
       messageParameters = Map(
-        "valueType" -> valueType,
+        "inputType" -> toSQLType(dataType),
         "input" -> input,
         "format" -> format))
   }
@@ -2742,22 +2483,32 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def unsupportedCreateNamespaceCommentError(): SparkSQLFeatureNotSupportedException = {
+  def unsupportedCommentNamespaceError(
+      namespace: String): SparkSQLFeatureNotSupportedException = {
     new SparkSQLFeatureNotSupportedException(
-      errorClass = "_LEGACY_ERROR_TEMP_2280",
-      messageParameters = Map.empty)
+      errorClass = "UNSUPPORTED_FEATURE.COMMENT_NAMESPACE",
+      messageParameters = Map("namespace" -> toSQLId(namespace)))
   }
 
-  def unsupportedRemoveNamespaceCommentError(): SparkSQLFeatureNotSupportedException = {
+  def unsupportedRemoveNamespaceCommentError(
+      namespace: String): SparkSQLFeatureNotSupportedException = {
     new SparkSQLFeatureNotSupportedException(
-      errorClass = "_LEGACY_ERROR_TEMP_2281",
-      messageParameters = Map.empty)
+      errorClass = "UNSUPPORTED_FEATURE.REMOVE_NAMESPACE_COMMENT",
+      messageParameters = Map("namespace" -> toSQLId(namespace)))
   }
 
-  def unsupportedDropNamespaceRestrictError(): SparkSQLFeatureNotSupportedException = {
+  def unsupportedDropNamespaceError(
+      namespace: String): SparkSQLFeatureNotSupportedException = {
     new SparkSQLFeatureNotSupportedException(
-      errorClass = "_LEGACY_ERROR_TEMP_2282",
-      messageParameters = Map.empty)
+      errorClass = "UNSUPPORTED_FEATURE.DROP_NAMESPACE",
+      messageParameters = Map("namespace" -> toSQLId(namespace)))
+  }
+
+  def exceedMaxLimit(limit: Int): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "EXCEED_LIMIT_LENGTH",
+      messageParameters = Map("limit" -> limit.toString)
+    )
   }
 
   def timestampAddOverflowError(micros: Long, amount: Int, unit: String): ArithmeticException = {
@@ -2777,7 +2528,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
-  def multipleRowSubqueryError(context: SQLQueryContext): Throwable = {
+  def multipleRowScalarSubqueryError(context: QueryContext): Throwable = {
     new SparkException(
       errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
       messageParameters = Map.empty,
@@ -2807,13 +2558,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def tooManyArrayElementsError(
-      numElements: Int,
-      elementSize: Int): SparkIllegalArgumentException = {
+      numElements: Long,
+      maxRoundedArrayLength: Int): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "TOO_MANY_ARRAY_ELEMENTS",
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.INITIALIZE",
       messageParameters = Map(
-        "numElements" -> numElements.toString,
-        "size" -> elementSize.toString))
+        "numberOfElements" -> numElements.toString,
+        "maxRoundedArrayLength" -> maxRoundedArrayLength.toString)
+    )
   }
 
   def invalidEmptyLocationError(location: String): SparkIllegalArgumentException = {
@@ -2850,5 +2602,160 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "protobufColumn" -> protobufColumn,
         "data" -> data,
         "enumString" -> enumString))
+  }
+
+  def unreleasedThreadError(
+      loggingId: String,
+      newAcquiredThreadInfo: String,
+      acquiredThreadInfo: String,
+      timeWaitedMs: Long,
+      stackTraceOutput: String): Throwable = {
+    new SparkException (
+      errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
+      messageParameters = Map(
+        "loggingId" -> loggingId,
+        "newAcquiredThreadInfo" -> newAcquiredThreadInfo,
+        "acquiredThreadInfo" -> acquiredThreadInfo,
+        "timeWaitedMs" -> timeWaitedMs.toString,
+        "stackTraceOutput" -> stackTraceOutput),
+      cause = null)
+  }
+
+  def cannotReadCheckpoint(expectedVersion: String, actualVersion: String): Throwable = {
+    new SparkException (
+      errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_CHECKPOINT",
+      messageParameters = Map(
+        "expectedVersion" -> expectedVersion,
+        "actualVersion" -> actualVersion),
+      cause = null)
+  }
+
+  def unexpectedFileSize(
+      dfsFile: Path,
+      localFile: File,
+      expectedSize: Long,
+      localFileSize: Long): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_FILE_SIZE",
+      messageParameters = Map(
+        "dfsFile" -> dfsFile.toString,
+        "localFile" -> localFile.toString,
+        "expectedSize" -> expectedSize.toString,
+        "localFileSize" -> localFileSize.toString),
+      cause = null)
+  }
+
+  def unexpectedStateStoreVersion(version: Long): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
+      messageParameters = Map("version" -> version.toString),
+      cause = null)
+  }
+
+  def cannotLoadStore(e: Throwable): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+      messageParameters = Map.empty,
+      cause = e)
+  }
+
+  def hllInvalidLgK(function: String, min: Int, max: Int, value: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "HLL_INVALID_LG_K",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "min" -> toSQLValue(min, IntegerType),
+        "max" -> toSQLValue(max, IntegerType),
+        "value" -> value))
+  }
+
+  def hllInvalidInputSketchBuffer(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "HLL_INVALID_INPUT_SKETCH_BUFFER",
+      messageParameters = Map(
+        "function" -> toSQLId(function)))
+  }
+
+  def hllUnionDifferentLgK(left: Int, right: Int, function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "HLL_UNION_DIFFERENT_LG_K",
+      messageParameters = Map(
+        "left" -> toSQLValue(left, IntegerType),
+        "right" -> toSQLValue(right, IntegerType),
+        "function" -> toSQLId(function)))
+  }
+
+  def mergeCardinalityViolationError(): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "MERGE_CARDINALITY_VIOLATION",
+      messageParameters = Map.empty)
+  }
+
+  def unsupportedPurgePartitionError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.PURGE_PARTITION",
+      messageParameters = Map.empty)
+  }
+
+  def unsupportedPurgeTableError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.PURGE_TABLE",
+      messageParameters = Map.empty)
+  }
+
+  def raiseError(
+      errorClass: UTF8String,
+      errorParms: MapData): RuntimeException = {
+    val errorClassStr = if (errorClass != null) {
+      errorClass.toString.toUpperCase(Locale.ROOT)
+    } else {
+      "null"
+    }
+    val errorParmsMap = if (errorParms != null) {
+      val errorParmsMutable = collection.mutable.Map[String, String]()
+      errorParms.foreach(StringType, StringType, { case (key, value) =>
+        errorParmsMutable += (key.toString ->
+          (if (value == null) { "null" } else { value.toString } ))
+      })
+      errorParmsMutable.toMap
+    } else {
+      Map.empty[String, String]
+    }
+
+    // Is the error class a known error class? If not raise an error
+    if (!SparkThrowableHelper.isValidErrorClass(errorClassStr)) {
+      new SparkRuntimeException(
+        errorClass = "USER_RAISED_EXCEPTION_UNKNOWN_ERROR_CLASS",
+        messageParameters = Map("errorClass" -> toSQLValue(errorClassStr)))
+    } else {
+      // Did the user provide all parameters? If not raise an error
+      val expectedParms = SparkThrowableHelper.getMessageParameters(errorClassStr).sorted
+      val providedParms = errorParmsMap.keys.toSeq.sorted
+      if (expectedParms != providedParms) {
+        new SparkRuntimeException(
+          errorClass = "USER_RAISED_EXCEPTION_PARAMETER_MISMATCH",
+          messageParameters = Map("errorClass" -> toSQLValue(errorClassStr),
+            "expectedParms" -> expectedParms.map { p => toSQLValue(p) }.mkString(","),
+            "providedParms" -> providedParms.map { p => toSQLValue(p) }.mkString(",")))
+      } else if (errorClassStr == "_LEGACY_ERROR_USER_RAISED_EXCEPTION") {
+        // Don't break old raise_error() if asked
+        new RuntimeException(errorParmsMap.head._2)
+      } else {
+        // All good, raise the error
+        new SparkRuntimeException(
+          errorClass = errorClassStr,
+          messageParameters = errorParmsMap)
+      }
+    }
+  }
+
+  def bitPositionRangeError(funcName: String, pos: Int, size: Int): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
+      messageParameters = Map(
+        "parameter" -> toSQLId("pos"),
+        "functionName" -> toSQLId(funcName),
+        "upper" -> size.toString,
+        "invalidValue" -> pos.toString))
   }
 }

@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayData, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, VarcharType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
+import org.apache.spark.util.ArrayImplicits._
 
 sealed abstract class PhysicalDataType {
   private[sql] type InternalType
@@ -316,7 +317,7 @@ case class PhysicalArrayType(
 case class PhysicalStructType(fields: Array[StructField]) extends PhysicalDataType {
   override private[sql] type InternalType = Any
   override private[sql] def ordering =
-    forSchema(this.fields.map(_.dataType)).asInstanceOf[Ordering[InternalType]]
+    forSchema(this.fields.map(_.dataType).toImmutableArraySeq).asInstanceOf[Ordering[InternalType]]
   @transient private[sql] lazy val tag = typeTag[InternalType]
 
   private[sql] def forSchema(dataTypes: Seq[DataType]): InterpretedOrdering = {

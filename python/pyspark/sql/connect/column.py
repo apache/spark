@@ -258,7 +258,7 @@ class Column:
                 error_class="NOT_COLUMN_OR_INT",
                 message_parameters={"arg_name": "length", "arg_type": type(length).__name__},
             )
-        return Column(UnresolvedFunction("substring", [self._expr, start_expr, length_expr]))
+        return Column(UnresolvedFunction("substr", [self._expr, start_expr, length_expr]))
 
     substr.__doc__ = PySparkColumn.substr.__doc__
 
@@ -477,12 +477,6 @@ class Column:
         )
 
     __bool__ = __nonzero__
-
-    @property
-    def _jc(self) -> None:
-        raise PySparkAttributeError(
-            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jc"}
-        )
 
 
 Column.__doc__ = PySparkColumn.__doc__

@@ -102,14 +102,14 @@ CreateViewCommand `tbl_misc`, SELECT * FROM (VALUES (1), (8), (2)) AS T(v), fals
 -- !query
 SELECT raise_error('error message')
 -- !query analysis
-Project [raise_error(error message, NullType) AS raise_error(error message)#x]
+Project [raise_error(USER_RAISED_EXCEPTION, map(errorMessage, error message), NullType) AS raise_error(USER_RAISED_EXCEPTION, map(errorMessage, error message))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT if(v > 5, raise_error('too big: ' || v), v + 1) FROM tbl_misc
 -- !query analysis
-Project [if ((v#x > 5)) cast(raise_error(concat(too big: , cast(v#x as string)), NullType) as int) else (v#x + 1) AS (IF((v > 5), raise_error(concat(too big: , v)), (v + 1)))#x]
+Project [if ((v#x > 5)) cast(raise_error(USER_RAISED_EXCEPTION, map(errorMessage, concat(too big: , cast(v#x as string))), NullType) as int) else (v#x + 1) AS (IF((v > 5), raise_error(USER_RAISED_EXCEPTION, map(errorMessage, concat(too big: , v))), (v + 1)))#x]
 +- SubqueryAlias tbl_misc
    +- View (`tbl_misc`, [v#x])
       +- Project [cast(v#x as int) AS v#x]
@@ -117,3 +117,85 @@ Project [if ((v#x > 5)) cast(raise_error(concat(too big: , cast(v#x as string)),
             +- SubqueryAlias T
                +- Project [col1#x AS v#x]
                   +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT raise_error('VIEW_NOT_FOUND', Map('relationName', '`v`'))
+-- !query analysis
+Project [raise_error(VIEW_NOT_FOUND, map(relationName, `v`), NullType) AS raise_error(VIEW_NOT_FOUND, map(relationName, `v`))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT raise_error('VIEW_NOT_FOund', Map('relationName', '`v`'))
+-- !query analysis
+Project [raise_error(VIEW_NOT_FOund, map(relationName, `v`), NullType) AS raise_error(VIEW_NOT_FOund, map(relationName, `v`))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT raise_error('VIEW_NOT_FOund', Map('relationNAME', '`v`'))
+-- !query analysis
+Project [raise_error(VIEW_NOT_FOund, map(relationNAME, `v`), NullType) AS raise_error(VIEW_NOT_FOund, map(relationNAME, `v`))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT raise_error('VIEW_NOT_FOUND', Map())
+-- !query analysis
+Project [raise_error(VIEW_NOT_FOUND, cast(map() as map<string,string>), NullType) AS raise_error(VIEW_NOT_FOUND, map())#x]
++- OneRowRelation
+
+
+-- !query
+SELECT raise_error('VIEW_NOT_FOUND', Map('relationName', '`v`', 'totallymadeup', '5'))
+-- !query analysis
+Project [raise_error(VIEW_NOT_FOUND, map(relationName, `v`, totallymadeup, 5), NullType) AS raise_error(VIEW_NOT_FOUND, map(relationName, `v`, totallymadeup, 5))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT raise_error('ALL_PARTITION_COLUMNS_NOT_ALLOWED', Map())
+-- !query analysis
+Project [raise_error(ALL_PARTITION_COLUMNS_NOT_ALLOWED, cast(map() as map<string,string>), NullType) AS raise_error(ALL_PARTITION_COLUMNS_NOT_ALLOWED, map())#x]
++- OneRowRelation
+
+
+-- !query
+SELECT raise_error('ALL_PARTITION_COLUMNS_NOT_ALLOWED', NULL)
+-- !query analysis
+Project [raise_error(ALL_PARTITION_COLUMNS_NOT_ALLOWED, cast(null as map<string,string>), NullType) AS raise_error(ALL_PARTITION_COLUMNS_NOT_ALLOWED, NULL)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT raise_error(NULL, NULL)
+-- !query analysis
+Project [raise_error(cast(null as string), cast(null as map<string,string>), NullType) AS raise_error(NULL, NULL)#x]
++- OneRowRelation
+
+
+-- !query
+SET spark.sql.legacy.raiseErrorWithoutErrorClass=true
+-- !query analysis
+SetCommand (spark.sql.legacy.raiseErrorWithoutErrorClass,Some(true))
+
+
+-- !query
+SELECT assert_true(false)
+-- !query analysis
+Project [assert_true(false, 'false' is not true!) AS assert_true(false, 'false' is not true!)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT raise_error('hello')
+-- !query analysis
+Project [raise_error(_LEGACY_ERROR_USER_RAISED_EXCEPTION, map(errorMessage, hello), NullType) AS raise_error(_LEGACY_ERROR_USER_RAISED_EXCEPTION, map(errorMessage, hello))#x]
++- OneRowRelation
+
+
+-- !query
+SET spark.sql.legacy.raiseErrorWithoutErrorClass=false
+-- !query analysis
+SetCommand (spark.sql.legacy.raiseErrorWithoutErrorClass,Some(false))

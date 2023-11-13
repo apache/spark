@@ -2,43 +2,43 @@
 Pseudo random
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
 Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 nextInt:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java.util.Random                                   1615           1616           1         61.9          16.1       1.0X
-XORShiftRandom                                      265            265           0        377.3           2.7       6.1X
+java.util.Random                                   1620           1623           6         61.7          16.2       1.0X
+XORShiftRandom                                      265            265           0        377.2           2.7       6.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
 Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 nextLong:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java.util.Random                                   3254           3254           0         30.7          32.5       1.0X
-XORShiftRandom                                      723            723           0        138.4           7.2       4.5X
+java.util.Random                                   3256           3256           0         30.7          32.6       1.0X
+XORShiftRandom                                      727            727           0        137.6           7.3       4.5X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
 Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 nextDouble:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java.util.Random                                   3253           3253           0         30.7          32.5       1.0X
-XORShiftRandom                                      723            723           0        138.4           7.2       4.5X
+java.util.Random                                   3257           3257           0         30.7          32.6       1.0X
+XORShiftRandom                                      725            725           0        137.9           7.2       4.5X
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
 Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 nextGaussian:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java.util.Random                                   7594           7595           1         13.2          75.9       1.0X
-XORShiftRandom                                     5120           5123           3         19.5          51.2       1.5X
+java.util.Random                                   9981           9983           2         10.0          99.8       1.0X
+XORShiftRandom                                     4839           4840           0         20.7          48.4       2.1X
 
 
 ================================================================================================
 hash seed
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
 Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Hash seed:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-XORShiftRandom.hashSeed                              51             51           0        197.7           5.1       1.0X
+XORShiftRandom.hashSeed                               1              1           0       8910.2           0.1       1.0X
 
 

@@ -236,22 +236,22 @@ Input [9]: [w_warehouse_name#35, w_warehouse_sk#34, i_item_sk#33, d_moy#32, n#41
 Keys [4]: [w_warehouse_name#35, w_warehouse_sk#34, i_item_sk#33, d_moy#32]
 Functions [2]: [stddev_samp(cast(inv_quantity_on_hand#28 as double)), avg(inv_quantity_on_hand#28)]
 Aggregate Attributes [2]: [stddev_samp(cast(inv_quantity_on_hand#28 as double))#21, avg(inv_quantity_on_hand#28)#22]
-Results [5]: [w_warehouse_sk#34, i_item_sk#33, d_moy#32, stddev_samp(cast(inv_quantity_on_hand#28 as double))#21 AS stdev#23, avg(inv_quantity_on_hand#28)#22 AS mean#24]
+Results [5]: [w_warehouse_sk#34, i_item_sk#33, d_moy#32, stddev_samp(cast(inv_quantity_on_hand#28 as double))#21 AS stdev#46, avg(inv_quantity_on_hand#28)#22 AS mean#47]
 
 (41) Filter [codegen id : 11]
-Input [5]: [w_warehouse_sk#34, i_item_sk#33, d_moy#32, stdev#23, mean#24]
-Condition : CASE WHEN (mean#24 = 0.0) THEN false ELSE ((stdev#23 / mean#24) > 1.0) END
+Input [5]: [w_warehouse_sk#34, i_item_sk#33, d_moy#32, stdev#46, mean#47]
+Condition : CASE WHEN (mean#47 = 0.0) THEN false ELSE ((stdev#46 / mean#47) > 1.0) END
 
 (42) Project [codegen id : 11]
-Output [5]: [w_warehouse_sk#34, i_item_sk#33, d_moy#32, mean#24 AS mean#46, CASE WHEN (mean#24 = 0.0) THEN null ELSE (stdev#23 / mean#24) END AS cov#47]
-Input [5]: [w_warehouse_sk#34, i_item_sk#33, d_moy#32, stdev#23, mean#24]
+Output [5]: [w_warehouse_sk#34, i_item_sk#33, d_moy#32, mean#47, CASE WHEN (mean#47 = 0.0) THEN null ELSE (stdev#46 / mean#47) END AS cov#48]
+Input [5]: [w_warehouse_sk#34, i_item_sk#33, d_moy#32, stdev#46, mean#47]
 
 (43) Exchange
-Input [5]: [w_warehouse_sk#34, i_item_sk#33, d_moy#32, mean#46, cov#47]
+Input [5]: [w_warehouse_sk#34, i_item_sk#33, d_moy#32, mean#47, cov#48]
 Arguments: hashpartitioning(i_item_sk#33, w_warehouse_sk#34, 5), ENSURE_REQUIREMENTS, [plan_id=6]
 
 (44) Sort [codegen id : 12]
-Input [5]: [w_warehouse_sk#34, i_item_sk#33, d_moy#32, mean#46, cov#47]
+Input [5]: [w_warehouse_sk#34, i_item_sk#33, d_moy#32, mean#47, cov#48]
 Arguments: [i_item_sk#33 ASC NULLS FIRST, w_warehouse_sk#34 ASC NULLS FIRST], false, 0
 
 (45) SortMergeJoin [codegen id : 13]
@@ -261,12 +261,12 @@ Join type: Inner
 Join condition: None
 
 (46) Exchange
-Input [10]: [w_warehouse_sk#9, i_item_sk#8, d_moy#7, mean#24, cov#25, w_warehouse_sk#34, i_item_sk#33, d_moy#32, mean#46, cov#47]
-Arguments: rangepartitioning(w_warehouse_sk#9 ASC NULLS FIRST, i_item_sk#8 ASC NULLS FIRST, d_moy#7 ASC NULLS FIRST, mean#24 ASC NULLS FIRST, cov#25 ASC NULLS FIRST, d_moy#32 ASC NULLS FIRST, mean#46 ASC NULLS FIRST, cov#47 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=7]
+Input [10]: [w_warehouse_sk#9, i_item_sk#8, d_moy#7, mean#24, cov#25, w_warehouse_sk#34, i_item_sk#33, d_moy#32, mean#47, cov#48]
+Arguments: rangepartitioning(w_warehouse_sk#9 ASC NULLS FIRST, i_item_sk#8 ASC NULLS FIRST, d_moy#7 ASC NULLS FIRST, mean#24 ASC NULLS FIRST, cov#25 ASC NULLS FIRST, d_moy#32 ASC NULLS FIRST, mean#47 ASC NULLS FIRST, cov#48 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=7]
 
 (47) Sort [codegen id : 14]
-Input [10]: [w_warehouse_sk#9, i_item_sk#8, d_moy#7, mean#24, cov#25, w_warehouse_sk#34, i_item_sk#33, d_moy#32, mean#46, cov#47]
-Arguments: [w_warehouse_sk#9 ASC NULLS FIRST, i_item_sk#8 ASC NULLS FIRST, d_moy#7 ASC NULLS FIRST, mean#24 ASC NULLS FIRST, cov#25 ASC NULLS FIRST, d_moy#32 ASC NULLS FIRST, mean#46 ASC NULLS FIRST, cov#47 ASC NULLS FIRST], true, 0
+Input [10]: [w_warehouse_sk#9, i_item_sk#8, d_moy#7, mean#24, cov#25, w_warehouse_sk#34, i_item_sk#33, d_moy#32, mean#47, cov#48]
+Arguments: [w_warehouse_sk#9 ASC NULLS FIRST, i_item_sk#8 ASC NULLS FIRST, d_moy#7 ASC NULLS FIRST, mean#24 ASC NULLS FIRST, cov#25 ASC NULLS FIRST, d_moy#32 ASC NULLS FIRST, mean#47 ASC NULLS FIRST, cov#48 ASC NULLS FIRST], true, 0
 
 ===== Subqueries =====
 
@@ -279,22 +279,22 @@ BroadcastExchange (52)
 
 
 (48) Scan parquet spark_catalog.default.date_dim
-Output [3]: [d_date_sk#6, d_year#48, d_moy#7]
+Output [3]: [d_date_sk#6, d_year#49, d_moy#7]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,1), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (49) ColumnarToRow [codegen id : 1]
-Input [3]: [d_date_sk#6, d_year#48, d_moy#7]
+Input [3]: [d_date_sk#6, d_year#49, d_moy#7]
 
 (50) Filter [codegen id : 1]
-Input [3]: [d_date_sk#6, d_year#48, d_moy#7]
-Condition : ((((isnotnull(d_year#48) AND isnotnull(d_moy#7)) AND (d_year#48 = 2001)) AND (d_moy#7 = 1)) AND isnotnull(d_date_sk#6))
+Input [3]: [d_date_sk#6, d_year#49, d_moy#7]
+Condition : ((((isnotnull(d_year#49) AND isnotnull(d_moy#7)) AND (d_year#49 = 2001)) AND (d_moy#7 = 1)) AND isnotnull(d_date_sk#6))
 
 (51) Project [codegen id : 1]
 Output [2]: [d_date_sk#6, d_moy#7]
-Input [3]: [d_date_sk#6, d_year#48, d_moy#7]
+Input [3]: [d_date_sk#6, d_year#49, d_moy#7]
 
 (52) BroadcastExchange
 Input [2]: [d_date_sk#6, d_moy#7]
@@ -309,22 +309,22 @@ BroadcastExchange (57)
 
 
 (53) Scan parquet spark_catalog.default.date_dim
-Output [3]: [d_date_sk#31, d_year#49, d_moy#32]
+Output [3]: [d_date_sk#31, d_year#50, d_moy#32]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,2), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (54) ColumnarToRow [codegen id : 1]
-Input [3]: [d_date_sk#31, d_year#49, d_moy#32]
+Input [3]: [d_date_sk#31, d_year#50, d_moy#32]
 
 (55) Filter [codegen id : 1]
-Input [3]: [d_date_sk#31, d_year#49, d_moy#32]
-Condition : ((((isnotnull(d_year#49) AND isnotnull(d_moy#32)) AND (d_year#49 = 2001)) AND (d_moy#32 = 2)) AND isnotnull(d_date_sk#31))
+Input [3]: [d_date_sk#31, d_year#50, d_moy#32]
+Condition : ((((isnotnull(d_year#50) AND isnotnull(d_moy#32)) AND (d_year#50 = 2001)) AND (d_moy#32 = 2)) AND isnotnull(d_date_sk#31))
 
 (56) Project [codegen id : 1]
 Output [2]: [d_date_sk#31, d_moy#32]
-Input [3]: [d_date_sk#31, d_year#49, d_moy#32]
+Input [3]: [d_date_sk#31, d_year#50, d_moy#32]
 
 (57) BroadcastExchange
 Input [2]: [d_date_sk#31, d_moy#32]

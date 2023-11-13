@@ -255,8 +255,8 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
 
   private boolean isEndMarker(byte[] key) {
     return (key.length > 2 &&
-        key[key.length - 2] == LevelDBTypeInfo.KEY_SEPARATOR &&
-        key[key.length - 1] == LevelDBTypeInfo.END_MARKER[0]);
+        key[key.length - 2] == RocksDBTypeInfo.KEY_SEPARATOR &&
+        key[key.length - 1] == RocksDBTypeInfo.END_MARKER[0]);
   }
 
   static int compare(byte[] a, byte[] b) {

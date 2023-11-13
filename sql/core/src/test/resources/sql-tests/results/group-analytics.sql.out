@@ -464,9 +464,10 @@ SELECT course, year, GROUPING(course) FROM courseSales GROUP BY course, year
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2445",
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -482,9 +483,10 @@ SELECT course, year, GROUPING_ID(course, year) FROM courseSales GROUP BY course,
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -529,7 +531,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
 }
 
 
@@ -540,7 +543,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
 }
 
 
@@ -597,7 +601,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
 }
 
 
@@ -608,7 +613,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
 }
 
 

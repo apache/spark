@@ -18,11 +18,12 @@ package org.apache.spark.sql.connect.service
 
 import java.io.InputStream
 import java.nio.file.{Files, Path}
+import java.util.UUID
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Promise
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
@@ -36,6 +37,8 @@ import org.apache.spark.util.ThreadUtils
 class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
 
   private val CHUNK_SIZE: Int = 32 * 1024
+
+  private val sessionId = UUID.randomUUID.toString()
 
   class DummyStreamObserver(p: Promise[AddArtifactsResponse])
       extends StreamObserver[AddArtifactsResponse] {
@@ -125,7 +128,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
 
     val singleChunkArtifactRequest = AddArtifactsRequest
       .newBuilder()
-      .setSessionId("abc")
+      .setSessionId(sessionId)
       .setUserContext(context)
       .setBatch(
         proto.AddArtifactsRequest.Batch.newBuilder().addArtifacts(singleChunkArtifact).build())
@@ -168,7 +171,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
 
     val requestBuilder = AddArtifactsRequest
       .newBuilder()
-      .setSessionId("abc")
+      .setSessionId(sessionId)
       .setUserContext(context)
       .setBeginChunk(beginChunkedArtifact)
 
@@ -181,7 +184,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
   }
 
   test("single chunk artifact") {
-    val promise = Promise[AddArtifactsResponse]
+    val promise = Promise[AddArtifactsResponse]()
     val handler = new TestAddArtifactsHandler(new DummyStreamObserver(promise))
     try {
       val name = "classes/smallClassFile.class"
@@ -205,7 +208,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
   }
 
   test("Multi chunk artifact") {
-    val promise = Promise[AddArtifactsResponse]
+    val promise = Promise[AddArtifactsResponse]()
     val handler = new TestAddArtifactsHandler(new DummyStreamObserver(promise))
     try {
       val name = "jars/junitLargeJar.jar"
@@ -229,7 +232,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
   }
 
   test("Mix of single-chunk and chunked artifacts") {
-    val promise = Promise[AddArtifactsResponse]
+    val promise = Promise[AddArtifactsResponse]()
     val handler = new TestAddArtifactsHandler(new DummyStreamObserver(promise))
     try {
       val names = Seq(
@@ -269,7 +272,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
   }
 
   test("Artifacts that fail CRC are not added to the artifact manager") {
-    val promise = Promise[AddArtifactsResponse]
+    val promise = Promise[AddArtifactsResponse]()
     val handler = new TestAddArtifactsHandler(new DummyStreamObserver(promise))
     try {
       val name = "classes/smallClassFile.class"
@@ -295,7 +298,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
 
       val singleChunkArtifactRequest = AddArtifactsRequest
         .newBuilder()
-        .setSessionId("abc")
+        .setSessionId(sessionId)
         .setUserContext(context)
         .setBatch(
           proto.AddArtifactsRequest.Batch.newBuilder().addArtifacts(singleChunkArtifact).build())
@@ -314,4 +317,85 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
       handler.forceCleanUp()
     }
   }
+
+  private def createDummyArtifactRequests(name: String): Seq[proto.AddArtifactsRequest] = {
+    val bytes = ByteString.EMPTY
+    val context = proto.UserContext
+      .newBuilder()
+      .setUserId("c1")
+      .build()
+
+    val singleChunkArtifact = proto.AddArtifactsRequest.SingleChunkArtifact
+      .newBuilder()
+      .setName(name)
+      .setData(
+        proto.AddArtifactsRequest.ArtifactChunk
+          .newBuilder()
+          .setData(bytes)
+          // Set a dummy CRC value
+          .setCrc(12345)
+          .build())
+      .build()
+
+    val singleChunkArtifactRequest = AddArtifactsRequest
+      .newBuilder()
+      .setSessionId(sessionId)
+      .setUserContext(context)
+      .setBatch(
+        proto.AddArtifactsRequest.Batch.newBuilder().addArtifacts(singleChunkArtifact).build())
+      .build()
+
+    val beginChunkedArtifact = proto.AddArtifactsRequest.BeginChunkedArtifact
+      .newBuilder()
+      .setName(name)
+      .setNumChunks(1)
+      .setTotalBytes(1)
+      .setInitialChunk(
+        proto.AddArtifactsRequest.ArtifactChunk.newBuilder().setData(bytes).setCrc(12345).build())
+      .build()
+
+    val beginChunkArtifactRequest = AddArtifactsRequest
+      .newBuilder()
+      .setSessionId(sessionId)
+      .setUserContext(context)
+      .setBeginChunk(beginChunkedArtifact)
+      .build()
+
+    Seq(singleChunkArtifactRequest, beginChunkArtifactRequest)
+  }
+
+  test("Artifacts names are not allowed to be absolute paths") {
+    val promise = Promise[AddArtifactsResponse]()
+    val handler = new TestAddArtifactsHandler(new DummyStreamObserver(promise))
+    try {
+      val name = "/absolute/path/"
+      val request = createDummyArtifactRequests(name)
+      request.foreach { req =>
+        intercept[IllegalArgumentException] {
+          handler.onNext(req)
+        }
+      }
+      handler.onCompleted()
+    } finally {
+      handler.forceCleanUp()
+    }
+  }
+
+  test("Artifact name/paths cannot reference parent/sibling/nephew directories") {
+    val promise = Promise[AddArtifactsResponse]()
+    val handler = new TestAddArtifactsHandler(new DummyStreamObserver(promise))
+    try {
+      val names = Seq("..", "../sibling", "../nephew/directory", "a/../../b", "x/../y/../..")
+      val request = names.flatMap(createDummyArtifactRequests)
+      request.foreach { req =>
+        intercept[IllegalArgumentException] {
+          handler.onNext(req)
+        }
+      }
+      handler.onCompleted()
+    } finally {
+      handler.forceCleanUp()
+    }
+  }
+
 }

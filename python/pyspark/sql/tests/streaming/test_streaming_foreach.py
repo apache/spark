@@ -230,7 +230,6 @@ class StreamingTestsForeachMixin:
         # TODO: Verify whether original error message is inside the exception
 
     def test_streaming_foreach_with_invalid_writers(self):
-
         tester = self.ForeachWriterTester(self.spark)
 
         def func_with_iterator_input(iter):

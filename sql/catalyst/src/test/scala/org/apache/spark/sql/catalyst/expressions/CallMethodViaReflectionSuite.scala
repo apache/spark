@@ -125,7 +125,7 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "method",
+          "inputName" -> "`method`",
           "inputType" -> "\"STRING\"",
           "inputExpr" -> "\"1\"")
       )

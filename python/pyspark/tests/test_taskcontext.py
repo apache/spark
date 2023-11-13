@@ -286,11 +286,12 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
             self.assertTrue(pid in worker_pids)
         return True
 
+    @eventually(catch_assertions=True)
     def test_task_context_correct_with_python_worker_reuse(self):
         # Retrying the check as the PIDs from Python workers might be different even
         # when reusing Python workers is enabled if a Python worker is dead for some reasons
         # (e.g., socket connection failure) and new Python worker is created.
-        eventually(self.check_task_context_correct_with_python_worker_reuse, catch_assertions=True)
+        self.check_task_context_correct_with_python_worker_reuse()
 
     def tearDown(self):
         self.sc.stop()

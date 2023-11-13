@@ -346,7 +346,7 @@ PIVOT (
   FOR year IN (2012, 2013)
 )
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -396,7 +396,7 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 )
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "NESTED_AGGREGATE_FUNCTION",
   "sqlState" : "42607",
@@ -504,7 +504,7 @@ PIVOT (
   FOR year IN (s, 2013)
 )
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",

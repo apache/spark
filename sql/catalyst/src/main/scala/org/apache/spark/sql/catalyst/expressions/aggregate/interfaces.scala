@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, TreePattern}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashMap
@@ -419,7 +420,7 @@ abstract class DeclarativeAggregate
   val evaluateExpression: Expression
 
   /** An expression-based aggregate's bufferSchema is derived from bufferAttributes. */
-  final override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+  final override def aggBufferSchema: StructType = DataTypeUtils.fromAttributes(aggBufferAttributes)
 
   lazy val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
@@ -606,7 +607,7 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
   final override lazy val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
 
-  final override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+  final override def aggBufferSchema: StructType = DataTypeUtils.fromAttributes(aggBufferAttributes)
 
   /**
    * In-place replaces the aggregation buffer object stored at buffer's index

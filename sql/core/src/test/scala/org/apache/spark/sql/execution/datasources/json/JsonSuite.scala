@@ -30,11 +30,11 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUpgradeException, TestUtils}
+import org.apache.spark.{SparkConf, SparkException, SparkFileNotFoundException, SparkRuntimeException, SparkUpgradeException, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, HadoopCompressionCodec}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLType
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, InMemoryFileIndex, NoopCache}
@@ -45,6 +45,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.StructType.fromDDL
 import org.apache.spark.sql.types.TestUDT.{MyDenseVector, MyDenseVectorUDT}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 class TestFileFilter extends PathFilter {
@@ -1252,7 +1253,7 @@ abstract class JsonSuite
 
       val df1 = spark.createDataFrame(rowRDD1, schema1)
       df1.createOrReplaceTempView("applySchema1")
-      val df2 = df1.toDF
+      val df2 = df1.toDF()
       val result = df2.toJSON.collect()
       // scalastyle:off
       assert(result(0) === "{\"f1\":1,\"f2\":\"A1\",\"f3\":true,\"f4\":[\"1\",\" A1\",\" true\",\" null\"]}")
@@ -1275,7 +1276,7 @@ abstract class JsonSuite
 
       val df3 = spark.createDataFrame(rowRDD2, schema2)
       df3.createOrReplaceTempView("applySchema2")
-      val df4 = df3.toDF
+      val df4 = df3.toDF()
       val result2 = df4.toJSON.collect()
 
       assert(result2(1) === "{\"f1\":{\"f11\":2,\"f12\":false},\"f2\":{\"B2\":null}}")
@@ -1377,7 +1378,7 @@ abstract class JsonSuite
       val d1 = DataSource(
         spark,
         userSpecifiedSchema = None,
-        partitionColumns = Array.empty[String],
+        partitionColumns = Array.empty[String].toImmutableArraySeq,
         bucketSpec = None,
         className = classOf[JsonFileFormat].getCanonicalName,
         options = Map("path" -> path)).resolveRelation()
@@ -1385,7 +1386,7 @@ abstract class JsonSuite
       val d2 = DataSource(
         spark,
         userSpecifiedSchema = None,
-        partitionColumns = Array.empty[String],
+        partitionColumns = Array.empty[String].toImmutableArraySeq,
         bucketSpec = None,
         className = classOf[JsonFileFormat].getCanonicalName,
         options = Map("path" -> path)).resolveRelation()
@@ -1584,7 +1585,7 @@ abstract class JsonSuite
         // inferring partitions because the original path in the "path" option will list the
         // partition directory that has been removed.
         assert(
-          spark.read.options(extraOptions).format("json").option("path", path).load.count() === 2)
+          spark.read.options(extraOptions).format("json").option("path", path).load().count() === 2)
       }
     }
   }
@@ -1663,7 +1664,7 @@ abstract class JsonSuite
         .format("json")
         .load(jsonDir)
 
-      assert(jsonCopy.count == jsonDF.count)
+      assert(jsonCopy.count() == jsonDF.count())
       val jsonCopySome = jsonCopy.selectExpr("string", "long", "boolean")
       val jsonDFSome = jsonDF.selectExpr("string", "long", "boolean")
       checkAnswer(jsonCopySome, jsonDFSome)
@@ -1689,7 +1690,7 @@ abstract class JsonSuite
       val jsonDir = new File(dir, "json").getCanonicalPath
       jsonDF.coalesce(1).write
         .format("json")
-        .option("compression", "none")
+        .option("compression", HadoopCompressionCodec.NONE.lowerCaseName())
         .options(extraOptions)
         .save(jsonDir)
 
@@ -1701,7 +1702,7 @@ abstract class JsonSuite
         .options(extraOptions)
         .load(jsonDir)
 
-      assert(jsonCopy.count == jsonDF.count)
+      assert(jsonCopy.count() == jsonDF.count())
       val jsonCopySome = jsonCopy.selectExpr("string", "long", "boolean")
       val jsonDFSome = jsonDF.selectExpr("string", "long", "boolean")
       checkAnswer(jsonCopySome, jsonDFSome)
@@ -1913,6 +1914,50 @@ abstract class JsonSuite
     }
   }
 
+  test("SPARK-45035: json enable ignoreCorruptFiles/ignoreMissingFiles") {
+    withCorruptFile(inputFile => {
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+        val e = intercept[SparkException] {
+          spark.read.json(inputFile.toURI.toString).collect()
+        }
+        assert(e.getCause.getCause.isInstanceOf[EOFException])
+        assert(e.getCause.getCause.getMessage === "Unexpected end of input stream")
+        val e2 = intercept[SparkException] {
+          spark.read.option("multiLine", true).json(inputFile.toURI.toString).collect()
+        }
+        assert(e2.getCause.isInstanceOf[EOFException])
+        assert(e2.getCause.getMessage === "Unexpected end of input stream")
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+        assert(spark.read.json(inputFile.toURI.toString).collect().isEmpty)
+        assert(spark.read.option("multiLine", true).json(inputFile.toURI.toString).collect()
+          .isEmpty)
+      }
+    })
+    withTempPath { dir =>
+      val jsonPath = new Path(dir.getCanonicalPath, "json")
+      val fs = jsonPath.getFileSystem(spark.sessionState.newHadoopConf())
+
+      sampledTestData.write.json(jsonPath.toString)
+      val df = spark.read.option("multiLine", true).json(jsonPath.toString)
+      fs.delete(jsonPath, true)
+      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "false") {
+        val e = intercept[SparkException] {
+          df.collect()
+        }
+        assert(e.getCause.isInstanceOf[SparkFileNotFoundException])
+        assert(e.getCause.getMessage.contains(".json does not exist"))
+      }
+
+      sampledTestData.write.json(jsonPath.toString)
+      val df2 = spark.read.option("multiLine", true).json(jsonPath.toString)
+      fs.delete(jsonPath, true)
+      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "true") {
+        assert(df2.collect().isEmpty)
+      }
+    }
+  }
+
   test("SPARK-18352: Handle multi-line corrupt documents (PERMISSIVE)") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
@@ -2031,7 +2076,7 @@ abstract class JsonSuite
           .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
           .schema(schema)
           .json(path)
-          .collect
+          .collect()
       }.getMessage
       assert(errMsg.startsWith("The field for corrupt records must be string type and nullable"))
     }
@@ -2191,7 +2236,7 @@ abstract class JsonSuite
         // inferred when sampling ratio is involved.
         val readback2 = spark.read
           .option("samplingRatio", 0.1).option("path", path.getCanonicalPath)
-          .format("json").load
+          .format("json").load()
         assert(readback2.schema == new StructType().add("f1", LongType))
       }
     })
@@ -2618,7 +2663,7 @@ abstract class JsonSuite
 
   private def failedOnEmptyString(dataType: DataType): Unit = {
     val df = spark.read.schema(s"a ${dataType.catalogString}")
-      .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
+      .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS())
     val e = intercept[SparkException] {df.collect()}
     checkError(
       exception = e.getCause.getCause.getCause.asInstanceOf[SparkRuntimeException],
@@ -2629,7 +2674,7 @@ abstract class JsonSuite
 
   private def emptyString(dataType: DataType, expected: Any): Unit = {
     val df = spark.read.schema(s"a ${dataType.catalogString}")
-      .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
+      .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS())
     checkAnswer(df, Row(expected) :: Nil)
   }
 
@@ -2655,7 +2700,7 @@ abstract class JsonSuite
   test("SPARK-25040: allowing empty strings when legacy config is enabled") {
     def emptyStringAsNull(dataType: DataType): Unit = {
       val df = spark.read.schema(s"a ${dataType.catalogString}")
-        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
+        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS())
       checkAnswer(df, Row(null) :: Nil)
     }
 
@@ -2697,7 +2742,7 @@ abstract class JsonSuite
 
   test("inferring timestamp type") {
     def schemaOf(jsons: String*): StructType = {
-      spark.read.option("inferTimestamp", true).json(jsons.toDS).schema
+      spark.read.option("inferTimestamp", true).json(jsons.toDS()).schema
     }
 
     assert(schemaOf(
@@ -3061,7 +3106,9 @@ abstract class JsonSuite
                 readback.filter($"AAA" === 0 && $"bbb" === 1).collect()
               },
               errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-              parameters = Map("objectName" -> "`AAA`", "proposal" -> "`BBB`, `aaa`"))
+              parameters = Map("objectName" -> "`AAA`", "proposal" -> "`BBB`, `aaa`"),
+              context =
+                ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
             // Schema inferring
             val readback2 = spark.read.json(path.getCanonicalPath)
             checkAnswer(
@@ -3083,7 +3130,7 @@ abstract class JsonSuite
       spark.range(3).coalesce(1).write.json(s"$basePath/$jsonTableName")
       val readback = spark.read
         .json(s"$basePath/${"""(\[|\]|\{|\})""".r.replaceAllIn(jsonTableName, """\\$1""")}")
-      assert(readback.collect sameElements Array(Row(0), Row(1), Row(2)))
+      assert(readback.collect() sameElements Array(Row(0), Row(1), Row(2)))
     }
   }
 
@@ -3092,7 +3139,7 @@ abstract class JsonSuite
     withTempPaths(2) { paths =>
       paths.foreach(_.delete())
       val seq = Seq("a", "\n", "\u3042")
-      val df = seq.toDF
+      val df = seq.toDF()
 
       val basePath1 = paths(0).getCanonicalPath
       df.write.option("writeNonAsciiCharacterAsCodePoint", "true")
@@ -3146,7 +3193,7 @@ abstract class JsonSuite
     withSQLConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1") {
       withTempPath { path =>
         val basePath = path.getCanonicalPath
-        val df = Seq("a", "b", "c").toDF
+        val df = Seq("a", "b", "c").toDF()
         df.write.option("pretty", "true").json(basePath)
 
         val expectedText =
@@ -3197,7 +3244,7 @@ abstract class JsonSuite
           StructType(
             StructField("f1", LongType, nullable = false) ::
             StructField("f2", LongType, nullable = false) :: Nil)
-        ).option("mode", "DROPMALFORMED").json(Seq("""{"f1": 1}""").toDS),
+        ).option("mode", "DROPMALFORMED").json(Seq("""{"f1": 1}""").toDS()),
         // It is for testing legacy configuration. This is technically a bug as
         // `0` has to be `null` but the schema is non-nullable.
         Row(1, 0))
@@ -3207,7 +3254,7 @@ abstract class JsonSuite
   test("SPARK-36379: proceed parsing with root nulls in permissive mode") {
     val exception = intercept[SparkException] {
       spark.read.option("mode", "failfast")
-        .schema("a string").json(Seq("""[{"a": "str"}, null]""").toDS).collect()
+        .schema("a string").json(Seq("""[{"a": "str"}, null]""").toDS()).collect()
     }
     assert(exception.getMessage.contains("Malformed records are detected"))
 
@@ -3221,8 +3268,23 @@ abstract class JsonSuite
     // Here, since an array fails to parse in the middle, we will return one row.
     checkAnswer(
       spark.read.option("mode", "permissive")
-        .json(Seq("""[{"a": "str"}, null, {"a": "str"}]""").toDS),
+        .json(Seq("""[{"a": "str"}, null, {"a": "str"}]""").toDS()),
       Row(null) :: Nil)
+  }
+
+  test("SPARK-44079: fix incorrect result when parse array as struct " +
+    "using PERMISSIVE mode with corrupt record") {
+    val data = """[{"a": "incorrect", "b": "correct"}, {"a": "incorrect", "b": "correct"}]"""
+    val schema = new StructType(Array(StructField("a", IntegerType),
+      StructField("b", StringType), StructField("_corrupt_record", StringType)))
+
+    val result = spark.read
+      .option("mode", "PERMISSIVE")
+      .option("multiline", "true")
+      .schema(schema)
+      .json(Seq(data).toDS())
+
+    checkAnswer(result, Seq(Row(null, "correct", data), Row(null, "correct", data)))
   }
 
   test("SPARK-36536: use casting when datetime pattern is not set") {
@@ -3422,7 +3484,7 @@ abstract class JsonSuite
           if (enablePartialResults) {
             checkAnswer(
               df,
-              Seq(Row(null, Row(1)), Row(Row(2, null), Row(2)))
+              Seq(Row(Row(1, null), Row(1)), Row(Row(2, null), Row(2)))
             )
           } else {
             checkAnswer(
@@ -3431,6 +3493,174 @@ abstract class JsonSuite
             )
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-44940: fully parse the record except f1 if partial results are enabled") {
+    withTempPath { path =>
+      Seq(
+        """{"a1": "AAA", "a2": [{"f1": "", "f2": ""}], "a3": "id1", "a4": "XXX"}""",
+        """{"a1": "BBB", "a2": [{"f1": 12, "f2": ""}], "a3": "id2", "a4": "YYY"}""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+        val df = spark.read.json(path.getAbsolutePath)
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", Seq(Row(null, "")), "id1", "XXX"),
+            Row("BBB", Seq(Row(12, "")), "id2", "YYY")
+          )
+        )
+      }
+
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+        val df = spark.read.json(path.getAbsolutePath)
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", null, null, null),
+            Row("BBB", Seq(Row(12, "")), "id2", "YYY")
+          )
+        )
+      }
+    }
+  }
+
+  test("SPARK-44940: fully parse primitive map if partial results are enabled") {
+    withTempPath { path =>
+      Seq(
+        """{"a1": "AAA", "a2": {"f1": "", "f2": ""}, "a3": "id1"}""",
+        """{"a1": "BBB", "a2": {"f1": 12, "f2": ""}, "a3": "id2"}""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      val schema = "a1 string, a2 map<string, int>, a3 string"
+
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+        val df = spark.read.schema(schema).json(path.getAbsolutePath)
+        // Although the keys match the string type and some values match the integer type, because
+        // some of the values do not match the type, we mark the entire map as null.
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", null, "id1"),
+            Row("BBB", null, "id2")
+          )
+        )
+      }
+
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+        val df = spark.read.schema(schema).json(path.getAbsolutePath)
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", null, null),
+            Row("BBB", null, null)
+          )
+        )
+      }
+    }
+  }
+
+  test("SPARK-44940: fully parse map of structs if partial results are enabled") {
+    withTempPath { path =>
+      Seq(
+        """{"a1": "AAA", "a2": {"key": {"f1": "", "f2": ""}}, "a3": "id1"}""",
+        """{"a1": "BBB", "a2": {"key": {"f1": 12, "f2": ""}}, "a3": "id2"}""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      val schema = "a1 string, a2 map<string, struct<f1: int, f2: string>>, a3 string"
+
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+        val df = spark.read.schema(schema).json(path.getAbsolutePath)
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", Map("key" -> Row(null, "")), "id1"),
+            Row("BBB", Map("key" -> Row(12, "")), "id2")
+          )
+        )
+      }
+
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+        val df = spark.read.schema(schema).json(path.getAbsolutePath)
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", null, null),
+            Row("BBB", Map("key" -> Row(12, "")), "id2")
+          )
+        )
+      }
+    }
+  }
+
+  test("SPARK-44940: fully parse primitive arrays if partial results are enabled") {
+    withTempPath { path =>
+      Seq(
+        """{"a1": "AAA", "a2": {"f1": [""]}, "a3": "id1", "a4": "XXX"}""",
+        """{"a1": "BBB", "a2": {"f1": [12]}, "a3": "id2", "a4": "YYY"}""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+        val df = spark.read.json(path.getAbsolutePath)
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", Row(null), "id1", "XXX"),
+            Row("BBB", Row(Seq(12)), "id2", "YYY")
+          )
+        )
+      }
+
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+        val df = spark.read.json(path.getAbsolutePath)
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", null, null, null),
+            Row("BBB", Row(Seq(12)), "id2", "YYY")
+          )
+        )
+      }
+    }
+  }
+
+  test("SPARK-44940: fully parse array of arrays if partial results are enabled") {
+    withTempPath { path =>
+      Seq(
+        """{"a1": "AAA", "a2": [[12, ""], [""]], "a3": "id1", "a4": "XXX"}""",
+        """{"a1": "BBB", "a2": [[12, 34], [""]], "a3": "id2", "a4": "YYY"}""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      // We cannot parse `array<array<int>>` type because one of the inner arrays contains a
+      // mismatched type.
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+        val df = spark.read.json(path.getAbsolutePath)
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", null, "id1", "XXX"),
+            Row("BBB", null, "id2", "YYY")
+          )
+        )
+      }
+
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+        val df = spark.read.json(path.getAbsolutePath)
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", null, "id1", "XXX"),
+            Row("BBB", null, "id2", "YYY")
+          )
+        )
       }
     }
   }

@@ -145,8 +145,6 @@ private[sql] object PythonSQLUtils extends Logging {
   def ewm(e: Column, alpha: Double, ignoreNA: Boolean): Column =
     Column(EWM(e.expr, alpha, ignoreNA))
 
-  def lastNonNull(e: Column): Column = Column(LastNonNull(e.expr))
-
   def nullIndex(e: Column): Column = Column(NullIndex(e.expr))
 
   def makeInterval(unit: String, e: Column): Column = {

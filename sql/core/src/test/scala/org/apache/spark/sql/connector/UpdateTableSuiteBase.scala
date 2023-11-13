@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue}
 import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.types.{IntegerType, StringType}
@@ -114,7 +114,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       Row(1, -1, "hr") :: Row(2, -1, "hardware") :: Row(3, -1, "hr") :: Nil)
   }
 
-  test("update with NULL conditions") {
+  test("update with NULL conditions on partition columns") {
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": null }
         |{ "pk": 2, "salary": 200, "dep": "hr" }
@@ -132,6 +132,26 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, -1, null) :: Row(2, 200, "hr") :: Row(3, 300, "hardware") :: Nil)
+  }
+
+  test("update with NULL conditions on data columns") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": null, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "hr" }
+        |{ "pk": 3, "salary": 300, "dep": "hardware" }
+        |""".stripMargin)
+
+    // should not update any rows as NULL is never equal to NULL
+    sql(s"UPDATE $tableNameAsString SET dep = 'invalid' WHERE salary = NULL")
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, null, "hr") :: Row(2, 200, "hr") :: Row(3, 300, "hardware") :: Nil)
+
+    // should update one matching row with a null-safe condition
+    sql(s"UPDATE $tableNameAsString SET dep = 'invalid' WHERE salary <=> NULL")
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, null, "invalid") :: Row(2, 200, "hr") :: Row(3, 300, "hardware") :: Nil)
   }
 
   test("update with IN and NOT IN predicates") {
@@ -506,19 +526,6 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT count(*) FROM $tableNameAsString WHERE value < 2.0"),
       Row(2) :: Nil)
-  }
-
-  test("update with nondeterministic conditions") {
-    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
-      """{ "pk": 1, "id": 1, "dep": "hr" }
-        |{ "pk": 2, "id": 2, "dep": "software" }
-        |{ "pk": 3, "id": 3, "dep": "hr" }
-        |""".stripMargin)
-
-    val e = intercept[AnalysisException] {
-      sql(s"UPDATE $tableNameAsString SET dep = 'invalid' WHERE id <= 1 AND rand() > 0.5")
-    }
-    assert(e.message.contains("nondeterministic expressions are only allowed"))
   }
 
   test("update with default values") {

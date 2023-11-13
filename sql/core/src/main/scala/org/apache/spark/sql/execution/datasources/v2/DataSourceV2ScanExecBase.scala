@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical
-import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.plans.physical.KeyGroupedPartitioning
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan}
 import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode, SQLExecution}
@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsMetadata
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 trait DataSourceV2ScanExecBase extends LeafExecNode {
@@ -62,8 +63,9 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
     redact(result)
   }
 
-  def partitions: Seq[Seq[InputPartition]] =
-    groupedPartitions.map(_.map(_._2)).getOrElse(inputPartitions.map(Seq(_)))
+  def partitions: Seq[Seq[InputPartition]] = {
+    groupedPartitions.map(_.groupedParts.map(_.parts)).getOrElse(inputPartitions.map(Seq(_)))
+  }
 
   /**
    * Shorthand for calling redact() without specifying redacting rules
@@ -91,22 +93,27 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   }
 
   override def outputPartitioning: physical.Partitioning = {
-    if (partitions.length == 1) {
-      SinglePartition
-    } else {
-      keyGroupedPartitioning match {
-        case Some(exprs) if KeyGroupedPartitioning.supportsExpressions(exprs) =>
-          groupedPartitions.map { partitionValues =>
-            KeyGroupedPartitioning(exprs, partitionValues.size, partitionValues.map(_._1))
-          }.getOrElse(super.outputPartitioning)
-        case _ =>
-          super.outputPartitioning
-      }
+    keyGroupedPartitioning match {
+      case Some(exprs) if KeyGroupedPartitioning.supportsExpressions(exprs) =>
+        groupedPartitions
+          .map { keyGroupedPartsInfo =>
+            val keyGroupedParts = keyGroupedPartsInfo.groupedParts
+            KeyGroupedPartitioning(exprs, keyGroupedParts.size, keyGroupedParts.map(_.value),
+              keyGroupedPartsInfo.originalParts.map(_.partitionKey()))
+          }
+          .getOrElse(super.outputPartitioning)
+      case _ =>
+        super.outputPartitioning
     }
   }
 
-  @transient lazy val groupedPartitions: Option[Seq[(InternalRow, Seq[InputPartition])]] =
-    groupPartitions(inputPartitions)
+  @transient lazy val groupedPartitions: Option[KeyGroupedPartitionInfo] = {
+    // Early check if we actually need to materialize the input partitions.
+    keyGroupedPartitioning match {
+      case Some(_) => groupPartitions(inputPartitions)
+      case _ => None
+    }
+  }
 
   /**
    * Group partition values for all the input partitions. This returns `Some` iff:
@@ -114,24 +121,21 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
    *   - all input partitions implement [[HasPartitionKey]]
    *   - `keyGroupedPartitioning` is set
    *
-   * The result, if defined, is a list of tuples where the first element is a partition value,
-   * and the second element is a list of input partitions that share the same partition value.
+   * The result, if defined, is a [[KeyGroupedPartitionInfo]] which contains a list of
+   * [[KeyGroupedPartition]], as well as a list of partition values from the original input splits,
+   * sorted according to the partition keys in ascending order.
    *
    * A non-empty result means each partition is clustered on a single key and therefore eligible
    * for further optimizations to eliminate shuffling in some operations such as join and aggregate.
    */
-  def groupPartitions(
-      inputPartitions: Seq[InputPartition],
-      groupSplits: Boolean = !conf.v2BucketingPushPartValuesEnabled ||
-          !conf.v2BucketingPartiallyClusteredDistributionEnabled):
-    Option[Seq[(InternalRow, Seq[InputPartition])]] = {
-
+  def groupPartitions(inputPartitions: Seq[InputPartition]): Option[KeyGroupedPartitionInfo] = {
     if (!SQLConf.get.v2BucketingEnabled) return None
+
     keyGroupedPartitioning.flatMap { expressions =>
       val results = inputPartitions.takeWhile {
         case _: HasPartitionKey => true
         case _ => false
-      }.map(p => (p.asInstanceOf[HasPartitionKey].partitionKey(), p))
+      }.map(p => (p.asInstanceOf[HasPartitionKey].partitionKey(), p.asInstanceOf[HasPartitionKey]))
 
       if (results.length != inputPartitions.length || inputPartitions.isEmpty) {
         // Not all of the `InputPartitions` implements `HasPartitionKey`, therefore skip here.
@@ -140,41 +144,38 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
         // also sort the input partitions according to their partition key order. This ensures
         // a canonical order from both sides of a bucketed join, for example.
         val partitionDataTypes = expressions.map(_.dataType)
-        val partitionOrdering: Ordering[(InternalRow, Seq[InputPartition])] = {
-          RowOrdering.createNaturalAscendingOrdering(partitionDataTypes).on(_._1)
-        }
-
-        val partitions = if (groupSplits) {
-          // Group the splits by their partition value
-          results
+        val rowOrdering = RowOrdering.createNaturalAscendingOrdering(partitionDataTypes)
+        val sortedKeyToPartitions = results.sorted(rowOrdering.on((t: (InternalRow, _)) => t._1))
+        val sortedGroupedPartitions = sortedKeyToPartitions
             .map(t => (InternalRowComparableWrapper(t._1, expressions), t._2))
             .groupBy(_._1)
             .toSeq
-            .map {
-              case (key, s) => (key.row, s.map(_._2))
-            }
-        } else {
-          // No splits grouping, each split will become a separate Spark partition
-          results.map(t => (t._1, Seq(t._2)))
-        }
+            .map { case (key, s) => KeyGroupedPartition(key.row, s.map(_._2)) }
+            .sorted(rowOrdering.on((k: KeyGroupedPartition) => k.value))
 
-        Some(partitions.sorted(partitionOrdering))
+        Some(KeyGroupedPartitionInfo(sortedGroupedPartitions, sortedKeyToPartitions.map(_._2)))
       }
     }
   }
 
   override def outputOrdering: Seq[SortOrder] = {
     // when multiple partitions are grouped together, ordering inside partitions is not preserved
-    val partitioningPreservesOrdering = groupedPartitions.forall(_.forall(_._2.length <= 1))
+    val partitioningPreservesOrdering = groupedPartitions
+        .forall(_.groupedParts.forall(_.parts.length <= 1))
     ordering.filter(_ => partitioningPreservesOrdering).getOrElse(super.outputOrdering)
   }
 
   override def supportsColumnar: Boolean = {
-    require(inputPartitions.forall(readerFactory.supportColumnarReads) ||
-      !inputPartitions.exists(readerFactory.supportColumnarReads),
-      "Cannot mix row-based and columnar input partitions.")
-
-    inputPartitions.exists(readerFactory.supportColumnarReads)
+    scan.columnarSupportMode() match {
+      case Scan.ColumnarSupportMode.PARTITION_DEFINED =>
+        require(
+          inputPartitions.forall(readerFactory.supportColumnarReads) ||
+            !inputPartitions.exists(readerFactory.supportColumnarReads),
+          "Cannot mix row-based and columnar input partitions.")
+        inputPartitions.exists(readerFactory.supportColumnarReads)
+      case Scan.ColumnarSupportMode.SUPPORTED => true
+      case Scan.ColumnarSupportMode.UNSUPPORTED => false
+    }
   }
 
   def inputRDD: RDD[InternalRow]
@@ -198,7 +199,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
 
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
-      driveSQLMetrics)
+      driveSQLMetrics.toImmutableArraySeq)
   }
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
@@ -209,3 +210,19 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
     }
   }
 }
+
+/**
+ * A key-grouped Spark partition, which could consist of multiple input splits
+ *
+ * @param value the partition value shared by all the input splits
+ * @param parts the input splits that are grouped into a single Spark partition
+ */
+private[v2] case class KeyGroupedPartition(value: InternalRow, parts: Seq[InputPartition])
+
+/**
+ * Information about key-grouped partitions, which contains a list of grouped partitions as well
+ * as the original input partitions before the grouping.
+ */
+private[v2] case class KeyGroupedPartitionInfo(
+    groupedParts: Seq[KeyGroupedPartition],
+    originalParts: Seq[HasPartitionKey])

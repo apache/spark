@@ -26,7 +26,8 @@ import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StructType}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder}
 
 class PropagateEmptyRelationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -201,7 +202,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
   test("propagate empty streaming relation through multiple UnaryNode") {
     val output = Seq($"a".int)
     val data = Seq(Row(1))
-    val schema = StructType.fromAttributes(output)
+    val schema = DataTypeUtils.fromAttributes(output)
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
     val relation = LocalRelation(
       output,
@@ -224,7 +225,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
   test("don't propagate empty streaming relation through agg") {
     val output = Seq($"a".int)
     val data = Seq(Row(1))
-    val schema = StructType.fromAttributes(output)
+    val schema = DataTypeUtils.fromAttributes(output)
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
     val relation = LocalRelation(
       output,

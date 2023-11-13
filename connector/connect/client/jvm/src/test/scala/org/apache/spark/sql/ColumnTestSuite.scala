@@ -18,10 +18,10 @@ package org.apache.spark.sql
 
 import java.io.ByteArrayOutputStream
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.{functions => fn}
-import org.apache.spark.sql.connect.client.util.ConnectFunSuite
+import org.apache.spark.sql.test.ConnectFunSuite
 import org.apache.spark.sql.types._
 
 /**
@@ -207,5 +207,6 @@ class ColumnTestSuite extends ConnectFunSuite {
   private val structType1 = new StructType().add("a", "int").add("b", "string")
   private val structType2 = structType1.add("c", "binary")
   testColName(structType1, _.struct(structType1))
-  testColName(structType2, _.struct(structType2.fields: _*))
+  import org.apache.spark.util.ArrayImplicits._
+  testColName(structType2, _.struct(structType2.fields.toImmutableArraySeq: _*))
 }

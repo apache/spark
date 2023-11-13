@@ -26,22 +26,6 @@ SciPy is available in their environment.
 import sys
 import array
 import struct
-
-import numpy as np
-
-from pyspark import since
-from pyspark.ml import linalg as newlinalg
-from pyspark.sql.types import (
-    UserDefinedType,
-    StructField,
-    StructType,
-    ArrayType,
-    DoubleType,
-    IntegerType,
-    ByteType,
-    BooleanType,
-)
-
 from typing import (
     Any,
     Callable,
@@ -58,6 +42,21 @@ from typing import (
     TypeVar,
     TYPE_CHECKING,
     Union,
+)
+
+import numpy as np
+
+from pyspark import since
+from pyspark.ml import linalg as newlinalg
+from pyspark.sql.types import (
+    UserDefinedType,
+    StructField,
+    StructType,
+    ArrayType,
+    DoubleType,
+    IntegerType,
+    ByteType,
+    BooleanType,
 )
 
 if TYPE_CHECKING:
@@ -297,7 +296,6 @@ class MatrixUDT(UserDefinedType):
 
 
 class Vector:
-
     __UDT__ = VectorUDT()
 
     """
@@ -1200,7 +1198,6 @@ class Vectors:
 
 
 class Matrix:
-
     __UDT__ = MatrixUDT()
 
     """
@@ -1617,7 +1614,7 @@ class QRDecomposition(Generic[QT, RT]):
         self._Q = Q
         self._R = R
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def Q(self) -> QT:
         """
@@ -1626,7 +1623,7 @@ class QRDecomposition(Generic[QT, RT]):
         """
         return self._Q
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def R(self) -> RT:
         """

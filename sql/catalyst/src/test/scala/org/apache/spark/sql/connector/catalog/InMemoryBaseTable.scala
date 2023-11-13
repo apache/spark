@@ -42,6 +42,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A simple in-memory table. Rows are stored as a buffered group produced by each output task.
@@ -90,6 +91,7 @@ abstract class InMemoryBaseTable(
     case _: HoursTransform =>
     case _: BucketTransform =>
     case _: SortedBucketTransform =>
+    case _: ClusterByTransform =>
     case NamedTransform("truncate", Seq(_: NamedReference, _: Literal[_])) =>
     case t if !allowUnsupportedTransforms =>
       throw new IllegalArgumentException(s"Transform $t is not a supported transform")
@@ -103,7 +105,7 @@ abstract class InMemoryBaseTable(
   def rows: Seq[InternalRow] = dataMap.values.flatten.flatMap(_.rows).toSeq
 
   val partCols: Array[Array[String]] = partitioning.flatMap(_.references).map { ref =>
-    schema.findNestedField(ref.fieldNames(), includeCollections = false) match {
+    schema.findNestedField(ref.fieldNames().toImmutableArraySeq, includeCollections = false) match {
       case Some(_) => ref.fieldNames()
       case None => throw new IllegalArgumentException(s"${ref.describe()} does not exist.")
     }
@@ -192,7 +194,7 @@ abstract class InMemoryBaseTable(
           case (v, t) =>
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
-    }
+    }.toImmutableArraySeq
   }
 
   protected def addPartitionKey(key: Seq[Any]): Unit = {}
@@ -292,12 +294,32 @@ abstract class InMemoryBaseTable(
     new InMemoryScanBuilder(schema)
   }
 
+  private def canEvaluate(filter: Filter): Boolean = {
+    if (partitioning.length == 1 && partitioning.head.references.length == 1) {
+      filter match {
+        case In(attrName, _) if attrName == partitioning.head.references.head.toString => true
+        case _ => false
+      }
+    } else {
+      false
+    }
+  }
+
   class InMemoryScanBuilder(tableSchema: StructType) extends ScanBuilder
       with SupportsPushDownRequiredColumns with SupportsPushDownFilters {
     private var schema: StructType = tableSchema
+    private var postScanFilters: Array[Filter] = Array.empty
+    private var evaluableFilters: Array[Filter] = Array.empty
+    private var _pushedFilters: Array[Filter] = Array.empty
 
-    override def build: Scan =
-      InMemoryBatchScan(data.map(_.asInstanceOf[InputPartition]), schema, tableSchema)
+    override def build: Scan = {
+      val scan = InMemoryBatchScan(
+        data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq, schema, tableSchema)
+      if (evaluableFilters.nonEmpty) {
+        scan.filter(evaluableFilters)
+      }
+      scan
+    }
 
     override def pruneColumns(requiredSchema: StructType): Unit = {
       // The required schema could contain conflict-renamed metadata columns, so we need to match
@@ -310,11 +332,12 @@ abstract class InMemoryBaseTable(
       schema = StructType(prunedFields)
     }
 
-    private var _pushedFilters: Array[Filter] = Array.empty
-
     override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+      val (evaluableFilters, postScanFilters) = filters.partition(canEvaluate)
+      this.evaluableFilters = evaluableFilters
+      this.postScanFilters = postScanFilters
       this._pushedFilters = filters
-      this._pushedFilters
+      postScanFilters
     }
 
     override def pushedFilters(): Array[Filter] = this._pushedFilters
@@ -429,10 +452,16 @@ abstract class InMemoryBaseTable(
         val ref = partitioning.head.references().head
         filters.foreach {
           case In(attrName, values) if attrName == ref.toString =>
-            val matchingKeys = values.map(_.toString).toSet
-            data = data.filter(partition => {
-              val key = partition.asInstanceOf[BufferedRows].keyString
-              matchingKeys.contains(key)
+            val matchingKeys = values.map { value =>
+              if (value != null) value.toString else null
+            }.toSet
+            this.data = this.data.filter(partition => {
+              val rows = partition.asInstanceOf[BufferedRows]
+              rows.key match {
+                // null partitions are represented as Seq(null)
+                case Seq(null) => matchingKeys.contains(null)
+                case _ => matchingKeys.contains(rows.keyString())
+              }
             })
 
           case _ => // skip
@@ -508,7 +537,7 @@ abstract class InMemoryBaseTable(
 
   protected object TruncateAndAppend extends TestBatchWrite {
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
-      dataMap.clear
+      dataMap.clear()
       withData(messages.map(_.asInstanceOf[BufferedRows]))
     }
   }
@@ -546,7 +575,7 @@ abstract class InMemoryBaseTable(
   protected object StreamingTruncateAndAppend extends TestStreamingWrite {
     override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
       dataMap.synchronized {
-        dataMap.clear
+        dataMap.clear()
         withData(messages.map(_.asInstanceOf[BufferedRows]))
       }
     }
@@ -630,7 +659,7 @@ private class BufferedRowsReader(
   private def addMetadata(row: InternalRow): InternalRow = {
     val metadataRow = new GenericInternalRow(metadataColumnNames.map {
       case "index" => index
-      case "_partition" => UTF8String.fromString(partition.keyString)
+      case "_partition" => UTF8String.fromString(partition.keyString())
     }.toArray)
     new JoinedRow(row, metadataRow)
   }

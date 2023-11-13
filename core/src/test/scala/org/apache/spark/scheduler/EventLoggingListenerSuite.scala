@@ -33,12 +33,13 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.{EventLogFileReader, SingleEventLogFileWriter}
 import org.apache.spark.deploy.history.EventLogTestHelper._
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
-import org.apache.spark.internal.config.{EVENT_LOG_DIR, EVENT_LOG_ENABLED}
+import org.apache.spark.internal.config.{EVENT_LOG_COMPRESS, EVENT_LOG_DIR, EVENT_LOG_ENABLE_ROLLING, EVENT_LOG_ENABLED}
 import org.apache.spark.io._
 import org.apache.spark.metrics.{ExecutorMetricType, MetricsSystem}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.{JsonProtocol, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Test whether EventLoggingListener logs events properly.
@@ -163,6 +164,8 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   test("SPARK-31764: isBarrier should be logged in event log") {
     val conf = new SparkConf()
     conf.set(EVENT_LOG_ENABLED, true)
+    conf.set(EVENT_LOG_ENABLE_ROLLING, false)
+    conf.set(EVENT_LOG_COMPRESS, false)
     conf.set(EVENT_LOG_DIR, testDirPath.toString)
     val sc = new SparkContext("local", "test-SPARK-31764", conf)
     val appId = sc.applicationId
@@ -172,7 +175,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       .mapPartitions(_.map(elem => (elem, elem)))
       .filter(elem => elem._1 % 2 == 0)
       .reduceByKey(_ + _)
-      .collect
+      .collect()
     sc.stop()
 
     val eventLogStream = EventLogFileReader.openEventLog(new Path(testDirPath, appId), fileSystem)
@@ -384,7 +387,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       8000L, 5000L, 7000L, 4000L, 6000L, 3000L, 10L, 90L, 2L, 20L, 110L)
 
     def max(a: Array[Long], b: Array[Long]): Array[Long] =
-      (a, b).zipped.map(Math.max).toArray
+      a.lazyZip(b).map(Math.max).toArray
 
     // calculated metric peaks per stage per executor
     // metrics sent during stage 0 for each executor
@@ -585,7 +588,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       } else {
         stageIds.map(id => (id, 0) -> executorMetrics).toMap
       }
-    SparkListenerExecutorMetricsUpdate(executorId, accum, executorUpdates)
+    SparkListenerExecutorMetricsUpdate(executorId, accum.toImmutableArraySeq, executorUpdates)
   }
 
   private def createTaskEndEvent(

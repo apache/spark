@@ -23,8 +23,8 @@ import java.nio.file.{Files, Path}
 import java.util.{Locale, TimeZone}
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.io.FileUtils
 import org.apache.logging.log4j._
@@ -33,7 +33,9 @@ import org.apache.logging.log4j.core.appender.AbstractAppender
 import org.apache.logging.log4j.core.config.Property
 import org.scalactic.source.Position
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Failed, Outcome, Tag}
+import org.scalatest.concurrent.TimeLimits
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
+import org.scalatest.time._ // scalastyle:ignore
 
 import org.apache.spark.deploy.LocalSparkCluster
 import org.apache.spark.internal.Logging
@@ -69,6 +71,7 @@ abstract class SparkFunSuite
   with BeforeAndAfterAll
   with BeforeAndAfterEach
   with ThreadAudit
+  with TimeLimits
   with Logging {
 // scalastyle:on
 
@@ -147,7 +150,10 @@ abstract class SparkFunSuite
     if (excluded.contains(testName)) {
       ignore(s"$testName (excluded)")(testBody)
     } else {
-      super.test(testName, testTags: _*)(testBody)
+      val timeout = sys.props.getOrElse("spark.test.timeout", "20").toLong
+      super.test(testName, testTags: _*)(
+        failAfter(Span(timeout, Minutes))(testBody)
+      )
     }
   }
 
@@ -194,7 +200,7 @@ abstract class SparkFunSuite
 
   protected def logForFailedTest(): Unit = {
     LocalSparkCluster.get.foreach { localCluster =>
-      val workerLogfiles = localCluster.workerLogfiles
+      val workerLogfiles = localCluster.workerLogfiles()
       if (workerLogfiles.nonEmpty) {
         logInfo("\n\n===== EXTRA LOGS FOR THE FAILED TEST\n")
         workerLogfiles.foreach { logFile =>
@@ -291,6 +297,31 @@ abstract class SparkFunSuite
           logger.asInstanceOf[Logger].setLevel(restoreLevels(i))
           logger.asInstanceOf[Logger].get().setLevel(restoreLevels(i))
         }
+        LogManager.getContext(false).asInstanceOf[LoggerContext].updateLoggers()
+      }
+    }
+  }
+
+  /**
+   * Sets all configurations specified in `pairs` in SparkEnv SparkConf, calls `f`, and then
+   * restores all configurations.
+   */
+  protected def withSparkEnvConfs(pairs: (String, String)*)(f: => Unit): Unit = {
+    val conf = SparkEnv.get.conf
+    val (keys, values) = pairs.unzip
+    val currentValues = keys.map { key =>
+      if (conf.getOption(key).isDefined) {
+        Some(conf.get(key))
+      } else {
+        None
+      }
+    }
+    pairs.foreach { kv => conf.set(kv._1, kv._2) }
+    try f
+    finally {
+      keys.zip(currentValues).foreach {
+        case (key, Some(value)) => conf.set(key, value)
+        case (key, None) => conf.remove(key)
       }
     }
   }
@@ -311,7 +342,7 @@ abstract class SparkFunSuite
       sqlState: Option[String] = None,
       parameters: Map[String, String] = Map.empty,
       matchPVals: Boolean = false,
-      queryContext: Array[QueryContext] = Array.empty): Unit = {
+      queryContext: Array[ExpectedContext] = Array.empty): Unit = {
     assert(exception.getErrorClass === errorClass)
     sqlState.foreach(state => assert(exception.getSqlState === state))
     val expectedParameters = exception.getMessageParameters.asScala
@@ -333,16 +364,25 @@ abstract class SparkFunSuite
     val actualQueryContext = exception.getQueryContext()
     assert(actualQueryContext.length === queryContext.length, "Invalid length of the query context")
     actualQueryContext.zip(queryContext).foreach { case (actual, expected) =>
-      assert(actual.objectType() === expected.objectType(),
-        "Invalid objectType of a query context Actual:" + actual.toString)
-      assert(actual.objectName() === expected.objectName(),
-        "Invalid objectName of a query context. Actual:" + actual.toString)
-      assert(actual.startIndex() === expected.startIndex(),
-        "Invalid startIndex of a query context. Actual:" + actual.toString)
-      assert(actual.stopIndex() === expected.stopIndex(),
-        "Invalid stopIndex of a query context. Actual:" + actual.toString)
-      assert(actual.fragment() === expected.fragment(),
-        "Invalid fragment of a query context. Actual:" + actual.toString)
+      assert(actual.contextType() === expected.contextType,
+        "Invalid contextType of a query context Actual:" + actual.toString)
+      if (actual.contextType() == QueryContextType.SQL) {
+        assert(actual.objectType() === expected.objectType,
+          "Invalid objectType of a query context Actual:" + actual.toString)
+        assert(actual.objectName() === expected.objectName,
+          "Invalid objectName of a query context. Actual:" + actual.toString)
+        assert(actual.startIndex() === expected.startIndex,
+          "Invalid startIndex of a query context. Actual:" + actual.toString)
+        assert(actual.stopIndex() === expected.stopIndex,
+          "Invalid stopIndex of a query context. Actual:" + actual.toString)
+        assert(actual.fragment() === expected.fragment,
+          "Invalid fragment of a query context. Actual:" + actual.toString)
+      } else if (actual.contextType() == QueryContextType.DataFrame) {
+        assert(actual.fragment() === expected.fragment,
+          "Invalid code fragment of a query context. Actual:" + actual.toString)
+        assert(actual.callSite().matches(expected.callSitePattern),
+          "Invalid callSite of a query context. Actual:" + actual.toString)
+      }
     }
   }
 
@@ -358,21 +398,21 @@ abstract class SparkFunSuite
       errorClass: String,
       sqlState: String,
       parameters: Map[String, String],
-      context: QueryContext): Unit =
+      context: ExpectedContext): Unit =
     checkError(exception, errorClass, Some(sqlState), parameters, false, Array(context))
 
   protected def checkError(
       exception: SparkThrowable,
       errorClass: String,
       parameters: Map[String, String],
-      context: QueryContext): Unit =
+      context: ExpectedContext): Unit =
     checkError(exception, errorClass, None, parameters, false, Array(context))
 
   protected def checkError(
       exception: SparkThrowable,
       errorClass: String,
       sqlState: String,
-      context: QueryContext): Unit =
+      context: ExpectedContext): Unit =
     checkError(exception, errorClass, None, Map.empty, false, Array(context))
 
   protected def checkError(
@@ -380,7 +420,7 @@ abstract class SparkFunSuite
       errorClass: String,
       sqlState: Option[String],
       parameters: Map[String, String],
-      context: QueryContext): Unit =
+      context: ExpectedContext): Unit =
     checkError(exception, errorClass, sqlState, parameters,
       false, Array(context))
 
@@ -395,7 +435,7 @@ abstract class SparkFunSuite
       errorClass: String,
       sqlState: Option[String],
       parameters: Map[String, String],
-      context: QueryContext): Unit =
+      context: ExpectedContext): Unit =
     checkError(exception, errorClass, sqlState, parameters,
       matchPVals = true, Array(context))
 
@@ -422,15 +462,32 @@ abstract class SparkFunSuite
       parameters = Map("relationName" -> tableName))
 
   case class ExpectedContext(
+      contextType: QueryContextType,
       objectType: String,
       objectName: String,
       startIndex: Int,
       stopIndex: Int,
-      fragment: String) extends QueryContext
+      fragment: String,
+      callSitePattern: String
+  )
 
   object ExpectedContext {
     def apply(fragment: String, start: Int, stop: Int): ExpectedContext = {
       ExpectedContext("", "", start, stop, fragment)
+    }
+
+    def apply(
+        objectType: String,
+        objectName: String,
+        startIndex: Int,
+        stopIndex: Int,
+        fragment: String): ExpectedContext = {
+      new ExpectedContext(QueryContextType.SQL, objectType, objectName, startIndex, stopIndex,
+        fragment, "")
+    }
+
+    def apply(fragment: String, callSitePattern: String): ExpectedContext = {
+      new ExpectedContext(QueryContextType.DataFrame, "", "", -1, -1, fragment, callSitePattern)
     }
   }
 

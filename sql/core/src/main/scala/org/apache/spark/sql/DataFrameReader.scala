@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql
 
-import java.util.{Locale, Properties}
+import java.util.{Locale, Properties, ServiceConfigurationError}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
+import scala.util.{Failure, Success, Try}
 
-import org.apache.spark.Partition
+import org.apache.spark.{Partition, SparkClassNotFoundException, SparkThrowable}
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
@@ -31,6 +32,7 @@ import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, Univocit
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, FailureSafeParser}
+import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlOptions}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -39,6 +41,8 @@ import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.JsonUtils.checkJsonSchema
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
+import org.apache.spark.sql.execution.datasources.xml.TextInputXmlDataSource
+import org.apache.spark.sql.execution.datasources.xml.XmlUtils.checkXmlSchema
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -205,10 +209,45 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       throw QueryCompilationErrors.pathOptionNotSetCorrectlyWhenReadingError()
     }
 
-    DataSource.lookupDataSourceV2(source, sparkSession.sessionState.conf).flatMap { provider =>
-      DataSourceV2Utils.loadV2Source(sparkSession, provider, userSpecifiedSchema, extraOptions,
-        source, paths: _*)
-    }.getOrElse(loadV1Source(paths: _*))
+    val isUserDefinedDataSource =
+      sparkSession.sharedState.dataSourceManager.dataSourceExists(source)
+
+    Try(DataSource.lookupDataSourceV2(source, sparkSession.sessionState.conf)) match {
+      case Success(providerOpt) =>
+        // The source can be successfully loaded as either a V1 or a V2 data source.
+        // Check if it is also a user-defined data source.
+        if (isUserDefinedDataSource) {
+          throw QueryCompilationErrors.foundMultipleDataSources(source)
+        }
+        providerOpt.flatMap { provider =>
+          DataSourceV2Utils.loadV2Source(
+            sparkSession, provider, userSpecifiedSchema, extraOptions, source, paths: _*)
+        }.getOrElse(loadV1Source(paths: _*))
+      case Failure(exception) =>
+        // Exceptions are thrown while trying to load the data source as a V1 or V2 data source.
+        // For the following not found exceptions, if the user-defined data source is defined,
+        // we can instead return the user-defined data source.
+        val isNotFoundError = exception match {
+          case _: NoClassDefFoundError | _: SparkClassNotFoundException => true
+          case e: SparkThrowable => e.getErrorClass == "DATA_SOURCE_NOT_FOUND"
+          case e: ServiceConfigurationError => e.getCause.isInstanceOf[NoClassDefFoundError]
+          case _ => false
+        }
+        if (isNotFoundError && isUserDefinedDataSource) {
+          loadUserDefinedDataSource(paths)
+        } else {
+          // Throw the original exception.
+          throw exception
+        }
+    }
+  }
+
+  private def loadUserDefinedDataSource(paths: Seq[String]): DataFrame = {
+    val builder = sparkSession.sharedState.dataSourceManager.lookupDataSource(source)
+    // Unless the legacy path option behavior is enabled, the extraOptions here
+    // should not include "path" or "paths" as keys.
+    val plan = builder(sparkSession, source, paths, userSpecifiedSchema, extraOptions)
+    Dataset.ofRows(sparkSession, plan)
   }
 
   private def loadV1Source(paths: String*) = {
@@ -536,6 +575,77 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def csv(paths: String*): DataFrame = format("csv").load(paths : _*)
+
+  /**
+   * Loads a XML file and returns the result as a `DataFrame`. See the documentation on the
+   * other overloaded `xml()` method for more details.
+   *
+   * @since 4.0.0
+   */
+  def xml(path: String): DataFrame = {
+    // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    xml(Seq(path): _*)
+  }
+
+  /**
+   * Loads XML files and returns the result as a `DataFrame`.
+   *
+   * This function will go through the input once to determine the input schema if `inferSchema`
+   * is enabled. To avoid going through the entire data once, disable `inferSchema` option or
+   * specify the schema explicitly using `schema`.
+   *
+   * You can find the XML-specific options for reading XML files in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   * Data Source Option</a> in the version you use.
+   *
+   * @since 4.0.0
+   */
+  @scala.annotation.varargs
+  def xml(paths: String*): DataFrame = {
+    userSpecifiedSchema.foreach(checkXmlSchema)
+    format("xml").load(paths: _*)
+  }
+
+  /**
+   * Loads an `Dataset[String]` storing XML object and returns the result as a `DataFrame`.
+   *
+   * If the schema is not specified using `schema` function and `inferSchema` option is enabled,
+   * this function goes through the input once to determine the input schema.
+   *
+   * @param xmlDataset input Dataset with one XML object per record
+   * @since 4.0.0
+   */
+  def xml(xmlDataset: Dataset[String]): DataFrame = {
+    val parsedOptions: XmlOptions = new XmlOptions(
+      extraOptions.toMap,
+      sparkSession.sessionState.conf.sessionLocalTimeZone,
+      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+
+    userSpecifiedSchema.foreach(checkXmlSchema)
+
+    val schema = userSpecifiedSchema.map {
+      case s if !SQLConf.get.getConf(
+        SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION) => s.asNullable
+      case other => other
+    }.getOrElse {
+      TextInputXmlDataSource.inferFromDataset(xmlDataset, parsedOptions)
+    }
+
+    ExprUtils.verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
+    val actualSchema =
+      StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+
+    val parsed = xmlDataset.rdd.mapPartitions { iter =>
+      val rawParser = new StaxXmlParser(actualSchema, parsedOptions)
+      val parser = new FailureSafeParser[String](
+        input => rawParser.parse(input),
+        parsedOptions.parseMode,
+        schema,
+        parsedOptions.columnNameOfCorruptRecord)
+      iter.flatMap(parser.parse)
+    }
+    sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = xmlDataset.isStreaming)
+  }
 
   /**
    * Loads a Parquet file, returning the result as a `DataFrame`. See the documentation

@@ -41,6 +41,7 @@ import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
 import org.apache.spark.util.{Utils, VersionUtils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Test HiveExternalCatalog backward compatibility.
@@ -64,11 +65,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   private val sparkTestingDir = Option(System.getProperty(SPARK_TEST_CACHE_DIR_SYSTEM_PROPERTY))
       .map(new File(_)).getOrElse(Utils.createTempDir(namePrefix = "test-spark"))
   private val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
-  val hiveVersion = if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-    HiveUtils.builtinHiveVersion
-  } else {
-    "1.2.1"
-  }
+  val hiveVersion = HiveUtils.builtinHiveVersion
 
   override def afterAll(): Unit = {
     try {
@@ -203,7 +200,11 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
     if (PROCESS_TABLES.testingVersions.isEmpty) {
       if (PROCESS_TABLES.isPythonVersionAvailable) {
-        logError("Fail to get the latest Spark versions to test.")
+        if (SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
+          logError("Fail to get the latest Spark versions to test.")
+        } else {
+          logInfo("Skip tests because old Spark versions don't support Java 21.")
+        }
       } else {
         logError(s"Python version <  ${TestUtils.minimumPythonSupportedVersion}, " +
           "the running environment is unavailable.")
@@ -259,8 +260,9 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
   val isPythonVersionAvailable = TestUtils.isPythonVersionAvailable
   val releaseMirror = sys.env.getOrElse("SPARK_RELEASE_MIRROR",
     "https://dist.apache.org/repos/dist/release")
-  // Tests the latest version of every release line.
-  val testingVersions: Seq[String] = if (isPythonVersionAvailable) {
+  // Tests the latest version of every release line if Java version is at most 17.
+  val testingVersions: Seq[String] = if (isPythonVersionAvailable &&
+      SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
     import scala.io.Source
     try Utils.tryWithResource(
       Source.fromURL(s"$releaseMirror/spark")) { source =>
@@ -269,7 +271,7 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
         .filter(_.contains("""<a href="spark-"""))
         .filterNot(_.contains("preview"))
         .map("""<a href="spark-(\d.\d.\d)/">""".r.findFirstMatchIn(_).get.group(1))
-        .filter(_ < org.apache.spark.SPARK_VERSION)
+        .filter(_ < org.apache.spark.SPARK_VERSION).toImmutableArraySeq
     } catch {
       // Do not throw exception during object initialization.
       case NonFatal(_) => Nil

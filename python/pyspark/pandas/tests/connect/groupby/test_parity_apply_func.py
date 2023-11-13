@@ -24,7 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 class GroupbyParityApplyFuncTests(
     GroupbyApplyFuncMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("TODO(SPARK-43628): Enable SparkContext with Spark Connect.")
+    @unittest.skip("Test depends on SparkContext which is not supported from Spark Connect.")
     def test_apply_with_side_effect(self):
         super().test_apply_with_side_effect()
 

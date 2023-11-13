@@ -21,18 +21,19 @@ import java.util.{Iterator => JIterator}
 import java.util.Arrays
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import org.apache.spark.TaskContext
 import org.apache.spark.api.java.function._
+import org.apache.spark.sql.api.java.UDF2
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder}
-import org.apache.spark.sql.connect.client.util.RemoteSparkSession
-import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.functions.{col, struct, udf}
+import org.apache.spark.sql.test.QueryTest
+import org.apache.spark.sql.types.IntegerType
 
 /**
  * All tests in this class requires client UDF defined in this test class synced with the server.
  */
-class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
+class UserDefinedFunctionE2ETestSuite extends QueryTest {
   test("Dataset typed filter") {
     val rows = spark.range(10).filter(n => n % 2 == 0).collectAsList()
     assert(rows == Arrays.asList[Long](0, 2, 4, 6, 8))
@@ -92,6 +93,66 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
       .collectAsList()
     assert(rows.size() == 10)
     rows.forEach(x => assert(x == 42))
+  }
+
+  test("(deprecated) Dataset explode") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val result1 = spark
+      .range(3)
+      .filter(col("id") =!= 1L)
+      .explode(col("id") + 41, col("id") + 10) { case Row(x: Long, y: Long) =>
+        Iterator((x, x - 1), (y, y + 1))
+      }
+      .as[(Long, Long, Long)]
+      .collect()
+      .toSeq
+    assert(result1 === Seq((0L, 41L, 40L), (0L, 10L, 11L), (2L, 43L, 42L), (2L, 12L, 13L)))
+
+    val result2 = Seq((1, "a b c"), (2, "a b"), (3, "a"))
+      .toDF("number", "letters")
+      .explode(Symbol("letters")) { case Row(letters: String) =>
+        letters.split(' ').map(Tuple1.apply).toSeq
+      }
+      .as[(Int, String, String)]
+      .collect()
+      .toSeq
+    assert(
+      result2 === Seq(
+        (1, "a b c", "a"),
+        (1, "a b c", "b"),
+        (1, "a b c", "c"),
+        (2, "a b", "a"),
+        (2, "a b", "b"),
+        (3, "a", "a")))
+
+    val result3 = Seq("a b c", "d e")
+      .toDF("words")
+      .explode("words", "word") { word: String =>
+        word.split(' ').toSeq
+      }
+      .select(col("word"))
+      .as[String]
+      .collect()
+      .toSeq
+    assert(result3 === Seq("a", "b", "c", "d", "e"))
+
+    val result4 = Seq("a b c", "d e")
+      .toDF("words")
+      .explode("words", "word") { word: String =>
+        word.split(' ').map(s => s -> s.head.toInt).toSeq
+      }
+      .select(col("word"), col("words"))
+      .as[((String, Int), String)]
+      .collect()
+      .toSeq
+    assert(
+      result4 === Seq(
+        (("a", 97), "a b c"),
+        (("b", 98), "a b c"),
+        (("c", 99), "a b c"),
+        (("d", 100), "d e"),
+        (("e", 101), "d e")))
   }
 
   test("Dataset typed flat map - java") {
@@ -154,39 +215,31 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
   }
 
   test("Dataset foreachPartition") {
-    val sum = new AtomicLong()
     val func: Iterator[JLong] => Unit = f => {
+      val sum = new AtomicLong()
       f.foreach(v => sum.addAndGet(v))
-      TaskContext
-        .get()
-        .addTaskCompletionListener(_ =>
-          // The value should be 45
-          assert(sum.get() == -1))
+      throw new Exception("Success, processed records: " + sum.get())
     }
     val exception = intercept[Exception] {
       spark.range(10).repartition(1).foreachPartition(func)
     }
-    assert(exception.getMessage.contains("45 did not equal -1"))
+    assert(exception.getMessage.contains("Success, processed records: 45"))
   }
 
   test("Dataset foreachPartition - java") {
     val sum = new AtomicLong()
     val exception = intercept[Exception] {
       spark
-        .range(10)
+        .range(11)
         .repartition(1)
         .foreachPartition(new ForeachPartitionFunction[JLong] {
           override def call(t: JIterator[JLong]): Unit = {
             t.asScala.foreach(v => sum.addAndGet(v))
-            TaskContext
-              .get()
-              .addTaskCompletionListener(_ =>
-                // The value should be 45
-                assert(sum.get() == -1))
+            throw new Exception("Success, processed records: " + sum.get())
           }
         })
     }
-    assert(exception.getMessage.contains("45 did not equal -1"))
+    assert(exception.getMessage.contains("Success, processed records: 55"))
   }
 
   test("Dataset foreach: change not visible to client") {
@@ -226,5 +279,71 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
         .reduce(new ReduceFunction[Long] {
           override def call(v1: Long, v2: Long): Long = v1 + v2
         }) == 55)
+  }
+
+  test("udf with row input encoder") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val df = Seq((1, 2, 3)).toDF("a", "b", "c")
+    val f = udf((row: Row) => row.schema.fieldNames)
+    import org.apache.spark.util.ArrayImplicits._
+    checkDataset(
+      df.select(f(struct((df.columns map col).toImmutableArraySeq: _*))),
+      Row(Seq("a", "b", "c")))
+  }
+
+  test("Filter with row input encoder") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val df = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDF("c1", "c2")
+
+    checkDataset(df.filter(r => r.getInt(1) > 5), Row("a", 10), Row("a", 20))
+  }
+
+  test("mapPartitions with row input encoder") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val df = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDF("c1", "c2")
+
+    checkDataset(
+      df.mapPartitions(it => it.map(r => r.getAs[String]("c1"))),
+      "a",
+      "a",
+      "b",
+      "b",
+      "c")
+  }
+
+  test("(deprecated) scala UDF with dataType") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val fn = udf(((i: Long) => (i + 1).toInt), IntegerType)
+    checkDataset(session.range(2).select(fn($"id")).as[Int], 1, 2)
+  }
+
+  test("java UDF") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val fn = udf(
+      new UDF2[Long, Long, Int] {
+        override def call(t1: Long, t2: Long): Int = (t1 + t2 + 1).toInt
+      },
+      IntegerType)
+    checkDataset(session.range(2).select(fn($"id", $"id" + 2)).as[Int], 3, 5)
+  }
+
+  test("nullified SparkSession/Dataset/KeyValueGroupedDataset in UDF") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val df = session.range(0, 10, 1, 1)
+    val kvgds = df.groupByKey(_ / 2)
+    val f = udf { (i: Long) =>
+      assert(session == null)
+      assert(df == null)
+      assert(kvgds == null)
+      i + 1
+    }
+    val result = df.select(f($"id")).as[Long].head()
+    assert(result == 1L)
   }
 }

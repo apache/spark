@@ -79,14 +79,12 @@ class GroupedApplyInPandasTestsMixin:
     def data(self):
         return (
             self.spark.range(10)
-            .toDF("id")
             .withColumn("vs", array([lit(i) for i in range(20, 30)]))
             .withColumn("v", explode(col("vs")))
             .drop("vs")
         )
 
     def test_supported_types(self):
-
         values = [
             1,
             2,
@@ -287,8 +285,7 @@ class GroupedApplyInPandasTestsMixin:
     def check_apply_in_pandas_not_returning_pandas_dataframe(self):
         with self.assertRaisesRegex(
             PythonException,
-            "Return type of the user-defined function should be pandas.DataFrame, "
-            "but is <class 'tuple'>",
+            "Return type of the user-defined function should be pandas.DataFrame, but is tuple.",
         ):
             self._test_apply_in_pandas(lambda key, pdf: key)
 
@@ -559,7 +556,6 @@ class GroupedApplyInPandasTestsMixin:
             self.check_column_order()
 
     def check_column_order(self):
-
         # Helper function to set column names from a list
         def rename_pdf(pdf, names):
             pdf.rename(
@@ -694,7 +690,6 @@ class GroupedApplyInPandasTestsMixin:
         self.assertEqual(result, expected)
 
     def test_grouped_over_window(self):
-
         data = [
             (0, 1, "2018-03-10T00:00:00+00:00", [0]),
             (1, 2, "2018-03-11T00:00:00+00:00", [0]),
@@ -726,7 +721,6 @@ class GroupedApplyInPandasTestsMixin:
         self.assertListEqual([Row(id=key, result=val) for key, val in expected.items()], result)
 
     def test_grouped_over_window_with_key(self):
-
         data = [
             (0, 1, "2018-03-10T00:00:00+00:00", [0]),
             (1, 2, "2018-03-11T00:00:00+00:00", [0]),

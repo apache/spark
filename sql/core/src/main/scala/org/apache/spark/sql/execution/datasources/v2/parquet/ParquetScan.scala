@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.parquet
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -27,12 +27,13 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
-import org.apache.spark.sql.execution.datasources.parquet.{ParquetOptions, ParquetReadSupport, ParquetRowIndexUtil, ParquetWriteSupport}
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetOptions, ParquetReadSupport, ParquetWriteSupport}
 import org.apache.spark.sql.execution.datasources.v2.FileScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SerializableConfiguration
 
 case class ParquetScan(
@@ -50,10 +51,7 @@ case class ParquetScan(
   override def isSplitable(path: Path): Boolean = {
     // If aggregate is pushed down, only the file footer will be read once,
     // so file should not be split across multiple tasks.
-    pushedAggregate.isEmpty &&
-      // SPARK-39634: Allow file splitting in combination with row index generation once
-      // the fix for PARQUET-2161 is available.
-      !ParquetRowIndexUtil.isNeededForSchema(readSchema)
+    pushedAggregate.isEmpty
   }
 
   override def readSchema(): StructType = {
@@ -124,14 +122,14 @@ case class ParquetScan(
   override def hashCode(): Int = getClass.hashCode()
 
   lazy private val (pushedAggregationsStr, pushedGroupByStr) = if (pushedAggregate.nonEmpty) {
-    (seqToString(pushedAggregate.get.aggregateExpressions),
-      seqToString(pushedAggregate.get.groupByExpressions))
+    (seqToString(pushedAggregate.get.aggregateExpressions.toImmutableArraySeq),
+      seqToString(pushedAggregate.get.groupByExpressions.toImmutableArraySeq))
   } else {
     ("[]", "[]")
   }
 
   override def getMetaData(): Map[String, String] = {
-    super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters)) ++
+    super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters.toImmutableArraySeq)) ++
       Map("PushedAggregation" -> pushedAggregationsStr) ++
       Map("PushedGroupBy" -> pushedGroupByStr)
   }

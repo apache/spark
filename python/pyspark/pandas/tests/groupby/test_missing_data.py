@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from distutils.version import LooseVersion
+
 import unittest
 
 import numpy as np
@@ -223,103 +223,7 @@ class GroupbyMissingDataMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        # pd.DataFrame.groupby with dropna parameter is implemented since pandas 1.1.0
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
-            for dropna in [True, False]:
-                for as_index in [True, False]:
-                    if as_index:
-
-                        def sort(df):
-                            return df.sort_index()
-
-                    else:
-
-                        def sort(df):
-                            return df.sort_values("A").reset_index(drop=True)
-
-                    self.assert_eq(
-                        sort(psdf.groupby("A", as_index=as_index, dropna=dropna).std()),
-                        sort(pdf.groupby("A", as_index=as_index, dropna=dropna).std()),
-                    )
-
-                    self.assert_eq(
-                        sort(psdf.groupby("A", as_index=as_index, dropna=dropna).B.std()),
-                        sort(pdf.groupby("A", as_index=as_index, dropna=dropna).B.std()),
-                    )
-                    self.assert_eq(
-                        sort(psdf.groupby("A", as_index=as_index, dropna=dropna)["B"].std()),
-                        sort(pdf.groupby("A", as_index=as_index, dropna=dropna)["B"].std()),
-                    )
-
-                    self.assert_eq(
-                        sort(
-                            psdf.groupby("A", as_index=as_index, dropna=dropna).agg(
-                                {"B": "min", "C": "std"}
-                            )
-                        ),
-                        sort(
-                            pdf.groupby("A", as_index=as_index, dropna=dropna).agg(
-                                {"B": "min", "C": "std"}
-                            )
-                        ),
-                    )
-
-            for dropna in [True, False]:
-                for as_index in [True, False]:
-                    if as_index:
-
-                        def sort(df):
-                            return df.sort_index()
-
-                    else:
-
-                        def sort(df):
-                            return df.sort_values(["A", "B"]).reset_index(drop=True)
-
-                    self.assert_eq(
-                        sort(
-                            psdf.groupby(["A", "B"], as_index=as_index, dropna=dropna).agg(
-                                {"C": ["min", "std"]}
-                            )
-                        ),
-                        sort(
-                            pdf.groupby(["A", "B"], as_index=as_index, dropna=dropna).agg(
-                                {"C": ["min", "std"]}
-                            )
-                        ),
-                        almost=True,
-                    )
-
-            # multi-index columns
-            columns = pd.MultiIndex.from_tuples([("X", "A"), ("X", "B"), ("Y", "C")])
-            pdf.columns = columns
-            psdf.columns = columns
-
-            for dropna in [True, False]:
-                for as_index in [True, False]:
-                    if as_index:
-
-                        def sort(df):
-                            return df.sort_index()
-
-                    else:
-
-                        def sort(df):
-                            return df.sort_values(("X", "A")).reset_index(drop=True)
-
-                    sorted_stats_psdf = sort(
-                        psdf.groupby(("X", "A"), as_index=as_index, dropna=dropna).agg(
-                            {("X", "B"): "min", ("Y", "C"): "std"}
-                        )
-                    )
-                    sorted_stats_pdf = sort(
-                        pdf.groupby(("X", "A"), as_index=as_index, dropna=dropna).agg(
-                            {("X", "B"): "min", ("Y", "C"): "std"}
-                        )
-                    )
-                    self.assert_eq(sorted_stats_psdf, sorted_stats_pdf)
-        else:
-            # Testing dropna=True (pandas default behavior)
+        for dropna in [True, False]:
             for as_index in [True, False]:
                 if as_index:
 
@@ -332,10 +236,34 @@ class GroupbyMissingDataMixin:
                         return df.sort_values("A").reset_index(drop=True)
 
                 self.assert_eq(
-                    sort(psdf.groupby("A", as_index=as_index, dropna=True)["B"].min()),
-                    sort(pdf.groupby("A", as_index=as_index)["B"].min()),
+                    sort(psdf.groupby("A", as_index=as_index, dropna=dropna).std()),
+                    sort(pdf.groupby("A", as_index=as_index, dropna=dropna).std()),
                 )
 
+                self.assert_eq(
+                    sort(psdf.groupby("A", as_index=as_index, dropna=dropna).B.std()),
+                    sort(pdf.groupby("A", as_index=as_index, dropna=dropna).B.std()),
+                )
+                self.assert_eq(
+                    sort(psdf.groupby("A", as_index=as_index, dropna=dropna)["B"].std()),
+                    sort(pdf.groupby("A", as_index=as_index, dropna=dropna)["B"].std()),
+                )
+
+                self.assert_eq(
+                    sort(
+                        psdf.groupby("A", as_index=as_index, dropna=dropna).agg(
+                            {"B": "min", "C": "std"}
+                        )
+                    ),
+                    sort(
+                        pdf.groupby("A", as_index=as_index, dropna=dropna).agg(
+                            {"B": "min", "C": "std"}
+                        )
+                    ),
+                )
+
+        for dropna in [True, False]:
+            for as_index in [True, False]:
                 if as_index:
 
                     def sort(df):
@@ -348,61 +276,46 @@ class GroupbyMissingDataMixin:
 
                 self.assert_eq(
                     sort(
-                        psdf.groupby(["A", "B"], as_index=as_index, dropna=True).agg(
+                        psdf.groupby(["A", "B"], as_index=as_index, dropna=dropna).agg(
                             {"C": ["min", "std"]}
                         )
                     ),
-                    sort(pdf.groupby(["A", "B"], as_index=as_index).agg({"C": ["min", "std"]})),
+                    sort(
+                        pdf.groupby(["A", "B"], as_index=as_index, dropna=dropna).agg(
+                            {"C": ["min", "std"]}
+                        )
+                    ),
                     almost=True,
                 )
 
-            # Testing dropna=False
-            index = pd.Index([1.0, 2.0, np.nan], name="A")
-            expected = pd.Series([2.0, np.nan, 1.0], index=index, name="B")
-            result = psdf.groupby("A", as_index=True, dropna=False)["B"].min().sort_index()
-            self.assert_eq(expected, result)
+        # multi-index columns
+        columns = pd.MultiIndex.from_tuples([("X", "A"), ("X", "B"), ("Y", "C")])
+        pdf.columns = columns
+        psdf.columns = columns
 
-            expected = pd.DataFrame({"A": [1.0, 2.0, np.nan], "B": [2.0, np.nan, 1.0]})
-            result = (
-                psdf.groupby("A", as_index=False, dropna=False)["B"]
-                .min()
-                .sort_values("A")
-                .reset_index(drop=True)
-            )
-            self.assert_eq(expected, result)
+        for dropna in [True, False]:
+            for as_index in [True, False]:
+                if as_index:
 
-            index = pd.MultiIndex.from_tuples(
-                [(1.0, 2.0), (1.0, None), (2.0, None), (None, 1.0), (None, 3.0)], names=["A", "B"]
-            )
-            expected = pd.DataFrame(
-                {
-                    ("C", "min"): [5.0, 7.0, np.nan, 4.0, 6.0],
-                    ("C", "std"): [np.nan, np.nan, np.nan, np.nan, np.nan],
-                },
-                index=index,
-            )
-            result = (
-                psdf.groupby(["A", "B"], as_index=True, dropna=False)
-                .agg({"C": ["min", "std"]})
-                .sort_index()
-            )
-            self.assert_eq(expected, result)
+                    def sort(df):
+                        return df.sort_index()
 
-            expected = pd.DataFrame(
-                {
-                    ("A", ""): [1.0, 1.0, 2.0, np.nan, np.nan],
-                    ("B", ""): [2.0, np.nan, np.nan, 1.0, 3.0],
-                    ("C", "min"): [5.0, 7.0, np.nan, 4.0, 6.0],
-                    ("C", "std"): [np.nan, np.nan, np.nan, np.nan, np.nan],
-                }
-            )
-            result = (
-                psdf.groupby(["A", "B"], as_index=False, dropna=False)
-                .agg({"C": ["min", "std"]})
-                .sort_values(["A", "B"])
-                .reset_index(drop=True)
-            )
-            self.assert_eq(expected, result)
+                else:
+
+                    def sort(df):
+                        return df.sort_values(("X", "A")).reset_index(drop=True)
+
+                sorted_stats_psdf = sort(
+                    psdf.groupby(("X", "A"), as_index=as_index, dropna=dropna).agg(
+                        {("X", "B"): "min", ("Y", "C"): "std"}
+                    )
+                )
+                sorted_stats_pdf = sort(
+                    pdf.groupby(("X", "A"), as_index=as_index, dropna=dropna).agg(
+                        {("X", "B"): "min", ("Y", "C"): "std"}
+                    )
+                )
+                self.assert_eq(sorted_stats_psdf, sorted_stats_pdf)
 
 
 class GroupbyMissingDataTests(GroupbyMissingDataMixin, ComparisonTestBase, SQLTestUtils):

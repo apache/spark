@@ -27,6 +27,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.util.{FileBasedWriteAheadLogSegment, FileBasedWriteAheadLogWriter}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 class WriteAheadLogBackedBlockRDDSuite extends SparkFunSuite {
@@ -178,7 +179,7 @@ class WriteAheadLogBackedBlockRDDSuite extends SparkFunSuite {
     // Generate write ahead log record handles
     val recordHandles = generateFakeRecordHandles(numPartitions - numPartitionsInWAL) ++
       generateWALRecordHandles(data.takeRight(numPartitionsInWAL),
-        blockIds.takeRight(numPartitionsInWAL))
+        blockIds.takeRight(numPartitionsInWAL).toImmutableArraySeq)
 
     // Make sure that the left `numPartitionsInBM` blocks are in block manager, and others are not
     require(
@@ -255,6 +256,6 @@ class WriteAheadLogBackedBlockRDDSuite extends SparkFunSuite {
   }
 
   private def generateFakeRecordHandles(count: Int): Seq[FileBasedWriteAheadLogSegment] = {
-    Array.fill(count)(new FileBasedWriteAheadLogSegment("random", 0L, 0))
+    Array.fill(count)(FileBasedWriteAheadLogSegment("random", 0L, 0)).toImmutableArraySeq
   }
 }

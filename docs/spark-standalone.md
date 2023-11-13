@@ -21,7 +21,7 @@ license: |
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
-In addition to running on the Mesos or YARN cluster managers, Spark also provides a simple standalone deploy mode. You can launch a standalone cluster either manually, by starting a master and workers by hand, or use our provided [launch scripts](#cluster-launch-scripts). It is also possible to run these daemons on a single machine for testing.
+In addition to running on the YARN cluster manager, Spark also provides a simple standalone deploy mode. You can launch a standalone cluster either manually, by starting a master and workers by hand, or use our provided [launch scripts](#cluster-launch-scripts). It is also possible to run these daemons on a single machine for testing.
 
 # Security
 
@@ -104,10 +104,12 @@ Once you've set up this file, you can launch or stop your cluster with the follo
 - `sbin/start-master.sh` - Starts a master instance on the machine the script is executed on.
 - `sbin/start-workers.sh` - Starts a worker instance on each machine specified in the `conf/workers` file.
 - `sbin/start-worker.sh` - Starts a worker instance on the machine the script is executed on.
+- `sbin/start-connect-server.sh` - Starts a Spark Connect server on the machine the script is executed on.
 - `sbin/start-all.sh` - Starts both a master and a number of workers as described above.
 - `sbin/stop-master.sh` - Stops the master that was started via the `sbin/start-master.sh` script.
 - `sbin/stop-worker.sh` - Stops all worker instances on the machine the script is executed on.
 - `sbin/stop-workers.sh` - Stops all worker instances on the machines specified in the `conf/workers` file.
+- `sbin/stop-connect-server.sh` - Stops all Spark Connect server instances on the machine the script is executed on.
 - `sbin/stop-all.sh` - Stops both the master and the workers as described above.
 
 Note that these scripts must be executed on the machine you want to run the Spark master on, not your local machine.
@@ -216,7 +218,7 @@ SPARK_MASTER_OPTS supports the following system properties:
 </tr>
 <tr>
   <td><code>spark.deploy.defaultCores</code></td>
-  <td>(infinite)</td>
+  <td>Int.MaxValue</td>
   <td>
     Default number of cores to give to applications in Spark's standalone mode if they don't
     set <code>spark.cores.max</code>. If not set, applications always get all available
@@ -243,6 +245,43 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>1.6.3</td>
 </tr>
 <tr>
+  <td><code>spark.deploy.maxDrivers</code></td>
+  <td>Int.MaxValue</td>
+  <td>
+    The maximum number of running drivers.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.deploy.appNumberModulo</code></td>
+  <td>(None)</td>
+  <td>
+    The modulo for app number. By default, the next of `app-yyyyMMddHHmmss-9999` is
+    `app-yyyyMMddHHmmss-10000`. If we have 10000 as modulo, it will be `app-yyyyMMddHHmmss-0000`.
+    In most cases, the prefix `app-yyyyMMddHHmmss` is increased already during creating 10000 applications.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.deploy.driverIdPattern</code></td>
+  <td>driver-%s-%04d</td>
+  <td>
+    The pattern for driver ID generation based on Java `String.format` method.
+    The default value is `driver-%s-%04d` which represents the existing driver id string, e.g., `driver-20231031224459-0019`. Please be careful to generate unique IDs.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.deploy.appIdPattern</code></td>
+  <td>app-%s-%04d</td>
+  <td>
+    The pattern for app ID generation based on Java `String.format` method.
+    The default value is `app-%s-%04d` which represents the existing app id string, e.g.,
+    `app-20231031224509-0008`. Plesae be careful to generate unique IDs.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.worker.timeout</code></td>
   <td>60</td>
   <td>
@@ -250,6 +289,14 @@ SPARK_MASTER_OPTS supports the following system properties:
     receives no heartbeats.
   </td>
   <td>0.6.2</td>
+</tr>
+<tr>
+  <td><code>spark.dead.worker.persistence</code></td>
+  <td>15</td>
+  <td>
+    Number of iterations to keep the deae worker information in UI. By default, the dead worker is visible for (15 + 1) * <code>spark.worker.timeout</code> since its last heartbeat.
+  </td>
+  <td>0.8.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.resource.{resourceName}.amount</code></td>
@@ -330,11 +377,11 @@ SPARK_WORKER_OPTS supports the following system properties:
 </tr>
 <tr>
   <td><code>spark.shuffle.service.db.backend</code></td>
-  <td>LEVELDB</td>
+  <td>ROCKSDB</td>
   <td>
     When <code>spark.shuffle.service.db.enabled</code> is true, user can use this to specify the kind of disk-based
-    store used in shuffle service state store. This supports `LEVELDB` and `ROCKSDB` now and `LEVELDB` as default value.
-    The original data store in `LevelDB/RocksDB` will not be automatically convert to another kind of storage now.
+    store used in shuffle service state store. This supports `ROCKSDB` and `LEVELDB` (deprecated) now and `ROCKSDB` as default value.
+    The original data store in `RocksDB/LevelDB` will not be automatically convert to another kind of storage now.
   </td>
   <td>3.4.0</td>
 </tr>
@@ -360,6 +407,16 @@ SPARK_WORKER_OPTS supports the following system properties:
     size.
   </td>
   <td>2.0.2</td>
+</tr>
+<tr>
+  <td><code>spark.worker.idPattern</code></td>
+  <td>worker-%s-%s-%d</td>
+  <td>
+    The pattern for worker ID generation based on Java `String.format` method.
+    The default value is `worker-%s-%s-%d` which represents the existing worker id string, e.g.,
+    `worker-20231109183042-[fe80::1%lo0]-39729`. Please be careful to generate unique IDs
+  </td>
+  <td>4.0.0</td>
 </tr>
 </table>
 
@@ -540,15 +597,38 @@ ZooKeeper is the best way to go for production-level high availability, but if y
 In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env using this configuration:
 
 <table class="table table-striped">
-  <thead><tr><th style="width:21%">System property</th><th>Meaning</th><th>Since Version</th></tr></thead>
+  <thead><tr><th style="width:21%">System property</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>spark.deploy.recoveryMode</code></td>
-    <td>Set to FILESYSTEM to enable single-node recovery mode (default: NONE).</td>
+    <td>NONE</td>
+    <td>The recovery mode setting to recover submitted Spark jobs with cluster mode when it failed and relaunches.
+      Set to FILESYSTEM to enable single-node recovery mode, ZOOKEEPER to use Zookeeper-based recovery mode, and
+      CUSTOM to provide a customer provider class via additional `spark.deploy.recoveryMode.factory` configuration.
+    </td>
     <td>0.8.1</td>
   </tr>
   <tr>
     <td><code>spark.deploy.recoveryDirectory</code></td>
+    <td>""</td>
     <td>The directory in which Spark will store recovery state, accessible from the Master's perspective.</td>
+    <td>0.8.1</td>
+  </tr>
+  <tr>
+    <td><code>spark.deploy.recoveryMode.factory</code></td>
+    <td>""</td>
+    <td>A class to implement <code>StandaloneRecoveryModeFactory</code> interface</td>
+    <td>1.2.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.deploy.zookeeper.url</code></td>
+    <td>None</td>
+    <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper URL to connect to.</td>
+    <td>0.8.1</td>
+  </tr>
+  <tr>
+    <td><code>spark.deploy.zookeeper.dir</code></td>
+    <td>None</td>
+    <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper directory to store recovery state.</td>
     <td>0.8.1</td>
   </tr>
 </table>

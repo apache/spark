@@ -778,7 +778,7 @@ select timestamp'2011-11-11 11:11:11' + '1'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
@@ -802,7 +802,7 @@ select '1' + timestamp'2011-11-11 11:11:11'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
@@ -826,7 +826,7 @@ select timestamp'2011-11-11 11:11:11' + null
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -850,7 +850,7 @@ select null + timestamp'2011-11-11 11:11:11'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -1126,5 +1126,85 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "startIndex" : 8,
     "stopIndex" : 64,
     "fragment" : "timestampdiff('YEAR', date'2022-02-15', date'2023-02-15')"
+  } ]
+}
+
+
+-- !query
+select timediff(QUARTER, timestamp'2023-08-10 01:02:03', timestamp'2022-01-14 01:02:03')
+-- !query schema
+struct<timestampdiff(QUARTER, TIMESTAMP_NTZ '2023-08-10 01:02:03', TIMESTAMP_NTZ '2022-01-14 01:02:03'):bigint>
+-- !query output
+-6
+
+
+-- !query
+select timediff(HOUR, timestamp'2022-02-14 01:02:03', timestamp'2022-02-14 12:00:03')
+-- !query schema
+struct<timestampdiff(HOUR, TIMESTAMP_NTZ '2022-02-14 01:02:03', TIMESTAMP_NTZ '2022-02-14 12:00:03'):bigint>
+-- !query output
+10
+
+
+-- !query
+select timediff(DAY, date'2022-02-15', date'2023-02-15')
+-- !query schema
+struct<timestampdiff(DAY, DATE '2022-02-15', DATE '2023-02-15'):bigint>
+-- !query output
+365
+
+
+-- !query
+select timediff(SECOND, date'2022-02-15', timestamp'2022-02-14 23:59:59')
+-- !query schema
+struct<timestampdiff(SECOND, DATE '2022-02-15', TIMESTAMP_NTZ '2022-02-14 23:59:59'):bigint>
+-- !query output
+-1
+
+
+-- !query
+select timediff('MINUTE', timestamp'2023-02-14 01:02:03', timestamp'2023-02-14 02:00:03')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`timediff`",
+    "invalidValue" : "'MINUTE'",
+    "parameter" : "`unit`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 89,
+    "fragment" : "timediff('MINUTE', timestamp'2023-02-14 01:02:03', timestamp'2023-02-14 02:00:03')"
+  } ]
+}
+
+
+-- !query
+select timediff('YEAR', date'2020-02-15', date'2023-02-15')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`timediff`",
+    "invalidValue" : "'YEAR'",
+    "parameter" : "`unit`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 59,
+    "fragment" : "timediff('YEAR', date'2020-02-15', date'2023-02-15')"
   } ]
 }

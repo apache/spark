@@ -87,6 +87,9 @@ class DataStreamReader(OptionUtils):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         source : str
@@ -127,6 +130,9 @@ class DataStreamReader(OptionUtils):
         inference step, and thus speed up data loading.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -177,6 +183,9 @@ class DataStreamReader(OptionUtils):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         This API is evolving.
@@ -203,6 +212,9 @@ class DataStreamReader(OptionUtils):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         This API is evolving.
@@ -210,6 +222,11 @@ class DataStreamReader(OptionUtils):
         Examples
         --------
         >>> spark.readStream.options(x="1", y=2)
+        <...streaming.readwriter.DataStreamReader object ...>
+
+        Specify options in a dictionary.
+
+        >>> spark.readStream.options(**{"k1": "v1", "k2": "v2"})
         <...streaming.readwriter.DataStreamReader object ...>
 
         The example below specifies 'rowsPerSecond' and 'numPartitions' options to
@@ -237,6 +254,9 @@ class DataStreamReader(OptionUtils):
         :class:`DataFrame <pyspark.sql.DataFrame>`.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -324,6 +344,9 @@ class DataStreamReader(OptionUtils):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         path : str
@@ -407,6 +430,9 @@ class DataStreamReader(OptionUtils):
 
         .. versionadded:: 2.3.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Other Parameters
         ----------------
         Extra options
@@ -457,6 +483,9 @@ class DataStreamReader(OptionUtils):
         Loads a Parquet file stream, returning the result as a :class:`DataFrame`.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -520,6 +549,9 @@ class DataStreamReader(OptionUtils):
         By default, each line in the text file is a new row in the resulting DataFrame.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -619,6 +651,9 @@ class DataStreamReader(OptionUtils):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Other Parameters
         ----------------
         Extra options
@@ -689,11 +724,113 @@ class DataStreamReader(OptionUtils):
                 message_parameters={"arg_name": "path", "arg_type": type(path).__name__},
             )
 
+    def xml(
+        self,
+        path: str,
+        rowTag: Optional[str] = None,
+        schema: Optional[Union[StructType, str]] = None,
+        excludeAttribute: Optional[Union[bool, str]] = None,
+        attributePrefix: Optional[str] = None,
+        valueTag: Optional[str] = None,
+        ignoreSurroundingSpaces: Optional[Union[bool, str]] = None,
+        rowValidationXSDPath: Optional[str] = None,
+        ignoreNamespace: Optional[Union[bool, str]] = None,
+        wildcardColName: Optional[str] = None,
+        encoding: Optional[str] = None,
+        inferSchema: Optional[Union[bool, str]] = None,
+        nullValue: Optional[str] = None,
+        dateFormat: Optional[str] = None,
+        timestampFormat: Optional[str] = None,
+        mode: Optional[str] = None,
+        columnNameOfCorruptRecord: Optional[str] = None,
+        multiLine: Optional[Union[bool, str]] = None,
+        samplingRatio: Optional[Union[float, str]] = None,
+        locale: Optional[str] = None,
+    ) -> "DataFrame":
+        r"""Loads a XML file stream and returns the result as a :class:`DataFrame`.
+
+        If the ``schema`` parameter is not specified, this function goes
+        through the input once to determine the input schema.
+
+        Parameters
+        ----------
+        path : str
+            string for input path.
+        schema : :class:`pyspark.sql.types.StructType` or str, optional
+            an optional :class:`pyspark.sql.types.StructType` for the input schema
+            or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
+
+        .. versionadded:: 4.0.0
+
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option>`_
+            in the version you use.
+
+            .. # noqa
+
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
+        Write a DataFrame into a XML file and read it back.
+
+        >>> import tempfile
+        >>> import time
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     # Write a DataFrame into a XML file
+        ...     spark.createDataFrame(
+        ...         [{"age": 100, "name": "Hyukjin Kwon"}]
+        ...     ).write.mode("overwrite").option("rowTag", "person").xml(d)
+        ...
+        ...     # Start a streaming query to read the XML file.
+        ...     q = spark.readStream.schema(
+        ...         "age INT, name STRING"
+        ...     ).xml(d, rowTag="person").writeStream.format("console").start()
+        ...     time.sleep(3)
+        ...     q.stop()
+        """
+        self._set_opts(
+            rowTag=rowTag,
+            schema=schema,
+            excludeAttribute=excludeAttribute,
+            attributePrefix=attributePrefix,
+            valueTag=valueTag,
+            ignoreSurroundingSpaces=ignoreSurroundingSpaces,
+            rowValidationXSDPath=rowValidationXSDPath,
+            ignoreNamespace=ignoreNamespace,
+            wildcardColName=wildcardColName,
+            encoding=encoding,
+            inferSchema=inferSchema,
+            nullValue=nullValue,
+            dateFormat=dateFormat,
+            timestampFormat=timestampFormat,
+            mode=mode,
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord,
+            multiLine=multiLine,
+            samplingRatio=samplingRatio,
+            locale=locale,
+        )
+        if isinstance(path, str):
+            return self._df(self._jreader.xml(path))
+        else:
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "path", "arg_type": type(path).__name__},
+            )
+
     def table(self, tableName: str) -> "DataFrame":
         """Define a Streaming DataFrame on a Table. The DataSource corresponding to the table should
         support streaming mode.
 
         .. versionadded:: 3.1.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -745,6 +882,9 @@ class DataStreamWriter:
 
     .. versionadded:: 2.0.0
 
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
+
     Notes
     -----
     This API is evolving.
@@ -775,6 +915,9 @@ class DataStreamWriter:
         """Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Options include:
 
@@ -818,6 +961,9 @@ class DataStreamWriter:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         source : str
@@ -857,6 +1003,9 @@ class DataStreamWriter:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         This API is evolving.
@@ -885,6 +1034,9 @@ class DataStreamWriter:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         This API is evolving.
@@ -893,6 +1045,11 @@ class DataStreamWriter:
         --------
         >>> df = spark.readStream.format("rate").load()
         >>> df.writeStream.option("x", 1)
+        <...streaming.readwriter.DataStreamWriter object ...>
+
+        Specify options in a dictionary.
+
+        >>> df.writeStream.options(**{"k1": "v1", "k2": "v2"})
         <...streaming.readwriter.DataStreamWriter object ...>
 
         The example below specifies 'numRows' and 'truncate' options to Console source in order
@@ -924,6 +1081,9 @@ class DataStreamWriter:
         to Hive's partitioning scheme.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -967,6 +1127,9 @@ class DataStreamWriter:
         in the associated SparkSession.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1022,6 +1185,9 @@ class DataStreamWriter:
         as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1280,6 +1446,9 @@ class DataStreamWriter:
 
         .. versionadded:: 2.4.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         This API is evolving.
@@ -1344,20 +1513,29 @@ class DataStreamWriter:
 
         .. versionadded:: 2.4.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         This API is evolving.
+        This function behaves differently in Spark Connect mode. See examples.
+        In Connect, the provided function doesn't have access to variables defined outside of it.
 
         Examples
         --------
         >>> import time
         >>> df = spark.readStream.format("rate").load()
+        >>> my_value = -1
         >>> def func(batch_df, batch_id):
+        ...     global my_value
+        ...     my_value = 100
         ...     batch_df.collect()
         ...
         >>> q = df.writeStream.foreachBatch(func).start()
         >>> time.sleep(3)
         >>> q.stop()
+        >>> # if in Spark Connect, my_value = -1, else my_value = 100
         """
 
         from pyspark.java_gateway import ensure_callback_server_started
@@ -1387,6 +1565,9 @@ class DataStreamWriter:
         ``spark.sql.sources.default`` will be used.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1472,6 +1653,9 @@ class DataStreamWriter:
         The returned :class:`StreamingQuery` object can be used to interact with the stream.
 
         .. versionadded:: 3.1.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------

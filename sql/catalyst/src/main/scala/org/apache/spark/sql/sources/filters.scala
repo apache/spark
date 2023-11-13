@@ -65,13 +65,6 @@ sealed abstract class Filter {
   }
 
   /**
-   * If any of the references of this filter contains nested column
-   */
-  private[sql] def containsNestedColumn: Boolean = {
-    this.v2references.exists(_.length > 1)
-  }
-
-  /**
    * Converts V1 filter to V2 filter
    */
   private[sql] def toV2: Predicate

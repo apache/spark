@@ -42,10 +42,6 @@
               "literal": {
                 "integer": 40
               }
-            }, {
-              "literal": {
-                "long": "1"
-              }
             }]
           }
         }]

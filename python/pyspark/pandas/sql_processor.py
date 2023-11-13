@@ -18,10 +18,10 @@
 import _string  # type: ignore[import]
 from typing import Any, Dict, Optional, Union, List
 import inspect
+
 import pandas as pd
 
 from pyspark.sql import SparkSession, DataFrame as SDataFrame
-
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.utils import default_session
 from pyspark.pandas.frame import DataFrame
@@ -300,7 +300,7 @@ class SQLProcessor:
         # TODO: use a string builder
         res = ""
         try:
-            for (pre, inner, _, _) in blocks:
+            for pre, inner, _, _ in blocks:
                 var_next = "" if inner is None else self._convert(inner)
                 res = res + pre + var_next
             self._normalized_statement = res

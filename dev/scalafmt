@@ -17,6 +17,6 @@
 # limitations under the License.
 #
 
-VERSION="${@:-2.12}"
+VERSION="${@:-2.13}"
 ./build/mvn -Pscala-$VERSION scalafmt:format -Dscalafmt.skip=false -Dscalafmt.validateOnly=false
 

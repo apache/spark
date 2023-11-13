@@ -24,11 +24,11 @@ import java.nio.channels.Channels
 import java.util.Collections
 import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, TimeUnit}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.{Failure, Random, Success, Try}
 import scala.util.control.NonFatal
@@ -43,7 +43,7 @@ import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.{Network, RDD_CACHE_VISIBILITY_TRACKING_ENABLED}
+import org.apache.spark.internal.config.{Network, RDD_CACHE_VISIBILITY_TRACKING_ENABLED, Tests}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
@@ -62,6 +62,7 @@ import org.apache.spark.storage.BlockManagerMessages.{DecommissionBlockManager, 
 import org.apache.spark.storage.memory._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 /* Class for returning a fetched block and associated metrics. */
@@ -85,6 +86,13 @@ private[spark] trait BlockData {
    */
   def toNetty(): Object
 
+  /**
+   * Returns a Netty-friendly wrapper for the block's data.
+   *
+   * Please see `ManagedBuffer.convertToNettyForSsl()` for more details.
+   */
+  def toNettyForSsl(): Object
+
   def toChunkedByteBuffer(allocator: Int => ByteBuffer): ChunkedByteBuffer
 
   def toByteBuffer(): ByteBuffer
@@ -102,6 +110,8 @@ private[spark] class ByteBufferBlockData(
   override def toInputStream(): InputStream = buffer.toInputStream()
 
   override def toNetty(): Object = buffer.toNetty
+
+  override def toNettyForSsl(): AnyRef = buffer.toNettyForSsl
 
   override def toChunkedByteBuffer(allocator: Int => ByteBuffer): ChunkedByteBuffer = {
     buffer.copy(allocator)
@@ -527,7 +537,7 @@ private[spark] class BlockManager(
       logInfo(s"external shuffle service port = $externalShuffleServicePort")
       shuffleServerId = BlockManagerId(executorId, blockTransferService.hostName,
         externalShuffleServicePort)
-      if (!isDriver) {
+      if (!isDriver && !(Utils.isTesting && conf.get(Tests.TEST_SKIP_ESS_REGISTER))) {
         registerWithExternalShuffleServer()
       }
     }
@@ -867,7 +877,10 @@ private[spark] class BlockManager(
     val storageLevel = status.storageLevel
     val inMemSize = Math.max(status.memSize, droppedMemorySize)
     val onDiskSize = status.diskSize
-    master.updateBlockInfo(blockManagerId, blockId, storageLevel, inMemSize, onDiskSize)
+    // Yet `blockId` could only be `ShuffleIndexBlockId` or `ShuffleDataBlockId` when it's a
+    // shuffle block because of decommission.
+    val bmId = if (blockId.isShuffle) shuffleServerId else blockManagerId
+    master.updateBlockInfo(bmId, blockId, storageLevel, inMemSize, onDiskSize)
   }
 
   /**
@@ -1171,8 +1184,8 @@ private[spark] class BlockManager(
         val buf = blockTransferService.fetchBlockSync(loc.host, loc.port, loc.executorId,
           blockId.toString, tempFileManager)
         if (blockSize > 0 && buf.size() == 0) {
-          throw new IllegalStateException("Empty buffer received for non empty block " +
-            s"when fetching remote block $blockId from $loc")
+          throw SparkException.internalError("Empty buffer received for non empty block " +
+            s"when fetching remote block $blockId from $loc", category = "STORAGE")
         }
         buf
       } catch {
@@ -1240,7 +1253,8 @@ private[spark] class BlockManager(
             new EncryptedBlockData(file, blockSize, conf, key))
 
         case _ =>
-          val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
+          val transportConf = SparkTransportConf.fromSparkConf(
+            conf, "shuffle", sslOptions = Some(securityManager.getRpcSSLOptions()))
           new FileSegmentManagedBuffer(transportConf, file, 0, file.length)
       }
       Some(managedBuffer)
@@ -1303,7 +1317,7 @@ private[spark] class BlockManager(
     val taskAttemptId = taskContext.map(_.taskAttemptId())
     // SPARK-27666. When a task completes, Spark automatically releases all the blocks locked
     // by this task. We should not release any locks for a task that is already completed.
-    if (taskContext.isDefined && taskContext.get.isCompleted) {
+    if (taskContext.isDefined && taskContext.get.isCompleted()) {
       logWarning(s"Task ${taskAttemptId.get} already completed, not releasing lock for $blockId")
     } else {
       blockInfoManager.unlock(blockId, taskAttemptId)
@@ -1510,14 +1524,10 @@ private[spark] class BlockManager(
 
     val putBlockInfo = {
       val newInfo = new BlockInfo(level, classTag, tellMaster)
-      if (blockInfoManager.lockNewBlockForWriting(blockId, newInfo)) {
+      if (blockInfoManager.lockNewBlockForWriting(blockId, newInfo, keepReadLock)) {
         newInfo
       } else {
         logWarning(s"Block $blockId already exists on this machine; not re-adding it")
-        if (!keepReadLock) {
-          // lockNewBlockForWriting returned a read lock on the existing block, so we must free it:
-          releaseLock(blockId)
-        }
         return None
       }
     }
@@ -2142,7 +2152,7 @@ private[spark] object BlockManager {
     // blockManagerMaster != null is used in tests
     assert(env != null || blockManagerMaster != null)
     val blockLocations: Seq[Seq[BlockManagerId]] = if (blockManagerMaster == null) {
-      env.blockManager.getLocationBlockIds(blockIds)
+      env.blockManager.getLocationBlockIds(blockIds).toImmutableArraySeq
     } else {
       blockManagerMaster.getLocations(blockIds)
     }

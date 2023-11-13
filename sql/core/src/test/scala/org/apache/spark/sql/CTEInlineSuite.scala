@@ -645,6 +645,64 @@ abstract class CTEInlineSuiteBase
       }
     }
   }
+
+  test("SPARK-44934: CTE column pruning handles duplicate exprIds in CTE") {
+    withTempView("t") {
+      Seq((0, 1, 2), (1, 2, 3)).toDF("c1", "c2", "c3").createOrReplaceTempView("t")
+      val query =
+        """
+          |with cte as (
+          |  select c1, c1, c2, c3 from t where random() > 0
+          |)
+          |select cte.c1, cte2.c1, cte.c2, cte2.c3 from
+          |  (select c1, c2 from cte) cte
+          |    inner join
+          |  (select c1, c3 from cte) cte2
+          |    on cte.c1 = cte2.c1
+          """.stripMargin
+
+      val df = sql(query)
+      checkAnswer(df, Row(0, 0, 1, 2) :: Row(1, 1, 2, 3) :: Nil)
+      assert(
+        df.queryExecution.analyzed.collect {
+          case WithCTE(_, cteDefs) => cteDefs
+        }.head.length == 1,
+        "With-CTE should contain 1 CTE def after analysis.")
+      val cteRepartitions = df.queryExecution.optimizedPlan.collect {
+        case r: RepartitionOperation => r
+      }
+      assert(cteRepartitions.length == 2,
+        "CTE should not be inlined after optimization.")
+      assert(cteRepartitions.head.collectFirst {
+        case p: Project if p.projectList.length == 4 => p
+      }.isDefined, "CTE columns should not be pruned.")
+    }
+  }
+
+  test("SPARK-45752: Unreferenced CTE should all be checked by CheckAnalysis0") {
+    val e = intercept[AnalysisException](sql(
+      s"""
+        |with
+        |a as (select * from tab_non_exists),
+        |b as (select * from a)
+        |select 2
+        |""".stripMargin))
+    checkErrorTableNotFound(e, "`tab_non_exists`", ExpectedContext("tab_non_exists", 26, 39))
+
+    withTable("tab_exists") {
+      spark.sql("CREATE TABLE tab_exists(id INT) using parquet")
+      val e = intercept[AnalysisException](sql(
+        s"""
+           |with
+           |a as (select * from tab_exists),
+           |b as (select * from a),
+           |c as (select * from tab_non_exists),
+           |d as (select * from c)
+           |select 2
+           |""".stripMargin))
+      checkErrorTableNotFound(e, "`tab_non_exists`", ExpectedContext("tab_non_exists", 83, 96))
+    }
+  }
 }
 
 class CTEInlineSuiteAEOff extends CTEInlineSuiteBase with DisableAdaptiveExecutionSuite

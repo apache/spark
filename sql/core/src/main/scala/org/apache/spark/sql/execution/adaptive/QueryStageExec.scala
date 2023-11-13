@@ -110,7 +110,7 @@ abstract class QueryStageExec extends LeafExecNode {
 
   override def generateTreeString(
       depth: Int,
-      lastChildren: Seq[Boolean],
+      lastChildren: java.util.ArrayList[Boolean],
       append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
@@ -127,8 +127,10 @@ abstract class QueryStageExec extends LeafExecNode {
       maxFields,
       printNodeId,
       indent)
+    lastChildren.add(true)
     plan.generateTreeString(
-      depth + 1, lastChildren :+ true, append, verbose, "", false, maxFields, printNodeId, indent)
+      depth + 1, lastChildren, append, verbose, "", false, maxFields, printNodeId, indent)
+    lastChildren.remove(lastChildren.size() - 1)
   }
 
   override protected[sql] def cleanupResources(): Unit = {
@@ -250,7 +252,7 @@ case class BroadcastQueryStageExec(
 
   override def cancel(): Unit = {
     if (!broadcast.relationFuture.isDone) {
-      sparkContext.cancelJobGroup(broadcast.runId.toString)
+      sparkContext.cancelJobsWithTag(broadcast.jobTag)
       broadcast.relationFuture.cancel(true)
     }
   }

@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, LeafExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_FUNC}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, Table, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -29,16 +30,13 @@ import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Holds the name of a namespace that has yet to be looked up in a catalog. It will be resolved to
  * [[ResolvedNamespace]] during analysis.
  */
-case class UnresolvedNamespace(multipartIdentifier: Seq[String]) extends LeafNode {
-  override lazy val resolved: Boolean = false
-
-  override def output: Seq[Attribute] = Nil
-}
+case class UnresolvedNamespace(multipartIdentifier: Seq[String]) extends UnresolvedLeafNode
 
 /**
  * Holds the name of a table that has yet to be looked up in a catalog. It will be resolved to
@@ -47,11 +45,7 @@ case class UnresolvedNamespace(multipartIdentifier: Seq[String]) extends LeafNod
 case class UnresolvedTable(
     multipartIdentifier: Seq[String],
     commandName: String,
-    relationTypeMismatchHint: Option[String]) extends LeafNode {
-  override lazy val resolved: Boolean = false
-
-  override def output: Seq[Attribute] = Nil
-}
+    suggestAlternative: Boolean = false) extends UnresolvedLeafNode
 
 /**
  * Holds the name of a view that has yet to be looked up. It will be resolved to
@@ -61,11 +55,7 @@ case class UnresolvedView(
     multipartIdentifier: Seq[String],
     commandName: String,
     allowTemp: Boolean,
-    relationTypeMismatchHint: Option[String]) extends LeafNode {
-  override lazy val resolved: Boolean = false
-
-  override def output: Seq[Attribute] = Nil
-}
+    suggestAlternative: Boolean = false) extends UnresolvedLeafNode
 
 /**
  * Holds the name of a table or view that has yet to be looked up in a catalog. It will
@@ -75,10 +65,7 @@ case class UnresolvedView(
 case class UnresolvedTableOrView(
     multipartIdentifier: Seq[String],
     commandName: String,
-    allowTempView: Boolean) extends LeafNode {
-  override lazy val resolved: Boolean = false
-  override def output: Seq[Attribute] = Nil
-}
+    allowTempView: Boolean) extends UnresolvedLeafNode
 
 sealed trait PartitionSpec extends LeafExpression with Unevaluable {
   override def dataType: DataType = throw new IllegalStateException(
@@ -127,9 +114,7 @@ case class UnresolvedFunctionName(
     commandName: String,
     requirePersistent: Boolean,
     funcTypeMismatchHint: Option[String],
-    possibleQualifiedName: Option[Seq[String]] = None) extends LeafNode {
-  override lazy val resolved: Boolean = false
-  override def output: Seq[Attribute] = Nil
+    possibleQualifiedName: Option[Seq[String]] = None) extends UnresolvedLeafNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_FUNC)
 }
 
@@ -138,10 +123,7 @@ case class UnresolvedFunctionName(
  * be resolved to [[ResolvedIdentifier]] during analysis.
  */
 case class UnresolvedIdentifier(nameParts: Seq[String], allowTemp: Boolean = false)
-  extends LeafNode {
-  override lazy val resolved: Boolean = false
-  override def output: Seq[Attribute] = Nil
-}
+  extends UnresolvedLeafNode
 
 
 /**
@@ -171,7 +153,7 @@ case class ResolvedTable(
   extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = {
     val qualifier = catalog.name +: identifier.namespace :+ identifier.name
-    outputAttributes.map(_.withQualifier(qualifier))
+    outputAttributes.map(_.withQualifier(qualifier.toImmutableArraySeq))
   }
   def name: String = (catalog.name +: identifier.namespace() :+ identifier.name()).quoted
 }
@@ -182,7 +164,7 @@ object ResolvedTable {
       identifier: Identifier,
       table: Table): ResolvedTable = {
     val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.columns.asSchema)
-    ResolvedTable(catalog, identifier, table, schema.toAttributes)
+    ResolvedTable(catalog, identifier, table, toAttributes(schema))
   }
 }
 
@@ -251,5 +233,5 @@ case class ResolvedIdentifier(
 // A fake v2 catalog to hold temp views.
 object FakeSystemCatalog extends CatalogPlugin {
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
-  override def name(): String = "SYSTEM"
+  override def name(): String = "system"
 }

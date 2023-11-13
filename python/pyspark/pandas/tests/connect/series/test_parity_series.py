@@ -22,9 +22,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class SeriesParityTests(SeriesTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    @unittest.skip("TODO(SPARK-43619): Enable DataFrameSlowParityTests.test_udt.")
-    def test_udt(self):
-        super().test_udt()
+    pass
 
 
 if __name__ == "__main__":

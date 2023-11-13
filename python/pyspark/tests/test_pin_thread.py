@@ -83,10 +83,24 @@ class PinThreadTests(unittest.TestCase):
         assert len(set(jvm_thread_ids)) == 10
 
     def test_multiple_group_jobs(self):
-        # SPARK-22340 Add a mode to pin Python thread into JVM's
+        # SPARK-22340: Add a mode to pin Python thread into JVM's
+        self.check_job_cancellation(
+            lambda job_group: self.sc.setJobGroup(
+                job_group, "test rdd collect with setting job group"
+            ),
+            lambda job_group: self.sc.cancelJobGroup(job_group),
+        )
 
-        group_a = "job_ids_to_cancel"
-        group_b = "job_ids_to_run"
+    def test_multiple_group_tags(self):
+        # SPARK-44194: Test pinned thread mode with job tags.
+        self.check_job_cancellation(
+            lambda job_tag: self.sc.addJobTag(job_tag),
+            lambda job_tag: self.sc.cancelJobsWithTag(job_tag),
+        )
+
+    def check_job_cancellation(self, setter, canceller):
+        job_id_a = "job_ids_to_cancel"
+        job_id_b = "job_ids_to_run"
 
         threads = []
         thread_ids = range(4)
@@ -97,13 +111,13 @@ class PinThreadTests(unittest.TestCase):
         # The index of the array is the thread index which job run in.
         is_job_cancelled = [False for _ in thread_ids]
 
-        def run_job(job_group, index):
+        def run_job(job_id, index):
             """
             Executes a job with the group ``job_group``. Each job waits for 3 seconds
             and then exits.
             """
             try:
-                self.sc.setJobGroup(job_group, "test rdd collect with setting job group")
+                setter(job_id)
                 self.sc.parallelize([15]).map(lambda x: time.sleep(x)).collect()
                 is_job_cancelled[index] = False
             except Exception:
@@ -111,24 +125,24 @@ class PinThreadTests(unittest.TestCase):
                 is_job_cancelled[index] = True
 
         # Test if job succeeded when not cancelled.
-        run_job(group_a, 0)
+        run_job(job_id_a, 0)
         self.assertFalse(is_job_cancelled[0])
 
         # Run jobs
         for i in thread_ids_to_cancel:
-            t = threading.Thread(target=run_job, args=(group_a, i))
+            t = threading.Thread(target=run_job, args=(job_id_a, i))
             t.start()
             threads.append(t)
 
         for i in thread_ids_to_run:
-            t = threading.Thread(target=run_job, args=(group_b, i))
+            t = threading.Thread(target=run_job, args=(job_id_b, i))
             t.start()
             threads.append(t)
 
         # Wait to make sure all jobs are executed.
         time.sleep(3)
         # And then, cancel one job group.
-        self.sc.cancelJobGroup(group_a)
+        canceller(job_id_a)
 
         # Wait until all threads launching jobs are finished.
         for t in threads:

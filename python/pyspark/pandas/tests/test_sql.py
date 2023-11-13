@@ -19,6 +19,7 @@ from pyspark import pandas as ps
 from pyspark.errors import ParseException
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.testing.utils import assertDataFrameEqual
 
 
 class SQLTestsMixin:
@@ -49,7 +50,7 @@ class SQLTestsMixin:
             psdf_reset_index=psdf_reset_index,
         )
         expected = psdf.iloc[[1, 2]]
-        self.assert_eq(actual, expected)
+        assertDataFrameEqual(actual, expected)
 
         # MultiIndex
         psdf = ps.DataFrame(
@@ -65,34 +66,44 @@ class SQLTestsMixin:
             psdf_reset_index=psdf_reset_index,
         )
         expected = psdf.iloc[[1, 2]]
-        self.assert_eq(actual, expected)
+        assertDataFrameEqual(actual, expected)
 
     def test_sql_with_pandas_objects(self):
         import pandas as pd
 
         pdf = pd.DataFrame({"a": [1, 2, 3, 4]})
-        self.assert_eq(ps.sql("SELECT {col} + 1 as a FROM {tbl}", col=pdf.a, tbl=pdf), pdf + 1)
+        assertDataFrameEqual(
+            ps.sql("SELECT {col} + 1 as a FROM {tbl}", col=pdf.a, tbl=pdf), pdf + 1
+        )
 
     def test_sql_with_python_objects(self):
-        self.assert_eq(
+        assertDataFrameEqual(
             ps.sql("SELECT {col} as a FROM range(1)", col="lit"), ps.DataFrame({"a": ["lit"]})
         )
-        self.assert_eq(
+        assertDataFrameEqual(
             ps.sql("SELECT id FROM range(10) WHERE id IN {pred}", col="lit", pred=(1, 2, 3)),
+            ps.DataFrame({"id": [1, 2, 3]}),
+        )
+        assertDataFrameEqual(
+            ps.sql("SELECT {col} as a FROM range(1)", col="a'''c''d"),
+            ps.DataFrame({"a": ["a'''c''d"]}),
+        )
+        assertDataFrameEqual(
+            ps.sql("SELECT id FROM range(10) WHERE id IN {pred}", col="a'''c''d", pred=(1, 2, 3)),
             ps.DataFrame({"id": [1, 2, 3]}),
         )
 
     def test_sql_with_pandas_on_spark_objects(self):
         psdf = ps.DataFrame({"a": [1, 2, 3, 4]})
 
-        self.assert_eq(ps.sql("SELECT {col} FROM {tbl}", col=psdf.a, tbl=psdf), psdf)
-        self.assert_eq(ps.sql("SELECT {tbl.a} FROM {tbl}", tbl=psdf), psdf)
+        assertDataFrameEqual(ps.sql("SELECT {col} FROM {tbl}", col=psdf.a, tbl=psdf), psdf)
+        assertDataFrameEqual(ps.sql("SELECT {tbl.a} FROM {tbl}", tbl=psdf), psdf)
 
         psdf = ps.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
-        self.assert_eq(
+        assertDataFrameEqual(
             ps.sql("SELECT {col}, {col2} FROM {tbl}", col=psdf.A, col2=psdf.B, tbl=psdf), psdf
         )
-        self.assert_eq(ps.sql("SELECT {tbl.A}, {tbl.B} FROM {tbl}", tbl=psdf), psdf)
+        assertDataFrameEqual(ps.sql("SELECT {tbl.A}, {tbl.B} FROM {tbl}", tbl=psdf), psdf)
 
 
 class SQLTests(SQLTestsMixin, PandasOnSparkTestCase, SQLTestUtils):

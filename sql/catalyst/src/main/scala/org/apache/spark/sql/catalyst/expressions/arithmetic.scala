@@ -19,13 +19,13 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.math.{max, min}
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLId, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreePattern, UNARY_POSITIVE}
 import org.apache.spark.sql.catalyst.types.{PhysicalDecimalType, PhysicalFractionalType, PhysicalIntegerType, PhysicalIntegralType, PhysicalLongType}
 import org.apache.spark.sql.catalyst.util.{IntervalMathUtils, IntervalUtils, MathUtils, TypeUtils}
@@ -219,6 +219,12 @@ abstract class BinaryArithmetic extends BinaryOperator
 
   protected val evalMode: EvalMode.Value
 
+  private lazy val internalDataType: DataType = (left.dataType, right.dataType) match {
+    case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
+      resultDecimalType(p1, s1, p2, s2)
+    case _ => left.dataType
+  }
+
   protected def failOnError: Boolean = evalMode match {
     // The TRY mode executes as if it would fail on errors, except that it would capture the errors
     // and return null results.
@@ -234,11 +240,7 @@ abstract class BinaryArithmetic extends BinaryOperator
     case _ => super.checkInputDataTypes()
   }
 
-  override def dataType: DataType = (left.dataType, right.dataType) match {
-    case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
-      resultDecimalType(p1, s1, p2, s2)
-    case _ => left.dataType
-  }
+  override def dataType: DataType = internalDataType
 
   // When `spark.sql.decimalOperations.allowPrecisionLoss` is set to true, if the precision / scale
   // needed are out of the range of available values, the scale is reduced up to 6, in order to
@@ -264,9 +266,7 @@ abstract class BinaryArithmetic extends BinaryOperator
 
   final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_ARITHMETIC)
 
-  override lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
-
-  override def initQueryContext(): Option[SQLQueryContext] = {
+  override def initQueryContext(): Option[QueryContext] = {
     if (failOnError) {
       Some(origin.context)
     } else {

@@ -29,36 +29,6 @@ class FrameParityMissingDataTests(
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_backfill(self):
-        super().test_backfill()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_bfill(self):
-        super().test_bfill()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_ffill(self):
-        super().test_ffill()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_fillna(self):
-        return super().test_fillna()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_pad(self):
-        super().test_pad()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.computation.test_parity_missing_data import *  # noqa: F401

@@ -20,6 +20,7 @@ package org.apache.spark.util.collection
 import java.io._
 import java.util.Comparator
 
+import scala.collection.BufferedIterator
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -102,10 +103,8 @@ private[spark] class ExternalSorter[K, V, C](
   private val conf = SparkEnv.get.conf
 
   private val numPartitions = partitioner.map(_.numPartitions).getOrElse(1)
-  private val shouldPartition = numPartitions > 1
-  private def getPartition(key: K): Int = {
-    if (shouldPartition) partitioner.get.getPartition(key) else 0
-  }
+  private val actualPartitioner =
+    if (numPartitions > 1) partitioner.get else new ConstantPartitioner
 
   private val blockManager = SparkEnv.get.blockManager
   private val diskBlockManager = blockManager.diskBlockManager
@@ -197,7 +196,7 @@ private[spark] class ExternalSorter[K, V, C](
       while (records.hasNext) {
         addElementsRead()
         kv = records.next()
-        map.changeValue((getPartition(kv._1), kv._1), update)
+        map.changeValue((actualPartitioner.getPartition(kv._1), kv._1), update)
         maybeSpillCollection(usingMap = true)
       }
     } else {
@@ -205,7 +204,7 @@ private[spark] class ExternalSorter[K, V, C](
       while (records.hasNext) {
         addElementsRead()
         val kv = records.next()
-        buffer.insert(getPartition(kv._1), kv._1, kv._2.asInstanceOf[C])
+        buffer.insert(actualPartitioner.getPartition(kv._1), kv._1, kv._2.asInstanceOf[C])
         maybeSpillCollection(usingMap = false)
       }
     }
@@ -818,7 +817,7 @@ private[spark] class ExternalSorter[K, V, C](
         false
       } else {
         val inMemoryIterator = new WritablePartitionedIterator[K, C](upstream)
-        logInfo(s"Task ${TaskContext.get().taskAttemptId} force spilling in-memory map to disk " +
+        logInfo(s"Task ${TaskContext.get().taskAttemptId()} force spilling in-memory map to disk " +
           s"and it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
         val spillFile = spillMemoryIteratorToDisk(inMemoryIterator)
         forceSpillFiles += spillFile
@@ -844,7 +843,7 @@ private[spark] class ExternalSorter[K, V, C](
       }
     }
 
-    override def hasNext(): Boolean = cur != null
+    override def hasNext: Boolean = cur != null
 
     override def next(): ((Int, K), C) = {
       val r = cur

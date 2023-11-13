@@ -53,6 +53,8 @@ import org.apache.spark.unsafe.types.UTF8String;
 public abstract class WritableColumnVector extends ColumnVector {
   private final byte[] byte8 = new byte[8];
 
+  protected abstract void releaseMemory();
+
   /**
    * Resets this column for writing. The currently stored values are no longer accessible.
    */
@@ -68,6 +70,12 @@ public abstract class WritableColumnVector extends ColumnVector {
     if (numNulls > 0) {
       putNotNulls(0, capacity);
       numNulls = 0;
+    }
+
+    if (hugeVectorThreshold > 0 && capacity > hugeVectorThreshold) {
+      capacity = defaultCapacity;
+      releaseMemory();
+      reserveInternal(capacity);
     }
   }
 
@@ -85,6 +93,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       dictionaryIds = null;
     }
     dictionary = null;
+    releaseMemory();
   }
 
   public void reserveAdditional(int additionalCapacity) {
@@ -95,7 +104,10 @@ public abstract class WritableColumnVector extends ColumnVector {
     if (requiredCapacity < 0) {
       throwUnsupportedException(requiredCapacity, null);
     } else if (requiredCapacity > capacity) {
-      int newCapacity = (int) Math.min(MAX_CAPACITY, requiredCapacity * 2L);
+      int newCapacity =
+          hugeVectorThreshold < 0 || requiredCapacity < hugeVectorThreshold ?
+              (int) Math.min(MAX_CAPACITY, requiredCapacity * 2L) :
+              (int) Math.min(MAX_CAPACITY, requiredCapacity * hugeVectorReserveRatio);
       if (requiredCapacity <= newCapacity) {
         try {
           reserveInternal(newCapacity);
@@ -709,8 +721,7 @@ public abstract class WritableColumnVector extends ColumnVector {
     if (value instanceof Byte) {
       return Optional.of(appendBytes(length, (Byte) value));
     }
-    if (value instanceof Decimal) {
-      Decimal decimal = (Decimal) value;
+    if (value instanceof Decimal decimal) {
       long unscaled = decimal.toUnscaledLong();
       if (decimal.precision() < 10) {
         return Optional.of(appendInts(length, (int) unscaled));
@@ -733,8 +744,7 @@ public abstract class WritableColumnVector extends ColumnVector {
     if (value instanceof Short) {
       return Optional.of(appendShorts(length, (Short) value));
     }
-    if (value instanceof UTF8String) {
-      UTF8String utf8 = (UTF8String) value;
+    if (value instanceof UTF8String utf8) {
       byte[] bytes = utf8.getBytes();
       int result = 0;
       for (int i = 0; i < length; ++i) {
@@ -742,8 +752,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       }
       return Optional.of(result);
     }
-    if (value instanceof GenericArrayData) {
-      GenericArrayData arrayData = (GenericArrayData) value;
+    if (value instanceof GenericArrayData arrayData) {
       int result = 0;
       for (int i = 0; i < length; ++i) {
         appendArray(arrayData.numElements());
@@ -756,8 +765,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       }
       return Optional.of(result);
     }
-    if (value instanceof GenericInternalRow) {
-      GenericInternalRow row = (GenericInternalRow) value;
+    if (value instanceof GenericInternalRow row) {
       int result = 0;
       for (int i = 0; i < length; ++i) {
         appendStruct(false);
@@ -771,8 +779,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       }
       return Optional.of(result);
     }
-    if (value instanceof ArrayBasedMapData) {
-      ArrayBasedMapData data = (ArrayBasedMapData) value;
+    if (value instanceof ArrayBasedMapData data) {
       appendArray(length);
       int result = 0;
       for (int i = 0; i < length; ++i) {
@@ -846,7 +853,14 @@ public abstract class WritableColumnVector extends ColumnVector {
   /**
    * Marks this column as being constant.
    */
-  public final void setIsConstant() { isConstant = true; }
+  public final void setIsConstant() {
+    if (childColumns != null) {
+      for (WritableColumnVector c : childColumns) {
+        c.setIsConstant();
+      }
+    }
+    isConstant = true;
+  }
 
   /**
    * Marks this column only contains null values.
@@ -868,10 +882,19 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected int capacity;
 
   /**
+   * The default number of rows that can be stored in this column.
+   */
+  protected final int defaultCapacity;
+
+  /**
    * Upper limit for the maximum capacity for this column.
    */
   @VisibleForTesting
   protected int MAX_CAPACITY = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH;
+
+  protected int hugeVectorThreshold;
+
+  protected double hugeVectorReserveRatio;
 
   /**
    * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.
@@ -922,6 +945,9 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected WritableColumnVector(int capacity, DataType dataType) {
     super(dataType);
     this.capacity = capacity;
+    this.defaultCapacity = capacity;
+    this.hugeVectorThreshold = SQLConf.get().vectorizedHugeVectorThreshold();
+    this.hugeVectorReserveRatio = SQLConf.get().vectorizedHugeVectorReserveRatio();
 
     if (isArray()) {
       DataType childType;
@@ -934,14 +960,12 @@ public abstract class WritableColumnVector extends ColumnVector {
       }
       this.childColumns = new WritableColumnVector[1];
       this.childColumns[0] = reserveNewColumn(childCapacity, childType);
-    } else if (type instanceof StructType) {
-      StructType st = (StructType)type;
+    } else if (type instanceof StructType st) {
       this.childColumns = new WritableColumnVector[st.fields().length];
       for (int i = 0; i < childColumns.length; ++i) {
         this.childColumns[i] = reserveNewColumn(capacity, st.fields()[i].dataType());
       }
-    } else if (type instanceof MapType) {
-      MapType mapType = (MapType) type;
+    } else if (type instanceof MapType mapType) {
       this.childColumns = new WritableColumnVector[2];
       this.childColumns[0] = reserveNewColumn(capacity, mapType.keyType());
       this.childColumns[1] = reserveNewColumn(capacity, mapType.valueType());

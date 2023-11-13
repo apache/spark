@@ -236,4 +236,5 @@ Project [b#x, c#x, equal_null(b#x, c#x) AS equal_null(b, c)#x, equal_null(c#x, b
 -- !query
 drop table t1
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`t1`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t1

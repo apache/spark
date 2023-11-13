@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase}
+import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -28,10 +28,12 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils
 import org.apache.spark.util.random.RandomSampler
 
@@ -102,7 +104,8 @@ object Project {
 
   def matchSchema(plan: LogicalPlan, schema: StructType, conf: SQLConf): Project = {
     assert(plan.resolved)
-    val projectList = reorderFields(plan.output.map(a => (a.name, a)), schema.fields, Nil, conf)
+    val projectList =
+      reorderFields(plan.output.map(a => (a.name, a)), schema.fields.toImmutableArraySeq, Nil, conf)
     Project(projectList, plan)
   }
 
@@ -124,8 +127,8 @@ object Project {
             } else {
               (f.name, GetStructField(col, index))
             }
-          },
-          expected.fields,
+          }.toImmutableArraySeq,
+          expected.fields.toImmutableArraySeq,
           columnPath,
           conf)
         if (col.nullable) {
@@ -234,6 +237,20 @@ object Project {
   }
 }
 
+case class DataFrameDropColumns(dropList: Seq[Expression], child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = Nil
+
+  override def maxRows: Option[Long] = child.maxRows
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(DF_DROP_COLUMNS)
+
+  override lazy val resolved: Boolean = false
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): DataFrameDropColumns =
+    copy(child = newChild)
+}
+
 /**
  * Applies a [[Generator]] to a stream of input rows, combining the
  * output of each into a new stream of rows.  This operation is similar to a `flatMap` in functional
@@ -302,8 +319,15 @@ case class Filter(condition: Expression, child: LogicalPlan)
   extends OrderPreservingUnaryNode with PredicateHelper {
   override def output: Seq[Attribute] = child.output
 
-  override def maxRows: Option[Long] = child.maxRows
-  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+  override def maxRows: Option[Long] = condition match {
+    case Literal.FalseLiteral => Some(0L)
+    case _ => child.maxRows
+  }
+
+  override def maxRowsPerPartition: Option[Long] = condition match {
+    case Literal.FalseLiteral => Some(0L)
+    case _ => child.maxRowsPerPartition
+  }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(FILTER)
 
@@ -676,7 +700,7 @@ case class InsertIntoDir(
     provider: Option[String],
     child: LogicalPlan,
     overwrite: Boolean = true)
-  extends UnaryNode {
+  extends UnaryNode with CTEInChildren {
 
   override def output: Seq[Attribute] = Seq.empty
   override def metadataOutput: Seq[Attribute] = Nil
@@ -754,7 +778,7 @@ object View {
     // as optimization configs but they are still needed during the view resolution.
     // TODO: remove this `retainedConfigs` after the `RelationConversions` is moved to
     // optimization phase.
-    val retainedConfigs = activeConf.getAllConfs.filterKeys(key =>
+    val retainedConfigs = activeConf.getAllConfs.view.filterKeys(key =>
       Seq(
         "spark.sql.hive.convertMetastoreParquet",
         "spark.sql.hive.convertMetastoreOrc",
@@ -886,6 +910,16 @@ case class WithCTE(plan: LogicalPlan, cteDefs: Seq[CTERelationDef]) extends Logi
   }
 }
 
+/**
+ * The logical node which is able to place the `WithCTE` node on its children.
+ */
+trait CTEInChildren extends LogicalPlan {
+  def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    withNewChildren(children.map(WithCTE(_, cteDefs)))
+  }
+}
+
+
 case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
     child: LogicalPlan) extends UnaryNode {
@@ -922,7 +956,7 @@ object Range {
   }
 
   def getOutputAttrs: Seq[Attribute] = {
-    StructType(Array(StructField("id", LongType, nullable = false))).toAttributes
+    toAttributes(StructType(Array(StructField("id", LongType, nullable = false))))
   }
 
   private def typeCoercion: TypeCoercionBase = {
@@ -1182,7 +1216,7 @@ object Aggregate {
   }
 
   def supportsHashAggregate(aggregateBufferAttributes: Seq[Attribute]): Boolean = {
-    val aggregationBufferSchema = StructType.fromAttributes(aggregateBufferAttributes)
+    val aggregationBufferSchema = DataTypeUtils.fromAttributes(aggregateBufferAttributes)
     isAggregateBufferMutable(aggregationBufferSchema)
   }
 
@@ -1314,9 +1348,9 @@ object Expand {
     // grouping expression or null, so here we create new instance of it.
     val output = if (hasDuplicateGroupingSets) {
       val gpos = AttributeReference("_gen_grouping_pos", IntegerType, false)()
-      child.output ++ groupByAttrs.map(_.newInstance) :+ gid :+ gpos
+      child.output ++ groupByAttrs.map(_.newInstance()) :+ gid :+ gpos
     } else {
-      child.output ++ groupByAttrs.map(_.newInstance) :+ gid
+      child.output ++ groupByAttrs.map(_.newInstance()) :+ gid
     }
     Expand(projections, output, Project(child.output ++ groupByAliases, child))
   }
@@ -1404,7 +1438,7 @@ case class Pivot(
         pivotValues.map(value => AttributeReference(value.toString, agg.dataType)())
       case _ =>
         pivotValues.flatMap { value =>
-          aggregates.map(agg => AttributeReference(value + "_" + agg.sql, agg.dataType)())
+          aggregates.map(agg => AttributeReference(s"${value}_${agg.sql}", agg.dataType)())
         }
     }
     groupByExprsOpt.getOrElse(Seq.empty).map(_.toAttribute) ++ pivotAgg
@@ -1498,12 +1532,10 @@ case class Unpivot(
     aliases: Option[Seq[Option[String]]],
     variableColumnName: String,
     valueColumnNames: Seq[String],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan) extends UnresolvedUnaryNode {
   // There should be no code path that creates `Unpivot` with both set None
   assert(ids.isDefined || values.isDefined, "at least one of `ids` and `values` must be defined")
 
-  override lazy val resolved = false  // Unpivot will be replaced after being resolved.
-  override def output: Seq[Attribute] = Nil
   override def metadataOutput: Seq[Attribute] = Nil
   final override val nodePatterns: Seq[TreePattern] = Seq(UNPIVOT)
 
@@ -1709,7 +1741,12 @@ object SubqueryAlias {
       child: LogicalPlan): SubqueryAlias = {
     SubqueryAlias(AliasIdentifier(multipartIdentifier.last, multipartIdentifier.init), child)
   }
+
+  def generateSubqueryName(suffix: String = ""): String = {
+    s"__auto_generated_subquery_name$suffix"
+  }
 }
+
 /**
  * Sample the dataset.
  *
@@ -1948,7 +1985,8 @@ trait SupportsSubquery extends LogicalPlan
 case class CollectMetrics(
     name: String,
     metrics: Seq[NamedExpression],
-    child: LogicalPlan)
+    child: LogicalPlan,
+    dataframeId: Long)
   extends UnaryNode {
 
   override lazy val resolved: Boolean = {
@@ -1961,6 +1999,10 @@ case class CollectMetrics(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): CollectMetrics =
     copy(child = newChild)
+
+  override def doCanonicalize(): LogicalPlan = {
+    super.doCanonicalize().asInstanceOf[CollectMetrics].copy(dataframeId = 0L)
+  }
 }
 
 /**

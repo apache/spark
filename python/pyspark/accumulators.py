@@ -88,12 +88,14 @@ class Accumulator(Generic[T]):
     >>> def f(x):
     ...     global a
     ...     a += x
+    ...
     >>> rdd.foreach(f)
     >>> a.value
     13
     >>> b = sc.accumulator(0)
     >>> def g(x):
     ...     b.add(x)
+    ...
     >>> rdd.foreach(g)
     >>> b.value
     6
@@ -106,6 +108,7 @@ class Accumulator(Generic[T]):
     >>> def h(x):
     ...     global a
     ...     a.value = 7
+    ...
     >>> rdd.foreach(h) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
@@ -198,6 +201,7 @@ class AccumulatorParam(Generic[T]):
     >>> def g(x):
     ...     global va
     ...     va += [x] * 3
+    ...
     >>> rdd = sc.parallelize([1,2,3])
     >>> rdd.foreach(g)
     >>> va.value

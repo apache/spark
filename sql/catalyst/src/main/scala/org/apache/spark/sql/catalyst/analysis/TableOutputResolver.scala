@@ -19,19 +19,61 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.getDefaultValueExprOrNullLit
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralType, MapType, StructType}
 
-object TableOutputResolver {
+object TableOutputResolver extends SQLConfHelper with Logging {
+
+  def resolveVariableOutputColumns(
+      expected: Seq[VariableReference],
+      query: LogicalPlan,
+      conf: SQLConf): LogicalPlan = {
+
+    if (expected.size != query.output.size) {
+      throw new AnalysisException(
+        errorClass = "ASSIGNMENT_ARITY_MISMATCH",
+        messageParameters = Map(
+          "numTarget" -> expected.size.toString,
+          "numExpr" -> query.output.size.toString))
+    }
+
+    val resolved: Seq[NamedExpression] = {
+      query.output.zip(expected).map { case (inputCol, expected) =>
+        if (DataTypeUtils.sameType(inputCol.dataType, expected.dataType)) {
+          inputCol
+        } else {
+          // SET VAR always uses the ANSI store assignment policy
+          val cast = Cast(
+            inputCol,
+            expected.dataType,
+            Option(conf.sessionLocalTimeZone),
+            ansiEnabled = true)
+          Alias(cast, expected.identifier.name)()
+        }
+      }
+    }
+
+    if (resolved == query.output) {
+      query
+    } else {
+      Project(resolved, query)
+    }
+  }
+
   def resolveOutputColumns(
       tableName: String,
       expected: Seq[Attribute],
@@ -47,7 +89,7 @@ object TableOutputResolver {
 
     if (actualExpectedCols.size < query.output.size) {
       throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(
-        tableName, actualExpectedCols, query)
+        tableName, actualExpectedCols.map(_.name), query.output)
     }
 
     val errors = new mutable.ArrayBuffer[String]()
@@ -56,32 +98,23 @@ object TableOutputResolver {
       // the column's default value. We need to pass `fillDefaultValue` as true here, if the
       // `supportColDefaultValue` parameter is also true.
       reorderColumnsByName(
+        tableName,
         query.output,
         actualExpectedCols,
         conf,
         errors += _,
         fillDefaultValue = supportColDefaultValue)
     } else {
-      // If the target table needs more columns than the input query, fill them with
-      // the columns' default values, if the `supportColDefaultValue` parameter is true.
-      val fillDefaultValue = supportColDefaultValue && actualExpectedCols.size > query.output.size
-      val queryOutputCols = if (fillDefaultValue) {
-        query.output ++ actualExpectedCols.drop(query.output.size).flatMap { expectedCol =>
-          getDefaultValueExprOrNullLit(expectedCol, conf)
-        }
-      } else {
-        query.output
-      }
-      if (actualExpectedCols.size > queryOutputCols.size) {
+      if (actualExpectedCols.size > query.output.size) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
-          tableName, actualExpectedCols, query)
+          tableName, actualExpectedCols.map(_.name), query.output)
       }
-
-      resolveColumnsByPosition(queryOutputCols, actualExpectedCols, conf, errors += _)
+      resolveColumnsByPosition(tableName, query.output, actualExpectedCols, conf, errors += _)
     }
 
     if (errors.nonEmpty) {
-      throw QueryCompilationErrors.cannotWriteIncompatibleDataToTableError(tableName, errors.toSeq)
+      throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
+        tableName, actualExpectedCols.map(_.name).map(toSQLId).mkString(", "))
     }
 
     if (resolved == query.output) {
@@ -92,6 +125,7 @@ object TableOutputResolver {
   }
 
   def resolveUpdate(
+      tableName: String,
       value: Expression,
       col: Attribute,
       conf: SQLConf,
@@ -101,29 +135,31 @@ object TableOutputResolver {
     (value.dataType, col.dataType) match {
       // no need to reorder inner fields or cast if types are already compatible
       case (valueType, colType) if DataType.equalsIgnoreCompatibleNullability(valueType, colType) =>
-        val canWriteExpr = canWrite(valueType, colType, byName = true, conf, addError, colPath)
+        val canWriteExpr = canWrite(
+          tableName, valueType, colType, byName = true, conf, addError, colPath)
         if (canWriteExpr) checkNullability(value, col, conf, colPath) else value
       case (valueType: StructType, colType: StructType) =>
         val resolvedValue = resolveStructType(
-          value, valueType, col, colType,
+          tableName, value, valueType, col, colType,
           byName = true, conf, addError, colPath)
         resolvedValue.getOrElse(value)
       case (valueType: ArrayType, colType: ArrayType) =>
         val resolvedValue = resolveArrayType(
-          value, valueType, col, colType,
+          tableName, value, valueType, col, colType,
           byName = true, conf, addError, colPath)
         resolvedValue.getOrElse(value)
       case (valueType: MapType, colType: MapType) =>
         val resolvedValue = resolveMapType(
-          value, valueType, col, colType,
+          tableName, value, valueType, col, colType,
           byName = true, conf, addError, colPath)
         resolvedValue.getOrElse(value)
       case _ =>
-        checkUpdate(value, col, conf, addError, colPath)
+        checkUpdate(tableName, value, col, conf, addError, colPath)
     }
   }
 
   private def checkUpdate(
+      tableName: String,
       value: Expression,
       attr: Attribute,
       conf: SQLConf,
@@ -138,7 +174,7 @@ object TableOutputResolver {
     }
 
     val canWriteValue = canWrite(
-      value.dataType, attrTypeWithoutCharVarchar,
+      tableName, value.dataType, attrTypeWithoutCharVarchar,
       byName = true, conf, addError, colPath)
 
     if (canWriteValue) {
@@ -156,6 +192,7 @@ object TableOutputResolver {
   }
 
   private def canWrite(
+      tableName: String,
       valueType: DataType,
       expectedType: DataType,
       byName: Boolean,
@@ -165,7 +202,7 @@ object TableOutputResolver {
     conf.storeAssignmentPolicy match {
       case StoreAssignmentPolicy.STRICT | StoreAssignmentPolicy.ANSI =>
         DataTypeUtils.canWrite(
-          valueType, expectedType, byName, conf.resolver, colPath.quoted,
+          tableName, valueType, expectedType, byName, conf.resolver, colPath.quoted,
           conf.storeAssignmentPolicy, addError)
       case _ =>
         true
@@ -173,6 +210,7 @@ object TableOutputResolver {
   }
 
   private def reorderColumnsByName(
+      tableName: String,
       inputCols: Seq[NamedExpression],
       expectedCols: Seq[Attribute],
       conf: SQLConf,
@@ -185,17 +223,20 @@ object TableOutputResolver {
       val newColPath = colPath :+ expectedCol.name
       if (matched.isEmpty) {
         val defaultExpr = if (fillDefaultValue) {
-          getDefaultValueExprOrNullLit(expectedCol, conf)
+          getDefaultValueExprOrNullLit(expectedCol, conf.useNullsForMissingDefaultColumnValues)
         } else {
           None
         }
         if (defaultExpr.isEmpty) {
-          addError(s"Cannot find data for output column '${newColPath.quoted}'")
+          throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
+            tableName, newColPath.quoted
+          )
         }
         defaultExpr
       } else if (matched.length > 1) {
-        addError(s"Ambiguous column name in the input data: '${newColPath.quoted}'")
-        None
+        throw QueryCompilationErrors.incompatibleDataToTableAmbiguousColumnNameError(
+          tableName, newColPath.quoted
+        )
       } else {
         matchedCols += matched.head.name
         val expectedName = expectedCol.name
@@ -208,18 +249,19 @@ object TableOutputResolver {
         (matchedCol.dataType, expectedCol.dataType) match {
           case (matchedType: StructType, expectedType: StructType) =>
             resolveStructType(
-              matchedCol, matchedType, expectedCol, expectedType,
+              tableName, matchedCol, matchedType, expectedCol, expectedType,
               byName = true, conf, addError, newColPath)
           case (matchedType: ArrayType, expectedType: ArrayType) =>
             resolveArrayType(
-              matchedCol, matchedType, expectedCol, expectedType,
+              tableName, matchedCol, matchedType, expectedCol, expectedType,
               byName = true, conf, addError, newColPath)
           case (matchedType: MapType, expectedType: MapType) =>
             resolveMapType(
-              matchedCol, matchedType, expectedCol, expectedType,
+              tableName, matchedCol, matchedType, expectedCol, expectedType,
               byName = true, conf, addError, newColPath)
           case _ =>
-            checkField(expectedCol, matchedCol, byName = true, conf, addError, newColPath)
+            checkField(
+              tableName, expectedCol, matchedCol, byName = true, conf, addError, newColPath)
         }
       }
     }
@@ -227,9 +269,14 @@ object TableOutputResolver {
     if (reordered.length == expectedCols.length) {
       if (matchedCols.size < inputCols.length) {
         val extraCols = inputCols.filterNot(col => matchedCols.contains(col.name))
-          .map(col => s"'${col.name}'").mkString(", ")
-        addError(s"Cannot write extra fields to struct '${colPath.quoted}': $extraCols")
-        Nil
+          .map(col => s"${toSQLId(col.name)}").mkString(", ")
+        if (colPath.isEmpty) {
+          throw QueryCompilationErrors.incompatibleDataToTableExtraColumnsError(tableName,
+            extraCols)
+        } else {
+          throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
+            tableName, colPath.quoted, extraCols)
+        }
       } else {
         reordered
       }
@@ -239,6 +286,7 @@ object TableOutputResolver {
   }
 
   private def resolveColumnsByPosition(
+      tableName: String,
       inputCols: Seq[NamedExpression],
       expectedCols: Seq[Attribute],
       conf: SQLConf,
@@ -247,16 +295,28 @@ object TableOutputResolver {
 
     if (inputCols.size > expectedCols.size) {
       val extraColsStr = inputCols.takeRight(inputCols.size - expectedCols.size)
-        .map(col => s"'${col.name}'")
+        .map(col => toSQLId(col.name))
         .mkString(", ")
-      addError(s"Cannot write extra fields to struct '${colPath.quoted}': $extraColsStr")
-      return Nil
+      if (colPath.isEmpty) {
+        throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(tableName,
+          expectedCols.map(_.name), inputCols.map(_.toAttribute))
+      } else {
+        throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
+          tableName, colPath.quoted, extraColsStr
+        )
+      }
     } else if (inputCols.size < expectedCols.size) {
       val missingColsStr = expectedCols.takeRight(expectedCols.size - inputCols.size)
-        .map(col => s"'${col.name}'")
+        .map(col => toSQLId(col.name))
         .mkString(", ")
-      addError(s"Struct '${colPath.quoted}' missing fields: $missingColsStr")
-      return Nil
+      if (colPath.isEmpty) {
+        throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(tableName,
+          expectedCols.map(_.name), inputCols.map(_.toAttribute))
+      } else {
+        throw QueryCompilationErrors.incompatibleDataToTableStructMissingFieldsError(
+          tableName, colPath.quoted, missingColsStr
+        )
+      }
     }
 
     inputCols.zip(expectedCols).flatMap { case (inputCol, expectedCol) =>
@@ -264,18 +324,18 @@ object TableOutputResolver {
       (inputCol.dataType, expectedCol.dataType) match {
         case (inputType: StructType, expectedType: StructType) =>
           resolveStructType(
-            inputCol, inputType, expectedCol, expectedType,
+            tableName, inputCol, inputType, expectedCol, expectedType,
             byName = false, conf, addError, newColPath)
         case (inputType: ArrayType, expectedType: ArrayType) =>
           resolveArrayType(
-            inputCol, inputType, expectedCol, expectedType,
+            tableName, inputCol, inputType, expectedCol, expectedType,
             byName = false, conf, addError, newColPath)
         case (inputType: MapType, expectedType: MapType) =>
           resolveMapType(
-            inputCol, inputType, expectedCol, expectedType,
+            tableName, inputCol, inputType, expectedCol, expectedType,
             byName = false, conf, addError, newColPath)
         case _ =>
-          checkField(expectedCol, inputCol, byName = false, conf, addError, newColPath)
+          checkField(tableName, expectedCol, inputCol, byName = false, conf, addError, newColPath)
       }
     }
   }
@@ -300,6 +360,7 @@ object TableOutputResolver {
   }
 
   private def resolveStructType(
+      tableName: String,
       input: Expression,
       inputType: StructType,
       expected: Attribute,
@@ -313,9 +374,10 @@ object TableOutputResolver {
       Alias(GetStructField(nullCheckedInput, i, Some(f.name)), f.name)()
     }
     val resolved = if (byName) {
-      reorderColumnsByName(fields, expectedType.toAttributes, conf, addError, colPath)
+      reorderColumnsByName(tableName, fields, toAttributes(expectedType), conf, addError, colPath)
     } else {
-      resolveColumnsByPosition(fields, expectedType.toAttributes, conf, addError, colPath)
+      resolveColumnsByPosition(
+        tableName, fields, toAttributes(expectedType), conf, addError, colPath)
     }
     if (resolved.length == expectedType.length) {
       val struct = CreateStruct(resolved)
@@ -331,6 +393,7 @@ object TableOutputResolver {
   }
 
   private def resolveArrayType(
+      tableName: String,
       input: Expression,
       inputType: ArrayType,
       expected: Attribute,
@@ -344,9 +407,9 @@ object TableOutputResolver {
     val fakeAttr =
       AttributeReference("element", expectedType.elementType, expectedType.containsNull)()
     val res = if (byName) {
-      reorderColumnsByName(Seq(param), Seq(fakeAttr), conf, addError, colPath)
+      reorderColumnsByName(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath)
     } else {
-      resolveColumnsByPosition(Seq(param), Seq(fakeAttr), conf, addError, colPath)
+      resolveColumnsByPosition(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath)
     }
     if (res.length == 1) {
       val func = LambdaFunction(res.head, Seq(param))
@@ -357,6 +420,7 @@ object TableOutputResolver {
   }
 
   private def resolveMapType(
+      tableName: String,
       input: Expression,
       inputType: MapType,
       expected: Attribute,
@@ -370,9 +434,9 @@ object TableOutputResolver {
     val keyParam = NamedLambdaVariable("key", inputType.keyType, nullable = false)
     val fakeKeyAttr = AttributeReference("key", expectedType.keyType, nullable = false)()
     val resKey = if (byName) {
-      reorderColumnsByName(Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath)
+      reorderColumnsByName(tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath)
     } else {
-      resolveColumnsByPosition(Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath)
+      resolveColumnsByPosition(tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath)
     }
 
     val valueParam =
@@ -380,9 +444,10 @@ object TableOutputResolver {
     val fakeValueAttr =
       AttributeReference("value", expectedType.valueType, expectedType.valueContainsNull)()
     val resValue = if (byName) {
-      reorderColumnsByName(Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath)
+      reorderColumnsByName(tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath)
     } else {
-      resolveColumnsByPosition(Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath)
+      resolveColumnsByPosition(
+        tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath)
     }
 
     if (resKey.length == 1 && resValue.length == 1) {
@@ -404,6 +469,19 @@ object TableOutputResolver {
       CheckOverflowInTableInsert(cast, columnName)
     } else {
       cast
+    }
+  }
+
+  def suitableForByNameCheck(
+      byName: Boolean,
+      expected: Seq[Attribute],
+      queryOutput: Seq[Attribute]): Unit = {
+    if (!byName && expected.size == queryOutput.size &&
+      expected.forall(e => queryOutput.exists(p => conf.resolver(p.name, e.name))) &&
+      expected.zip(queryOutput).exists(e => !conf.resolver(e._1.name, e._2.name))) {
+      logWarning("The query columns and the table columns have same names but different " +
+        "orders. You can use INSERT [INTO | OVERWRITE] BY NAME to reorder the query columns to " +
+        "align with the table columns.")
     }
   }
 
@@ -429,6 +507,7 @@ object TableOutputResolver {
   }
 
   private def checkField(
+      tableName: String,
       tableAttr: Attribute,
       queryExpr: NamedExpression,
       byName: Boolean,
@@ -464,7 +543,7 @@ object TableOutputResolver {
     }
 
     val canWriteExpr = canWrite(
-      queryExpr.dataType, attrTypeWithoutCharVarchar,
+      tableName, queryExpr.dataType, attrTypeWithoutCharVarchar,
       byName, conf, addError, colPath)
 
     if (canWriteExpr) outputField else None

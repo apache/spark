@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.io.{ByteArrayOutputStream, DataOutputStream}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.language.existentials
 
 import org.apache.spark.api.java.function.MapFunction
@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.ReferenceAllColumns
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, FunctionUtils, LogicalGroupState}
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.python.BatchIterator
 import org.apache.spark.sql.execution.r.ArrowRRunner
 import org.apache.spark.sql.execution.streaming.GroupStateImpl
@@ -391,7 +392,7 @@ case class AppendColumnsWithObjectExec(
  * The result of this function is flattened before being output.
  */
 case class MapGroupsExec(
-    func: (Any, Iterator[Any]) => TraversableOnce[Any],
+    func: (Any, Iterator[Any]) => IterableOnce[Any],
     keyDeserializer: Expression,
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
@@ -420,7 +421,7 @@ case class MapGroupsExec(
         val result = func(
           getKey(key),
           rowIter.map(getValue))
-        result.map(outputObject)
+        result.iterator.map(outputObject)
       }
     }
   }
@@ -431,7 +432,7 @@ case class MapGroupsExec(
 
 object MapGroupsExec {
   def apply(
-      func: (Any, Iterator[Any], LogicalGroupState[Any]) => TraversableOnce[Any],
+      func: (Any, Iterator[Any], LogicalGroupState[Any]) => IterableOnce[Any],
       keyDeserializer: Expression,
       valueDeserializer: Expression,
       groupingAttributes: Seq[Attribute],
@@ -593,7 +594,7 @@ case class FlatMapGroupsInRWithArrowExec(
       // binary in a batch due to the limitation of R API. See also ARROW-4512.
       val columnarBatchIter = runner.compute(groupedByRKey, -1)
       val outputProject = UnsafeProjection.create(output, output)
-      val outputTypes = StructType.fromAttributes(output).map(_.dataType)
+      val outputTypes = DataTypeUtils.fromAttributes(output).map(_.dataType)
 
       columnarBatchIter.flatMap { batch =>
         val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
@@ -614,7 +615,7 @@ case class FlatMapGroupsInRWithArrowExec(
  * The result of this function is flattened before being output.
  */
 case class CoGroupExec(
-    func: (Any, Iterator[Any], Iterator[Any]) => TraversableOnce[Any],
+    func: (Any, Iterator[Any], Iterator[Any]) => IterableOnce[Any],
     keyDeserializer: Expression,
     leftDeserializer: Expression,
     rightDeserializer: Expression,
@@ -652,7 +653,7 @@ case class CoGroupExec(
             getKey(key),
             leftResult.map(getLeft),
             rightResult.map(getRight))
-          result.map(outputObject)
+          result.iterator.map(outputObject)
       }
     }
   }

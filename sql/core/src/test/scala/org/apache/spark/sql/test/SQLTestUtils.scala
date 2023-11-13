@@ -22,8 +22,8 @@ import java.net.URI
 import java.nio.file.Files
 import java.util.{Locale, UUID}
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
 import scala.util.control.NonFatal
 
@@ -45,6 +45,7 @@ import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.UninterruptibleThread
 import org.apache.spark.util.Utils
 
@@ -203,7 +204,7 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
    */
   protected def withTempPaths(numPaths: Int)(f: Seq[File] => Unit): Unit = {
     val files = Array.fill[File](numPaths)(Utils.createTempDir().getCanonicalFile)
-    try f(files) finally {
+    try f(files.toImmutableArraySeq) finally {
       // wait for all tasks to finish before deleting files
       waitForTasksToFinish()
       files.foreach(Utils.deleteRecursively)

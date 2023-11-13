@@ -25,7 +25,7 @@ import org.apache.spark.sql.types._
 
 class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   private def checkTuple(actual: Expression, expected: Seq[InternalRow]): Unit = {
-    assert(actual.eval(null).asInstanceOf[TraversableOnce[InternalRow]].toSeq === expected)
+    assert(actual.eval(null).asInstanceOf[IterableOnce[InternalRow]].iterator.to(Seq) === expected)
   }
 
   private final val empty_array = CreateArray(Seq.empty)

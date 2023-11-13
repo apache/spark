@@ -21,6 +21,7 @@ import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
 import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, LongType}
 
 @ExpressionDescription(
@@ -51,7 +52,12 @@ case class HllSketchEstimate(child: Expression)
 
   override def nullSafeEval(input: Any): Any = {
     val buffer = input.asInstanceOf[Array[Byte]]
-    Math.round(HllSketch.heapify(Memory.wrap(buffer)).getEstimate)
+    try {
+      Math.round(HllSketch.heapify(Memory.wrap(buffer)).getEstimate)
+    } catch {
+      case _: java.lang.Error =>
+        throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
+    }
   }
 }
 
@@ -98,15 +104,22 @@ case class HllUnion(first: Expression, second: Expression, third: Expression)
   override def dataType: DataType = BinaryType
 
   override def nullSafeEval(value1: Any, value2: Any, value3: Any): Any = {
-    val sketch1 = HllSketch.heapify(Memory.wrap(value1.asInstanceOf[Array[Byte]]))
-    val sketch2 = HllSketch.heapify(Memory.wrap(value2.asInstanceOf[Array[Byte]]))
+    val sketch1 = try {
+      HllSketch.heapify(Memory.wrap(value1.asInstanceOf[Array[Byte]]))
+    } catch {
+      case _: java.lang.Error =>
+        throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
+    }
+    val sketch2 = try {
+      HllSketch.heapify(Memory.wrap(value2.asInstanceOf[Array[Byte]]))
+    } catch {
+      case _: java.lang.Error =>
+        throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
+    }
     val allowDifferentLgConfigK = value3.asInstanceOf[Boolean]
     if (!allowDifferentLgConfigK && sketch1.getLgConfigK != sketch2.getLgConfigK) {
-      throw new UnsupportedOperationException(
-        "Sketches have different lgConfigK values: " +
-        s"${sketch1.getLgConfigK} and ${sketch2.getLgConfigK}. " +
-        "Set allowDifferentLgConfigK to true to enable unions of " +
-        "different lgConfigK values.")
+      throw QueryExecutionErrors.hllUnionDifferentLgK(
+        sketch1.getLgConfigK, sketch2.getLgConfigK, function = prettyName)
     }
     val union = new Union(Math.min(sketch1.getLgConfigK, sketch2.getLgConfigK))
     union.update(sketch1)

@@ -37,7 +37,7 @@ class ErrorClassesReader:
         # Verify message parameters.
         message_parameters_from_template = re.findall("<([a-zA-Z0-9_-]+)>", message_template)
         assert set(message_parameters_from_template) == set(message_parameters), (
-            f"Undifined error message parameter for error class: {error_class}. "
+            f"Undefined error message parameter for error class: {error_class}. "
             f"Parameters: {message_parameters}"
         )
         table = str.maketrans("<>", "{}")

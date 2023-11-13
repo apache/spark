@@ -48,6 +48,7 @@ import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 
 class DataSourceV2Strategy(session: SparkSession) extends Strategy with PredicateHelper {
 
@@ -142,7 +143,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case _ => false
       }
       val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
-        relation.keyGroupedPartitioning, relation.ordering, relation.relation.table)
+        relation.ordering, relation.relation.table,
+        StoragePartitionJoinParams(relation.keyGroupedPartitioning))
       withProjectAndFilter(project, postScanFilters, batchExec, !batchExec.supportsColumnar) :: Nil
 
     case PhysicalOperation(p, f, r: StreamingDataSourceV2Relation)
@@ -172,7 +174,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query), customMetrics) :: Nil
 
     case CreateTable(ResolvedIdentifier(catalog, ident), schema, partitioning,
-        tableSpec, ifNotExists, unresolvedOptionsList) =>
+        tableSpec: TableSpec, ifNotExists) =>
       ResolveDefaultColumns.validateCatalogForDefaultValue(schema, catalog.asTableCatalog, ident)
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
@@ -183,8 +185,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       CreateTableExec(catalog.asTableCatalog, ident, structTypeToV2Columns(newSchema),
         partitioning, qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
 
-    case CreateTableAsSelect(ResolvedIdentifier(catalog, ident), parts, query, tableSpec,
-        options, ifNotExists, true, unresolvedOptionsList) =>
+    case CreateTableAsSelect(ResolvedIdentifier(catalog, ident), parts, query, tableSpec: TableSpec,
+        options, ifNotExists, true) =>
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicCreateTableAsSelectExec(staging, ident, parts, query,
@@ -198,8 +200,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r)) :: Nil
 
     case ReplaceTable(
-        ResolvedIdentifier(catalog, ident), schema, parts, tableSpec, orCreate,
-        unresolvedOptionsList) =>
+        ResolvedIdentifier(catalog, ident), schema, parts, tableSpec: TableSpec, orCreate) =>
       ResolveDefaultColumns.validateCatalogForDefaultValue(schema, catalog.asTableCatalog, ident)
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
@@ -218,7 +219,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case ReplaceTableAsSelect(ResolvedIdentifier(catalog, ident),
-        parts, query, tableSpec, options, orCreate, true, unresolvedOptionsList) =>
+        parts, query, tableSpec: TableSpec, options, orCreate, true) =>
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableAsSelectExec(
@@ -311,7 +312,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           throw SparkException.internalError("Unexpected table relation: " + other)
       }
 
-    case ReplaceData(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, Some(write)) =>
+    case ReplaceData(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, _, Some(write)) =>
       // use the original relation to refresh the cache
       ReplaceDataExec(planLater(query), refreshCache(r), write) :: Nil
 
@@ -319,6 +320,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         Some(write)) =>
       // use the original relation to refresh the cache
       WriteDeltaExec(planLater(query), refreshCache(r), projections, write) :: Nil
+
+    case MergeRows(isSourceRowPresent, isTargetRowPresent, matchedInstructions,
+        notMatchedInstructions, notMatchedBySourceInstructions, checkCardinality, output, child) =>
+      MergeRowsExec(isSourceRowPresent, isTargetRowPresent, matchedInstructions,
+        notMatchedInstructions, notMatchedBySourceInstructions, checkCardinality,
+        output, planLater(child)) :: Nil
 
     case WriteToContinuousDataSource(writer, query, customMetrics) =>
       WriteToContinuousDataSourceExec(writer, planLater(query), customMetrics) :: Nil
@@ -343,7 +350,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case DropTable(r: ResolvedIdentifier, ifExists, purge) =>
       val invalidateFunc = () => session.sharedState.cacheManager.uncacheTableOrView(
-        session, r.catalog.name() +: r.identifier.namespace() :+ r.identifier.name(),
+        session,
+        (r.catalog.name() +: r.identifier.namespace() :+ r.identifier.name()).toImmutableArraySeq,
         cascade = true)
       DropTableExec(r.catalog.asTableCatalog, r.identifier, ifExists, purge, invalidateFunc) :: Nil
 
@@ -450,7 +458,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       if (asSerde) {
         throw QueryCompilationErrors.showCreateTableAsSerdeNotSupportedForV2TablesError()
       }
-      ShowCreateTableExec(output, rt.table) :: Nil
+      ShowCreateTableExec(output, rt) :: Nil
 
     case TruncateTable(r: ResolvedTable) =>
       TruncateTableExec(

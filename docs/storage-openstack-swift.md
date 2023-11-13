@@ -44,7 +44,7 @@ For example, for Maven support, add the following to the <code>pom.xml</code> fi
   ...
   <dependency>
     <groupId>org.apache.spark</groupId>
-    <artifactId>hadoop-cloud_2.12</artifactId>
+    <artifactId>hadoop-cloud_2.13</artifactId>
     <version>${spark.version}</version>
   </dependency>
   ...

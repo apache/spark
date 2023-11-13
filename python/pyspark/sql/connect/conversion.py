@@ -99,7 +99,6 @@ class LocalDataToArrowConversion:
             return lambda value: None
 
         elif isinstance(dataType, StructType):
-
             field_names = dataType.fieldNames()
             dedup_field_names = _dedup_names(dataType.names)
 
@@ -117,7 +116,11 @@ class LocalDataToArrowConversion:
                     ), f"{type(value)} {value}"
 
                     _dict = {}
-                    if not isinstance(value, Row) and hasattr(value, "__dict__"):
+                    if (
+                        not isinstance(value, Row)
+                        and not isinstance(value, tuple)  # inherited namedtuple
+                        and hasattr(value, "__dict__")
+                    ):
                         value = value.__dict__
                     if isinstance(value, dict):
                         for i, field in enumerate(field_names):
@@ -136,7 +139,6 @@ class LocalDataToArrowConversion:
             return convert_struct
 
         elif isinstance(dataType, ArrayType):
-
             element_conv = LocalDataToArrowConversion._create_converter(dataType.elementType)
 
             def convert_array(value: Any) -> Any:
@@ -149,7 +151,6 @@ class LocalDataToArrowConversion:
             return convert_array
 
         elif isinstance(dataType, MapType):
-
             key_conv = LocalDataToArrowConversion._create_converter(dataType.keyType)
             value_conv = LocalDataToArrowConversion._create_converter(dataType.valueType)
 
@@ -256,7 +257,6 @@ class LocalDataToArrowConversion:
             return convert_udt
 
         else:
-
             return lambda value: value
 
     @staticmethod
@@ -274,7 +274,11 @@ class LocalDataToArrowConversion:
         pylist: List[List] = [[] for _ in range(len(column_names))]
 
         for item in data:
-            if not isinstance(item, Row) and hasattr(item, "__dict__"):
+            if (
+                not isinstance(item, Row)
+                and not isinstance(item, tuple)  # inherited namedtuple
+                and hasattr(item, "__dict__")
+            ):
                 item = item.__dict__
             if isinstance(item, dict):
                 for i, col in enumerate(column_names):
@@ -341,7 +345,6 @@ class ArrowTableToRowsConversion:
             return lambda value: None
 
         elif isinstance(dataType, StructType):
-
             field_names = dataType.names
             dedup_field_names = _dedup_names(field_names)
 
@@ -364,7 +367,6 @@ class ArrowTableToRowsConversion:
             return convert_struct
 
         elif isinstance(dataType, ArrayType):
-
             element_conv = ArrowTableToRowsConversion._create_converter(dataType.elementType)
 
             def convert_array(value: Any) -> Any:
@@ -377,7 +379,6 @@ class ArrowTableToRowsConversion:
             return convert_array
 
         elif isinstance(dataType, MapType):
-
             key_conv = ArrowTableToRowsConversion._create_converter(dataType.keyType)
             value_conv = ArrowTableToRowsConversion._create_converter(dataType.valueType)
 
@@ -438,7 +439,6 @@ class ArrowTableToRowsConversion:
             return convert_udt
 
         else:
-
             return lambda value: value
 
     @staticmethod

@@ -21,6 +21,7 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
 import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExecHelper, StreamingAggregationStateManager, SymmetricHashJoinStateManager}
@@ -118,7 +119,7 @@ object OffsetSeqMetadata extends Logging {
       StreamingAggregationStateManager.legacyVersion.toString,
     STREAMING_JOIN_STATE_FORMAT_VERSION.key ->
       SymmetricHashJoinStateManager.legacyVersion.toString,
-    STATE_STORE_COMPRESSION_CODEC.key -> "lz4",
+    STATE_STORE_COMPRESSION_CODEC.key -> CompressionCodec.LZ4,
     STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION.key -> "false"
   )
 

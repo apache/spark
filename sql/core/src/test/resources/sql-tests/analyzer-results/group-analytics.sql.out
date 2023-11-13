@@ -330,9 +330,10 @@ Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, cast((shi
 -- !query
 SELECT course, year, GROUPING(course) FROM courseSales GROUP BY course, year
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2445",
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -346,9 +347,10 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT course, year, GROUPING_ID(course, year) FROM courseSales GROUP BY course, year
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -397,7 +399,8 @@ SELECT course, year FROM courseSales GROUP BY course, year HAVING GROUPING(cours
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
 }
 
 
@@ -406,7 +409,8 @@ SELECT course, year FROM courseSales GROUP BY course, year HAVING GROUPING_ID(co
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
 }
 
 
@@ -465,7 +469,8 @@ SELECT course, year FROM courseSales GROUP BY course, year ORDER BY GROUPING(cou
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
 }
 
 
@@ -474,7 +479,8 @@ SELECT course, year FROM courseSales GROUP BY course, year ORDER BY GROUPING_ID(
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
 }
 
 

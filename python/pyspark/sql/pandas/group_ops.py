@@ -72,6 +72,7 @@ class PandasGroupedOpsMixin:
         ... def normalize(pdf):
         ...     v = pdf.v
         ...     return pdf.assign(v=(v - v.mean()) / v.std())
+        ...
         >>> df.groupby("id").apply(normalize).show()  # doctest: +SKIP
         +---+-------------------+
         | id|                  v|
@@ -154,6 +155,7 @@ class PandasGroupedOpsMixin:
         >>> def normalize(pdf):
         ...     v = pdf.v
         ...     return pdf.assign(v=(v - v.mean()) / v.std())
+        ...
         >>> df.groupby("id").applyInPandas(
         ...     normalize, schema="id long, v double").show()  # doctest: +SKIP
         +---+-------------------+
@@ -180,6 +182,7 @@ class PandasGroupedOpsMixin:
         ...     # key is a tuple of one numpy.int64, which is the value
         ...     # of 'id' for the current group
         ...     return pd.DataFrame([key + (pdf.v.mean(),)])
+        ...
         >>> df.groupby('id').applyInPandas(
         ...     mean_func, schema="id long, v double").show()  # doctest: +SKIP
         +---+---+
@@ -193,6 +196,7 @@ class PandasGroupedOpsMixin:
         ...     # key is a tuple of two numpy.int64s, which is the values
         ...     # of 'id' and 'ceil(df.v / 2)' for the current group
         ...     return pd.DataFrame([key + (pdf.v.sum(),)])
+        ...
         >>> df.groupby(df.id, ceil(df.v / 2)).applyInPandas(
         ...     sum_func, schema="id long, `ceil(v / 2)` long, v double").show()  # doctest: +SKIP
         +---+-----------+----+
@@ -433,6 +437,7 @@ class PandasCogroupedOps:
         ...     ("time", "id", "v2"))
         >>> def asof_join(l, r):
         ...     return pd.merge_asof(l, r, on="time", by="id")
+        ...
         >>> df1.groupby("id").cogroup(df2.groupby("id")).applyInPandas(
         ...     asof_join, schema="time int, id int, v1 double, v2 string"
         ... ).show()  # doctest: +SKIP
@@ -456,6 +461,7 @@ class PandasCogroupedOps:
         ...         return pd.merge_asof(l, r, on="time", by="id")
         ...     else:
         ...         return pd.DataFrame(columns=['time', 'id', 'v1', 'v2'])
+        ...
         >>> df1.groupby("id").cogroup(df2.groupby("id")).applyInPandas(
         ...     asof_join, "time int, id int, v1 double, v2 string").show()  # doctest: +SKIP
         +--------+---+---+---+

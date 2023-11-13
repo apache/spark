@@ -598,3 +598,12 @@ where t.c2 is not null
 struct<c1:bigint,c2:bigint>
 -- !query output
 1	1
+
+
+-- !query
+SELECT c1, c2, (SELECT count(*) cnt FROM t1 t2 WHERE t1.c1 = t2.c1 HAVING cnt = 0) FROM t1
+-- !query schema
+struct<c1:int,c2:int,scalarsubquery(c1):bigint>
+-- !query output
+0	1	NULL
+1	2	NULL

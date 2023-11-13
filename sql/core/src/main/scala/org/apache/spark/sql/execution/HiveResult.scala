@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.datasources.v2.{DescribeTableExec, ShowTab
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Runs a query returning the result in Hive compatible form.
@@ -62,15 +63,15 @@ object HiveResult {
       // SHOW TABLES in Hive only output table names while our v1 command outputs
       // database, table name, isTemp.
       case ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
-        executedPlan.executeCollect().map(_.getString(1))
+        executedPlan.executeCollect().map(_.getString(1)).toImmutableArraySeq
       // SHOW TABLES in Hive only output table names while our v2 command outputs
       // namespace and table name.
       case _ : ShowTablesExec =>
-        executedPlan.executeCollect().map(_.getString(1))
+        executedPlan.executeCollect().map(_.getString(1)).toImmutableArraySeq
       // SHOW VIEWS in Hive only outputs view names while our v1 command outputs
       // namespace, viewName, and isTemporary.
       case ExecutedCommandExec(_: ShowViewsCommand) =>
-        executedPlan.executeCollect().map(_.getString(1))
+        executedPlan.executeCollect().map(_.getString(1)).toImmutableArraySeq
       case other =>
         val timeFormatters = getTimeFormatters
         val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
@@ -87,7 +88,7 @@ object HiveResult {
         Seq(name, dataType, Option(comment.asInstanceOf[String]).getOrElse(""))
           .map(s => String.format("%-20s", s))
           .mkString("\t")
-    }
+    }.toImmutableArraySeq
   }
 
   /** Formats a datum (based on the given data type) and returns the string representation. */

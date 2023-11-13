@@ -1411,7 +1411,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "`attributereference`",
+          "inputName" -> toSQLId("attributereference"),
           "inputType" -> toSQLType(right.dataType),
           "inputExpr" -> toSQLExpr(right)
         )
@@ -1433,7 +1433,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "fmt",
+          "inputName" -> toSQLId("fmt"),
           "inputType" -> toSQLType(wrongFmt.dataType),
           "inputExpr" -> toSQLExpr(wrongFmt)
         )
@@ -1474,8 +1474,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val toNumberExpr = ToNumber(Literal(str), Literal(format))
       assert(toNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
 
-      checkExceptionInExpression[SparkIllegalArgumentException](
-        toNumberExpr, "does not match the given number format")
+      checkErrorInExpression[SparkIllegalArgumentException](
+        toNumberExpr,
+        errorClass = "INVALID_FORMAT.MISMATCH_INPUT",
+        parameters = Map(
+          "inputType" -> "\"STRING\"",
+          "input" -> str,
+          "format" -> format))
 
       val tryToNumberExpr = TryToNumber(Literal(str), Literal(format))
       assert(tryToNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
@@ -1490,7 +1495,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "`attributereference`",
+          "inputName" -> toSQLId("attributereference"),
           "inputType" -> toSQLType(right.dataType),
           "inputExpr" -> toSQLExpr(right)
         )

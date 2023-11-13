@@ -20,7 +20,7 @@ openpyxl
 coverage
 
 # Linter
-mypy==0.920
+mypy==0.982
 pytest-mypy-plugins==1.9.3
 flake8==3.9.0
 # See SPARK-38680.
@@ -42,17 +42,17 @@ docutils<0.18.0
 markupsafe==2.0.1
 
 # Development scripts
-jira
+jira>=3.5.2
 PyGithub
 
 # pandas API on Spark Code formatter.
-black==22.6.0
+black==23.9.1
 py
 
 # Spark Connect (required)
-grpcio==1.48.1
-grpcio-status==1.48.1
-protobuf==3.19.5
+grpcio>=1.48,<1.57
+grpcio-status>=1.48,<1.57
+protobuf==3.20.3
 googleapis-common-protos==1.56.4
 
 # Spark Connect python proto generation plugin (optional)
@@ -61,7 +61,10 @@ googleapis-common-protos-stubs==2.2.0
 grpc-stubs==1.24.11
 
 # TorchDistributor dependencies
-torch
+torch<=2.0.1
 torchvision
 torcheval
+
+# DeepspeedTorchDistributor dependencies
+deepspeed; sys_platform != 'darwin'
 

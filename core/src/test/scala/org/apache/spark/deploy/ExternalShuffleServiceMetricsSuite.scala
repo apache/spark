@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.{SHUFFLE_SERVICE_DB_ENABLED, SHUFFLE_SERVICE_ENABLED}

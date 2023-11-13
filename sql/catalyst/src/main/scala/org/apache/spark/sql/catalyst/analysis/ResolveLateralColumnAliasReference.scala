@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.WindowExpression.hasWindowExpre
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, TEMP_RESOLVED_COLUMN, UNRESOLVED_HAVING}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, TEMP_RESOLVED_COLUMN}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -131,95 +131,97 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
       (pList.exists(hasWindowExpression) && p.expressions.forall(_.resolved) && p.childrenResolved)
   }
 
-  override def apply(plan: LogicalPlan): LogicalPlan = {
-    if (!conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) {
-      plan
-    } else if (plan.containsAnyPattern(TEMP_RESOLVED_COLUMN, UNRESOLVED_HAVING)) {
-      // It should not change the plan if `TempResolvedColumn` or `UnresolvedHaving` is present in
-      // the query plan. These plans need certain plan shape to get recognized and resolved by other
-      // rules, such as Filter/Sort + Aggregate to be matched by ResolveAggregateFunctions.
-      // LCA resolution can break the plan shape, like adding Project above Aggregate.
-      plan
-    } else {
-      // phase 2: unwrap
-      plan.resolveOperatorsUpWithPruning(
-        _.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE), ruleId) {
-        case p @ Project(projectList, child) if ruleApplicableOnOperator(p, projectList)
-          && projectList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
-          var aliasMap = AttributeMap.empty[AliasEntry]
-          val referencedAliases = collection.mutable.Set.empty[AliasEntry]
-          def unwrapLCAReference(e: NamedExpression): NamedExpression = {
-            e.transformWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
-              case lcaRef: LateralColumnAliasReference if aliasMap.contains(lcaRef.a) =>
-                val aliasEntry = aliasMap.get(lcaRef.a).get
-                // If there is no chaining of lateral column alias reference, push down the alias
-                // and unwrap the LateralColumnAliasReference to the NamedExpression inside
-                // If there is chaining, don't resolve and save to future rounds
-                if (!aliasEntry.alias.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
-                  referencedAliases += aliasEntry
-                  lcaRef.ne
-                } else {
-                  lcaRef
-                }
-              case lcaRef: LateralColumnAliasReference if !aliasMap.contains(lcaRef.a) =>
-                // It shouldn't happen, but restore to unresolved attribute to be safe.
-                UnresolvedAttribute(lcaRef.nameParts)
-            }.asInstanceOf[NamedExpression]
-          }
-          val newProjectList = projectList.zipWithIndex.map {
-            case (a: Alias, idx) =>
-              val lcaResolved = unwrapLCAReference(a)
-              // Insert the original alias instead of rewritten one to detect chained LCA
-              aliasMap += (a.toAttribute -> AliasEntry(a, idx))
-              lcaResolved
-            case (e, _) =>
-              unwrapLCAReference(e)
-          }
+  /** Internal application method. A hand-written bottom-up recursive traverse. */
+  private def apply0(plan: LogicalPlan): LogicalPlan = {
+    plan match {
+      case p: LogicalPlan if !p.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE) =>
+        p
 
-          if (referencedAliases.isEmpty) {
-            p
-          } else {
-            val outerProjectList = collection.mutable.Seq(newProjectList: _*)
-            val innerProjectList =
-              collection.mutable.ArrayBuffer(child.output.map(_.asInstanceOf[NamedExpression]): _*)
-            referencedAliases.foreach { case AliasEntry(alias: Alias, idx) =>
-              outerProjectList.update(idx, alias.toAttribute)
-              innerProjectList += alias
-            }
-            p.copy(
-              projectList = outerProjectList.toSeq,
-              child = Project(innerProjectList.toSeq, child)
-            )
-          }
+      // It should not change the Aggregate (and thus the plan shape) if its parent is an
+      // UnresolvedHaving, to avoid breaking the shape pattern `UnresolvedHaving - Aggregate`
+      // matched by ResolveAggregateFunctions. See SPARK-42936 and SPARK-44714 for more details.
+      case u @ UnresolvedHaving(_, agg: Aggregate) =>
+        u.copy(child = agg.mapChildren(apply0))
 
-        case agg @ Aggregate(groupingExpressions, aggregateExpressions, _)
-          if ruleApplicableOnOperator(agg, aggregateExpressions)
-            && aggregateExpressions.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+      case pOriginal: Project if ruleApplicableOnOperator(pOriginal, pOriginal.projectList)
+          && pOriginal.projectList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+        val p @ Project(projectList, child) = pOriginal.mapChildren(apply0)
+        var aliasMap = AttributeMap.empty[AliasEntry]
+        val referencedAliases = collection.mutable.Set.empty[AliasEntry]
+        def unwrapLCAReference(e: NamedExpression): NamedExpression = {
+          e.transformWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
+            case lcaRef: LateralColumnAliasReference if aliasMap.contains(lcaRef.a) =>
+              val aliasEntry = aliasMap.get(lcaRef.a).get
+              // If there is no chaining of lateral column alias reference, push down the alias
+              // and unwrap the LateralColumnAliasReference to the NamedExpression inside
+              // If there is chaining, don't resolve and save to future rounds
+              if (!aliasEntry.alias.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
+                referencedAliases += aliasEntry
+                lcaRef.ne
+              } else {
+                lcaRef
+              }
+            case lcaRef: LateralColumnAliasReference if !aliasMap.contains(lcaRef.a) =>
+              // It shouldn't happen, but restore to unresolved attribute to be safe.
+              UnresolvedAttribute(lcaRef.nameParts)
+          }.asInstanceOf[NamedExpression]
+        }
+        val newProjectList = projectList.zipWithIndex.map {
+          case (a: Alias, idx) =>
+            val lcaResolved = unwrapLCAReference(a)
+            // Insert the original alias instead of rewritten one to detect chained LCA
+            aliasMap += (a.toAttribute -> AliasEntry(a, idx))
+            lcaResolved
+          case (e, _) =>
+            unwrapLCAReference(e)
+        }
 
-          // Check if current Aggregate is eligible to lift up with Project: the aggregate
-          // expression only contains: 1) aggregate functions, 2) grouping expressions, 3) leaf
-          // expressions excluding attributes not in grouping expressions
-          // This check is to prevent unnecessary transformation on invalid plan, to guarantee it
-          // throws the same exception. For example, cases like non-aggregate expressions not
-          // in group by, once transformed, will throw a different exception: missing input.
-          def eligibleToLiftUp(exp: Expression): Boolean = {
-            exp match {
-              case _: AggregateExpression => true
-              case e if groupingExpressions.exists(_.semanticEquals(e)) => true
-              case a: Attribute => false
-              case s: ScalarSubquery if s.children.nonEmpty
-                && !groupingExpressions.exists(_.semanticEquals(s)) => false
-              // Manually skip detection on function itself because it can be an aggregate function.
-              // This is to avoid expressions like sum(salary) over () eligible to lift up.
-              case WindowExpression(function, spec) =>
-                function.children.forall(eligibleToLiftUp) && eligibleToLiftUp(spec)
-              case e => e.children.forall(eligibleToLiftUp)
-            }
+        if (referencedAliases.isEmpty) {
+          p
+        } else {
+          val outerProjectList = collection.mutable.Seq(newProjectList: _*)
+          val innerProjectList =
+            collection.mutable.ArrayBuffer(child.output.map(_.asInstanceOf[NamedExpression]): _*)
+          referencedAliases.foreach { case AliasEntry(alias: Alias, idx) =>
+            outerProjectList.update(idx, alias.toAttribute)
+            innerProjectList += alias
           }
-          if (!aggregateExpressions.forall(eligibleToLiftUp)) {
-            return agg
-          }
+          p.copy(
+            projectList = outerProjectList.toSeq,
+            child = Project(innerProjectList.toSeq, child)
+          )
+        }
 
+      case aggOriginal: Aggregate
+        if ruleApplicableOnOperator(aggOriginal, aggOriginal.aggregateExpressions)
+          && aggOriginal.aggregateExpressions.exists(
+            _.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+        val agg @ Aggregate(groupingExpressions, aggregateExpressions, _) =
+          aggOriginal.mapChildren(apply0)
+
+        // Check if current Aggregate is eligible to lift up with Project: the aggregate
+        // expression only contains: 1) aggregate functions, 2) grouping expressions, 3) leaf
+        // expressions excluding attributes not in grouping expressions
+        // This check is to prevent unnecessary transformation on invalid plan, to guarantee it
+        // throws the same exception. For example, cases like non-aggregate expressions not
+        // in group by, once transformed, will throw a different exception: missing input.
+        def eligibleToLiftUp(exp: Expression): Boolean = {
+          exp match {
+            case _: AggregateExpression => true
+            case e if groupingExpressions.exists(_.semanticEquals(e)) => true
+            case a: Attribute => false
+            case s: ScalarSubquery if s.children.nonEmpty
+              && !groupingExpressions.exists(_.semanticEquals(s)) => false
+            // Manually skip detection on function itself because it can be an aggregate function.
+            // This is to avoid expressions like sum(salary) over () eligible to lift up.
+            case WindowExpression(function, spec) =>
+              function.children.forall(eligibleToLiftUp) && eligibleToLiftUp(spec)
+            case e => e.children.forall(eligibleToLiftUp)
+          }
+        }
+        if (!aggregateExpressions.forall(eligibleToLiftUp)) {
+          agg
+        } else {
           val newAggExprs = collection.mutable.Set.empty[NamedExpression]
           val expressionMap = collection.mutable.LinkedHashMap.empty[Expression, NamedExpression]
           // Extract the expressions to keep in the Aggregate. Return the transformed expression
@@ -262,7 +264,33 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
             projectList = projectExprs,
             child = agg.copy(aggregateExpressions = newAggExprs.toSeq)
           )
-      }
+        }
+
+      case p: LogicalPlan =>
+        p.mapChildren(apply0)
+    }
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) {
+      plan
+    } else if (plan.containsAnyPattern(TEMP_RESOLVED_COLUMN)) {
+      // It should not change the plan if `TempResolvedColumn` is present in the query plan. These
+      // plans need certain plan shape to get recognized and resolved by other rules, such as
+      // Filter/Sort + Aggregate to be matched by ResolveAggregateFunctions. LCA resolution can
+      // break the plan shape, like adding Project above Aggregate.
+      // TODO: this condition only guarantees to keep the shape after the plan has
+      //  `TempResolvedColumn`. However, it does not consider the case of breaking the shape even
+      //  before `TempResolvedColumn` is generated by matching Filter/Sort - Aggregate in
+      //  ResolveReferences. Currently the correctness of this case now relies on the rule
+      //  application order, that ResolveReference is right before the application of
+      //  ResolveLateralColumnAliasReference. The condition in the two rules guarantees that the
+      //  case can never happen. We should consider to remove this order dependency but still assure
+      //  correctness in the future.
+      plan
+    } else {
+      // phase 2: unwrap
+      apply0(plan)
     }
   }
 }

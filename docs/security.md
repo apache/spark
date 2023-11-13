@@ -49,9 +49,9 @@ specified below, the secret must be defined by setting the `spark.authenticate.s
 option. The same secret is shared by all Spark applications and daemons in that case, which limits
 the security of these deployments, especially on multi-tenant clusters.
 
-The REST Submission Server and the MesosClusterDispatcher do not support authentication.  You should
-ensure that all network access to the REST API & MesosClusterDispatcher (port 6066 and 7077
-respectively by default) are restricted to hosts that are trusted to submit jobs.
+The REST Submission Server does not support authentication. You should
+ensure that all network access to the REST API (port 6066 by default) 
+is restricted to hosts that are trusted to submit jobs.
 
 ### YARN
 
@@ -147,7 +147,26 @@ Note that when using files, Spark will not mount these files into the containers
 you to ensure that the secret files are deployed securely into your containers and that the driver's
 secret file agrees with the executors' secret file.
 
-## Encryption
+# Network Encryption
+
+Spark supports two mutually exclusive forms of encryption for RPC connections.
+
+The first is an AES-based encryption which relies on a shared secret, and thus requires
+RPC authentication to also be enabled.
+
+The second is an SSL based encryption mechanism utilizing Netty's support for SSL. This requires
+keys and certificates to be properly configured. It can be used with or without the authentication
+mechanism discussed earlier.
+
+One may prefer to use the SSL based encryption in scenarios where compliance mandates the usage
+of specific protocols; or to leverage the security of a more standard encryption library. However,
+the AES based encryption is simpler to configure and may be preferred if the only requirement
+is that data be encrypted in transit.
+
+If both options are enabled in the configuration, the SSL based RPC encryption takes precedence
+and the AES based encryption will not be used (and a warning message will be emitted).
+
+## AES based Encryption
 
 Spark supports AES-based encryption for RPC connections. For encryption to be enabled, RPC
 authentication must also be enabled and properly configured. AES encryption uses the
@@ -209,6 +228,17 @@ The following table describes the different options available for configuring th
 </tr>
 </table>
 
+## SSL Encryption
+
+Spark supports SSL based encryption for RPC connections. Please refer to the SSL Configuration
+section below to understand how to configure it. The SSL settings are mostly similar across the UI 
+and RPC, however there are a few additional settings which are specific to the RPC implementation.
+The RPC implementation uses Netty under the hood (while the UI uses Jetty), which supports a
+different set of options.
+
+Unlike the other SSL settings for the UI, the RPC SSL is *not* automatically enabled if 
+`spark.ssl.enabled` is set. It must be explicitly enabled, to ensure a safe migration path for users
+upgrading Spark versions.
 
 # Local Storage Encryption
 
@@ -225,7 +255,7 @@ The following settings cover enabling encryption for data written to disk:
   <td><code>spark.io.encryption.enabled</code></td>
   <td>false</td>
   <td>
-    Enable local disk I/O encryption. Currently supported by all modes except Mesos. It's strongly
+    Enable local disk I/O encryption. Currently supported by all modes. It's strongly
     recommended that RPC encryption be enabled when using this feature.
   </td>
   <td>2.1.0</td>
@@ -289,6 +319,12 @@ The following options control the authentication of Web UIs:
 
 <table class="table table-striped">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
+<tr>
+  <td><code>spark.ui.allowFramingFrom</code></td>
+  <td><code>SAMEORIGIN</code></td>
+  <td>Allow framing for a specific named URI via <code>X-Frame-Options</code>. By default, allow only from the same origin.</td>
+  <td>1.6.0</td>
+</tr>
 <tr>
   <td><code>spark.ui.filters</code></td>
   <td>None</td>
@@ -431,8 +467,10 @@ application configurations will be ignored.
 Configuration for SSL is organized hierarchically. The user can configure the default SSL settings
 which will be used for all the supported communication protocols unless they are overwritten by
 protocol-specific settings. This way the user can easily provide the common settings for all the
-protocols without disabling the ability to configure each one individually. The following table
-describes the SSL configuration namespaces:
+protocols without disabling the ability to configure each one individually. Note that all settings 
+are inherited this way, *except* for `spark.ssl.rpc.enabled` which must be explicitly set.
+
+The following table describes the SSL configuration namespaces:
 
 <table class="table table-striped">
   <thead>
@@ -460,17 +498,22 @@ describes the SSL configuration namespaces:
     <td><code>spark.ssl.historyServer</code></td>
     <td>History Server Web UI</td>
   </tr>
+  <tr>
+    <td><code>spark.ssl.rpc</code></td>
+    <td>Spark RPC communication</td>
+  </tr>
 </table>
 
 The full breakdown of available SSL options can be found below. The `${ns}` placeholder should be
 replaced with one of the above namespaces.
 
 <table class="table table-striped">
-<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr></thead>
+<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Supported Namespaces</th></tr></thead>
   <tr>
     <td><code>${ns}.enabled</code></td>
     <td>false</td>
     <td>Enables SSL. When enabled, <code>${ns}.ssl.protocol</code> is required.</td>
+    <td>ui,standalone,historyServer,rpc</td>
   </tr>
   <tr>
     <td><code>${ns}.port</code></td>
@@ -484,6 +527,7 @@ replaced with one of the above namespaces.
       <br />When not set, the SSL port will be derived from the non-SSL port for the
       same service. A value of "0" will make the service bind to an ephemeral port.
     </td>
+    <td>ui,standalone,historyServer</td>
   </tr>
   <tr>
     <td><code>${ns}.enabledAlgorithms</code></td>
@@ -492,12 +536,13 @@ replaced with one of the above namespaces.
       A comma-separated list of ciphers. The specified ciphers must be supported by JVM.
 
       <br />The reference list of protocols can be found in the "JSSE Cipher Suite Names" section
-      of the Java security guide. The list for Java 8 can be found at
-      <a href="https://docs.oracle.com/javase/8/docs/technotes/guides/security/StandardNames.html#ciphersuites">this</a>
+      of the Java security guide. The list for Java 17 can be found at
+      <a href="https://docs.oracle.com/en/java/javase/17/docs/specs/security/standard-names.html#jsse-cipher-suite-names">this</a>
       page.
 
       <br />Note: If not set, the default cipher suite for the JRE will be used.
     </td>
+    <td>ui,standalone,historyServer,rpc</td>
   </tr>
   <tr>
     <td><code>${ns}.keyPassword</code></td>
@@ -505,6 +550,7 @@ replaced with one of the above namespaces.
     <td>
       The password to the private key in the key store.
     </td>
+    <td>ui,standalone,historyServer,rpc</td>
   </tr>
   <tr>
     <td><code>${ns}.keyStore</code></td>
@@ -513,16 +559,19 @@ replaced with one of the above namespaces.
       Path to the key store file. The path can be absolute or relative to the directory in which the
       process is started.
     </td>
+    <td>ui,standalone,historyServer,rpc</td>
   </tr>
   <tr>
     <td><code>${ns}.keyStorePassword</code></td>
     <td>None</td>
     <td>Password to the key store.</td>
+    <td>ui,standalone,historyServer,rpc</td>
   </tr>
   <tr>
     <td><code>${ns}.keyStoreType</code></td>
     <td>JKS</td>
     <td>The type of the key store.</td>
+    <td>ui,standalone,historyServer</td>
   </tr>
   <tr>
     <td><code>${ns}.protocol</code></td>
@@ -531,15 +580,19 @@ replaced with one of the above namespaces.
       TLS protocol to use. The protocol must be supported by JVM.
 
       <br />The reference list of protocols can be found in the "Additional JSSE Standard Names"
-      section of the Java security guide. For Java 8, the list can be found at
-      <a href="https://docs.oracle.com/javase/8/docs/technotes/guides/security/StandardNames.html#jssenames">this</a>
+      section of the Java security guide. For Java 17, the list can be found at
+      <a href="https://docs.oracle.com/en/java/javase/17/docs/specs/security/standard-names.html#additional-jsse-standard-names">this</a>
       page.
     </td>
+    <td>ui,standalone,historyServer,rpc</td>
   </tr>
   <tr>
     <td><code>${ns}.needClientAuth</code></td>
     <td>false</td>
-    <td>Whether to require client authentication.</td>
+    <td>
+      Whether to require client authentication.
+    </td>
+    <td>ui,standalone,historyServer</td>
   </tr>
   <tr>
     <td><code>${ns}.trustStore</code></td>
@@ -548,16 +601,68 @@ replaced with one of the above namespaces.
       Path to the trust store file. The path can be absolute or relative to the directory in which
       the process is started.
     </td>
+    <td>ui,standalone,historyServer,rpc</td>
   </tr>
   <tr>
     <td><code>${ns}.trustStorePassword</code></td>
     <td>None</td>
     <td>Password for the trust store.</td>
+    <td>ui,standalone,historyServer,rpc</td>
   </tr>
   <tr>
     <td><code>${ns}.trustStoreType</code></td>
     <td>JKS</td>
     <td>The type of the trust store.</td>
+    <td>ui,standalone,historyServer</td>
+  </tr>
+  <tr>
+    <td><code>${ns}.openSSLEnabled</code></td>
+    <td>false</td>
+    <td>
+      Whether to use OpenSSL for cryptographic operations instead of the JDK SSL provider.
+      This setting requires the `certChain` and `privateKey` settings to be set.
+      This takes precedence over the `keyStore` and `trustStore` settings if both are specified.
+      If the OpenSSL library is not available at runtime, we will fall back to the JDK provider.
+    </td>
+    <td>rpc</td>
+  </tr>
+  <tr>
+    <td><code>${ns}.privateKey</code></td>
+    <td>None</td>
+    <td>
+      Path to the private key file in PEM format. The path can be absolute or relative to the 
+      directory in which the process is started. 
+      This setting is required when using the OpenSSL implementation.
+    </td>
+    <td>rpc</td>
+  </tr>
+  <tr>
+    <td><code>${ns}.certChain</code></td>
+    <td>None</td>
+    <td>
+      Path to the certificate chain file in PEM format. The path can be absolute or relative to the 
+      directory in which the process is started. 
+      This setting is required when using the OpenSSL implementation.
+    </td>
+    <td>rpc</td>
+  </tr>
+  <tr>
+    <td><code>${ns}.trustStoreReloadingEnabled</code></td>
+    <td>false</td>
+    <td>
+      Whether the trust store should be reloaded periodically.
+      This setting is mostly only useful in standalone deployments, not k8s or yarn deployments.
+    </td>
+    <td>rpc</td>
+  </tr>
+  <tr>
+    <td><code>${ns}.trustStoreReloadIntervalMs</code></td>
+    <td>10000</td>
+    <td>
+      The interval at which the trust store should be reloaded (in milliseconds).
+      This setting is mostly only useful in standalone deployments, not k8s or yarn deployments.
+    </td>
+    <td>rpc</td>
   </tr>
 </table>
 
@@ -585,7 +690,7 @@ Or via SparkConf "spark.hadoop.hadoop.security.credential.provider.path=jceks://
 ## Preparing the key stores
 
 Key stores can be generated by `keytool` program. The reference documentation for this tool for
-Java 8 is [here](https://docs.oracle.com/javase/8/docs/technotes/tools/unix/keytool.html).
+Java 17 is [here](https://docs.oracle.com/en/java/javase/17/docs/specs/man/keytool.html).
 The most basic steps to configure the key stores and the trust store for a Spark Standalone
 deployment mode is as follows:
 
@@ -614,20 +719,6 @@ be set by attaching appropriate Java system properties in `SPARK_MASTER_OPTS` an
 The user may allow the executors to use the SSL settings inherited from the worker process. That
 can be accomplished by setting `spark.ssl.useNodeLocalConf` to `true`. In that case, the settings
 provided by the user on the client side are not used.
-
-### Mesos mode
-
-Mesos 1.3.0 and newer supports `Secrets` primitives as both file-based and environment based
-secrets. Spark allows the specification of file-based and environment variable based secrets with
-`spark.mesos.driver.secret.filenames` and `spark.mesos.driver.secret.envkeys`, respectively.
-
-Depending on the secret store backend secrets can be passed by reference or by value with the
-`spark.mesos.driver.secret.names` and `spark.mesos.driver.secret.values` configuration properties,
-respectively.
-
-Reference type secrets are served by the secret store and referred to by name, for example
-`/mysecret`. Value type secrets are passed on the command line and translated into their
-appropriate files or environment variables.
 
 ## HTTP Security Headers
 
@@ -813,7 +904,7 @@ mechanism (see `java.util.ServiceLoader`). Implementations of
 `org.apache.spark.security.HadoopDelegationTokenProvider` can be made available to Spark
 by listing their names in the corresponding file in the jar's `META-INF/services` directory.
 
-Delegation token support is currently only supported in YARN and Mesos modes. Consult the
+Delegation token support is currently only supported in YARN mode. Consult the
 deployment-specific page for more information.
 
 The following options provides finer-grained control for this feature:
@@ -855,7 +946,7 @@ Long-running applications may run into issues if their run time exceeds the maxi
 token lifetime configured in services it needs to access.
 
 This feature is not available everywhere. In particular, it's only implemented
-on YARN and Kubernetes (both client and cluster modes), and on Mesos when using client mode.
+on YARN and Kubernetes (both client and cluster modes).
 
 Spark supports automatically creating new tokens for these applications. There are two ways to
 enable this functionality.

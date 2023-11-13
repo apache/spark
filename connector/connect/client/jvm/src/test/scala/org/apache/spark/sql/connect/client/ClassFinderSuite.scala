@@ -20,15 +20,15 @@ import java.nio.file.Paths
 
 import org.apache.commons.io.FileUtils
 
-import org.apache.spark.sql.connect.client.util.ConnectFunSuite
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.test.ConnectFunSuite
+import org.apache.spark.util.SparkFileUtils
 
 class ClassFinderSuite extends ConnectFunSuite {
 
   private val classResourcePath = commonResourcePath.resolve("artifact-tests")
 
   test("REPLClassDirMonitor functionality test") {
-    val copyDir = Utils.createTempDir().toPath
+    val copyDir = SparkFileUtils.createTempDir().toPath
     FileUtils.copyDirectory(classResourcePath.toFile, copyDir.toFile)
     val monitor = new REPLClassDirMonitor(copyDir.toAbsolutePath.toString)
 
@@ -47,7 +47,7 @@ class ClassFinderSuite extends ConnectFunSuite {
     checkClasses(monitor)
 
     // Add new class file into directory
-    val subDir = Utils.createTempDir(copyDir.toAbsolutePath.toString)
+    val subDir = SparkFileUtils.createTempDir(copyDir.toAbsolutePath.toString)
     val classToCopy = copyDir.resolve("Hello.class")
     val copyLocation = subDir.toPath.resolve("HelloDup.class")
     FileUtils.copyFile(classToCopy.toFile, copyLocation.toFile)

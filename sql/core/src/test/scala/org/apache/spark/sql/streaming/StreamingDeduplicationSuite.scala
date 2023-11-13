@@ -26,8 +26,10 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
+@SlowSQLTest
 class StreamingDeduplicationSuite extends StateStoreMetricsTest {
 
   import testImplicits._
@@ -262,7 +264,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
 
   test("SPARK-19841: watermarkPredicate should filter based on keys") {
     val input = MemoryStream[(Int, Int)]
-    val df = input.toDS.toDF("time", "id")
+    val df = input.toDS().toDF("time", "id")
       .withColumn("time", timestamp_seconds($"time"))
       .withWatermark("time", "1 second")
       .dropDuplicates("id", "time") // Change the column positions
@@ -281,7 +283,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
 
   test("SPARK-21546: dropDuplicates should ignore watermark when it's not a key") {
     val input = MemoryStream[(Int, Int)]
-    val df = input.toDS.toDF("id", "time")
+    val df = input.toDS().toDF("id", "time")
       .withColumn("time", timestamp_seconds($"time"))
       .withWatermark("time", "1 second")
       .dropDuplicates("id")
@@ -484,5 +486,6 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
   }
 }
 
+@SlowSQLTest
 class RocksDBStateStoreStreamingDeduplicationSuite
   extends StreamingDeduplicationSuite with RocksDBStateStoreTest

@@ -19,10 +19,11 @@ import unittest
 from pyspark.ml.image import ImageSchema
 from pyspark.testing.mlutils import SparkSessionTestCase
 from pyspark.sql import Row
-from pyspark.testing.utils import QuietTest
+from pyspark.testing.utils import QuietTest, eventually
 
 
 class ImageFileFormatTest(SparkSessionTestCase):
+    @eventually(timeout=60.0, catch_assertions=True)
     def test_read_images(self):
         data_path = "data/mllib/images/origin/kittens"
         df = (

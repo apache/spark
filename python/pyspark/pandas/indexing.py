@@ -25,11 +25,11 @@ from typing import Any, Optional, List, Tuple, TYPE_CHECKING, Union, cast, Sized
 
 import pandas as pd
 from pandas.api.types import is_list_like  # type: ignore[attr-defined]
+import numpy as np
+
 from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import BooleanType, LongType, DataType
 from pyspark.errors import AnalysisException
-import numpy as np
-
 from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas._typing import Label, Name, Scalar
 from pyspark.pandas.internal import (
@@ -50,9 +50,7 @@ from pyspark.pandas.utils import (
     spark_column_equals,
     verify_temp_column_name,
 )
-
-# For Supporting Spark Connect
-from pyspark.sql.utils import is_remote
+from pyspark.sql.utils import get_column_class
 
 if TYPE_CHECKING:
     from pyspark.pandas.frame import DataFrame
@@ -261,18 +259,13 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         """
         from pyspark.pandas.series import Series
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
+        Column = get_column_class()
         if rows_sel is None:
             return None, None, None
         elif isinstance(rows_sel, Series):
             return self._select_rows_by_series(rows_sel)
         elif isinstance(rows_sel, Column):
-            return self._select_rows_by_spark_column(rows_sel)  # type: ignore[arg-type]
+            return self._select_rows_by_spark_column(rows_sel)
         elif isinstance(rows_sel, slice):
             if rows_sel == slice(None):
                 # If slice is None - select everything, so nothing to do
@@ -313,12 +306,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         """
         from pyspark.pandas.series import Series
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
+        Column = get_column_class()
         if cols_sel is None:
             column_labels = self._internal.column_labels
             data_spark_columns = self._internal.data_spark_columns
@@ -327,9 +315,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         elif isinstance(cols_sel, Series):
             return self._select_cols_by_series(cols_sel, missing_keys)
         elif isinstance(cols_sel, Column):
-            return self._select_cols_by_spark_column(
-                cols_sel, missing_keys  # type: ignore[arg-type]
-            )
+            return self._select_cols_by_spark_column(cols_sel, missing_keys)
         elif isinstance(cols_sel, slice):
             if cols_sel == slice(None):
                 # If slice is None - select everything, so nothing to do
@@ -593,12 +579,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         from pyspark.pandas.frame import DataFrame
         from pyspark.pandas.series import Series, first_series
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
+        Column = get_column_class()
         if self._is_series:
             if (
                 isinstance(key, Series)
@@ -1067,7 +1048,6 @@ class LocIndexer(LocIndexerLike):
             if (start is None and rows_sel.start is not None) or (
                 stop is None and rows_sel.stop is not None
             ):
-
                 inc = index_column.is_monotonic_increasing
                 if inc is False:
                     dec = index_column.is_monotonic_decreasing
@@ -1095,12 +1075,16 @@ class LocIndexer(LocIndexerLike):
 
             return reduce(lambda x, y: x & y, conds), None, None
         else:
-            from pyspark.sql.types import StructType
+            from pyspark.sql.types import ArrayType, StructType
 
             index = self._psdf_or_psser.index
-            index_data_type = [  # type: ignore[assignment]
-                f.dataType for f in cast(StructType, index.to_series().spark.data_type)
-            ]
+            data_type = index.to_series().spark.data_type
+            if isinstance(data_type, StructType):
+                index_data_type = [f.dataType for f in data_type]  # type: ignore[assignment]
+            elif isinstance(data_type, ArrayType):
+                index_data_type = [  # type: ignore[assignment]
+                    data_type.elementType for _ in range(index._internal.index_level)
+                ]
 
             start = rows_sel.start
             if start is not None:
@@ -1122,7 +1106,9 @@ class LocIndexer(LocIndexerLike):
                 return None, None, None
             elif (
                 depth > self._internal.index_level
-                or not index.droplevel(list(range(self._internal.index_level)[depth:])).is_monotonic
+                or not index.droplevel(
+                    list(range(self._internal.index_level)[depth:])
+                ).is_monotonic_increasing
             ):
                 raise KeyError(
                     "Key length ({}) was greater than MultiIndex sort depth".format(depth)
@@ -1139,16 +1125,9 @@ class LocIndexer(LocIndexerLike):
                     )
                 )[::-1]:
                     compare = MultiIndex._comparator_for_monotonic_increasing(dt)
-                    if is_remote():
-                        from pyspark.sql.connect.column import Column as ConnectColumn
-
-                        Column = ConnectColumn
-                    else:
-                        Column = PySparkColumn  # type: ignore[assignment]
+                    Column = get_column_class()
                     cond = F.when(scol.eqNullSafe(F.lit(value).cast(dt)), cond).otherwise(
-                        compare(
-                            scol, F.lit(value).cast(dt), Column.__gt__  # type: ignore[arg-type]
-                        )
+                        compare(scol, F.lit(value).cast(dt), Column.__gt__)
                     )
                 conds.append(cond)
             if stop is not None:
@@ -1161,16 +1140,9 @@ class LocIndexer(LocIndexerLike):
                     )
                 )[::-1]:
                     compare = MultiIndex._comparator_for_monotonic_increasing(dt)
-                    if is_remote():
-                        from pyspark.sql.connect.column import Column as ConnectColumn
-
-                        Column = ConnectColumn
-                    else:
-                        Column = PySparkColumn  # type: ignore[assignment]
+                    Column = get_column_class()
                     cond = F.when(scol.eqNullSafe(F.lit(value).cast(dt)), cond).otherwise(
-                        compare(
-                            scol, F.lit(value).cast(dt), Column.__lt__  # type: ignore[arg-type]
-                        )
+                        compare(scol, F.lit(value).cast(dt), Column.__lt__)
                     )
                 conds.append(cond)
 
@@ -1328,12 +1300,7 @@ class LocIndexer(LocIndexerLike):
     ]:
         from pyspark.pandas.series import Series
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
+        Column = get_column_class()
         if all(isinstance(key, Series) for key in cols_sel):
             column_labels = [key._column_label for key in cols_sel]
             data_spark_columns = [key.spark.column for key in cols_sel]
@@ -1837,12 +1804,7 @@ class iLocIndexer(LocIndexerLike):
             )
 
     def __setitem__(self, key: Any, value: Any) -> None:
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
+        Column = get_column_class()
         if not isinstance(value, Column) and is_list_like(value):
             iloc_item = self[key]
             if not is_list_like(key) or not is_list_like(iloc_item):

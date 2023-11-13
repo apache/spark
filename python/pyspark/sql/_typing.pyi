@@ -36,6 +36,7 @@ from pyspark.sql.column import Column
 
 ColumnOrName = Union[Column, str]
 ColumnOrName_ = TypeVar("ColumnOrName_", bound=ColumnOrName)
+ColumnOrNameOrOrdinal = Union[Column, str, int]
 DecimalLiteral = decimal.Decimal
 DateTimeLiteral = Union[datetime.datetime, datetime.date]
 LiteralType = PrimitiveType
@@ -58,6 +59,8 @@ RowLike = TypeVar("RowLike", List[Any], Tuple[Any, ...], pyspark.sql.types.Row)
 
 SQLBatchedUDFType = Literal[100]
 SQLArrowBatchedUDFType = Literal[101]
+SQLTableUDFType = Literal[300]
+SQLArrowTableUDFType = Literal[301]
 
 class SupportsOpen(Protocol):
     def open(self, partition_id: int, epoch_id: int) -> bool: ...

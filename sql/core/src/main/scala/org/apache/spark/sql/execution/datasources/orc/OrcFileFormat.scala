@@ -35,6 +35,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -219,7 +220,7 @@ class OrcFileFormat
           val iter = new RecordReaderIterator[OrcStruct](orcRecordReader)
           Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
 
-          val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+          val fullSchema = toAttributes(requiredSchema) ++ toAttributes(partitionSchema)
           val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
           val deserializer = new OrcDeserializer(requiredSchema, requestedColIds)
 

@@ -471,4 +471,5 @@ Project [x#x, cast(x#x as int) AS int4_value#x]
 -- !query
 DROP TABLE INT4_TBL
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`INT4_TBL`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.INT4_TBL

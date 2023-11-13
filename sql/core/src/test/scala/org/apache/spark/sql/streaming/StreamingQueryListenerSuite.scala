@@ -29,14 +29,16 @@ import org.scalatest.concurrent.Waiters.Waiter
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{Encoder, Row, SparkSession}
-import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
+import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.streaming.ui.StreamingQueryStatusListener
 import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.JsonProtocol
 
+@SlowSQLTest
 class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   import testImplicits._
@@ -64,7 +66,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       extends AssertOnQuery(q => {
         eventually(Timeout(streamingTimeout)) {
           if (q.exception.isEmpty) {
-            assert(clock.isStreamWaitingAt(clock.getTimeMillis))
+            assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
           }
         }
         if (q.exception.isDefined) {
@@ -208,7 +210,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   test("adding and removing listener") {
     def isListenerActive(listener: EventCollector): Boolean = {
       listener.reset()
-      testStream(MemoryStream[Int].toDS)(
+      testStream(MemoryStream[Int].toDS())(
         StartStream(),
         StopStream
       )
@@ -239,7 +241,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       for (i <- 1 to 50) {
         listener.reset()
         require(listener.startEvent === null)
-        testStream(MemoryStream[Int].toDS)(
+        testStream(MemoryStream[Int].toDS())(
           StartStream(),
           Assert(listener.startEvent !== null, "onQueryStarted not called before query returned"),
           StopStream,
@@ -266,7 +268,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   test("QueryProgressEvent serialization") {
     def testSerialization(event: QueryProgressEvent): Unit = {
-      import scala.collection.JavaConverters._
+      import scala.jdk.CollectionConverters._
       val json = JsonProtocol.sparkEventToJsonString(event)
       val newEvent = JsonProtocol.sparkEventFromJson(json).asInstanceOf[QueryProgressEvent]
       assert(newEvent.progress.json === event.progress.json)  // json as a proxy for equality
@@ -312,9 +314,9 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       try {
         var numTriggers = 0
         val input = new MemoryStream[Int](0, sqlContext) {
-          override def latestOffset(): OffsetV2 = {
+          override def latestOffset(startOffset: OffsetV2, limit: ReadLimit): OffsetV2 = {
             numTriggers += 1
-            super.latestOffset()
+            super.latestOffset(startOffset, limit)
           }
         }
         val clock = new StreamManualClock()
@@ -329,11 +331,11 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           }
           true
         }
-        // `recentProgress` should not receive any events
+        // `recentProgress` should not receive too many no data events
         actions += AssertOnQuery { q =>
-          q.recentProgress.isEmpty
+          q.recentProgress.size > 1 && q.recentProgress.size <= 11
         }
-        testStream(input.toDS)(actions.toSeq: _*)
+        testStream(input.toDS())(actions.toSeq: _*)
         spark.sparkContext.listenerBus.waitUntilEmpty()
         // 11 is the max value of the possible numbers of events.
         assert(numIdleEvent > 1 && numIdleEvent <= 11)
@@ -353,7 +355,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       collector1.reset()
       collector2.reset()
       val mem = MemoryStream[Int](implicitly[Encoder[Int]], session.sqlContext)
-      testStream(mem.toDS)(
+      testStream(mem.toDS())(
         AddData(mem, 1, 2, 3),
         CheckAnswer(1, 2, 3)
       )
@@ -522,7 +524,6 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         testStream(result)(
           StartStream(trigger = Trigger.ProcessingTime(10), triggerClock = clock),
           AddData(input, 10),
-          // checkProgressEvent(1),
           AdvanceManualClock(10),
           checkProgressEvent(1),
           AdvanceManualClock(90),

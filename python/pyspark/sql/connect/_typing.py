@@ -37,6 +37,8 @@ from pyspark.sql.streaming.state import GroupState
 
 ColumnOrName = Union[Column, str]
 
+ColumnOrNameOrOrdinal = Union[Column, str, int]
+
 PrimitiveType = Union[bool, float, int, str]
 
 OptionalPrimitiveType = Optional[PrimitiveType]

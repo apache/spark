@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, TYPE_CHECK
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype  # noqa: F401
+
 from pyspark._globals import _NoValue, _NoValueType
 from pyspark.sql import (
     functions as F,
@@ -40,17 +41,9 @@ from pyspark.sql.types import (  # noqa: F401
     StringType,
 )
 from pyspark.sql.utils import is_timestamp_ntz_preferred
-
-# For supporting Spark Connect
-from pyspark.sql.utils import is_remote
-
-# For running doctests and reference resolution in PyCharm.
+from pyspark.sql.utils import is_remote, get_column_class, get_dataframe_class
 from pyspark import pandas as ps
 from pyspark.pandas._typing import Label
-
-if TYPE_CHECKING:
-    # This is required in old Python 3.5 to prevent circular reference.
-    from pyspark.pandas.series import Series
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.typedef import (
@@ -71,6 +64,8 @@ from pyspark.pandas.utils import (
     spark_column_equals,
 )
 
+if TYPE_CHECKING:
+    from pyspark.pandas.series import Series
 
 # A function to turn given numbers to Spark columns that represent pandas-on-Spark index.
 SPARK_INDEX_NAME_FORMAT = "__index_level_{}__".format
@@ -624,12 +619,7 @@ class InternalFrame:
         >>> internal.column_label_names
         [('column_labels_a',), ('column_labels_b',)]
         """
-        if is_remote():
-            from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
-
-            SparkDataFrame = ConnectDataFrame
-        else:
-            SparkDataFrame = PySparkDataFrame  # type: ignore[assignment]
+        SparkDataFrame = get_dataframe_class()
         assert isinstance(spark_frame, SparkDataFrame)
         assert not spark_frame.isStreaming, "pandas-on-Spark does not support Structured Streaming."
 
@@ -682,12 +672,7 @@ class InternalFrame:
         self._sdf = spark_frame
 
         # index_spark_columns
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn
+        Column = get_column_class()
         assert all(
             isinstance(index_scol, Column) for index_scol in index_spark_columns
         ), index_spark_columns
@@ -761,7 +746,7 @@ class InternalFrame:
             ]
 
         assert all(
-            isinstance(ops.dtype, Dtype.__args__)
+            isinstance(ops.dtype, Dtype.__args__)  # type: ignore[attr-defined]
             and (
                 ops.dtype == np.dtype("object")
                 or as_spark_type(ops.dtype, raise_error=False) is not None
@@ -795,7 +780,7 @@ class InternalFrame:
         self._index_fields: List[InternalField] = index_fields
 
         assert all(
-            isinstance(ops.dtype, Dtype.__args__)
+            isinstance(ops.dtype, Dtype.__args__)  # type: ignore[attr-defined]
             and (
                 ops.dtype == np.dtype("object")
                 or as_spark_type(ops.dtype, raise_error=False) is not None
@@ -1000,12 +985,7 @@ class InternalFrame:
 
     def spark_column_name_for(self, label_or_scol: Union[Label, PySparkColumn]) -> str:
         """Return the actual Spark column name for the given column label."""
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
+        Column = get_column_class()
         if isinstance(label_or_scol, Column):
             return self.spark_frame.select(label_or_scol).columns[0]
         else:
@@ -1013,12 +993,7 @@ class InternalFrame:
 
     def spark_type_for(self, label_or_scol: Union[Label, PySparkColumn]) -> DataType:
         """Return DataType for the given column label."""
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
+        Column = get_column_class()
         if isinstance(label_or_scol, Column):
             return self.spark_frame.select(label_or_scol).schema[0].dataType
         else:
@@ -1026,12 +1001,7 @@ class InternalFrame:
 
     def spark_column_nullable_for(self, label_or_scol: Union[Label, PySparkColumn]) -> bool:
         """Return nullability for the given column label."""
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
+        Column = get_column_class()
         if isinstance(label_or_scol, Column):
             return self.spark_frame.select(label_or_scol).schema[0].nullable
         else:
@@ -1048,7 +1018,7 @@ class InternalFrame:
     @property
     def spark_frame(self) -> PySparkDataFrame:
         """Return the managed Spark DataFrame."""
-        return self._sdf  # type: ignore[has-type]
+        return self._sdf
 
     @lazy_property
     def data_spark_column_names(self) -> List[str]:

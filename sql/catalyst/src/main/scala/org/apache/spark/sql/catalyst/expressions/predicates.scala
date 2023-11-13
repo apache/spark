@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A base class for generated/interpreted predicate
@@ -173,7 +174,7 @@ trait PredicateHelper extends AliasHelper with Logging {
         }
         i += 2
       }
-      currentResult = nextResult
+      currentResult = nextResult.toImmutableArraySeq
     }
     currentResult.head
   }
@@ -468,6 +469,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   override def foldable: Boolean = children.forall(_.foldable)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(IN)
+  private val legacyNullInEmptyBehavior =
+    SQLConf.get.legacyNullInEmptyBehavior
 
   override lazy val canonicalized: Expression = {
     val basic = withNewChildren(children.map(_.canonicalized)).asInstanceOf[In]
@@ -481,88 +484,104 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
 
   override def eval(input: InternalRow): Any = {
-    val evaluatedValue = value.eval(input)
-    if (evaluatedValue == null) {
-      null
+    if (list.isEmpty && !legacyNullInEmptyBehavior) {
+      // IN (empty list) is always false under current behavior.
+      // Under legacy behavior it's null if the left side is null, otherwise false (SPARK-44550).
+      false
     } else {
-      var hasNull = false
-      list.foreach { e =>
-        val v = e.eval(input)
-        if (v == null) {
-          hasNull = true
-        } else if (ordering.equiv(v, evaluatedValue)) {
-          return true
-        }
-      }
-      if (hasNull) {
+      val evaluatedValue = value.eval(input)
+      if (evaluatedValue == null) {
         null
       } else {
-        false
+        var hasNull = false
+        list.foreach { e =>
+          val v = e.eval(input)
+          if (v == null) {
+            hasNull = true
+          } else if (ordering.equiv(v, evaluatedValue)) {
+            return true
+          }
+        }
+        if (hasNull) {
+          null
+        } else {
+          false
+        }
       }
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val javaDataType = CodeGenerator.javaType(value.dataType)
-    val valueGen = value.genCode(ctx)
-    val listGen = list.map(_.genCode(ctx))
-    // inTmpResult has 3 possible values:
-    // -1 means no matches found and there is at least one value in the list evaluated to null
-    val HAS_NULL = -1
-    // 0 means no matches found and all values in the list are not null
-    val NOT_MATCHED = 0
-    // 1 means one value in the list is matched
-    val MATCHED = 1
-    val tmpResult = ctx.freshName("inTmpResult")
-    val valueArg = ctx.freshName("valueArg")
-    // All the blocks are meant to be inside a do { ... } while (false); loop.
-    // The evaluation of variables can be stopped when we find a matching value.
-    val listCode = listGen.map(x =>
-      s"""
-         |${x.code}
-         |if (${x.isNull}) {
-         |  $tmpResult = $HAS_NULL; // ${ev.isNull} = true;
-         |} else if (${ctx.genEqual(value.dataType, valueArg, x.value)}) {
-         |  $tmpResult = $MATCHED; // ${ev.isNull} = false; ${ev.value} = true;
-         |  continue;
-         |}
+    if (list.isEmpty && !legacyNullInEmptyBehavior) {
+      // IN (empty list) is always false under current behavior.
+      // Under legacy behavior it's null if the left side is null, otherwise false (SPARK-44550).
+      ev.copy(code =
+        code"""
+              |final boolean ${ev.isNull} = false;
+              |final boolean ${ev.value} = false;
        """.stripMargin)
-
-    val codes = ctx.splitExpressionsWithCurrentInputs(
-      expressions = listCode,
-      funcName = "valueIn",
-      extraArguments = (javaDataType, valueArg) :: (CodeGenerator.JAVA_BYTE, tmpResult) :: Nil,
-      returnType = CodeGenerator.JAVA_BYTE,
-      makeSplitFunction = body =>
+    } else {
+      val javaDataType = CodeGenerator.javaType(value.dataType)
+      val valueGen = value.genCode(ctx)
+      val listGen = list.map(_.genCode(ctx))
+      // inTmpResult has 3 possible values:
+      // -1 means no matches found and there is at least one value in the list evaluated to null
+      val HAS_NULL = -1
+      // 0 means no matches found and all values in the list are not null
+      val NOT_MATCHED = 0
+      // 1 means one value in the list is matched
+      val MATCHED = 1
+      val tmpResult = ctx.freshName("inTmpResult")
+      val valueArg = ctx.freshName("valueArg")
+      // All the blocks are meant to be inside a do { ... } while (false); loop.
+      // The evaluation of variables can be stopped when we find a matching value.
+      val listCode = listGen.map(x =>
         s"""
-           |do {
-           |  $body
-           |} while (false);
-           |return $tmpResult;
-         """.stripMargin,
-      foldFunctions = _.map { funcCall =>
-        s"""
-           |$tmpResult = $funcCall;
-           |if ($tmpResult == $MATCHED) {
+           |${x.code}
+           |if (${x.isNull}) {
+           |  $tmpResult = $HAS_NULL; // ${ev.isNull} = true;
+           |} else if (${ctx.genEqual(value.dataType, valueArg, x.value)}) {
+           |  $tmpResult = $MATCHED; // ${ev.isNull} = false; ${ev.value} = true;
            |  continue;
            |}
-         """.stripMargin
-      }.mkString("\n"))
+         """.stripMargin)
 
-    ev.copy(code =
-      code"""
-         |${valueGen.code}
-         |byte $tmpResult = $HAS_NULL;
-         |if (!${valueGen.isNull}) {
-         |  $tmpResult = $NOT_MATCHED;
-         |  $javaDataType $valueArg = ${valueGen.value};
-         |  do {
-         |    $codes
-         |  } while (false);
-         |}
-         |final boolean ${ev.isNull} = ($tmpResult == $HAS_NULL);
-         |final boolean ${ev.value} = ($tmpResult == $MATCHED);
-       """.stripMargin)
+      val codes = ctx.splitExpressionsWithCurrentInputs(
+        expressions = listCode,
+        funcName = "valueIn",
+        extraArguments = (javaDataType, valueArg) :: (CodeGenerator.JAVA_BYTE, tmpResult) :: Nil,
+        returnType = CodeGenerator.JAVA_BYTE,
+        makeSplitFunction = body =>
+          s"""
+             |do {
+             |  $body
+             |} while (false);
+             |return $tmpResult;
+           """.stripMargin,
+        foldFunctions = _.map { funcCall =>
+          s"""
+             |$tmpResult = $funcCall;
+             |if ($tmpResult == $MATCHED) {
+             |  continue;
+             |}
+           """.stripMargin
+        }.mkString("\n"))
+
+      ev.copy(code =
+        code"""
+           |${valueGen.code}
+           |byte $tmpResult = $HAS_NULL;
+           |if (!${valueGen.isNull}) {
+           |  $tmpResult = $NOT_MATCHED;
+           |  $javaDataType $valueArg = ${valueGen.value};
+           |  do {
+           |    $codes
+           |  } while (false);
+           |}
+           |final boolean ${ev.isNull} = ($tmpResult == $HAS_NULL);
+           |final boolean ${ev.value} = ($tmpResult == $MATCHED);
+         """.stripMargin)
+    }
   }
 
   override def sql: String = {
@@ -607,16 +626,27 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   override def nullable: Boolean = child.nullable || hasNull
 
   final override val nodePatterns: Seq[TreePattern] = Seq(INSET)
+  private val legacyNullInEmptyBehavior =
+    SQLConf.get.legacyNullInEmptyBehavior
 
-  protected override def nullSafeEval(value: Any): Any = {
-    if (set.contains(value)) {
-      true
-    } else if (isNaN(value)) {
-      hasNaN
-    } else if (hasNull) {
-      null
-    } else {
+  override def eval(input: InternalRow): Any = {
+    if (hset.isEmpty && !legacyNullInEmptyBehavior) {
+      // IN (empty list) is always false under current behavior.
+      // Under legacy behavior it's null if the left side is null, otherwise false (SPARK-44550).
       false
+    } else {
+      val value = child.eval(input)
+      if (value == null) {
+        null
+      } else if (set.contains(value)) {
+        true
+      } else if (isNaN(value)) {
+        hasNaN
+      } else if (hasNull) {
+        null
+      } else {
+        false
+      }
     }
   }
 
@@ -629,7 +659,16 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (canBeComputedUsingSwitch && hset.size <= SQLConf.get.optimizerInSetSwitchThreshold) {
+    if (hset.isEmpty && !legacyNullInEmptyBehavior) {
+      // IN (empty list) is always false under current behavior.
+      // Under legacy behavior it's null if the left side is null, otherwise false (SPARK-44550).
+      ev.copy(code =
+        code"""
+        ${CodeGenerator.JAVA_BOOLEAN} ${ev.value} = false;
+        ${CodeGenerator.JAVA_BOOLEAN} ${ev.isNull} = false;
+        """
+      )
+    } else if (canBeComputedUsingSwitch && hset.size <= SQLConf.get.optimizerInSetSwitchThreshold) {
       genCodeWithSwitch(ctx, ev)
     } else {
       genCodeWithSet(ctx, ev)
@@ -1112,7 +1151,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
        true
   """,
   since = "3.4.0",
-  group = "misc_funcs")
+  group = "predicate_funcs")
 case class EqualNull(left: Expression, right: Expression, replacement: Expression)
     extends RuntimeReplaceable with InheritAnalysisRules {
   def this(left: Expression, right: Expression) = this(left, right, EqualNullSafe(left, right))
@@ -1274,7 +1313,7 @@ object IsUnknown {
   def apply(child: Expression): Predicate = {
     new IsNull(child) with ExpectsInputTypes {
       override def inputTypes: Seq[DataType] = Seq(BooleanType)
-      override def sql: String = s"(${child.sql} IS UNKNOWN)"
+      override def sql: String = s"(${this.child.sql} IS UNKNOWN)"
     }
   }
 }
@@ -1283,7 +1322,7 @@ object IsNotUnknown {
   def apply(child: Expression): Predicate = {
     new IsNotNull(child) with ExpectsInputTypes {
       override def inputTypes: Seq[DataType] = Seq(BooleanType)
-      override def sql: String = s"(${child.sql} IS NOT UNKNOWN)"
+      override def sql: String = s"(${this.child.sql} IS NOT UNKNOWN)"
     }
   }
 }

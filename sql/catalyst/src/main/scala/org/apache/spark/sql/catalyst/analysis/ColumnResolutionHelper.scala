@@ -29,12 +29,15 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.toPrettySQL
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
+import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
 import org.apache.spark.sql.internal.SQLConf
 
-trait ColumnResolutionHelper extends Logging {
+trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
   def conf: SQLConf
+
+  def catalogManager: CatalogManager
 
   /**
    * This method tries to resolve expressions and find missing attributes recursively.
@@ -92,12 +95,13 @@ trait ColumnResolutionHelper extends Logging {
     }
   }
 
-    // support CURRENT_DATE, CURRENT_TIMESTAMP, and grouping__id
+  // support CURRENT_DATE, CURRENT_TIMESTAMP, CURRENT_USER, USER, SESSION_USER and grouping__id
   private val literalFunctions: Seq[(String, () => Expression, Expression => String)] = Seq(
     (CurrentDate().prettyName, () => CurrentDate(), toPrettySQL(_)),
     (CurrentTimestamp().prettyName, () => CurrentTimestamp(), toPrettySQL(_)),
     (CurrentUser().prettyName, () => CurrentUser(), toPrettySQL),
     ("user", () => CurrentUser(), toPrettySQL),
+    ("session_user", () => CurrentUser(), toPrettySQL),
     (VirtualColumn.hiveGroupingIdName, () => GroupingID(Nil), _ => VirtualColumn.hiveGroupingIdName)
   )
 
@@ -131,7 +135,7 @@ trait ColumnResolutionHelper extends Logging {
       resolveColumnByName: Seq[String] => Option[Expression],
       getAttrCandidates: () => Seq[Attribute],
       throws: Boolean,
-      allowOuter: Boolean): Expression = {
+      includeLastResort: Boolean): Expression = {
     def innerResolve(e: Expression, isTopLevel: Boolean): Expression = withOrigin(e.origin) {
       if (e.resolved) return e
       val resolved = e match {
@@ -192,7 +196,11 @@ trait ColumnResolutionHelper extends Logging {
 
     try {
       val resolved = innerResolve(expr, isTopLevel = true)
-      if (allowOuter) resolveOuterRef(resolved) else resolved
+      if (includeLastResort) {
+        resolveColsLastResort(resolved)
+      } else {
+        resolved
+      }
     } catch {
       case ae: AnalysisException if !throws =>
         logDebug(ae.getMessage)
@@ -227,6 +235,87 @@ trait ColumnResolutionHelper extends Logging {
       case u: UnresolvedAttribute =>
         resolve(u.nameParts).getOrElse(u)
       // Re-resolves `TempResolvedColumn` as outer references if it has tried to be resolved with
+      // Aggregate but failed.
+      case t: TempResolvedColumn if t.hasTried =>
+        resolve(t.nameParts).getOrElse(t)
+    }
+  }
+
+  def lookupVariable(nameParts: Seq[String]): Option[VariableReference] = {
+    // The temp variables live in `SYSTEM.SESSION`, and the name can be qualified or not.
+    def maybeTempVariableName(nameParts: Seq[String]): Boolean = {
+      nameParts.length == 1 || {
+        if (nameParts.length == 2) {
+          nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+        } else if (nameParts.length == 3) {
+          nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+            nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+        } else {
+          false
+        }
+      }
+    }
+
+    if (maybeTempVariableName(nameParts)) {
+      val variableName = if (conf.caseSensitiveAnalysis) {
+        nameParts.last
+      } else {
+        nameParts.last.toLowerCase(Locale.ROOT)
+      }
+      catalogManager.tempVariableManager.get(variableName).map { varDef =>
+        VariableReference(
+          nameParts,
+          FakeSystemCatalog,
+          Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), variableName),
+          varDef)
+      }
+    } else {
+      None
+    }
+  }
+
+  // Resolves `UnresolvedAttribute` to its value.
+  protected def resolveVariables(e: Expression): Expression = {
+    def resolveVariable(nameParts: Seq[String]): Option[Expression] = {
+      val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
+      if (isResolvingView) {
+        if (AnalysisContext.get.referredTempVariableNames.contains(nameParts)) {
+          lookupVariable(nameParts)
+        } else {
+          None
+        }
+      } else {
+        lookupVariable(nameParts)
+      }
+    }
+
+    def resolve(nameParts: Seq[String]): Option[Expression] = {
+      var resolvedVariable: Option[Expression] = None
+      // We only support temp variables for now, so the variable name can at most have 3 parts.
+      var numInnerFields: Int = math.max(0, nameParts.length - 3)
+      // Follow the column resolution and prefer the longest match. This makes sure that users
+      // can always use fully qualified variable name to avoid name conflicts.
+      while (resolvedVariable.isEmpty && numInnerFields < nameParts.length) {
+        resolvedVariable = resolveVariable(nameParts.dropRight(numInnerFields))
+        if (resolvedVariable.isEmpty) numInnerFields += 1
+      }
+
+      resolvedVariable.map { variable =>
+        if (numInnerFields != 0) {
+          val nestedFields = nameParts.takeRight(numInnerFields)
+          nestedFields.foldLeft(variable: Expression) { (e, name) =>
+            ExtractValue(e, Literal(name), conf.resolver)
+          }
+        } else {
+          variable
+        }
+      }.map(e => Alias(e, nameParts.last)())
+    }
+
+    e.transformWithPruning(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) {
+      case u: UnresolvedAttribute =>
+        resolve(u.nameParts).getOrElse(u)
+      // Re-resolves `TempResolvedColumn` as variable references if it has tried to be resolved with
       // Aggregate but failed.
       case t: TempResolvedColumn if t.hasTried =>
         resolve(t.nameParts).getOrElse(t)
@@ -335,15 +424,15 @@ trait ColumnResolutionHelper extends Logging {
       expr: Expression,
       plan: LogicalPlan,
       throws: Boolean = false,
-      allowOuter: Boolean = false): Expression = {
+      includeLastResort: Boolean = false): Expression = {
     resolveExpression(
-      expr,
+      tryResolveColumnByPlanId(expr, plan),
       resolveColumnByName = nameParts => {
         plan.resolve(nameParts, conf.resolver)
       },
       getAttrCandidates = () => plan.output,
       throws = throws,
-      allowOuter = allowOuter)
+      includeLastResort = includeLastResort)
   }
 
   /**
@@ -357,22 +446,9 @@ trait ColumnResolutionHelper extends Logging {
   def resolveExpressionByPlanChildren(
       e: Expression,
       q: LogicalPlan,
-      allowOuter: Boolean = false): Expression = {
-    val newE = if (e.exists(_.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty)) {
-      // If the TreeNodeTag 'LogicalPlan.PLAN_ID_TAG' is attached, it means that the plan and
-      // expression are from Spark Connect, and need to be resolved in this way:
-      //    1, extract the attached plan id from the expression (UnresolvedAttribute only for now);
-      //    2, top-down traverse the query plan to find the plan node that matches the plan id;
-      //    3, if can not find the matching node, fail the analysis due to illegal references;
-      //    4, resolve the expression with the matching node, if any error occurs here, apply the
-      //    old code path;
-      resolveExpressionByPlanId(e, q)
-    } else {
-      e
-    }
-
+      includeLastResort: Boolean = false): Expression = {
     resolveExpression(
-      newE,
+      tryResolveColumnByPlanId(e, q),
       resolveColumnByName = nameParts => {
         q.resolveChildren(nameParts, conf.resolver)
       },
@@ -381,7 +457,16 @@ trait ColumnResolutionHelper extends Logging {
         q.children.head.output
       },
       throws = true,
-      allowOuter = allowOuter)
+      includeLastResort = includeLastResort)
+  }
+
+  /**
+   * The last resort to resolve columns. Currently it does two things:
+   *  - Try to resolve column names as outer references
+   *  - Try to resolve column names as SQL variable
+   */
+  protected def resolveColsLastResort(e: Expression): Expression = {
+    resolveVariables(resolveOuterRef(e))
   }
 
   def resolveExprInAssignment(expr: Expression, hostPlan: LogicalPlan): Expression = {
@@ -392,46 +477,84 @@ trait ColumnResolutionHelper extends Logging {
     }
   }
 
-  private def resolveExpressionByPlanId(
+  // If the TreeNodeTag 'LogicalPlan.PLAN_ID_TAG' is attached, it means that the plan and
+  // expression are from Spark Connect, and need to be resolved in this way:
+  //    1. extract the attached plan id from UnresolvedAttribute;
+  //    2. top-down traverse the query plan to find the plan node that matches the plan id;
+  //    3. if can not find the matching node, fail the analysis due to illegal references;
+  //    4. if more than one matching nodes are found, fail due to ambiguous column reference;
+  //    5. resolve the expression with the matching node, if any error occurs here, return the
+  //       original expression as it is.
+  private def tryResolveColumnByPlanId(
       e: Expression,
-      q: LogicalPlan): Expression = {
-    if (!e.exists(_.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty)) {
-      return e
-    }
-
-    e match {
-      case u: UnresolvedAttribute =>
-        resolveUnresolvedAttributeByPlanId(u, q).getOrElse(u)
-      case _ =>
-        e.mapChildren(c => resolveExpressionByPlanId(c, q))
-    }
+      q: LogicalPlan,
+      idToPlan: mutable.HashMap[Long, LogicalPlan] = mutable.HashMap.empty): Expression = e match {
+    case u: UnresolvedAttribute =>
+      resolveUnresolvedAttributeByPlanId(
+        u, q, idToPlan: mutable.HashMap[Long, LogicalPlan]
+      ).getOrElse(u)
+    case _ if e.containsPattern(UNRESOLVED_ATTRIBUTE) =>
+      e.mapChildren(c => tryResolveColumnByPlanId(c, q, idToPlan))
+    case _ => e
   }
 
   private def resolveUnresolvedAttributeByPlanId(
       u: UnresolvedAttribute,
-      q: LogicalPlan): Option[NamedExpression] = {
+      q: LogicalPlan,
+      idToPlan: mutable.HashMap[Long, LogicalPlan]): Option[NamedExpression] = {
     val planIdOpt = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
     if (planIdOpt.isEmpty) return None
     val planId = planIdOpt.get
     logDebug(s"Extract plan_id $planId from $u")
 
-    val planOpt = q.find(_.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(planId))
-    if (planOpt.isEmpty) {
-      // For example:
-      //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
-      //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
-      //  df1.select(df2.a)   <-   illegal reference df2.a
-      throw new AnalysisException(s"When resolving $u, " +
-        s"fail to find subplan with plan_id=$planId in $q")
-    }
-    val plan = planOpt.get
+    val plan = idToPlan.getOrElseUpdate(planId, {
+      findPlanById(u, planId, q).getOrElse {
+        // For example:
+        //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
+        //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
+        //  df1.select(df2.a)   <-   illegal reference df2.a
+        throw new AnalysisException(s"When resolving $u, " +
+          s"fail to find subplan with plan_id=$planId in $q")
+      }
+    })
 
+    val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).isDefined
     try {
-      plan.resolve(u.nameParts, conf.resolver)
+      if (!isMetadataAccess) {
+        plan.resolve(u.nameParts, conf.resolver)
+      } else if (u.nameParts.size == 1) {
+        plan.getMetadataAttributeByNameOpt(u.nameParts.head)
+      } else {
+        None
+      }
     } catch {
       case e: AnalysisException =>
         logDebug(s"Fail to resolve $u with $plan due to $e")
         None
+    }
+  }
+
+  private def findPlanById(
+      u: UnresolvedAttribute,
+      id: Long,
+      plan: LogicalPlan): Option[LogicalPlan] = {
+    if (plan.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
+      Some(plan)
+    } else if (plan.children.length == 1) {
+      findPlanById(u, id, plan.children.head)
+    } else if (plan.children.length > 1) {
+      val matched = plan.children.flatMap(findPlanById(u, id, _))
+      if (matched.length > 1) {
+        throw new AnalysisException(
+          errorClass = "AMBIGUOUS_COLUMN_REFERENCE",
+          messageParameters = Map("name" -> toSQLId(u.nameParts)),
+          origin = u.origin
+        )
+      } else {
+        matched.headOption
+      }
+    } else {
+      None
     }
   }
 }

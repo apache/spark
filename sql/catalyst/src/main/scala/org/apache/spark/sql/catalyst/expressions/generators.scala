@@ -21,11 +21,12 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, GeneratorBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GENERATOR, TreePattern}
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.catalyst.util.SQLKeywordUtils._
@@ -57,7 +58,7 @@ trait Generator extends Expression {
 
   override def nullable: Boolean = false
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(GENERATOR)
+  protected override val nodePatterns: Seq[TreePattern] = Seq(GENERATOR)
 
   /**
    * The output element schema.
@@ -65,13 +66,13 @@ trait Generator extends Expression {
   def elementSchema: StructType
 
   /** Should be implemented by child classes to perform specific Generators. */
-  override def eval(input: InternalRow): TraversableOnce[InternalRow]
+  override def eval(input: InternalRow): IterableOnce[InternalRow]
 
   /**
    * Notifies that there are no more rows to process, clean up code, and additional
    * rows can be made here.
    */
-  def terminate(): TraversableOnce[InternalRow] = Nil
+  def terminate(): IterableOnce[InternalRow] = Nil
 
   /**
    * Check if this generator supports code generation.
@@ -99,7 +100,7 @@ trait CollectionGenerator extends Generator {
  */
 case class UserDefinedGenerator(
     elementSchema: StructType,
-    function: Row => TraversableOnce[InternalRow],
+    function: Row => IterableOnce[InternalRow],
     children: Seq[Expression])
   extends Generator with CodegenFallback {
 
@@ -116,7 +117,7 @@ case class UserDefinedGenerator(
     }.asInstanceOf[InternalRow => Row]
   }
 
-  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     if (inputRow == null) {
       initializeConverters()
     }
@@ -180,7 +181,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "n",
+          "inputName" -> toSQLId("n"),
           "inputType" -> toSQLType(IntegerType),
           "inputExpr" -> toSQLExpr(children.head)
         )
@@ -231,15 +232,17 @@ case class Stack(children: Seq[Expression]) extends Generator {
       case (e, index) => StructField(s"col$index", e.dataType)
     })
 
-  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     val values = children.tail.map(_.eval(input)).toArray
+
+    import org.apache.spark.util.ArrayImplicits._
     for (row <- 0 until numRows) yield {
       val fields = new Array[Any](numFields)
       for (col <- 0 until numFields) {
         val index = row * numFields + col
         fields.update(col, if (index < values.length) values(index) else null)
       }
-      InternalRow(fields: _*)
+      InternalRow(fields.toImmutableArraySeq: _*)
     }
   }
 
@@ -264,7 +267,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
     })
 
     // Create the collection.
-    val wrapperClass = classOf[mutable.WrappedArray[_]].getName
+    val wrapperClass = classOf[mutable.ArraySeq[_]].getName
     ev.copy(code =
       code"""
          |$code
@@ -289,15 +292,17 @@ case class ReplicateRows(children: Seq[Expression]) extends Generator with Codeg
       case (e, index) => StructField(s"col$index", e.dataType)
     })
 
-  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     val numRows = children.head.eval(input).asInstanceOf[Long]
     val values = children.tail.map(_.eval(input)).toArray
+
+    import org.apache.spark.util.ArrayImplicits._
     Range.Long(0, numRows, 1).map { _ =>
       val fields = new Array[Any](numColumns)
       for (col <- 0 until numColumns) {
         fields.update(col, values(col))
       }
-      InternalRow(fields: _*)
+      InternalRow(fields.toImmutableArraySeq: _*)
     }
   }
 
@@ -310,7 +315,7 @@ case class ReplicateRows(children: Seq[Expression]) extends Generator with Codeg
  * such as explode_outer. This expression gets replaced during analysis.
  */
 case class GeneratorOuter(child: Generator) extends UnaryExpression with Generator {
-  final override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =
+  final override def eval(input: InternalRow = null): IterableOnce[InternalRow] =
     throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
 
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
@@ -368,7 +373,7 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
       }
   }
 
-  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     child.dataType match {
       case ArrayType(et, _) =>
         val inputArray = child.eval(input).asInstanceOf[ArrayData]
@@ -413,6 +418,21 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
  *   20
  * }}}
  */
+case class Explode(child: Expression) extends ExplodeBase {
+  override val position: Boolean = false
+  override protected def withNewChildInternal(newChild: Expression): Explode =
+    copy(child = newChild)
+}
+
+trait ExplodeGeneratorBuilderBase extends GeneratorBuilder {
+  override def functionSignature: Option[FunctionSignature] =
+    Some(FunctionSignature(Seq(InputParameter("collection"))))
+  override def buildGenerator(funcName: String, expressions: Seq[Expression]): Generator = {
+    assert(expressions.size == 1)
+    Explode(expressions(0))
+  }
+}
+
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns. Unless specified otherwise, uses the default column name `col` for elements of the array or `key` and `value` for the elements of the map.",
@@ -421,15 +441,65 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
       > SELECT _FUNC_(array(10, 20));
        10
        20
+      > SELECT _FUNC_(collection => array(10, 20));
+       10
+       20
+      > SELECT * FROM _FUNC_(collection => array(10, 20));
+       10
+       20
   """,
   since = "1.0.0",
   group = "generator_funcs")
 // scalastyle:on line.size.limit
-case class Explode(child: Expression) extends ExplodeBase {
-  override val position: Boolean = false
-  override protected def withNewChildInternal(newChild: Expression): Explode =
-    copy(child = newChild)
+object ExplodeExpressionBuilder extends ExpressionBuilder {
+  override def functionSignature: Option[FunctionSignature] =
+    Some(FunctionSignature(Seq(InputParameter("collection"))))
+
+  override def build(funcName: String, expressions: Seq[Expression]) : Expression =
+    Explode(expressions(0))
 }
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns. Unless specified otherwise, uses the default column name `col` for elements of the array or `key` and `value` for the elements of the map.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(10, 20));
+       10
+       20
+      > SELECT _FUNC_(collection => array(10, 20));
+       10
+       20
+      > SELECT * FROM _FUNC_(collection => array(10, 20));
+       10
+       20
+  """,
+  since = "1.0.0",
+  group = "generator_funcs")
+// scalastyle:on line.size.limit
+object ExplodeGeneratorBuilder extends ExplodeGeneratorBuilderBase {
+  override def isOuter: Boolean = false
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns. Unless specified otherwise, uses the default column name `col` for elements of the array or `key` and `value` for the elements of the map.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(10, 20));
+       10
+       20
+      > SELECT _FUNC_(collection => array(10, 20));
+       10
+       20
+  """,
+  since = "1.0.0",
+  group = "generator_funcs")
+// scalastyle:on line.size.limit
+object ExplodeOuterGeneratorBuilder extends ExplodeGeneratorBuilderBase {
+  override def isOuter: Boolean = true
+}
+
 
 /**
  * Given an input array produces a sequence of rows for each position and value in the array.
@@ -446,6 +516,9 @@ case class Explode(child: Expression) extends ExplodeBase {
   examples = """
     Examples:
       > SELECT _FUNC_(array(10,20));
+       0	10
+       1	20
+      > SELECT * FROM _FUNC_(array(10,20));
        0	10
        1	20
   """,
@@ -502,7 +575,7 @@ case class Inline(child: Expression) extends UnaryExpression with CollectionGene
 
   private lazy val generatorNullRow = new GenericInternalRow(elementSchema.length)
 
-  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     val inputArray = child.eval(input).asInstanceOf[ArrayData]
     if (inputArray == null) {
       Nil
@@ -536,7 +609,7 @@ case class SQLKeywords() extends LeafExpression with Generator with CodegenFallb
     .add("keyword", StringType, nullable = false)
     .add("reserved", BooleanType, nullable = false)
 
-  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     val reservedList = getReservedList()
     keywords.zip(reservedList).map { case (keyword, isReserved) =>
       InternalRow(UTF8String.fromString(keyword), isReserved)

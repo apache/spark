@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, Literal, MetadataAttribute}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, EqualNullSafe, Expression, If, Literal, MetadataAttribute, Not, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
-import org.apache.spark.sql.catalyst.plans.logical.{Assignment, Expand, Filter, LogicalPlan, Project, UpdateTable, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, Expand, Filter, LogicalPlan, Project, ReplaceData, Union, UpdateTable, WriteDelta}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
 import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
@@ -47,13 +46,93 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
           table.operation match {
             case _: SupportsDelta =>
               buildWriteDeltaPlan(r, table, assignments, updateCond)
+            case _ if SubqueryExpression.hasSubquery(updateCond) =>
+              buildReplaceDataWithUnionPlan(r, table, assignments, updateCond)
             case _ =>
-              throw new AnalysisException("Group-based UPDATE commands are not supported yet")
+              buildReplaceDataPlan(r, table, assignments, updateCond)
           }
 
         case _ =>
           u
       }
+  }
+
+  // build a rewrite plan for sources that support replacing groups of data (e.g. files, partitions)
+  // if the condition does NOT contain a subquery
+  private def buildReplaceDataPlan(
+      relation: DataSourceV2Relation,
+      operationTable: RowLevelOperationTable,
+      assignments: Seq[Assignment],
+      cond: Expression): ReplaceData = {
+
+    // resolve all required metadata attrs that may be used for grouping data on write
+    val metadataAttrs = resolveRequiredMetadataAttrs(relation, operationTable.operation)
+
+    // construct a read relation and include all required metadata columns
+    val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
+
+    // build a plan with updated and copied over records
+    val updatedAndRemainingRowsPlan = buildReplaceDataUpdateProjection(
+      readRelation, assignments, cond)
+
+    // build a plan to replace read groups in the table
+    val writeRelation = relation.copy(table = operationTable)
+    ReplaceData(writeRelation, cond, updatedAndRemainingRowsPlan, relation, Some(cond))
+  }
+
+  // build a rewrite plan for sources that support replacing groups of data (e.g. files, partitions)
+  // if the condition contains a subquery
+  private def buildReplaceDataWithUnionPlan(
+      relation: DataSourceV2Relation,
+      operationTable: RowLevelOperationTable,
+      assignments: Seq[Assignment],
+      cond: Expression): ReplaceData = {
+
+    // resolve all required metadata attrs that may be used for grouping data on write
+    val metadataAttrs = resolveRequiredMetadataAttrs(relation, operationTable.operation)
+
+    // construct a read relation and include all required metadata columns
+    // the same read relation will be used to read records that must be updated and copied over
+    // the analyzer will take care of duplicated attr IDs
+    val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
+
+    // build a plan for updated records that match the condition
+    val matchedRowsPlan = Filter(cond, readRelation)
+    val updatedRowsPlan = buildReplaceDataUpdateProjection(matchedRowsPlan, assignments)
+
+    // build a plan that contains unmatched rows in matched groups that must be copied over
+    val remainingRowFilter = Not(EqualNullSafe(cond, Literal.TrueLiteral))
+    val remainingRowsPlan = Filter(remainingRowFilter, readRelation)
+
+    // the new state is a union of updated and copied over records
+    val updatedAndRemainingRowsPlan = Union(updatedRowsPlan, remainingRowsPlan)
+
+    // build a plan to replace read groups in the table
+    val writeRelation = relation.copy(table = operationTable)
+    ReplaceData(writeRelation, cond, updatedAndRemainingRowsPlan, relation, Some(cond))
+  }
+
+  // this method assumes the assignments have been already aligned before
+  private def buildReplaceDataUpdateProjection(
+      plan: LogicalPlan,
+      assignments: Seq[Assignment],
+      cond: Expression = TrueLiteral): LogicalPlan = {
+
+    // the plan output may include immutable metadata columns at the end
+    // that's why the number of assignments may not match the number of plan output columns
+    val assignedValues = assignments.map(_.value)
+    val updatedValues = plan.output.zipWithIndex.map { case (attr, index) =>
+      if (index < assignments.size) {
+        val assignedExpr = assignedValues(index)
+        val updatedValue = If(cond, assignedExpr, attr)
+        Alias(updatedValue, attr.name)()
+      } else {
+        assert(MetadataAttribute.isValid(attr.metadata))
+        attr
+      }
+    }
+
+    Project(updatedValues, plan)
   }
 
   // build a rewrite plan for sources that support row deltas
@@ -78,7 +157,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val rowDeltaPlan = if (operation.representUpdateAsDeleteAndInsert) {
       buildDeletesAndInserts(matchedRowsPlan, assignments, rowIdAttrs)
     } else {
-      buildUpdateProjection(matchedRowsPlan, assignments, rowIdAttrs)
+      buildWriteDeltaUpdateProjection(matchedRowsPlan, assignments, rowIdAttrs)
     }
 
     // build a plan to write the row delta to the table
@@ -88,7 +167,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
   }
 
   // this method assumes the assignments have been already aligned before
-  private def buildUpdateProjection(
+  private def buildWriteDeltaUpdateProjection(
       plan: LogicalPlan,
       assignments: Seq[Assignment],
       rowIdAttrs: Seq[Attribute]): LogicalPlan = {
@@ -108,16 +187,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // original row ID values must be preserved and passed back to the table to encode updates
     // if there are any assignments to row ID attributes, add extra columns for the original values
-    val rowIdAttrSet = AttributeSet(rowIdAttrs)
-    val originalRowIdValues = assignments.flatMap { assignment =>
-      val key = assignment.key.asInstanceOf[Attribute]
-      val value = assignment.value
-      if (rowIdAttrSet.contains(key) && !key.semanticEquals(value)) {
-        Some(Alias(key, ORIGINAL_ROW_ID_VALUE_PREFIX + key.name)())
-      } else {
-        None
-      }
-    }
+    val originalRowIdValues = buildOriginalRowIdValues(rowIdAttrs, assignments)
 
     val operationType = Alias(Literal(UPDATE_OPERATION), OPERATION_COLUMN)()
 
@@ -133,27 +203,11 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       MetadataAttribute.isValid(attr.metadata)
     }
     val deleteOutput = deltaDeleteOutput(rowAttrs, rowIdAttrs, metadataAttrs)
-    val insertOutput = deltaInsertOutput(assignments.map(_.value), metadataAttrs)
-    val output = buildDeletesAndInsertsOutput(matchedRowsPlan, deleteOutput, insertOutput)
-    Expand(Seq(deleteOutput, insertOutput), output, matchedRowsPlan)
-  }
-
-  private def buildDeletesAndInsertsOutput(
-      child: LogicalPlan,
-      deleteOutput: Seq[Expression],
-      insertOutput: Seq[Expression]): Seq[Attribute] = {
-
+    val insertOutput = deltaInsertOutput(assignments, metadataAttrs)
+    val outputs = Seq(deleteOutput, insertOutput)
     val operationTypeAttr = AttributeReference(OPERATION_COLUMN, IntegerType, nullable = false)()
-    val attrs = operationTypeAttr +: child.output
-
-    // build a correct nullability map for output attributes
-    // an attribute is nullable if at least one output projection may produce null
-    val nullabilityMap = attrs.indices.map { index =>
-      index -> (deleteOutput(index).nullable || insertOutput(index).nullable)
-    }.toMap
-
-    attrs.zipWithIndex.map { case (attr, index) =>
-      AttributeReference(attr.name, attr.dataType, nullabilityMap(index))()
-    }
+    val attrs = operationTypeAttr +: matchedRowsPlan.output
+    val expandOutput = generateExpandOutput(attrs, outputs)
+    Expand(outputs, expandOutput, matchedRowsPlan)
   }
 }

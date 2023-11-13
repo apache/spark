@@ -26,7 +26,7 @@ The `INSERT` statement inserts new rows into a table or overwrites the existing 
 ### Syntax
 
 ```sql
-INSERT [ INTO | OVERWRITE ] [ TABLE ] table_identifier [ partition_spec ] [ ( column_list ) ]
+INSERT [ INTO | OVERWRITE ] [ TABLE ] table_identifier [ partition_spec ] [ ( column_list ) | [BY NAME] ]
     { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] | query }
 
 INSERT INTO [ TABLE ] table_identifier REPLACE WHERE boolean_expression query
@@ -318,6 +318,46 @@ SELECT * FROM students;
 +-------------+--------------------------+----------+
 ```
 
+##### Insert By Name Using a SELECT Statement
+
+```sql
+-- Assuming the persons table has already been created and populated.
+SELECT * FROM persons;
++-------------+--------------------------+---------+
+|         name|                   address|      ssn|
++-------------+--------------------------+---------+
+|Dora Williams|134 Forest Ave, Menlo Park|123456789|
++-------------+--------------------------+---------+
+|  Eddie Davis|   245 Market St, Milpitas|345678901|
++-------------+--------------------------+---------+
+
+-- Spark will reorder the fields of the query according to the order of the fields in the table,
+-- so don't worry about the field order mismatch
+INSERT INTO students PARTITION (student_id = 222222) BY NAME
+    SELECT address, name FROM persons WHERE name = "Dora Williams";
+
+SELECT * FROM students;
++-------------+--------------------------+----------+
+|         name|                   address|student_id|
++-------------+--------------------------+----------+
+|   Ashua Hill|   456 Erica Ct, Cupertino|    111111|
++-------------+--------------------------+----------+
+|Dora Williams|134 Forest Ave, Menlo Park|    222222|
++-------------+--------------------------+----------+
+    
+INSERT OVERWRITE students PARTITION (student_id = 222222) BY NAME
+    SELECT 'Unknown' as address, name FROM persons WHERE name = "Dora Williams";
+
+SELECT * FROM students;
++-------------+--------------------------+----------+
+|         name|                   address|student_id|
++-------------+--------------------------+----------+
+|   Ashua Hill|   456 Erica Ct, Cupertino|    111111|
++-------------+--------------------------+----------+
+|Dora Williams|                   Unknown|    222222|
++-------------+--------------------------+----------+
+```
+
 ##### Insert Using a REPLACE WHERE Statement
 
 ```sql
@@ -419,7 +459,7 @@ SELECT * FROM students;
 |    Amy Smith|   123 Park Ave, San Jose| 2019-01-02|
 +-------------+-------------------------+-----------+
 
-INSERT INTO students PARTITION (birthday = date'2019-01-02')
+INSERT OVERWRITE students PARTITION (birthday = date'2019-01-02')
     VALUES('Jason Wang', '908 Bird St, Saratoga');
 
 SELECT * FROM students;

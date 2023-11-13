@@ -16,7 +16,13 @@
  */
 package org.apache.spark.util
 
-trait SparkClassUtils {
+import java.util.Random
+
+import scala.util.Try
+
+private[spark] trait SparkClassUtils {
+  val random = new Random()
+
   def getSparkClassLoader: ClassLoader = getClass.getClassLoader
 
   def getContextOrSparkClassLoader: ClassLoader =
@@ -39,6 +45,11 @@ trait SparkClassUtils {
     }
     // scalastyle:on classforname
   }
+
+  /** Determines whether the provided class is loadable in the current thread. */
+  def classIsLoadable(clazz: String): Boolean = {
+    Try { classForName(clazz, initialize = false) }.isSuccess
+  }
 }
 
-object SparkClassUtils extends SparkClassUtils
+private[spark] object SparkClassUtils extends SparkClassUtils

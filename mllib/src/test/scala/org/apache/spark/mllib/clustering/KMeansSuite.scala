@@ -80,7 +80,8 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("unique cluster centers") {
     val rng = new Random(seed)
     val numDistinctPoints = 10
-    val points = (0 until numDistinctPoints).map(i => Vectors.dense(Array.fill(3)(rng.nextDouble)))
+    val points =
+      (0 until numDistinctPoints).map(i => Vectors.dense(Array.fill(3)(rng.nextDouble())))
     val data = sc.parallelize(points.flatMap(Array.fill(1 + rng.nextInt(3))(_)), 2)
     val normedData = data.map(new VectorWithNorm(_))
 
@@ -362,7 +363,7 @@ class KMeansClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
     val n = 200000
     val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
       val random = new Random(idx)
-      iter.map(i => Vectors.dense(Array.fill(n)(random.nextDouble)))
+      iter.map(i => Vectors.dense(Array.fill(n)(random.nextDouble())))
     }.cache()
     for (initMode <- Seq(KMeans.RANDOM, KMeans.K_MEANS_PARALLEL)) {
       // If we serialize data directly in the task closure, the size of the serialized task would be

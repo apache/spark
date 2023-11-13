@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
 
 import org.apache.spark.connect.proto
@@ -361,7 +361,7 @@ package object dsl {
       }
 
       def fillValueMap(valueMap: Map[String, Any]): Relation = {
-        val (cols, values) = valueMap.mapValues(toLiteralProto).toSeq.unzip
+        val (cols, values) = valueMap.view.mapValues(toLiteralProto).toSeq.unzip
         Relation
           .newBuilder()
           .setFillNa(
@@ -520,7 +520,7 @@ package object dsl {
         .setProject(
           Project
             .newBuilder()
-            .addAllExpressions(exprs.toIterable.asJava)
+            .addAllExpressions(exprs.asJava)
             .build())
         .build()
     }
@@ -533,7 +533,7 @@ package object dsl {
             Project
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllExpressions(exprs.toIterable.asJava)
+              .addAllExpressions(exprs.asJava)
               .build())
           .build()
       }
@@ -1056,7 +1056,7 @@ package object dsl {
       def randomSplit(weights: Array[Double], seed: Long): Array[Relation] = {
         require(
           weights.forall(_ >= 0),
-          s"Weights must be nonnegative, but got ${weights.mkString("[", ",", "]")}")
+          s"Weights must be non-negative, but got ${weights.mkString("[", ",", "]")}")
         require(
           weights.sum > 0,
           s"Sum of weights must be positive, but got ${weights.mkString("[", ",", "]")}")

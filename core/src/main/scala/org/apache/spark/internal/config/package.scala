@@ -21,6 +21,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkContext
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.metrics.GarbageCollectionMetrics
 import org.apache.spark.network.shuffle.Constants
@@ -30,7 +31,7 @@ import org.apache.spark.scheduler.{EventLoggingListener, SchedulingMode}
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
 import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy}
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{MavenUtils, Utils}
 import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillReader.MAX_BUFFER_SIZE_BYTES
 
 package object config {
@@ -123,6 +124,13 @@ package object config {
         "Ensure that memory overhead is a double greater than 0")
       .createWithDefault(0.1)
 
+  private[spark] val DRIVER_LOG_LOCAL_DIR =
+    ConfigBuilder("spark.driver.log.localDir")
+      .doc("Specifies a local directory to write driver logs and enable Driver Log UI Tab.")
+      .version("4.0.0")
+      .stringConf
+      .createOptional
+
   private[spark] val DRIVER_LOG_DFS_DIR =
     ConfigBuilder("spark.driver.log.dfsDir").version("3.0.0").stringConf.createOptional
 
@@ -158,7 +166,7 @@ package object config {
     ConfigBuilder("spark.eventLog.compress")
       .version("1.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val EVENT_LOG_BLOCK_UPDATES =
     ConfigBuilder("spark.eventLog.logBlockUpdates.enabled")
@@ -231,7 +239,7 @@ package object config {
         "each event log file to the configured size.")
       .version("3.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val EVENT_LOG_ROLLING_MAX_FILE_SIZE =
     ConfigBuilder("spark.eventLog.rolling.maxFileSize")
@@ -350,11 +358,10 @@ package object config {
       .createWithDefault(0.1)
 
   private[spark] val CORES_MAX = ConfigBuilder("spark.cores.max")
-    .doc("When running on a standalone deploy cluster or a Mesos cluster in coarse-grained " +
-      "sharing mode, the maximum amount of CPU cores to request for the application from across " +
+    .doc("When running on a standalone deploy cluster, " +
+      "the maximum amount of CPU cores to request for the application from across " +
       "the cluster (not from each machine). If not set, the default will be " +
-      "`spark.deploy.defaultCores` on Spark's standalone cluster manager, or infinite " +
-      "(all available cores) on Mesos.")
+      "`spark.deploy.defaultCores` on Spark's standalone cluster manager")
     .version("0.6.0")
     .intConf
     .createOptional
@@ -719,12 +726,12 @@ package object config {
   private[spark] val SHUFFLE_SERVICE_DB_BACKEND =
     ConfigBuilder(Constants.SHUFFLE_SERVICE_DB_BACKEND)
       .doc("Specifies a disk-based store used in shuffle service local db. " +
-        "LEVELDB or ROCKSDB.")
+        "ROCKSDB or LEVELDB (deprecated).")
       .version("3.4.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(DBBackend.values.map(_.toString).toSet)
-      .createWithDefault(DBBackend.LEVELDB.name)
+      .createWithDefault(DBBackend.ROCKSDB.name)
 
   private[spark] val SHUFFLE_SERVICE_PORT =
     ConfigBuilder("spark.shuffle.service.port").version("1.2.0").intConf.createWithDefault(7337)
@@ -1070,7 +1077,7 @@ package object config {
 
   private[spark] val DRIVER_SUPERVISE = ConfigBuilder("spark.driver.supervise")
     .doc("If true, restarts the driver automatically if it fails with a non-zero exit status. " +
-      "Only has effect in Spark standalone mode or Mesos cluster deploy mode.")
+      "Only has effect in Spark standalone mode.")
     .version("1.3.0")
     .booleanConf
     .createWithDefault(false)
@@ -1524,7 +1531,7 @@ package object config {
         "use fully qualified class names to specify the codec.")
       .version("3.0.0")
       .stringConf
-      .createWithDefault("zstd")
+      .createWithDefault(CompressionCodec.ZSTD)
 
   private[spark] val SHUFFLE_SPILL_INITIAL_MEM_THRESHOLD =
     ConfigBuilder("spark.shuffle.spill.initialMemoryThreshold")
@@ -1831,6 +1838,22 @@ package object config {
     .intConf
     .createWithDefault(8080)
 
+  private[spark] val MASTER_UI_HISTORY_SERVER_URL =
+    ConfigBuilder("spark.master.ui.historyServerUrl")
+      .doc("The URL where Spark history server is running. Please note that this assumes " +
+        "that all Spark jobs share the same event log location where the history server accesses.")
+      .version("4.0.0")
+      .stringConf
+      .createOptional
+
+  private[spark] val MASTER_USE_APP_NAME_AS_APP_ID =
+    ConfigBuilder("spark.master.useAppNameAsAppId.enabled")
+      .internal()
+      .doc("(Experimental) If true, Spark master uses the user-provided appName for appId.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val IO_COMPRESSION_SNAPPY_BLOCKSIZE =
     ConfigBuilder("spark.io.compression.snappy.blockSize")
       .doc("Block size in bytes used in Snappy compression, in the case when " +
@@ -1857,7 +1880,7 @@ package object config {
         "the codec")
       .version("0.8.0")
       .stringConf
-      .createWithDefaultString("lz4")
+      .createWithDefaultString(CompressionCodec.LZ4)
 
   private[spark] val IO_COMPRESSION_ZSTD_BUFFERSIZE =
     ConfigBuilder("spark.io.compression.zstd.bufferSize")
@@ -1900,7 +1923,7 @@ package object config {
         "the codec.")
       .version("3.0.0")
       .stringConf
-      .createWithDefault("zstd")
+      .createWithDefault(CompressionCodec.ZSTD)
 
   private[spark] val BUFFER_SIZE =
     ConfigBuilder("spark.buffer.size")
@@ -2244,6 +2267,14 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val EXECUTOR_ALLOW_SYNC_LOG_LEVEL =
+    ConfigBuilder("spark.executor.syncLogLevel.enabled")
+      .doc("If set to true, log level applied through SparkContext.setLogLevel() method " +
+        "will be propagated to all executors.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EXECUTOR_KILL_ON_FATAL_ERROR_DEPTH =
     ConfigBuilder("spark.executor.killOnFatalError.depth")
       .doc("The max depth of the exception chain in a failed task Spark will search for a fatal " +
@@ -2255,10 +2286,17 @@ package object config {
       .checkValue(_ >= 0, "needs to be a non-negative value")
       .createWithDefault(5)
 
+  private[spark] val STAGE_MAX_CONSECUTIVE_ATTEMPTS =
+    ConfigBuilder("spark.stage.maxConsecutiveAttempts")
+      .doc("Number of consecutive stage attempts allowed before a stage is aborted.")
+      .version("2.2.0")
+      .intConf
+      .createWithDefault(4)
+
   private[spark] val STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE =
     ConfigBuilder("spark.stage.ignoreDecommissionFetchFailure")
       .doc("Whether ignore stage fetch failure caused by executor decommission when " +
-        "count spark.stage.maxConsecutiveAttempts")
+        s"count ${STAGE_MAX_CONSECUTIVE_ATTEMPTS.key}")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
@@ -2431,7 +2469,7 @@ package object config {
       .createOptional
 
   private[spark] val JAR_IVY_SETTING_PATH =
-    ConfigBuilder("spark.jars.ivySettings")
+    ConfigBuilder(MavenUtils.JAR_IVY_SETTING_PATH_KEY)
       .doc("Path to an Ivy settings file to customize resolution of jars specified " +
         "using spark.jars.packages instead of the built-in defaults, such as maven central. " +
         "Additional repositories given by the command-line option --repositories " +
@@ -2527,7 +2565,7 @@ package object config {
       .doc("Specify the max attempts for a stage - the spark job will be aborted if any of its " +
         "stages is resubmitted multiple times beyond the max retries limitation. The maximum " +
         "number of stage retries is the maximum of `spark.stage.maxAttempts` and " +
-        "`spark.stage.maxConsecutiveAttempts`.")
+        s"`${STAGE_MAX_CONSECUTIVE_ATTEMPTS.key}`.")
       .version("3.5.0")
       .intConf
       .createWithDefault(Int.MaxValue)
@@ -2540,4 +2578,18 @@ package object config {
       .version("3.5.0")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val CONNECT_SCALA_UDF_STUB_PREFIXES =
+    ConfigBuilder("spark.connect.scalaUdf.stubPrefixes")
+      .internal()
+      .doc("""
+          |Comma-separated list of binary names of classes/packages that should be stubbed during
+          |the Scala UDF serde and execution if not found on the server classpath.
+          |An empty list effectively disables stubbing for all missing classes.
+          |By default, the server stubs classes from the Scala client package.
+          |""".stripMargin)
+      .version("3.5.0")
+      .stringConf
+      .toSequence
+      .createWithDefault("org.apache.spark.sql.connect.client" :: Nil)
 }

@@ -30,10 +30,12 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{AccumulatorSuite, SPARK_DOC_ROOT, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Hex}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.{CommandResultExec, UnionExec}
@@ -281,7 +283,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-43522: Fix creating struct column name with index of array") {
-    val df = Seq("a=b,c=d,d=f").toDF.withColumn("key_value", split('value, ","))
+    val df = Seq("a=b,c=d,d=f").toDF().withColumn("key_value", split(Symbol("value"), ","))
       .withColumn("map_entry", transform(col("key_value"), x => struct(split(x, "=")
         .getItem(0), split(x, "=").getItem(1)))).select("map_entry")
 
@@ -593,7 +595,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("Allow only a single WITH clause per query") {
-    intercept[AnalysisException] {
+    intercept[ParseException] {
       sql(
         "with q1 as (select * from testData) with q2 as (select * from q1) select * from q2")
     }
@@ -1535,7 +1537,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           .save(path)
 
         // We don't support creating a temporary table while specifying a database
-        intercept[AnalysisException] {
+        intercept[ParseException] {
           spark.sql(
             s"""
               |CREATE TEMPORARY VIEW db.t
@@ -1646,18 +1648,16 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       exception = intercept[AnalysisException] {
         sql("select * from json.invalid_file")
       },
-      errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
-      parameters = Map("dataSourceType" -> "json"),
-      context = ExpectedContext("json.invalid_file", 14, 30)
+      errorClass = "PATH_NOT_FOUND",
+      parameters = Map("path" -> "file:/.*invalid_file"),
+      matchPVals = true
     )
 
     checkError(
       exception = intercept[AnalysisException] {
         sql(s"select id from `org.apache.spark.sql.hive.orc`.`file_path`")
       },
-      errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
-      parameters = Map("dataSourceType" -> "org.apache.spark.sql.hive.orc"),
-      context = ExpectedContext("`org.apache.spark.sql.hive.orc`.`file_path`", 15, 57)
+      errorClass = "_LEGACY_ERROR_TEMP_1138"
     )
 
     e = intercept[AnalysisException] {
@@ -1822,8 +1822,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           exception = intercept[AnalysisException]{
             sql("SELECT abc.* FROM nestedStructTable")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1051",
-          parameters = Map("targetString" -> "abc", "columns" -> "record"),
+          errorClass = "CANNOT_RESOLVE_STAR_EXPAND",
+          parameters = Map("targetString" -> "`abc`", "columns" -> "`record`"),
           context = ExpectedContext(fragment = "abc.*", start = 7, stop = 11))
       }
 
@@ -1911,16 +1911,19 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         exception = intercept[AnalysisException] {
           sql("SELECT a.* FROM temp_table_no_cols a")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1051",
-        parameters = Map("targetString" -> "a", "columns" -> ""),
+        errorClass = "CANNOT_RESOLVE_STAR_EXPAND",
+        parameters = Map("targetString" -> "`a`", "columns" -> ""),
         context = ExpectedContext(fragment = "a.*", start = 7, stop = 9))
 
       checkError(
         exception = intercept[AnalysisException] {
           dfNoCols.select($"b.*")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1051",
-        parameters = Map("targetString" -> "b", "columns" -> ""))
+        errorClass = "CANNOT_RESOLVE_STAR_EXPAND",
+        parameters = Map("targetString" -> "`b`", "columns" -> ""),
+        context = ExpectedContext(
+          fragment = "$",
+          callSitePattern = getCurrentClassCallSitePattern))
     }
   }
 
@@ -2545,7 +2548,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   test("SPARK-18053: ARRAY equality is broken") {
     withTable("array_tbl") {
       spark.range(10).select(array($"id").as("arr")).write.saveAsTable("array_tbl")
-      assert(sql("SELECT * FROM array_tbl where arr = ARRAY(1L)").count == 1)
+      assert(sql("SELECT * FROM array_tbl where arr = ARRAY(1L)").count() == 1)
     }
   }
 
@@ -2633,11 +2636,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     assert(!jobStarted.get(), "Command should not trigger a Spark job.")
   }
 
-  test("SPARK-20164: AnalysisException should be tolerant to null query plan") {
+  test("SPARK-20164: ExtendedAnalysisException should be tolerant to null query plan") {
     try {
-      throw new AnalysisException("", None, None, plan = null)
+      throw new ExtendedAnalysisException("", None, None, plan = null)
     } catch {
-      case ae: AnalysisException => assert(ae.plan == null && ae.getMessage == ae.getSimpleMessage)
+      case ae: ExtendedAnalysisException =>
+        assert(ae.plan == null && ae.getMessage == ae.getSimpleMessage)
     }
   }
 
@@ -2880,7 +2884,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withTable("fact_stats", "dim_stats") {
       val factData = Seq((1, 1, 99, 1), (2, 2, 99, 2), (3, 1, 99, 3), (4, 2, 99, 4))
       val storeData = Seq((1, "BW", "DE"), (2, "AZ", "US"))
-      spark.udf.register("filterND", udf((value: Int) => value > 2).asNondeterministic)
+      spark.udf.register("filterND", udf((value: Int) => value > 2).asNondeterministic())
       factData.toDF("date_id", "store_id", "product_id", "units_sold")
         .write.mode("overwrite").partitionBy("store_id").format("parquet").saveAsTable("fact_stats")
       storeData.toDF("store_id", "state_province", "country")
@@ -2937,14 +2941,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       val distributeExprs = (0 until 100).map(c => s"id$c").mkString(",")
       df.selectExpr(columns : _*).createTempView("spark_25084")
       assert(
-        spark.sql(s"select * from spark_25084 distribute by ($distributeExprs)").count === count)
+        spark.sql(s"select * from spark_25084 distribute by ($distributeExprs)").count() === count)
     }
   }
 
   test("SPARK-25144 'distinct' causes memory leak") {
-    val ds = List(Foo(Some("bar"))).toDS
-    val result = ds.flatMap(_.bar).distinct
-    result.rdd.isEmpty
+    val ds = List(Foo(Some("bar"))).toDS()
+    val result = ds.flatMap(_.bar).distinct()
+    result.rdd.isEmpty()
   }
 
   test("SPARK-25454: decimal division with negative scale") {
@@ -4248,7 +4252,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-35749: Parse multiple unit fields interval literals as day-time interval types") {
     def evalAsSecond(query: String): Long = {
-      spark.sql(query).map(_.getAs[Duration](0)).collect.head.getSeconds
+      spark.sql(query).map(_.getAs[Duration](0)).collect().head.getSeconds
     }
 
     Seq(
@@ -4271,7 +4275,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-35749: Parse multiple unit fields interval literals as year-month interval types") {
     def evalAsYearAndMonth(query: String): (Int, Int) = {
-      val result = spark.sql(query).map(_.getAs[Period](0)).collect.head
+      val result = spark.sql(query).map(_.getAs[Period](0)).collect().head
       (result.getYears, result.getMonths)
     }
 
@@ -4541,8 +4545,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         .parquet(dir.getCanonicalPath)
       checkAnswer(res,
         Seq(
-          Row(1, false, mutable.WrappedArray.make(binary1)),
-          Row(2, true, mutable.WrappedArray.make(binary2))
+          Row(1, false, mutable.ArraySeq.make(binary1)),
+          Row(2, true, mutable.ArraySeq.make(binary2))
         ))
     }
   }
@@ -4668,6 +4672,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         |""".stripMargin).collect()
   }
 
+  test("SPARK-44763: Do not promote strings in binary arithmetic with intervals") {
+    val df = sql("SELECT concat(DATE'2020-12-31', ' 09:03:00') +" +
+      " (INTERVAL '03' HOUR)")
+    checkAnswer(df, Row("2020-12-31 12:03:00"))
+  }
+
   test("SPARK-43979: CollectedMetrics should be treated as the same one for self-join") {
     spark.range(1, 5).toDF("age")
       .withColumn("customer_id", lit(1))
@@ -4682,6 +4692,22 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       """
     ).observe("my_event", count("*"))
     df1.crossJoin(df1)
+
+    val df2 = spark.sql(
+      """
+      WITH t1 AS (
+      SELECT customer_id, age, row_number() OVER(PARTITION BY customer_id ORDER BY age ASC) rn
+      FROM tmp_view)
+      SELECT customer_id, age FROM t1 WHERE rn = 1
+     """.stripMargin
+    ).observe("my_event2", count("*")).as("df2")
+
+    val df3 = spark.range(1, 5).toDF("id").withColumn("zaak_id", lit(1))
+      .withColumn("targetid", lit(2)).as("df3")
+    val df4 = spark.range(1, 5).toDF("id").withColumn("zaak_id", lit(2)).as("df4")
+    val df5 = df4.join(df2, col("df4.id") === col("df2.customer_id"), "inner")
+    val df6 = df3.join(df2, col("df3.zaak_id") === col("df2.customer_id"), "outer")
+    df5.crossJoin(df6)
   }
 }
 

@@ -36,6 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 // scalastyle:off line.size.limit
@@ -202,6 +203,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     val udf: TestUDF
   }
 
+  protected trait UDTFSetTest {
+    val udtfSet: TestUDTFSet
+  }
+
   /** A regular test case. */
   protected case class RegularTestCase(
       name: String, inputFile: String, resultFile: String) extends TestCase {
@@ -235,6 +240,16 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       udf: TestUDF) extends TestCase with UDFTest {
     override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
       UDFAnalyzerTestCase(newName, inputFile, newResultFile, udf)
+  }
+
+  protected case class UDTFSetTestCase(
+      name: String,
+      inputFile: String,
+      resultFile: String,
+      udtfSet: TestUDTFSet) extends TestCase with UDTFSetTest {
+
+    override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
+      UDTFSetAnalyzerTestCase(newName, inputFile, newResultFile, udtfSet)
   }
 
   /** A UDAF test case. */
@@ -285,6 +300,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   protected case class UDFAnalyzerTestCase(
       name: String, inputFile: String, resultFile: String, udf: TestUDF)
       extends AnalyzerTest with UDFTest
+  protected case class UDTFSetAnalyzerTestCase(
+      name: String, inputFile: String, resultFile: String, udtfSet: TestUDTFSet)
+      extends AnalyzerTest with UDTFSetTest
   protected case class UDAFAnalyzerTestCase(
       name: String, inputFile: String, resultFile: String, udf: TestUDF)
       extends AnalyzerTest with UDFTest
@@ -304,19 +322,19 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }
     } else testCase match {
-      case udfTestCase: UDFTest
+      case udfTestCase: SQLQueryTestSuite#UDFTest
           if udfTestCase.udf.isInstanceOf[TestPythonUDF] && !shouldTestPythonUDFs =>
         ignore(s"${testCase.name} is skipped because " +
           s"[$pythonExec] and/or pyspark were not available.") {
           /* Do nothing */
         }
-      case udfTestCase: UDFTest
+      case udfTestCase: SQLQueryTestSuite#UDFTest
           if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && !shouldTestPandasUDFs =>
         ignore(s"${testCase.name} is skipped because pyspark," +
           s"pandas and/or pyarrow were not available in [$pythonExec].") {
           /* Do nothing */
         }
-      case udfTestCase: UDFTest
+      case udfTestCase: SQLQueryTestSuite#UDFTest
           if udfTestCase.udf.isInstanceOf[TestGroupedAggPandasUDF] &&
             !shouldTestPandasUDFs =>
         ignore(s"${testCase.name} is skipped because pyspark," +
@@ -384,7 +402,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       }
       queries.toSeq
     } else {
-      splitWithSemicolon(allCode).toSeq
+      splitWithSemicolon(allCode.toImmutableArraySeq).toSeq
     }
 
     // List of SQL queries to run
@@ -399,7 +417,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     })
 
     if (regenerateGoldenFiles) {
-      runQueries(queries, testCase, settings)
+      runQueries(queries, testCase, settings.toImmutableArraySeq)
     } else {
       // A config dimension has multiple config sets, and a config set has multiple configs.
       // - config dim:     Seq[Seq[(String, String)]]
@@ -408,7 +426,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       // We need to do cartesian product for all the config dimensions, to get a list of
       // config sets, and run the query once for each config set.
       val configDimLines = comments.filter(_.startsWith("--CONFIG_DIM")).map(_.substring(12))
-      val configDims = configDimLines.groupBy(_.takeWhile(_ != ' ')).mapValues { lines =>
+      val configDims = configDimLines.groupBy(_.takeWhile(_ != ' ')).view.mapValues { lines =>
         lines.map(_.dropWhile(_ != ' ').substring(1)).map(_.split(",").map { kv =>
           val (conf, value) = kv.span(_ != '=')
           conf.trim -> value.substring(1).trim
@@ -421,7 +439,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
       configSets.foreach { configSet =>
         try {
-          runQueries(queries, testCase, settings ++ configSet)
+          runQueries(queries, testCase, (settings ++ configSet).toImmutableArraySeq)
         } catch {
           case e: Throwable =>
             val configs = configSet.map {
@@ -486,13 +504,15 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     val localSparkSession = spark.newSession()
 
     testCase match {
-      case udfTestCase: UDFTest =>
+      case udfTestCase: SQLQueryTestSuite#UDFTest =>
         registerTestUDF(udfTestCase.udf, localSparkSession)
+      case udtfTestCase: SQLQueryTestSuite#UDTFSetTest =>
+        registerTestUDTFs(udtfTestCase.udtfSet, localSparkSession)
       case _ =>
     }
 
     testCase match {
-      case _: PgSQLTest =>
+      case _: SQLQueryTestSuite#PgSQLTest =>
         // booleq/boolne used by boolean.sql
         localSparkSession.udf.register("booleq", (b1: Boolean, b2: Boolean) => b1 == b2)
         localSparkSession.udf.register("boolne", (b1: Boolean, b2: Boolean) => b1 != b2)
@@ -500,9 +520,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         localSparkSession.udf.register("vol", (s: String) => s)
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
         localSparkSession.conf.set(SQLConf.LEGACY_INTERVAL_ENABLED.key, true)
-      case _: AnsiTest =>
+      case _: SQLQueryTestSuite#AnsiTest =>
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
-      case _: TimestampNTZTest =>
+      case _: SQLQueryTestSuite#TimestampNTZTest =>
         localSparkSession.conf.set(SQLConf.TIMESTAMP_TYPE.key,
           TimestampTypes.TIMESTAMP_NTZ.toString)
       case _ =>
@@ -522,19 +542,19 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         case _: AnalyzerTest =>
           val (_, output) =
             handleExceptions(getNormalizedQueryAnalysisResult(localSparkSession, sql))
-          // We might need to do some query canonicalization in the future.
+          // We do some query canonicalization now.
           AnalyzerOutput(
             sql = sql,
             schema = None,
-            output = output.mkString("\n").replaceAll("\\s+$", ""))
+            output = normalizeTestResults(output.mkString("\n")))
         case _ =>
           val (schema, output) =
             handleExceptions(getNormalizedQueryExecutionResult(localSparkSession, sql))
-          // We might need to do some query canonicalization in the future.
+          // We do some query canonicalization now.
           val executionOutput = ExecutionOutput(
             sql = sql,
             schema = Some(schema),
-            output = output.mkString("\n").replaceAll("\\s+$", ""))
+            output = normalizeTestResults(output.mkString("\n")))
           if (testCase.isInstanceOf[CTETest]) {
             expandCTEQueryAndCompareResult(localSparkSession, sql, executionOutput)
           }
@@ -562,18 +582,22 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     // See also SPARK-29127. It is difficult to see the version information in the failed test
     // cases so the version information related to Python was also added.
     val clue = testCase match {
-      case udfTestCase: UDFTest
+      case udfTestCase: SQLQueryTestSuite#UDFTest
           if udfTestCase.udf.isInstanceOf[TestPythonUDF] && shouldTestPythonUDFs =>
         s"${testCase.name}${System.lineSeparator()}Python: $pythonVer${System.lineSeparator()}"
-      case udfTestCase: UDFTest
+      case udfTestCase: SQLQueryTestSuite#UDFTest
           if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && shouldTestPandasUDFs =>
         s"${testCase.name}${System.lineSeparator()}" +
           s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
-      case udfTestCase: UDFTest
+      case udfTestCase: SQLQueryTestSuite#UDFTest
           if udfTestCase.udf.isInstanceOf[TestGroupedAggPandasUDF] &&
             shouldTestPandasUDFs =>
         s"${testCase.name}${System.lineSeparator()}" +
           s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
+      case udtfTestCase: SQLQueryTestSuite#UDTFSetTest
+          if udtfTestCase.udtfSet.udtfs.forall(_.isInstanceOf[TestPythonUDTF]) &&
+            shouldTestPythonUDFs =>
+        s"${testCase.name}${System.lineSeparator()}Python: $pythonVer${System.lineSeparator()}"
       case _ =>
         s"${testCase.name}${System.lineSeparator()}"
     }
@@ -590,9 +614,15 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
   protected lazy val listTestCases: Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
-      val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
-      val analyzerResultFile =
+      var resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
+      var analyzerResultFile =
         file.getAbsolutePath.replace(inputFilePath, analyzerGoldenFilePath) + ".out"
+      // JDK-4511638 changes 'toString' result of Float/Double
+      // JDK-8282081 changes DataTimeFormatter 'F' symbol
+      if (Utils.isJavaVersionAtLeast21) {
+        if (new File(resultFile + ".java21").exists()) resultFile += ".java21"
+        if (new File(analyzerResultFile + ".java21").exists()) analyzerResultFile += ".java21"
+      }
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
       val analyzerTestCaseName = s"${testCaseName}_analyzer_test"
@@ -613,6 +643,29 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         Seq(TestGroupedAggPandasUDF("udaf")).map { udf =>
           UDAFTestCase(
             s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
+        }
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udtf")) {
+        Seq(TestUDTFSet(Seq(
+          TestPythonUDTF("udtf"),
+          TestPythonUDTFCountSumLast,
+          TestPythonUDTFLastString,
+          TestPythonUDTFWithSinglePartition,
+          TestPythonUDTFPartitionBy,
+          InvalidPartitionByAndWithSinglePartition,
+          InvalidOrderByWithoutPartitionBy,
+          InvalidEvalReturnsNoneToNonNullableColumnScalarType,
+          InvalidEvalReturnsNoneToNonNullableColumnArrayType,
+          InvalidEvalReturnsNoneToNonNullableColumnArrayElementType,
+          InvalidEvalReturnsNoneToNonNullableColumnStructType,
+          InvalidEvalReturnsNoneToNonNullableColumnMapType,
+          InvalidTerminateReturnsNoneToNonNullableColumnScalarType,
+          InvalidTerminateReturnsNoneToNonNullableColumnArrayType,
+          InvalidTerminateReturnsNoneToNonNullableColumnArrayElementType,
+          InvalidTerminateReturnsNoneToNonNullableColumnStructType,
+          InvalidTerminateReturnsNoneToNonNullableColumnMapType
+        ))).map { udtfSet =>
+          UDTFSetTestCase(
+            s"$testCaseName - Python UDTFs", absPath, resultFile, udtfSet)
         }
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
@@ -648,19 +701,17 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     // Filter out test files with invalid extensions such as temp files created
     // by vi (.swp), Mac (.DS_Store) etc.
     val filteredFiles = files.filter(_.getName.endsWith(validFileExtensions))
-    filteredFiles ++ dirs.flatMap(listFilesRecursively)
+    (filteredFiles ++ dirs.flatMap(listFilesRecursively)).toImmutableArraySeq
   }
 
   /** Load built-in test tables into the SparkSession. */
   protected def createTestTables(session: SparkSession): Unit = {
     import session.implicits._
 
-    // Before creating test tables, deletes orphan directories in warehouse dir
-    Seq("testdata", "arraydata", "mapdata", "aggtest", "onek", "tenk1").foreach { dirName =>
-      val f = new File(new URI(s"${conf.warehousePath}/$dirName"))
-      if (f.exists()) {
-        Utils.deleteRecursively(f)
-      }
+    // Before creating test tables, deletes warehouse dir
+    val f = new File(new URI(conf.warehousePath))
+    if (f.exists()) {
+      Utils.deleteRecursively(f)
     }
 
     (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
@@ -808,17 +859,18 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         s"Expected $numSegments blocks in result file but got " +
           s"${segments.size}. Try regenerate the result files.")
       var curSegment = 0
+
       outputs.map { output =>
         val result = if (output.numSegments == 3) {
           makeOutput(
             segments(curSegment + 1).trim, // SQL
             Some(segments(curSegment + 2).trim), // Schema
-            segments(curSegment + 3).replaceAll("\\s+$", "")) // Output
+            normalizeTestResults(segments(curSegment + 3))) // Output
         } else {
           makeOutput(
             segments(curSegment + 1).trim, // SQL
             None, // Schema
-            segments(curSegment + 2).replaceAll("\\s+$", "")) // Output
+            normalizeTestResults(segments(curSegment + 2))) // Output
         }
         curSegment += output.numSegments
         result
@@ -843,6 +895,22 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         output.output
       }
     }
+  }
+
+  /** This is a helper function to normalize non-deterministic Python error stacktraces. */
+  def normalizeTestResults(output: String): String = {
+    val strippedPythonErrors: String = {
+      var traceback = false
+      output.split("\n").filter { line: String =>
+        if (line == "Traceback (most recent call last):") {
+          traceback = true
+        } else if (!line.startsWith(" ")) {
+          traceback = false
+        }
+        !traceback
+      }.mkString("\n")
+    }
+    strippedPythonErrors.replaceAll("\\s+$", "")
   }
 
   /** A single SQL query's output. */

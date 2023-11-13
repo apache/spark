@@ -580,4 +580,5 @@ Project [make_date(2013, 11, -1, true) AS make_date(2013, 11, -1)#x]
 -- !query
 DROP TABLE DATE_TBL
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`DATE_TBL`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.DATE_TBL

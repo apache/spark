@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.metrics.source.CodegenMetrics
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.SerializeFromObject
 import org.apache.spark.sql.functions._
@@ -199,7 +199,7 @@ class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-32652: Pruned nested serializers: RowEncoder") {
     val df = Seq(("a", 1), ("b", 2), ("c", 3)).toDF("i", "j")
-    val encoder = RowEncoder(new StructType().add("s", df.schema))
+    val encoder = ExpressionEncoder(new StructType().add("s", df.schema))
     val query = df.map(row => Row(row))(encoder).select("s.i")
     testSerializer(query, Seq(Seq("i")))
     checkAnswer(query, Seq(Row("a"), Row("b"), Row("c")))

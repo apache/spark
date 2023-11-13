@@ -33,7 +33,7 @@ import io.netty.util.internal.OutOfDirectMemoryError
 import org.apache.commons.io.IOUtils
 import org.roaringbitmap.RoaringBitmap
 
-import org.apache.spark.{MapOutputTracker, TaskContext}
+import org.apache.spark.{MapOutputTracker, SparkException, TaskContext}
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
@@ -653,7 +653,7 @@ final class ShuffleBlockFetcherIterator(
         hostLocalDirManager.getHostLocalDirs(host, port, bmIds.map(_.executorId)) {
           case Success(dirsByExecId) =>
             fetchMultipleHostLocalBlocks(
-              hostLocalBlocksWithMissingDirs.filterKeys(bmIds.contains).toMap,
+              hostLocalBlocksWithMissingDirs.view.filterKeys(bmIds.contains).toMap,
               dirsByExecId,
               cached = false)
 
@@ -1143,7 +1143,8 @@ final class ShuffleBlockFetcherIterator(
         logWarning(diagnosisResponse)
         diagnosisResponse
       case unexpected: BlockId =>
-        throw new IllegalArgumentException(s"Unexpected type of BlockId, $unexpected")
+        throw SparkException.internalError(
+          s"Unexpected type of BlockId, $unexpected", category = "STORAGE")
     }
   }
 
@@ -1353,7 +1354,8 @@ private class BufferReleasingInputStream(
     }
   }
 
-  override def available(): Int = delegate.available()
+  override def available(): Int =
+    tryOrFetchFailedException(delegate.available())
 
   override def mark(readlimit: Int): Unit = delegate.mark(readlimit)
 
@@ -1368,12 +1370,13 @@ private class BufferReleasingInputStream(
   override def read(b: Array[Byte], off: Int, len: Int): Int =
     tryOrFetchFailedException(delegate.read(b, off, len))
 
-  override def reset(): Unit = delegate.reset()
+  override def reset(): Unit = tryOrFetchFailedException(delegate.reset())
 
   /**
    * Execute a block of code that returns a value, close this stream quietly and re-throwing
    * IOException as FetchFailedException when detectCorruption is true. This method is only
-   * used by the `read` and `skip` methods inside `BufferReleasingInputStream` currently.
+   * used by the `available`, `read` and `skip` methods inside `BufferReleasingInputStream`
+   * currently.
    */
   private def tryOrFetchFailedException[T](block: => T): T = {
     try {

@@ -40,15 +40,16 @@ import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.ENDPOINT_NAME
+import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A scheduler backend that waits for coarse-grained executors to connect.
  * This backend holds onto each executor for the duration of the Spark job rather than relinquishing
  * executors whenever a task is done and asking the scheduler to launch a new executor for
- * each new task. Executors may be launched in a variety of ways, such as Mesos tasks for the
- * coarse-grained Mesos mode or standalone processes for Spark's standalone deploy mode
- * (spark.deploy.*).
+ * each new task. Executors may be launched in a variety of ways, such as standalone processes for
+ * Spark's standalone deploy mode (spark.deploy.*).
  */
 private[spark]
 class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: RpcEnv)
@@ -123,6 +124,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // The num of current max ExecutorId used to re-register appMaster
   @volatile protected var currentExecutorIdCounter = 0
 
+  // Current log level of driver to send to executor
+  @volatile private var currentLogLevel: Option[String] = None
+
   // Current set of delegation tokens to send to executors.
   private val delegationTokens = new AtomicReference[Array[Byte]]()
 
@@ -170,7 +174,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               executorInfo.freeCores += taskCpus
               resources.foreach { case (k, v) =>
                 executorInfo.resourcesInfo.get(k).foreach { r =>
-                  r.release(v.addresses)
+                  r.release(v.addresses.toImmutableArraySeq)
                 }
               }
               makeOffers(executorId)
@@ -245,7 +249,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           attributes, resources, resourceProfileId) =>
         if (executorDataMap.contains(executorId)) {
           context.sendFailure(new IllegalStateException(s"Duplicate executor ID: $executorId"))
-        } else if (scheduler.excludedNodes.contains(hostname) ||
+        } else if (scheduler.excludedNodes().contains(hostname) ||
             isExecutorExcluded(executorId, hostname)) {
           // If the cluster manager gives us an executor on an excluded node (because it
           // already started allocating those resources before we informed it of our exclusion,
@@ -271,7 +275,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             // as configured by the user, or set to 1 as that is the default (1 task/resource)
             val numParts = scheduler.sc.resourceProfileManager
               .resourceProfileFromId(resourceProfileId).getNumSlotsPerAddress(rName, conf)
-            (info.name, new ExecutorResourceInfo(info.name, info.addresses, numParts))
+            (info.name,
+              new ExecutorResourceInfo(info.name, info.addresses.toImmutableArraySeq, numParts))
           }
           // If we've requested the executor figure out when we did.
           val reqTs: Option[Long] = CoarseGrainedSchedulerBackend.this.synchronized {
@@ -316,7 +321,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case StopDriver =>
         context.reply(true)
-        stop()
+        this.stop()
+
+      case UpdateExecutorsLogLevel(logLevel) =>
+        currentLogLevel = Some(logLevel)
+        logInfo(s"Asking each executor to refresh the log level to $logLevel")
+        for ((_, executorData) <- executorDataMap) {
+          executorData.executorEndpoint.send(UpdateExecutorLogLevel(logLevel))
+        }
+        context.reply(true)
 
       case StopExecutors =>
         logInfo("Asking each executor to shut down")
@@ -345,7 +358,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           sparkProperties,
           SparkEnv.get.securityManager.getIOEncryptionKey(),
           Option(delegationTokens.get()),
-          rp)
+          rp,
+          currentLogLevel)
         context.reply(reply)
 
       case IsExecutorAlive(executorId) => context.reply(isExecutorActive(executorId))
@@ -359,7 +373,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // Make sure no executor is killed while some task is launching on it
       val taskDescs = withLock {
         // Filter out executors under killing
-        val activeExecutors = executorDataMap.filterKeys(isExecutorActive)
+        val activeExecutors = executorDataMap.view.filterKeys(isExecutorActive)
         val workOffers = activeExecutors.map {
           case (id, executorData) => buildWorkerOffer(id, executorData)
         }.toIndexedSeq
@@ -434,7 +448,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           executorData.freeCores -= task.cpus
           task.resources.foreach { case (rName, rInfo) =>
             assert(executorData.resourcesInfo.contains(rName))
-            executorData.resourcesInfo(rName).acquire(rInfo.addresses)
+            executorData.resourcesInfo(rName).acquire(rInfo.addresses.toImmutableArraySeq)
           }
 
           logDebug(s"Launching task ${task.taskId} on executor id: ${task.executorId} hostname: " +
@@ -557,14 +571,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     if (executorsToDecommission.isEmpty) {
-      return executorsToDecommission
+      return executorsToDecommission.toImmutableArraySeq
     }
 
     logInfo(s"Decommission executors: ${executorsToDecommission.mkString(", ")}")
 
     // If we don't want to replace the executors we are decommissioning
     if (adjustTargetNumExecutors) {
-      adjustExecutors(executorsToDecommission)
+      adjustExecutors(executorsToDecommission.toImmutableArraySeq)
     }
 
     // Mark those corresponding BlockManagers as decommissioned first before we sending
@@ -574,7 +588,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Note that marking BlockManager as decommissioned doesn't need depend on
     // `spark.storage.decommission.enabled`. Because it's meaningless to save more blocks
     // for the BlockManager since the executor will be shutdown soon.
-    scheduler.sc.env.blockManager.master.decommissionBlockManagers(executorsToDecommission)
+    scheduler.sc.env.blockManager.master
+      .decommissionBlockManagers(executorsToDecommission.toImmutableArraySeq)
 
     if (!triggeredByExecutor) {
       executorsToDecommission.foreach { executorId =>
@@ -591,14 +606,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           }
           if (stragglers.nonEmpty) {
             logInfo(s"${stragglers.toList} failed to decommission in ${cleanupInterval}, killing.")
-            killExecutors(stragglers, false, false, true)
+            killExecutors(stragglers.toImmutableArraySeq, false, false, true)
           }
         }
       }
       cleanupService.map(_.schedule(cleanupTask, cleanupInterval, TimeUnit.SECONDS))
     }
 
-    executorsToDecommission
+    executorsToDecommission.toImmutableArraySeq
   }
 
   override def start(): Unit = {
@@ -653,6 +668,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
   }
 
+  override def updateExecutorsLogLevel(logLevel: String): Unit = {
+    if (driverEndpoint != null) {
+      driverEndpoint.ask[Boolean](UpdateExecutorsLogLevel(logLevel))
+    }
+  }
+
   /**
    * Reset the state of CoarseGrainedSchedulerBackend to the initial state. Currently it will only
    * be called in the yarn-client mode when AM re-registers after a failure.
@@ -700,7 +721,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   def sufficientResourcesRegistered(): Boolean = true
 
   override def isReady(): Boolean = {
-    if (sufficientResourcesRegistered) {
+    if (sufficientResourcesRegistered()) {
       logInfo("SchedulerBackend is ready for scheduling beginning after " +
         s"reached minRegisteredResourcesRatio: $minRegisteredRatio")
       return true
@@ -713,17 +734,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     false
   }
 
-  /**
-   * Return the number of executors currently registered with this backend.
-   */
-  private def numExistingExecutors: Int = synchronized { executorDataMap.size }
-
   override def getExecutorIds(): Seq[String] = synchronized {
     executorDataMap.keySet.toSeq
   }
 
   def getExecutorsWithRegistrationTs(): Map[String, Long] = synchronized {
-    executorDataMap.mapValues(v => v.registrationTs).toMap
+    executorDataMap.view.mapValues(v => v.registrationTs).toMap
   }
 
   override def isExecutorActive(id: String): Boolean = synchronized {
@@ -868,7 +884,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // Note: it's possible that something else allocated an executor and we have
       // a negative delta, we can just avoid mutating the queue.
       while (toConsume > 0 && times.nonEmpty) {
-        val h = times.dequeue
+        val h = times.dequeue()
         if (h._1 > toConsume) {
           // Prepend updated first req to times, constant time op
           ((h._1 - toConsume, h._2)) +=: times
@@ -1058,6 +1074,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     CoarseGrainedSchedulerBackend.this.synchronized { fn }
   }
 
+  override def getTaskThreadDump(
+      taskId: Long,
+      executorId: String): Option[ThreadStackTrace] = withLock {
+    if (isExecutorActive(executorId)) {
+      val executorData = executorDataMap(executorId)
+      executorData.executorEndpoint.askSync[Option[ThreadStackTrace]](TaskThreadDump(taskId))
+    } else {
+      None
+    }
+  }
 }
 
 private[spark] object CoarseGrainedSchedulerBackend {
