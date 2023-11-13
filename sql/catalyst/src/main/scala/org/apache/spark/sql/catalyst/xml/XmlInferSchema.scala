@@ -51,8 +51,7 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
-    isParsing = true
-  )
+    isParsing = true)
 
   private val timestampNTZFormatter = TimestampFormatter(
     options.timestampNTZFormatInRead,
@@ -106,12 +105,11 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       xml
     }
     // perform schema inference on each row and merge afterwards
-    val rootType = schemaData
-      .mapPartitions { iter =>
-        val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
+    val rootType = schemaData.mapPartitions { iter =>
+      val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
 
-        iter.flatMap { xml =>
-          infer(xml, xsdSchema)
+      iter.flatMap { xml =>
+        infer(xml, xsdSchema)
       }
     }.fold(StructType(Seq()))(compatibleType)
 
