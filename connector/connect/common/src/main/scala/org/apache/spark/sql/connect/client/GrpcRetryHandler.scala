@@ -38,7 +38,6 @@ private[sql] class GrpcRetryHandler(
    */
   def retry[T](fn: => T): T = new GrpcRetryHandler.Retrying(policies, sleep, fn).retry()
 
-
   /**
    * Generalizes the retry logic for RPC calls that return an iterator.
    * @param request
@@ -152,12 +151,17 @@ private[sql] class GrpcRetryHandler(
 }
 
 private[sql] object GrpcRetryHandler extends Logging {
+
   /**
    * Class managing the state of the retrying logic.
-   * @param retryPolicies list of policies to apply (in order)
-   * @param sleep typically Thread.sleep
-   * @param fn the function to compute
-   * @tparam T result of function fn
+   * @param retryPolicies
+   *   list of policies to apply (in order)
+   * @param sleep
+   *   typically Thread.sleep
+   * @param fn
+   *   the function to compute
+   * @tparam T
+   *   result of function fn
    */
   class Retrying[T](retryPolicies: Seq[RetryPolicy], sleep: Long => Unit, fn: => T) {
     private var currentRetryNum: Int = 0
@@ -187,17 +191,19 @@ private[sql] object GrpcRetryHandler extends Logging {
         val time = policy.nextAttempt()
 
         if (time.isDefined) {
-          logWarning(s"Non-Fatal error during RPC execution: $lastException, retrying " +
-            s"(wait=${time.get.toMillis}, currentRetryNum=$currentRetryNum, " +
-            s"policy: ${policy.getName})")
+          logWarning(
+            s"Non-Fatal error during RPC execution: $lastException, retrying " +
+              s"(wait=${time.get.toMillis}, currentRetryNum=$currentRetryNum, " +
+              s"policy: ${policy.getName})")
 
           sleep(time.get.toMillis)
           return
         }
       }
 
-      logWarning(s"Non-Fatal error during RPC execution: $lastException, exceeded retries " +
-        s"(currentRetryNum=$currentRetryNum)")
+      logWarning(
+        s"Non-Fatal error during RPC execution: $lastException, exceeded retries " +
+          s"(currentRetryNum=$currentRetryNum)")
 
       val error = new RetriesExceeded()
       exceptionList.foreach(error.addSuppressed)
@@ -274,7 +280,8 @@ private[sql] object GrpcRetryHandler extends Logging {
     def toState: RetryPolicyState = new RetryPolicyState(this)
   }
 
-  def defaultPolicy(): RetryPolicy = RetryPolicy(name = "DefaultPolicy",
+  def defaultPolicy(): RetryPolicy = RetryPolicy(
+    name = "DefaultPolicy",
     // Please synchronize changes here with Python side:
     // pyspark/sql/connect/client/core.py
     //
@@ -286,8 +293,7 @@ private[sql] object GrpcRetryHandler extends Logging {
     backoffMultiplier = 4.0,
     jitter = FiniteDuration(500, "ms"),
     minJitterThreshold = FiniteDuration(2, "s"),
-    canRetry = retryException
-  )
+    canRetry = retryException)
 
   // list of policies to be used by this client
   def defaultPolicies(): Seq[RetryPolicy] = List(defaultPolicy())
@@ -329,8 +335,7 @@ private[sql] object GrpcRetryHandler extends Logging {
   class RetryException extends Throwable
 
   /**
-   * Represents an exception which was considered retriable
-   * but has exceeded retry limits
+   * Represents an exception which was considered retriable but has exceeded retry limits
    */
   class RetriesExceeded extends Throwable
 }

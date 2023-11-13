@@ -248,7 +248,7 @@ trait SparkConnectServerTest extends SharedSparkSession {
       f: CustomSparkConnectBlockingStub => Unit): Unit = {
     val conf = SparkConnectClient.Configuration(port = serverPort)
     val channel = conf.createChannel()
-    val stubState = new SparkConnectStubState(channel, retryPolicy)
+    val stubState = new SparkConnectStubState(channel, List(retryPolicy))
     val bstub = new CustomSparkConnectBlockingStub(channel, stubState)
     try f(bstub)
     finally {

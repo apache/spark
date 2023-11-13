@@ -26,9 +26,7 @@ import org.apache.spark.internal.Logging
 // that the same stub instance is used for all requests from the same client. In addition,
 // this class provides access to the commonly configured retry policy and exception conversion
 // logic.
-class SparkConnectStubState(
-    channel: ManagedChannel,
-    val retryHandler: GrpcRetryHandler)
+class SparkConnectStubState(channel: ManagedChannel, val retryHandler: GrpcRetryHandler)
     extends Logging {
 
   def this(channel: ManagedChannel, retryPolicies: Seq[GrpcRetryHandler.RetryPolicy]) =

@@ -396,8 +396,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
       canRetry = {
         case e: StatusRuntimeException => e.getStatus.getCode == status.getCode
         case _ => false
-      }
-    )
+      })
   }
 
   test("Test multiple policies") {
@@ -432,8 +431,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
         if (e.isDefined) {
           throw e.get.asRuntimeException()
         }
-      })
-    )
+      }))
 
     assert(countAttempted == 7)
   }
