@@ -452,7 +452,7 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
               val fieldTypes = fields.map(_._2)
               val dataType = fieldTypes.map(_.dataType).reduce(compatibleType)
               // we pick up the first field name that we've encountered for the field
-              StructField(fields(0)._2.name, dataType)
+              StructField(fields.head._2.name, dataType)
           }
           StructType(newFields.toArray.sortBy(_.name))
 
