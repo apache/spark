@@ -351,79 +351,236 @@ class ResourceUtilsSuite extends SparkFunSuite
     // no exception,
     warnOnWastedResources(rp, conf)
 
-    // cpu limiting task number = 10/2, gpu limiting task number = 1/0.1
     ereqs = new ExecutorResourceRequests().cores(10).resource("gpu", 1)
-    treqs = new TaskResourceRequests().cpus(2).resource("gpu", 0.1)
-    rp = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
-    var msg = intercept[SparkException] {
-      warnOnWastedResources(rp, conf)
-    }.getMessage
-
-    assert(msg.contains("The configuration of resource: gpu (exec = 1, task = 0.1/10, runnable " +
-      "tasks = 10) will result in wasted resources due to resource cpus limiting the number of " +
-      "runnable tasks per executor to: 5. Please adjust your configuration."))
-
-    // cpu limiting task number = 10/1, gpu limiting task number = 1/0.2 = 5
-    ereqs = new ExecutorResourceRequests().cores(10).resource("gpu", 1)
-    treqs = new TaskResourceRequests().cpus(1).resource("gpu", 0.2)
-    rp = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
-    msg = intercept[SparkException] {
-      warnOnWastedResources(rp, conf)
-    }.getMessage
-
-    assert(msg.contains("The configuration of cores (exec = 10 task = 1, runnable tasks = 10) " +
-      "will result in wasted resources due to resource gpu limiting the number of runnable " +
-      "tasks per executor to: 5. Please adjust your configuration"))
-
-    // cpu limiting task number = 10/1, gpu limiting task number = 1/0.5 = 2
-    ereqs = new ExecutorResourceRequests().cores(10).resource("gpu", 1)
-    treqs = new TaskResourceRequests().cpus(1).resource("gpu", 0.5)
-    rp = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
-    msg = intercept[SparkException] {
-      warnOnWastedResources(rp, conf)
-    }.getMessage
-
-    assert(msg.contains("The configuration of cores (exec = 10 task = 1, runnable tasks = 10) " +
-      "will result in wasted resources due to resource gpu limiting the number of runnable " +
-      "tasks per executor to: 2. Please adjust your configuration"))
-
-    // executor gpu amount > 1
-    // cpu limiting task number = 100/2 = 50, gpu limiting task number = 2/0.2 = 10
-    ereqs = new ExecutorResourceRequests().cores(100).resource("gpu", 2)
     treqs = new TaskResourceRequests().cpus(2).resource("gpu", 0.2)
     rp = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
-    msg = intercept[SparkException] {
-      warnOnWastedResources(rp, conf)
-    }.getMessage
+    // no exception,
+    warnOnWastedResources(rp, conf)
 
-    assert(msg.contains("The configuration of cores (exec = 100 task = 2, runnable tasks = 50) " +
-      "will result in wasted resources due to resource gpu limiting the number of runnable " +
-      "tasks per executor to: 10. Please adjust your configuration"))
-
-    // executor gpu amount > 1 and task gpu amount > 1
-    // cpu limiting task number = 10/1 = 10, gpu limiting task number = 6/2 = 3
-    ereqs = new ExecutorResourceRequests().cores(10).resource("gpu", 6)
-    treqs = new TaskResourceRequests().cpus(1).resource("gpu", 2)
+    ereqs = new ExecutorResourceRequests().cores(20).resource("gpu", 2)
+    treqs = new TaskResourceRequests().cpus(2).resource("gpu", 0.2)
     rp = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
-    msg = intercept[SparkException] {
-      warnOnWastedResources(rp, conf)
-    }.getMessage
+    // no exception,
+    warnOnWastedResources(rp, conf)
 
-    assert(msg.contains("The configuration of cores (exec = 10 task = 1, runnable tasks = 10) " +
-      "will result in wasted resources due to resource gpu limiting the number of runnable " +
-      "tasks per executor to: 3. Please adjust your configuration"))
+    var msg: String = ""
 
-    // executor gpu amount > 1 and task gpu amount > 1
-    // cpu limiting task number = 10/1 = 10, gpu limiting task number = 6/0.2 = 3
-    ereqs = new ExecutorResourceRequests().cores(10).resource("gpu", 6)
-    treqs = new TaskResourceRequests().cpus(1).resource("gpu", 0.2)
-    rp = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
-    msg = intercept[SparkException] {
-      warnOnWastedResources(rp, conf)
-    }.getMessage
+    // Test cpu limiting task number
+    // format: (executor.core, task.cpus, executor.gpu, task.gpu, expected runnable tasks)
+    Seq(
+      (10, 2, 1, 0.1, 5), // cpu limiting task number=10/2=5, gpu limiting task number = 1/0.1 = 10
+      (10, 3, 1, 0.1, 3), // cpu limiting task number=10/3=3, gpu limiting task number = 1/0.1 = 10
+      (10, 4, 1, 0.1, 2), // cpu limiting task number=10/4=2, gpu limiting task number = 1/0.1 = 10
+      (10, 5, 1, 0.1, 2), // cpu limiting task number=10/5=2, gpu limiting task number = 1/0.1 = 10
+      (10, 6, 1, 0.1, 1), // cpu limiting task number=10/6=1, gpu limiting task number = 1/0.1 = 10
+      (10, 10, 1, 0.1, 1), // cpu limiting task number=10/6=1, gpu limiting task number = 1/0.1 = 10
+      (20, 7, 1, 0.1, 2), // cpu limiting task number=20/7=3, gpu limiting task number = 1/0.1 = 10
+      (30, 7, 1, 0.1, 4), // cpu limiting task number=30/7=4, gpu limiting task number = 1/0.1 = 10
+      (50, 14, 1, 0.1, 3) // cpu limiting task number=50/14=3, gpu limiting task number = 1/0.1=10
+    ).foreach { case (executorCores, taskCpus: Int, executorGpus: Int, taskGpus: Double,
+    expectedTaskNumber: Int) =>
+      ereqs = new ExecutorResourceRequests().cores(executorCores).resource("gpu", executorGpus)
+      treqs = new TaskResourceRequests().cpus(taskCpus).resource("gpu", taskGpus)
+      rp = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
+      msg = intercept[SparkException] {
+        warnOnWastedResources(rp, conf)
+      }.getMessage
+      assert(msg.contains("The configuration of resource: gpu (exec = 1, task = 0.1/10, runnable " +
+        "tasks = 10) will result in wasted resources due to resource cpus limiting the number of " +
+        s"runnable tasks per executor to: ${expectedTaskNumber}. Please adjust your configuration.")
+      )
+    }
 
-    assert(msg.contains("The configuration of resource: gpu (exec = 6, task = 0.2/5, runnable " +
-      "tasks = 30) will result in wasted resources due to resource cpus limiting the number " +
-      "of runnable tasks per executor to: 10. Please adjust your configuration"))
+    // Test gpu limiting task number
+    // format: (executor.core, task.cpus, executor.gpu, task.gpu, expected runnable tasks)
+    Seq(
+      (10, 1, 1, 1.0/9, 9), // cpu limiting task number=10, gpu limiting task number = 9
+      (10, 1, 1, 1.0/8, 8), // cpu limiting task number=10, gpu limiting task number = 8
+      (10, 1, 1, 1.0/7, 7), // cpu limiting task number=10, gpu limiting task number = 7
+      (10, 1, 1, 1.0/6, 6), // cpu limiting task number=10, gpu limiting task number = 6
+      (10, 1, 1, 1.0/5, 5), // cpu limiting task number=10, gpu limiting task number = 5
+      (10, 1, 1, 1.0/4, 4), // cpu limiting task number=10, gpu limiting task number = 4
+      (10, 1, 1, 1.0/3, 3), // cpu limiting task number=10, gpu limiting task number = 3
+      (10, 1, 1, 1.0/2, 2), // cpu limiting task number=10, gpu limiting task number = 2
+      (10, 1, 1, 1.0, 1), // cpu limiting task number=10, gpu limiting task number = 1
+      (30, 1, 2, 1.0/9, 2*9), // cpu limiting task number=30, gpu limiting task number = 2*9
+      (30, 1, 2, 1.0/8, 2*8), // cpu limiting task number=30, gpu limiting task number = 2*8
+      (30, 1, 2, 1.0/7, 2*7), // cpu limiting task number=30, gpu limiting task number = 2*7
+      (30, 1, 2, 1.0/6, 2*6), // cpu limiting task number=30, gpu limiting task number = 2*6
+      (30, 1, 2, 1.0/5, 2*5), // cpu limiting task number=30, gpu limiting task number = 2*5
+      (30, 1, 2, 1.0/4, 2*4), // cpu limiting task number=30, gpu limiting task number = 2*4
+      (30, 1, 2, 1.0/3, 2*3), // cpu limiting task number=30, gpu limiting task number = 2*3
+      (30, 1, 2, 1.0/2, 2*2), // cpu limiting task number=30, gpu limiting task number = 2*2
+      (30, 1, 2, 1.0, 2*1), // cpu limiting task number=30, gpu limiting task number = 2*1
+      (30, 1, 2, 2.0, 1), // cpu limiting task number=30, gpu limiting task number = 1
+      (70, 2, 7, 0.5, 7*2), // cpu limiting task number=30, gpu limiting task number = 7*1/0.5=
+      (80, 3, 9, 2.0, 9/2) // cpu limiting task number=30, gpu limiting task number = 9/2
+    ).foreach { case (executorCores, taskCpus: Int, executorGpus: Int, taskGpus: Double,
+    expectedTaskNumber: Int) =>
+      ereqs = new ExecutorResourceRequests().cores(executorCores).resource("gpu", executorGpus)
+      treqs = new TaskResourceRequests().cpus(taskCpus).resource("gpu", taskGpus)
+      rp = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
+      msg = intercept[SparkException] {
+        warnOnWastedResources(rp, conf)
+      }.getMessage
+      assert(msg.contains(s"The configuration of cores (exec = ${executorCores} task = " +
+        s"${taskCpus}, runnable tasks = ${executorCores/taskCpus}) " +
+        "will result in wasted resources due to resource gpu limiting the number of runnable " +
+        s"tasks per executor to: ${expectedTaskNumber}. Please adjust your configuration"))
+    }
+  }
+
+  private class FakedTaskResourceProfile(
+      val defaultRp: ResourceProfile,
+      override val taskResources: Map[String, TaskResourceRequest])
+    extends TaskResourceProfile(taskResources) {
+    override protected[spark] def getCustomExecutorResources()
+      : Map[String, ExecutorResourceRequest] = defaultRp.getCustomExecutorResources()
+  }
+
+  test("SPARK-45527 warnOnWastedResources for TaskResourceProfile when executor number = 1") {
+    val conf = new SparkConf()
+    conf.set("spark.executor.cores", "10")
+    conf.set("spark.task.cpus", "1")
+    conf.set(TASK_GPU_ID.amountConf, "0.1")
+    conf.set(EXECUTOR_GPU_ID.amountConf, "1")
+    conf.set(RESOURCES_WARNING_TESTING, true)
+
+    val defaultDp = ResourceProfile.getOrCreateDefaultProfile(conf)
+
+    // cpu limiting task number = 10/1, gpu limiting task number = 1/0.1
+    var treqs = new TaskResourceRequests().cpus(1).resource("gpu", 0.1)
+    var rp = new FakedTaskResourceProfile(defaultDp, treqs.requests)
+    // no exception,
+    warnOnWastedResources(rp, conf)
+
+    var msg: String = ""
+
+    // Test cpu limiting task number
+    // format: (task cpu cores, task gpu amount, expected runnable tasks)
+    // spark.executor.cores=60, spark.task.cpus=1, EXECUTOR_GPU_ID=6, TASK_GPU_ID=0.1
+    Seq(
+      (2, 0.1, 5), // cpu limiting task number = 10/2=5, gpu limiting task number = 1/0.1 = 10
+      (3, 0.1, 3), // cpu limiting task number = 10/3 = 3, gpu limiting task number = 1/0.1 = 10
+      (4, 0.1, 2), // cpu limiting task number = 10/4 = 2, gpu limiting task number = 1/0.1 = 10
+      (5, 0.1, 2), // cpu limiting task number = 10/5 = 2, gpu limiting task number = 1/0.1 = 10
+      (6, 0.1, 1), // cpu limiting task number = 10/6 = 1, gpu limiting task number = 1/0.1 = 10
+      (7, 0.1, 1), // cpu limiting task number = 10/7 = 1, gpu limiting task number = 1/0.1 = 10
+      (10, 0.1, 1) // cpu limiting task number = 10/10 = 1, gpu limiting task number = 1/0.1 = 10
+    ).foreach { case (cores: Int, gpus: Double, expectedTaskNumber: Int) =>
+      treqs = new TaskResourceRequests().cpus(cores).resource("gpu", gpus)
+      rp = new FakedTaskResourceProfile(defaultDp, treqs.requests)
+      msg = intercept[SparkException] {
+        warnOnWastedResources(rp, conf)
+      }.getMessage
+      assert(msg.contains("The configuration of resource: gpu (exec = 1, task = 0.1/10, runnable " +
+        "tasks = 10) will result in wasted resources due to resource cpus limiting the number of " +
+        s"runnable tasks per executor to: $expectedTaskNumber. Please adjust your configuration.")
+      )
+    }
+
+    // Test gpu limiting task number
+    // format: (task cpu cores, task gpu amount, expected runnable tasks)
+    // spark.executor.cores=60, spark.task.cpus=1, EXECUTOR_GPU_ID=6, TASK_GPU_ID=0.1
+    Seq(
+      (1, 0.111, 9), // cpu limiting task number = 10/1, gpu limiting task number = 1/0.111=9
+      (1, 0.125, 8), // cpu limiting task number = 10/1, gpu limiting task number = 1/0.125=8
+      (1, 0.142, 7), // cpu limiting task number = 10/1, gpu limiting task number = 1/0.142=7
+      (1, 0.166, 6), // cpu limiting task number = 10/1, gpu limiting task number = 1/0.166=6
+      (1, 0.2, 5), // cpu limiting task number = 10/1, gpu limiting task number = 1/0.2=5
+      (1, 0.25, 4), // cpu limiting task number = 10/1, gpu limiting task number = 1/0.25=4
+      (1, 0.333, 3), // cpu limiting task number = 10/1, gpu limiting task number = 1/0.333=3
+      (1, 0.5, 2), // cpu limiting task number = 10/1, gpu limiting task number = 1/0.166=2
+      (1, 0.6, 1), // cpu limiting task number = 10/1, gpu limiting task number = 1/0.6=1
+      (1, 0.7, 1), // cpu limiting task number = 10/1, gpu limiting task number = 1/0.7=1
+      (1, 0.8, 1), // cpu limiting task number = 10/1, gpu limiting task number = 1/0.8=1
+      (1, 0.9, 1), // cpu limiting task number = 10/1, gpu limiting task number = 1/0.9=1
+      (1, 1.0, 1) // cpu limiting task number = 10/1, gpu limiting task number = 1/1.0=1
+    ).foreach { case (cores: Int, gpus: Double, expectedTaskNumber: Int) =>
+      treqs = new TaskResourceRequests().cpus(cores).resource("gpu", gpus)
+      rp = new FakedTaskResourceProfile(defaultDp, treqs.requests)
+      msg = intercept[SparkException] {
+        warnOnWastedResources(rp, conf)
+      }.getMessage
+      assert(msg.contains("The configuration of cores (exec = 10 task = 1, runnable tasks = 10) " +
+        "will result in wasted resources due to resource gpu limiting the number of runnable " +
+        s"tasks per executor to: $expectedTaskNumber. Please adjust your configuration"))
+    }
+  }
+
+  test("SPARK-45527 warnOnWastedResources for TaskResourceProfile when executor number > 1") {
+    val conf = new SparkConf()
+    conf.set("spark.executor.cores", "60")
+    conf.set("spark.task.cpus", "1")
+    conf.set(TASK_GPU_ID.amountConf, "0.1")
+    conf.set(EXECUTOR_GPU_ID.amountConf, "6")
+    conf.set(RESOURCES_WARNING_TESTING, true)
+
+    val defaultDp = ResourceProfile.getOrCreateDefaultProfile(conf)
+
+    // cpu limiting task number = 60/1, gpu limiting task number = 6/0.1
+    var treqs = new TaskResourceRequests().cpus(1).resource("gpu", 0.1)
+    var rp = new FakedTaskResourceProfile(defaultDp, treqs.requests)
+    // no exception,
+    warnOnWastedResources(rp, conf)
+
+    // cpu limiting task number = 60/2 = 30, gpu limiting task number = 6/0.2 = 30
+    treqs = new TaskResourceRequests().cpus(2).resource("gpu", 0.2)
+    rp = new FakedTaskResourceProfile(defaultDp, treqs.requests)
+    // no exception
+    warnOnWastedResources(rp, conf)
+
+    var msg: String = ""
+
+    // Test cpu limiting task number
+    // format: (task cpu cores, task gpu amount, expected runnable tasks)
+    // spark.executor.cores=60, spark.task.cpus=1, EXECUTOR_GPU_ID=6, TASK_GPU_ID=0.1
+    Seq(
+      (4, 0.2, 15), // cpu limiting task number = 60/4=15, gpu limiting task number = 6/0.2 = 30
+      (7, 0.2, 8), // cpu limiting task number = 60/7 = 8, gpu limiting task number = 6/0.2 = 30
+      (30, 0.2, 2), // cpu limiting task number = 60/30 = 2, gpu limiting task number = 6/0.2 = 30
+      (31, 0.2, 1), // cpu limiting task number = 60/31 = 1, gpu limiting task number = 6/0.2 = 30
+      (55, 0.2, 1), // cpu limiting task number = 60/55 = 1, gpu limiting task number = 6/0.2 = 30
+      (60, 0.2, 1) // cpu limiting task number = 60/60 = 1, gpu limiting task number = 6/0.2 = 30
+    ).foreach { case (cores: Int, gpus: Double, expectedTaskNumber: Int) =>
+      treqs = new TaskResourceRequests().cpus(cores).resource("gpu", gpus)
+      rp = new FakedTaskResourceProfile(defaultDp, treqs.requests)
+      msg = intercept[SparkException] {
+        warnOnWastedResources(rp, conf)
+      }.getMessage
+      assert(msg.contains("The configuration of resource: gpu (exec = 6, task = 0.2/5, runnable " +
+        "tasks = 30) will result in wasted resources due to resource cpus limiting the number of " +
+        s"runnable tasks per executor to: $expectedTaskNumber. Please adjust your configuration.")
+      )
+    }
+
+    // Test gpu limiting task number
+    // format: (task cpu cores, task gpu amount, expected runnable tasks)
+    // spark.executor.cores=60, spark.task.cpus=1, EXECUTOR_GPU_ID=6, TASK_GPU_ID=0.1
+    Seq(
+      (1, 0.111, 54), // cpu limiting task number = 60/1, gpu limiting task number = 6*1/0.111=54
+      (1, 0.125, 48), // cpu limiting task number = 60/1, gpu limiting task number = 6*1/0.125=48
+      (1, 0.142, 42), // cpu limiting task number = 60/1, gpu limiting task number = 6*1/0.142=42
+      (1, 0.166, 36), // cpu limiting task number = 60/1, gpu limiting task number = 6*1/0.166=36
+      (1, 0.2, 30), // cpu limiting task number = 60/1, gpu limiting task number = 6*1/0.2=30
+      (1, 0.25, 24), // cpu limiting task number = 60/1, gpu limiting task number = 6*1/0.25=24
+      (1, 0.33, 18), // cpu limiting task number = 60/1, gpu limiting task number = 6*1/0.33=18
+      (1, 0.5, 12), // cpu limiting task number = 60/1, gpu limiting task number = 6*1/0.5=12
+      (1, 0.7, 6), // cpu limiting task number = 60/1 = 60, gpu limiting task number = 6*1/0.7 = 6
+      (1, 1.0, 6), // cpu limiting task number = 60/1 = 60, gpu limiting task number = 6/1 = 6
+      (1, 2.0, 3),  // cpu limiting task number = 60/1 = 60, gpu limiting task number = 6/2 = 3
+      (1, 3.0, 2), // cpu limiting task number = 60/1 = 60, gpu limiting task number = 6/3 = 2
+      (1, 4.0, 1), // cpu limiting task number = 60/1 = 60, gpu limiting task number = 6/4 = 1
+      (1, 6.0, 1) // cpu limiting task number = 60/1 = 60, gpu limiting task number = 6/6 = 1
+    ).foreach { case (cores: Int, gpus: Double, expectedTaskNumber: Int) =>
+      treqs = new TaskResourceRequests().cpus(cores).resource("gpu", gpus)
+      rp = new FakedTaskResourceProfile(defaultDp, treqs.requests)
+      msg = intercept[SparkException] {
+        warnOnWastedResources(rp, conf)
+      }.getMessage
+      assert(msg.contains("The configuration of cores (exec = 60 task = 1, runnable tasks = 60) " +
+        "will result in wasted resources due to resource gpu limiting the number of runnable " +
+        s"tasks per executor to: $expectedTaskNumber. Please adjust your configuration"))
+    }
   }
 }
