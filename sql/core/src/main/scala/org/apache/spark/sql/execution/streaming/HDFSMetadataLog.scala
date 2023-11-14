@@ -52,15 +52,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
 
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
-  /** Needed to serialize type T into JSON when using Jackson */
-  private implicit val manifest: Manifest[T] = {
-    val classTag = implicitly[ClassTag[T]]
-    if (classTag == null) {
-      Manifest.classType[T](classOf[AnyRef])
-    } else {
-      Manifest.classType[T](classTag.runtimeClass)
-    }
-  }
+  private val classTag = implicitly[ClassTag[T]]
 
   // Avoid serializing generic sequences, see SPARK-17372
   require(implicitly[ClassTag[T]].runtimeClass != classOf[Seq[_]],
@@ -126,6 +118,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
    */
   protected def deserialize(in: InputStream): T = {
     val reader = new InputStreamReader(in, StandardCharsets.UTF_8)
+    implicit val manifest: Manifest[T] = Manifest.classType[T](classTag.runtimeClass)
     Serialization.read[T](reader)
   }
 

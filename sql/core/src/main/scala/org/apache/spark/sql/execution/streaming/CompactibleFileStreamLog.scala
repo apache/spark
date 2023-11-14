@@ -51,15 +51,8 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
 
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
-  /** Needed to serialize type T into JSON when using Jackson */
-  private implicit val manifest: Manifest[T] = {
-    val classTag = implicitly[ClassTag[T]]
-    if (classTag == null) {
-      Manifest.classType[T](classOf[AnyRef])
-    } else {
-      Manifest.classType[T](classTag.runtimeClass)
-    }
-  }
+  private val classTag = implicitly[ClassTag[T]]
+
   protected val minBatchesToRetain = sparkSession.sessionState.conf.minBatchesToRetain
 
   /**
@@ -146,7 +139,10 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     out.write(Serialization.write(entry).getBytes(UTF_8))
   }
 
-  private def deserializeEntry(line: String): T = Serialization.read[T](line)
+  private def deserializeEntry(line: String): T = {
+    implicit val manifest: Manifest[T] = Manifest.classType[T](classTag.runtimeClass)
+    Serialization.read[T](line)
+  }
 
   override def serialize(logData: Array[T], out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
