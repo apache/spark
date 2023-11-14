@@ -2468,6 +2468,12 @@
     ],
     "sqlState" : "42803"
   },
+  "MULTIPLE_PATHS_UNSUPPORTED" : {
+    "message" : [
+      "Data source '<provider>' does not support load() with multiple paths: '<paths>'. Please load each path individually."
+    ],
+    "sqlState" : "42K02"
+  },
   "MULTIPLE_TIME_TRAVEL_SPEC" : {
     "message" : [
       "Cannot specify time travel in both the time travel clause and options."

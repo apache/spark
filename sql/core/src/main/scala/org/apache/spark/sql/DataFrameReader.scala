@@ -246,7 +246,15 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     val builder = sparkSession.sharedState.dataSourceManager.lookupDataSource(source)
     // Unless the legacy path option behavior is enabled, the extraOptions here
     // should not include "path" or "paths" as keys.
-    val plan = builder(sparkSession, source, paths, userSpecifiedSchema, extraOptions)
+    // Add path to the options field. Note currently it only supports a single path.
+    val optionsWithPath = if (paths.isEmpty) {
+      extraOptions
+    } else if (paths.length == 1) {
+        extraOptions + ("path" -> paths.head)
+    } else {
+      throw QueryCompilationErrors.multiplePathsUnsupportedError(source, paths)
+    }
+    val plan = builder(sparkSession, source, userSpecifiedSchema, optionsWithPath)
     Dataset.ofRows(sparkSession, plan)
   }
 

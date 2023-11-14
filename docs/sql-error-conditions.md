@@ -1407,6 +1407,12 @@ For more details see [MISSING_ATTRIBUTES](sql-error-conditions-missing-attribute
 
 The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses.
 
+### MULTIPLE_PATHS_UNSUPPORTED
+
+[SQLSTATE: 42K02](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Data source '`<provider>`' does not support load() with multiple paths: '`<paths>`'. Please load each path individually.
+
 ### MULTIPLE_TIME_TRAVEL_SPEC
 
 [SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)

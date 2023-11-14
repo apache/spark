@@ -17,7 +17,7 @@
 import inspect
 import os
 import sys
-from typing import IO, List
+from typing import IO
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError, PySparkTypeError
@@ -107,12 +107,6 @@ def main(infile: IO, outfile: IO) -> None:
                 },
             )
 
-        # Receive the paths.
-        num_paths = read_int(infile)
-        paths: List[str] = []
-        for _ in range(num_paths):
-            paths.append(utf8_deserializer.loads(infile))
-
         # Receive the user-specified schema
         user_specified_schema = None
         if read_bool(infile):
@@ -136,11 +130,7 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Instantiate a data source.
         try:
-            data_source = data_source_cls(
-                paths=paths,
-                userSpecifiedSchema=user_specified_schema,  # type: ignore
-                options=options,
-            )
+            data_source = data_source_cls(options=options)
         except Exception as e:
             raise PySparkRuntimeError(
                 error_class="PYTHON_DATA_SOURCE_CREATE_ERROR",

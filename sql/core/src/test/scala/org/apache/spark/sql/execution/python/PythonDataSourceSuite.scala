@@ -161,12 +161,12 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader
          |class SimpleDataSourceReader(DataSourceReader):
-         |    def __init__(self, paths, options):
-         |        self.paths = paths
+         |    def __init__(self, options):
          |        self.options = options
          |
          |    def partitions(self):
-         |        return iter(self.paths)
+         |        paths = self.options.get("path", [])
+         |        return paths
          |
          |    def read(self, path):
          |        yield (path, 1)
@@ -180,14 +180,17 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
          |        return "id STRING, value INT"
          |
          |    def reader(self, schema):
-         |        return SimpleDataSourceReader(self.paths, self.options)
+         |        return SimpleDataSourceReader(self.options)
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
     spark.dataSource.registerPython("test", dataSource)
-
     checkAnswer(spark.read.format("test").load(), Seq(Row(null, 1)))
     checkAnswer(spark.read.format("test").load("1"), Seq(Row("1", 1)))
-    checkAnswer(spark.read.format("test").load("1", "2"), Seq(Row("1", 1), Row("2", 1)))
+    checkError(
+      exception = intercept[AnalysisException](spark.read.format("test").load("1", "2")),
+      errorClass = "MULTIPLE_PATHS_UNSUPPORTED",
+      parameters = Map("provider" -> "test", "paths" -> "[1, 2]")
+    )
   }
 
   test("reader not implemented") {
