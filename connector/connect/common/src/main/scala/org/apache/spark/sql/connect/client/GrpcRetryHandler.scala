@@ -187,6 +187,10 @@ private[sql] object GrpcRetryHandler extends Logging {
 
       if (lastException.isInstanceOf[RetryException]) {
         // retry exception is considered immediately retriable without any policies.
+        logWarning(
+          s"Non-Fatal error during RPC execution: $lastException, retrying " +
+            s"(currentRetryNum=$currentRetryNum)"
+        )
         return
       }
 
