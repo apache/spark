@@ -234,8 +234,8 @@ public class RpcIntegrationSuite {
     return res;
   }
 
-  private record RpcStreamCallback(String streamId, RpcResult res, Semaphore sem) implements RpcResponseCallback {
-    
+  private record RpcStreamCallback(
+      String streamId, RpcResult res, Semaphore sem) implements RpcResponseCallback {
     @Override
     public void onSuccess(ByteBuffer message) {
       res.successMessages.add(streamId);

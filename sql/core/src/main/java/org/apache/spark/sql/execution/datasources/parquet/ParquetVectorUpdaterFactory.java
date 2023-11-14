@@ -523,7 +523,8 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-  private record LongWithRebaseUpdater(boolean failIfRebase, String timeZone) implements ParquetVectorUpdater {
+  private record LongWithRebaseUpdater(
+      boolean failIfRebase, String timeZone) implements ParquetVectorUpdater {
 
     @Override
     public void readValues(
@@ -595,7 +596,8 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-  private record LongAsMicrosRebaseUpdater(boolean failIfRebase, String timeZone) implements ParquetVectorUpdater {
+  private record LongAsMicrosRebaseUpdater(
+      boolean failIfRebase, String timeZone) implements ParquetVectorUpdater {
 
     @Override
     public void readValues(
@@ -772,7 +774,8 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-  private record BinaryToSQLTimestampConvertTzUpdater(ZoneId convertTz) implements ParquetVectorUpdater {
+  private record BinaryToSQLTimestampConvertTzUpdater(
+      ZoneId convertTz) implements ParquetVectorUpdater {
 
     @Override
     public void readValues(

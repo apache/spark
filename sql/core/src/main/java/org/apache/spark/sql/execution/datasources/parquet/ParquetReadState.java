@@ -177,6 +177,6 @@ final class ParquetReadState {
   /**
    * Helper struct to represent a range of row indexes `[start, end]`.
    */
-    private record RowRange(long start, long end) {
+  private record RowRange(long start, long end) {
   }
 }

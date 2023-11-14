@@ -1612,7 +1612,8 @@ public class RemoteBlockPushResolverSuite {
     assertEquals(expectedIgnoredBlocksBytes, ignoredBlockBytes.getCount(), "ignored block bytes");
   }
 
-  private record PushBlock(int shuffleId, int shuffleMergeId, int mapIndex, int reduceId, ByteBuffer buffer) {
+  private record PushBlock(
+      int shuffleId, int shuffleMergeId, int mapIndex, int reduceId, ByteBuffer buffer) {
   }
 
   private static class TestMergeShuffleFile extends MergeShuffleFile {

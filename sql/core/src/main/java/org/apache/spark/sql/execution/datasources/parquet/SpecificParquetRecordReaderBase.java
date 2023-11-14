@@ -269,8 +269,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     PageReadStore readNextRowGroup() throws IOException;
   }
 
-  private record ParquetRowGroupReaderImpl(ParquetFileReader reader) implements ParquetRowGroupReader {
-
+  private record ParquetRowGroupReaderImpl(
+      ParquetFileReader reader) implements ParquetRowGroupReader {
     @Override
     public PageReadStore readNextRowGroup() throws IOException {
       return reader.readNextFilteredRowGroup();

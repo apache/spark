@@ -152,7 +152,8 @@ class ArrayWrappers {
     }
   }
 
-  private record ComparableObjectArray(Object[] array) implements Comparable<ComparableObjectArray> {
+  private record ComparableObjectArray(
+      Object[] array) implements Comparable<ComparableObjectArray> {
 
     @Override
     public boolean equals(Object other) {
