@@ -248,6 +248,12 @@ class RetryException(Exception):
 
 
 class DefaultPolicy(RetryPolicy):
+    # Please synchronize changes here with Scala side
+    # GrpcRetryHandler.scala
+    #
+    # Note: the number of retries is selected so that the maximum tolerated wait
+    # is guaranteed to be at least 10 minutes
+    
     def __init__(
         self,
         max_retries: Optional[int] = 15,
