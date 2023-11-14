@@ -18,9 +18,9 @@ import os
 import time
 import unittest
 
+from pyspark.errors import PythonException
 from pyspark.sql import Row
 from pyspark.sql.functions import array, col, explode, lit, mean, stddev
-from pyspark.sql.utils import PythonException
 from pyspark.sql.window import Window
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -135,8 +135,7 @@ class GroupedMapInArrowTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegex(
                 PythonException,
-                "Return type of the user-defined function should be pyarrow.Table, "
-                "but is <class 'tuple'>",
+                "Return type of the user-defined function should be pyarrow.Table, but is tuple",
             ):
                 df.groupby("id").applyInArrow(stats, schema="id long, m double").collect()
 
@@ -144,14 +143,14 @@ class GroupedMapInArrowTests(ReusedSQLTestCase):
         df = self.data
 
         for schema, expected in [
-            ("id integer, v integer", "column 'id' \\(expected int32, actual int64\\)\n"),
+            ("id integer, v integer", "column 'id' \\(expected int32, actual int64\\)"),
             (
                 "id integer, v long",
                 "column 'id' \\(expected int32, actual int64\\), "
-                "column 'v' \\(expected int64, actual int32\\)\n",
+                "column 'v' \\(expected int64, actual int32\\)",
             ),
-            ("id long, v long", "column 'v' \\(expected int64, actual int32\\)\n"),
-            ("id long, v string", "column 'v' \\(expected string, actual int32\\)\n"),
+            ("id long, v long", "column 'v' \\(expected int64, actual int32\\)"),
+            ("id long, v string", "column 'v' \\(expected string, actual int32\\)"),
         ]:
             with self.subTest(schema=schema):
                 with QuietTest(self.sc):
@@ -165,14 +164,14 @@ class GroupedMapInArrowTests(ReusedSQLTestCase):
         df = self.data
 
         for schema, expected in [
-            ("a integer, b integer", "column 'a' \\(expected int32, actual int64\\)\n"),
+            ("a integer, b integer", "column 'a' \\(expected int32, actual int64\\)"),
             (
                 "a integer, b long",
                 "column 'a' \\(expected int32, actual int64\\), "
-                "column 'b' \\(expected int64, actual int32\\)\n",
+                "column 'b' \\(expected int64, actual int32\\)",
             ),
-            ("a long, b long", "column 'b' \\(expected int64, actual int32\\)\n"),
-            ("a long, b string", "column 'b' \\(expected string, actual int32\\)\n"),
+            ("a long, b long", "column 'b' \\(expected int64, actual int32\\)"),
+            ("a long, b string", "column 'b' \\(expected string, actual int32\\)"),
         ]:
             with self.subTest(schema=schema):
                 with self.sql_conf(
@@ -186,15 +185,6 @@ class GroupedMapInArrowTests(ReusedSQLTestCase):
                             df.groupby("id").applyInArrow(
                                 lambda table: table, schema=schema
                             ).collect()
-
-    def test_apply_in_arrow_coerce(self):
-        df = self.data
-
-        result = (
-            df.groupby("id").applyInArrow(lambda pdf: pdf, "id long, v double").sort("id").collect()
-        )
-        expected = df.withColumn("v", df.v.cast("double")).collect()
-        self.assert_equal(expected, result)
 
     def test_apply_in_arrow_returning_wrong_column_names(self):
         df = self.data

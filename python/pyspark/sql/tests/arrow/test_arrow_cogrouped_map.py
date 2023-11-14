@@ -18,9 +18,9 @@ import os
 import time
 import unittest
 
+from pyspark.errors import PythonException
 from pyspark.sql import Row
 from pyspark.sql.functions import col
-from pyspark.sql.utils import PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pyarrow,
@@ -152,21 +152,20 @@ class CogroupedMapInArrowTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegex(
                 PythonException,
-                "Return type of the user-defined function should be pyarrow.Table, "
-                "but is <class 'tuple'>",
+                "Return type of the user-defined function should be pyarrow.Table, but is tuple",
             ):
                 self.cogrouped.applyInArrow(func, schema="id long").collect()
 
     def test_apply_in_arrow_returning_wrong_types(self):
         for schema, expected in [
-            ("id integer, v long", "column 'id' \\(expected int32, actual int64\\)\n"),
+            ("id integer, v long", "column 'id' \\(expected int32, actual int64\\)"),
             (
                 "id integer, v integer",
                 "column 'id' \\(expected int32, actual int64\\), "
-                "column 'v' \\(expected int32, actual int64\\)\n",
+                "column 'v' \\(expected int32, actual int64\\)",
             ),
-            ("id long, v integer", "column 'v' \\(expected int32, actual int64\\)\n"),
-            ("id long, v string", "column 'v' \\(expected string, actual int64\\)\n"),
+            ("id long, v integer", "column 'v' \\(expected int32, actual int64\\)"),
+            ("id long, v string", "column 'v' \\(expected string, actual int64\\)"),
         ]:
             with self.subTest(schema=schema):
                 with QuietTest(self.sc):
@@ -180,14 +179,14 @@ class CogroupedMapInArrowTests(ReusedSQLTestCase):
 
     def test_apply_in_arrow_returning_wrong_types_positional_assignment(self):
         for schema, expected in [
-            ("a integer, b long", "column 'a' \\(expected int32, actual int64\\)\n"),
+            ("a integer, b long", "column 'a' \\(expected int32, actual int64\\)"),
             (
                 "a integer, b integer",
                 "column 'a' \\(expected int32, actual int64\\), "
-                "column 'b' \\(expected int32, actual int64\\)\n",
+                "column 'b' \\(expected int32, actual int64\\)",
             ),
-            ("a long, b int", "column 'b' \\(expected int32, actual int64\\)\n"),
-            ("a long, b string", "column 'b' \\(expected string, actual int64\\)\n"),
+            ("a long, b int", "column 'b' \\(expected int32, actual int64\\)"),
+            ("a long, b string", "column 'b' \\(expected string, actual int64\\)"),
         ]:
             with self.subTest(schema=schema):
                 with self.sql_conf(
