@@ -239,9 +239,9 @@ class SparkConnectGrpcException(SparkConnectException):
         server_stacktrace: Optional[str] = None,
         display_server_stacktrace: bool = False,
     ) -> None:
-        self.message = message  # type: ignore[assignment]
+        self._message = message  # type: ignore[assignment]
         if reason is not None:
-            self.message = f"({reason}) {self.message}"
+            self._message = f"({reason}) {self._message}"
 
         # PySparkException has the assumption that error_class and message_parameters are
         # only occurring together. If only one is set, we assume the message to be fully
@@ -254,11 +254,11 @@ class SparkConnectGrpcException(SparkConnectException):
             tmp_message_parameters = None
 
         super().__init__(
-            message=self.message,
+            message=self._message,
             error_class=tmp_error_class,
             message_parameters=tmp_message_parameters,
         )
-        self.error_class = error_class
+        self._error_class = error_class
         self._sql_state: Optional[str] = sql_state
         self._stacktrace: Optional[str] = server_stacktrace
         self._display_stacktrace: bool = display_server_stacktrace
@@ -273,7 +273,7 @@ class SparkConnectGrpcException(SparkConnectException):
         return self._stacktrace
 
     def __str__(self) -> str:
-        desc = self.message
+        desc = self._message
         if self._display_stacktrace:
             desc += "\n\nJVM stacktrace:\n%s" % self._stacktrace
         return desc
