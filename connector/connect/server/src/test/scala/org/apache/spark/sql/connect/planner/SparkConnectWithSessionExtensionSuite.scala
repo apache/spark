@@ -63,20 +63,20 @@ class SparkConnectWithSessionExtensionSuite extends SparkFunSuite {
       .build()
     val rel = proto.Relation.newBuilder.setRead(readWithTable).build()
 
-    val newSpark = SparkSession
+    val spark = SparkSession
       .builder()
       .master("local[1]")
-      .withExtensions { extension =>
-        extension.injectParser(MyParser)
-      }
+      .withExtensions(extension => extension.injectParser(MyParser))
       .getOrCreate()
 
-    val res = new SparkConnectPlanner(SessionHolder.forTesting(newSpark)).transformRelation(rel)
+    val res = new SparkConnectPlanner(SessionHolder.forTesting(spark)).transformRelation(rel)
 
     assert(res !== null)
-    assert(res.nodeName == "UnresolvedRelation")
+    assert(res.nodeName === "UnresolvedRelation")
     assert(
       res.asInstanceOf[UnresolvedRelation].multipartIdentifier ===
         Seq("name", "FROM_MY_PARSER"))
+
+    spark.stop()
   }
 }
