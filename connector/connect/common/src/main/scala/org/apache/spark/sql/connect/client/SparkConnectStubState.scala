@@ -28,7 +28,7 @@ import org.apache.spark.internal.Logging
 // logic.
 class SparkConnectStubState(
     channel: ManagedChannel,
-    retryPolicies: Seq[GrpcRetryHandler.RetryPolicy])
+    retryPolicies: Seq[RetryPolicy])
     extends Logging {
 
   // Manages the retry handler logic used by the stubs.

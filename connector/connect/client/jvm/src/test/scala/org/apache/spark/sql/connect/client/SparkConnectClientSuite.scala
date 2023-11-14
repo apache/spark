@@ -31,7 +31,6 @@ import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.client.GrpcRetryHandler.RetryPolicy
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.test.ConnectFunSuite
 
@@ -120,7 +119,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     client = SparkConnectClient
       .builder()
       .connectionString(s"sc://localhost:${server.getPort}/;use_ssl=true")
-      .retryPolicy(GrpcRetryHandler.RetryPolicy(maxRetries = Some(0)))
+      .retryPolicy(RetryPolicy(maxRetries = Some(0), canRetry = _ => false, name = "TestPolicy"))
       .build()
 
     val request = AnalyzePlanRequest.newBuilder().setSessionId("abc123").build()
@@ -334,9 +333,9 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
       }
 
       val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE), numFails = 100)
-      val retryHandler = new GrpcRetryHandler(GrpcRetryHandler.defaultPolicies(), sleep)
+      val retryHandler = new GrpcRetryHandler(RetryPolicy.defaultPolicies(), sleep)
 
-      assertThrows[GrpcRetryHandler.RetriesExceeded] {
+      assertThrows[RetriesExceeded] {
         retryHandler.retry {
           dummyFn.fn()
         }
@@ -348,7 +347,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   test("SPARK-44275: retry actually retries") {
     val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
-    val retryPolicies = GrpcRetryHandler.defaultPolicies()
+    val retryPolicies = RetryPolicy.defaultPolicies()
     val retryHandler = new GrpcRetryHandler(retryPolicies, sleep = _ => {})
     val result = retryHandler.retry { dummyFn.fn() }
 
@@ -358,7 +357,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   test("SPARK-44275: default retryException retries only on UNAVAILABLE") {
     val dummyFn = new DummyFn(new StatusRuntimeException(Status.ABORTED))
-    val retryPolicies = GrpcRetryHandler.defaultPolicies()
+    val retryPolicies = RetryPolicy.defaultPolicies()
     val retryHandler = new GrpcRetryHandler(retryPolicies, sleep = _ => {})
 
     assertThrows[StatusRuntimeException] {
@@ -369,7 +368,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   test("SPARK-44275: retry uses canRetry to filter exceptions") {
     val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
-    val retryPolicy = GrpcRetryHandler.RetryPolicy(canRetry = _ => false)
+    val retryPolicy = RetryPolicy(canRetry = _ => false, name = "TestPolicy")
     val retryHandler = new GrpcRetryHandler(retryPolicy)
 
     assertThrows[StatusRuntimeException] {
@@ -380,17 +379,17 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   test("SPARK-44275: retry does not exceed maxRetries") {
     val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
-    val retryPolicy = GrpcRetryHandler.RetryPolicy(canRetry = _ => true, maxRetries = Some(1))
+    val retryPolicy = RetryPolicy(canRetry = _ => true, maxRetries = Some(1), name = "TestPolicy")
     val retryHandler = new GrpcRetryHandler(retryPolicy, sleep = _ => {})
 
-    assertThrows[GrpcRetryHandler.RetriesExceeded] {
+    assertThrows[RetriesExceeded] {
       retryHandler.retry { dummyFn.fn() }
     }
     assert(dummyFn.counter == 2)
   }
 
   def testPolicySpecificError(maxRetries: Int, status: Status): RetryPolicy = {
-    GrpcRetryHandler.RetryPolicy(
+    RetryPolicy(
       maxRetries = Some(maxRetries),
       name = s"Policy for ${status.getCode}",
       canRetry = {
@@ -424,7 +423,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     val errors = List.fill(10)(Status.INTERNAL).iterator
     var countAttempted = 0
 
-    assertThrows[GrpcRetryHandler.RetriesExceeded](
+    assertThrows[RetriesExceeded](
       new GrpcRetryHandler(List(policy1, policy2), sleep = _ => {}).retry({
         countAttempted += 1
         val e = errors.nextOption()

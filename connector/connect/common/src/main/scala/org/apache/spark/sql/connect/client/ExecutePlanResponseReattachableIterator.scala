@@ -241,7 +241,7 @@ class ExecutePlanResponseReattachableIterator(
         }
         // Try a new ExecutePlan, and throw upstream for retry.
         iter = Some(rawBlockingStub.executePlan(initialRequest))
-        val error = new GrpcRetryHandler.RetryException()
+        val error = new RetryPolicy.RetryException()
         error.addSuppressed(ex)
         throw error
       case NonFatal(e) =>

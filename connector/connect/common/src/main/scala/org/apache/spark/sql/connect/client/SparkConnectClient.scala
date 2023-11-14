@@ -443,12 +443,12 @@ object SparkConnectClient {
 
     def sslEnabled: Boolean = _configuration.isSslEnabled.contains(true)
 
-    def retryPolicy(policies: Seq[GrpcRetryHandler.RetryPolicy]): Builder = {
+    def retryPolicy(policies: Seq[RetryPolicy]): Builder = {
       _configuration = _configuration.copy(retryPolicies = policies)
       this
     }
 
-    def retryPolicy(policy: GrpcRetryHandler.RetryPolicy): Builder = {
+    def retryPolicy(policy: RetryPolicy): Builder = {
       retryPolicy(List(policy))
     }
 
@@ -638,7 +638,7 @@ object SparkConnectClient {
       metadata: Map[String, String] = Map.empty,
       userAgent: String = genUserAgent(
         sys.env.getOrElse("SPARK_CONNECT_USER_AGENT", DEFAULT_USER_AGENT)),
-      retryPolicies: Seq[GrpcRetryHandler.RetryPolicy] = GrpcRetryHandler.defaultPolicies(),
+      retryPolicies: Seq[RetryPolicy] = RetryPolicy.defaultPolicies(),
       useReattachableExecute: Boolean = true,
       interceptors: List[ClientInterceptor] = List.empty,
       sessionId: Option[String] = None) {
