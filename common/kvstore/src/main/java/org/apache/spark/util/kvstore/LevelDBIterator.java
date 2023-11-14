@@ -197,8 +197,6 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     if (!closed) {
       try {
         it.close();
-      } catch (UncheckedIOException uncheckedIOException) {
-        throw uncheckedIOException.getCause();
       } finally {
         closed = true;
         next = null;
