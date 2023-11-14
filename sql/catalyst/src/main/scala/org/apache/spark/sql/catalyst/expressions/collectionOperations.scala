@@ -3531,7 +3531,6 @@ object Sequence {
       step: String,
       estimatedStep: String,
       len: String): String = {
-    val BigInt = classOf[java.math.BigInteger].getName
     val calcFn = "Sequence.sequenceLength"
     s"""
        |if (!(($estimatedStep > 0 && $start <= $stop) ||
