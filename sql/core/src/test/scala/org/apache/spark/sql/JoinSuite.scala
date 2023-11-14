@@ -1567,27 +1567,27 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
 
   test("SPARK-45882: BroadcastHashJoinExec propagate partitioning should respect " +
     "CoalescedHashPartitioning") {
-    val cached = spark.sql(
-      """
-        |select /*+ broadcast(testData) */ key, value, a
-        |from testData join (
-        | select a from testData2 group by a
-        |)tmp on key = a
-        |""".stripMargin).cache()
-    try {
-      val df = cached.groupBy("key").count()
-      val expected = Seq(Row(1, 1), Row(2, 1), Row(3, 1))
-      assert(find(df.queryExecution.executedPlan) {
-        case _: ShuffleExchangeLike => true
-        case _ => false
-      }.size == 1, df.queryExecution)
-      checkAnswer(df, expected)
-      assert(find(df.queryExecution.executedPlan) {
-        case _: ShuffleExchangeLike => true
-        case _ => false
-      }.isEmpty, df.queryExecution)
-    } finally {
-      cached.unpersist()
+    withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
+      val cached = spark.sql(
+        """
+          |select /*+ broadcast(testData) */ key, value, a
+          |from testData join (
+          | select a from testData2 group by a
+          |)tmp on key = a
+          |""".stripMargin).cache()
+      try {
+        // materialize aqe first to propagate output partitioning
+        cached.count()
+        val df = cached.groupBy("key").count()
+        val expected = Seq(Row(1, 1), Row(2, 1), Row(3, 1))
+        checkAnswer(df, expected)
+        assert(find(df.queryExecution.executedPlan) {
+          case _: ShuffleExchangeLike => true
+          case _ => false
+        }.isEmpty, df.queryExecution)
+      } finally {
+        cached.unpersist()
+      }
     }
   }
 }
