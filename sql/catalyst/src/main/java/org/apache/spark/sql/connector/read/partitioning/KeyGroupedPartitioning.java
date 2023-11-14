@@ -32,24 +32,12 @@ import org.apache.spark.sql.connector.expressions.Expression;
  * @since 3.3.0
  */
 @Evolving
-public class KeyGroupedPartitioning implements Partitioning {
-  private final Expression[] keys;
-  private final int numPartitions;
-
-  public KeyGroupedPartitioning(Expression[] keys, int numPartitions) {
-    this.keys = keys;
-    this.numPartitions = numPartitions;
-  }
+public record KeyGroupedPartitioning(Expression[] keys, int numPartitions) implements Partitioning {
 
   /**
    * Returns the partition transform expressions for this partitioning.
    */
   public Expression[] keys() {
     return keys;
-  }
-
-  @Override
-  public int numPartitions() {
-    return numPartitions;
   }
 }

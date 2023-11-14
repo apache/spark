@@ -269,12 +269,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     PageReadStore readNextRowGroup() throws IOException;
   }
 
-  private static class ParquetRowGroupReaderImpl implements ParquetRowGroupReader {
-    private final ParquetFileReader reader;
-
-    ParquetRowGroupReaderImpl(ParquetFileReader reader) {
-      this.reader = reader;
-    }
+  private record ParquetRowGroupReaderImpl(ParquetFileReader reader) implements ParquetRowGroupReader {
 
     @Override
     public PageReadStore readNextRowGroup() throws IOException {

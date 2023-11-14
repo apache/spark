@@ -25,15 +25,5 @@ import org.apache.spark.annotation.Evolving;
  * @since 3.3.0
  */
 @Evolving
-public class UnknownPartitioning implements Partitioning {
-  private final int numPartitions;
-
-  public UnknownPartitioning(int numPartitions) {
-    this.numPartitions = numPartitions;
-  }
-
-  @Override
-  public int numPartitions() {
-    return numPartitions;
-  }
+public record UnknownPartitioning(int numPartitions) implements Partitioning {
 }

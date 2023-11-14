@@ -510,34 +510,15 @@ public final class VectorizedRleValuesReader extends ValuesReader
     state.rowId = rowId;
   }
 
-  private static class DefLevelProcessor {
-    private final VectorizedRleValuesReader reader;
-    private final ParquetReadState state;
-    private final WritableColumnVector defLevels;
-    private final WritableColumnVector values;
-    private final WritableColumnVector nulls;
-    private final boolean valuesReused;
-    private final VectorizedValuesReader valueReader;
-    private final ParquetVectorUpdater updater;
-
-    DefLevelProcessor(
-        VectorizedRleValuesReader reader,
-        ParquetReadState state,
-        WritableColumnVector defLevels,
-        WritableColumnVector values,
-        WritableColumnVector nulls,
-        boolean valuesReused,
-        VectorizedValuesReader valueReader,
-        ParquetVectorUpdater updater) {
-      this.reader = reader;
-      this.state = state;
-      this.defLevels = defLevels;
-      this.values = values;
-      this.nulls = nulls;
-      this.valuesReused = valuesReused;
-      this.valueReader = valueReader;
-      this.updater = updater;
-    }
+  private record DefLevelProcessor(
+      VectorizedRleValuesReader reader,
+      ParquetReadState state,
+      WritableColumnVector defLevels,
+      WritableColumnVector values,
+      WritableColumnVector nulls,
+      boolean valuesReused,
+      VectorizedValuesReader valueReader,
+      ParquetVectorUpdater updater) {
 
     void readValues(int n) {
       if (!state.shouldSkip) {

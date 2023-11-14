@@ -383,12 +383,7 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-  private static class IntegerWithRebaseUpdater implements ParquetVectorUpdater {
-    private final boolean failIfRebase;
-
-    IntegerWithRebaseUpdater(boolean failIfRebase) {
-      this.failIfRebase = failIfRebase;
-    }
+  private record IntegerWithRebaseUpdater(boolean failIfRebase) implements ParquetVectorUpdater {
 
     @Override
     public void readValues(
@@ -528,14 +523,7 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-  private static class LongWithRebaseUpdater implements ParquetVectorUpdater {
-    private final boolean failIfRebase;
-    private final String timeZone;
-
-    LongWithRebaseUpdater(boolean failIfRebase, String timeZone) {
-      this.failIfRebase = failIfRebase;
-      this.timeZone = timeZone;
-    }
+  private record LongWithRebaseUpdater(boolean failIfRebase, String timeZone) implements ParquetVectorUpdater {
 
     @Override
     public void readValues(
@@ -607,14 +595,7 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-  private static class LongAsMicrosRebaseUpdater implements ParquetVectorUpdater {
-    private final boolean failIfRebase;
-    private final String timeZone;
-
-    LongAsMicrosRebaseUpdater(boolean failIfRebase, String timeZone) {
-      this.failIfRebase = failIfRebase;
-      this.timeZone = timeZone;
-    }
+  private record LongAsMicrosRebaseUpdater(boolean failIfRebase, String timeZone) implements ParquetVectorUpdater {
 
     @Override
     public void readValues(
@@ -791,12 +772,7 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-  private static class BinaryToSQLTimestampConvertTzUpdater implements ParquetVectorUpdater {
-    private final ZoneId convertTz;
-
-    BinaryToSQLTimestampConvertTzUpdater(ZoneId convertTz) {
-      this.convertTz = convertTz;
-    }
+  private record BinaryToSQLTimestampConvertTzUpdater(ZoneId convertTz) implements ParquetVectorUpdater {
 
     @Override
     public void readValues(
@@ -838,14 +814,8 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-  private static class BinaryToSQLTimestampRebaseUpdater implements ParquetVectorUpdater {
-    private final boolean failIfRebase;
-    private final String timeZone;
-
-    BinaryToSQLTimestampRebaseUpdater(boolean failIfRebase, String timeZone) {
-      this.failIfRebase = failIfRebase;
-      this.timeZone = timeZone;
-    }
+  private record BinaryToSQLTimestampRebaseUpdater(
+      boolean failIfRebase, String timeZone) implements ParquetVectorUpdater {
 
     @Override
     public void readValues(
@@ -887,19 +857,8 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-  private static class BinaryToSQLTimestampConvertTzRebaseUpdater implements ParquetVectorUpdater {
-    private final boolean failIfRebase;
-    private final ZoneId convertTz;
-    private final String timeZone;
-
-    BinaryToSQLTimestampConvertTzRebaseUpdater(
-        boolean failIfRebase,
-        ZoneId convertTz,
-        String timeZone) {
-      this.failIfRebase = failIfRebase;
-      this.convertTz = convertTz;
-      this.timeZone = timeZone;
-    }
+  private record BinaryToSQLTimestampConvertTzRebaseUpdater(
+      boolean failIfRebase, ZoneId convertTz, String timeZone) implements ParquetVectorUpdater {
 
     @Override
     public void readValues(
@@ -943,12 +902,7 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-  private static class FixedLenByteArrayUpdater implements ParquetVectorUpdater {
-    private final int arrayLen;
-
-    FixedLenByteArrayUpdater(int arrayLen) {
-      this.arrayLen = arrayLen;
-    }
+  private record FixedLenByteArrayUpdater(int arrayLen) implements ParquetVectorUpdater {
 
     @Override
     public void readValues(
@@ -985,12 +939,7 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-  private static class FixedLenByteArrayAsIntUpdater implements ParquetVectorUpdater {
-    private final int arrayLen;
-
-    FixedLenByteArrayAsIntUpdater(int arrayLen) {
-      this.arrayLen = arrayLen;
-    }
+  private record FixedLenByteArrayAsIntUpdater(int arrayLen) implements ParquetVectorUpdater {
 
     @Override
     public void readValues(
@@ -1028,12 +977,7 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-  private static class FixedLenByteArrayAsLongUpdater implements ParquetVectorUpdater {
-    private final int arrayLen;
-
-    FixedLenByteArrayAsLongUpdater(int arrayLen) {
-      this.arrayLen = arrayLen;
-    }
+  private record FixedLenByteArrayAsLongUpdater(int arrayLen) implements ParquetVectorUpdater {
 
     @Override
     public void readValues(

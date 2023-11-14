@@ -41,20 +41,10 @@ import org.apache.spark.util.collection.Sorter;
  */
 public final class UnsafeInMemorySorter {
 
-  private static final class SortComparator implements Comparator<RecordPointerAndKeyPrefix> {
-
-    private final RecordComparator recordComparator;
-    private final PrefixComparator prefixComparator;
-    private final TaskMemoryManager memoryManager;
-
-    SortComparator(
-        RecordComparator recordComparator,
-        PrefixComparator prefixComparator,
-        TaskMemoryManager memoryManager) {
-      this.recordComparator = recordComparator;
-      this.prefixComparator = prefixComparator;
-      this.memoryManager = memoryManager;
-    }
+  private record SortComparator(
+      RecordComparator recordComparator,
+      PrefixComparator prefixComparator,
+      TaskMemoryManager memoryManager) implements Comparator<RecordPointerAndKeyPrefix> {
 
     @Override
     public int compare(RecordPointerAndKeyPrefix r1, RecordPointerAndKeyPrefix r2) {
