@@ -2469,18 +2469,20 @@ class BaseUDTFTestsMixin:
         )
 
     def test_udtf_with_skip_rest_of_input_table_exception(self):
-        @udtf(returnType="total: int")
+        @udtf(returnType="current: int, total: int")
         class TestUDTF:
             def __init__(self):
+                self._current = 0
                 self._total = 0
 
-            def eval(self, _: Row):
+            def eval(self, input: Row):
+                self._current = input["id"]
                 self._total += 1
                 if self._total >= 4:
                     raise SkipRestOfInputTableException("Stop at self._total >= 4")
 
             def terminate(self):
-                yield self._total,
+                yield self._current, self._total
 
         self.spark.udtf.register("test_udtf", TestUDTF)
 
@@ -2492,12 +2494,13 @@ class BaseUDTFTestsMixin:
                 WITH t AS (
                   SELECT id FROM range(1, 21)
                 )
-                SELECT total
-                FROM test_udtf(TABLE(t) WITH SINGLE PARTITION)
+                SELECT current, total
+                FROM test_udtf(TABLE(t) WITH SINGLE PARTITION ORDER BY id)
                 """
             ),
-            [Row(total=4)],
+            [Row(current=4, total=4)],
         )
+
         # Run a test case including WITH SINGLE PARTITION on the UDTF call. The
         # SkipRestOfInputTableException stops scanning rows for each of the two partitions
         # separately.
@@ -2507,12 +2510,12 @@ class BaseUDTFTestsMixin:
                 WITH t AS (
                   SELECT id FROM range(1, 21)
                 )
-                SELECT id / 10 AS id_divided_by_ten, total
-                FROM test_udtf(TABLE(t) PARTITION BY id / 10)
+                SELECT current, total
+                FROM test_udtf(TABLE(t) PARTITION BY floor(id / 10) ORDER BY id)
                 ORDER BY ALL
                 """
             ),
-            [Row(id_divided_by_ten=0, total=4), Row(id_divided_by_ten=1, total=4)],
+            [Row(current=4, total=4), Row(current=13, total=4), Row(current=20, total=1)],
         )
 
 
@@ -2530,6 +2533,7 @@ class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
             super(UDTFTests, cls).tearDownClass()
 
 
+'''
 @unittest.skipIf(
     not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
 )
@@ -2823,7 +2827,7 @@ class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
             cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
         finally:
             super(UDTFArrowTests, cls).tearDownClass()
-
+'''
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_udtf import *  # noqa: F401

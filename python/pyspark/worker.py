@@ -764,6 +764,7 @@ def read_udtf(pickleSer, infile, eval_type):
             self._udtf = create_udtf()
             self._prev_arguments: list = list()
             self._partition_child_indexes: list = partition_child_indexes
+            self._eval_raised_skip_rest_of_input_table: bool = False
 
         def eval(self, *args, **kwargs) -> Iterator:
             changed_partitions = self._check_partition_boundaries(
@@ -776,16 +777,24 @@ def read_udtf(pickleSer, infile, eval_type):
                         for row in result:
                             yield row
                 self._udtf = self._create_udtf()
-            if self._udtf.eval is not None:
+                self._eval_raised_skip_rest_of_input_table = False
+            if self._udtf.eval is not None and not self._eval_raised_skip_rest_of_input_table:
                 # Filter the arguments to exclude projected PARTITION BY values added by Catalyst.
                 filtered_args = [self._remove_partition_by_exprs(arg) for arg in args]
                 filtered_kwargs = {
                     key: self._remove_partition_by_exprs(value) for (key, value) in kwargs.items()
                 }
-                result = self._udtf.eval(*filtered_args, **filtered_kwargs)
-                if result is not None:
-                    for row in result:
-                        yield row
+                try:
+                    result = self._udtf.eval(*filtered_args, **filtered_kwargs)
+                    if result is not None:
+                        for row in result:
+                            yield row
+                except SkipRestOfInputTableException:
+                    # If the 'eval' method raised this exception, then we should skip the rest of
+                    # the rows in the current partition. Set this field to True here and then for
+                    # each subsequent row in the partition, we will skip calling the 'eval' method
+                    # until we see a change in the partition boundaries.
+                    self._eval_raised_skip_rest_of_input_table = True
 
         def terminate(self) -> Iterator:
             if self._udtf.terminate is not None:
