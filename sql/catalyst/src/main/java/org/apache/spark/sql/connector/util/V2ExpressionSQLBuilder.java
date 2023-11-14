@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.StringJoiner;
 
+import org.apache.spark.sql.catalyst.util.QuotingUtils;
 import org.apache.spark.sql.connector.expressions.Cast;
 import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.Extract;
@@ -238,21 +239,21 @@ public class V2ExpressionSQLBuilder {
     // Remove quotes at the beginning and end.
     // e.g. converts "'str'" to "str".
     String value = r.substring(1, r.length() - 1);
-    return l + " LIKE '" + value + "%'";
+    return l + " LIKE '" + QuotingUtils.escapeSpecialChar(value) + "%'";
   }
 
   protected String visitEndsWith(String l, String r) {
     // Remove quotes at the beginning and end.
     // e.g. converts "'str'" to "str".
     String value = r.substring(1, r.length() - 1);
-    return l + " LIKE '%" + value + "'";
+    return l + " LIKE '%" + QuotingUtils.escapeSpecialChar(value) + "'";
   }
 
   protected String visitContains(String l, String r) {
     // Remove quotes at the beginning and end.
     // e.g. converts "'str'" to "str".
     String value = r.substring(1, r.length() - 1);
-    return l + " LIKE '%" + value + "%'";
+    return l + " LIKE '%" + QuotingUtils.escapeSpecialChar(value) + "%'";
   }
 
   private String inputToSQL(Expression input) {

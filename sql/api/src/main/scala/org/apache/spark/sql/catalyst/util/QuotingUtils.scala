@@ -71,4 +71,17 @@ object QuotingUtils {
 
     builder.toString()
   }
+
+  def escapeSpecialChar(str: String): String = {
+    val builder = new StringBuilder
+
+    str.foreach {
+      case '_' => builder ++= "\\_"
+      case '%' => builder ++= "\\%"
+      // TODO Support for escaping more special characters
+      case ch => builder += ch
+    }
+
+    builder.toString()
+  }
 }

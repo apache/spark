@@ -204,6 +204,19 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       conn.prepareStatement("INSERT INTO \"test\".\"datetime\" VALUES " +
         "('alex', '2022-05-18', '2022-05-18 00:00:00')").executeUpdate()
 
+      conn.prepareStatement(
+        "CREATE TABLE \"test\".\"address\" (email TEXT(32) NOT NULL)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"address\" VALUES " +
+        "('abc_def@gmail.com')").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"address\" VALUES " +
+        "('abc%def@gmail.com')").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"address\" VALUES " +
+        "('abc%_def@gmail.com')").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"address\" VALUES " +
+        "('abc_%def@gmail.com')").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"address\" VALUES " +
+        "('abc_''%def@gmail.com')").executeUpdate()
+
       conn.prepareStatement("CREATE TABLE \"test\".\"binary1\" (name TEXT(32),b BINARY(20))")
         .executeUpdate()
       val stmt = conn.prepareStatement("INSERT INTO \"test\".\"binary1\" VALUES (?, ?)")
@@ -1262,6 +1275,85 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df17, Seq(Row(6, "jen", 12000, 1200, true)))
   }
 
+  test("SPARK-38432: escape the quote, _ and % for DS V2 pushdown") {
+    val df1 = spark.table("h2.test.address").filter($"email".startsWith("abc_"))
+    checkFiltersRemoved(df1)
+    checkPushedInfo(df1, "PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE 'abc\\_%']")
+    checkAnswer(df1,
+      Seq(Row("abc_%def@gmail.com"), Row("abc_'%def@gmail.com"), Row("abc_def@gmail.com")))
+
+    val df2 = spark.table("h2.test.address").filter($"email".startsWith("abc%"))
+    checkFiltersRemoved(df2)
+    checkPushedInfo(df2, "PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE 'abc\\%%']")
+    checkAnswer(df2, Seq(Row("abc%_def@gmail.com"), Row("abc%def@gmail.com")))
+
+    val df3 = spark.table("h2.test.address").filter($"email".startsWith("abc%_"))
+    checkFiltersRemoved(df3)
+    checkPushedInfo(df3, "PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE 'abc\\%\\_%']")
+    checkAnswer(df3, Seq(Row("abc%_def@gmail.com")))
+
+    val df4 = spark.table("h2.test.address").filter($"email".startsWith("abc_%"))
+    checkFiltersRemoved(df4)
+    checkPushedInfo(df4, "PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE 'abc\\_\\%%']")
+    checkAnswer(df4, Seq(Row("abc_%def@gmail.com")))
+
+    val df5 = spark.table("h2.test.address").filter($"email".startsWith("abc_'%"))
+    checkFiltersRemoved(df5)
+    checkPushedInfo(df5, "PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE 'abc\\_'\\%%']")
+    checkAnswer(df5, Seq(Row("abc_'%def@gmail.com")))
+
+    val df6 = spark.table("h2.test.address").filter($"email".endsWith("_def@gmail.com"))
+    checkFiltersRemoved(df6)
+    checkPushedInfo(df6, "PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%\\_def@gmail.com']")
+    checkAnswer(df6, Seq(Row("abc%_def@gmail.com"), Row("abc_def@gmail.com")))
+
+    val df7 = spark.table("h2.test.address").filter($"email".endsWith("%def@gmail.com"))
+    checkFiltersRemoved(df7)
+    checkPushedInfo(df7, "PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%\\%def@gmail.com']")
+    checkAnswer(df7,
+      Seq(Row("abc%def@gmail.com"), Row("abc_%def@gmail.com"), Row("abc_'%def@gmail.com")))
+
+    val df8 = spark.table("h2.test.address").filter($"email".endsWith("%_def@gmail.com"))
+    checkFiltersRemoved(df8)
+    checkPushedInfo(df8, "PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%\\%\\_def@gmail.com']")
+    checkAnswer(df8, Seq(Row("abc%_def@gmail.com")))
+
+    val df9 = spark.table("h2.test.address").filter($"email".endsWith("_%def@gmail.com"))
+    checkFiltersRemoved(df9)
+    checkPushedInfo(df9, "PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%\\_\\%def@gmail.com']")
+    checkAnswer(df9, Seq(Row("abc_%def@gmail.com")))
+
+    val df10 = spark.table("h2.test.address").filter($"email".endsWith("_'%def@gmail.com"))
+    checkFiltersRemoved(df10)
+    checkPushedInfo(df10, "PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%\\_'\\%def@gmail.com']")
+    checkAnswer(df10, Seq(Row("abc_'%def@gmail.com")))
+
+    val df11 = spark.table("h2.test.address").filter($"email".contains("c_d"))
+    checkFiltersRemoved(df11)
+    checkPushedInfo(df11, "PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%c\\_d%']")
+    checkAnswer(df11, Seq(Row("abc_def@gmail.com")))
+
+    val df12 = spark.table("h2.test.address").filter($"email".contains("c%d"))
+    checkFiltersRemoved(df12)
+    checkPushedInfo(df12, "PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%c\\%d%']")
+    checkAnswer(df12, Seq(Row("abc%def@gmail.com")))
+
+    val df13 = spark.table("h2.test.address").filter($"email".contains("c%_d"))
+    checkFiltersRemoved(df13)
+    checkPushedInfo(df13, "PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%c\\%\\_d%']")
+    checkAnswer(df13, Seq(Row("abc%_def@gmail.com")))
+
+    val df14 = spark.table("h2.test.address").filter($"email".contains("c_%d"))
+    checkFiltersRemoved(df14)
+    checkPushedInfo(df14, "PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%c\\_\\%d%']")
+    checkAnswer(df14, Seq(Row("abc_%def@gmail.com")))
+
+    val df15 = spark.table("h2.test.address").filter($"email".contains("c_'%d"))
+    checkFiltersRemoved(df15)
+    checkPushedInfo(df15, "PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%c\\_'\\%d%']")
+    checkAnswer(df15, Seq(Row("abc_'%def@gmail.com")))
+  }
+
   test("scan with filter push-down with ansi mode") {
     Seq(false, true).foreach { ansiMode =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiMode.toString) {
@@ -1612,8 +1704,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
   test("show tables") {
     checkAnswer(sql("SHOW TABLES IN h2.test"),
-      Seq(Row("test", "people", false), Row("test", "empty_table", false),
-        Row("test", "employee", false), Row("test", "item", false), Row("test", "dept", false),
+      Seq(Row("test", "address", false), Row("test", "people", false),
+        Row("test", "empty_table", false), Row("test", "employee", false),
+        Row("test", "item", false), Row("test", "dept", false),
         Row("test", "person", false), Row("test", "view1", false), Row("test", "view2", false),
         Row("test", "datetime", false), Row("test", "binary1", false)))
   }
