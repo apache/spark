@@ -116,7 +116,7 @@ case class BroadcastHashJoinExec(
     PartitioningCollection(partitioning.multiTransformDown {
       case e: Expression if streamedKeyToBuildKeyMapping.contains(e.canonicalized) =>
         e +: streamedKeyToBuildKeyMapping(e.canonicalized)
-    }.asInstanceOf[Stream[HashPartitioning]]
+    }.asInstanceOf[Stream[HashPartitioningLike]]
       .take(conf.broadcastHashJoinOutputPartitioningExpandLimit))
   }
 
