@@ -62,10 +62,10 @@ class StatePartitionReader(
       partition.sourceOptions.stateCheckpointLocation.getParent.toString, hadoopConf)
       .stateMetadata.toArray
 
-    val stateStoreMetadata = allStateStoreMetadata.filter(entry =>
-      entry.operatorId == partition.sourceOptions.operatorId
-        && entry.stateStoreName == partition.sourceOptions.storeName
-    )
+    val stateStoreMetadata = allStateStoreMetadata.filter { entry =>
+      entry.operatorId == partition.sourceOptions.operatorId &&
+        entry.stateStoreName == partition.sourceOptions.storeName
+    }
     val numColsPrefixKey = if (stateStoreMetadata.isEmpty) {
       logWarning("Metadata for state store not found, possible cause is this checkpoint " +
         "is created by older version of spark. The state of session window aggregation can't be " +
@@ -77,9 +77,6 @@ class StatePartitionReader(
       stateStoreMetadata.head.numColsPrefixKey
     }
 
-    // TODO: This does not handle the case of session window aggregation; we don't have an
-    //  information whether the state store uses prefix scan or not. We will have to add such
-    //  information to determine the right encoder/decoder for the data.
     StateStore.getReadOnly(stateStoreProviderId, keySchema, valueSchema,
       numColsPrefixKey = numColsPrefixKey, version = partition.sourceOptions.batchId + 1,
       storeConf = storeConf, hadoopConf = hadoopConf.value)
