@@ -21,7 +21,7 @@ from py4j.java_gateway import JavaClass, JavaObject
 
 from pyspark import RDD, since
 from pyspark.sql.column import _to_seq, _to_java_column, Column
-from pyspark.sql.types import StructType
+from pyspark.sql.types import StructType, Row
 from pyspark.sql import utils
 from pyspark.sql.utils import to_str
 from pyspark.errors import PySparkTypeError, PySparkValueError
@@ -1936,7 +1936,23 @@ class DataFrameWriter(OptionUtils):
         if partitionBy is not None:
             self.partitionBy(partitionBy)
         self._set_opts(compression=compression)
-        self._jwrite.parquet(path)
+        if self._df.isEmpty() is True and partitionBy is not None:
+            self._write_empty_partition(path, partitionBy)
+        else:
+            self._jwrite.parquet(path)
+    
+    @overload
+    def _write_empty_partition(self, path: str, partitionBy: str) -> None:
+        ...
+    
+    @overload
+    def _write_empty_partition(self, path: str, partitionBy: List[str]) -> None:
+        ...
+
+    def _write_empty_partition(self, path: str, partitionBy: Union[str, List[str]]) -> None:
+            temp_row_data = {col: None for col in partitionBy} if isinstance(partitionBy, list) else {partitionBy: None}
+            temp_df = self._df.sparkSession.createDataFrame([Row(**temp_row_data)])
+            temp_df.write.mode("overwrite").partitionBy(partitionBy).parquet(path)
 
     def text(
         self, path: str, compression: Optional[str] = None, lineSep: Optional[str] = None
