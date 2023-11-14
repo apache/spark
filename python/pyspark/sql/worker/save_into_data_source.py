@@ -18,16 +18,14 @@ import inspect
 import os
 import sys
 from itertools import chain
-from typing import IO, List
+from typing import IO
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError, PySparkTypeError
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
-    read_bool,
     read_int,
     write_int,
-    write_with_length,
     SpecialLengths,
 )
 from pyspark.sql import Row
@@ -122,8 +120,8 @@ def main(infile: IO, outfile: IO) -> None:
         # TODO: remove `paths` from DataSource constructor and rename userSpecifiedSchema.
         try:
             data_source = data_source_cls(
-                paths=[],  # type: ignore
-                userSpecifiedSchema=schema,  # type: ignore
+                paths=[],
+                userSpecifiedSchema=schema,
                 options=options,
             )
         except Exception as e:
@@ -136,17 +134,18 @@ def main(infile: IO, outfile: IO) -> None:
         try:
             writer = data_source.writer(schema, save_mode)
         except Exception as e:
+            # TODO: Change this to be generic error class
             raise PySparkRuntimeError(
-                error_class="PYTHON_DATA_SOURCE_CREATE_ERROR",  # Change this to be generic error class
+                error_class="PYTHON_DATA_SOURCE_CREATE_ERROR",
                 message_parameters={"type": "instance", "error": str(e)},
             )
 
         # Create a UDF to be used in mapInPandas.
-        # The purpose of this UDF is to change the input type from an iterator of pandas dataframe
-        # to an iterator of rows.
+        # The purpose of this UDF is to change the input type from an iterator of
+        # pandas dataframe to an iterator of rows.
         import pandas as pd
 
-        def data_source_write_func(iterator):
+        def data_source_write_func(iterator):  # type: ignore
             rows = (Row(*record) for df in iterator for record in df.to_records(index=False))
             row_iterator = chain.from_iterable(rows)
             res = writer.write(row_iterator)
