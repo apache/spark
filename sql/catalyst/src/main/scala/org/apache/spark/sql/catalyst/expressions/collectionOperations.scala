@@ -3122,9 +3122,9 @@ case class Sequence(
 }
 
 object Sequence {
-  def prettyName: String = "sequence"
+  private def prettyName: String = "sequence"
 
-  private def sequenceLength(start: Long, stop: Long, step: Long): Int = {
+  def sequenceLength(start: Long, stop: Long, step: Long): Int = {
     try {
       val delta = Math.subtractExact(stop, start)
       if (delta == Long.MinValue && step == -1L) {
@@ -3532,7 +3532,7 @@ object Sequence {
       estimatedStep: String,
       len: String): String = {
     val BigInt = classOf[java.math.BigInteger].getName
-    val calculateLen = "Sequence.sequenceLength"
+    val calcFn = "Sequence.sequenceLength"
     s"""
        |if (!(($estimatedStep > 0 && $start <= $stop) ||
        |  ($estimatedStep < 0 && $start >= $stop) ||
@@ -3540,7 +3540,7 @@ object Sequence {
        |  throw new IllegalArgumentException(
        |    "Illegal sequence boundaries: " + $start + " to " + $stop + " by " + $step);
        |}
-       |int $len = $calculateLen((long) $start, (long) $stop, (long) $estimatedStep);
+       |int $len = $calcFn((long) $start, (long) $stop, (long) $estimatedStep);
        """.stripMargin
   }
 }
