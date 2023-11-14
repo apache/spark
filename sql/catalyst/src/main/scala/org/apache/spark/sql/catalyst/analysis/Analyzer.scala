@@ -1190,8 +1190,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         identifier: Seq[String],
         viewOnly: Boolean = false): Option[LogicalPlan] = {
       lookupTempView(identifier).map { tempView =>
-        ResolvedTempView(
-          identifier.asIdentifier, tempView.tableMeta.schema, tempView.tableMeta.comment)
+        ResolvedTempView(identifier.asIdentifier, tempView.tableMeta)
       }.orElse {
         expandIdentifier(identifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
@@ -1204,7 +1203,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 val v1Ident = v1Table.catalogTable.identifier
                 val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
                 ResolvedPersistentView(
-                  catalog, v2Ident, v1Table.catalogTable.schema, v1Table.v1Table.comment)
+                  catalog, v2Ident, v1Table.catalogTable)
               case table =>
                 ResolvedTable.create(catalog.asTableCatalog, ident, table)
             }

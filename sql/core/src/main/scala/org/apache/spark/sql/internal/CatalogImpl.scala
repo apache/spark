@@ -210,16 +210,16 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
             if (isExternal) CatalogTableType.EXTERNAL.name
             else CatalogTableType.MANAGED.name,
           isTemporary = false)
-      case ResolvedPersistentView(catalog, identifier, _, comment) =>
+      case ResolvedPersistentView(catalog, identifier, metadata) =>
         new Table(
           name = identifier.name(),
           catalog = catalog.name(),
           namespace = identifier.namespace(),
-          description = comment.orNull,
+          description = metadata.comment.orNull,
           tableType = "VIEW",
           isTemporary = false
         )
-      case ResolvedTempView(identifier, _, _) =>
+      case ResolvedTempView(identifier, _) =>
         new Table(
           name = identifier.name(),
           catalog = null,
@@ -388,11 +388,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         val bucketColumnNames = bucketSpecOpt.map(_.bucketColumnNames).getOrElse(Nil)
         schemaToColumns(table.schema(), partitionColumnNames.contains, bucketColumnNames.contains)
 
-      case ResolvedPersistentView(_, _, schema, _) =>
-        schemaToColumns(schema)
+      case ResolvedPersistentView(_, _, metadata) =>
+        schemaToColumns(metadata.schema)
 
-      case ResolvedTempView(_, schema, _) =>
-        schemaToColumns(schema)
+      case ResolvedTempView(_, metadata) =>
+        schemaToColumns(metadata.schema)
 
       case _ => throw QueryCompilationErrors.tableOrViewNotFound(ident)
     }
