@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.util.QuotingUtils.quoted
  * Thrown by a catalog when an item already exists. The analyzer will rethrow the exception
  * as an [[org.apache.spark.sql.AnalysisException]] with the correct position information.
  */
-case class NonEmptyNamespaceException(
+case class NonEmptyNamespaceException private(
     override val message: String,
     override val cause: Option[Throwable] = None)
   extends AnalysisException(message, cause = cause) {

@@ -55,6 +55,15 @@ See '`<docroot>`/sql-migration-guide.html#query-engine'.
 
 Column or field `<name>` is ambiguous and has `<n>` matches.
 
+### AMBIGUOUS_COLUMN_REFERENCE
+
+[SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Column `<name>` is ambiguous. It's because you joined several DataFrame together, and some of these DataFrames are the same.
+This column points to one of the DataFrame but Spark is unable to figure out which one.
+Please alias the DataFrames with different names via `DataFrame.alias` before joining them,
+and specify the column using qualified name, e.g. `df.alias("a").join(df.alias("b"), col("a.id") > col("b.id"))`.
+
 ### AMBIGUOUS_LATERAL_COLUMN_ALIAS
 
 [SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -271,6 +280,12 @@ SQLSTATE: 58030
 
 Failed to set permissions on created path `<path>` back to `<permission>`.
 
+### CANNOT_SAVE_VARIANT
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Cannot save variant data type into external storage.
+
 ### [CANNOT_UPDATE_FIELD](sql-error-conditions-cannot-update-field-error-class.html)
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
@@ -337,6 +352,14 @@ The codec `<codecName>` is not available. Consider to set the config `<configKey
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot find a short name for the codec `<codecName>`.
+
+### [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
+
+[SQLSTATE: 54000](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
+
+Can't create array with `<numberOfElements>` elements which exceeding the array size limit `<maxRoundedArrayLength>`,
+
+For more details see [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
 
 ### COLUMN_ALIASES_IS_NOT_ALLOWED
 
@@ -436,6 +459,12 @@ DataType `<type>` requires a length parameter, for example `<type>`(10). Please 
 [SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Data source '`<provider>`' already exists in the registry. Please use a different name for the new data source.
+
+### DATA_SOURCE_NOT_EXIST
+
+[SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Data source '`<provider>`' not found. Please make sure the data source is registered.
 
 ### DATA_SOURCE_NOT_FOUND
 
@@ -651,6 +680,12 @@ No such struct field `<fieldName>` in `<fields>`.
 [SQLSTATE: 42809](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The operation `<statement>` is not allowed on the `<objectType>`: `<objectName>`.
+
+### FOUND_MULTIPLE_DATA_SOURCES
+
+[SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Detected multiple data sources with the name '`<provider>`'. Please check the data source isn't simultaneously registered and located in the classpath.
 
 ### GENERATED_COLUMN_WITH_DEFAULT_VALUE
 
@@ -1823,6 +1858,18 @@ A CREATE TABLE without explicit column list cannot specify bucketing information
 Please use the form with explicit column list and specify bucketing information.
 Alternatively, allow bucketing information to be inferred by omitting the clause.
 
+### SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED
+
+[SQLSTATE: 42908](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot specify both CLUSTER BY and CLUSTERED BY INTO BUCKETS.
+
+### SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED
+
+[SQLSTATE: 42908](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot specify both CLUSTER BY and PARTITIONED BY.
+
 ### SPECIFY_PARTITION_IS_NOT_ALLOWED
 
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1920,12 +1967,6 @@ Choose a different name, drop or replace the existing view,  or add the IF NOT E
 [SQLSTATE: 428EK](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: `<actualName>`.
-
-### TOO_MANY_ARRAY_ELEMENTS
-
-[SQLSTATE: 54000](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
-
-Cannot initialize array with `<numElements>` elements of size `<size>`.
 
 ### UDTF_ALIAS_NUMBER_MISMATCH
 
@@ -2334,3 +2375,9 @@ The operation `<operation>` requires a `<requiredType>`. But `<objectName>` is a
 The `<functionName>` requires `<expectedNum>` parameters but the actual number is `<actualNum>`.
 
 For more details see [WRONG_NUM_ARGS](sql-error-conditions-wrong-num-args-error-class.html)
+
+### XML_ROW_TAG_MISSING
+
+[SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+`<rowTag>` option is required for reading files in XML format.

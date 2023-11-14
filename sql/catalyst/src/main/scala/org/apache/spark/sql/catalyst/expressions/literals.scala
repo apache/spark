@@ -53,6 +53,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 import org.apache.spark.util.collection.ImmutableBitSet
@@ -96,6 +97,7 @@ object Literal {
       val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
       Literal(convert(a), dataType)
     case i: CalendarInterval => Literal(i, CalendarIntervalType)
+    case v: VariantVal => Literal(v, VariantType)
     case null => Literal(null, NullType)
     case v: Literal => v
     case _ =>
@@ -142,6 +144,7 @@ object Literal {
     case _ if clz == classOf[BigInt] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[CalendarInterval] => CalendarIntervalType
+    case _ if clz == classOf[VariantVal] => VariantType
 
     case _ if clz.isArray => ArrayType(componentTypeToDataType(clz.getComponentType))
 
@@ -198,7 +201,8 @@ object Literal {
     case arr: ArrayType => create(Array(), arr)
     case map: MapType => create(Map(), map)
     case struct: StructType =>
-      create(InternalRow.fromSeq(struct.fields.map(f => default(f.dataType).value)), struct)
+      create(InternalRow.fromSeq(
+        struct.fields.map(f => default(f.dataType).value).toImmutableArraySeq), struct)
     case udt: UserDefinedType[_] => Literal(default(udt.sqlType).value, udt)
     case other =>
       throw QueryExecutionErrors.noDefaultForDataTypeError(dataType)
@@ -233,6 +237,7 @@ object Literal {
         case PhysicalNullType => true
         case PhysicalShortType => v.isInstanceOf[Short]
         case PhysicalStringType => v.isInstanceOf[UTF8String]
+        case PhysicalVariantType => v.isInstanceOf[VariantVal]
         case st: PhysicalStructType =>
           v.isInstanceOf[InternalRow] && {
             val row = v.asInstanceOf[InternalRow]

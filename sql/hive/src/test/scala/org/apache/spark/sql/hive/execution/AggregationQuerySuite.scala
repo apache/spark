@@ -941,8 +941,10 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         data
           .find(r => r.getInt(0) == 50)
           .getOrElse(fail("A row with id 50 should be the expected answer."))
+
+      import org.apache.spark.util.ArrayImplicits._
       checkAnswer(
-        df.agg(udaf(allColumns: _*)),
+        df.agg(udaf(allColumns.toImmutableArraySeq: _*)),
         // udaf returns a Row as the output value.
         Row(expectedAnswer)
       )

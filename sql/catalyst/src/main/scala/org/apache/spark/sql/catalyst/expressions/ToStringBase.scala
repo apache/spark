@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.util.ArrayImplicits._
 
 trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 
@@ -221,7 +222,8 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           val row = ctx.freshVariable("row", classOf[InternalRow])
           val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
           val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
-          val writeStructCode = writeStructToStringBuilder(fields.map(_.dataType), row, buffer, ctx)
+          val writeStructCode =
+            writeStructToStringBuilder(fields.map(_.dataType).toImmutableArraySeq, row, buffer, ctx)
           code"""
              |InternalRow $row = $c;
              |$bufferClass $buffer = new $bufferClass();

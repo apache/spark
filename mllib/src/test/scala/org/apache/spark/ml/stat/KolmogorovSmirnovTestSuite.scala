@@ -26,6 +26,7 @@ import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
+import org.apache.spark.util.ArrayImplicits._
 
 class KolmogorovSmirnovTestSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -48,7 +49,7 @@ class KolmogorovSmirnovTestSuite
     // Sample data from the distributions and parallelize it
     val n = 100000
     val sampledArray = sampleDist.sample(n)
-    val sampledDF = sc.parallelize(sampledArray, 10).toDF("sample")
+    val sampledDF = sc.parallelize(sampledArray.toImmutableArraySeq, 10).toDF("sample")
 
     // Use a apache math commons local KS test to verify calculations
     val ksTest = new Math3KSTest()
@@ -60,9 +61,10 @@ class KolmogorovSmirnovTestSuite
         val cdf = (x: Double) => theoreticalDist.cumulativeProbability(x)
         KolmogorovSmirnovTest.test(sampledDF, "sample", cdf).head()
       } else {
+        import org.apache.spark.util.ArrayImplicits._
         KolmogorovSmirnovTest.test(sampledDF, "sample",
           theoreticalDistByName._1,
-          theoreticalDistByName._2: _*
+          theoreticalDistByName._2.toImmutableArraySeq: _*
         ).head()
       }
     val theoreticalDistMath3 = if (theoreticalDist == null) {
@@ -130,7 +132,7 @@ class KolmogorovSmirnovTestSuite
         -0.461702683149641, -0.555540910137444, -0.0201353678515895, -0.150382224136063,
         -0.628126755843964, 1.32322085193283, -1.52135057001199, -0.437427868856691,
         0.970577579543399, 0.0282226444247749, -0.0857821886527593, 0.389214404984942
-      )
+      ).toImmutableArraySeq
     ).toDF("sample")
     val Row(pValue: Double, statistic: Double) = KolmogorovSmirnovTest
       .test(rData, "sample", "norm", 0, 1).head()

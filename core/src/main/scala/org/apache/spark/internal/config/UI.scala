@@ -97,6 +97,12 @@ private[spark] object UI {
     .booleanConf
     .createWithDefault(true)
 
+  val UI_FLAMEGRAPH_ENABLED = ConfigBuilder("spark.ui.threadDump.flamegraphEnabled")
+    .doc("Whether to render the Flamegraph for executor thread dumps")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val UI_HEAP_HISTOGRAM_ENABLED = ConfigBuilder("spark.ui.heapHistogramEnabled")
     .version("3.5.0")
     .booleanConf

@@ -197,8 +197,10 @@ private[sql] object H2Dialect extends JdbcDialect {
           // TABLE_OR_VIEW_NOT_FOUND_1
           case 42102 =>
             val quotedName = quoteNameParts(UnresolvedAttribute.parseAttributeName(message))
-            throw new NoSuchTableException(errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-              messageParameters = Map("relationName" -> quotedName))
+            throw new NoSuchTableException(
+              errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+              messageParameters = Map("relationName" -> quotedName),
+              cause = Some(e))
           // SCHEMA_NOT_FOUND_1
           case 90079 =>
             val regex = """"((?:[^"\\]|\\[\\"ntbrf])+)"""".r

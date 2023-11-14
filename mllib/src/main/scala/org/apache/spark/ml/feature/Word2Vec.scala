@@ -31,6 +31,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils, VersionUtils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Params for [[Word2Vec]] and [[Word2VecModel]].
@@ -230,7 +231,8 @@ class Word2VecModel private[ml] (
   @Since("1.5.0")
   def findSynonyms(word: String, num: Int): DataFrame = {
     val spark = SparkSession.builder().getOrCreate()
-    spark.createDataFrame(findSynonymsArray(word, num)).toDF("word", "similarity")
+    spark.createDataFrame(findSynonymsArray(word, num).toImmutableArraySeq)
+      .toDF("word", "similarity")
   }
 
   /**
@@ -243,7 +245,8 @@ class Word2VecModel private[ml] (
   @Since("2.0.0")
   def findSynonyms(vec: Vector, num: Int): DataFrame = {
     val spark = SparkSession.builder().getOrCreate()
-    spark.createDataFrame(findSynonymsArray(vec, num)).toDF("word", "similarity")
+    spark.createDataFrame(findSynonymsArray(vec, num).toImmutableArraySeq)
+      .toDF("word", "similarity")
   }
 
   /**

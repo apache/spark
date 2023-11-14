@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.GZIP
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.execution.{FilterExec, LogicalRDD, QueryExecution, SortExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -53,6 +54,7 @@ import org.apache.spark.sql.test.SQLTestData.{ArrayStringWrapper, ContainerStrin
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -779,7 +781,7 @@ class DataFrameSuite extends QueryTest
 
   test("SPARK-36642: withMetadata: replace metadata of a column") {
     val metadata = new MetadataBuilder().putLong("key", 1L).build()
-    val df1 = sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
+    val df1 = sparkContext.parallelize(Array(1, 2, 3).toImmutableArraySeq).toDF("x")
     val df2 = df1.withMetadata("x", metadata)
     assert(df2.schema(0).metadata === metadata)
 
@@ -793,7 +795,7 @@ class DataFrameSuite extends QueryTest
   }
 
   test("replace column using withColumn") {
-    val df2 = sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
+    val df2 = sparkContext.parallelize(Array(1, 2, 3).toImmutableArraySeq).toDF("x")
     val df3 = df2.withColumn("x", df2("x") + 1)
     checkAnswer(
       df3.select("x"),
@@ -1181,8 +1183,9 @@ class DataFrameSuite extends QueryTest
   }
 
   test("summary advanced") {
+    import org.apache.spark.util.ArrayImplicits._
     val stats = Array("count", "50.01%", "max", "mean", "min", "25%")
-    val orderMatters = person2.summary(stats: _*)
+    val orderMatters = person2.summary(stats.toImmutableArraySeq: _*)
     assert(orderMatters.collect().map(_.getString(0)) === stats)
 
     val onlyPercentiles = person2.summary("0.1%", "99.9%")
@@ -2766,7 +2769,8 @@ class DataFrameSuite extends QueryTest
         // The data set has 2 partitions, so Spark will write at least 2 json files.
         // Use a non-splittable compression (gzip), to make sure the json scan RDD has at least 2
         // partitions.
-        .write.partitionBy("p").option("compression", "gzip").json(path.getCanonicalPath)
+        .write.partitionBy("p")
+        .option("compression", GZIP.lowerCaseName()).json(path.getCanonicalPath)
 
       val numJobs = new AtomicLong(0)
       sparkContext.addSparkListener(new SparkListener {

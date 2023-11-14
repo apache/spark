@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparabl
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.execution.joins.ProxyBroadcastVarAndStageIdentifier
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Physical plan node for scanning a batch of data from a data source v2.
@@ -78,7 +79,8 @@ case class BatchScanExec(
       this.proxyForPushedBroadcastVar, this.output, this.ordering)
   }
 
-  @transient override lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions()
+  @transient override lazy val inputPartitions: Seq[InputPartition] =
+    batch.planInputPartitions().toImmutableArraySeq
 
   private def initFilteredPartitions(): Unit = {
     val dataSourceFilters = runtimeFilters.flatMap {
@@ -135,12 +137,12 @@ case class BatchScanExec(
               "During runtime filtering, data source must not report new " +
                 "partition values that are not present in the original partitioning.")
           }
-          groupPartitions(newPartitions).map(_.groupedParts.map(_.parts)).
-            getOrElse(Seq.empty)
+          groupPartitions(newPartitions.toImmutableArraySeq)
+            .map(_.groupedParts.map(_.parts)).getOrElse(Seq.empty)
 
         case _ =>
           // no validation is needed as the data source did not report any specific partitioning
-          newPartitions.map(Seq(_)).toSeq
+          newPartitions.map(Seq(_)).toImmutableArraySeq
       }
       this.filteredPartitions = newGroupedPartitions
     } else {
@@ -177,10 +179,9 @@ case class BatchScanExec(
             this.initFilteredPartitions()
           }
           this.inputRDDCached =
-            if (filteredPartitions.isEmpty &&
-              outputPartitioning == SinglePartition) {
+            if (filteredPartitions.isEmpty && outputPartitioning == SinglePartition) {
               // return an empty RDD with 1 partition if dynamic filtering removed the only split
-              sparkContext.parallelize(Array.empty[InternalRow], 1)
+              sparkContext.parallelize(Array.empty[InternalRow].toImmutableArraySeq, 1)
             } else {
 
               val finalPartitions = outputPartitioning match {
@@ -192,15 +193,12 @@ case class BatchScanExec(
                   val (groupedPartitions, partExpressions) = spjParams.joinKeyPositions match {
                     case Some(projectPositions) =>
                       val projectedExpressions = projectPositions.map(i => expressions(i))
-                      val parts = filteredPartitions.flatten
-                        .groupBy(part => {
-                          val row = part.asInstanceOf[HasPartitionKey].partitionKey()
-                          val projectedRow =
-                            KeyGroupedPartitioning.project(expressions, projectPositions, row)
-                          InternalRowComparableWrapper(projectedRow, projectedExpressions)
-                        })
-                        .map { case (wrapper, splits) => (wrapper.row, splits) }
-                        .toSeq
+                      val parts = filteredPartitions.flatten.groupBy(part => {
+                        val row = part.asInstanceOf[HasPartitionKey].partitionKey()
+                        val projectedRow = KeyGroupedPartitioning.project(
+                          expressions, projectPositions, row)
+                        InternalRowComparableWrapper(projectedRow, projectedExpressions)
+                      }).map { case (wrapper, splits) => (wrapper.row, splits) }.toSeq
                       (parts, projectedExpressions)
                     case _ =>
                       val groupedParts = filteredPartitions.map(splits => {

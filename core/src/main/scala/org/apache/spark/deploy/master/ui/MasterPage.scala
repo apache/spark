@@ -98,10 +98,15 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   def render(request: HttpServletRequest): Seq[Node] = {
     val state = getMasterState
 
-    val workerHeaders = Seq("Worker Id", "Address", "State", "Cores", "Memory", "Resources")
+    val showResourceColumn = state.workers.filter(_.resourcesInfoUsed.nonEmpty).nonEmpty
+    val workerHeaders = if (showResourceColumn) {
+      Seq("Worker Id", "Address", "State", "Cores", "Memory", "Resources")
+    } else {
+      Seq("Worker Id", "Address", "State", "Cores", "Memory")
+    }
     val workers = state.workers.sortBy(_.id)
     val aliveWorkers = state.workers.filter(_.state == WorkerState.ALIVE)
-    val workerTable = UIUtils.listingTable(workerHeaders, workerRow, workers)
+    val workerTable = UIUtils.listingTable(workerHeaders, workerRow(showResourceColumn), workers)
 
     val appHeaders = Seq("Application ID", "Name", "Cores", "Memory per Executor",
       "Resources Per Executor", "Submitted Time", "User", "State", "Duration")
@@ -256,7 +261,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     UIUtils.basicSparkPage(request, content, "Spark Master at " + state.uri)
   }
 
-  private def workerRow(worker: WorkerInfo): Seq[Node] = {
+  private def workerRow(showResourceColumn: Boolean): WorkerInfo => Seq[Node] = worker => {
     <tr>
       <td>
         {
@@ -276,7 +281,9 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         {Utils.megabytesToString(worker.memory)}
         ({Utils.megabytesToString(worker.memoryUsed)} Used)
       </td>
-      <td>{formatWorkerResourcesDetails(worker)}</td>
+      {if (showResourceColumn) {
+        <td>{formatWorkerResourcesDetails(worker)}</td>
+      }}
     </tr>
   }
 

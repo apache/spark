@@ -31,6 +31,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 // For v2 DML commands, it may end up with the v1 fallback code path and need to build a DataFrame
@@ -344,7 +345,7 @@ case class WriteDelta(
   // validates row ID projection output is compatible with row ID attributes
   private def rowIdAttrsResolved: Boolean = {
     val rowIdAttrs = V2ExpressionUtils.resolveRefs[AttributeReference](
-      operation.rowId,
+      operation.rowId.toImmutableArraySeq,
       originalTable)
 
     val projectionSchema = projections.rowIdProjection.schema
@@ -358,7 +359,7 @@ case class WriteDelta(
     projections.metadataProjection match {
       case Some(projection) =>
         val metadataAttrs = V2ExpressionUtils.resolveRefs[AttributeReference](
-          operation.requiredMetadataAttributes,
+          operation.requiredMetadataAttributes.toImmutableArraySeq,
           originalTable)
 
         val projectionSchema = projection.schema
@@ -406,7 +407,8 @@ trait V2CreateTableAsSelectPlan
     // the table schema is created from the query schema, so the only resolution needed is to check
     // that the columns referenced by the table's partitioning exist in the query schema
     val references = partitioning.flatMap(_.references).toSet
-    references.map(_.fieldNames).forall(query.schema.findNestedField(_).isDefined)
+    references.map(_.fieldNames.toImmutableArraySeq)
+      .forall(query.schema.findNestedField(_).isDefined)
   }
 
   override def childrenToAnalyze: Seq[LogicalPlan] = Seq(name, query)

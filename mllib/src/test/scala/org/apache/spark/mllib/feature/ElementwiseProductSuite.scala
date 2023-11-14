@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.ArrayImplicits._
 
 class ElementwiseProductSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -30,7 +31,7 @@ class ElementwiseProductSuite extends SparkFunSuite with MLlibTestSparkContext {
     )
     val scalingVec = Vectors.dense(2.0, 0.5, 0.0, 0.25)
     val transformer = new ElementwiseProduct(scalingVec)
-    val transformedData = transformer.transform(sc.makeRDD(denseData))
+    val transformedData = transformer.transform(sc.makeRDD(denseData.toImmutableArraySeq))
     val transformedVecs = transformedData.collect()
     val transformedVec = transformedVecs(0)
     val expectedVec = Vectors.dense(2.0, 2.0, 0.0, -2.25)
@@ -42,7 +43,7 @@ class ElementwiseProductSuite extends SparkFunSuite with MLlibTestSparkContext {
     val sparseData = Array(
       Vectors.sparse(3, Seq((1, -1.0), (2, -3.0)))
     )
-    val dataRDD = sc.parallelize(sparseData, 3)
+    val dataRDD = sc.parallelize(sparseData.toImmutableArraySeq, 3)
     val scalingVec = Vectors.dense(1.0, 0.0, 0.5)
     val transformer = new ElementwiseProduct(scalingVec)
     val data2 = sparseData.map(transformer.transform)

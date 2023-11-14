@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.python
 import java.io.{DataInputStream, DataOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
-import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.Pickler
 
@@ -28,9 +27,10 @@ import org.apache.spark.api.python.{PythonFunction, PythonWorkerUtils, SimplePyt
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, PythonDataSource}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A user-defined Python data source. This is used by the Python API.
@@ -44,7 +44,7 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       provider: String,
       paths: Seq[String],
       userSpecifiedSchema: Option[StructType],
-      options: CaseInsensitiveStringMap): LogicalPlan = {
+      options: CaseInsensitiveMap[String]): LogicalPlan = {
 
     val runner = new UserDefinedPythonDataSourceRunner(
       dataSourceCls, provider, paths, userSpecifiedSchema, options)
@@ -53,7 +53,7 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
     val pickledDataSourceInstance = result.dataSource
 
     val dataSource = SimplePythonFunction(
-      command = pickledDataSourceInstance,
+      command = pickledDataSourceInstance.toImmutableArraySeq,
       envVars = dataSourceCls.envVars,
       pythonIncludes = dataSourceCls.pythonIncludes,
       pythonExec = dataSourceCls.pythonExec,
@@ -70,7 +70,7 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       provider: String,
       paths: Seq[String] = Seq.empty,
       userSpecifiedSchema: Option[StructType] = None,
-      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty): DataFrame = {
+      options: CaseInsensitiveMap[String] = CaseInsensitiveMap(Map.empty)): DataFrame = {
     val plan = builder(sparkSession, provider, paths, userSpecifiedSchema, options)
     Dataset.ofRows(sparkSession, plan)
   }
@@ -91,7 +91,7 @@ class UserDefinedPythonDataSourceRunner(
     provider: String,
     paths: Seq[String],
     userSpecifiedSchema: Option[StructType],
-    options: CaseInsensitiveStringMap)
+    options: CaseInsensitiveMap[String])
   extends PythonPlannerRunner[PythonDataSourceCreationResult](dataSourceCls) {
 
   override val workerModule = "pyspark.sql.worker.create_data_source"
@@ -113,9 +113,9 @@ class UserDefinedPythonDataSourceRunner(
 
     // Send the options
     dataOut.writeInt(options.size)
-    options.entrySet.asScala.foreach { e =>
-      PythonWorkerUtils.writeUTF(e.getKey, dataOut)
-      PythonWorkerUtils.writeUTF(e.getValue, dataOut)
+    options.iterator.foreach { case (key, value) =>
+      PythonWorkerUtils.writeUTF(key, dataOut)
+      PythonWorkerUtils.writeUTF(value, dataOut)
     }
   }
 

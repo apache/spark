@@ -34,6 +34,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
@@ -1541,7 +1542,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
- val V2_BUCKETING_SHUFFLE_ENABLED =
+  val V2_BUCKETING_SHUFFLE_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.shuffle.enabled")
       .doc("During a storage-partitioned join, whether to allow to shuffle only one side." +
         "When only one side is KeyGroupedPartitioning, if the conditions are met, spark will " +
@@ -1551,7 +1552,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS =
+   val V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS =
     buildConf("spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys.enabled")
       .doc("Whether to allow storage-partition join in the case where join keys are" +
         "a subset of the partition keys of the source tables. At planning time, " +
@@ -2034,7 +2035,7 @@ object SQLConf {
         "use fully qualified class names to specify the codec. Default codec is lz4.")
       .version("3.1.0")
       .stringConf
-      .createWithDefault("lz4")
+      .createWithDefault(CompressionCodec.LZ4)
 
   val CHECKPOINT_RENAMEDFILE_CHECK_ENABLED =
     buildConf("spark.sql.streaming.checkpoint.renamedFileCheck.enabled")
@@ -2700,6 +2701,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val UPDATE_PART_STATS_IN_ANALYZE_TABLE_ENABLED =
+    buildConf("spark.sql.statistics.updatePartitionStatsInAnalyzeTable.enabled")
+      .doc("When this config is enabled, Spark will also update partition statistics in analyze " +
+        "table command (i.e., ANALYZE TABLE .. COMPUTE STATISTICS [NOSCAN]). Note the command " +
+        "will also become more expensive. When this config is disabled, Spark will only " +
+        "update table level statistics.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val CBO_ENABLED =
     buildConf("spark.sql.cbo.enabled")
       .doc("Enables CBO for estimation of plan statistics when set true.")
@@ -2935,6 +2946,14 @@ object SQLConf {
       .booleanConf
       // show full stacktrace in tests but hide in production by default.
       .createWithDefault(Utils.isTesting)
+
+  val PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED =
+    buildConf("spark.sql.execution.pyspark.udf.faulthandler.enabled")
+      .doc(
+        s"Same as ${Python.PYTHON_WORKER_FAULTHANLDER_ENABLED.key} for Python execution with " +
+        "DataFrame and SQL. It can change during runtime.")
+      .version("4.0.0")
+      .fallbackConf(Python.PYTHON_WORKER_FAULTHANLDER_ENABLED)
 
   val ARROW_SPARKR_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.sparkr.enabled")
@@ -5141,6 +5160,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def autoSizeUpdateEnabled: Boolean = getConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED)
 
+  def updatePartStatsInAnalyzeTableEnabled: Boolean =
+    getConf(SQLConf.UPDATE_PART_STATS_IN_ANALYZE_TABLE_ENABLED)
+
   def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
 
   def joinReorderDPThreshold: Int = getConf(SQLConf.JOIN_REORDER_DP_THRESHOLD)
@@ -5204,6 +5226,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def arrowPySparkSelfDestructEnabled: Boolean = getConf(ARROW_PYSPARK_SELF_DESTRUCT_ENABLED)
 
   def pysparkJVMStacktraceEnabled: Boolean = getConf(PYSPARK_JVM_STACKTRACE_ENABLED)
+
+  def pythonUDFWorkerFaulthandlerEnabled: Boolean = getConf(PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED)
 
   def arrowSparkREnabled: Boolean = getConf(ARROW_SPARKR_EXECUTION_ENABLED)
 

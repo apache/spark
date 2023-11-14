@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils
 import org.apache.spark.util.random.RandomSampler
 
@@ -104,7 +105,8 @@ object Project {
 
   def matchSchema(plan: LogicalPlan, schema: StructType, conf: SQLConf): Project = {
     assert(plan.resolved)
-    val projectList = reorderFields(plan.output.map(a => (a.name, a)), schema.fields, Nil, conf)
+    val projectList =
+      reorderFields(plan.output.map(a => (a.name, a)), schema.fields.toImmutableArraySeq, Nil, conf)
     Project(projectList, plan)
   }
 
@@ -126,8 +128,8 @@ object Project {
             } else {
               (f.name, GetStructField(col, index))
             }
-          },
-          expected.fields,
+          }.toImmutableArraySeq,
+          expected.fields.toImmutableArraySeq,
           columnPath,
           conf)
         if (col.nullable) {
@@ -234,6 +236,20 @@ object Project {
         }
     }
   }
+}
+
+case class DataFrameDropColumns(dropList: Seq[Expression], child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = Nil
+
+  override def maxRows: Option[Long] = child.maxRows
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(DF_DROP_COLUMNS)
+
+  override lazy val resolved: Boolean = false
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): DataFrameDropColumns =
+    copy(child = newChild)
 }
 
 /**

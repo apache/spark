@@ -35,6 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 trait RocksDBStateStoreChangelogCheckpointingTestUtil {
   val rocksdbChangelogCheckpointingConfKey: String = RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX +
@@ -48,6 +49,7 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
       .map(_.getName.stripSuffix(".zip"))
       .map(_.toLong)
       .sorted
+      .toImmutableArraySeq
   }
 
   def changelogVersionsPresent(dir: File): Seq[Long] = {
@@ -55,6 +57,7 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
       .map(_.getName.stripSuffix(".changelog"))
       .map(_.toLong)
       .sorted
+      .toImmutableArraySeq
   }
 }
 
@@ -1307,6 +1310,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   def listFiles(file: File): Seq[File] = {
     if (!file.exists()) return Seq.empty
     file.listFiles.filter(file => !file.getName.endsWith("crc") && !file.isDirectory)
+      .toImmutableArraySeq
   }
 
   def listFiles(file: String): Seq[File] = listFiles(new File(file))

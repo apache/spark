@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, ByteType, IntegerType, LongType}
+import org.apache.spark.util.ArrayImplicits._
 
 class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   val attribute = attr("key")
@@ -268,7 +269,8 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
 
   test("command should report a dummy stats") {
     val plan = CommentOnNamespace(
-      ResolvedNamespace(mock(classOf[SupportsNamespaces]), Array("ns")), "comment")
+      ResolvedNamespace(mock(classOf[SupportsNamespaces]),
+        Array("ns").toImmutableArraySeq), "comment")
     checkStats(
       plan,
       expectedStatsCboOn = Statistics.DUMMY,
