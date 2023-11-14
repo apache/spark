@@ -187,9 +187,9 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     if (!closed) {
       try {
         it.close();
+      } finally {
         closed = true;
         next = null;
-      } finally {
         cancelResourceClean();
       }
     }
