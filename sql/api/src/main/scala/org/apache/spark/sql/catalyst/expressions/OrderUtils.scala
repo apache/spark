@@ -25,6 +25,7 @@ object OrderUtils {
   def isOrderable(dataType: DataType): Boolean = dataType match {
     case NullType => true
     case dt: AtomicType => true
+    case _: CalendarIntervalType => true
     case struct: StructType => struct.fields.forall(f => isOrderable(f.dataType))
     case array: ArrayType => isOrderable(array.elementType)
     case udt: UserDefinedType[_] => isOrderable(udt.sqlType)
