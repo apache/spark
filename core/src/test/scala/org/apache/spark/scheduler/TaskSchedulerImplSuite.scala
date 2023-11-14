@@ -2299,87 +2299,218 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     resources.map { case (k, v) => k -> (v * RESOURCE_TOTAL_AMOUNT).toLong }
   }
 
-  Seq(0.51, 0.6, 0.7, 0.8, 0.9, 1.0).foreach { gpuTaskAmount =>
-    test(s"SPARK-45527 default rp with task.gpu.amount=${gpuTaskAmount} can " +
-      s"restrict each task takes 1 gpu exclusively in the same executor") {
-      val taskCpus = 1
-      val executorCpus = 1000 // cpu will not limit the concurrent tasks number
-      val executorGpus = 1
+  // 1 executor with 4 GPUS
+  Seq(true, false).foreach { barrierMode =>
+    val barrier = if (barrierMode) "barrier" else ""
+    (1 to 20).foreach { taskNum =>
+      val gpuTaskAmount = (RESOURCE_TOTAL_AMOUNT / taskNum).toDouble / RESOURCE_TOTAL_AMOUNT
+      test(s"SPARK-45527 default rp with task.gpu.amount=${gpuTaskAmount} can " +
+        s"restrict $taskNum $barrier tasks run in the same executor") {
+        val taskCpus = 1
+        val executorCpus = 100 // cpu will not limit the concurrent tasks number
+        val executorGpus = 1
 
-      val taskScheduler = setupScheduler(numCores = executorCpus,
-        config.CPUS_PER_TASK.key -> taskCpus.toString,
-        TASK_GPU_ID.amountConf -> gpuTaskAmount.toString,
-        EXECUTOR_GPU_ID.amountConf -> executorGpus.toString,
-        config.EXECUTOR_CORES.key -> executorCpus.toString)
+        val taskScheduler = setupScheduler(numCores = executorCpus,
+          config.CPUS_PER_TASK.key -> taskCpus.toString,
+          TASK_GPU_ID.amountConf -> gpuTaskAmount.toString,
+          EXECUTOR_GPU_ID.amountConf -> executorGpus.toString,
+          config.EXECUTOR_CORES.key -> executorCpus.toString)
 
-      val taskSet = FakeTask.createTaskSet(100)
+        val taskSet = if (barrierMode) {
+          FakeTask.createTaskSet(100)
+        } else {
+          FakeTask.createBarrierTaskSet(4 * taskNum)
+        }
 
-      val resources = new ExecutorResourcesAmounts(
-        Map(GPU -> convertMapDoubleToLong(Map("0" -> 1.0, "1" -> 1.0, "2" -> 1.0, "3" -> 1.0))))
+        val resources = new ExecutorResourcesAmounts(
+          Map(GPU -> convertMapDoubleToLong(Map("0" -> 1.0, "1" -> 1.0, "2" -> 1.0, "3" -> 1.0))))
 
-      val workerOffers =
-        IndexedSeq(new WorkerOffer("executor0", "host0", executorCpus, None, resources))
+        val workerOffers =
+          IndexedSeq(WorkerOffer("executor0", "host0", executorCpus, Some("host0"), resources))
 
-      taskScheduler.submitTasks(taskSet)
-      // Launch tasks on executor that satisfies resource requirements.
-      val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
-      assert(4 === taskDescriptions.length)
-      assert(!failedTaskSet)
-      assert(ArrayBuffer("0") === taskDescriptions(0).resources.get(GPU).get.keys.toArray.sorted)
-      assert(ArrayBuffer("1") === taskDescriptions(1).resources.get(GPU).get.keys.toArray.sorted)
-      assert(ArrayBuffer("2") === taskDescriptions(2).resources.get(GPU).get.keys.toArray.sorted)
-      assert(ArrayBuffer("3") === taskDescriptions(3).resources.get(GPU).get.keys.toArray.sorted)
+        taskScheduler.submitTasks(taskSet)
+        // Launch tasks on executor that satisfies resource requirements.
+        val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+        assert(4 * taskNum === taskDescriptions.length)
+        assert(!failedTaskSet)
+        var gpuAddress = -1
+        for (taskId <- 0 until 4 * taskNum) {
+          if (taskId % taskNum == 0) {
+            gpuAddress += 1
+          }
+          assert(ArrayBuffer(gpuAddress.toString) ===
+            taskDescriptions(taskId).resources.get(GPU).get.keys.toArray.sorted)
+        }
+      }
     }
   }
 
+  // 4 executors, each of which has 1 GPU
+  Seq(true, false).foreach { barrierMode =>
+    val barrier = if (barrierMode) "barrier" else ""
+    (1 to 20).foreach { taskNum =>
+      val gpuTaskAmount = (RESOURCE_TOTAL_AMOUNT / taskNum).toDouble / RESOURCE_TOTAL_AMOUNT
+      test(s"SPARK-45527 default rp with task.gpu.amount=${gpuTaskAmount} can " +
+        s"restrict $taskNum $barrier tasks run on the different executor") {
+        val taskCpus = 1
+        val executorCpus = 100 // cpu will not limit the concurrent tasks number
+        val executorGpus = 1
 
-  Seq(0.51, 0.6, 0.7, 0.8, 0.9, 1.0).foreach { gpuTaskAmount =>
-    test(s"SPARK-45527 default rp with task.gpu.amount=${gpuTaskAmount} can " +
-      s"restrict only 1 task will run on each executor") {
-      val taskCpus = 1
-      val executorCpus = 1000 // cpu will not limit the concurrent tasks number
-      val executorGpus = 1
+        val taskScheduler = setupScheduler(numCores = executorCpus,
+          config.CPUS_PER_TASK.key -> taskCpus.toString,
+          TASK_GPU_ID.amountConf -> gpuTaskAmount.toString,
+          EXECUTOR_GPU_ID.amountConf -> executorGpus.toString,
+          config.EXECUTOR_CORES.key -> executorCpus.toString)
 
-      val taskScheduler = setupScheduler(numCores = executorCpus,
-        config.CPUS_PER_TASK.key -> taskCpus.toString,
-        TASK_GPU_ID.amountConf -> gpuTaskAmount.toString,
-        EXECUTOR_GPU_ID.amountConf -> executorGpus.toString,
-        config.EXECUTOR_CORES.key -> executorCpus.toString)
+        val taskSet = if (barrierMode) {
+          FakeTask.createTaskSet(100)
+        } else {
+          FakeTask.createBarrierTaskSet(4 * taskNum)
+        }
 
-      val taskSet = FakeTask.createTaskSet(100)
+        val workerOffers =
+          IndexedSeq(
+            WorkerOffer("executor0", "host0", executorCpus, Some("host0"),
+              new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("0" -> 1.0))))),
+            WorkerOffer("executor1", "host1", executorCpus, Some("host1"),
+              new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("1" -> 1.0))))),
+            WorkerOffer("executor2", "host2", executorCpus, Some("host2"),
+              new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("2" -> 1.0))))),
+            WorkerOffer("executor3", "host3", executorCpus, Some("host3"),
+              new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("3" -> 1.0))))))
 
-      val workerOffers =
-        IndexedSeq(
-          new WorkerOffer("executor0", "host0", executorCpus, None,
-            new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("0" -> 1.0))))),
-          new WorkerOffer("executor1", "host1", executorCpus, None,
-            new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("7" -> 1.0))))),
-          new WorkerOffer("executor2", "host2", executorCpus, None,
-            new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("9" -> 1.0))))),
-          new WorkerOffer("executor3", "host3", executorCpus, None,
-            new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("20" -> 1.0))))))
+        taskScheduler.submitTasks(taskSet)
+        // Launch tasks on executor that satisfies resource requirements
 
-      taskScheduler.submitTasks(taskSet)
-      // Launch tasks on executor that satisfies resource requirements.
-      val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
-      assert(4 === taskDescriptions.length)
-      assert(!failedTaskSet)
-
-      val assignedExecutorsGpus = ArrayBuffer[(String, String)]()
-      for (tDesc <- taskDescriptions) {
-        assert(tDesc.resources.contains(GPU))
-        assert(tDesc.resources.get(GPU).get.keys.size == 1)
-        val address = tDesc.resources.get(GPU).get.keys.toArray.sorted
-        assignedExecutorsGpus.append((tDesc.executorId, address(0)))
+        val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+        assert(4 * taskNum === taskDescriptions.length)
+        assert(!failedTaskSet)
+        val assignedGpus: HashMap[String, Int] = HashMap.empty
+        for (taskId <- 0 until 4 * taskNum) {
+          val gpus = taskDescriptions(taskId).resources.get(GPU).get.keys.toArray.sorted
+          assert(gpus.length == 1)
+          val addr = gpus(0)
+          if (!assignedGpus.contains(addr)) {
+            assignedGpus(addr) = 1
+          } else {
+            assignedGpus(addr) += 1
+          }
+        }
+        assert(assignedGpus.toMap ===
+          Map("0" -> taskNum, "1" -> taskNum, "2" -> taskNum, "3" -> taskNum))
       }
+    }
+  }
 
-      assert(assignedExecutorsGpus.sorted sameElements
-        ArrayBuffer(
-          ("executor0", "0"),
-          ("executor1", "7"),
-          ("executor2", "9"),
-          ("executor3", "20")
-        ))
+  // 1 executor with 4 GPUS
+  Seq(true, false).foreach { barrierMode =>
+    val barrier = if (barrierMode) "barrier" else ""
+    (1 to 20).foreach { taskNum =>
+      val gpuTaskAmount = (RESOURCE_TOTAL_AMOUNT / taskNum).toDouble / RESOURCE_TOTAL_AMOUNT
+      test(s"SPARK-45527 TaskResourceProfile with task.gpu.amount=${gpuTaskAmount} can " +
+        s"restrict $taskNum $barrier tasks run in the same executor") {
+        val executorCpus = 100 // cpu will not limit the concurrent tasks number
+
+        val taskScheduler = setupScheduler(numCores = executorCpus,
+          config.CPUS_PER_TASK.key -> "1",
+          TASK_GPU_ID.amountConf -> "0.1",
+          EXECUTOR_GPU_ID.amountConf -> "4",
+          config.EXECUTOR_CORES.key -> executorCpus.toString)
+
+        val treqs = new TaskResourceRequests().cpus(1).resource(GPU, gpuTaskAmount)
+        val rp = new TaskResourceProfile(treqs.requests)
+        taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
+
+        val taskSet = if (barrierMode) {
+          FakeTask.createTaskSet(100, 0, 1, 1, rp.id)
+        } else {
+          FakeTask.createBarrierTaskSet(4 * taskNum, 0, 1, 1, rp.id)
+        }
+        val resources = new ExecutorResourcesAmounts(
+          Map(GPU -> convertMapDoubleToLong(Map("0" -> 1.0, "1" -> 1.0, "2" -> 1.0, "3" -> 1.0))))
+
+        val workerOffers = IndexedSeq(
+          WorkerOffer("executor0", "host0", executorCpus, Some("host0"), resources, rp.id)
+        )
+
+        taskScheduler.submitTasks(taskSet)
+        // Launch tasks on executor that satisfies resource requirements.
+        val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+        assert(4 * taskNum === taskDescriptions.length)
+        assert(!failedTaskSet)
+        var gpuAddress = -1
+        for (taskId <- 0 until 4 * taskNum) {
+          if (taskId % taskNum == 0) {
+            gpuAddress += 1
+          }
+          assert(ArrayBuffer(gpuAddress.toString) ===
+            taskDescriptions(taskId).resources.get(GPU).get.keys.toArray.sorted)
+        }
+      }
+    }
+  }
+
+  // 4 executors, each of which has 1 GPU
+  Seq(true, false).foreach { barrierMode =>
+    val barrier = if (barrierMode) "barrier" else ""
+    (1 to 20).foreach { taskNum =>
+      val gpuTaskAmount = (RESOURCE_TOTAL_AMOUNT / taskNum).toDouble / RESOURCE_TOTAL_AMOUNT
+      test(s"SPARK-45527 TaskResourceProfile with task.gpu.amount=${gpuTaskAmount} can " +
+        s"restrict $taskNum $barrier tasks run on the different executor") {
+        val executorCpus = 100 // cpu will not limit the concurrent tasks number
+
+        val taskScheduler = setupScheduler(numCores = executorCpus,
+          config.CPUS_PER_TASK.key -> "1",
+          TASK_GPU_ID.amountConf -> "0.1",
+          EXECUTOR_GPU_ID.amountConf -> "1",
+          config.EXECUTOR_CORES.key -> executorCpus.toString)
+
+        val treqs = new TaskResourceRequests().cpus(1).resource(GPU, gpuTaskAmount)
+        val rp = new TaskResourceProfile(treqs.requests)
+        taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
+
+        val taskSet = if (barrierMode) {
+          FakeTask.createTaskSet(100, 0, 1, 1, rp.id)
+        } else {
+          FakeTask.createBarrierTaskSet(4 * taskNum, 0, 1, 1, rp.id)
+        }
+
+        val workerOffers =
+          IndexedSeq(
+            WorkerOffer("executor0", "host0", executorCpus, Some("host1"),
+              new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("0" -> 1.0)))),
+              rp.id),
+            WorkerOffer("executor1", "host1", executorCpus, Some("host2"),
+              new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("1" -> 1.0)))),
+              rp.id),
+            WorkerOffer("executor2", "host2", executorCpus, Some("host3"),
+              new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("2" -> 1.0)))),
+              rp.id),
+            WorkerOffer("executor3", "host3", executorCpus, Some("host4"),
+              new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("3" -> 1.0)))),
+              rp.id)
+          )
+
+        taskScheduler.submitTasks(taskSet)
+        // Launch tasks on executor that satisfies resource requirements
+
+        val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+        assert(4 * taskNum === taskDescriptions.length)
+        assert(!failedTaskSet)
+        val assignedGpus: HashMap[String, Int] = HashMap.empty
+        for (taskId <- 0 until 4 * taskNum) {
+          val gpus = taskDescriptions(taskId).resources.get(GPU).get.keys.toArray.sorted
+          assert(gpus.length == 1)
+          val addr = gpus(0)
+          if (!assignedGpus.contains(addr)) {
+            assignedGpus(addr) = 1
+          } else {
+            assignedGpus(addr) += 1
+          }
+        }
+        assert(assignedGpus.toMap ===
+          Map("0" -> taskNum, "1" -> taskNum, "2" -> taskNum, "3" -> taskNum))
+      }
     }
   }
 
@@ -2516,7 +2647,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
   }
 
   test("SPARK-45527 TaskResourceProfile: the left multiple gpu resources on 1 executor " +
-    "can't assign to other taskset due to no enough gpu resource") {
+    "can't assign to other taskset due to not enough gpu resource") {
     val taskCpus = 1
     val taskGpus = 0.4
     val executorGpus = 4
@@ -2581,62 +2712,5 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     taskScheduler.submitTasks(attempt1)
     val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
     assert(3 === taskDescriptions.length)
-  }
-
-  Seq(0.51, 0.6, 0.7, 0.8, 0.9, 1.0).foreach { gpuTaskAmount => {
-    test(s"SPARK-45527 schedule tasks for a barrier taskSet if all tasks can be launched " +
-      s"together diff ResourceProfile with task.gpu.amount: ${gpuTaskAmount}, " +
-      s"but not enough gpus") {
-      val taskCpus = 1
-      val taskScheduler = setupSchedulerWithMaster(
-        s"local[$taskCpus]", config.CPUS_PER_TASK.key -> taskCpus.toString)
-      val execReqs = new ExecutorResourceRequests().cores(100).resource("gpu", 2)
-      val taskReqs = new TaskResourceRequests().cpus(1).resource("gpu", gpuTaskAmount)
-      val rp = new ResourceProfile(execReqs.requests, taskReqs.requests)
-      taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
-
-      val numFreeCores = 100
-      // make each of the worker offers only have 1 GPU, thus making it not enough
-      val workerOffers = IndexedSeq(
-        new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625"),
-          Map("gpu" -> Seq("0").toBuffer), rp.id),
-        new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627"),
-          Map("gpu" -> Seq("0").toBuffer), rp.id))
-      val attempt1 = FakeTask.createBarrierTaskSet(3, rpId = rp.id)
-
-      taskScheduler.submitTasks(attempt1)
-      val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
-      assert(0 === taskDescriptions.length)
-    }
-  }
-  }
-
-  Seq(0.51, 0.6, 0.7, 0.8, 0.9, 1.0).foreach { gpuTaskAmount => {
-    test(s"SPARK-45527 schedule tasks for a barrier taskSet if all tasks can be launched " +
-      s"together diff ResourceProfile with task.gpu.amount: ${gpuTaskAmount}") {
-      val taskCpus = 1
-      val taskScheduler = setupSchedulerWithMaster(
-        s"local[$taskCpus]", config.CPUS_PER_TASK.key -> taskCpus.toString)
-      val execReqs = new ExecutorResourceRequests().cores(100).resource("gpu", 2)
-      val taskReqs = new TaskResourceRequests().cpus(1).resource("gpu", gpuTaskAmount)
-      val rp = new ResourceProfile(execReqs.requests, taskReqs.requests)
-      taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
-
-      val numFreeCores = 100
-      // make each of the worker offers only have 1 GPU, thus making it not enough
-      val workerOffers = IndexedSeq(
-        new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625"),
-          Map("gpu" -> Seq("0").toBuffer), rp.id),
-        new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627"),
-          Map("gpu" -> Seq("0").toBuffer), rp.id),
-        new WorkerOffer("executor2", "host2", numFreeCores, Some("192.168.0.101:49628"),
-          Map("gpu" -> Seq("0").toBuffer), rp.id))
-      val attempt1 = FakeTask.createBarrierTaskSet(3, rpId = rp.id)
-
-      taskScheduler.submitTasks(attempt1)
-      val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
-      assert(3 === taskDescriptions.length)
-    }
-  }
   }
 }
