@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.datasources.xml
 import java.io.StringReader
 
 import scala.jdk.CollectionConverters._
-import scala.xml.InputSource
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.shaded.org.jline.utils.InputStreamReader
 import org.apache.ws.commons.schema._
 import org.apache.ws.commons.schema.constants.Constants
 
@@ -59,7 +59,7 @@ object XSDToSchema {
         fs.open(new Path(addFileUrl))
     }
     val xmlSchemaCollection = new XmlSchemaCollection()
-    val xmlSchema = xmlSchemaCollection.read(new InputSource(in))
+    val xmlSchema = xmlSchemaCollection.read(new InputStreamReader(in))
     xmlSchemaCollection.setBaseUri(xsdPath.getParent.toString)
     getStructType(xmlSchema)
   }
