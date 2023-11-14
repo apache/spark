@@ -380,22 +380,59 @@ class DataFrameReader(OptionUtils):
 
         Examples
         --------
-        Write a DataFrame into a JSON file and read it back.
+        Example 1: Write a DataFrame into a JSON file and read it back.
 
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory() as d:
         ...     # Write a DataFrame into a JSON file
         ...     spark.createDataFrame(
-        ...         [{"age": 100, "name": "Hyukjin Kwon"}]
+        ...         [{"age": 100, "name": "Hyukjin"}]
         ...     ).write.mode("overwrite").format("json").save(d)
         ...
         ...     # Read the JSON file as a DataFrame.
         ...     spark.read.json(d).show()
-        +---+------------+
-        |age|        name|
-        +---+------------+
-        |100|Hyukjin Kwon|
-        +---+------------+
+        +---+-------+
+        |age|   name|
+        +---+-------+
+        |100|Hyukjin|
+        +---+-------+
+
+        Example 2: Read JSON from multiple files in a directory
+
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d1, tempfile.TemporaryDirectory() as d2:
+        ...     # Write a DataFrame into a JSON file
+        ...     spark.createDataFrame(
+        ...         [{"age": 30, "name": "Bob"}]
+        ...     ).write.mode("overwrite").format("json").save(d1)
+        ...
+        ...     # Read the JSON files as a DataFrame.
+        ...     spark.createDataFrame(
+        ...         [{"age": 25, "name": "Alice"}]
+        ...     ).write.mode("overwrite").format("json").save(d2)
+        ...     spark.read.json([d1, d2]).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 25|Alice|
+        | 30|  Bob|
+        +---+-----+
+
+        Example 3: Read JSON with a custom schema
+
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     # Write a DataFrame into a JSON file
+        ...     spark.createDataFrame(
+        ...        [{"age": 30, "name": "Bob"}]
+        ...     ).write.mode("overwrite").format("json").save(d)
+        ...     custom_schema = "name STRING, age INT"
+        ...     spark.read.json(d, schema=custom_schema).show()
+        +----+---+
+        |name|age|
+        +----+---+
+        | Bob| 30|
+        +----+---+
         """
         self._set_opts(
             schema=schema,

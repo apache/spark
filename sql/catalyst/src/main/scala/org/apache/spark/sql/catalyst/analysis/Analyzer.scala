@@ -57,6 +57,7 @@ import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A trivial [[Analyzer]] with a dummy [[SessionCatalog]] and
@@ -303,6 +304,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
       ResolveOutputRelation ::
+      new ResolveDataFrameDropColumns(catalogManager) ::
       new ResolveSetVariable(catalogManager) ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
@@ -1347,7 +1349,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       table.partitioning.flatMap {
         case IdentityTransform(FieldReference(Seq(name))) => Some(name)
         case _ => None
-      }
+      }.toImmutableArraySeq
     }
 
     private def validatePartitionSpec(
@@ -2033,7 +2035,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             f
           } else {
             val CatalogAndIdentifier(catalog, ident) = expandIdentifier(nameParts)
-            val fullName = normalizeFuncName(catalog.name +: ident.namespace :+ ident.name)
+            val fullName =
+              normalizeFuncName((catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
             if (externalFunctionNameSet.contains(fullName)) {
               f
             } else if (catalog.asFunctionCatalog.functionExists(ident)) {
@@ -2086,7 +2089,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           val fullName = catalog.name +: ident.namespace :+ ident.name
           CatalogV2Util.loadFunction(catalog, ident).map { func =>
             ResolvedPersistentFunc(catalog.asFunctionCatalog, ident, func)
-          }.getOrElse(u.copy(possibleQualifiedName = Some(fullName)))
+          }.getOrElse(u.copy(possibleQualifiedName = Some(fullName.toImmutableArraySeq)))
         }
 
       // Resolve table-valued function references.

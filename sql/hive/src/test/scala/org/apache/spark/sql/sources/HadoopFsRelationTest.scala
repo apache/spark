@@ -34,6 +34,7 @@ import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 
 abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with TestHiveSingleton {
@@ -607,7 +608,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       require(dir.listFiles().exists(!_.isDirectory))
       require(subdir.exists())
       require(subdir.listFiles().exists(!_.isDirectory))
-      testWithPath(dir, dataInDir.collect())
+      testWithPath(dir, dataInDir.collect().toImmutableArraySeq)
     }
   }
 

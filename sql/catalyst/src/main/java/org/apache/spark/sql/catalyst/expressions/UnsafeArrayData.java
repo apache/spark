@@ -38,6 +38,7 @@ import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.unsafe.types.VariantVal;
 
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 
@@ -229,6 +230,12 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
     final int days = Platform.getInt(baseObject, baseOffset + offset + 4);
     final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
     return new CalendarInterval(months, days, microseconds);
+  }
+
+  @Override
+  public VariantVal getVariant(int ordinal) {
+    if (isNullAt(ordinal)) return null;
+    return VariantVal.readFromUnsafeRow(getLong(ordinal), baseObject, baseOffset);
   }
 
   @Override

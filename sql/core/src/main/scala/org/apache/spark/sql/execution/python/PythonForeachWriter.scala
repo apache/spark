@@ -92,6 +92,10 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
       override val pythonExec: String =
         SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
           funcs.head.funcs.head.pythonExec)
+
+      override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
+
+      override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
     }
   }
 

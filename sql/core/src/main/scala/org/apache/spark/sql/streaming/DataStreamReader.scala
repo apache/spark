@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.json.JsonUtils.checkJsonSchema
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2}
+import org.apache.spark.sql.execution.datasources.xml.XmlUtils.checkXmlSchema
 import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.types.StructType
@@ -278,7 +279,10 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *
    * @since 4.0.0
    */
-  def xml(path: String): DataFrame = format("xml").load(path)
+  def xml(path: String): DataFrame = {
+    userSpecifiedSchema.foreach(checkXmlSchema)
+    format("xml").load(path)
+  }
 
   /**
    * Loads a ORC file stream, returning the result as a `DataFrame`.

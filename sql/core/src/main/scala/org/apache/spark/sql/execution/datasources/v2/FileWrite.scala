@@ -37,6 +37,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SerializableConfiguration
 
 trait FileWrite extends Write {
@@ -91,7 +92,8 @@ trait FileWrite extends Write {
         s"got: ${paths.mkString(", ")}")
     }
     val pathName = paths.head
-    SchemaUtils.checkColumnNameDuplication(schema.fields.map(_.name), caseSensitiveAnalysis)
+    SchemaUtils.checkColumnNameDuplication(
+      schema.fields.map(_.name).toImmutableArraySeq, caseSensitiveAnalysis)
     DataSource.validateSchema(schema, sqlConf)
 
     // TODO: [SPARK-36340] Unify check schema filed of DataSource V2 Insert.

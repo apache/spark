@@ -201,7 +201,9 @@ private[connect] class SparkConnectAnalyzeHandler(
       case other => throw InvalidPlanInput(s"Unknown Analyze Method $other!")
     }
 
-    builder.setSessionId(request.getSessionId)
+    builder
+      .setSessionId(request.getSessionId)
+      .setServerSideSessionId(sessionHolder.serverSessionId)
     builder.build()
   }
 }

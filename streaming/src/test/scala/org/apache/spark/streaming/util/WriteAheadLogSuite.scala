@@ -43,6 +43,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.util.{CompletionIterator, ManualClock, ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /** Common tests for WriteAheadLogs that we would like to test with different configurations. */
 abstract class CommonWriteAheadLogTests(
@@ -718,7 +719,7 @@ object WriteAheadLogSuite {
     val wal = createWriteAheadLog(logDirectory, closeFileAfterWrite, allowBatching)
     val data = wal.readAll().asScala.map(byteBufferToString).toArray
     wal.close()
-    data
+    data.toImmutableArraySeq
   }
 
   /** Get the log files in a directory. */
@@ -732,7 +733,7 @@ object WriteAheadLogSuite {
         _.getName().split("-")(1).toLong
       }.map {
         _.toString.stripPrefix("file:")
-      }
+      }.toImmutableArraySeq
     } else {
       Seq.empty
     }

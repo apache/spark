@@ -241,7 +241,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
       SortExprs: Array[Column],
       f: FlatMapGroupsFunction[K, V, U],
       encoder: Encoder[U]): Dataset[U] = {
-    flatMapSortedGroups(SortExprs: _*)((key, data) => f.call(key, data.asJava).asScala)(encoder)
+    import org.apache.spark.util.ArrayImplicits._
+    flatMapSortedGroups(
+      SortExprs.toImmutableArraySeq: _*)((key, data) => f.call(key, data.asJava).asScala)(encoder)
   }
 
   /**
@@ -901,7 +903,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
       otherSortExprs: Array[Column],
       f: CoGroupFunction[K, V, U, R],
       encoder: Encoder[R]): Dataset[R] = {
-    cogroupSorted(other)(thisSortExprs: _*)(otherSortExprs: _*)(
+    import org.apache.spark.util.ArrayImplicits._
+    cogroupSorted(other)(
+      thisSortExprs.toImmutableArraySeq: _*)(otherSortExprs.toImmutableArraySeq: _*)(
       (key, left, right) => f.call(key, left.asJava, right.asJava).asScala)(encoder)
   }
 

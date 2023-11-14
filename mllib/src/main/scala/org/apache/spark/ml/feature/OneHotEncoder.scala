@@ -31,6 +31,7 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions.{col, lit, udf}
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 /** Private trait for params and common methods for OneHotEncoder and OneHotEncoderModel */
 private[ml] trait OneHotEncoderBase extends Params with HasHandleInvalid
@@ -193,7 +194,8 @@ class OneHotEncoder @Since("3.0.0") (@Since("3.0.0") override val uid: String)
       // When fitting data, we want the plain number of categories without `handleInvalid` and
       // `dropLast` taken into account.
       val attrGroups = OneHotEncoderCommon.getOutputAttrGroupFromData(
-        dataset, inputColNames, outputColNames, dropLast = false)
+        dataset, inputColNames.toImmutableArraySeq, outputColNames.toImmutableArraySeq,
+        dropLast = false)
       attrGroups.zip(columnToScanIndices).foreach { case (attrGroup, idx) =>
         categorySizes(idx) = attrGroup.size
       }
@@ -372,7 +374,7 @@ class OneHotEncoderModel private[ml] (
       encoder(col(inputColName).cast(DoubleType), lit(idx))
         .as(outputColName, metadata)
     }
-    dataset.withColumns(outputColNames, encodedColumns)
+    dataset.withColumns(outputColNames.toImmutableArraySeq, encodedColumns)
   }
 
   @Since("3.0.0")

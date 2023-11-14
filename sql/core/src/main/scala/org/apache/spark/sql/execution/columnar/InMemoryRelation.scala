@@ -38,6 +38,7 @@ import org.apache.spark.sql.types.{BooleanType, ByteType, DoubleType, FloatType,
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{LongAccumulator, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The default implementation of CachedBatch.
@@ -192,7 +193,7 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
     }.toArray
 
     input.mapPartitionsInternal { cachedBatchIterator =>
-      val columnarIterator = GenerateColumnAccessor.generate(columnTypes)
+      val columnarIterator = GenerateColumnAccessor.generate(columnTypes.toImmutableArraySeq)
       columnarIterator.initialize(cachedBatchIterator.asInstanceOf[Iterator[DefaultCachedBatch]],
         columnTypes,
         requestedColumnIndices.toArray)
