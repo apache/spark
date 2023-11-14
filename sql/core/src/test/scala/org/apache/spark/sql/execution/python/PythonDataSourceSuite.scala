@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.SaveIntoPythonDataSourceCommand
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
@@ -452,5 +453,35 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(metrics(pythonDataSent.id).asInstanceOf[String].endsWith("B"))
     assert(metrics.contains(pythonDataReceived.id))
     assert(metrics(pythonDataReceived.id).asInstanceOf[String].endsWith("B"))
+  }
+
+  test("save into data source command") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceWriter
+         |class SimpleDataSourceWriter(DataSourceWriter):
+         |    def __init__(self, options):
+         |        self.options = options
+         |
+         |    def write(self, iterator):
+         |        for row in iterator:
+         |            print(row)
+         |
+         |class SimpleDataSource(DataSource):
+         |    def writer(self, schema, save_mode):
+         |        return SimpleDataSourceWriter(self.options)
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    val df = spark.sql("SELECT * FROM range(0, 10)")
+    val command = SaveIntoPythonDataSourceCommand(
+      df.logicalPlan,
+      dataSource.dataSourceCls,
+      provider = dataSourceName,
+      options = Map.empty,
+      mode = SaveMode.Append)
+    import org.apache.spark.sql.execution.QueryExecution
+    val qe = new QueryExecution(spark, command, df.queryExecution.tracker)
+    qe.assertCommandExecuted()
   }
 }
