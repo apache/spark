@@ -56,8 +56,8 @@ Key differences are:
 How does this affect Spark? 
 
 1. Reading and writing data can be significantly slower than working with a normal filesystem.
-1. Some directory structures may be very inefficient to scan during query split calculation.
-1. The rename-based algorithm by which Spark normally commits work when saving an RDD, DataFrame or Dataset
+2. Some directory structures may be very inefficient to scan during query split calculation.
+3. The rename-based algorithm by which Spark normally commits work when saving an RDD, DataFrame or Dataset
  is potentially both slow and unreliable.
 
 For these reasons, it is not always safe to use an object store as a direct destination of queries, or as
@@ -121,12 +121,12 @@ for talking to cloud infrastructures, in which case this module may not be neede
 Spark jobs must authenticate with the object stores to access data within them.
 
 1. When Spark is running in a cloud infrastructure, the credentials are usually automatically set up.
-1. `spark-submit` is able to read the `AWS_ENDPOINT_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+2. `spark-submit` is able to read the `AWS_ENDPOINT_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
 and `AWS_SESSION_TOKEN` environment variables and sets the associated authentication options
 for the `s3n` and `s3a` connectors to Amazon S3.
-1. In a Hadoop cluster, settings may be set in the `core-site.xml` file.
-1. Authentication details may be manually added to the Spark configuration in `spark-defaults.conf`
-1. Alternatively, they can be programmatically set in the `SparkConf` instance used to configure 
+3. In a Hadoop cluster, settings may be set in the `core-site.xml` file.
+4. Authentication details may be manually added to the Spark configuration in `spark-defaults.conf`
+5. Alternatively, they can be programmatically set in the `SparkConf` instance used to configure
 the application's `SparkContext`.
 
 *Important: never check authentication secrets into source code repositories,
@@ -185,9 +185,9 @@ different stores and connectors when renaming directories:
 
 1. As storing temporary files can run up charges; delete
 directories called `"_temporary"` on a regular basis.
-1. For AWS S3, set a limit on how long multipart uploads can remain outstanding.
+2. For AWS S3, set a limit on how long multipart uploads can remain outstanding.
 This avoids incurring bills from incompleted uploads.
-1. For Google cloud, directory rename is file-by-file. Consider using the v2 committer
+3. For Google cloud, directory rename is file-by-file. Consider using the v2 committer
 and only write code which generates idempotent output -including filenames,
 as it is *no more unsafe* than the v1 committer, and faster.
 
@@ -227,11 +227,11 @@ creating a `FileInputDStream` to monitor a path in the store through a call to
 under the path, not the number of *new* files, so it can become a slow operation.
 The size of the window needs to be set to handle this.
 
-1. Files only appear in an object store once they are completely written; there
+2. Files only appear in an object store once they are completely written; there
 is no need for a workflow of write-then-rename to ensure that files aren't picked up
 while they are still being written. Applications can write straight to the monitored directory.
 
-1. In case of the default checkpoint file manager called `FileContextBasedCheckpointFileManager`
+3. In case of the default checkpoint file manager called `FileContextBasedCheckpointFileManager`
 streams should only be checkpointed to a store implementing a fast and
 atomic `rename()` operation. Otherwise the checkpointing may be slow and potentially unreliable.
 On AWS S3 with Hadoop 3.3.1 or later using the S3A connector the abortable stream based checkpoint
@@ -291,7 +291,7 @@ Amazon EMR has its own S3-aware committers for parquet data.
 For instructions on use, see
 [the EMRFS S3-optimized committer](https://docs.aws.amazon.com/emr/latest/ReleaseGuide/emr-spark-s3-optimized-committer.html)
 
-For implementation and performanc details, see
+For implementation and performance details, see
 ["Improve Apache Spark write performance on Apache Parquet formats with the EMRFS S3-optimized committer"](https://aws.amazon.com/blogs/big-data/improve-apache-spark-write-performance-on-apache-parquet-formats-with-the-emrfs-s3-optimized-committer/
 
 
