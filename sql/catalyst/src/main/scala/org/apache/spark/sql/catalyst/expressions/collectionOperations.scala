@@ -3531,7 +3531,7 @@ object Sequence {
       step: String,
       estimatedStep: String,
       len: String): String = {
-    val calcFn = "Sequence.sequenceLength"
+    val calcFn = classOf[Sequence].getName + ".sequenceLength"
     s"""
        |if (!(($estimatedStep > 0 && $start <= $stop) ||
        |  ($estimatedStep < 0 && $start >= $stop) ||
