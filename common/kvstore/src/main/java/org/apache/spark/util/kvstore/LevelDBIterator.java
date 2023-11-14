@@ -312,7 +312,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
 
     private final AtomicBoolean started = new AtomicBoolean(true);
 
-    public ResourceCleaner(DBIterator dbIterator, LevelDB levelDB) {
+    ResourceCleaner(DBIterator dbIterator, LevelDB levelDB) {
       this.dbIterator = dbIterator;
       this.levelDB = levelDB;
     }
