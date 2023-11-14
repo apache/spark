@@ -49,7 +49,7 @@ import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, Tex
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, StructField, StructType, VariantType}
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.{HadoopFSUtils, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -503,6 +503,7 @@ case class DataSource(
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
         disallowWritingIntervals(outputColumns.map(_.dataType), forbidAnsiIntervals = true)
+        disallowWritingVariant(outputColumns.map(_.dataType))
         dataSource.createRelation(
           sparkSession.sqlContext, mode, caseInsensitiveOptions, Dataset.ofRows(sparkSession, data))
       case format: FileFormat =>
@@ -524,6 +525,7 @@ case class DataSource(
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
         disallowWritingIntervals(data.schema.map(_.dataType), forbidAnsiIntervals = true)
+        disallowWritingVariant(data.schema.map(_.dataType))
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
         disallowWritingIntervals(data.schema.map(_.dataType), forbidAnsiIntervals = false)
@@ -559,6 +561,14 @@ case class DataSource(
       TypeUtils.invokeOnceForInterval(_, forbidAnsiIntervals) {
       throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError()
     })
+  }
+
+  private def disallowWritingVariant(dataTypes: Seq[DataType]): Unit = {
+    dataTypes.foreach { dt =>
+      if (dt.existsRecursively(_.isInstanceOf[VariantType])) {
+        throw QueryCompilationErrors.cannotSaveVariantIntoExternalStorageError()
+      }
+    }
   }
 }
 

@@ -1564,6 +1564,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
+  def cannotSaveVariantIntoExternalStorageError(): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_SAVE_VARIANT",
+      messageParameters = Map.empty)
+  }
+
   def cannotResolveAttributeError(name: String, outputStr: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1137",
