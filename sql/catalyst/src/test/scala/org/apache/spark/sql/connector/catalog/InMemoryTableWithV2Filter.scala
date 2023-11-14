@@ -101,15 +101,6 @@ class InMemoryTableWithV2Filter(
 
     override def hashCode: Int = Objects.hashCode(this.readSchema, this.tableSchema,
       this.allFilters)
-
-    override def equalToIgnoreRuntimeFilters(other: Scan): Boolean = other match {
-      case ims: InMemoryV2FilterBatchScan => this.readSchema == ims.readSchema &&
-        this.tableSchema == ims.tableSchema
-      case _ => false
-    }
-
-    override def hashCodeIgnoreRuntimeFilters: Int = Objects.hashCode(this.readSchema,
-      this.tableSchema)
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {

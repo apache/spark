@@ -479,15 +479,6 @@ abstract class InMemoryBaseTable(
 
     override def hashCode: Int = Objects.hashCode(this.readSchema, this.tableSchema,
       this.allFilters)
-
-    override def equalToIgnoreRuntimeFilters(other: Scan): Boolean = other match {
-      case ims: InMemoryBatchScan => this.readSchema == ims.readSchema &&
-        this.tableSchema == ims.tableSchema
-      case _ => false
-    }
-
-    override def hashCodeIgnoreRuntimeFilters: Int = Objects.hashCode(this.readSchema,
-      this.tableSchema)
   }
 
   abstract class InMemoryWriterBuilder() extends SupportsTruncate with SupportsDynamicOverwrite
