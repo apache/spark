@@ -185,6 +185,11 @@ class ParquetToSparkSchemaConverter(
     }
     field match {
       case primitiveColumn: PrimitiveColumnIO => convertPrimitiveField(primitiveColumn, targetType)
+      case groupColumn: GroupColumnIO if targetType.contains(VariantType) =>
+        ParquetColumn(VariantType, groupColumn, Seq(
+          convertField(groupColumn.getChild(0), Some(BinaryType)),
+          convertField(groupColumn.getChild(1), Some(BinaryType))
+        ))
       case groupColumn: GroupColumnIO => convertGroupField(groupColumn, targetType)
     }
   }
@@ -718,6 +723,12 @@ class SparkToParquetSchemaConverter(
       // ===========
       // Other types
       // ===========
+
+      case VariantType =>
+        Types.buildGroup(repetition)
+          .addField(convertField(StructField("value", BinaryType, nullable = false)))
+          .addField(convertField(StructField("metadata", BinaryType, nullable = false)))
+          .named(field.name)
 
       case StructType(fields) =>
         fields.foldLeft(Types.buildGroup(repetition)) { (builder, field) =>

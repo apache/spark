@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.unsafe.types.VariantVal;
 
 /**
  * Row abstraction in {@link ColumnVector}.
@@ -141,6 +142,11 @@ public final class ColumnarRow extends InternalRow {
   }
 
   @Override
+  public VariantVal getVariant(int ordinal) {
+    return data.getChild(ordinal).getVariant(rowId);
+  }
+
+  @Override
   public ColumnarRow getStruct(int ordinal, int numFields) {
     return data.getChild(ordinal).getStruct(rowId);
   }
@@ -187,6 +193,8 @@ public final class ColumnarRow extends InternalRow {
       return getStruct(ordinal, ((StructType)dataType).fields().length);
     } else if (dataType instanceof MapType) {
       return getMap(ordinal);
+    } else if (dataType instanceof VariantType) {
+      return getVariant(ordinal);
     } else {
       throw new UnsupportedOperationException("Datatype not supported " + dataType);
     }

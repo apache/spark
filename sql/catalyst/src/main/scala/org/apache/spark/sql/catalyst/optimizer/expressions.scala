@@ -1063,6 +1063,8 @@ object SimplifyCasts extends Rule[LogicalPlan] {
         if fromKey == toKey && fromValue == toValue => e
       case _ => c
       }
+    case IsNotNull(Cast(e, dataType: NumericType, _, _)) if isWiderCast(e.dataType, dataType) =>
+      IsNotNull(e)
   }
 
   // Returns whether the from DataType can be safely casted to the to DataType without losing
