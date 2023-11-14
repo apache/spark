@@ -72,7 +72,7 @@ object RetryPolicy {
 
   // represents a state of the specific policy
   // (how many retries have happened and how much to wait until next one)
-  class RetryPolicyState(val policy: RetryPolicy) {
+  private class RetryPolicyState(val policy: RetryPolicy) {
     private var numberAttempts = 0
     private var nextWait: Duration = policy.initialBackoff
 
@@ -135,6 +135,7 @@ object RetryPolicy {
 
   /**
    * An exception that can be thrown upstream when inside retry and which will be always retryable
+   * without any policies.
    */
   class RetryException extends Throwable
 }

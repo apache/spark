@@ -22,6 +22,7 @@ import scala.util.control.NonFatal
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.connect.client.RetryPolicy.RetryException
 
 private[sql] class GrpcRetryHandler(
     private val policies: Seq[RetryPolicy],
@@ -166,7 +167,7 @@ private[sql] object GrpcRetryHandler extends Logging {
     private val policies: Seq[RetryPolicy.RetryPolicyState] = retryPolicies.map(_.toState)
 
     def canRetry(throwable: Throwable): Boolean = {
-      policies.exists(p => p.canRetry(throwable))
+      throwable.isInstanceOf[RetryException] || policies.exists(p => p.canRetry(throwable))
     }
 
     def makeAttempt(): Option[T] = {
@@ -183,6 +184,11 @@ private[sql] object GrpcRetryHandler extends Logging {
     def waitAfterAttempt(): Unit = {
       // find policy which will accept this exception
       val lastException = exceptionList.head
+
+      if (lastException.isInstanceOf[RetryException]) {
+        // retry exception is considered immediately retriable without any policies.
+        return
+      }
 
       for (policy <- policies if policy.canRetry(lastException)) {
         val time = policy.nextAttempt()
