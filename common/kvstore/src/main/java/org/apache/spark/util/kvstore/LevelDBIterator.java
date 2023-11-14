@@ -208,7 +208,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   }
 
   /**
-   * Prevent ResourceCleaner from actually releasing resources after close it.
+   * Prevent ResourceCleaner from trying to release resources after close.
    */
   private void cancelResourceClean() {
     this.resourceCleaner.setStartedToFalse();
