@@ -44,14 +44,12 @@ import org.apache.spark.util.Utils
 abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     metadataLogVersion: Int,
     sparkSession: SparkSession,
-    path: String)
+    path: String)(private final implicit val manifest: Manifest[T])
   extends HDFSMetadataLog[Array[T]](sparkSession, path) {
 
   import CompactibleFileStreamLog._
 
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
-
-  private val classTag = implicitly[ClassTag[T]]
 
   protected val minBatchesToRetain = sparkSession.sessionState.conf.minBatchesToRetain
 
@@ -140,7 +138,6 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
   }
 
   private def deserializeEntry(line: String): T = {
-    implicit val manifest: Manifest[T] = Manifest.classType[T](classTag.runtimeClass)
     Serialization.read[T](line)
   }
 
