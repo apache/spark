@@ -59,8 +59,8 @@ object XSDToSchema {
         fs.open(new Path(addFileUrl))
     }
     val xmlSchemaCollection = new XmlSchemaCollection()
-    val xmlSchema = xmlSchemaCollection.read(new InputStreamReader(in))
     xmlSchemaCollection.setBaseUri(xsdPath.getParent.toString)
+    val xmlSchema = xmlSchemaCollection.read(new InputStreamReader(in))
     getStructType(xmlSchema)
   }
 
