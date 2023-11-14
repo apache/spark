@@ -248,8 +248,23 @@ class RetryException(Exception):
 
 
 class DefaultPolicy(RetryPolicy):
-    def __init__(self, **kwargs):  # type: ignore[no-untyped-def]
-        super().__init__(**kwargs)
+    def __init__(
+        self,
+        max_retries: Optional[int] = 15,
+        backoff_multiplier: float = 4.0,
+        initial_backoff: int = 50,
+        max_backoff: Optional[int] = 60000,
+        jitter: int = 500,
+        min_jitter_threshold: int = 2000,
+    ):
+        super().__init__(
+            max_retries=max_retries,
+            backoff_multiplier=backoff_multiplier,
+            initial_backoff=initial_backoff,
+            max_backoff=max_backoff,
+            jitter=jitter,
+            min_jitter_threshold=min_jitter_threshold,
+        )
 
     def can_retry(self, e: BaseException) -> bool:
         """

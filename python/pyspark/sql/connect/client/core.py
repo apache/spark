@@ -595,23 +595,8 @@ class SparkConnectClient(object):
         self._user_id = None
         self._retry_policies: List[RetryPolicy] = []
 
-        default_policy_args = {
-            # Please synchronize changes here with Scala side
-            # GrpcRetryHandler.scala
-            #
-            # Note: the number of retries is selected so that the maximum tolerated wait
-            # is guaranteed to be at least 10 minutes
-            "max_retries": 15,
-            "backoff_multiplier": 4.0,
-            "initial_backoff": 50,
-            "max_backoff": 60000,
-            "jitter": 500,
-            "min_jitter_threshold": 2000,
-        }
-        if retry_policy:
-            default_policy_args.update(retry_policy)
-
-        default_policy = DefaultPolicy(**default_policy_args)
+        retry_policy_args = retry_policy or dict()
+        default_policy = DefaultPolicy(**retry_policy_args)
         self.set_retry_policies([default_policy])
 
         if self._builder.session_id is None:
