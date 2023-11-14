@@ -258,18 +258,8 @@ case object SinglePartition extends Partitioning {
     SinglePartitionShuffleSpec
 }
 
-/**
- * Represents a partitioning where rows are split up across partitions based on the hash
- * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
- * in the same partition.
- *
- * Since [[StatefulOpClusteredDistribution]] relies on this partitioning and Spark requires
- * stateful operators to retain the same physical partitioning during the lifetime of the query
- * (including restart), the result of evaluation on `partitionIdExpression` must be unchanged
- * across Spark versions. Violation of this requirement may bring silent correctness issue.
- */
-case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
-  extends Expression with Partitioning with Unevaluable {
+trait HashPartitioningLike extends Expression with Partitioning with Unevaluable {
+  def expressions: Seq[Expression]
 
   override def children: Seq[Expression] = expressions
   override def nullable: Boolean = false
@@ -294,6 +284,20 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
       }
     }
   }
+}
+
+/**
+ * Represents a partitioning where rows are split up across partitions based on the hash
+ * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
+ * in the same partition.
+ *
+ * Since [[StatefulOpClusteredDistribution]] relies on this partitioning and Spark requires
+ * stateful operators to retain the same physical partitioning during the lifetime of the query
+ * (including restart), the result of evaluation on `partitionIdExpression` must be unchanged
+ * across Spark versions. Violation of this requirement may bring silent correctness issue.
+ */
+case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
+  extends HashPartitioningLike {
 
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
     HashShuffleSpec(this, distribution)
@@ -306,7 +310,6 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): HashPartitioning = copy(expressions = newChildren)
-
 }
 
 case class CoalescedBoundary(startReducerIndex: Int, endReducerIndex: Int)
@@ -316,25 +319,18 @@ case class CoalescedBoundary(startReducerIndex: Int, endReducerIndex: Int)
  * fewer number of partitions.
  */
 case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[CoalescedBoundary])
-  extends Expression with Partitioning with Unevaluable {
+  extends HashPartitioningLike {
 
-  override def children: Seq[Expression] = from.expressions
-  override def nullable: Boolean = from.nullable
-  override def dataType: DataType = from.dataType
-
-  override def satisfies0(required: Distribution): Boolean = from.satisfies0(required)
+  override def expressions: Seq[Expression] = from.expressions
 
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
     CoalescedHashShuffleSpec(from.createShuffleSpec(distribution), partitions)
 
-  override protected def withNewChildrenInternal(
-    newChildren: IndexedSeq[Expression]): CoalescedHashPartitioning =
-      copy(from = from.copy(expressions = newChildren))
-
   override val numPartitions: Int = partitions.length
 
-  override def toString: String = from.toString
-  override def sql: String = from.sql
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): CoalescedHashPartitioning =
+    copy(from = from.copy(expressions = newChildren))
 }
 
 /**
