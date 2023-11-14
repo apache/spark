@@ -150,7 +150,7 @@ private[sql] class GrpcRetryHandler(
 private[sql] object GrpcRetryHandler extends Logging {
 
   /**
-   * Class managing the state of the retrying logic.
+   * Class managing the state of the retrying logic during a single retryable block.
    * @param retryPolicies
    *   list of policies to apply (in order)
    * @param sleep
