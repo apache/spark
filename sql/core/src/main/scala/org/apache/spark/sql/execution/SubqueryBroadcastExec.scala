@@ -22,6 +22,8 @@ import java.util.concurrent.{Future => JFuture}
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
 
+import com.google.common.base.Objects
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -66,6 +68,16 @@ case class SubqueryBroadcastExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),
     "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"))
+
+  override def equals(other: Any): Boolean = other match {
+    case x: SubqueryAdaptiveBroadcastExec => this.name == x.name && this.index == x.index &&
+       this.buildKeys == x.buildKeys && this.child == x.child
+    case y: SubqueryBroadcastExec => this.name == y.name && this.index == y.index &&
+      this.buildKeys == y.buildKeys && this.child == y.child
+    case _ => false
+  }
+
+  override def hashCode: Int = Objects.hashCode(name, index, buildKeys, child)
 
   override def doCanonicalize(): SparkPlan = {
     val keys = buildKeys.map(k => QueryPlan.normalizeExpressions(k, child.output))
