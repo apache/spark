@@ -185,6 +185,9 @@ class Retrying:
         self._done = False
 
     def can_retry(self, exception: BaseException) -> bool:
+        if isinstance(exception, RetryException):
+            return True
+
         return any(policy.can_retry(exception) for policy in self._policies)
 
     def accept_exception(self, exception: BaseException) -> bool:
@@ -204,8 +207,12 @@ class Retrying:
     def _wait(self) -> None:
         exception = self._last_exception()
 
-        # Attempt to find a policy to wait with
+        if isinstance(exception, RetryException):
+            # Considered immediately retriable
+            logger.debug(f"Got error: {repr(exception)}. Retrying.")
+            return
 
+        # Attempt to find a policy to wait with
         for policy in self._policies:
             if not policy.can_retry(exception):
                 continue
@@ -244,6 +251,7 @@ class Retrying:
 class RetryException(Exception):
     """
     An exception that can be thrown upstream when inside retry and which is always retryable
+    even without policies
     """
 
 
@@ -253,7 +261,7 @@ class DefaultPolicy(RetryPolicy):
     #
     # Note: the number of retries is selected so that the maximum tolerated wait
     # is guaranteed to be at least 10 minutes
-    
+
     def __init__(
         self,
         max_retries: Optional[int] = 15,
