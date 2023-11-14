@@ -46,14 +46,30 @@ case class BatchScanExec(
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
     case other: BatchScanExec =>
-      this.batch != null && this.batch == other.batch &&
-          this.runtimeFilters == other.runtimeFilters &&
-          this.spjParams == other.spjParams
-    case _ =>
-      false
+      val commonEquality = this.runtimeFilters == other.runtimeFilters  &&
+        this.spjParams == other.spjParams  && this.output == other.output
+      if (commonEquality) {
+        (this.scan, other.scan) match {
+          case (sr1: SupportsRuntimeV2Filtering, sr2: SupportsRuntimeV2Filtering) =>
+            sr1.equalToIgnoreRuntimeFilters(sr2)
+
+          case _ if this.batch != null => this.batch == other.batch
+        }
+      } else {
+        false
+      }
+
+    case _ => false
   }
 
-  override def hashCode(): Int = Objects.hashCode(batch, runtimeFilters)
+  override def hashCode(): Int = {
+    val batchHashCode = scan match {
+      case sr: SupportsRuntimeV2Filtering => sr.hashCodeIgnoreRuntimeFilters()
+
+      case _ => this.batch.hashCode()
+    }
+    Objects.hashCode(batchHashCode, runtimeFilters, spjParams, output, ordering, table)
+  }
 
   @transient override lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions()
 

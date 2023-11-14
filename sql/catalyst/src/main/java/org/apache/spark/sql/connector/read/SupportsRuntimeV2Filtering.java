@@ -64,4 +64,12 @@ public interface SupportsRuntimeV2Filtering extends Scan {
    * @param predicates data source V2 predicates used to filter the scan at runtime
    */
   void filter(Predicate[] predicates);
+
+  default boolean equalToIgnoreRuntimeFilters(Scan other) {
+    return this.equals(other);
+  }
+
+  default int hashCodeIgnoreRuntimeFilters() {
+    return this.hashCode();
+  }
 }

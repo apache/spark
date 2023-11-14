@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import com.google.common.base.Objects
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -44,9 +46,21 @@ case class SubqueryAdaptiveBroadcastExec(
     throw QueryExecutionErrors.executeCodePathUnsupportedError("SubqueryAdaptiveBroadcastExec")
   }
 
+  override def equals(other: Any): Boolean = other match {
+    case x: SubqueryAdaptiveBroadcastExec => this.name == x.name && this.index == x.index &&
+        this.onlyInBroadcast == x.onlyInBroadcast && this.buildPlan == x.buildPlan &&
+        this.buildKeys == x.buildKeys && this.child == x.child
+    case y: SubqueryBroadcastExec => this.name == y.name && this.index == y.index &&
+         this.buildKeys == y.buildKeys && this.child == y.child
+    case _ => false
+  }
+
+  override def hashCode: Int = Objects.hashCode(name, index, buildKeys, child)
+
   protected override def doCanonicalize(): SparkPlan = {
     val keys = buildKeys.map(k => QueryPlan.normalizeExpressions(k, child.output))
-    copy(name = "dpp", buildKeys = keys, child = child.canonicalized)
+    copy(name = "dpp", buildKeys = keys, child = child.canonicalized,
+      buildPlan = buildPlan.canonicalized)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SubqueryAdaptiveBroadcastExec =
