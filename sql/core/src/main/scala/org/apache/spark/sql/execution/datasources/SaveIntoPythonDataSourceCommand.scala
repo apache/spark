@@ -38,6 +38,7 @@ case class SaveIntoPythonDataSourceCommand(
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     val rdd = child.execute()
+    // TODO(SPARK-45914): support commit protocol.
     val ret = new Array[InternalRow](rdd.partitions.length)
     sparkSession.sparkContext.runJob(
       rdd,
