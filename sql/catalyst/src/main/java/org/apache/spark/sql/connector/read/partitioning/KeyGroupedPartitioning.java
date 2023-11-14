@@ -33,11 +33,4 @@ import org.apache.spark.sql.connector.expressions.Expression;
  */
 @Evolving
 public record KeyGroupedPartitioning(Expression[] keys, int numPartitions) implements Partitioning {
-
-  /**
-   * Returns the partition transform expressions for this partitioning.
-   */
-  public Expression[] keys() {
-    return keys;
-  }
 }
