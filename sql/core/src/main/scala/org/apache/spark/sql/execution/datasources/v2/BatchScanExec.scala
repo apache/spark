@@ -53,7 +53,7 @@ case class BatchScanExec(
     case other: BatchScanExec =>
       val commonEquality = this.runtimeFilters == other.runtimeFilters &&
         this.proxyForPushedBroadcastVar == other.proxyForPushedBroadcastVar &&
-        this.spjParams == other.spjParams
+        this.spjParams == other.spjParams && this.output == other.output
       if (commonEquality) {
         (this.scan, other.scan) match {
           case (sr1: SupportsRuntimeV2Filtering, sr2: SupportsRuntimeV2Filtering) =>
@@ -74,10 +74,8 @@ case class BatchScanExec(
 
       case _ => this.batch.hashCode()
     }
-    Objects.hashCode(
-      Integer.valueOf(batchHashCode),
-      runtimeFilters,
-      this.proxyForPushedBroadcastVar)
+    Objects.hashCode(Integer.valueOf(batchHashCode), runtimeFilters,
+      this.proxyForPushedBroadcastVar, this.output, this.ordering)
   }
 
   @transient override lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions()
