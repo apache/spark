@@ -1777,12 +1777,21 @@ class HiveDDLSuite
         val indexTabName =
           spark.sessionState.catalog.listTables("default", s"*$indexName*").head.table
 
-        // Even if index tables exist, listTables and getTable APIs should still work
+        // Even if index tables exist, listTables APIs should still work
         checkAnswer(
           spark.catalog.listTables().toDF(),
           Row(indexTabName, "spark_catalog", Array("default"), null, null, false) ::
             Row(tabName, "spark_catalog", Array("default"), null, "MANAGED", false) :: Nil)
-        assert(spark.catalog.getTable("default", indexTabName).name === indexTabName)
+
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.catalog.getTable("default", indexTabName)
+          },
+          errorClass = "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE",
+          parameters = Map(
+            "tableName" -> s"`$indexTabName`",
+            "tableType" -> "index table")
+        )
 
         checkError(
           exception = intercept[TableAlreadyExistsException] {

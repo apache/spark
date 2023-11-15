@@ -1176,10 +1176,16 @@ class SparkConnectClient(object):
                 logger.debug("Received observed metric batch.")
                 for observed_metrics in self._build_observed_metrics(b.observed_metrics):
                     if observed_metrics.name in observations:
-                        observations[observed_metrics.name]._result = {
-                            key: LiteralExpression._to_value(metric)
-                            for key, metric in zip(observed_metrics.keys, observed_metrics.metrics)
-                        }
+                        observation_result = observations[observed_metrics.name]._result
+                        assert observation_result is not None
+                        observation_result.update(
+                            {
+                                key: LiteralExpression._to_value(metric)
+                                for key, metric in zip(
+                                    observed_metrics.keys, observed_metrics.metrics
+                                )
+                            }
+                        )
                     yield observed_metrics
             if b.HasField("schema"):
                 logger.debug("Received the schema.")

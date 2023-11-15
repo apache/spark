@@ -303,16 +303,16 @@ class StreamingTestsMixin:
 
     def _assert_exception_tree_contains_msg_connect(self, exception, msg):
         self.assertTrue(
-            msg in exception.message,
+            msg in exception._message,
             "Exception tree doesn't contain the expected message: %s" % msg,
         )
 
     def _assert_exception_tree_contains_msg_default(self, exception, msg):
         e = exception
-        contains = msg in e.desc
-        while e.cause is not None and not contains:
-            e = e.cause
-            contains = msg in e.desc
+        contains = msg in e._desc
+        while e._cause is not None and not contains:
+            e = e._cause
+            contains = msg in e._desc
         self.assertTrue(contains, "Exception tree doesn't contain the expected message: %s" % msg)
 
     def test_query_manager_get(self):
