@@ -22,7 +22,6 @@ import scala.util.control.NonFatal
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.connect.client.RetryPolicy.RetryException
 
 private[sql] class GrpcRetryHandler(
     private val policies: Seq[RetryPolicy],
@@ -189,8 +188,7 @@ private[sql] object GrpcRetryHandler extends Logging {
         // retry exception is considered immediately retriable without any policies.
         logWarning(
           s"Non-Fatal error during RPC execution: $lastException, retrying " +
-            s"(currentRetryNum=$currentRetryNum)"
-        )
+            s"(currentRetryNum=$currentRetryNum)")
         return
       }
 
@@ -228,4 +226,10 @@ private[sql] object GrpcRetryHandler extends Logging {
       result.get
     }
   }
+
+  /**
+   * An exception that can be thrown upstream when inside retry and which will be always retryable
+   * without any policies.
+   */
+  class RetryException extends Throwable
 }

@@ -18,6 +18,8 @@
 package org.apache.spark.sql.connect.client
 
 /**
- * Represents an exception which was considered retriable but has exceeded retry limits
+ * Represents an exception which was considered retriable but has exceeded retry limits.
+ *
+ * The actual exceptions incurred can be retrieved with getSuppressed()
  */
 class RetriesExceeded extends Throwable

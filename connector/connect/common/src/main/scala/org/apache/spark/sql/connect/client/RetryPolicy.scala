@@ -26,25 +26,25 @@ import io.grpc.{Status, StatusRuntimeException}
  * [[RetryPolicy]] configure the retry mechanism in [[GrpcRetryHandler]]
  *
  * @param maxRetries
- * Maximum number of retries.
+ *   Maximum number of retries.
  * @param initialBackoff
- * Start value of the exponential backoff (ms).
+ *   Start value of the exponential backoff (ms).
  * @param maxBackoff
- * Maximal value of the exponential backoff (ms).
+ *   Maximal value of the exponential backoff (ms).
  * @param backoffMultiplier
- * Multiplicative base of the exponential backoff.
+ *   Multiplicative base of the exponential backoff.
  * @param canRetry
- * Function that determines whether a retry is to be performed in the event of an error.
+ *   Function that determines whether a retry is to be performed in the event of an error.
  */
 case class RetryPolicy(
-  maxRetries: Option[Int] = None,
-  initialBackoff: FiniteDuration = FiniteDuration(1000, "ms"),
-  maxBackoff: Option[FiniteDuration] = None,
-  backoffMultiplier: Double = 1.0,
-  jitter: FiniteDuration = FiniteDuration(0, "s"),
-  minJitterThreshold: FiniteDuration = FiniteDuration(0, "s"),
-  canRetry: Throwable => Boolean,
-  name: String) {
+    maxRetries: Option[Int] = None,
+    initialBackoff: FiniteDuration = FiniteDuration(1000, "ms"),
+    maxBackoff: Option[FiniteDuration] = None,
+    backoffMultiplier: Double = 1.0,
+    jitter: FiniteDuration = FiniteDuration(0, "s"),
+    minJitterThreshold: FiniteDuration = FiniteDuration(0, "s"),
+    canRetry: Throwable => Boolean,
+    name: String) {
 
   def getName: String = name
 
@@ -72,7 +72,7 @@ object RetryPolicy {
 
   // represents a state of the specific policy
   // (how many retries have happened and how much to wait until next one)
-  private class RetryPolicyState(val policy: RetryPolicy) {
+  private[client] class RetryPolicyState(val policy: RetryPolicy) {
     private var numberAttempts = 0
     private var nextWait: Duration = policy.initialBackoff
 
@@ -106,13 +106,12 @@ object RetryPolicy {
    * Default canRetry in [[RetryPolicy]].
    *
    * @param e
-   * The exception to check.
+   *   The exception to check.
    * @return
-   * true if the exception is a [[StatusRuntimeException]] with code UNAVAILABLE.
+   *   true if the exception is a [[StatusRuntimeException]] with code UNAVAILABLE.
    */
   private[client] def defaultPolicyRetryException(e: Throwable): Boolean = {
     e match {
-      case _: RetryPolicy.RetryException => true
       case e: StatusRuntimeException =>
         val statusCode: Status.Code = e.getStatus.getCode
 
@@ -132,10 +131,4 @@ object RetryPolicy {
       case _ => false
     }
   }
-
-  /**
-   * An exception that can be thrown upstream when inside retry and which will be always retryable
-   * without any policies.
-   */
-  class RetryException extends Throwable
 }

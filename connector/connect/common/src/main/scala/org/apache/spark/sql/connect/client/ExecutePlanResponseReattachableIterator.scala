@@ -27,6 +27,7 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.connect.client.GrpcRetryHandler.RetryException
 
 /**
  * Retryable iterator of ExecutePlanResponses to an ExecutePlan call.
@@ -241,7 +242,7 @@ class ExecutePlanResponseReattachableIterator(
         }
         // Try a new ExecutePlan, and throw upstream for retry.
         iter = Some(rawBlockingStub.executePlan(initialRequest))
-        val error = new RetryPolicy.RetryException()
+        val error = new RetryException()
         error.addSuppressed(ex)
         throw error
       case NonFatal(e) =>
