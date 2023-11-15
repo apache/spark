@@ -248,6 +248,8 @@ object CheckConnectJvmClientCompatibility {
 
       // RuntimeConfig
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RuntimeConfig$"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.RuntimeConfig.sqlConf"),
 
       // DataStreamWriter
       ProblemFilters.exclude[MissingClassProblem](
