@@ -1940,17 +1940,21 @@ class DataFrameWriter(OptionUtils):
             self._write_empty_partition(path, partitionBy)
         else:
             self._jwrite.parquet(path)
-    
+
     @overload
     def _write_empty_partition(self, path: str, partitionBy: str) -> None:
         ...
-    
+
     @overload
     def _write_empty_partition(self, path: str, partitionBy: List[str]) -> None:
         ...
 
     def _write_empty_partition(self, path: str, partitionBy: Union[str, List[str]]) -> None:
-        temp_row_data = {col: None for col in partitionBy} if isinstance(partitionBy, list) else {partitionBy: None}
+        temp_row_data = (
+            {col: None for col in partitionBy}
+            if isinstance(partitionBy, list)
+            else {partitionBy: None}
+        )
         temp_df = self._df.sparkSession.createDataFrame([Row(**temp_row_data)])
         temp_df.write.mode("overwrite").partitionBy(partitionBy).parquet(path)
 
