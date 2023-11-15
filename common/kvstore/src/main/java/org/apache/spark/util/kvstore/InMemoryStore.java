@@ -450,7 +450,13 @@ public class InMemoryStore implements KVStore {
     }
   }
 
-  private record InMemoryIterator<T>(Iterator<T> iter) implements KVStoreIterator<T> {
+  private static class InMemoryIterator<T> implements KVStoreIterator<T> {
+
+    private final Iterator<T> iter;
+
+    InMemoryIterator(Iterator<T> iter) {
+      this.iter = iter;
+    }
 
     @Override
     public boolean hasNext() {

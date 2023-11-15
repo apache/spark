@@ -53,7 +53,13 @@ class ArrayWrappers {
     return (Comparable<Object>) ret;
   }
 
-  private record ComparableIntArray(int[] array) implements Comparable<ComparableIntArray> {
+  private static class ComparableIntArray implements Comparable<ComparableIntArray> {
+
+    private final int[] array;
+
+    ComparableIntArray(int[] array) {
+      this.array = array;
+    }
 
     @Override
     public boolean equals(Object other) {
@@ -86,7 +92,13 @@ class ArrayWrappers {
     }
   }
 
-  private record ComparableLongArray(long[] array) implements Comparable<ComparableLongArray> {
+  private static class ComparableLongArray implements Comparable<ComparableLongArray> {
+
+    private final long[] array;
+
+    ComparableLongArray(long[] array) {
+      this.array = array;
+    }
 
     @Override
     public boolean equals(Object other) {
@@ -119,7 +131,13 @@ class ArrayWrappers {
     }
   }
 
-  private record ComparableByteArray(byte[] array) implements Comparable<ComparableByteArray> {
+  private static class ComparableByteArray implements Comparable<ComparableByteArray> {
+
+    private final byte[] array;
+
+    ComparableByteArray(byte[] array) {
+      this.array = array;
+    }
 
     @Override
     public boolean equals(Object other) {
@@ -152,8 +170,13 @@ class ArrayWrappers {
     }
   }
 
-  private record ComparableObjectArray(
-      Object[] array) implements Comparable<ComparableObjectArray> {
+  private static class ComparableObjectArray implements Comparable<ComparableObjectArray> {
+
+    private final Object[] array;
+
+    ComparableObjectArray(Object[] array) {
+      this.array = array;
+    }
 
     @Override
     public boolean equals(Object other) {

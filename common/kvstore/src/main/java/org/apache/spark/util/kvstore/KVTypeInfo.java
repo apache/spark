@@ -128,7 +128,13 @@ public class KVTypeInfo {
     Class<?> getType();
   }
 
-  private record FieldAccessor(Field field) implements Accessor {
+  private static class FieldAccessor implements Accessor {
+
+    private final Field field;
+
+    FieldAccessor(Field field) {
+      this.field = field;
+    }
 
     @Override
     public Object get(Object instance) throws ReflectiveOperationException {
@@ -141,7 +147,13 @@ public class KVTypeInfo {
     }
   }
 
-  private record MethodAccessor(Method method) implements Accessor {
+  private static class MethodAccessor implements Accessor {
+
+    private final Method method;
+
+    MethodAccessor(Method method) {
+      this.method = method;
+    }
 
     @Override
     public Object get(Object instance) throws ReflectiveOperationException {
