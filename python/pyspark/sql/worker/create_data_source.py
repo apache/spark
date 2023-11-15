@@ -55,7 +55,6 @@ def main(infile: IO, outfile: IO) -> None:
     The JVM sends the following information to this process:
     - a `DataSource` class representing the data source to be created.
     - a provider name in string.
-    - a list of paths in string.
     - an optional user-specified schema in json string.
     - a dictionary of options in string.
 
