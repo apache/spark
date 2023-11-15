@@ -29,22 +29,17 @@ class SubqueryAdaptiveBroadcastExecSuite extends SparkPlanTest with SharedSparkS
     val d = spark.range(10).select(Column($"id".as("b1")), Column((- $"id").as("b2")))
     val relation = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, None)
     val cloned = relation.clone().asInstanceOf[InMemoryRelation]
-
     val df1 = relation.select(Column($"b1".as("b111")))
     val lp1 = df1.queryExecution.optimizedPlan
     val sp1 = df1.queryExecution.sparkPlan
-
     val df2 = cloned.select(Column($"b1".as("b11")))
     val lp2 = df2.queryExecution.optimizedPlan
     val sp2 = df2.queryExecution.sparkPlan
-
     val sabe1 = SubqueryAdaptiveBroadcastExec("one", 1, true, lp1, lp1.output, sp1)
     val sabe2 = SubqueryAdaptiveBroadcastExec("one", 1, true, lp2, lp2.output, sp2)
-
     val c1 = sabe1.canonicalized
     val c2 = sabe2.canonicalized
     assert(c1 == c2)
-
     // check equivalence with SubqueryBroadcastExec
     val sbe = SubqueryBroadcastExec("one", 1, lp1.output, sp1)
     val c3 = sbe.canonicalized
