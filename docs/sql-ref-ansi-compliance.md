@@ -242,7 +242,7 @@ The least common type resolution is used to:
 Special rules are applied if the least common type resolves to FLOAT. With float type values, if any of the types is INT, BIGINT, or DECIMAL the least common type is pushed to DOUBLE to avoid potential loss of digits.
 
 Decimal type is a bit more complicated here, as it's not a simple type but has parameters: precision and scale.
-A `decimal(precision, scale)` means the value can has at most `precision - scale` digits in the integral part and `scale` digits in the fractional part.
+A `decimal(precision, scale)` means the value can have at most `precision - scale` digits in the integral part and `scale` digits in the fractional part.
 A least common type between decimal types should have enough digits in both integral and fractional parts to represent all values.
 More precisely, a least common type between `decimal(p1, s1)` and `decimal(p2, s2)` has the scale of `max(s1, s2)` and precision of `max(s1, s2) + max(p1 - s1, p2 - s2)`.
 However, decimal types in Spark has a maximum precision: 38. If the final decimal type needs more precision, we must do truncation.
