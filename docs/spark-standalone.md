@@ -299,7 +299,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>0.8.0</td>
 </tr>
 <tr>
-  <td><code>spark.worker.resource.{resourceName}.amount</code></td>
+  <td><code>spark.worker.resource.{name}.amount</code></td>
   <td>(none)</td>
   <td>
     Amount of a particular resource to use on the worker.
@@ -307,7 +307,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.worker.resource.{resourceName}.discoveryScript</code></td>
+  <td><code>spark.worker.resource.{name}.discoveryScript</code></td>
   <td>(none)</td>
   <td>
     Path to resource discovery script, which is used to find a particular resource while worker starting up.
@@ -320,8 +320,10 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>(none)</td>
   <td>
     Path to resources file which is used to find various resources while worker starting up.
-    The content of resources file should be formatted like <code>
-    [{"id":{"componentName": "spark.worker","resourceName":"gpu"},"addresses":["0","1","2"]}]</code>.
+    The content of resources file should be formatted like
+    <code>[{"id":{"componentName":</code>
+    <code>"spark.worker", "resourceName":"gpu"},</code>
+    <code>"addresses":["0","1","2"]}]</code>.
     If a particular resource is not found in the resources file, the discovery script would be used to
     find that resource. If the discovery script also does not find the resources, the worker will fail
     to start up.
