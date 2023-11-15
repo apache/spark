@@ -20,8 +20,6 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io.{BufferedReader, InputStreamReader}
 import java.nio.charset.StandardCharsets
 
-import scala.reflect.ClassTag
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataOutputStream, Path}
 import org.json4s.{Formats, NoTypeHints}
@@ -65,15 +63,6 @@ case class OperatorStateMetadataV1(
 object OperatorStateMetadataV1 {
 
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
-
-  private implicit val manifest: Manifest[OperatorStateMetadataV1] = {
-    val classTag = implicitly[ClassTag[OperatorStateMetadataV1]]
-    if (classTag == null) {
-      Manifest.classType[OperatorStateMetadataV1](classOf[AnyRef])
-    } else {
-      Manifest.classType[OperatorStateMetadataV1](classTag.runtimeClass)
-    }
-  }
 
   def metadataFilePath(stateCheckpointPath: Path): Path =
     new Path(new Path(stateCheckpointPath, "_metadata"), "metadata")
