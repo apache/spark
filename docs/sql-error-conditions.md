@@ -280,6 +280,12 @@ SQLSTATE: 58030
 
 Failed to set permissions on created path `<path>` back to `<permission>`.
 
+### CANNOT_SAVE_VARIANT
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Cannot save variant data type into external storage.
+
 ### [CANNOT_UPDATE_FIELD](sql-error-conditions-cannot-update-field-error-class.html)
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)

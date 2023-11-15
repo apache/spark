@@ -31,7 +31,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES}
+import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES, Python}
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.resource.ResourceProfile.{EXECUTOR_CORES_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
@@ -548,6 +548,13 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         val error = String.join("\n", JavaFiles.readAllLines(path)) + "\n"
         JavaFiles.deleteIfExists(path)
         throw new SparkException(s"Python worker exited unexpectedly (crashed): $error", e)
+
+      case eof: EOFException if !faultHandlerEnabled =>
+        throw new SparkException(
+          s"Python worker exited unexpectedly (crashed). " +
+            "Consider setting 'spark.sql.execution.pyspark.udf.faulthandler.enabled' or" +
+            s"'${Python.PYTHON_WORKER_FAULTHANLDER_ENABLED.key}' configuration to 'true' for" +
+            "the better Python traceback.", eof)
 
       case eof: EOFException =>
         throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
