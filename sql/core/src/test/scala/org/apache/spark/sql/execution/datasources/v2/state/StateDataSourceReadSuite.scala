@@ -315,8 +315,6 @@ class RocksDBWithChangelogCheckpointStateDataSourceReaderSuite extends StateData
 
 abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Assertions {
 
-  import testImplicits._
-
   test("simple aggregation, state ver 1") {
     testStreamingAggregation(1)
   }
