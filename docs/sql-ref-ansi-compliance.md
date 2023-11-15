@@ -245,7 +245,7 @@ Decimal type is a bit more complicated here, as it's not a simple type but has p
 A `decimal(precision, scale)` means the value can have at most `precision - scale` digits in the integral part and `scale` digits in the fractional part.
 A least common type between decimal types should have enough digits in both integral and fractional parts to represent all values.
 More precisely, a least common type between `decimal(p1, s1)` and `decimal(p2, s2)` has the scale of `max(s1, s2)` and precision of `max(s1, s2) + max(p1 - s1, p2 - s2)`.
-However, decimal types in Spark has a maximum precision: 38. If the final decimal type needs more precision, we must do truncation.
+However, decimal types in Spark have a maximum precision: 38. If the final decimal type need more precision, we must do truncation.
 Since the digits in the integral part are more significant, Spark truncates the digits in the fractional part first. For example, `decimal(48, 20)` will be reduced to `decimal(38, 10)`.
 
 Note, arithmetic operations have special rules to calculate the least common type for decimal inputs:
