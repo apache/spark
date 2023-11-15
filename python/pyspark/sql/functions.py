@@ -3866,7 +3866,7 @@ def array_agg(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def collect_set(col: "ColumnOrName") -> Column:
     """
-    Aggregate function: Collects the values from a column into a set,
+    Aggregate function: Collects the values from a column into a set (array),
     eliminating duplicates, and returns this set of objects.
 
     .. versionadded:: 1.6.0
@@ -3882,7 +3882,7 @@ def collect_set(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        A new Column object representing a set of collected values, duplicates excluded.
+        A new Column object representing an array of collected values, duplicates excluded.
 
     Notes
     -----
