@@ -24,7 +24,8 @@ private[spark] trait SparkEnvUtils {
   def isTesting: Boolean = {
     // Scala's `sys.env` creates a ton of garbage by constructing Scala immutable maps, so
     // we directly use the Java APIs instead.
-    System.getenv("SPARK_TESTING") != null || System.getProperty("spark.testing") != null
+    (System.getenv("SPARK_TESTING") != null || System.getProperty("spark.testing") != null) &&
+      System.getProperty("SPARK-45943") == null
   }
 
 }

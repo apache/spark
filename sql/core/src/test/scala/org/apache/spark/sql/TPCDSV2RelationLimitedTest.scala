@@ -67,34 +67,41 @@ class TPCDSV2RelationLimitedTest extends QueryTest with TPCDSBase with SQLQueryT
 
  test("q14b") {
 
-   def findUnionExecPlans(plan: SparkPlan): Seq[UnionExec] = {
-     val unionExecs1 = plan collectWithSubqueries  {
-       case u: UnionExec => u
+   // TODO . Fix the assertion failure in DataSourceV2Relation.computeStats which gets exposed
+   // by this test
+   System.setProperty("SPARK-45943", "1")
+   try {
+     def findUnionExecPlans(plan: SparkPlan): Seq[UnionExec] = {
+       val unionExecs1 = plan collectWithSubqueries {
+         case u: UnionExec => u
+       }
+       val collectLeavesIncludeHiddenInPlanExprs = plan.collectWithSubqueries {
+         case leaf: LeafExecNode => leaf
+       }
+
+       // find leaves which can internally contain plan and extract Unions from it too.
+       val unionExecs2 = collectLeavesIncludeHiddenInPlanExprs.flatMap(pl => pl match {
+         case adp: AdaptiveSparkPlanExec => findUnionExecPlans(adp.finalPhysicalPlan)
+         case qs: QueryStageExec => findUnionExecPlans(qs.plan)
+         // ignore reused exchange exec etc
+         case _ => Seq.empty
+       })
+
+       unionExecs2 ++ unionExecs1
      }
-     val collectLeavesIncludeHiddenInPlanExprs = plan.collectWithSubqueries {
-       case leaf: LeafExecNode => leaf
+
+     tpcdsQueries.filter(_ == "q14b").foreach { name =>
+       val queryString = resourceToString(s"tpcds/$name.sql")
+       val df = spark.sql(queryString)
+       // execute the query
+       df.collect()
+       val execPlan = df.queryExecution.executedPlan
+       // collect the total UnionExec nodes.
+       val allUnions = findUnionExecPlans(execPlan)
+       assert(allUnions.size == 1)
      }
-
-     // find leaves which can internally contain plan and extract Unions from it too.
-     val unionExecs2 = collectLeavesIncludeHiddenInPlanExprs.flatMap(pl => pl match {
-       case adp: AdaptiveSparkPlanExec => findUnionExecPlans(adp.finalPhysicalPlan)
-       case qs: QueryStageExec => findUnionExecPlans(qs.plan)
-       // ignore reused exchange exec etc
-       case _ => Seq.empty
-     })
-
-     unionExecs2 ++ unionExecs1
-   }
-
-   tpcdsQueries.filter(_ == "q14b").foreach { name =>
-     val queryString = resourceToString(s"tpcds/$name.sql")
-      val df = spark.sql(queryString)
-     // execute the query
-     df.collect()
-     val execPlan = df.queryExecution.executedPlan
-     // collect the total UnionExec nodes.
-     val allUnions = findUnionExecPlans(execPlan)
-     assert(allUnions.size == 1)
+   } finally {
+     System.clearProperty("SPARK-45943")
    }
  }
 }

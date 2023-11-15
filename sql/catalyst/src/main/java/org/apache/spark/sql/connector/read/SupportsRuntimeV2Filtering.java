@@ -65,10 +65,21 @@ public interface SupportsRuntimeV2Filtering extends Scan {
    */
   void filter(Predicate[] predicates);
 
+  /**
+   * This method should be implemented by the DataSourceV2 Scan which should check for equality
+   * of Scan without taking into account pushed runtime filters (DPP)
+   * @param other scan to be compared to
+   * @return boolean if the scans are same.
+   */
   default boolean equalToIgnoreRuntimeFilters(Scan other) {
     return this.equals(other);
   }
 
+  /**
+   * This method should be implemented by the DataSourceV2 Scan to return the hashCode excluding
+   * the runtime filters (DPP) pushed to scan.
+   * @return int
+   */
   default int hashCodeIgnoreRuntimeFilters() {
     return this.hashCode();
   }
