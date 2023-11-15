@@ -70,7 +70,7 @@ class SparkEnv (
     val outputCommitCoordinator: OutputCommitCoordinator,
     val conf: SparkConf) extends Logging {
 
-  // We initialize the ShuffleManager later in the Executor, to allow
+  // We initialize the ShuffleManager later in SparkContext, and Executor, to allow
   // user jars to define custom ShuffleManagers.
   private var _shuffleManager: ShuffleManager = _
 
@@ -193,7 +193,7 @@ class SparkEnv (
       pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, worker)
   }
 
-  def initializeShuffleManager(): Unit = {
+  private[spark] def initializeShuffleManager(): Unit = {
     Preconditions.checkState(null == _shuffleManager,
       "Shuffle manager already initialized to %s", _shuffleManager)
     _shuffleManager = ShuffleManager.create(conf, executorId == SparkContext.DRIVER_IDENTIFIER)
@@ -419,7 +419,7 @@ object SparkEnv extends Logging {
 
     // NB: blockManager is not valid until initialize() is called later.
     //     SPARK-45762 introduces a change where the ShuffleManager is initialized later
-    //     in the Executor, to allow for custom ShuffleManagers defined
+    //     in the SparkContext and Executor, to allow for custom ShuffleManagers defined
     //     in user jars. In the executor, the BlockManager uses a lazy val to obtain the
     //     shuffleManager from the SparkEnv. In the driver, the SparkEnv's shuffleManager
     //     is set at this point.

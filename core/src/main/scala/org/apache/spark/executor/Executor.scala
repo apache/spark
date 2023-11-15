@@ -337,6 +337,7 @@ private[spark] class Executor(
       PluginContainer(env, resources.asJava)
     }
 
+  // Skip local mode because the ShuffleManager is already initialized
   if (!isLocal) {
     Utils.withContextClassLoader(defaultSessionState.replClassLoader) {
       env.initializeShuffleManager()
