@@ -57,17 +57,17 @@ class SparkConnectWithSessionExtensionSuite extends SparkFunSuite {
   }
 
   test("Parse table name with test parser") {
-    val read = proto.Read.newBuilder().build()
-    val readWithTable = read.toBuilder
-      .setNamedTable(proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("name").build())
-      .build()
-    val rel = proto.Relation.newBuilder.setRead(readWithTable).build()
-
     val spark = SparkSession
       .builder()
       .master("local[1]")
       .withExtensions(extension => extension.injectParser(MyParser))
       .getOrCreate()
+
+    val read = proto.Read.newBuilder().build()
+    val readWithTable = read.toBuilder
+      .setNamedTable(proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("name").build())
+      .build()
+    val rel = proto.Relation.newBuilder.setRead(readWithTable).build()
 
     val res = new SparkConnectPlanner(SessionHolder.forTesting(spark)).transformRelation(rel)
 
