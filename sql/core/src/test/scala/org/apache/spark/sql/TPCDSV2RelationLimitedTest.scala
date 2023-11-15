@@ -21,8 +21,8 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, PropagateEmptyRelation}
 import org.apache.spark.sql.catalyst.util.resourceToString
 import org.apache.spark.sql.connector.catalog.InMemoryTableWithV2FilterCatalog
-import org.apache.spark.sql.execution.{SparkPlan, UnionExec}
-import org.apache.spark.sql.execution.adaptive.{AQEPropagateEmptyRelation, AdaptiveSparkPlanExec, QueryStageExec}
+import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, UnionExec}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AQEPropagateEmptyRelation, QueryStageExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.TestSparkSession
 
@@ -71,8 +71,12 @@ class TPCDSV2RelationLimitedTest extends QueryTest with TPCDSBase with SQLQueryT
      val unionExecs1 = plan collectWithSubqueries  {
        case u: UnionExec => u
      }
+     val collectLeavesIncludeHiddenInPlanExprs = plan.collectWithSubqueries {
+       case leaf: LeafExecNode => leaf
+     }
+
      // find leaves which can internally contain plan and extract Unions from it too.
-     val unionExecs2 = plan.collectLeaves().flatMap(pl => pl match {
+     val unionExecs2 = collectLeavesIncludeHiddenInPlanExprs.flatMap(pl => pl match {
        case adp: AdaptiveSparkPlanExec => findUnionExecPlans(adp.finalPhysicalPlan)
        case qs: QueryStageExec => findUnionExecPlans(qs.plan)
        // ignore reused exchange exec etc
@@ -91,10 +95,6 @@ class TPCDSV2RelationLimitedTest extends QueryTest with TPCDSBase with SQLQueryT
      // collect the total UnionExec nodes.
      val allUnions = findUnionExecPlans(execPlan)
      assert(allUnions.size == 1)
-     Thread.sleep(1000000)
    }
-
-
-
  }
 }

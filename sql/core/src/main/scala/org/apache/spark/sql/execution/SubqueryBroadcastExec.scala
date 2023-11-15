@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-
 import java.util.concurrent.{Future => JFuture}
 
 import scala.concurrent.ExecutionContext
