@@ -24,7 +24,7 @@ import net.razorvine.pickle.Pickler
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SimplePythonFunction, SpecialLengths}
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.expressions.{PredicateHelper, PythonUDF}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, MapInPandas}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, PythonMapInArrow}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -37,12 +37,13 @@ import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
  */
 object PythonDataSourceWrites extends Rule[LogicalPlan] with PredicateHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case c @ SaveIntoPythonDataSourceCommand(query, dataSourceCls, provider, options, mode, None) =>
+    case c @ SaveIntoPythonDataSourceCommand(
+        query, dataSourceCls, provider, options, mode, false) =>
 
-      // Create a logical plan for the write (mapInArrow)
+      // Start a Python process and create an instance of the Python data source writer.
+      // Return back a serialized Python function that's used to write data into the data source.
       val runner = new SaveIntoPythonDataSourceRunner(
         dataSourceCls, provider, options, mode, query)
-
       val result = runner.runInPython()
 
       // Construct the Python UDF.
@@ -62,23 +63,26 @@ object PythonDataSourceWrites extends Rule[LogicalPlan] with PredicateHelper {
         func = func,
         dataType = dataType,
         children = query.output,
-        evalType = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
-        udfDeterministic = true) // TODO: change to false
+        evalType = PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
+        udfDeterministic = true)  // TODO(SPARK-45930): support non-deterministic udf
 
       // Construct the plan.
-      val plan = MapInPandas(
+      val plan = PythonMapInArrow(
         pythonUDF,
         toAttributes(dataType),
         query,
         isBarrier = false)
 
-      // TODO: think about a different way to make it idempotent
-      c.copy(query = plan, write = Some(plan))
+      c.copy(query = plan, planned = true)
   }
 }
 
 case class PythonDataSourceSaveResult(func: Array[Byte])
 
+/**
+ * A runner that creates a Python data source writer instance and returns a Python function
+ * to be used to write data into the data source.
+ */
 class SaveIntoPythonDataSourceRunner(
     dataSourceCls: PythonFunction,
     provider: String,

@@ -17,10 +17,10 @@
 import inspect
 import os
 import sys
-from itertools import chain
-from typing import IO
+from typing import IO, Iterable, Iterator
 
 from pyspark.accumulators import _accumulatorRegistry
+from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError, PySparkTypeError
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
@@ -29,8 +29,14 @@ from pyspark.serializers import (
     SpecialLengths,
 )
 from pyspark.sql import Row
-from pyspark.sql.datasource import DataSource
-from pyspark.sql.types import _parse_datatype_json_string, StructType, StructField, BinaryType
+from pyspark.sql.datasource import DataSource, WriterCommitMessage
+from pyspark.sql.types import (
+    _parse_datatype_json_string,
+    StructType,
+    StructField,
+    BinaryType,
+    _create_row,
+)
 from pyspark.util import handle_worker_exception
 from pyspark.worker_util import (
     check_python_version,
@@ -47,6 +53,21 @@ from pyspark.worker_util import (
 def main(infile: IO, outfile: IO) -> None:
     """
     Main method for saving into a Python data source.
+
+    This process is invoked from the `SaveIntoPythonDataSourceRunner.runInPython` method
+    in the optimizer rule `PythonDataSourceWrites` in JVM. This process is responsible for
+    creating a `DataSource` object and a DataSourceWriter instance, and send information
+    needed back to the JVM.
+
+    The JVM sends the following information to this process:
+    - a `DataSource` class representing the data source to be created.
+    - a provider name in string.
+    - a schema in json string.
+    - a dictionary of options in string.
+
+    This process first creates a `DataSource` instance and then a `DataSourceWriter`
+    instance and send a function using the writer instance that can be used
+    in mapInPandas/mapInArrow back to the JVM.
     """
     try:
         check_python_version(infile)
@@ -99,7 +120,7 @@ def main(infile: IO, outfile: IO) -> None:
             raise PySparkAssertionError(
                 error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
                 message_parameters={
-                    "expected": "the user-defined schema to be a 'StructType'",
+                    "expected": "the schema to be a 'StructType'",
                     "actual": f"'{type(data_source_cls).__name__}'",
                 },
             )
@@ -114,10 +135,9 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Receive the save mode.
         save_mode = utf8_deserializer.loads(infile)
-        # TODO: check if the save mode is valid
 
         # Instantiate a data source.
-        # TODO: remove `paths` from DataSource constructor and rename userSpecifiedSchema.
+        # TODO(SPARK-45927) Update the data source class constructor.
         try:
             data_source = data_source_cls(
                 paths=[],
@@ -134,26 +154,49 @@ def main(infile: IO, outfile: IO) -> None:
         try:
             writer = data_source.writer(schema, save_mode)
         except Exception as e:
-            # TODO: Change this to be generic error class
             raise PySparkRuntimeError(
                 error_class="PYTHON_DATA_SOURCE_CREATE_ERROR",
-                message_parameters={"type": "instance", "error": str(e)},
+                message_parameters={"type": "writer", "error": str(e)},
             )
 
-        # Create a UDF to be used in mapInPandas.
-        # The purpose of this UDF is to change the input type from an iterator of
-        # pandas dataframe to an iterator of rows.
-        import pandas as pd
+        # Create a function that can be used in mapInArrow.
+        import pyarrow as pa
 
-        def data_source_write_func(iterator):  # type: ignore
-            rows = (Row(*record) for df in iterator for record in df.to_records(index=False))
-            row_iterator = chain.from_iterable(rows)
-            res = writer.write(row_iterator)
-            # Yield the pickled commit message.
-            picked_res = pickleSer.dumps(res)
-            yield pd.DataFrame({"message": [picked_res]})
+        converters = [
+            ArrowTableToRowsConversion._create_converter(f.dataType) for f in schema.fields
+        ]
+        fields = schema.fieldNames()
 
         return_type = StructType([StructField("message", BinaryType(), True)])
+
+        def data_source_write_func(iterator: Iterable[pa.RecordBatch]) -> Iterable[pa.RecordBatch]:
+            def batch_to_rows() -> Iterator[Row]:
+                for batch in iterator:
+                    columns = [column.to_pylist() for column in batch.columns]
+                    for row in range(0, batch.num_rows):
+                        values = [
+                            converters[col](columns[col][row]) for col in range(batch.num_columns)
+                        ]
+                        yield _create_row(fields=fields, values=values)
+
+            res = writer.write(batch_to_rows())
+
+            # Check the commit message has the right type.
+            if not isinstance(res, WriterCommitMessage):
+                raise PySparkRuntimeError(
+                    error_class="PYTHON_DATA_SOURCE_WRITE_ERROR",
+                    message_parameters={
+                        "error": f"return type of the `write` method must be "
+                        f"an instance of WriterCommitMessage, but got {type(res)}"
+                    },
+                )
+
+            # Serialize the commit message and return it.
+            pickled = pickleSer.dumps(res)
+
+            # Return the commit message.
+            messages = pa.array([pickled])
+            yield pa.record_batch([messages], names=["message"])
 
         # Return the pickled write UDF.
         command = (data_source_write_func, return_type)

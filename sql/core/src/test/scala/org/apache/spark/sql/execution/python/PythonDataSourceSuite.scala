@@ -26,6 +26,8 @@ import org.apache.spark.sql.types.StructType
 class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   import IntegratedUDFTestUtils._
 
+  setupTestData()
+
   private def dataSourceName = "SimpleDataSource"
   private def simpleDataSourceReaderScript: String =
     """
@@ -459,29 +461,49 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
-         |from pyspark.sql.datasource import DataSource, DataSourceWriter
+         |from pyspark.sql.datasource import DataSource, DataSourceWriter, WriterCommitMessage
+         |from dataclasses import dataclass
+         |
+         |@dataclass
+         |class Message(WriterCommitMessage):
+         |    count: int
+         |
          |class SimpleDataSourceWriter(DataSourceWriter):
          |    def __init__(self, options):
          |        self.options = options
          |
          |    def write(self, iterator):
+         |        cnt = 0
          |        for row in iterator:
-         |            print(row)
+         |            cnt += 1
+         |        return Message(count=cnt)
          |
          |class SimpleDataSource(DataSource):
-         |    def writer(self, schema, save_mode):
+         |    def writer(self, schema, saveMode):
          |        return SimpleDataSourceWriter(self.options)
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
-    val df = spark.sql("SELECT * FROM range(0, 10)")
-    val command = SaveIntoPythonDataSourceCommand(
-      df.logicalPlan,
-      dataSource.dataSourceCls,
-      provider = dataSourceName,
-      options = Map.empty,
-      mode = SaveMode.Append)
-    import org.apache.spark.sql.execution.QueryExecution
-    val qe = new QueryExecution(spark, command, df.queryExecution.tracker)
-    qe.assertCommandExecuted()
+    Seq(
+      "SELECT * FROM testData LIMIT 5",
+      "SELECT * FROM testData3",
+      "SELECT * FROM decimalData",
+      "SELECT * FROM arrayData",
+      "SELECT * FROM mapData",
+      "SELECT * FROM nullStrings",
+      "SELECT * FROM complexData"
+    ).foreach { query =>
+      val df = spark.sql(query)
+      val command = SaveIntoPythonDataSourceCommand(
+        df.logicalPlan,
+        dataSource.dataSourceCls,
+        provider = dataSourceName,
+        options = Map.empty,
+        mode = SaveMode.Append)
+      // TODO: update the once `df.write.save()` is supported.
+      import org.apache.spark.sql.execution.QueryExecution
+      val qe = new QueryExecution(spark, command, df.queryExecution.tracker)
+      qe.assertCommandExecuted()
+
+    }
   }
 }

@@ -25,20 +25,31 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DataWritingCommand
 
-
+/**
+ * A command for writing the data out to a Python data source.
+ *
+ * @param query the logical plan representing data to write to.
+ * @param dataSourceCls the serialized Python data source class.
+ * @param provider the data source provider name.
+ * @param options the data source options.
+ * @param mode the save mode.
+ * @param planned whether the logical plan is already planned. This flag is used by
+ *                the optimizer rule `PythonDataSourceWrites` to ensure idempotency.
+ */
 case class SaveIntoPythonDataSourceCommand(
     query: LogicalPlan,
     dataSourceCls: PythonFunction,
     provider: String,
     options: Map[String, String],
     mode: SaveMode,
-    write: Option[LogicalPlan] = None) extends DataWritingCommand {
+    planned: Boolean = false) extends DataWritingCommand {
 
   override def outputColumnNames: Seq[String] = query.output.map(_.name)
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     val rdd = child.execute()
-    // TODO(SPARK-45914): support commit protocol.
+
+    // TODO(SPARK-45914): support commit protocol (commit and abort).
     val ret = new Array[InternalRow](rdd.partitions.length)
     sparkSession.sparkContext.runJob(
       rdd,
