@@ -1611,6 +1611,9 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
       GreaterThan(Literal("1.5"), Literal(BigDecimal("0.5"))),
       GreaterThan(Cast(Literal("1.5"), DoubleType), Cast(Literal(BigDecimal("0.5")),
         DoubleType)))
+    ruleTest(rule,
+      GreaterThan(Literal("1.0"), Literal(BigDecimal("1"))),
+      GreaterThan(Cast(Literal("1.0"), DecimalType(1, 0)), Literal(BigDecimal("1"))))
     // Checks that dates/timestamps are not promoted to strings
     val date0301 = Literal(java.sql.Date.valueOf("2017-03-01"))
     val timestamp0301000000 = Literal(Timestamp.valueOf("2017-03-01 00:00:00"))
