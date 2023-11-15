@@ -4542,11 +4542,11 @@ object SQLConf {
       .createWithDefault(false)
 
   val LEGACY_RETAIN_FRACTION_DIGITS_FIRST =
-    buildConf("spark.sql.legacy.decimalLeastCommonType.retainFractionDigitsFirst")
+    buildConf("spark.sql.legacy.decimal.retainFractionDigitsOnTruncate")
       .internal()
       .doc("When set to true, we will try to retain the fraction digits first rather than " +
-        "integral digits, when getting a least common type between decimal types, and the " +
-        "result decimal precision exceeds the max precision.")
+        "integral digits as prior Spark 4.0, when getting a least common type between decimal " +
+        "types, and the result decimal precision exceeds the max precision.")
       .booleanConf
       .createWithDefault(false)
 
