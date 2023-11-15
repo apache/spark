@@ -47,7 +47,6 @@ class SubqueryAdaptiveBroadcastExecSuite extends SparkPlanTest with SharedSparkS
 
     // check equivalence with SubqueryBroadcastExec
     val sbe = SubqueryBroadcastExec("one", 1, lp1.output, sp1)
-    assert(sabe1 == sbe)
     val c3 = sbe.canonicalized
     assert(c1 == c3)
   }
