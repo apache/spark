@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Abstract class for writing out data in a single Spark task.
@@ -80,7 +81,7 @@ abstract class FileFormatDataWriter(
 
   def writeWithMetrics(record: InternalRow, count: Long): Unit = {
     if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
-      CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
+      CustomMetrics.updateMetrics(currentMetricsValues.toImmutableArraySeq, customMetrics)
     }
     write(record)
   }
@@ -92,7 +93,7 @@ abstract class FileFormatDataWriter(
       writeWithMetrics(iterator.next(), count)
       count += 1
     }
-    CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
+    CustomMetrics.updateMetrics(currentMetricsValues.toImmutableArraySeq, customMetrics)
   }
 
   /**
@@ -486,7 +487,7 @@ class DynamicPartitionDataConcurrentWriter(
       writeWithMetrics(iterator.next(), count)
       count += 1
     }
-    CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
+    CustomMetrics.updateMetrics(currentMetricsValues.toImmutableArraySeq, customMetrics)
 
     if (iterator.hasNext) {
       count = 0L
@@ -497,7 +498,7 @@ class DynamicPartitionDataConcurrentWriter(
         writeWithMetrics(sortIterator.next(), count)
         count += 1
       }
-      CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
+      CustomMetrics.updateMetrics(currentMetricsValues.toImmutableArraySeq, customMetrics)
     }
   }
 

@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.python.{UserDefinedPythonDataSource, UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * This object targets to integrate various UDF test cases so that Scalar UDF, Python UDF,
@@ -393,7 +394,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
-        command = pythonFunc,
+        command = pythonFunc.toImmutableArraySeq,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
         pythonExec = pythonExec,
@@ -428,7 +429,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
       pythonScript: String): UserDefinedPythonDataSource = {
     UserDefinedPythonDataSource(
       dataSourceCls = SimplePythonFunction(
-        command = createPythonDataSource(name, pythonScript),
+        command = createPythonDataSource(name, pythonScript).toImmutableArraySeq,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
         pythonExec = pythonExec,
@@ -446,7 +447,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     UserDefinedPythonTableFunction(
       name = name,
       func = SimplePythonFunction(
-        command = createPythonUDTF(name, pythonScript),
+        command = createPythonUDTF(name, pythonScript).toImmutableArraySeq,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
         pythonExec = pythonExec,
@@ -1165,7 +1166,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
-        command = pandasFunc,
+        command = pandasFunc.toImmutableArraySeq,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
         pythonExec = pythonExec,
@@ -1219,7 +1220,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
-        command = pandasGroupedAggFunc,
+        command = pandasGroupedAggFunc.toImmutableArraySeq,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
         pythonExec = pythonExec,
@@ -1254,7 +1255,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
-        command = createPandasGroupedMapFuncWithState(pythonScript),
+        command = createPandasGroupedMapFuncWithState(pythonScript).toImmutableArraySeq,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
         pythonExec = pythonExec,

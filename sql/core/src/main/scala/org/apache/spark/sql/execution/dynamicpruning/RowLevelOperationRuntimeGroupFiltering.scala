@@ -28,6 +28,7 @@ import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Implicits, DataSourceV2Relation, DataSourceV2ScanRelation}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A rule that assigns a subquery to filter groups in row-level operations at runtime.
@@ -63,7 +64,7 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
           val command = replaceData.operation.command
           val matchingRowsPlan = buildMatchingRowsPlan(relation, cond, tableAttrs, command)
 
-          val filterAttrs = scan.filterAttributes
+          val filterAttrs = scan.filterAttributes.toImmutableArraySeq
           val buildKeys = V2ExpressionUtils.resolveRefs[Attribute](filterAttrs, matchingRowsPlan)
           val pruningKeys = V2ExpressionUtils.resolveRefs[Attribute](filterAttrs, r)
           val dynamicPruningCond = buildDynamicPruningCond(matchingRowsPlan, buildKeys, pruningKeys)

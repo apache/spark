@@ -32,6 +32,7 @@ import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.StrategyOnNoMatchStartingOffset
 import org.apache.spark.util.{UninterruptibleThread, UninterruptibleThreadRunner}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * This class uses Kafka's own [[org.apache.kafka.clients.consumer.KafkaConsumer]] API to
@@ -535,7 +536,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       }
       KafkaOffsetRange(tp, fromOffset, untilOffset, preferredLoc = None)
     }
-    rangeCalculator.getRanges(ranges, getSortedExecutorList())
+    rangeCalculator.getRanges(ranges, getSortedExecutorList().toImmutableArraySeq)
   }
 
   private def partitionsAssignedToConsumer(

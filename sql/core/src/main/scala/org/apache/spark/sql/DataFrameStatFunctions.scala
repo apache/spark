@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{BloomFilterAggregate
 import org.apache.spark.sql.execution.stat._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
 
 /**
@@ -98,11 +99,10 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       cols: Array[String],
       probabilities: Array[Double],
       relativeError: Double): Array[Array[Double]] = withOrigin {
-    import org.apache.spark.util.ArrayImplicits._
     StatFunctions.multipleApproxQuantiles(
       df.select(cols.map(col).toImmutableArraySeq: _*),
-      cols,
-      probabilities,
+      cols.toImmutableArraySeq,
+      probabilities.toImmutableArraySeq,
       relativeError).map(_.toArray).toArray
   }
 
@@ -259,7 +259,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def freqItems(cols: Array[String], support: Double): DataFrame = withOrigin {
-    FrequentItems.singlePassFreqItems(df, cols, support)
+    FrequentItems.singlePassFreqItems(df, cols.toImmutableArraySeq, support)
   }
 
   /**
@@ -278,7 +278,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def freqItems(cols: Array[String]): DataFrame = withOrigin {
-    FrequentItems.singlePassFreqItems(df, cols, 0.01)
+    FrequentItems.singlePassFreqItems(df, cols.toImmutableArraySeq, 0.01)
   }
 
   /**

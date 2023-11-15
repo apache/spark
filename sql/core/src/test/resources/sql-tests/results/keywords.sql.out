@@ -320,6 +320,7 @@ VALUES	false
 VAR	false
 VARCHAR	false
 VARIABLE	false
+VARIANT	false
 VERSION	false
 VIEW	false
 VIEWS	false

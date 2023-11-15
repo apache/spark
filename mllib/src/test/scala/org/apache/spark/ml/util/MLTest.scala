@@ -33,6 +33,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.test.TestSparkSession
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 trait MLTest extends StreamTest with TempDirectory { self: Suite =>
@@ -133,7 +134,7 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
       (globalCheckFunction: Seq[Row] => Unit): Unit = {
     val dfOutput = transformer.transform(dataframe)
     val outputs = dfOutput.select(firstResultCol, otherResultCols: _*).collect()
-    globalCheckFunction(outputs)
+    globalCheckFunction(outputs.toImmutableArraySeq)
   }
 
   def testTransformer[A : Encoder](

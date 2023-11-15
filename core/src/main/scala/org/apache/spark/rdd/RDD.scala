@@ -45,6 +45,7 @@ import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{ExternalAppendOnlyMap, OpenHashMap,
   Utils => collectionUtils}
@@ -1963,8 +1964,7 @@ abstract class RDD[T: ClassTag](
       val storageInfo = rdd.context.getRDDStorageInfo(_.id == rdd.id).map(info =>
         "    CachedPartitions: %d; MemorySize: %s; DiskSize: %s".format(
           info.numCachedPartitions, bytesToString(info.memSize), bytesToString(info.diskSize)))
-
-      s"$rdd [$persistence]" +: storageInfo
+      (s"$rdd [$persistence]" +: storageInfo).toImmutableArraySeq
     }
 
     // Apply a different rule to the last child

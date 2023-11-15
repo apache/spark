@@ -28,6 +28,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Params for [[Imputer]] and [[ImputerModel]].
@@ -201,7 +202,7 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
         s"missingValue(${$(missingValue)})")
     }
 
-    val rows = spark.sparkContext.parallelize(Seq(Row.fromSeq(results)))
+    val rows = spark.sparkContext.parallelize(Seq(Row.fromSeq(results.toImmutableArraySeq)))
     val schema = StructType(inputColumns.map(col => StructField(col, DoubleType, nullable = false)))
     val surrogateDF = spark.createDataFrame(rows, schema)
     copyValues(new ImputerModel(uid, surrogateDF).setParent(this))
@@ -277,7 +278,7 @@ class ImputerModel private[ml] (
         .otherwise(ic)
         .cast(inputType)
     }
-    dataset.withColumns(outputColumns, newCols).toDF()
+    dataset.withColumns(outputColumns.toImmutableArraySeq, newCols.toImmutableArraySeq).toDF()
   }
 
   override def transformSchema(schema: StructType): StructType = {

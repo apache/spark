@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.streaming
 
+import java.sql.Timestamp
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 import scala.jdk.CollectionConverters._
@@ -35,6 +38,7 @@ import org.apache.spark.sql.streaming.StreamingQueryStatusAndProgressSuite._
 import org.apache.spark.sql.streaming.StreamingQuerySuite.clock
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
   test("StreamingQueryProgress - prettyJson") {
@@ -278,7 +282,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
         p.sources.size >= 1 && p.stateOperators.size >= 1 && p.sink != null
       })
 
-      val array = spark.sparkContext.parallelize(progress).collect()
+      val array = spark.sparkContext.parallelize(progress.toImmutableArraySeq).collect()
       assert(array.length === progress.length)
       array.zip(progress).foreach { case (p1, p2) =>
         // Make sure we did serialize and deserialize the object
@@ -352,6 +356,47 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
       }),
       StopStream
     )
+  }
+
+  test("SPARK-45655: Use current batch timestamp in observe API") {
+    import testImplicits._
+
+    val inputData = MemoryStream[Timestamp]
+
+    // current_date() internally uses current batch timestamp on streaming query
+    val query = inputData.toDF()
+      .filter("value < current_date()")
+      .observe("metrics", count(expr("value >= current_date()")).alias("dropped"))
+      .writeStream
+      .queryName("ts_metrics_test")
+      .format("memory")
+      .outputMode("append")
+      .start()
+
+    val timeNow = Instant.now().truncatedTo(ChronoUnit.SECONDS)
+
+    // this value would be accepted by the filter and would not count towards
+    // dropped metrics.
+    val validValue = Timestamp.from(timeNow.minus(2, ChronoUnit.DAYS))
+    inputData.addData(validValue)
+
+    // would be dropped by the filter and count towards dropped metrics
+    inputData.addData(Timestamp.from(timeNow.plus(2, ChronoUnit.DAYS)))
+
+    query.processAllAvailable()
+    query.stop()
+
+    val dropped = query.recentProgress.map { p =>
+      val metricVal = Option(p.observedMetrics.get("metrics"))
+      metricVal.map(_.getLong(0)).getOrElse(0L)
+    }.sum
+    // ensure dropped metrics are correct
+    assert(dropped == 1)
+
+    val data = spark.read.table("ts_metrics_test").collect()
+
+    // ensure valid value ends up in output
+    assert(data(0).getAs[Timestamp](0).equals(validValue))
   }
 
   def waitUntilBatchProcessed: AssertOnQuery = Execute { q =>

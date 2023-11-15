@@ -55,6 +55,7 @@ import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.{CallSite, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The entry point to programming Spark with the Dataset and DataFrame API.
@@ -646,7 +647,7 @@ class SparkSession private(
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
         if (args.nonEmpty) {
-          PosParameterizedQuery(parsedPlan, args.map(lit(_).expr))
+          PosParameterizedQuery(parsedPlan, args.map(lit(_).expr).toImmutableArraySeq)
         } else {
           parsedPlan
         }
@@ -901,7 +902,7 @@ class SparkSession private(
     val (dataType, _) = JavaTypeInference.inferDataType(beanClass)
     dataType.asInstanceOf[StructType].fields.map { f =>
       AttributeReference(f.name, f.dataType, f.nullable)()
-    }
+    }.toImmutableArraySeq
   }
 
   /**

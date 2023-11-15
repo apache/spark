@@ -42,6 +42,7 @@ import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Object for grouping error messages from exceptions thrown during query compilation.
@@ -845,7 +846,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       ident: Identifier,
       operation: String): Throwable = {
     unsupportedTableOperationError(
-      catalog.name +: ident.namespace :+ ident.name, operation)
+      (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq, operation)
   }
 
   def unsupportedTableOperationError(
@@ -1560,6 +1561,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def cannotSaveIntervalIntoExternalStorageError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1136",
+      messageParameters = Map.empty)
+  }
+
+  def cannotSaveVariantIntoExternalStorageError(): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_SAVE_VARIANT",
       messageParameters = Map.empty)
   }
 
@@ -3823,5 +3830,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "XML_ROW_TAG_MISSING",
       messageParameters = Map("rowTag" -> toSQLId(optionName))
     )
+  }
+
+  def invalidUDFClassError(invalidClass: String): Throwable = {
+    new InvalidUDFClassException(
+      errorClass = "_LEGACY_ERROR_TEMP_2450",
+      messageParameters = Map("invalidClass" -> invalidClass))
   }
 }

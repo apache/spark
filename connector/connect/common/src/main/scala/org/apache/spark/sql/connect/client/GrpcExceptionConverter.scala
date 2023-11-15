@@ -168,7 +168,7 @@ private[client] object GrpcExceptionConverter {
   private[client] case class ErrorParams(
       message: String,
       cause: Option[Throwable],
-      // errorClass will only be set if the error is both enriched and SparkThrowable.
+      // errorClass will only be set if the error is SparkThrowable.
       errorClass: Option[String],
       // messageParameters will only be set if the error is both enriched and SparkThrowable.
       messageParameters: Map[String, String],
@@ -204,34 +204,24 @@ private[client] object GrpcExceptionConverter {
         messageParameters = params.messageParameters,
         context = params.queryContext)),
     errorConstructor(params =>
-      new NamespaceAlreadyExistsException(
-        params.message,
-        params.errorClass,
-        params.messageParameters)),
+      new NamespaceAlreadyExistsException(params.errorClass.orNull, params.messageParameters)),
     errorConstructor(params =>
       new TableAlreadyExistsException(
-        params.message,
-        params.cause,
-        params.errorClass,
-        params.messageParameters)),
+        params.errorClass.orNull,
+        params.messageParameters,
+        params.cause)),
     errorConstructor(params =>
       new TempTableAlreadyExistsException(
-        params.message,
-        params.cause,
-        params.errorClass,
-        params.messageParameters)),
+        params.errorClass.orNull,
+        params.messageParameters,
+        params.cause)),
     errorConstructor(params =>
       new NoSuchDatabaseException(
-        params.message,
-        params.cause,
-        params.errorClass,
-        params.messageParameters)),
+        params.errorClass.orNull,
+        params.messageParameters,
+        params.cause)),
     errorConstructor(params =>
-      new NoSuchTableException(
-        params.message,
-        params.cause,
-        params.errorClass,
-        params.messageParameters)),
+      new NoSuchTableException(params.errorClass.orNull, params.messageParameters, params.cause)),
     errorConstructor[NumberFormatException](params =>
       new SparkNumberFormatException(
         params.message,
@@ -367,14 +357,20 @@ private[client] object GrpcExceptionConverter {
     implicit val formats = DefaultFormats
     val classes =
       JsonMethods.parse(info.getMetadataOrDefault("classes", "[]")).extract[Array[String]]
+    val errorClass = info.getMetadataOrDefault("errorClass", null)
+    val builder = FetchErrorDetailsResponse.Error
+      .newBuilder()
+      .setMessage(message)
+      .addAllErrorTypeHierarchy(classes.toImmutableArraySeq.asJava)
 
-    errorsToThrowable(
-      0,
-      Seq(
-        FetchErrorDetailsResponse.Error
+    if (errorClass != null) {
+      builder.setSparkThrowable(
+        FetchErrorDetailsResponse.SparkThrowable
           .newBuilder()
-          .setMessage(message)
-          .addAllErrorTypeHierarchy(classes.toImmutableArraySeq.asJava)
-          .build()))
+          .setErrorClass(errorClass)
+          .build())
+    }
+
+    errorsToThrowable(0, Seq(builder.build()))
   }
 }

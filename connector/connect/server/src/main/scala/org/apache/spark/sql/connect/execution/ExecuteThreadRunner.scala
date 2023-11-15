@@ -162,6 +162,21 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
             s"${executeHolder.request.getPlan.getOpTypeCase} not supported.")
       }
 
+      if (executeHolder.observations.nonEmpty) {
+        val observedMetrics = executeHolder.observations.map { case (name, observation) =>
+          val values = observation.getOrEmpty.map { case (key, value) =>
+            (Some(key), value)
+          }.toSeq
+          name -> values
+        }.toMap
+        executeHolder.responseObserver.onNext(
+          SparkConnectPlanExecution
+            .createObservedMetricsResponse(
+              executeHolder.sessionHolder.sessionId,
+              executeHolder.sessionHolder.serverSessionId,
+              observedMetrics))
+      }
+
       lock.synchronized {
         // Synchronized before sending ResultComplete, and up until completing the result stream
         // to prevent a situation in which a client of reattachable execution receives

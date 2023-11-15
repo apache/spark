@@ -250,15 +250,18 @@ class SparkSession private[sql] (
           .setSql(sqlText)
           .addAllPosArguments(args.map(lit(_).expr).toImmutableArraySeq.asJava)))
     val plan = proto.Plan.newBuilder().setCommand(cmd)
-    // .toBuffer forces that the iterator is consumed and closed
-    val responseSeq = client.execute(plan.build()).toBuffer.toSeq
+    val responseIter = client.execute(plan.build())
 
-    val response = responseSeq
-      .find(_.hasSqlCommandResult)
-      .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
-
-    // Update the builder with the values from the result.
-    builder.mergeFrom(response.getSqlCommandResult.getRelation)
+    try {
+      val response = responseIter
+        .find(_.hasSqlCommandResult)
+        .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
+      // Update the builder with the values from the result.
+      builder.mergeFrom(response.getSqlCommandResult.getRelation)
+    } finally {
+      // consume the rest of the iterator
+      responseIter.foreach(_ => ())
+    }
   }
 
   /**
@@ -309,15 +312,18 @@ class SparkSession private[sql] (
             .setSql(sqlText)
             .putAllNamedArguments(args.asScala.view.mapValues(lit(_).expr).toMap.asJava)))
       val plan = proto.Plan.newBuilder().setCommand(cmd)
-      // .toBuffer forces that the iterator is consumed and closed
-      val responseSeq = client.execute(plan.build()).toBuffer.toSeq
+      val responseIter = client.execute(plan.build())
 
-      val response = responseSeq
-        .find(_.hasSqlCommandResult)
-        .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
-
-      // Update the builder with the values from the result.
-      builder.mergeFrom(response.getSqlCommandResult.getRelation)
+      try {
+        val response = responseIter
+          .find(_.hasSqlCommandResult)
+          .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
+        // Update the builder with the values from the result.
+        builder.mergeFrom(response.getSqlCommandResult.getRelation)
+      } finally {
+        // consume the rest of the iterator
+        responseIter.foreach(_ => ())
+      }
   }
 
   /**
@@ -543,14 +549,14 @@ class SparkSession private[sql] (
     f(builder)
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
-    // .toBuffer forces that the iterator is consumed and closed
-    client.execute(plan).toBuffer
+    // .foreach forces that the iterator is consumed and closed
+    client.execute(plan).foreach(_ => ())
   }
 
   private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
-    // .toBuffer forces that the iterator is consumed and closed
-    client.execute(plan).toBuffer.toSeq
+    // .toSeq forces that the iterator is consumed and closed
+    client.execute(plan).toSeq
   }
 
   private[sql] def registerUdf(udf: proto.CommonInlineUserDefinedFunction): Unit = {
