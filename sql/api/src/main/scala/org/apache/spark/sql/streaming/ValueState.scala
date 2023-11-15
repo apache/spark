@@ -31,7 +31,6 @@ private[sql] trait ValueState[S] extends Serializable {
 
   /** Whether state exists or not. */
   def exists(): Boolean
-
   /**
    * Get the state value if it exists
    * @throws java.util.NoSuchElementException if the state does not exist
