@@ -22,8 +22,6 @@ import java.util.Comparator
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
-import org.apache.spark.QueryContext
-import org.apache.spark.SparkException.internalError
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -42,6 +40,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SQLOpenHashSet
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
+import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.unsafe.types.{ByteArray, CalendarInterval, UTF8String}
 
 /**
@@ -3081,34 +3080,6 @@ case class Sequence(
 }
 
 object Sequence {
-  private def prettyName: String = "sequence"
-
-  def sequenceLength(start: Long, stop: Long, step: Long): Int = {
-    try {
-      val delta = Math.subtractExact(stop, start)
-      if (delta == Long.MinValue && step == -1L) {
-        // We must special-case division of Long.MinValue by -1 to catch potential unchecked
-        // overflow in next operation. Division does not have a builtin overflow check. We
-        // previously special-case div-by-zero.
-        throw new ArithmeticException("Long overflow (Long.MinValue / -1)")
-      }
-      val len = if (stop == start) 1L else Math.addExact(1L, (delta / step))
-      if (len > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-        throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(prettyName, len)
-      }
-      len.toInt
-    } catch {
-      // We handle overflows in the previous try block by raising an appropriate exception.
-      case _: ArithmeticException =>
-        val safeLen =
-          BigInt(1) + (BigInt(stop) - BigInt(start)) / BigInt(step)
-        if (safeLen > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-          throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(prettyName, safeLen)
-        }
-        throw internalError("Unreachable code reached.")
-      case e: Exception => throw e
-    }
-  }
 
   private type LessThanOrEqualFn = (Any, Any) => Boolean
 
@@ -3480,7 +3451,13 @@ object Sequence {
         || (estimatedStep == num.zero && start == stop),
       s"Illegal sequence boundaries: $start to $stop by $step")
 
-    sequenceLength(start.toLong, stop.toLong, estimatedStep.toLong)
+    val len = if (start == stop) 1L else 1L + (stop.toLong - start.toLong) / estimatedStep.toLong
+
+    require(
+      len <= MAX_ROUNDED_ARRAY_LENGTH,
+      s"Too long sequence: $len. Should be <= $MAX_ROUNDED_ARRAY_LENGTH")
+
+    len.toInt
   }
 
   private def genSequenceLengthCode(
@@ -3490,7 +3467,7 @@ object Sequence {
       step: String,
       estimatedStep: String,
       len: String): String = {
-    val calcFn = classOf[Sequence].getName + ".sequenceLength"
+    val longLen = ctx.freshName("longLen")
     s"""
        |if (!(($estimatedStep > 0 && $start <= $stop) ||
        |  ($estimatedStep < 0 && $start >= $stop) ||
@@ -3498,7 +3475,12 @@ object Sequence {
        |  throw new IllegalArgumentException(
        |    "Illegal sequence boundaries: " + $start + " to " + $stop + " by " + $step);
        |}
-       |int $len = $calcFn((long) $start, (long) $stop, (long) $estimatedStep);
+       |long $longLen = $stop == $start ? 1L : 1L + ((long) $stop - $start) / $estimatedStep;
+       |if ($longLen > $MAX_ROUNDED_ARRAY_LENGTH) {
+       |  throw new IllegalArgumentException(
+       |    "Too long sequence: " + $longLen + ". Should be <= $MAX_ROUNDED_ARRAY_LENGTH");
+       |}
+       |int $len = (int) $longLen;
        """.stripMargin
   }
 }
