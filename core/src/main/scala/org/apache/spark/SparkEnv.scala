@@ -196,10 +196,6 @@ class SparkEnv (
   def initializeShuffleManager(): Unit = {
     Preconditions.checkState(null == _shuffleManager,
       "Shuffle manager already initialized to %s", _shuffleManager)
-    // Must not be driver
-    if (executorId == SparkContext.DRIVER_IDENTIFIER) {
-      throw new IllegalArgumentException("Should not be called from the driver")
-    }
     _shuffleManager = ShuffleManager.create(conf, executorId == SparkContext.DRIVER_IDENTIFIER)
   }
 }
@@ -372,12 +368,6 @@ object SparkEnv extends Logging {
       new MapOutputTrackerMasterEndpoint(
         rpcEnv, mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
 
-    val shuffleManager: ShuffleManager = if (isDriver) {
-      ShuffleManager.create(conf, true)
-    } else {
-      null
-    }
-
     val memoryManager: MemoryManager = UnifiedMemoryManager(conf, numUsableCores)
 
     val blockManagerPort = if (isDriver) {
@@ -415,7 +405,7 @@ object SparkEnv extends Logging {
             None
           }, blockManagerInfo,
           mapOutputTracker.asInstanceOf[MapOutputTrackerMaster],
-          shuffleManager,
+          _shuffleManager = null,
           isDriver)),
       registerOrLookupEndpoint(
         BlockManagerMaster.DRIVER_HEARTBEAT_ENDPOINT_NAME,
@@ -441,7 +431,7 @@ object SparkEnv extends Logging {
       conf,
       memoryManager,
       mapOutputTracker,
-      shuffleManager,
+      _shuffleManager = null,
       blockTransferService,
       securityManager,
       externalShuffleClient)
@@ -494,7 +484,6 @@ object SparkEnv extends Logging {
     if (isDriver) {
       val sparkFilesDir = Utils.createTempDir(Utils.getLocalDir(conf), "userFiles").getAbsolutePath
       envInstance.driverTmpDir = Some(sparkFilesDir)
-      envInstance._shuffleManager = shuffleManager
     }
 
     envInstance
