@@ -23,8 +23,8 @@ import scala.reflect.runtime.universe.typeTag
 import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, InterpretedOrdering, SortOrder}
 import org.apache.spark.sql.catalyst.util.{ArrayData, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, VarcharType, YearMonthIntervalType}
-import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, VarcharType, VariantType, YearMonthIntervalType}
+import org.apache.spark.unsafe.types.{ByteArray, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
 sealed abstract class PhysicalDataType {
@@ -58,6 +58,7 @@ object PhysicalDataType {
     case StructType(fields) => PhysicalStructType(fields)
     case MapType(keyType, valueType, valueContainsNull) =>
       PhysicalMapType(keyType, valueType, valueContainsNull)
+    case VariantType => PhysicalVariantType
     case _ => UninitializedPhysicalType
   }
 
@@ -326,6 +327,18 @@ case class PhysicalStructType(fields: Array[StructField]) extends PhysicalDataTy
     })
   }
 }
+
+class PhysicalVariantType extends PhysicalDataType {
+  private[sql] type InternalType = VariantVal
+  @transient private[sql] lazy val tag = typeTag[InternalType]
+
+  // TODO(SPARK-45891): Support comparison for the Variant type.
+  override private[sql] def ordering =
+    throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(
+      "PhysicalVariantType")
+}
+
+object PhysicalVariantType extends PhysicalVariantType
 
 object UninitializedPhysicalType extends PhysicalDataType {
   override private[sql] def ordering =

@@ -162,6 +162,8 @@ object InterpretedUnsafeProjection {
 
         case PhysicalStringType => (v, i) => writer.write(i, v.getUTF8String(i))
 
+        case PhysicalVariantType => (v, i) => writer.write(i, v.getVariant(i))
+
         case PhysicalStructType(fields) =>
           val numFields = fields.length
           val rowWriter = new UnsafeRowWriter(writer, numFields)

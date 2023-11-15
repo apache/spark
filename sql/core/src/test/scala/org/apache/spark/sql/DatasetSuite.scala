@@ -2663,16 +2663,29 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-45592: Coaleasced shuffle read is not compatible with hash partitioning") {
-    val ee = spark.range(0, 1000000, 1, 5).map(l => (l, l)).toDF()
-      .persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
-    ee.count()
+    withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "20",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2000") {
+      val ee = spark.range(0, 1000, 1, 5).map(l => (l, l - 1)).toDF()
+        .persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
+      ee.count()
 
-    val minNbrs1 = ee
-      .groupBy("_1").agg(min(col("_2")).as("min_number"))
-      .persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
+      // `minNbrs1` will start with 20 partitions and without the fix would coalesce to ~10
+      // partitions.
+      val minNbrs1 = ee
+        .groupBy("_2").agg(min(col("_1")).as("min_number"))
+        .select(col("_2") as "_1", col("min_number"))
+        .persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
+      minNbrs1.count()
 
-    val join = ee.join(minNbrs1, "_1")
-    assert(join.count() == 1000000)
+      // shuffle on `ee` will start with 2 partitions, smaller than `minNbrs1`'s partition num,
+      // and `EnsureRequirements` will change its partition num to `minNbrs1`'s partition num.
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
+        val join = ee.join(minNbrs1, "_1")
+        assert(join.count() == 999)
+      }
+    }
   }
 
   test("SPARK-45022: exact DatasetQueryContext call site") {

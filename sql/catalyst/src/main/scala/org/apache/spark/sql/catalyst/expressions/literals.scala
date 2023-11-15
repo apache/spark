@@ -97,6 +97,7 @@ object Literal {
       val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
       Literal(convert(a), dataType)
     case i: CalendarInterval => Literal(i, CalendarIntervalType)
+    case v: VariantVal => Literal(v, VariantType)
     case null => Literal(null, NullType)
     case v: Literal => v
     case _ =>
@@ -143,6 +144,7 @@ object Literal {
     case _ if clz == classOf[BigInt] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[CalendarInterval] => CalendarIntervalType
+    case _ if clz == classOf[VariantVal] => VariantType
 
     case _ if clz.isArray => ArrayType(componentTypeToDataType(clz.getComponentType))
 
@@ -235,6 +237,7 @@ object Literal {
         case PhysicalNullType => true
         case PhysicalShortType => v.isInstanceOf[Short]
         case PhysicalStringType => v.isInstanceOf[UTF8String]
+        case PhysicalVariantType => v.isInstanceOf[VariantVal]
         case st: PhysicalStructType =>
           v.isInstanceOf[InternalRow] && {
             val row = v.asInstanceOf[InternalRow]
