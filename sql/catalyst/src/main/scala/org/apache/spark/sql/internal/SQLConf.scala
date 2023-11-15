@@ -4560,6 +4560,9 @@ object SQLConf {
              |This will allow user to overwrite arbitrary file on spark
              |driver node we should only enable it for testing purpose.
              |""".stripMargin)
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val LEGACY_RETAIN_FRACTION_DIGITS_FIRST =
     buildConf("spark.sql.legacy.decimal.retainFractionDigitsOnTruncate")
