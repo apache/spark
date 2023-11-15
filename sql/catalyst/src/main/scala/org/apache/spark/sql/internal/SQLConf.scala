@@ -4547,6 +4547,7 @@ object SQLConf {
       .doc("When set to true, we will try to retain the fraction digits first rather than " +
         "integral digits as prior Spark 4.0, when getting a least common type between decimal " +
         "types, and the result decimal precision exceeds the max precision.")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
 
