@@ -26,7 +26,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, I
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-// import org.apache.spark.util.Utils
+import org.apache.spark.util.Utils
 
 /**
  * A logical plan representing a data source v2 table.
@@ -74,7 +74,7 @@ case class DataSourceV2Relation(
   }
 
   override def computeStats(): Statistics = {
-    if (false /* Utils.isTesting */) {
+    if (Utils.isTesting) {
       // when testing, throw an exception if this computeStats method is called because stats should
       // not be accessed before pushing the projection and filters to create a scan. otherwise, the
       // stats are not accurate because they are based on a full table scan of all columns.
