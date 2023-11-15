@@ -68,9 +68,10 @@ class StatePartitionReader(
     }
     val numColsPrefixKey = if (stateStoreMetadata.isEmpty) {
       logWarning("Metadata for state store not found, possible cause is this checkpoint " +
-        "is created by older version of spark. The state of session window aggregation can't be " +
-        "read correctly without state metadata and runtime exception will be thrown. " +
-        "Run the streaming query in newer spark version to generate state metadata.")
+        "is created by older version of spark. If the query has session window aggregation, " +
+        "the state can't be read correctly and runtime exception will be thrown. " +
+        "Run the streaming query in newer spark version to generate state metadata " +
+        "can fix the issue.")
       0
     } else {
       require(stateStoreMetadata.length == 1)
