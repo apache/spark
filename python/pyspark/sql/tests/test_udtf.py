@@ -2533,7 +2533,6 @@ class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
             super(UDTFTests, cls).tearDownClass()
 
 
-"""
 @unittest.skipIf(
     not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
 )
@@ -2827,7 +2826,7 @@ class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
             cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
         finally:
             super(UDTFArrowTests, cls).tearDownClass()
-"""
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_udtf import *  # noqa: F401
