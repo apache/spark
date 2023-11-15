@@ -1936,7 +1936,7 @@ class DataFrameWriter(OptionUtils):
         if partitionBy is not None:
             self.partitionBy(partitionBy)
         self._set_opts(compression=compression)
-        if self._df.isEmpty() is True and partitionBy is not None:
+        if self._df.isEmpty() and partitionBy is not None:
             self._write_empty_partition(path, partitionBy)
         else:
             self._jwrite.parquet(path)
@@ -1950,9 +1950,9 @@ class DataFrameWriter(OptionUtils):
         ...
 
     def _write_empty_partition(self, path: str, partitionBy: Union[str, List[str]]) -> None:
-            temp_row_data = {col: None for col in partitionBy} if isinstance(partitionBy, list) else {partitionBy: None}
-            temp_df = self._df.sparkSession.createDataFrame([Row(**temp_row_data)])
-            temp_df.write.mode("overwrite").partitionBy(partitionBy).parquet(path)
+        temp_row_data = {col: None for col in partitionBy} if isinstance(partitionBy, list) else {partitionBy: None}
+        temp_df = self._df.sparkSession.createDataFrame([Row(**temp_row_data)])
+        temp_df.write.mode("overwrite").partitionBy(partitionBy).parquet(path)
 
     def text(
         self, path: str, compression: Optional[str] = None, lineSep: Optional[str] = None
