@@ -21,7 +21,8 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, PropagateEmptyRelation}
 import org.apache.spark.sql.catalyst.util.resourceToString
 import org.apache.spark.sql.connector.catalog.InMemoryTableWithV2FilterCatalog
-import org.apache.spark.sql.execution.adaptive.AQEPropagateEmptyRelation
+import org.apache.spark.sql.execution.{SparkPlan, UnionExec}
+import org.apache.spark.sql.execution.adaptive.{AQEPropagateEmptyRelation, AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.TestSparkSession
 
@@ -54,7 +55,7 @@ class TPCDSV2RelationLimitedTest extends QueryTest with TPCDSBase with SQLQueryT
                             format: String = "parquet",
                             options: Seq[String] = Nil): Unit = {
 
-    // first read the parquet to create dataframe
+    // first read the parquet to create dataframe and store the table as InMemory table
     val dfwTemp = spark.read.parquet(s"$baseResourcePath/$tableName").writeTo(tableName)
     val dfw = tablePartitionColumns.get(tableName) match {
       case Some(partitionClause) => val cols = partitionClause.map(Column(_))
@@ -65,12 +66,35 @@ class TPCDSV2RelationLimitedTest extends QueryTest with TPCDSBase with SQLQueryT
   }
 
  test("q14b") {
-   val resource = getWorkspaceFilePath("sql", "core", "src", "test", "resources")
+
+   def findUnionExecPlans(plan: SparkPlan): Seq[UnionExec] = {
+     val unionExecs1 = plan collectWithSubqueries  {
+       case u: UnionExec => u
+     }
+     // find leaves which can internally contain plan and extract Unions from it too.
+     val unionExecs2 = plan.collectLeaves().flatMap(pl => pl match {
+       case adp: AdaptiveSparkPlanExec => findUnionExecPlans(adp.finalPhysicalPlan)
+       case qs: QueryStageExec => findUnionExecPlans(qs.plan)
+       // ignore reused exchange exec etc
+       case _ => Seq.empty
+     })
+
+     unionExecs2 ++ unionExecs1
+   }
+
    tpcdsQueries.filter(_ == "q14b").foreach { name =>
      val queryString = resourceToString(s"tpcds/$name.sql")
       val df = spark.sql(queryString)
+     // execute the query
      df.collect()
-     Thread.sleep(100000)
+     val execPlan = df.queryExecution.executedPlan
+     // collect the total UnionExec nodes.
+     val allUnions = findUnionExecPlans(execPlan)
+     assert(allUnions.size == 1)
+     Thread.sleep(1000000)
    }
+
+
+
  }
 }
