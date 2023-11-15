@@ -44,6 +44,7 @@ from pyspark.sql.functions import (
     AnalyzeResult,
     OrderingColumn,
     PartitioningColumn,
+    SkipRestOfInputTableException,
 )
 from pyspark.sql.types import (
     ArrayType,
@@ -2465,6 +2466,56 @@ class BaseUDTFTestsMixin:
                 """
             ),
             [Row(count=20, buffer="abc")],
+        )
+
+    def test_udtf_with_skip_rest_of_input_table_exception(self):
+        @udtf(returnType="current: int, total: int")
+        class TestUDTF:
+            def __init__(self):
+                self._current = 0
+                self._total = 0
+
+            def eval(self, input: Row):
+                self._current = input["id"]
+                self._total += 1
+                if self._total >= 4:
+                    raise SkipRestOfInputTableException("Stop at self._total >= 4")
+
+            def terminate(self):
+                yield self._current, self._total
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        # Run a test case including WITH SINGLE PARTITION on the UDTF call. The
+        # SkipRestOfInputTableException stops scanning rows after the fourth input row is consumed.
+        assertDataFrameEqual(
+            self.spark.sql(
+                """
+                WITH t AS (
+                  SELECT id FROM range(1, 21)
+                )
+                SELECT current, total
+                FROM test_udtf(TABLE(t) WITH SINGLE PARTITION ORDER BY id)
+                """
+            ),
+            [Row(current=4, total=4)],
+        )
+
+        # Run a test case including WITH SINGLE PARTITION on the UDTF call. The
+        # SkipRestOfInputTableException stops scanning rows for each of the two partitions
+        # separately.
+        assertDataFrameEqual(
+            self.spark.sql(
+                """
+                WITH t AS (
+                  SELECT id FROM range(1, 21)
+                )
+                SELECT current, total
+                FROM test_udtf(TABLE(t) PARTITION BY floor(id / 10) ORDER BY id)
+                ORDER BY ALL
+                """
+            ),
+            [Row(current=4, total=4), Row(current=13, total=4), Row(current=20, total=1)],
         )
 
 

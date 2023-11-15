@@ -214,12 +214,11 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
      * In case-insensitive mode, we will infer an array named by foo
      * (as it's the first one we encounter)
      */
-    val caseSensitivityOrdering: Ordering[String] = (x: String, y: String) =>
-      if (caseSensitive) {
-        x.compareTo(y)
-      } else {
-      x.compareToIgnoreCase(y)
-      }
+    val caseSensitivityOrdering: Ordering[String] = if (caseSensitive) {
+      (x: String, y: String) => x.compareTo(y)
+    } else {
+      (x: String, y: String) => x.compareToIgnoreCase(y)
+    }
 
     val nameToDataType =
       collection.mutable.TreeMap.empty[String, DataType](caseSensitivityOrdering)

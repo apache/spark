@@ -38,7 +38,14 @@ if TYPE_CHECKING:
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.session import SparkSession
 
-__all__ = ["AnalyzeArgument", "AnalyzeResult", "UDTFRegistration"]
+__all__ = [
+    "AnalyzeArgument",
+    "AnalyzeResult",
+    "PartitioningColumn",
+    "OrderingColumn",
+    "SkipRestOfInputTableException",
+    "UDTFRegistration",
+]
 
 
 @dataclass(frozen=True)
@@ -116,6 +123,16 @@ class AnalyzeResult:
     withSinglePartition: bool = False
     partitionBy: Sequence[PartitioningColumn] = field(default_factory=tuple)
     orderBy: Sequence[OrderingColumn] = field(default_factory=tuple)
+
+
+class SkipRestOfInputTableException(Exception):
+    """
+    This represents an exception that the 'eval' method may raise to indicate that it is done
+    consuming rows from the current partition of the input table. Then the UDTF's 'terminate'
+    method runs (if any).
+    """
+
+    pass
 
 
 def _create_udtf(

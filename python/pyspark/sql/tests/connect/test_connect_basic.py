@@ -1824,7 +1824,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.assert_eq(cdf, df)
 
-        self.assert_eq(cobservation.get, observation.get)
+        self.assertEquals(cobservation.get, observation.get)
 
         observed_metrics = cdf.attrs["observed_metrics"]
         self.assert_eq(len(observed_metrics), 1)
@@ -3368,8 +3368,8 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
             name = "test" * 10000
             with self.assertRaises(AnalysisException) as e:
                 self.spark.sql("select " + name).collect()
-            self.assertTrue(name in e.exception.message)
-            self.assertFalse("JVM stacktrace" in e.exception.message)
+            self.assertTrue(name in e.exception._message)
+            self.assertFalse("JVM stacktrace" in e.exception._message)
 
     def test_error_enrichment_jvm_stacktrace(self):
         with self.sql_conf(
@@ -3384,7 +3384,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
                         """select from_json(
                             '{"d": "02-29"}', 'd date', map('dateFormat', 'MM-dd'))"""
                     ).collect()
-                self.assertFalse("JVM stacktrace" in e.exception.message)
+                self.assertFalse("JVM stacktrace" in e.exception._message)
 
             with self.sql_conf({"spark.sql.connect.serverStacktrace.enabled": True}):
                 with self.assertRaises(SparkUpgradeException) as e:
@@ -3655,7 +3655,7 @@ class ChannelBuilderTests(unittest.TestCase):
         chan = ChannelBuilder(f"sc://host/;user_agent={user_agent}")
         with self.assertRaises(SparkConnectException) as err:
             chan.userAgent
-        self.assertRegex(err.exception.message, "'user_agent' parameter should not exceed")
+        self.assertRegex(err.exception._message, "'user_agent' parameter should not exceed")
 
         user_agent = "%C3%A4" * 341  # "%C3%A4" -> "ä"; (341 * 6 = 2046) < 2048
         expected = "ä" * 341

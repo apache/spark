@@ -1529,23 +1529,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(false))
     )
 
-    if (!conf.ansiEnabled) {
-      checkError(
-        exception = intercept[AnalysisException] {
-          OneRowRelation().selectExpr("array_contains(array(1), .01234567890123456790123456780)")
-        },
-        errorClass = "DATATYPE_MISMATCH.ARRAY_FUNCTION_DIFF_TYPES",
-        parameters = Map(
-          "sqlExpr" -> "\"array_contains(array(1), 0.01234567890123456790123456780)\"",
-          "functionName" -> "`array_contains`",
-          "dataType" -> "\"ARRAY\"",
-          "leftType" -> "\"ARRAY<INT>\"",
-          "rightType" -> "\"DECIMAL(38,29)\""
-        ),
-        queryContext = Array(ExpectedContext("", "", 0, 55,
-          "array_contains(array(1), .01234567890123456790123456780)"))
-      )
-    }
+    checkAnswer(
+      OneRowRelation().selectExpr("array_contains(array(1), .01234567890123456790123456780)"),
+      Seq(Row(false))
+    )
 
     checkError(
       exception = intercept[AnalysisException] {

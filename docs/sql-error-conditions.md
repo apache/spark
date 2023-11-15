@@ -2378,6 +2378,6 @@ For more details see [WRONG_NUM_ARGS](sql-error-conditions-wrong-num-args-error-
 
 ### XML_ROW_TAG_MISSING
 
-[SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+[SQLSTATE: 42KDF](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 `<rowTag>` option is required for reading files in XML format.
