@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.MapType;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.types.VariantType;
 
 /**
  * Contains necessary information representing a Parquet column, either of primitive or nested type.
@@ -175,7 +176,7 @@ final class ParquetColumnVector {
         child.assemble();
       }
       assembleCollection();
-    } else if (type instanceof StructType) {
+    } else if (type instanceof StructType || type instanceof VariantType) {
       for (ParquetColumnVector child : children) {
         child.assemble();
       }
