@@ -72,7 +72,8 @@ class IncrementalExecution(
       FlatMapGroupsInPandasWithStateStrategy ::
       StreamingRelationStrategy ::
       StreamingDeduplicationStrategy ::
-      StreamingGlobalLimitStrategy(outputMode) :: Nil
+      StreamingGlobalLimitStrategy(outputMode) ::
+      TransformWithStateStrategy :: Nil
   }
 
   private lazy val hadoopConf = sparkSession.sessionState.newHadoopConf()
@@ -264,6 +265,14 @@ class IncrementalExecution(
           hasInitialState = hasInitialState
         )
 
+      case t: TransformWithStateExec =>
+        t.copy(
+          stateInfo = Some(nextStatefulOperationStateInfo()),
+          batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
+          eventTimeWatermarkForLateEvents = None,
+          eventTimeWatermarkForEviction = None
+        )
+
       case m: FlatMapGroupsInPandasWithStateExec =>
         m.copy(
           stateInfo = Some(nextStatefulOperationStateInfo()),
@@ -331,6 +340,12 @@ class IncrementalExecution(
         m.copy(
           eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(m.stateInfo.get),
           eventTimeWatermarkForEviction = inputWatermarkForEviction(m.stateInfo.get)
+        )
+
+      case t: TransformWithStateExec if t.stateInfo.isDefined =>
+        t.copy(
+          eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(t.stateInfo.get),
+          eventTimeWatermarkForEviction = inputWatermarkForEviction(t.stateInfo.get)
         )
 
       case m: FlatMapGroupsInPandasWithStateExec if m.stateInfo.isDefined =>

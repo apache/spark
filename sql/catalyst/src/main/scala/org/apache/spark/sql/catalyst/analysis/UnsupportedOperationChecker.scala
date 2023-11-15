@@ -43,6 +43,9 @@ object UnsupportedOperationChecker extends Logging {
         throwError("dropDuplicatesWithinWatermark is not supported with batch " +
           "DataFrames/DataSets")(d)
 
+      case t: TransformWithState =>
+        throwError("transformWithState is not supported with batch DataFrames/Datasets")(t)
+
       case _ =>
     }
   }
@@ -101,6 +104,7 @@ object UnsupportedOperationChecker extends Logging {
     case f: FlatMapGroupsInPandasWithState if f.isStreaming => true
     case d: Deduplicate if d.isStreaming && d.keys.exists(hasEventTimeCol) => true
     case d: DeduplicateWithinWatermark if d.isStreaming => true
+    case t: TransformWithState if t.isStreaming => true
     case _ => false
   }
 
