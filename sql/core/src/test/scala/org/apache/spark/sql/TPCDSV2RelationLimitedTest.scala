@@ -21,7 +21,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, PropagateEmptyRelation}
 import org.apache.spark.sql.catalyst.util.resourceToString
 import org.apache.spark.sql.connector.catalog.InMemoryTableWithV2FilterCatalog
-import org.apache.spark.sql.execution.adaptive.{AQEPropagateEmptyRelation, AdaptiveSparkPlanExec}
+import org.apache.spark.sql.execution.adaptive.AQEPropagateEmptyRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.TestSparkSession
 
@@ -69,7 +69,6 @@ class TPCDSV2RelationLimitedTest extends QueryTest with TPCDSBase with SQLQueryT
    tpcdsQueries.filter(_ == "q14b").foreach { name =>
      val queryString = resourceToString(s"tpcds/$name.sql")
       val df = spark.sql(queryString)
-      println(df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].finalPhysicalPlan)
      df.collect()
      Thread.sleep(100000)
    }
