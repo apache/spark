@@ -2005,8 +2005,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 //             analyze the plan. Using a different integer literal may lead to
                 //             a repeat GROUP BY ordinal resolution which is wrong. GROUP BY
                 //             constant is meaningless so whatever value does not matter here.
-                // TODO: GROUP BY ordinal should pull out grouping expressions to a Project, then
-                //       the resolved ordinal expression is always `AttributeReference`.
+                // TODO: (SPARK-45932) GROUP BY ordinal should pull out grouping expressions to
+                //       a Project, then the resolved ordinal expression is always
+                //       `AttributeReference`.
                 case Literal(_: Int, IntegerType) =>
                   Literal(index)
                 case _ => ordinalExpr

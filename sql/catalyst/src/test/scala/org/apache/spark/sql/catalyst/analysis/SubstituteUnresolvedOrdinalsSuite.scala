@@ -69,7 +69,7 @@ class SubstituteUnresolvedOrdinalsSuite extends AnalysisTest {
     }
   }
 
-  test("group by ordinal repeated analysis") {
+  test("SPARK-45920: group by ordinal repeated analysis") {
     val plan = testRelation.groupBy(Literal(1))(Literal(100).as("a")).analyze
     comparePlans(
       plan,
