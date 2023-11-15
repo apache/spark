@@ -424,9 +424,6 @@ epub_exclude_files = ['search.html']
 
 # If false, no index is generated.
 #epub_use_index = True
-def setup(app):
-    # The app.add_javascript() is deprecated.
-    getattr(app, "add_js_file", getattr(app, "add_javascript", None))('copybutton.js')
 
 # Skip sample endpoint link (not expected to resolve)
 linkcheck_ignore = [r'https://kinesis.us-east-1.amazonaws.com']
