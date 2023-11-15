@@ -74,18 +74,6 @@ case class SubqueryBroadcastExec(
     SubqueryBroadcastExec("dpp", index, keys, child.canonicalized)
   }
 
-  override def equals(other: Any): Boolean = other match {
-    case x: SubqueryAdaptiveBroadcastExec => this.name == x.name && this.index == x.index &&
-         this.buildKeys == x.buildKeys && this.child == x.child
-
-    case y: SubqueryBroadcastExec => this.name == y.name && this.index == y.index &&
-         this.buildKeys == y.buildKeys && this.child == y.child
-
-    case _ => false
-  }
-
-  override def hashCode: Int = Objects.hashCode(name, index, buildKeys, child)
-
   @transient
   private lazy val relationFuture: JFuture[Array[InternalRow]] = {
     // relationFuture is used in "doExecute". Therefore we can get the execution id correctly here.

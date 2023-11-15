@@ -48,22 +48,10 @@ case class SubqueryAdaptiveBroadcastExec(
 
   protected override def doCanonicalize(): SparkPlan = {
     val keys = buildKeys.map(k => QueryPlan.normalizeExpressions(k, child.output))
-    copy(name = "dpp", buildKeys = keys, child = child.canonicalized)
+    SubqueryBroadcastExec(name = "dpp", index = index, buildKeys = keys,
+      child = child.canonicalized)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SubqueryAdaptiveBroadcastExec =
     copy(child = newChild)
-
-  override def equals(other: Any): Boolean = other match {
-    case x: SubqueryAdaptiveBroadcastExec => this.name == x.name && this.index == x.index &&
-        this.onlyInBroadcast == x.onlyInBroadcast && this.buildPlan == x.buildPlan &&
-        this.buildKeys == x.buildKeys && this.child == x.child
-
-    case y: SubqueryBroadcastExec => this.name == y.name && this.index == y.index &&
-        this.buildKeys == y.buildKeys && this.child == y.child
-
-    case _ => false
-  }
-
-  override def hashCode: Int = Objects.hashCode(name, index, buildKeys, child)
 }
