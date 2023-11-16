@@ -827,7 +827,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     // remove location and comment that are automatically added by HMS unless they are expected
     val toRemove =
       CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filter(expected.contains)
-    assert(expected -- toRemove === actual)
+    assert(expected.toMap -- toRemove === actual)
   }
 
   test("listNamespaces: basic behavior") {

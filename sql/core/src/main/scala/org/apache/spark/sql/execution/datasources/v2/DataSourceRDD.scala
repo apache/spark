@@ -28,6 +28,7 @@ import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, Par
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.util.ArrayImplicits._
 
 class DataSourceRDDPartition(val index: Int, val inputPartitions: Seq[InputPartition])
   extends Partition with Serializable
@@ -89,7 +90,8 @@ class DataSourceRDD(
           context.addTaskCompletionListener[Unit] { _ =>
             // In case of early stopping before consuming the entire iterator,
             // we need to do one more metric update at the end of the task.
-            CustomMetrics.updateMetrics(reader.currentMetricsValues, customMetrics)
+            CustomMetrics
+              .updateMetrics(reader.currentMetricsValues.toImmutableArraySeq, customMetrics)
             iter.forceUpdateMetrics()
             reader.close()
           }
@@ -128,7 +130,7 @@ private class PartitionIterator[T](
       throw QueryExecutionErrors.endOfStreamError()
     }
     if (numRow % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
-      CustomMetrics.updateMetrics(reader.currentMetricsValues, customMetrics)
+      CustomMetrics.updateMetrics(reader.currentMetricsValues.toImmutableArraySeq, customMetrics)
     }
     numRow += 1
     valuePrepared = false

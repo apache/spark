@@ -115,7 +115,7 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     steps:
       - name: Checkout Spark repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         # In order to fetch changed files
         with:
           fetch-depth: 0

@@ -117,4 +117,25 @@ class SimplifyCastsSuite extends PlanTest {
         input.select($"d".cast(LongType).cast(StringType).as("casted")).analyze),
       input.select($"d".cast(LongType).cast(StringType).as("casted")).analyze)
   }
+
+  test("SPARK-45909: Remove the cast if it can safely up-cast in IsNotNull") {
+    val input = LocalRelation($"a".int, $"b".decimal(18, 0))
+    // Remove cast
+    comparePlans(
+      Optimize.execute(
+        input.select($"a".cast(DecimalType(18, 1)).isNotNull.as("v")).analyze),
+      input.select($"a".isNotNull.as("v")).analyze)
+    comparePlans(
+      Optimize.execute(input.select($"a".cast(LongType).isNotNull.as("v")).analyze),
+      input.select($"a".isNotNull.as("v")).analyze)
+    comparePlans(
+      Optimize.execute(input.select($"b".cast(LongType).isNotNull.as("v")).analyze),
+      input.select($"b".isNotNull.as("v")).analyze)
+
+    // Can not remove cast
+    comparePlans(
+      Optimize.execute(
+        input.select($"a".cast(DecimalType(2, 1)).as("v")).analyze),
+      input.select($"a".cast(DecimalType(2, 1)).as("v")).analyze)
+  }
 }

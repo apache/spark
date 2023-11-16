@@ -38,6 +38,7 @@ import org.apache.spark.sql.execution.datasources.FileFormat._
 import org.apache.spark.sql.execution.vectorized.{ColumnVectorUtils, ConstantColumnVector}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.NextIterator
 
 /**
@@ -317,6 +318,6 @@ class FileScanRDD(
   override protected def getPartitions: Array[RDDPartition] = filePartitions.toArray
 
   override protected def getPreferredLocations(split: RDDPartition): Seq[String] = {
-    split.asInstanceOf[FilePartition].preferredLocations()
+    split.asInstanceOf[FilePartition].preferredLocations().toImmutableArraySeq
   }
 }

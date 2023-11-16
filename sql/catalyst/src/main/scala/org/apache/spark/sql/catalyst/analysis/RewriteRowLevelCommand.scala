@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
 
@@ -72,7 +73,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       operation: RowLevelOperation): Seq[AttributeReference] = {
 
     V2ExpressionUtils.resolveRefs[AttributeReference](
-      operation.requiredMetadataAttributes,
+      operation.requiredMetadataAttributes.toImmutableArraySeq,
       relation)
   }
 
@@ -81,7 +82,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       operation: SupportsDelta): Seq[AttributeReference] = {
 
     val rowIdAttrs = V2ExpressionUtils.resolveRefs[AttributeReference](
-      operation.rowId,
+      operation.rowId.toImmutableArraySeq,
       relation)
 
     val nullableRowIdAttrs = rowIdAttrs.filter(_.nullable)

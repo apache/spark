@@ -153,7 +153,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
    * cache, and the tombstones will be eventually removed.
    */
   def listAbandonedExecutions: Seq[ExecuteInfo] = {
-    abandonedTombstones.asMap.asScala.values.toBuffer.toSeq
+    abandonedTombstones.asMap.asScala.values.toSeq
   }
 
   private[connect] def shutdown(): Unit = executionsLock.synchronized {
@@ -236,7 +236,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     executions.values.foreach(_.interruptGrpcResponseSenders())
   }
 
-  private[connect] def listExecuteHolders = executionsLock.synchronized {
-    executions.values.toBuffer.toSeq
+  private[connect] def listExecuteHolders: Seq[ExecuteHolder] = executionsLock.synchronized {
+    executions.values.toSeq
   }
 }

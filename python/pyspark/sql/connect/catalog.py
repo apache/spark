@@ -223,7 +223,7 @@ class Catalog:
             options=options,
         )
         df = DataFrame.withPlan(catalog, session=self._sparkSession)
-        df.toPandas()  # Eager execution.
+        df._to_table()  # Eager execution.
         return df
 
     createExternalTable.__doc__ = PySparkCatalog.createExternalTable.__doc__
@@ -246,7 +246,7 @@ class Catalog:
             options=options,
         )
         df = DataFrame.withPlan(catalog, session=self._sparkSession)
-        df.toPandas()  # Eager execution.
+        df._to_table()  # Eager execution.
         return df
 
     createTable.__doc__ = PySparkCatalog.createTable.__doc__

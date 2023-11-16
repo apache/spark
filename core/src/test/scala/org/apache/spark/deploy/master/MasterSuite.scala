@@ -804,6 +804,7 @@ class MasterSuite extends SparkFunSuite
   private val _state = PrivateMethod[RecoveryState.Value](Symbol("state"))
   private val _newDriverId = PrivateMethod[String](Symbol("newDriverId"))
   private val _newApplicationId = PrivateMethod[String](Symbol("newApplicationId"))
+  private val _createApplication = PrivateMethod[ApplicationInfo](Symbol("createApplication"))
 
   private val workerInfo = makeWorkerInfo(4096, 10)
   private val workerInfos = Array(workerInfo, workerInfo, workerInfo)
@@ -1265,6 +1266,30 @@ class MasterSuite extends SparkFunSuite
       makeMaster(new SparkConf().set(APP_ID_PATTERN, "my app"))
     }.getMessage
     assert(m.contains("Whitespace is not allowed"))
+  }
+
+  test("SPARK-45785: Rotate app num with modulo operation") {
+    val conf = new SparkConf().set(APP_ID_PATTERN, "%2$d").set(APP_NUMBER_MODULO, 1000)
+    val master = makeMaster(conf)
+    val submitDate = new Date()
+    (0 to 2000).foreach { i =>
+      assert(master.invokePrivate(_newApplicationId(submitDate)) === s"${i % 1000}")
+    }
+  }
+
+  test("SPARK-45756: Use appName for appId") {
+    val conf = new SparkConf()
+      .set(MASTER_USE_APP_NAME_AS_APP_ID, true)
+    val master = makeMaster(conf)
+    val desc = new ApplicationDescription(
+        name = " spark - 45756 ",
+        maxCores = None,
+        command = null,
+        appUiUrl = "",
+        defaultProfile = DeployTestUtils.defaultResourceProfile,
+        eventLogDir = None,
+        eventLogCodec = None)
+    assert(master.invokePrivate(_createApplication(desc, null)).id === "spark-45756")
   }
 }
 

@@ -47,6 +47,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
@@ -362,10 +363,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       case s: Seq[_] =>
         s.map(mapChild)
       case m: Map[_, _] =>
-        // `map.mapValues().view.force` return `Map` in Scala 2.12 but return `IndexedSeq` in Scala
-        // 2.13, call `toMap` method manually to compatible with Scala 2.12 and Scala 2.13
-        // `mapValues` is lazy and we need to force it to materialize
-        m.view.mapValues(mapChild).view.force.toMap
+        // `mapValues` is lazy and we need to force it to materialize by converting to Map
+        m.view.mapValues(mapChild).toMap
       case arg: TreeNode[_] if containsChild(arg) => mapTreeNode(arg)
       case Some(child) => Some(mapChild(child))
       case nonChild: AnyRef => nonChild
@@ -784,13 +783,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
         arg.asInstanceOf[BaseType].clone()
       case Some(arg: TreeNode[_]) if containsChild(arg) =>
         Some(arg.asInstanceOf[BaseType].clone())
-      // `map.mapValues().view.force` return `Map` in Scala 2.12 but return `IndexedSeq` in Scala
-      // 2.13, call `toMap` method manually to compatible with Scala 2.12 and Scala 2.13
+      // `mapValues` is lazy and we need to force it to materialize by converting to Map
       case m: Map[_, _] => m.view.mapValues {
         case arg: TreeNode[_] if containsChild(arg) =>
           arg.asInstanceOf[BaseType].clone()
         case other => other
-      }.view.force.toMap // `mapValues` is lazy and we need to force it to materialize
+      }.toMap
       case d: DataType => d // Avoid unpacking Structs
       case args: LazyList[_] => args.map(mapChild).force // Force materialization on stream
       case args: Iterable[_] => args.map(mapChild)
@@ -832,7 +830,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       // Sort elements for deterministic behaviours
       truncatedString(set.toSeq.map(formatArg(_, maxFields)).sorted, "{", ", ", "}", maxFields)
     case array: Array[_] =>
-      truncatedString(array.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields)
+      truncatedString(
+        array.map(formatArg(_, maxFields)).toImmutableArraySeq, "[", ", ", "]", maxFields)
     case other =>
       other.toString
   }

@@ -30,6 +30,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rdd._
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 trait RDDCheckpointTester { self: SparkFunSuite =>
@@ -475,14 +476,14 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
       new PartitionerAwareUnionRDD[(Int, Int)](sc, Array(
         generateFatPairRDD(),
         rdd.map(x => (x % 2, 1)).reduceByKey(partitioner, _ + _)
-      ))
+      ).toImmutableArraySeq)
     }, reliableCheckpoint)
 
     testRDDPartitions(rdd => {
       new PartitionerAwareUnionRDD[(Int, Int)](sc, Array(
         generateFatPairRDD(),
         rdd.map(x => (x % 2, 1)).reduceByKey(partitioner, _ + _)
-      ))
+      ).toImmutableArraySeq)
     }, reliableCheckpoint)
 
     // Test that the PartitionerAwareUnionRDD updates parent partitions
@@ -491,7 +492,7 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
     // implementation of PartitionerAwareUnionRDD.
     val pairRDD = generateFatPairRDD()
     checkpoint(pairRDD, reliableCheckpoint)
-    val unionRDD = new PartitionerAwareUnionRDD(sc, Array(pairRDD))
+    val unionRDD = new PartitionerAwareUnionRDD(sc, Seq(pairRDD))
     val partitionBeforeCheckpoint = serializeDeserialize(
       unionRDD.partitions.head.asInstanceOf[PartitionerAwareUnionRDDPartition])
     pairRDD.count()

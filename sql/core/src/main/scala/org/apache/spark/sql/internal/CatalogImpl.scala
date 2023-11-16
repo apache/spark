@@ -22,14 +22,14 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.{Catalog, CatalogMetadata, Column, Database, Function, Table}
-import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, LogicalPlan, OptionList, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, UnresolvedTableSpec, View}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, FunctionCatalog, Identifier, SupportsNamespaces, Table => V2Table, TableCatalog, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, MultipartIdentifierHelper, NamespaceHelper, TransformHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.ShowTablesCommand
@@ -38,6 +38,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 
 
 /**
@@ -89,7 +90,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     val databases = qe.toRdd.collect().map { row =>
       getNamespace(catalog, parseIdent(row.getString(0)))
     }
-    CatalogImpl.makeDataset(databases, sparkSession)
+    CatalogImpl.makeDataset(databases.toImmutableArraySeq, sparkSession)
   }
 
   /**
@@ -107,7 +108,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     val databases = qe.toRdd.collect().map { row =>
       getNamespace(catalog, parseIdent(row.getString(0)))
     }
-    CatalogImpl.makeDataset(databases, sparkSession)
+    CatalogImpl.makeDataset(databases.toImmutableArraySeq, sparkSession)
   }
 
   /**
@@ -162,69 +163,72 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         makeTable(ns :+ tableName)
       } else {
         val ns = parseIdent(namespaceName)
-        makeTable(catalog.name() +: ns :+ tableName)
+        try {
+          makeTable(catalog.name() +: ns :+ tableName)
+        } catch {
+          case e: AnalysisException if e.getErrorClass == "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE" =>
+            new Table(
+              name = tableName,
+              catalog = catalog.name(),
+              namespace = ns.toArray,
+              description = null,
+              tableType = null,
+              isTemporary = false
+            )
+        }
       }
     }
-    CatalogImpl.makeDataset(tables, sparkSession)
+    CatalogImpl.makeDataset(tables.toImmutableArraySeq, sparkSession)
+  }
+
+  private def tableExists(nameParts: Seq[String]): Boolean = {
+    val plan = UnresolvedTableOrView(nameParts, "Catalog.tableExists", true)
+    try {
+      sparkSession.sessionState.executePlan(plan).analyzed match {
+        case _: ResolvedTable => true
+        case _: ResolvedPersistentView => true
+        case _: ResolvedTempView => true
+        case _ => false
+      }
+    } catch {
+      case e: AnalysisException if e.getErrorClass == "TABLE_OR_VIEW_NOT_FOUND" => false
+    }
   }
 
   private def makeTable(nameParts: Seq[String]): Table = {
-    sessionCatalog.getRawLocalOrGlobalTempView(nameParts).map { tempView =>
-      new Table(
-        name = tempView.tableMeta.identifier.table,
-        catalog = null,
-        namespace = tempView.tableMeta.identifier.database.toArray,
-        description = tempView.tableMeta.comment.orNull,
-        tableType = "TEMPORARY",
-        isTemporary = true)
-    }.getOrElse {
-      val plan = UnresolvedIdentifier(nameParts)
-      sparkSession.sessionState.executePlan(plan).analyzed match {
-        case ResolvedIdentifier(catalog: TableCatalog, ident) =>
-          val tableOpt = try {
-            loadTable(catalog, ident)
-          } catch {
-            // Even if the table exits, error may still happen. For example, Spark can't read Hive's
-            // index table. We return a Table without description and tableType in this case.
-            case NonFatal(_) =>
-              Some(new Table(
-                name = ident.name(),
-                catalog = catalog.name(),
-                namespace = ident.namespace(),
-                description = null,
-                tableType = null,
-                isTemporary = false))
-          }
-          tableOpt.getOrElse(throw QueryCompilationErrors.tableOrViewNotFound(nameParts))
-
-        case _ => throw QueryCompilationErrors.tableOrViewNotFound(nameParts)
-      }
-    }
-  }
-
-  private def loadTable(catalog: TableCatalog, ident: Identifier): Option[Table] = {
-    // TODO: support v2 view when it gets implemented.
-    CatalogV2Util.loadTable(catalog, ident).map {
-      case v1: V1Table if v1.v1Table.tableType == CatalogTableType.VIEW =>
-        new Table(
-          name = v1.v1Table.identifier.table,
-          catalog = catalog.name(),
-          namespace = v1.v1Table.identifier.database.toArray,
-          description = v1.v1Table.comment.orNull,
-          tableType = "VIEW",
-          isTemporary = false)
-      case t: V2Table =>
-        val isExternal = t.properties().getOrDefault(
+    val plan = UnresolvedTableOrView(nameParts, "Catalog.makeTable", true)
+    sparkSession.sessionState.executePlan(plan).analyzed match {
+      case ResolvedTable(catalog, ident, table, _) =>
+        val isExternal = table.properties().getOrDefault(
           TableCatalog.PROP_EXTERNAL, "false").equals("true")
         new Table(
           name = ident.name(),
           catalog = catalog.name(),
           namespace = ident.namespace(),
-          description = t.properties().get("comment"),
+          description = table.properties().get("comment"),
           tableType =
             if (isExternal) CatalogTableType.EXTERNAL.name
             else CatalogTableType.MANAGED.name,
           isTemporary = false)
+      case ResolvedPersistentView(catalog, identifier, metadata) =>
+        new Table(
+          name = identifier.name(),
+          catalog = catalog.name(),
+          namespace = identifier.namespace(),
+          description = metadata.comment.orNull,
+          tableType = "VIEW",
+          isTemporary = false
+        )
+      case ResolvedTempView(identifier, _) =>
+        new Table(
+          name = identifier.name(),
+          catalog = null,
+          namespace = identifier.namespace(),
+          description = null,
+          tableType = "TEMPORARY",
+          isTemporary = true
+        )
+      case _ => throw QueryCompilationErrors.tableOrViewNotFound(nameParts)
     }
   }
 
@@ -281,7 +285,34 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       functions += makeFunction(parseIdent(row.getString(0)))
     }
 
-    CatalogImpl.makeDataset(functions.result(), sparkSession)
+    CatalogImpl.makeDataset(functions.result().toImmutableArraySeq, sparkSession)
+  }
+
+  private def toFunctionIdent(functionName: String): Seq[String] = {
+    val parsed = parseIdent(functionName)
+    // For backward compatibility (Spark 3.3 and prior), we should check if the function exists in
+    // the Hive Metastore first.
+    if (parsed.length <= 2 &&
+      !sessionCatalog.isTemporaryFunction(parsed.asFunctionIdentifier) &&
+      sessionCatalog.isPersistentFunction(parsed.asFunctionIdentifier)) {
+      qualifyV1Ident(parsed)
+    } else {
+      parsed
+    }
+  }
+
+  private def functionExists(ident: Seq[String]): Boolean = {
+    val plan =
+      UnresolvedFunctionName(ident, CatalogImpl.FUNCTION_EXISTS_COMMAND_NAME, false, None)
+    try {
+      sparkSession.sessionState.executePlan(plan).analyzed match {
+        case _: ResolvedPersistentFunc => true
+        case _: ResolvedNonPersistentFunc => true
+        case _ => false
+      }
+    } catch {
+      case e: AnalysisException if e.getErrorClass == "UNRESOLVED_ROUTINE" => false
+    }
   }
 
   private def makeFunction(ident: Seq[String]): Function = {
@@ -352,15 +383,16 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
     val columns = sparkSession.sessionState.executePlan(plan).analyzed match {
       case ResolvedTable(_, _, table, _) =>
-        val (partitionColumnNames, bucketSpecOpt) = table.partitioning.toSeq.convertTransforms
+        // TODO (SPARK-45787): Support clusterBySpec for listColumns().
+        val (partitionColumnNames, bucketSpecOpt, _) = table.partitioning.toSeq.convertTransforms
         val bucketColumnNames = bucketSpecOpt.map(_.bucketColumnNames).getOrElse(Nil)
         schemaToColumns(table.schema(), partitionColumnNames.contains, bucketColumnNames.contains)
 
-      case ResolvedPersistentView(_, _, schema) =>
-        schemaToColumns(schema)
+      case ResolvedPersistentView(_, _, metadata) =>
+        schemaToColumns(metadata.schema)
 
-      case ResolvedTempView(_, schema) =>
-        schemaToColumns(schema)
+      case ResolvedTempView(_, metadata) =>
+        schemaToColumns(metadata.schema)
 
       case _ => throw QueryCompilationErrors.tableOrViewNotFound(ident)
     }
@@ -428,22 +460,24 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     }
   }
 
+  private def toTableIdent(tableName: String): Seq[String] = {
+    val parsed = parseIdent(tableName)
+    // For backward compatibility (Spark 3.3 and prior), we should check if the table exists in
+    // the Hive Metastore first.
+    if (parsed.length <= 2 && !sessionCatalog.isTempView(parsed) &&
+      sessionCatalog.tableExists(parsed.asTableIdentifier)) {
+      qualifyV1Ident(parsed)
+    } else {
+      parsed
+    }
+  }
 
   /**
    * Gets the table or view with the specified name. This table can be a temporary view or a
    * table/view. This throws an `AnalysisException` when no `Table` can be found.
    */
   override def getTable(tableName: String): Table = {
-    val parsed = parseIdent(tableName)
-    // For backward compatibility (Spark 3.3 and prior), we should check if the table exists in
-    // the Hive Metastore first.
-    val nameParts = if (parsed.length <= 2 && !sessionCatalog.isTempView(parsed) &&
-      sessionCatalog.tableExists(parsed.asTableIdentifier)) {
-      qualifyV1Ident(parsed)
-    } else {
-      parsed
-    }
-    makeTable(nameParts)
+    makeTable(toTableIdent(tableName))
   }
 
   /**
@@ -465,17 +499,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * function. This throws an `AnalysisException` when no `Function` can be found.
    */
   override def getFunction(functionName: String): Function = {
-    val parsed = parseIdent(functionName)
-    // For backward compatibility (Spark 3.3 and prior), we should check if the function exists in
-    // the Hive Metastore first.
-    val nameParts = if (parsed.length <= 2 &&
-      !sessionCatalog.isTemporaryFunction(parsed.asFunctionIdentifier) &&
-      sessionCatalog.isPersistentFunction(parsed.asFunctionIdentifier)) {
-      qualifyV1Ident(parsed)
-    } else {
-      parsed
-    }
-    makeFunction(nameParts)
+    makeFunction(toFunctionIdent(functionName))
   }
 
   /**
@@ -512,27 +536,20 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * view or a table/view.
    */
   override def tableExists(tableName: String): Boolean = {
-    val parsed = parseIdent(tableName)
-    // For backward compatibility (Spark 3.3 and prior), we should check if the table exists in
-    // the Hive Metastore first. This also checks if it's a temp view.
-    (parsed.length <= 2 && {
-      val v1Ident = parsed.asTableIdentifier
-      sessionCatalog.isTempView(v1Ident) || sessionCatalog.tableExists(v1Ident)
-    }) || {
-      val plan = UnresolvedIdentifier(parsed)
-      sparkSession.sessionState.executePlan(plan).analyzed match {
-        case ResolvedIdentifier(catalog: TableCatalog, ident) => catalog.tableExists(ident)
-        case _ => false
-      }
-    }
+    tableExists(toTableIdent(tableName))
   }
 
   /**
    * Checks if the table or view with the specified name exists in the specified database.
    */
   override def tableExists(dbName: String, tableName: String): Boolean = {
-    val tableIdent = TableIdentifier(tableName, Option(dbName))
-    sessionCatalog.isTempView(tableIdent) || sessionCatalog.tableExists(tableIdent)
+    if (sessionCatalog.isGlobalTempViewDB(dbName)) {
+      tableExists(Seq(dbName, tableName))
+    } else {
+      // For backward compatibility (Spark 3.3 and prior), here we always look up the table from the
+      // Hive Metastore.
+      tableExists(Seq(CatalogManager.SESSION_CATALOG_NAME, dbName, tableName))
+    }
   }
 
   /**
@@ -540,23 +557,16 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * or a function.
    */
   override def functionExists(functionName: String): Boolean = {
-    val parsed = parseIdent(functionName)
-    // For backward compatibility (Spark 3.3 and prior), we should check if the function exists in
-    // the Hive Metastore first. This also checks if it's a built-in/temp function.
-    (parsed.length <= 2 && sessionCatalog.functionExists(parsed.asFunctionIdentifier)) || {
-      val plan = UnresolvedIdentifier(parsed)
-      sparkSession.sessionState.executePlan(plan).analyzed match {
-        case ResolvedIdentifier(catalog: FunctionCatalog, ident) => catalog.functionExists(ident)
-        case _ => false
-      }
-    }
+    functionExists(toFunctionIdent(functionName))
   }
 
   /**
    * Checks if the function with the specified name exists in the specified database.
    */
   override def functionExists(dbName: String, functionName: String): Boolean = {
-    sessionCatalog.functionExists(FunctionIdentifier(functionName, Option(dbName)))
+    // For backward compatibility (Spark 3.3 and prior), here we always look up the function from
+    // the Hive Metastore.
+    functionExists(Seq(CatalogManager.SESSION_CATALOG_NAME, dbName, functionName))
   }
 
   /**
@@ -942,4 +952,5 @@ private[sql] object CatalogImpl {
     new Dataset[T](queryExecution, enc)
   }
 
+  private val FUNCTION_EXISTS_COMMAND_NAME = "Catalog.functionExists"
 }

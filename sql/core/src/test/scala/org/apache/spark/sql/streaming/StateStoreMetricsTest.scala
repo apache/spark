@@ -17,12 +17,17 @@
 
 package org.apache.spark.sql.streaming
 
+import org.scalatest.time.SpanSugar._
+
 import org.apache.spark.sql.execution.streaming.StreamExecution
+import org.apache.spark.util.ArrayImplicits._
 
 trait StateStoreMetricsTest extends StreamTest {
 
   private var lastCheckedRecentProgressIndex = -1
   private var lastQuery: StreamExecution = null
+
+  override val streamingTimeout = 120.seconds
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -54,18 +59,20 @@ trait StateStoreMetricsTest extends StreamTest {
         val numTotalRows = progressesSinceLastCheck.last.stateOperators.map(_.numRowsTotal)
         assert(numTotalRows === total, s"incorrect total rows, $debugString")
 
-        val numUpdatedRows = arraySum(allNumUpdatedRowsSinceLastCheck, numStateOperators)
+        val numUpdatedRows = arraySum(
+          allNumUpdatedRowsSinceLastCheck.toImmutableArraySeq, numStateOperators)
         assert(numUpdatedRows === updated, s"incorrect updates rows, $debugString")
 
-        val numRowsDroppedByWatermark = arraySum(allNumRowsDroppedByWatermarkSinceLastCheck,
-          numStateOperators)
+        val numRowsDroppedByWatermark = arraySum(
+          allNumRowsDroppedByWatermarkSinceLastCheck.toImmutableArraySeq, numStateOperators)
         assert(numRowsDroppedByWatermark === droppedByWatermark,
           s"incorrect dropped rows by watermark, $debugString")
 
         if (removed.isDefined) {
           val allNumRowsRemovedSinceLastCheck =
             progressesSinceLastCheck.map(_.stateOperators.map(_.numRowsRemoved))
-          val numRemovedRows = arraySum(allNumRowsRemovedSinceLastCheck, numStateOperators)
+          val numRemovedRows = arraySum(
+            allNumRowsRemovedSinceLastCheck.toImmutableArraySeq, numStateOperators)
           assert(numRemovedRows === removed.get, s"incorrect removed rows, $debugString")
         }
 
@@ -106,7 +113,7 @@ trait StateStoreMetricsTest extends StreamTest {
     AssertOnQuery(s"Check operator progress metrics: operatorName = $operatorName, " +
       s"numShufflePartitions = $numShufflePartitions, " +
       s"numStateStoreInstances = $numStateStoreInstances") { q =>
-      eventually(timeout(streamingTimeout)) {
+      eventually(timeout(streamingTimeout), interval(200.milliseconds)) {
         val (progressesSinceLastCheck, lastCheckedProgressIndex, numStateOperators) =
           retrieveProgressesSinceLastCheck(q)
         assert(operatorIndex < numStateOperators, s"Invalid operator Index: $operatorIndex")

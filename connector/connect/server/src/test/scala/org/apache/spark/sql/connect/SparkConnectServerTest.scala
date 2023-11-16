@@ -27,7 +27,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.connect.client.{CloseableIterator, CustomSparkConnectBlockingStub, ExecutePlanResponseReattachableIterator, GrpcRetryHandler, SparkConnectClient, WrappedCloseableIterator}
+import org.apache.spark.sql.connect.client.{CloseableIterator, CustomSparkConnectBlockingStub, ExecutePlanResponseReattachableIterator, RetryPolicy, SparkConnectClient, SparkConnectStubState}
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.config.Connect
@@ -147,13 +147,7 @@ trait SparkConnectServerTest extends SharedSparkSession {
 
   protected def getReattachableIterator(
       stubIterator: CloseableIterator[proto.ExecutePlanResponse]) = {
-    // This depends on the wrapping in CustomSparkConnectBlockingStub.executePlanReattachable:
-    // GrpcExceptionConverter.convertIterator
-    stubIterator
-      .asInstanceOf[WrappedCloseableIterator[proto.ExecutePlanResponse]]
-      // ExecutePlanResponseReattachableIterator
-      .innerIterator
-      .asInstanceOf[ExecutePlanResponseReattachableIterator]
+    ExecutePlanResponseReattachableIterator.fromIterator(stubIterator)
   }
 
   protected def assertNoActiveRpcs(): Unit = {
@@ -250,11 +244,12 @@ trait SparkConnectServerTest extends SharedSparkSession {
   }
 
   protected def withCustomBlockingStub(
-      retryPolicy: GrpcRetryHandler.RetryPolicy = GrpcRetryHandler.RetryPolicy())(
+      retryPolicies: Seq[RetryPolicy] = RetryPolicy.defaultPolicies())(
       f: CustomSparkConnectBlockingStub => Unit): Unit = {
     val conf = SparkConnectClient.Configuration(port = serverPort)
     val channel = conf.createChannel()
-    val bstub = new CustomSparkConnectBlockingStub(channel, retryPolicy)
+    val stubState = new SparkConnectStubState(channel, retryPolicies)
+    val bstub = new CustomSparkConnectBlockingStub(channel, stubState)
     try f(bstub)
     finally {
       channel.shutdownNow()

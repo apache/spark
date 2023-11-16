@@ -532,6 +532,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-45033: maps as parameters") {
+    import org.apache.spark.util.ArrayImplicits._
     def fromArr(keys: Array[_], values: Array[_]): Column = {
       map_from_arrays(Column(Literal(keys)), Column(Literal(values)))
     }
@@ -540,21 +541,21 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     }
     def createMap(keys: Array[_], values: Array[_]): Column = {
       val zipped = keys.map(k => Column(Literal(k))).zip(values.map(v => Column(Literal(v))))
-      map(zipped.map { case (k, v) => Seq(k, v) }.flatten: _*)
+      map(zipped.flatMap { case (k, v) => Seq(k, v) }.toImmutableArraySeq: _*)
     }
     def callMap(keys: Array[_], values: Array[_]): Column = {
       val zipped = keys.map(k => Column(Literal(k))).zip(values.map(v => Column(Literal(v))))
-      call_function("map", zipped.map { case (k, v) => Seq(k, v) }.flatten: _*)
+      call_function("map", zipped.flatMap { case (k, v) => Seq(k, v) }.toImmutableArraySeq: _*)
     }
     def fromEntries(keys: Array[_], values: Array[_]): Column = {
       val structures = keys.zip(values)
         .map { case (k, v) => struct(Column(Literal(k)), Column(Literal(v)))}
-      map_from_entries(array(structures: _*))
+      map_from_entries(array(structures.toImmutableArraySeq: _*))
     }
     def callFromEntries(keys: Array[_], values: Array[_]): Column = {
       val structures = keys.zip(values)
         .map { case (k, v) => struct(Column(Literal(k)), Column(Literal(v)))}
-      call_function("map_from_entries", call_function("array", structures: _*))
+      call_function("map_from_entries", call_function("array", structures.toImmutableArraySeq: _*))
     }
 
     Seq(fromArr(_, _), createMap(_, _), callFromArr(_, _), callMap(_, _)).foreach { f =>

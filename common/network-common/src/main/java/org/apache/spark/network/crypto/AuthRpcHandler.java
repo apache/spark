@@ -108,17 +108,17 @@ class AuthRpcHandler extends AbstractAuthRpcHandler {
     // Here we have the client challenge, so perform the new auth protocol and set up the channel.
     AuthEngine engine = null;
     try {
-      String secret = secretKeyHolder.getSecretKey(challenge.appId);
+      String secret = secretKeyHolder.getSecretKey(challenge.appId());
       Preconditions.checkState(secret != null,
-        "Trying to authenticate non-registered app %s.", challenge.appId);
-      LOG.debug("Authenticating challenge for app {}.", challenge.appId);
-      engine = new AuthEngine(challenge.appId, secret, conf);
+        "Trying to authenticate non-registered app %s.", challenge.appId());
+      LOG.debug("Authenticating challenge for app {}.", challenge.appId());
+      engine = new AuthEngine(challenge.appId(), secret, conf);
       AuthMessage response = engine.response(challenge);
       ByteBuf responseData = Unpooled.buffer(response.encodedLength());
       response.encode(responseData);
       callback.onSuccess(responseData.nioBuffer());
       engine.sessionCipher().addToChannel(channel);
-      client.setClientId(challenge.appId);
+      client.setClientId(challenge.appId());
     } catch (Exception e) {
       // This is a fatal error: authentication has failed. Close the channel explicitly.
       LOG.debug("Authentication failed for client {}, closing channel.", channel.remoteAddress());

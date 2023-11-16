@@ -35,6 +35,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -183,13 +184,13 @@ object CatalystTypeConverters {
       if (catalystValue == null) {
         null
       } else if (isPrimitive(elementType)) {
-        catalystValue.toArray[Any](elementType)
+        catalystValue.toArray[Any](elementType).toImmutableArraySeq
       } else {
         val result = new Array[Any](catalystValue.numElements())
         catalystValue.foreach(elementType, (i, e) => {
           result(i) = elementConverter.toScala(e)
         })
-        result
+        result.toImmutableArraySeq
       }
     }
 

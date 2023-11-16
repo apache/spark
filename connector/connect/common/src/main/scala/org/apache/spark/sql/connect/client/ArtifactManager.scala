@@ -39,6 +39,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.AddArtifactsResponse
 import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
 import org.apache.spark.util.{MavenUtils, SparkFileUtils, SparkThreadUtils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The Artifact Manager is responsible for handling and transferring artifacts from the local
@@ -123,7 +124,12 @@ class ArtifactManager(
       .setSessionId(sessionId)
       .addAllNames(Arrays.asList(artifactName))
       .build()
-    val statuses = bstub.artifactStatus(request).getStatusesMap
+    val response = bstub.artifactStatus(request)
+    if (response.getSessionId != sessionId) {
+      throw new IllegalStateException(
+        s"Session ID mismatch: $sessionId != ${response.getSessionId}")
+    }
+    val statuses = response.getStatusesMap
     if (statuses.containsKey(artifactName)) {
       statuses.get(artifactName).getExists
     } else false
@@ -179,6 +185,9 @@ class ArtifactManager(
     val responseHandler = new StreamObserver[proto.AddArtifactsResponse] {
       private val summaries = mutable.Buffer.empty[ArtifactSummary]
       override def onNext(v: AddArtifactsResponse): Unit = {
+        if (v.getSessionId != sessionId) {
+          throw new IllegalStateException(s"Session ID mismatch: $sessionId != ${v.getSessionId}")
+        }
         v.getArtifactsList.forEach { summary =>
           summaries += summary
         }
@@ -384,7 +393,7 @@ object Artifact {
 
     val exclusionsList: Seq[String] =
       if (!StringUtils.isBlank(exclusions)) {
-        exclusions.split(",")
+        exclusions.split(",").toImmutableArraySeq
       } else {
         Nil
       }
