@@ -195,7 +195,7 @@ class StaxXmlParser(
       case (_: StartElement, dt: DataType) => convertComplicatedType(dt, attributes)
       case (_: EndElement, _: StringType) =>
         // Empty. It's null if these are explicitly treated as null, or "" is the null value
-        if (options.nullValue == "") {
+        if (options.treatEmptyValuesAsNulls || options.nullValue == "") {
           null
         } else {
           UTF8String.fromString("")
