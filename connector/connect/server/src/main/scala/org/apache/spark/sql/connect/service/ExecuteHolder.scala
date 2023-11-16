@@ -25,6 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.Observation
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.config.Connect.CONNECT_EXECUTE_REATTACHABLE_ENABLED
 import org.apache.spark.sql.connect.execution.{ExecuteGrpcResponseSender, ExecuteResponseObserver, ExecuteThreadRunner}
@@ -89,6 +90,8 @@ private[connect] class ExecuteHolder(
 
   val eventsManager: ExecuteEventsManager = ExecuteEventsManager(this, new SystemClock())
 
+  val observations: mutable.Map[String, Observation] = mutable.Map.empty
+
   private val runner: ExecuteThreadRunner = new ExecuteThreadRunner(this)
 
   /** System.currentTimeMillis when this ExecuteHolder was created. */
@@ -130,6 +133,10 @@ private[connect] class ExecuteHolder(
    */
   def join(): Unit = {
     runner.join()
+  }
+
+  def addObservation(name: String, observation: Observation): Unit = synchronized {
+    observations += (name -> observation)
   }
 
   /**

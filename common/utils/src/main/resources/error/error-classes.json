@@ -3921,7 +3921,7 @@
     "message" : [
       "<rowTag> option is required for reading files in XML format."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42KDF"
   },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [

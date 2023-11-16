@@ -175,7 +175,7 @@ public class SSLFactory {
      * @return The builder object
      */
     public Builder requestedProtocol(String requestedProtocol) {
-      this.requestedProtocol = requestedProtocol == null ? "TLSv1.2" : requestedProtocol;
+      this.requestedProtocol = requestedProtocol == null ? "TLSv1.3" : requestedProtocol;
       return this;
     }
 
