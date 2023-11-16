@@ -191,6 +191,41 @@ SPARK_MASTER_OPTS supports the following system properties:
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
+  <td><code>spark.master.ui.port</code></td>
+  <td><code>8080</code></td>
+  <td>
+    Specifies the port number of the Master Web UI endpoint.
+  </td>
+  <td>1.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.master.ui.decommission.allow.mode</code></td>
+  <td><code>LOCAL</code></td>
+  <td>
+    Specifies the behavior of the Master Web UI's /workers/kill endpoint. Possible choices
+    are: <code>LOCAL</code> means allow this endpoint from IP's that are local to the machine running
+    the Master, <code>DENY</code> means to completely disable this endpoint, <code>ALLOW</code> means to allow
+    calling this endpoint from any IP.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.master.rest.enabled</code></td>
+  <td><code>false</code></td>
+  <td>
+    Whether to use the Master REST API endpoint or not.
+  </td>
+  <td>1.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.master.rest.port</code></td>
+  <td><code>6066</code></td>
+  <td>
+    Specifies the port number of the Master REST API endpoint.
+  </td>
+  <td>1.3.0</td>
+</tr>
+<tr>
   <td><code>spark.deploy.retainedApplications</code></td>
   <td>200</td>
   <td>
