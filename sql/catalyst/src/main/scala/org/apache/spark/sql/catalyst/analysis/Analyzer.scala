@@ -1191,7 +1191,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         identifier: Seq[String],
         viewOnly: Boolean = false): Option[LogicalPlan] = {
       lookupTempView(identifier).map { tempView =>
-        ResolvedTempView(identifier.asIdentifier, tempView.tableMeta.schema)
+        ResolvedTempView(identifier.asIdentifier, tempView.tableMeta)
       }.orElse {
         expandIdentifier(identifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
@@ -1203,7 +1203,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 v1Table.v1Table.tableType == CatalogTableType.VIEW =>
                 val v1Ident = v1Table.catalogTable.identifier
                 val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
-                ResolvedPersistentView(catalog, v2Ident, v1Table.catalogTable.schema)
+                ResolvedPersistentView(
+                  catalog, v2Ident, v1Table.catalogTable)
               case table =>
                 ResolvedTable.create(catalog.asTableCatalog, ident, table)
             }
@@ -2001,7 +2002,19 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               throw QueryCompilationErrors.groupByPositionRefersToAggregateFunctionError(
                 index, ordinalExpr)
             } else {
-              ordinalExpr
+              trimAliases(ordinalExpr) match {
+                // HACK ALERT: If the ordinal expression is also an integer literal, don't use it
+                //             but still keep the ordinal literal. The reason is we may repeatedly
+                //             analyze the plan. Using a different integer literal may lead to
+                //             a repeat GROUP BY ordinal resolution which is wrong. GROUP BY
+                //             constant is meaningless so whatever value does not matter here.
+                // TODO: (SPARK-45932) GROUP BY ordinal should pull out grouping expressions to
+                //       a Project, then the resolved ordinal expression is always
+                //       `AttributeReference`.
+                case Literal(_: Int, IntegerType) =>
+                  Literal(index)
+                case _ => ordinalExpr
+              }
             }
           } else {
             throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size)

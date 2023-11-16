@@ -119,7 +119,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     client = SparkConnectClient
       .builder()
       .connectionString(s"sc://localhost:${server.getPort}/;use_ssl=true")
-      .retryPolicy(GrpcRetryHandler.RetryPolicy(maxRetries = 0))
+      .retryPolicy(RetryPolicy(maxRetries = Some(0), canRetry = _ => false, name = "TestPolicy"))
       .build()
 
     val request = AnalyzePlanRequest.newBuilder().setSessionId("abc123").build()
@@ -311,7 +311,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     }
   }
 
-  private class DummyFn(val e: Throwable, numFails: Int = 3) {
+  private class DummyFn(e: => Throwable, numFails: Int = 3) {
     var counter = 0
     def fn(): Int = {
       if (counter < numFails) {
@@ -333,9 +333,9 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
       }
 
       val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE), numFails = 100)
-      val retryHandler = new GrpcRetryHandler(GrpcRetryHandler.RetryPolicy(), sleep)
+      val retryHandler = new GrpcRetryHandler(RetryPolicy.defaultPolicies(), sleep)
 
-      assertThrows[StatusRuntimeException] {
+      assertThrows[RetriesExceeded] {
         retryHandler.retry {
           dummyFn.fn()
         }
@@ -347,8 +347,8 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   test("SPARK-44275: retry actually retries") {
     val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
-    val retryPolicy = GrpcRetryHandler.RetryPolicy()
-    val retryHandler = new GrpcRetryHandler(retryPolicy)
+    val retryPolicies = RetryPolicy.defaultPolicies()
+    val retryHandler = new GrpcRetryHandler(retryPolicies, sleep = _ => {})
     val result = retryHandler.retry { dummyFn.fn() }
 
     assert(result == 42)
@@ -357,8 +357,8 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   test("SPARK-44275: default retryException retries only on UNAVAILABLE") {
     val dummyFn = new DummyFn(new StatusRuntimeException(Status.ABORTED))
-    val retryPolicy = GrpcRetryHandler.RetryPolicy()
-    val retryHandler = new GrpcRetryHandler(retryPolicy)
+    val retryPolicies = RetryPolicy.defaultPolicies()
+    val retryHandler = new GrpcRetryHandler(retryPolicies, sleep = _ => {})
 
     assertThrows[StatusRuntimeException] {
       retryHandler.retry { dummyFn.fn() }
@@ -368,7 +368,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   test("SPARK-44275: retry uses canRetry to filter exceptions") {
     val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
-    val retryPolicy = GrpcRetryHandler.RetryPolicy(canRetry = _ => false)
+    val retryPolicy = RetryPolicy(canRetry = _ => false, name = "TestPolicy")
     val retryHandler = new GrpcRetryHandler(retryPolicy)
 
     assertThrows[StatusRuntimeException] {
@@ -379,13 +379,60 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   test("SPARK-44275: retry does not exceed maxRetries") {
     val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
-    val retryPolicy = GrpcRetryHandler.RetryPolicy(canRetry = _ => true, maxRetries = 1)
-    val retryHandler = new GrpcRetryHandler(retryPolicy)
+    val retryPolicy = RetryPolicy(canRetry = _ => true, maxRetries = Some(1), name = "TestPolicy")
+    val retryHandler = new GrpcRetryHandler(retryPolicy, sleep = _ => {})
 
-    assertThrows[StatusRuntimeException] {
+    assertThrows[RetriesExceeded] {
       retryHandler.retry { dummyFn.fn() }
     }
     assert(dummyFn.counter == 2)
+  }
+
+  def testPolicySpecificError(maxRetries: Int, status: Status): RetryPolicy = {
+    RetryPolicy(
+      maxRetries = Some(maxRetries),
+      name = s"Policy for ${status.getCode}",
+      canRetry = {
+        case e: StatusRuntimeException => e.getStatus.getCode == status.getCode
+        case _ => false
+      })
+  }
+
+  test("Test multiple policies") {
+    val policy1 = testPolicySpecificError(maxRetries = 2, status = Status.UNAVAILABLE)
+    val policy2 = testPolicySpecificError(maxRetries = 4, status = Status.INTERNAL)
+
+    // Tolerate 2 UNAVAILABLE errors and 4 INTERNAL errors
+
+    val errors = (List.fill(2)(Status.UNAVAILABLE) ++ List.fill(4)(Status.INTERNAL)).iterator
+
+    new GrpcRetryHandler(List(policy1, policy2), sleep = _ => {}).retry({
+      val e = errors.nextOption()
+      if (e.isDefined) {
+        throw e.get.asRuntimeException()
+      }
+    })
+
+    assert(!errors.hasNext)
+  }
+
+  test("Test multiple policies exceed") {
+    val policy1 = testPolicySpecificError(maxRetries = 2, status = Status.INTERNAL)
+    val policy2 = testPolicySpecificError(maxRetries = 4, status = Status.INTERNAL)
+
+    val errors = List.fill(10)(Status.INTERNAL).iterator
+    var countAttempted = 0
+
+    assertThrows[RetriesExceeded](
+      new GrpcRetryHandler(List(policy1, policy2), sleep = _ => {}).retry({
+        countAttempted += 1
+        val e = errors.nextOption()
+        if (e.isDefined) {
+          throw e.get.asRuntimeException()
+        }
+      }))
+
+    assert(countAttempted == 7)
   }
 
   test("SPARK-45871: Client execute iterator.toSeq consumes the reattachable iterator") {

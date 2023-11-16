@@ -372,7 +372,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       ShuffleIndexInformation shuffleIndexInformation = indexCache.get(indexFilePath);
       ShuffleIndexRecord shuffleIndexRecord = shuffleIndexInformation.getIndex(chunkId);
       return new FileSegmentManagedBuffer(
-        conf, dataFile, shuffleIndexRecord.getOffset(), shuffleIndexRecord.getLength());
+        conf, dataFile, shuffleIndexRecord.offset(), shuffleIndexRecord.length());
     } catch (ExecutionException e) {
       throw new RuntimeException(String.format(
         "Failed to open merged shuffle index file %s", indexFilePath), e);

@@ -670,6 +670,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS =
+    buildConf("spark.sql.adaptive.applyFinalStageShuffleOptimizations")
+      .internal()
+      .doc("Configures whether adaptive query execution (if enabled) should apply shuffle " +
+        "coalescing and local shuffle read optimization for the final query stage.")
+      .version("3.4.2")
+      .booleanConf
+      .createWithDefault(true)
+
   val ADAPTIVE_EXECUTION_LOG_LEVEL = buildConf("spark.sql.adaptive.logLevel")
     .internal()
     .doc("Configures the log level for adaptive execution logging of plan changes. The value " +
@@ -4541,6 +4550,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_RETAIN_FRACTION_DIGITS_FIRST =
+    buildConf("spark.sql.legacy.decimal.retainFractionDigitsOnTruncate")
+      .internal()
+      .doc("When set to true, we will try to retain the fraction digits first rather than " +
+        "integral digits as prior Spark 4.0, when getting a least common type between decimal " +
+        "types, and the result decimal precision exceeds the max precision.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -5425,7 +5444,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   }
 
   def legacyRaiseErrorWithoutErrorClass: Boolean =
-      getConf(SQLConf.LEGACY_RAISE_ERROR_WITHOUT_ERROR_CLASS)
+    getConf(SQLConf.LEGACY_RAISE_ERROR_WITHOUT_ERROR_CLASS)
 
   /** ********************** SQLConf functionality methods ************ */
 

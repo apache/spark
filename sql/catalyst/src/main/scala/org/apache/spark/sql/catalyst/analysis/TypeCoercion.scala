@@ -934,8 +934,8 @@ object TypeCoercion extends TypeCoercionBase {
     // There is no proper decimal type we can pick,
     // using double type is the best we can do.
     // See SPARK-22469 for details.
-    case (n: DecimalType, s: StringType) => Some(DoubleType)
-    case (s: StringType, n: DecimalType) => Some(DoubleType)
+    case (DecimalType.Fixed(_, s), _: StringType) if s > 0 => Some(DoubleType)
+    case (_: StringType, DecimalType.Fixed(_, s)) if s > 0 => Some(DoubleType)
 
     case (l: StringType, r: AtomicType) if canPromoteAsInBinaryComparison(r) => Some(r)
     case (l: AtomicType, r: StringType) if canPromoteAsInBinaryComparison(l) => Some(l)
