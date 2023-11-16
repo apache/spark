@@ -30,7 +30,7 @@ import org.apache.spark.sql.test.TestSparkSession
 class TPCDSV2RelationLimitedTest extends QueryTest with TPCDSBase with SQLQueryTestHelper {
 
   protected override def createSparkSession: TestSparkSession = {
-    val session = new TestSparkSession(new SparkContext("local[3]",
+    val session = new TestSparkSession(new SparkContext("local[1]",
       this.getClass.getSimpleName, sparkConf))
     session.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableWithV2FilterCatalog].getName)
     session.conf.set("spark.sql.defaultCatalog", "testcat")
@@ -66,7 +66,6 @@ class TPCDSV2RelationLimitedTest extends QueryTest with TPCDSBase with SQLQueryT
   }
 
  test("q14b") {
-
    // TODO . Fix the assertion failure in DataSourceV2Relation.computeStats which gets exposed
    // by this test
    System.setProperty("SPARK-45943", "1")
