@@ -54,6 +54,7 @@ import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.{CallSite, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The entry point to programming Spark with the Dataset and DataFrame API.
@@ -227,6 +228,11 @@ class SparkSession private(
   def udf: UDFRegistration = sessionState.udfRegistration
 
   def udtf: UDTFRegistration = sessionState.udtfRegistration
+
+  /**
+   * A collection of methods for registering user-defined data sources.
+   */
+  private[sql] def dataSource: DataSourceRegistration = sharedState.dataSourceRegistration
 
   /**
    * Returns a `StreamingQueryManager` that allows managing all the
@@ -630,7 +636,7 @@ class SparkSession private(
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
         if (args.nonEmpty) {
-          PosParameterizedQuery(parsedPlan, args.map(lit(_).expr))
+          PosParameterizedQuery(parsedPlan, args.map(lit(_).expr).toImmutableArraySeq)
         } else {
           parsedPlan
         }
@@ -683,7 +689,7 @@ class SparkSession private(
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
         if (args.nonEmpty) {
-          NameParameterizedQuery(parsedPlan, args.mapValues(lit(_).expr).toMap)
+          NameParameterizedQuery(parsedPlan, args.view.mapValues(lit(_).expr).toMap)
         } else {
           parsedPlan
         }
@@ -885,7 +891,7 @@ class SparkSession private(
     val (dataType, _) = JavaTypeInference.inferDataType(beanClass)
     dataType.asInstanceOf[StructType].fields.map { f =>
       AttributeReference(f.name, f.dataType, f.nullable)()
-    }
+    }.toImmutableArraySeq
   }
 
   /**

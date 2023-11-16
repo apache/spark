@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.catalog.{ExternalCatalogWithListener, Inval
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.aggregate.ResolveEncodersInScalaAgg
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
@@ -123,7 +124,7 @@ class HiveSessionStateBuilder(
    */
   override protected def planner: SparkPlanner = {
     new SparkPlanner(session, experimentalMethods) with HiveStrategies {
-      override val sparkSession: SparkSession = session
+      override val sparkSession: SparkSession = this.session
 
       override def extraPlanningStrategies: Seq[Strategy] =
         super.extraPlanningStrategies ++ customPlanningStrategies ++
@@ -207,8 +208,7 @@ object HiveUDFExpressionBuilder extends SparkUDFExpressionBuilder {
         throw analysisException
     }
     udfExpr.getOrElse {
-      throw new InvalidUDFClassException(
-        s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}'")
+      throw QueryCompilationErrors.invalidUDFClassError(clazz.getCanonicalName)
     }
   }
 }

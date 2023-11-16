@@ -87,7 +87,7 @@ case class CreateTempViewUsing(
 
   override def argString(maxFields: Int): String = {
     s"[tableIdent:$tableIdent " +
-      userSpecifiedSchema.map(_ + " ").getOrElse("") +
+      userSpecifiedSchema.map(_.toString() + " ").getOrElse("") +
       s"replace:$replace " +
       s"provider:$provider " +
       conf.redactOptions(options)

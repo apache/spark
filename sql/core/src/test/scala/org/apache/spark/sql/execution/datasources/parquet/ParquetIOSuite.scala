@@ -392,7 +392,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     withParquetDataFrame(data) { df =>
       // Structs are converted to `Row`s
       checkAnswer(df, data.map { case Tuple1(m) =>
-        Row(m.mapValues(struct => Row(struct.productIterator.toSeq: _*)))
+        Row(m.view.mapValues(struct => Row(struct.productIterator.toSeq: _*)))
       })
     }
   }
@@ -1502,10 +1502,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
-    withSQLConf(SQLConf.PARQUET_COMPRESSION.key ->
-      ParquetCompressionCodec.SNAPPY.name.toLowerCase(Locale.ROOT)) {
+    withSQLConf(
+      SQLConf.PARQUET_COMPRESSION.key -> ParquetCompressionCodec.SNAPPY.lowerCaseName()) {
       val option = new ParquetOptions(
-        Map("Compression" -> ParquetCompressionCodec.UNCOMPRESSED.name.toLowerCase(Locale.ROOT)),
+        Map("Compression" -> ParquetCompressionCodec.UNCOMPRESSED.lowerCaseName()),
         spark.sessionState.conf)
       assert(option.compressionCodecClassName == ParquetCompressionCodec.UNCOMPRESSED.name)
     }

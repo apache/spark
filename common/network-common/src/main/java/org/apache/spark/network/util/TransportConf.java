@@ -402,14 +402,6 @@ public class TransportConf {
   }
 
   /**
-   * If we can dangerously fallback to unencrypted connections if RPC over SSL is enabled
-   * but the key files are not present
-   */
-  public boolean sslRpcDangerouslyFallbackIfKeysNotPresent() {
-    return conf.getBoolean("spark.ssl.rpc.dangerouslyFallbackIfKeysNotPresent", false);
-  }
-
-  /**
    * Flag indicating whether to share the pooled ByteBuf allocators between the different Netty
    * channels. If enabled then only two pooled ByteBuf allocators are created: one where caching
    * is allowed (for transport servers) and one where not (for transport clients).

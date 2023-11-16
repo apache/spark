@@ -34,7 +34,7 @@ import org.apache.spark.{SparkConf, SparkException, SparkFileNotFoundException, 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, HadoopCompressionCodec}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLType
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, InMemoryFileIndex, NoopCache}
@@ -45,6 +45,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.StructType.fromDDL
 import org.apache.spark.sql.types.TestUDT.{MyDenseVector, MyDenseVectorUDT}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 class TestFileFilter extends PathFilter {
@@ -1377,7 +1378,7 @@ abstract class JsonSuite
       val d1 = DataSource(
         spark,
         userSpecifiedSchema = None,
-        partitionColumns = Array.empty[String],
+        partitionColumns = Array.empty[String].toImmutableArraySeq,
         bucketSpec = None,
         className = classOf[JsonFileFormat].getCanonicalName,
         options = Map("path" -> path)).resolveRelation()
@@ -1385,7 +1386,7 @@ abstract class JsonSuite
       val d2 = DataSource(
         spark,
         userSpecifiedSchema = None,
-        partitionColumns = Array.empty[String],
+        partitionColumns = Array.empty[String].toImmutableArraySeq,
         bucketSpec = None,
         className = classOf[JsonFileFormat].getCanonicalName,
         options = Map("path" -> path)).resolveRelation()
@@ -1689,7 +1690,7 @@ abstract class JsonSuite
       val jsonDir = new File(dir, "json").getCanonicalPath
       jsonDF.coalesce(1).write
         .format("json")
-        .option("compression", "none")
+        .option("compression", HadoopCompressionCodec.NONE.lowerCaseName())
         .options(extraOptions)
         .save(jsonDir)
 
@@ -3105,7 +3106,9 @@ abstract class JsonSuite
                 readback.filter($"AAA" === 0 && $"bbb" === 1).collect()
               },
               errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-              parameters = Map("objectName" -> "`AAA`", "proposal" -> "`BBB`, `aaa`"))
+              parameters = Map("objectName" -> "`AAA`", "proposal" -> "`BBB`, `aaa`"),
+              context =
+                ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
             // Schema inferring
             val readback2 = spark.read.json(path.getCanonicalPath)
             checkAnswer(

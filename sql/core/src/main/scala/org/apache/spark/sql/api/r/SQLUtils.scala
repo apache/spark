@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 private[sql] object SQLUtils extends Logging {
   SerDe.setSQLReadObject(readSqlObject).setSQLWriteObject(writeSqlObject)
@@ -192,7 +193,7 @@ private[sql] object SQLUtils extends Logging {
       case 's' =>
         // Read StructType for DataFrame
         val fields = SerDe.readList(dis, jvmObjectTracker = null)
-        Row.fromSeq(fields)
+        Row.fromSeq(fields.toImmutableArraySeq)
       case _ => null
     }
   }
@@ -232,7 +233,7 @@ private[sql] object SQLUtils extends Logging {
       sparkSession: SparkSession,
       filename: String): JavaRDD[Array[Byte]] = {
     // Parallelize the record batches to create an RDD
-    val batches = ArrowConverters.readArrowStreamFromFile(filename)
+    val batches = ArrowConverters.readArrowStreamFromFile(filename).toImmutableArraySeq
     JavaRDD.fromRDD(sparkSession.sparkContext.parallelize(batches, batches.length))
   }
 

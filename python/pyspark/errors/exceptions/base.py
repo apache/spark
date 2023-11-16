@@ -15,10 +15,13 @@
 # limitations under the License.
 #
 
-from typing import Dict, Optional, cast
+from typing import Dict, Optional, cast, Iterable, TYPE_CHECKING
 
 from pyspark.errors.utils import ErrorClassesReader
 from pickle import PicklingError
+
+if TYPE_CHECKING:
+    from pyspark.sql.types import Row
 
 
 class PySparkException(Exception):
@@ -37,17 +40,17 @@ class PySparkException(Exception):
             message is None and (error_class is not None and message_parameters is not None)
         )
 
-        self.error_reader = ErrorClassesReader()
+        self._error_reader = ErrorClassesReader()
 
         if message is None:
-            self.message = self.error_reader.get_error_message(
+            self._message = self._error_reader.get_error_message(
                 cast(str, error_class), cast(Dict[str, str], message_parameters)
             )
         else:
-            self.message = message
+            self._message = message
 
-        self.error_class = error_class
-        self.message_parameters = message_parameters
+        self._error_class = error_class
+        self._message_parameters = message_parameters
 
     def getErrorClass(self) -> Optional[str]:
         """
@@ -60,7 +63,7 @@ class PySparkException(Exception):
         :meth:`PySparkException.getMessageParameters`
         :meth:`PySparkException.getSqlState`
         """
-        return self.error_class
+        return self._error_class
 
     def getMessageParameters(self) -> Optional[Dict[str, str]]:
         """
@@ -73,9 +76,9 @@ class PySparkException(Exception):
         :meth:`PySparkException.getErrorClass`
         :meth:`PySparkException.getSqlState`
         """
-        return self.message_parameters
+        return self._message_parameters
 
-    def getSqlState(self) -> None:
+    def getSqlState(self) -> Optional[str]:
         """
         Returns an SQLSTATE as a string.
 
@@ -92,9 +95,9 @@ class PySparkException(Exception):
 
     def __str__(self) -> str:
         if self.getErrorClass() is not None:
-            return f"[{self.getErrorClass()}] {self.message}"
+            return f"[{self.getErrorClass()}] {self._message}"
         else:
-            return self.message
+            return self._message
 
 
 class AnalysisException(PySparkException):
@@ -221,6 +224,16 @@ class PySparkAssertionError(PySparkException, AssertionError):
     """
     Wrapper class for AssertionError to support error classes.
     """
+
+    def __init__(
+        self,
+        message: Optional[str] = None,
+        error_class: Optional[str] = None,
+        message_parameters: Optional[Dict[str, str]] = None,
+        data: Optional[Iterable["Row"]] = None,
+    ):
+        super().__init__(message, error_class, message_parameters)
+        self.data = data
 
 
 class PySparkNotImplementedError(PySparkException, NotImplementedError):

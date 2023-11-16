@@ -159,7 +159,13 @@ case class AdaptiveSparkPlanExec(
   )
 
   private def optimizeQueryStage(plan: SparkPlan, isFinalStage: Boolean): SparkPlan = {
-    val optimized = queryStageOptimizerRules.foldLeft(plan) { case (latestPlan, rule) =>
+    val rules = if (isFinalStage &&
+        !conf.getConf(SQLConf.ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS)) {
+      queryStageOptimizerRules.filterNot(_.isInstanceOf[AQEShuffleReadRule])
+    } else {
+      queryStageOptimizerRules
+    }
+    val optimized = rules.foldLeft(plan) { case (latestPlan, rule) =>
       val applied = rule.apply(latestPlan)
       val result = rule match {
         case _: AQEShuffleReadRule if !applied.fastEquals(latestPlan) =>

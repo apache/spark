@@ -119,6 +119,8 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
       val artifactSummaries = flushStagedArtifacts()
       // Add the artifacts to the session and return the summaries to the client.
       val builder = proto.AddArtifactsResponse.newBuilder()
+      builder.setSessionId(holder.sessionId)
+      builder.setServerSideSessionId(holder.serverSessionId)
       artifactSummaries.foreach(summary => builder.addArtifacts(summary))
       // Delete temp dir
       cleanUpStagedArtifacts()

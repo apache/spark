@@ -37,6 +37,7 @@ import org.apache.spark.internal.config.{RDD_LIMIT_INITIAL_NUM_PARTITIONS, RDD_P
 import org.apache.spark.rdd.RDDSuiteUtils._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
   var tempDir: File = _
@@ -55,11 +56,11 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
   }
 
   test("basic operations") {
-    val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+    val nums = sc.makeRDD(Array(1, 2, 3, 4).toImmutableArraySeq, 2)
     assert(nums.getNumPartitions === 2)
     assert(nums.collect().toList === List(1, 2, 3, 4))
     assert(nums.toLocalIterator.toList === List(1, 2, 3, 4))
-    val dups = sc.makeRDD(Array(1, 1, 2, 2, 3, 3, 4, 4), 2)
+    val dups = sc.makeRDD(Array(1, 1, 2, 2, 3, 3, 4, 4).toImmutableArraySeq, 2)
     assert(dups.distinct().count() === 4)
     assert(dups.distinct().count() === 4)  // Can distinct and count be called without parentheses?
     assert(dups.distinct().collect() === dups.distinct().collect())
@@ -127,7 +128,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
   }
 
   test("SparkContext.union") {
-    val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+    val nums = sc.makeRDD(Array(1, 2, 3, 4).toImmutableArraySeq, 2)
     assert(sc.union(nums).collect().toList === List(1, 2, 3, 4))
     assert(sc.union(nums, nums).collect().toList === List(1, 2, 3, 4, 1, 2, 3, 4))
     assert(sc.union(Seq(nums)).collect().toList === List(1, 2, 3, 4))
@@ -135,8 +136,8 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
   }
 
   test("SparkContext.union parallel partition listing") {
-    val nums1 = sc.makeRDD(Array(1, 2, 3, 4), 2)
-    val nums2 = sc.makeRDD(Array(5, 6, 7, 8), 2)
+    val nums1 = sc.makeRDD(Array(1, 2, 3, 4).toImmutableArraySeq, 2)
+    val nums2 = sc.makeRDD(Array(5, 6, 7, 8).toImmutableArraySeq, 2)
     val serialUnion = sc.union(nums1, nums2)
     val expected = serialUnion.collect().toList
 
@@ -296,7 +297,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
   }
 
   test("basic caching") {
-    val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2).cache()
+    val rdd = sc.makeRDD(Array(1, 2, 3, 4).toImmutableArraySeq, 2).cache()
     assert(rdd.collect().toList === List(1, 2, 3, 4))
     assert(rdd.collect().toList === List(1, 2, 3, 4))
     assert(rdd.collect().toList === List(1, 2, 3, 4))
@@ -366,7 +367,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     // Coalesce partitions
     val input = Array.fill(1000)(1)
     val initialPartitions = 10
-    val data = sc.parallelize(input, initialPartitions)
+    val data = sc.parallelize(input.toImmutableArraySeq, initialPartitions)
 
     val repartitioned1 = data.repartition(2)
     assert(repartitioned1.partitions.size == 2)
@@ -392,9 +393,9 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
       }
     }
 
-    testSplitPartitions(Array.fill(100)(1), 10, 20)
-    testSplitPartitions(Array.fill(10000)(1) ++ Array.fill(10000)(2), 20, 100)
-    testSplitPartitions(Array.fill(1000)(1), 250, 128)
+    testSplitPartitions(Array.fill(100)(1).toImmutableArraySeq, 10, 20)
+    testSplitPartitions((Array.fill(10000)(1) ++ Array.fill(10000)(2)).toImmutableArraySeq, 20, 100)
+    testSplitPartitions(Array.fill(1000)(1).toImmutableArraySeq, 250, 128)
   }
 
   test("coalesced RDDs") {
@@ -594,7 +595,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
   }
 
   test("zipped RDDs") {
-    val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+    val nums = sc.makeRDD(Array(1, 2, 3, 4).toImmutableArraySeq, 2)
     val zipped = nums.zip(nums.map(_ + 1.0))
     assert(zipped.glom().map(_.toList).collect().toList ===
       List(List((1, 2.0), (2, 3.0)), List((3, 4.0), (4, 5.0))))
@@ -684,7 +685,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
 
   test("takeOrdered with predefined ordering") {
     val nums = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-    val rdd = sc.makeRDD(nums, 2)
+    val rdd = sc.makeRDD(nums.toImmutableArraySeq, 2)
     val sortedLowerK = rdd.takeOrdered(5)
     assert(sortedLowerK.size === 5)
     assert(sortedLowerK === Array(1, 2, 3, 4, 5))
@@ -692,7 +693,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
 
   test("takeOrdered with limit 0") {
     val nums = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-    val rdd = sc.makeRDD(nums, 2)
+    val rdd = sc.makeRDD(nums.toImmutableArraySeq, 2)
     val sortedLowerK = rdd.takeOrdered(0)
     assert(sortedLowerK.size === 0)
   }
@@ -705,7 +706,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
   test("takeOrdered with custom ordering") {
     val nums = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
     implicit val ord = implicitly[Ordering[Int]].reverse
-    val rdd = sc.makeRDD(nums, 2)
+    val rdd = sc.makeRDD(nums.toImmutableArraySeq, 2)
     val sortedTopK = rdd.takeOrdered(5)
     assert(sortedTopK.size === 5)
     assert(sortedTopK === Array(10, 9, 8, 7, 6))
@@ -1238,7 +1239,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     val numCoalescedPartitions = 50
     val locations = Array("locA", "locB")
 
-    val inputRDD = sc.makeRDD(Range(0, numInputPartitions).toArray[Int], numInputPartitions)
+    val inputRDD = sc.makeRDD(Range(0, numInputPartitions), numInputPartitions)
     assert(inputRDD.getNumPartitions == numInputPartitions)
 
     val locationPrefRDD = new LocationPrefRDD(inputRDD, { (p: Partition) =>
@@ -1254,6 +1255,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
       .getPartitions
       .map(coalescedRDD.getPreferredLocations(_).head)
       .groupBy(identity)
+      .view
       .mapValues(_.size)
 
     // Make sure the coalesced partitions are distributed fairly evenly between the two locations.

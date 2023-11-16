@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
-import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, ClusterByTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{Decimal, IntegerType, LongType, MetadataBuilder, StringType, StructType, TimestampType}
@@ -187,6 +187,50 @@ class DDLParserSuite extends AnalysisTest {
 
     Seq(createSql, replaceSql).foreach { sql =>
       testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
+    }
+  }
+
+  test("create/replace table - with cluster by") {
+    // Testing cluster by single part and multipart name.
+    Seq(
+      ("a INT, b STRING, ts TIMESTAMP",
+        "a, b",
+        new StructType()
+          .add("a", IntegerType)
+          .add("b", StringType)
+          .add("ts", TimestampType),
+        ClusterByTransform(Seq(FieldReference("a"), FieldReference("b")))),
+      ("a STRUCT<b INT, c STRING>, ts TIMESTAMP",
+        "a.b, ts",
+        new StructType()
+          .add("a",
+            new StructType()
+              .add("b", IntegerType)
+              .add("c", StringType))
+          .add("ts", TimestampType),
+        ClusterByTransform(Seq(FieldReference(Seq("a", "b")), FieldReference("ts"))))
+    ).foreach { case (columns, clusteringColumns, schema, clusterByTransform) =>
+      val createSql =
+        s"""CREATE TABLE my_tab ($columns) USING parquet
+           |CLUSTER BY ($clusteringColumns)
+           |""".stripMargin
+      val replaceSql =
+        s"""REPLACE TABLE my_tab ($columns) USING parquet
+           |CLUSTER BY ($clusteringColumns)
+           |""".stripMargin
+      val expectedTableSpec = TableSpec(
+        Seq("my_tab"),
+        Some(schema),
+        Seq(clusterByTransform),
+        Map.empty[String, String],
+        Some("parquet"),
+        OptionList(Seq.empty),
+        None,
+        None,
+        None)
+      Seq(createSql, replaceSql).foreach { sql =>
+        testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
+      }
     }
   }
 
@@ -859,6 +903,26 @@ class DDLParserSuite extends AnalysisTest {
         fragment = sql18,
         start = 0,
         stop = 86))
+
+    val sql19 = createTableHeader("CLUSTER BY (a)")
+    checkError(
+      exception = parseException(sql19),
+      errorClass = "DUPLICATE_CLAUSES",
+      parameters = Map("clauseName" -> "CLUSTER BY"),
+      context = ExpectedContext(
+        fragment = sql19,
+        start = 0,
+        stop = 65))
+
+    val sql20 = replaceTableHeader("CLUSTER BY (a)")
+    checkError(
+      exception = parseException(sql20),
+      errorClass = "DUPLICATE_CLAUSES",
+      parameters = Map("clauseName" -> "CLUSTER BY"),
+      context = ExpectedContext(
+        fragment = sql20,
+        start = 0,
+        stop = 66))
   }
 
   test("support for other types in OPTIONS") {
@@ -2893,6 +2957,50 @@ class DDLParserSuite extends AnalysisTest {
       parameters = Map("type" -> "ADD", "columnName" -> "b", "optionName" -> "FIRST|AFTER"),
       context =
         ExpectedContext(fragment = "b STRING FIRST COMMENT \"abc\" AFTER y", start = 30, stop = 65)
+    )
+  }
+
+  test("create table cluster by with bucket") {
+    val sql1 = "CREATE TABLE my_tab(a INT, b STRING) " +
+      "USING parquet CLUSTERED BY (a) INTO 2 BUCKETS CLUSTER BY (a)"
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED",
+      parameters = Map.empty,
+      context = ExpectedContext(fragment = sql1, start = 0, stop = 96)
+    )
+  }
+
+  test("replace table cluster by with bucket") {
+    val sql1 = "REPLACE TABLE my_tab(a INT, b STRING) " +
+      "USING parquet CLUSTERED BY (a) INTO 2 BUCKETS CLUSTER BY (a)"
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED",
+      parameters = Map.empty,
+      context = ExpectedContext(fragment = sql1, start = 0, stop = 97)
+    )
+  }
+
+  test("create table cluster by with partitioned by") {
+    val sql1 = "CREATE TABLE my_tab(a INT, b STRING) " +
+      "USING parquet CLUSTER BY (a) PARTITIONED BY (a)"
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED",
+      parameters = Map.empty,
+      context = ExpectedContext(fragment = sql1, start = 0, stop = 83)
+    )
+  }
+
+  test("replace table cluster by with partitioned by") {
+    val sql1 = "REPLACE TABLE my_tab(a INT, b STRING) " +
+      "USING parquet CLUSTER BY (a) PARTITIONED BY (a)"
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED",
+      parameters = Map.empty,
+      context = ExpectedContext(fragment = sql1, start = 0, stop = 84)
     )
   }
 

@@ -23,6 +23,7 @@ import java.util.{HashMap, Locale, Map => JMap}
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -30,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, SQLQueryContext}
+import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -39,6 +40,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
+import org.apache.spark.util.ArrayImplicits._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines expressions for string operations.
@@ -312,7 +314,7 @@ case class Elt(
           )
         )
       }
-      TypeUtils.checkForSameTypeInputExpr(inputTypes, prettyName)
+      TypeUtils.checkForSameTypeInputExpr(inputTypes.toImmutableArraySeq, prettyName)
     }
   }
 
@@ -355,7 +357,7 @@ case class Elt(
     }
 
     val codes = ctx.splitExpressionsWithCurrentInputs(
-      expressions = assignInputValue,
+      expressions = assignInputValue.toImmutableArraySeq,
       funcName = "eltFunc",
       extraArguments = ("int", indexVal) :: Nil,
       returnType = CodeGenerator.JAVA_BOOLEAN,
@@ -411,7 +413,7 @@ case class Elt(
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Elt =
     copy(children = newChildren)
 
-  override def initQueryContext(): Option[SQLQueryContext] = if (failOnError) {
+  override def initQueryContext(): Option[QueryContext] = if (failOnError) {
     Some(origin.context)
   } else {
     None
@@ -2231,16 +2233,18 @@ case class Levenshtein(
     val resultCode = s"${ev.value} = ${leftGen.value}.levenshteinDistance(" +
       s"${rightGen.value}, ${thresholdGen.value});"
     if (nullable) {
-      val nullSafeEval = leftGen.code + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
-        rightGen.code + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
-          thresholdGen.code + ctx.nullSafeExec(thresholdExpr.nullable, thresholdGen.isNull) {
-            s"""
-              ${ev.isNull} = false;
-              $resultCode
-             """
+      val nullSafeEval =
+        leftGen.code.toString + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
+          rightGen.code.toString + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
+            thresholdGen.code.toString +
+              ctx.nullSafeExec(thresholdExpr.nullable, thresholdGen.isNull) {
+                s"""
+                  ${ev.isNull} = false;
+                  $resultCode
+                 """
+              }
           }
         }
-      }
       ev.copy(code = code"""
         boolean ${ev.isNull} = true;
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -2259,14 +2263,15 @@ case class Levenshtein(
     val rightGen = children(1).genCode(ctx)
     val resultCode = s"${ev.value} = ${leftGen.value}.levenshteinDistance(${rightGen.value});"
     if (nullable) {
-      val nullSafeEval = leftGen.code + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
-        rightGen.code + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
-          s"""
-            ${ev.isNull} = false;
-            $resultCode
-           """
+      val nullSafeEval =
+        leftGen.code.toString + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
+          rightGen.code.toString + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
+            s"""
+              ${ev.isNull} = false;
+              $resultCode
+             """
+          }
         }
-      }
       ev.copy(code = code"""
         boolean ${ev.isNull} = true;
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -2573,7 +2578,7 @@ object Decode {
             default = search
           }
         }
-        CaseWhen(branches.seq.toSeq, default)
+        CaseWhen(branches.toSeq, default)
     }
   }
 }

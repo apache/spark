@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -169,8 +170,8 @@ case class CallMethodViaReflection(
   @transient private lazy val methodName = children(1).eval(null).asInstanceOf[UTF8String].toString
 
   /** The reflection method. */
-  @transient lazy val method: Method =
-    CallMethodViaReflection.findMethod(className, methodName, argExprs.map(_.dataType)).orNull
+  @transient lazy val method: Method = CallMethodViaReflection
+    .findMethod(className, methodName, argExprs.map(_.dataType).toImmutableArraySeq).orNull
 
   /** A temporary buffer used to hold intermediate results returned by children. */
   @transient private lazy val buffer = new Array[Object](argExprs.length)

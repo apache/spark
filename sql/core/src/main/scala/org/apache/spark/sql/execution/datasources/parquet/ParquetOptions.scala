@@ -89,7 +89,7 @@ object ParquetOptions extends DataSourceOptions {
   // The parquet compression short names
   private val shortParquetCompressionCodecNames =
     ParquetCompressionCodec.values().map {
-      codec => codec.name().toLowerCase(Locale.ROOT) -> codec.getCompressionCodec
+      codec => codec.lowerCaseName() -> codec.getCompressionCodec
     }.toMap
 
   def getParquetCompressionCodecName(name: String): String = {

@@ -32,6 +32,7 @@ import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_MET
 import org.apache.spark.sql.connector.expressions.{BucketTransform, Expression => V2Expression, FieldReference, IdentityTransform, Literal => V2Literal, NamedReference, NamedTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortOrder => V2SortOrder, SortValue, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A utility class that converts public connector expressions into Catalyst expressions.
@@ -40,7 +41,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 
   def resolveRef[T <: NamedExpression](ref: NamedReference, plan: LogicalPlan): T = {
-    plan.resolve(ref.fieldNames, conf.resolver) match {
+    plan.resolve(ref.fieldNames.toImmutableArraySeq, conf.resolver) match {
       case Some(namedExpr) =>
         namedExpr.asInstanceOf[T]
       case None =>
@@ -61,7 +62,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       ordering: Array[V2SortOrder],
       query: LogicalPlan,
       funCatalogOpt: Option[FunctionCatalog] = None): Seq[SortOrder] = {
-    ordering.map(toCatalyst(_, query, funCatalogOpt).asInstanceOf[SortOrder])
+    ordering.map(toCatalyst(_, query, funCatalogOpt).asInstanceOf[SortOrder]).toImmutableArraySeq
   }
 
   def toCatalyst(

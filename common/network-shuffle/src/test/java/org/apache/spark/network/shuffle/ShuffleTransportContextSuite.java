@@ -60,13 +60,16 @@ public class ShuffleTransportContextSuite {
     blockHandler = mock(ExternalBlockHandler.class);
   }
 
-  ShuffleTransportContext createShuffleTransportContext(boolean separateFinalizeThread)
-      throws IOException {
+  protected TransportConf createTransportConf(boolean separateFinalizeThread) {
     Map<String, String> configs = new HashMap<>();
     configs.put("spark.shuffle.server.finalizeShuffleMergeThreadsPercent",
-        separateFinalizeThread ? "1" : "0");
-    TransportConf transportConf = new TransportConf("shuffle",
-        new MapConfigProvider(configs));
+      separateFinalizeThread ? "1" : "0");
+    return new TransportConf("shuffle", new MapConfigProvider(configs));
+  }
+
+  ShuffleTransportContext createShuffleTransportContext(boolean separateFinalizeThread)
+      throws IOException {
+    TransportConf transportConf = createTransportConf(separateFinalizeThread);
     return new ShuffleTransportContext(transportConf, blockHandler, true);
   }
 
@@ -90,15 +93,17 @@ public class ShuffleTransportContextSuite {
   public void testInitializePipeline() throws IOException {
     // SPARK-43987: test that the FinalizedHandler is added to the pipeline only when configured
     for (boolean enabled : new boolean[]{true, false}) {
-      ShuffleTransportContext ctx = createShuffleTransportContext(enabled);
-      SocketChannel channel = new NioSocketChannel();
-      RpcHandler rpcHandler = mock(RpcHandler.class);
-      ctx.initializePipeline(channel, rpcHandler);
-      String handlerName = ShuffleTransportContext.FinalizedHandler.HANDLER_NAME;
-      if (enabled) {
-        Assertions.assertNotNull(channel.pipeline().get(handlerName));
-      } else {
-        Assertions.assertNull(channel.pipeline().get(handlerName));
+      for (boolean client: new boolean[]{true, false}) {
+        ShuffleTransportContext ctx = createShuffleTransportContext(enabled);
+        SocketChannel channel = new NioSocketChannel();
+        RpcHandler rpcHandler = mock(RpcHandler.class);
+        ctx.initializePipeline(channel, rpcHandler, client);
+        String handlerName = ShuffleTransportContext.FinalizedHandler.HANDLER_NAME;
+        if (enabled) {
+          Assertions.assertNotNull(channel.pipeline().get(handlerName));
+        } else {
+          Assertions.assertNull(channel.pipeline().get(handlerName));
+        }
       }
     }
   }
@@ -118,7 +123,7 @@ public class ShuffleTransportContextSuite {
     Assertions.assertEquals(1, out.size());
     Assertions.assertTrue(out.get(0) instanceof ShuffleTransportContext.RpcRequestInternal);
     Assertions.assertEquals(BlockTransferMessage.Type.FINALIZE_SHUFFLE_MERGE,
-        ((ShuffleTransportContext.RpcRequestInternal) out.get(0)).messageType);
+        ((ShuffleTransportContext.RpcRequestInternal) out.get(0)).messageType());
   }
 
   @Test

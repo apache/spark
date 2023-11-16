@@ -42,6 +42,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A simple in-memory table. Rows are stored as a buffered group produced by each output task.
@@ -90,6 +91,7 @@ abstract class InMemoryBaseTable(
     case _: HoursTransform =>
     case _: BucketTransform =>
     case _: SortedBucketTransform =>
+    case _: ClusterByTransform =>
     case NamedTransform("truncate", Seq(_: NamedReference, _: Literal[_])) =>
     case t if !allowUnsupportedTransforms =>
       throw new IllegalArgumentException(s"Transform $t is not a supported transform")
@@ -103,7 +105,7 @@ abstract class InMemoryBaseTable(
   def rows: Seq[InternalRow] = dataMap.values.flatten.flatMap(_.rows).toSeq
 
   val partCols: Array[Array[String]] = partitioning.flatMap(_.references).map { ref =>
-    schema.findNestedField(ref.fieldNames(), includeCollections = false) match {
+    schema.findNestedField(ref.fieldNames().toImmutableArraySeq, includeCollections = false) match {
       case Some(_) => ref.fieldNames()
       case None => throw new IllegalArgumentException(s"${ref.describe()} does not exist.")
     }
@@ -192,7 +194,7 @@ abstract class InMemoryBaseTable(
           case (v, t) =>
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
-    }
+    }.toImmutableArraySeq
   }
 
   protected def addPartitionKey(key: Seq[Any]): Unit = {}
@@ -311,7 +313,8 @@ abstract class InMemoryBaseTable(
     private var _pushedFilters: Array[Filter] = Array.empty
 
     override def build: Scan = {
-      val scan = InMemoryBatchScan(data.map(_.asInstanceOf[InputPartition]), schema, tableSchema)
+      val scan = InMemoryBatchScan(
+        data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq, schema, tableSchema)
       if (evaluableFilters.nonEmpty) {
         scan.filter(evaluableFilters)
       }
@@ -452,7 +455,7 @@ abstract class InMemoryBaseTable(
             val matchingKeys = values.map { value =>
               if (value != null) value.toString else null
             }.toSet
-            data = data.filter(partition => {
+            this.data = this.data.filter(partition => {
               val rows = partition.asInstanceOf[BufferedRows]
               rows.key match {
                 // null partitions are represented as Seq(null)

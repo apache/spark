@@ -55,6 +55,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A test suite that tests Parquet filter2 API based filter pushdown optimization.
@@ -200,7 +201,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       Seq(3, 20).foreach { threshold =>
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
           checkFilterPredicate(
-            In(tsAttr, Array(ts2.ts, ts3.ts, ts4.ts, "2021-05-01 00:01:02".ts).map(Literal.apply)),
+            In(tsAttr, Array(ts2.ts, ts3.ts, ts4.ts, "2021-05-01 00:01:02".ts).map(Literal.apply)
+              .toImmutableArraySeq),
             if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
             Seq(Row(resultFun(ts2)), Row(resultFun(ts3)), Row(resultFun(ts4))))
         }
@@ -361,7 +363,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       Seq(3, 20).foreach { threshold =>
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
           checkFilterPredicate(
-            In(intAttr, Array(2, 3, 4, 5, 6, 7).map(Literal.apply)),
+            In(intAttr, Array(2, 3, 4, 5, 6, 7).map(Literal.apply).toImmutableArraySeq),
             if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
             Seq(Row(resultFun(2)), Row(resultFun(3)), Row(resultFun(4))))
         }
@@ -403,7 +405,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     Seq(3, 20).foreach { threshold =>
       withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
         checkFilterPredicate(
-          In(intAttr, Array(2, 3, 4, 5, 6, 7).map(Literal.apply)),
+          In(intAttr, Array(2, 3, 4, 5, 6, 7).map(Literal.apply).toImmutableArraySeq),
           if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
           Seq(Row(2), Row(3), Row(4)))
       }
@@ -446,7 +448,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       Seq(3, 20).foreach { threshold =>
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
           checkFilterPredicate(
-            In(longAttr, Array(2L, 3L, 4L, 5L, 6L, 7L).map(Literal.apply)),
+            In(longAttr, Array(2L, 3L, 4L, 5L, 6L, 7L).map(Literal.apply).toImmutableArraySeq),
             if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
             Seq(Row(resultFun(2L)), Row(resultFun(3L)), Row(resultFun(4L))))
         }
@@ -488,7 +490,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     Seq(3, 20).foreach { threshold =>
       withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
         checkFilterPredicate(
-          In(longAttr, Array(2L, 3L, 4L, 5L, 6L, 7L).map(Literal.apply)),
+          In(longAttr, Array(2L, 3L, 4L, 5L, 6L, 7L).map(Literal.apply).toImmutableArraySeq),
           if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
           Seq(Row(2L), Row(3L), Row(4L)))
       }
@@ -531,7 +533,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       Seq(3, 20).foreach { threshold =>
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
           checkFilterPredicate(
-            In(floatAttr, Array(2F, 3F, 4F, 5F, 6F, 7F).map(Literal.apply)),
+            In(floatAttr, Array(2F, 3F, 4F, 5F, 6F, 7F).map(Literal.apply).toImmutableArraySeq),
             if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
             Seq(Row(resultFun(2F)), Row(resultFun(3F)), Row(resultFun(4F))))
         }
@@ -575,7 +577,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       Seq(3, 20).foreach { threshold =>
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
           checkFilterPredicate(
-            In(doubleAttr, Array(2.0D, 3.0D, 4.0D, 5.0D, 6.0D, 7.0D).map(Literal.apply)),
+            In(doubleAttr, Array(2.0D, 3.0D, 4.0D, 5.0D, 6.0D, 7.0D).map(Literal.apply)
+              .toImmutableArraySeq),
             if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
             Seq(Row(resultFun(2D)), Row(resultFun(3D)), Row(resultFun(4F))))
         }
@@ -619,7 +622,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       Seq(3, 20).foreach { threshold =>
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
           checkFilterPredicate(
-            In(stringAttr, Array("2", "3", "4", "5", "6", "7").map(Literal.apply)),
+            In(stringAttr, Array("2", "3", "4", "5", "6", "7").map(Literal.apply)
+              .toImmutableArraySeq),
             if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
             Seq(Row(resultFun("2")), Row(resultFun("3")), Row(resultFun("4"))))
         }
@@ -668,7 +672,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       Seq(3, 20).foreach { threshold =>
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
           checkFilterPredicate(
-            In(binaryAttr, Array(2.b, 3.b, 4.b, 5.b, 6.b, 7.b).map(Literal.apply)),
+            In(binaryAttr, Array(2.b, 3.b, 4.b, 5.b, 6.b, 7.b).map(Literal.apply)
+              .toImmutableArraySeq),
             if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
             Seq(Row(resultFun(2.b)), Row(resultFun(3.b)), Row(resultFun(4.b))))
         }
@@ -745,7 +750,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
               withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
                 checkFilterPredicate(
                   In(dateAttr, Array("2018-03-19".date, "2018-03-20".date, "2018-03-21".date,
-                    "2018-03-22".date).map(Literal.apply)),
+                    "2018-03-22".date).map(Literal.apply).toList),
                   if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
                   Seq(Row(resultFun("2018-03-19")), Row(resultFun("2018-03-20")),
                     Row(resultFun("2018-03-21"))))
@@ -854,7 +859,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
             withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
               checkFilterPredicate(
                 In(decimalAttr, Array(2, 3, 4, 5).map(Literal.apply)
-                  .map(_.cast(DecimalType(precision, 2)))),
+                  .map(_.cast(DecimalType(precision, 2))).toImmutableArraySeq),
                 if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
                 Seq(Row(resultFun(2)), Row(resultFun(3)), Row(resultFun(4))))
             }
@@ -1556,7 +1561,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   private def checkStringFilterPushdown(
       stringPredicate: String => Expression,
       sourceFilter: (String, String) => sources.Filter): Unit = {
-    withParquetDataFrame((1 to 4).map(i => Tuple1(i + "str" + i))) { implicit df =>
+    withParquetDataFrame((1 to 4).map(i => Tuple1(s"${i}str$i"))) { implicit df =>
       checkFilterPredicate(
         stringPredicate("").asInstanceOf[Predicate],
         classOf[UserDefinedByInstance[_, _]],
@@ -1866,7 +1871,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     withTempPath { dir =>
       val count = 10
       val tableName = "spark_25207"
-      val tableDir = dir.getAbsoluteFile + "/table"
+      val tableDir = s"${dir.getAbsoluteFile}/table"
       withTable(tableName) {
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
           spark.range(count).selectExpr("id as A", "id as B", "id as b")
@@ -2040,7 +2045,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       Seq(3, 20).foreach { threshold =>
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
           checkFilterPredicate(
-            In(iAttr, Array(2, 3, 4, 5, 6, 7).map(monthsLit)),
+            In(iAttr, Array(2, 3, 4, 5, 6, 7).map(monthsLit).toImmutableArraySeq),
             if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
             Seq(Row(resultFun(months(2))), Row(resultFun(months(3))), Row(resultFun(months(4)))))
         }
@@ -2086,7 +2091,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       Seq(3, 20).foreach { threshold =>
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
           checkFilterPredicate(
-            In(iAttr, Array(2, 3, 4, 5, 6, 7).map(secsLit)),
+            In(iAttr, Array(2, 3, 4, 5, 6, 7).map(secsLit).toImmutableArraySeq),
             if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
             Seq(Row(resultFun(secs(2))), Row(resultFun(secs(3))), Row(resultFun(secs(4)))))
         }
@@ -2255,7 +2260,8 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
           val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
           val parquetFilters = createParquetFilters(schema)
           // In this test suite, all the simple predicates are convertible here.
-          assert(parquetFilters.convertibleFilters(sourceFilters) === pushedFilters)
+          assert(
+            parquetFilters.convertibleFilters(sourceFilters.toImmutableArraySeq) === pushedFilters)
           val pushedParquetFilters = pushedFilters.map { pred =>
             val maybeFilter = parquetFilters.createFilter(pred)
             assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")

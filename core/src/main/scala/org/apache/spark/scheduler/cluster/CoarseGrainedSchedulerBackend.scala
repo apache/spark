@@ -42,6 +42,7 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.ENDPOINT_NAME
 import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A scheduler backend that waits for coarse-grained executors to connect.
@@ -173,7 +174,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               executorInfo.freeCores += taskCpus
               resources.foreach { case (k, v) =>
                 executorInfo.resourcesInfo.get(k).foreach { r =>
-                  r.release(v.addresses)
+                  r.release(v.addresses.toImmutableArraySeq)
                 }
               }
               makeOffers(executorId)
@@ -274,7 +275,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             // as configured by the user, or set to 1 as that is the default (1 task/resource)
             val numParts = scheduler.sc.resourceProfileManager
               .resourceProfileFromId(resourceProfileId).getNumSlotsPerAddress(rName, conf)
-            (info.name, new ExecutorResourceInfo(info.name, info.addresses, numParts))
+            (info.name,
+              new ExecutorResourceInfo(info.name, info.addresses.toImmutableArraySeq, numParts))
           }
           // If we've requested the executor figure out when we did.
           val reqTs: Option[Long] = CoarseGrainedSchedulerBackend.this.synchronized {
@@ -319,7 +321,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case StopDriver =>
         context.reply(true)
-        stop()
+        this.stop()
 
       case UpdateExecutorsLogLevel(logLevel) =>
         currentLogLevel = Some(logLevel)
@@ -446,7 +448,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           executorData.freeCores -= task.cpus
           task.resources.foreach { case (rName, rInfo) =>
             assert(executorData.resourcesInfo.contains(rName))
-            executorData.resourcesInfo(rName).acquire(rInfo.addresses)
+            executorData.resourcesInfo(rName).acquire(rInfo.addresses.toImmutableArraySeq)
           }
 
           logDebug(s"Launching task ${task.taskId} on executor id: ${task.executorId} hostname: " +
@@ -569,14 +571,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     if (executorsToDecommission.isEmpty) {
-      return executorsToDecommission
+      return executorsToDecommission.toImmutableArraySeq
     }
 
     logInfo(s"Decommission executors: ${executorsToDecommission.mkString(", ")}")
 
     // If we don't want to replace the executors we are decommissioning
     if (adjustTargetNumExecutors) {
-      adjustExecutors(executorsToDecommission)
+      adjustExecutors(executorsToDecommission.toImmutableArraySeq)
     }
 
     // Mark those corresponding BlockManagers as decommissioned first before we sending
@@ -586,7 +588,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Note that marking BlockManager as decommissioned doesn't need depend on
     // `spark.storage.decommission.enabled`. Because it's meaningless to save more blocks
     // for the BlockManager since the executor will be shutdown soon.
-    scheduler.sc.env.blockManager.master.decommissionBlockManagers(executorsToDecommission)
+    scheduler.sc.env.blockManager.master
+      .decommissionBlockManagers(executorsToDecommission.toImmutableArraySeq)
 
     if (!triggeredByExecutor) {
       executorsToDecommission.foreach { executorId =>
@@ -603,14 +606,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           }
           if (stragglers.nonEmpty) {
             logInfo(s"${stragglers.toList} failed to decommission in ${cleanupInterval}, killing.")
-            killExecutors(stragglers, false, false, true)
+            killExecutors(stragglers.toImmutableArraySeq, false, false, true)
           }
         }
       }
       cleanupService.map(_.schedule(cleanupTask, cleanupInterval, TimeUnit.SECONDS))
     }
 
-    executorsToDecommission
+    executorsToDecommission.toImmutableArraySeq
   }
 
   override def start(): Unit = {
@@ -736,7 +739,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   def getExecutorsWithRegistrationTs(): Map[String, Long] = synchronized {
-    executorDataMap.mapValues(v => v.registrationTs).toMap
+    executorDataMap.view.mapValues(v => v.registrationTs).toMap
   }
 
   override def isExecutorActive(id: String): Boolean = synchronized {

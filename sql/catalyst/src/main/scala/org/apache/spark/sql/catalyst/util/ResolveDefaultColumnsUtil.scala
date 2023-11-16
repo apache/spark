@@ -37,6 +37,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * This object contains fields to help process DEFAULT columns.
@@ -85,7 +86,7 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
         } else {
           field
         }
-      }
+      }.toImmutableArraySeq
       StructType(newFields)
     } else {
       tableSchema

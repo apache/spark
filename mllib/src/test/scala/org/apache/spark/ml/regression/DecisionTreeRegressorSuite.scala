@@ -29,6 +29,7 @@ import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
 import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.util.ArrayImplicits._
 
 class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
 
@@ -43,7 +44,8 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
   override def beforeAll(): Unit = {
     super.beforeAll()
     categoricalDataPointsRDD =
-      sc.parallelize(OldDecisionTreeSuite.generateCategoricalDataPoints().map(_.asML))
+      sc.parallelize(OldDecisionTreeSuite.generateCategoricalDataPoints().map(_.asML)
+        .toImmutableArraySeq)
     linearRegressionData = sc.parallelize(LinearDataGenerator.generateLinearInput(
       intercept = 6.3, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
       xVariance = Array(0.7, 1.2), nPoints = 1000, seed, eps = 0.5), 2).map(_.asML).toDF()
@@ -172,7 +174,7 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
     val data = TreeTests.getSingleTreeLeafData
     data.foreach { case (leafId, vec) => assert(leafId === model.predictLeaf(vec)) }
 
-    val df = sc.parallelize(data, 1).toDF("leafId", "features")
+    val df = sc.parallelize(data.toImmutableArraySeq, 1).toDF("leafId", "features")
     model.transform(df).select("leafId", "predictedLeafId")
       .collect()
       .foreach { case Row(leafId: Double, predictedLeafId: Double) =>

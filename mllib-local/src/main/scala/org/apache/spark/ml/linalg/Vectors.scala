@@ -21,7 +21,7 @@ import java.lang.{Double => JavaDouble, Integer => JavaInteger, Iterable => Java
 import java.util
 
 import scala.annotation.varargs
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 import scala.jdk.CollectionConverters._
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
@@ -54,11 +54,15 @@ sealed trait Vector extends Serializable {
         if (this.size != v2.size) return false
         (this, v2) match {
           case (s1: SparseVector, s2: SparseVector) =>
-            Vectors.equals(s1.indices, s1.values, s2.indices, s2.values)
+            Vectors.equals(
+              immutable.ArraySeq.unsafeWrapArray(s1.indices), s1.values,
+              immutable.ArraySeq.unsafeWrapArray(s2.indices), s2.values)
           case (s1: SparseVector, d1: DenseVector) =>
-            Vectors.equals(s1.indices, s1.values, 0 until d1.size, d1.values)
+            Vectors.equals(
+              immutable.ArraySeq.unsafeWrapArray(s1.indices), s1.values, 0 until d1.size, d1.values)
           case (d1: DenseVector, s1: SparseVector) =>
-            Vectors.equals(0 until d1.size, d1.values, s1.indices, s1.values)
+            Vectors.equals(
+              0 until d1.size, d1.values, immutable.ArraySeq.unsafeWrapArray(s1.indices), s1.values)
           case (_, _) => util.Arrays.equals(this.toArray, v2.toArray)
         }
       case _ => false
@@ -184,9 +188,9 @@ sealed trait Vector extends Serializable {
    * Returns a vector in either dense or sparse format, whichever uses less storage.
    */
   @Since("2.0.0")
-  def compressed: Vector = compressed(numNonzeros)
+  def compressed: Vector = compressedWithNNZ(numNonzeros)
 
-  private[ml] def compressed(nnz: Int): Vector = {
+  private[ml] def compressedWithNNZ(nnz: Int): Vector = {
     // A dense vector needs 8 * size + 8 bytes, while a sparse vector needs 12 * nnz + 20 bytes.
     if (1.5 * (nnz + 1.0) < size) {
       toSparseWithSize(nnz)

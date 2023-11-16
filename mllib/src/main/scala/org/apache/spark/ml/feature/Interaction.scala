@@ -30,6 +30,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Implements the feature interaction transform. This transformer takes in Double and Vector type
@@ -70,8 +71,8 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val inputFeatures = $(inputCols).map(c => dataset.schema(c))
-    val featureEncoders = getFeatureEncoders(inputFeatures)
-    val featureAttrs = getFeatureAttrs(inputFeatures)
+    val featureEncoders = getFeatureEncoders(inputFeatures.toImmutableArraySeq)
+    val featureAttrs = getFeatureAttrs(inputFeatures.toImmutableArraySeq)
 
     def interactFunc = udf { row: Row =>
       var indices = ArrayBuilder.make[Int]
@@ -108,9 +109,11 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
         case _: NumericType | BooleanType => dataset(f.name).cast(DoubleType)
       }
     }
+    import org.apache.spark.util.ArrayImplicits._
     dataset.select(
       col("*"),
-      interactFunc(struct(featureCols: _*)).as($(outputCol), featureAttrs.toMetadata()))
+      interactFunc(struct(featureCols.toImmutableArraySeq: _*))
+        .as($(outputCol), featureAttrs.toMetadata()))
   }
 
   /**
@@ -166,7 +169,7 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
           }
         case _: VectorUDT =>
           val group = AttributeGroup.fromStructField(f)
-          encodedFeatureAttrs(group.attributes.get, Some(group.name))
+          encodedFeatureAttrs(group.attributes.get.toImmutableArraySeq, Some(group.name))
       }
       if (featureAttrs.isEmpty) {
         featureAttrs = encodedAttrs

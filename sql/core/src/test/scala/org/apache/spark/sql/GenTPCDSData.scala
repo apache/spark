@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import java.util.concurrent.LinkedBlockingQueue
 
-import scala.collection.immutable.Stream
 import scala.sys.process._
 import scala.util.Try
 
@@ -29,6 +28,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions.{col, rpad}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{CharType, StringType, StructField, StructType, VarcharType}
+import org.apache.spark.util.ArrayImplicits._
 
 // The classes in this file are basically moved from https://github.com/databricks/spark-sql-perf
 
@@ -46,7 +46,7 @@ object BlockingLineStream {
   private final class BlockingStreamed[T](
     val process: T => Unit,
     val done: Int => Unit,
-    val stream: () => Stream[T])
+    val stream: () => LazyList[T])
 
   // See scala.sys.process.Streamed
   private object BlockingStreamed {
@@ -57,11 +57,11 @@ object BlockingLineStream {
     def apply[T](nonzeroException: Boolean): BlockingStreamed[T] = {
       val q = new LinkedBlockingQueue[Either[Int, T]](maxQueueSize)
 
-      def next(): Stream[T] = q.take match {
-        case Left(0) => Stream.empty
+      def next(): LazyList[T] = q.take match {
+        case Left(0) => LazyList.empty
         case Left(code) =>
-          if (nonzeroException) scala.sys.error("Nonzero exit code: " + code) else Stream.empty
-        case Right(s) => Stream.cons(s, next())
+          if (nonzeroException) scala.sys.error("Nonzero exit code: " + code) else LazyList.empty
+        case Right(s) => LazyList.cons(s, next())
       }
 
       new BlockingStreamed((s: T) => q put Right(s), code => q put Left(code), () => next())
@@ -79,7 +79,7 @@ object BlockingLineStream {
     }
   }
 
-  def apply(command: Seq[String]): Stream[String] = {
+  def apply(command: Seq[String]): LazyList[String] = {
     val streamed = BlockingStreamed[String](true)
     val process = command.run(BasicIO(false, streamed.process, None))
     Spawn(streamed.done(process.exitValue()))
@@ -150,7 +150,7 @@ class TPCDSTables(spark: SparkSession, dsdgenDir: String, scaleFactor: Int)
               v
             }
           }
-          Row.fromSeq(values)
+          Row.fromSeq(values.toImmutableArraySeq)
         }
       }
 
@@ -170,7 +170,8 @@ class TPCDSTables(spark: SparkSession, dsdgenDir: String, scaleFactor: Int)
           }
           c.as(f.name)
         }
-        stringData.select(columns: _*)
+        import org.apache.spark.util.ArrayImplicits._
+        stringData.select(columns.toImmutableArraySeq: _*)
       }
 
       convertedData

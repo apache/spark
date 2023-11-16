@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 
 import sun.util.calendar.ZoneInfo
 
-import org.apache.spark.sql.catalyst.trees.SQLQueryContext
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, rebaseJulianToGregorianDays, rebaseJulianToGregorianMicros}
 import org.apache.spark.sql.errors.ExecutionErrors
@@ -355,7 +355,7 @@ trait SparkDateTimeUtils {
 
   def stringToDateAnsi(
       s: UTF8String,
-      context: SQLQueryContext = null): Int = {
+      context: QueryContext = null): Int = {
     stringToDate(s).getOrElse {
       throw ExecutionErrors.invalidInputInCastToDatetimeError(s, DateType, context)
     }
@@ -567,7 +567,7 @@ trait SparkDateTimeUtils {
   def stringToTimestampAnsi(
       s: UTF8String,
       timeZoneId: ZoneId,
-      context: SQLQueryContext = null): Long = {
+      context: QueryContext = null): Long = {
     stringToTimestamp(s, timeZoneId).getOrElse {
       throw ExecutionErrors.invalidInputInCastToDatetimeError(s, TimestampType, context)
     }

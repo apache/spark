@@ -120,7 +120,9 @@ class PlanGenerationTestSuite
   }
 
   override protected def afterAll(): Unit = {
-    session.close()
+    // Don't call client.releaseSession on close(), because the connection details are dummy.
+    session.releaseSessionOnClose = false
+    session.stop()
     if (cleanOrphanedGoldenFiles) {
       cleanOrphanedGoldenFile()
     }

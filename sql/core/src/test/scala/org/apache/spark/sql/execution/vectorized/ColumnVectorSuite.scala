@@ -26,6 +26,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarArray
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
   private def withVector(
@@ -502,7 +503,7 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
   test("CachedBatch boolean Apis") {
     val dataType = BooleanType
     val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
-    val row = new SpecificInternalRow(Array(dataType))
+    val row = new SpecificInternalRow(Array(dataType).toImmutableArraySeq)
 
     row.setNullAt(0)
     columnBuilder.appendFrom(row, 0)
@@ -526,7 +527,7 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
   test("CachedBatch byte Apis") {
     val dataType = ByteType
     val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
-    val row = new SpecificInternalRow(Array(dataType))
+    val row = new SpecificInternalRow(Array(dataType).toImmutableArraySeq)
 
     row.setNullAt(0)
     columnBuilder.appendFrom(row, 0)
@@ -550,7 +551,7 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
   test("CachedBatch short Apis") {
     val dataType = ShortType
     val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
-    val row = new SpecificInternalRow(Array(dataType))
+    val row = new SpecificInternalRow(Array(dataType).toImmutableArraySeq)
 
     row.setNullAt(0)
     columnBuilder.appendFrom(row, 0)
@@ -574,7 +575,7 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
   test("CachedBatch int Apis") {
     val dataType = IntegerType
     val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
-    val row = new SpecificInternalRow(Array(dataType))
+    val row = new SpecificInternalRow(Array(dataType).toImmutableArraySeq)
 
     row.setNullAt(0)
     columnBuilder.appendFrom(row, 0)
@@ -598,7 +599,7 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
   test("CachedBatch long Apis") {
     Seq(LongType, TimestampType, TimestampNTZType).foreach { dataType =>
       val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
-      val row = new SpecificInternalRow(Array(dataType))
+      val row = new SpecificInternalRow(Array(dataType).toImmutableArraySeq)
 
       row.setNullAt(0)
       columnBuilder.appendFrom(row, 0)
@@ -623,7 +624,7 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
   test("CachedBatch float Apis") {
     val dataType = FloatType
     val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
-    val row = new SpecificInternalRow(Array(dataType))
+    val row = new SpecificInternalRow(Array(dataType).toImmutableArraySeq)
 
     row.setNullAt(0)
     columnBuilder.appendFrom(row, 0)
@@ -647,7 +648,7 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
   test("CachedBatch double Apis") {
     val dataType = DoubleType
     val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
-    val row = new SpecificInternalRow(Array(dataType))
+    val row = new SpecificInternalRow(Array(dataType).toImmutableArraySeq)
 
     row.setNullAt(0)
     columnBuilder.appendFrom(row, 0)

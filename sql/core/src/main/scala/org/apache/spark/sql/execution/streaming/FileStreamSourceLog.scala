@@ -28,6 +28,7 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.FileStreamSource.FileEntry
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.ArrayImplicits._
 
 class FileStreamSourceLog(
     metadataLogVersion: Int,
@@ -115,7 +116,7 @@ class FileStreamSourceLog(
     val batches =
       (existedBatches ++ retrievedBatches).map(i => i._1 -> i._2.get).toArray.sortBy(_._1)
     if (startBatchId <= endBatchId) {
-      HDFSMetadataLog.verifyBatchIds(batches.map(_._1), startId, endId)
+      HDFSMetadataLog.verifyBatchIds(batches.map(_._1).toImmutableArraySeq, startId, endId)
     }
     batches
   }

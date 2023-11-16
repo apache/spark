@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.util.Locale
-
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec
 import org.apache.spark.sql.execution.datasources.parquet.ParquetCompressionCodec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -65,14 +64,13 @@ class ParquetCodecSuite extends FileSourceCodecSuite {
   // on Maven Central.
   override protected def availableCodecs: Seq[String] =
     (ParquetCompressionCodec.NONE +:
-      ParquetCompressionCodec.availableCodecs.asScala.iterator.to(Seq))
-      .map(_.name().toLowerCase(Locale.ROOT)).iterator.to(Seq)
+      ParquetCompressionCodec.availableCodecs.asScala.iterator.to(Seq)).map(_.lowerCaseName())
 }
 
 class OrcCodecSuite extends FileSourceCodecSuite {
 
   override def format: String = "orc"
   override val codecConfigName: String = SQLConf.ORC_COMPRESSION.key
-  override protected def availableCodecs = Seq("none", "uncompressed", "snappy",
-    "zlib", "zstd", "lz4", "lzo")
+  override protected def availableCodecs =
+    OrcCompressionCodec.values().map(_.lowerCaseName()).toSeq
 }

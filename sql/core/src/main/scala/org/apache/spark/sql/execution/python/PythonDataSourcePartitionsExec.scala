@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.{InputRDDCodegen, LeafExecNode, SQLExecution}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A physical plan node for scanning data from a list of data source partition values.
@@ -50,7 +51,7 @@ case class PythonDataSourcePartitionsExec(
     if (numPartitions == 0) {
       sparkContext.emptyRDD
     } else {
-      sparkContext.parallelize(unsafeRows, numPartitions)
+      sparkContext.parallelize(unsafeRows.toImmutableArraySeq, numPartitions)
     }
   }
 

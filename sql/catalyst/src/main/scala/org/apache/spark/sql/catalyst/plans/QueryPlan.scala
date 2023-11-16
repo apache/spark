@@ -220,7 +220,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
       case Some(value) => Some(recursiveTransform(value))
       case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
-      case stream: Stream[_] => stream.map(recursiveTransform).force
+      case stream: LazyList[_] => stream.map(recursiveTransform).force
       case seq: Iterable[_] => seq.map(recursiveTransform)
       case other: AnyRef => other
       case null => null
@@ -371,7 +371,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     transformExpressions {
       case a: AttributeReference =>
         updateAttr(a, attrMap)
-      case pe: PlanExpression[PlanType] =>
+      case pe: PlanExpression[PlanType @unchecked] =>
         pe.withNewPlan(updateOuterReferencesInSubquery(pe.plan, attrMap))
     }.asInstanceOf[PlanType]
   }
@@ -401,7 +401,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
       currentFragment.transformExpressions {
         case OuterReference(a: AttributeReference) =>
           OuterReference(updateAttr(a, attrMap))
-        case pe: PlanExpression[PlanType] =>
+        case pe: PlanExpression[PlanType @unchecked] =>
           pe.withNewPlan(updateOuterReferencesInSubquery(pe.plan, attrMap))
       }
     }
@@ -490,7 +490,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   def transformUpWithSubqueries(f: PartialFunction[PlanType, PlanType]): PlanType = {
     transformUp { case plan =>
       val transformed = plan transformExpressionsUp {
-        case planExpression: PlanExpression[PlanType] =>
+        case planExpression: PlanExpression[PlanType @unchecked] =>
           val newPlan = planExpression.plan.transformUpWithSubqueries(f)
           planExpression.withNewPlan(newPlan)
       }
@@ -524,7 +524,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
       override def apply(plan: PlanType): PlanType = {
         val transformed = f.applyOrElse[PlanType, PlanType](plan, identity)
         transformed transformExpressionsDown {
-          case planExpression: PlanExpression[PlanType] =>
+          case planExpression: PlanExpression[PlanType @unchecked] =>
             val newPlan = planExpression.plan.transformDownWithSubqueriesAndPruning(cond, ruleId)(f)
             planExpression.withNewPlan(newPlan)
         }
