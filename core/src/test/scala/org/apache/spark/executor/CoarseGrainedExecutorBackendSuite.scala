@@ -39,7 +39,6 @@ import org.apache.spark.TestUtils._
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.internal.config.PLUGINS
 import org.apache.spark.resource._
-import org.apache.spark.resource.ResourceAmountUtils.RESOURCE_TOTAL_AMOUNT
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.RpcEnv
@@ -305,12 +304,11 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
         backend = new CoarseGrainedExecutorBackend(env.rpcEnv, rpcEnv.address.hostPort, "1",
         "host1", "host1", 4, env, None,
           resourceProfile = ResourceProfile.getOrCreateDefaultProfile(conf))
-      assert(backend.taskResources.isEmpty)
 
       val taskId = 1000000L
       val resourcesAmounts = Map(GPU -> Map(
-        "0" -> (0.15*RESOURCE_TOTAL_AMOUNT).toLong,
-        "1" -> (0.76*RESOURCE_TOTAL_AMOUNT).toLong))
+        "0" -> ResourceAmountUtils.toInternalResource(0.15),
+        "1" -> ResourceAmountUtils.toInternalResource(0.76)))
       // We don't really verify the data, just pass it around.
       val data = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
       val taskDescription = new TaskDescription(taskId, 2, "1", "TASK 1000000", 19,
@@ -345,25 +343,22 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       // Launch a new task shall add an entry to `taskResources` map.
       backend.self.send(LaunchTask(new SerializableBuffer(serializedTaskDescription)))
       eventually(timeout(10.seconds)) {
-        assert(backend.taskResources.size == 1)
         assert(runningTasks.size == 1)
-        val resources = backend.taskResources.get(taskId)
-        assert(resources(GPU).addresses sameElements Array("0", "1"))
+        val resources = backend.executor.runningTasks.get(taskId).taskDescription.resources
+        assert(resources(GPU).keys.toArray.sorted sameElements Array("0", "1"))
         assert(executor.runningTasks.get(taskId).taskDescription.resources
           === resourcesAmounts)
       }
 
       // Update the status of a running task shall not affect `taskResources` map.
       backend.statusUpdate(taskId, TaskState.RUNNING, data)
-      assert(backend.taskResources.size == 1)
-      val resources = backend.taskResources.get(taskId)
-      assert(resources(GPU).addresses sameElements Array("0", "1"))
+      val resources = backend.executor.runningTasks.get(taskId).taskDescription.resources
+      assert(resources(GPU).keys.toArray.sorted sameElements Array("0", "1"))
       assert(executor.runningTasks.get(taskId).taskDescription.resources
         === resourcesAmounts)
 
       // Update the status of a finished task shall remove the entry from `taskResources` map.
       backend.statusUpdate(taskId, TaskState.FINISHED, data)
-      assert(backend.taskResources.isEmpty)
     } finally {
       if (backend != null) {
         backend.rpcEnv.shutdown()
@@ -432,8 +427,8 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val tasksExecuted = new TrieMap[Long, Boolean]()
 
       val resourcesAmounts = Map(GPU -> Map(
-        "0" -> (0.15 * RESOURCE_TOTAL_AMOUNT).toLong,
-        "1" -> (0.76 * RESOURCE_TOTAL_AMOUNT).toLong))
+        "0" -> ResourceAmountUtils.toInternalResource(0.15),
+        "1" -> ResourceAmountUtils.toInternalResource(0.76)))
 
       // Fake tasks with different taskIds.
       val taskDescriptions = (1 to numTasks).map {
@@ -524,8 +519,8 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val tasksExecuted = new TrieMap[Long, Boolean]()
 
       val resourcesAmounts = Map(GPU -> Map(
-        "0" -> (0.15*RESOURCE_TOTAL_AMOUNT).toLong,
-        "1" -> (0.76*RESOURCE_TOTAL_AMOUNT).toLong))
+        "0" -> ResourceAmountUtils.toInternalResource(0.15),
+        "1" -> ResourceAmountUtils.toInternalResource(0.76)))
 
       // Fake tasks with different taskIds.
       val taskDescriptions = (1 to numTasks).map {

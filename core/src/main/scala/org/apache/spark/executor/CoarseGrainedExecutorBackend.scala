@@ -20,7 +20,6 @@ package org.apache.spark.executor
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.util.{Failure, Success}
@@ -67,16 +66,6 @@ private[spark] class CoarseGrainedExecutorBackend(
   @volatile var driver: Option[RpcEndpointRef] = None
 
   private var _resources = Map.empty[String, ResourceInformation]
-
-  /**
-   * Map each taskId to the information about the resource allocated to it, Please refer to
-   * [[ResourceInformation]] for specifics.
-   * CHM is used to ensure thread-safety (https://issues.apache.org/jira/browse/SPARK-45227)
-   * Exposed for testing only.
-   */
-  private[executor] val taskResources = new ConcurrentHashMap[
-    Long, Map[String, ResourceInformation]
-  ]
 
   private var decommissioned = false
 
@@ -194,7 +183,6 @@ private[spark] class CoarseGrainedExecutorBackend(
         // Convert resources amounts into ResourceInformation
         val resources = taskDesc.resources.map { case (rName, addressesAmounts) =>
           rName -> new ResourceInformation(rName, addressesAmounts.keys.toSeq.sorted.toArray)}
-        taskResources.put(taskDesc.taskId, resources)
         executor.launchTask(this, taskDesc)
       }
 
@@ -277,9 +265,6 @@ private[spark] class CoarseGrainedExecutorBackend(
     val resources = executor.runningTasks.get(taskId).taskDescription.resources
     val cpus = executor.runningTasks.get(taskId).taskDescription.cpus
     val msg = StatusUpdate(executorId, taskId, state, data, cpus, resources)
-    if (TaskState.isFinished(state)) {
-      taskResources.remove(taskId)
-    }
     driver match {
       case Some(driverRef) => driverRef.send(msg)
       case None => logWarning(s"Drop $msg because has not yet connected to driver")

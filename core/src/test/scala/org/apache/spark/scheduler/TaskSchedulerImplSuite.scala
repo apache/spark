@@ -35,8 +35,8 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.internal.config
-import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceProfile, TaskResourceRequests}
-import org.apache.spark.resource.ResourceAmountUtils.RESOURCE_TOTAL_AMOUNT
+import org.apache.spark.resource.{ExecutorResourceRequests, ResourceAmountUtils, ResourceProfile, TaskResourceProfile, TaskResourceRequests}
+import org.apache.spark.resource.ResourceAmountUtils.{ONE_ENTIRE_RESOURCE}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.status.api.v1.ThreadStackTrace
@@ -149,11 +149,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
   }
 
   // Convert resources to ExecutorResourcesAmounts automatically
-  implicit def convertResources(resources: Map[String, mutable.Buffer[String]]):
+  implicit def toExecutorResourcesAmounts(resources: Map[String, mutable.Buffer[String]]):
       ExecutorResourcesAmounts = {
     // convert the old resources to ExecutorResourcesAmounts
     new ExecutorResourcesAmounts(resources.map { case (rName, addresses) =>
-      rName -> addresses.map(address => address -> RESOURCE_TOTAL_AMOUNT).toMap
+      rName -> addresses.map(address => address -> ONE_ENTIRE_RESOURCE).toMap
     })
   }
 
@@ -1546,7 +1546,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     val numFreeCores = 3
     val workerOffers = IndexedSeq(
       new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625"),
-        convertResources(Map("gpu" -> Seq("0").toBuffer))),
+        Map("gpu" -> Seq("0").toBuffer)),
       new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627"),
         Map("gpu" -> Seq("0").toBuffer)),
       new WorkerOffer("executor2", "host2", numFreeCores, Some("192.168.0.101:49629"),
@@ -1937,7 +1937,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     val availableResourcesAmount = workerOffers.map(_.resources).map { resAmounts =>
       // available addresses already takes into account if there are fractional
       // task resource requests
-      resAmounts.resourceAmount
+      resAmounts.resourceAddressAmount
     }
 
     val taskSlotsForRp = TaskSchedulerImpl.calculateAvailableSlots(
@@ -2295,15 +2295,14 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     taskScheduler.handleFailedTask(tsm, tid, state, reason)
   }
 
-  private implicit def convertMapDoubleToLong(resources: Map[String, Double]): Map[String, Long] = {
-    resources.map { case (k, v) => k -> (v * RESOURCE_TOTAL_AMOUNT).toLong }
-  }
+  private implicit def toInternalResource(resources: Map[String, Double]): Map[String, Long] =
+    ResourceAmountUtils.toInternalResource(resources)
 
   // 1 executor with 4 GPUS
   Seq(true, false).foreach { barrierMode =>
     val barrier = if (barrierMode) "barrier" else ""
     (1 to 20).foreach { taskNum =>
-      val gpuTaskAmount = (RESOURCE_TOTAL_AMOUNT / taskNum).toDouble / RESOURCE_TOTAL_AMOUNT
+      val gpuTaskAmount = ResourceAmountUtils.toFractionalResource(ONE_ENTIRE_RESOURCE / taskNum)
       test(s"SPARK-45527 default rp with task.gpu.amount=${gpuTaskAmount} can " +
         s"restrict $taskNum $barrier tasks run in the same executor") {
         val taskCpus = 1
@@ -2323,7 +2322,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
         }
 
         val resources = new ExecutorResourcesAmounts(
-          Map(GPU -> convertMapDoubleToLong(Map("0" -> 1.0, "1" -> 1.0, "2" -> 1.0, "3" -> 1.0))))
+          Map(GPU -> toInternalResource(Map("0" -> 1.0, "1" -> 1.0, "2" -> 1.0, "3" -> 1.0))))
 
         val workerOffers =
           IndexedSeq(WorkerOffer("executor0", "host0", executorCpus, Some("host0"), resources))
@@ -2349,7 +2348,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
   Seq(true, false).foreach { barrierMode =>
     val barrier = if (barrierMode) "barrier" else ""
     (1 to 20).foreach { taskNum =>
-      val gpuTaskAmount = (RESOURCE_TOTAL_AMOUNT / taskNum).toDouble / RESOURCE_TOTAL_AMOUNT
+      val gpuTaskAmount = ResourceAmountUtils.toFractionalResource(ONE_ENTIRE_RESOURCE / taskNum)
       test(s"SPARK-45527 default rp with task.gpu.amount=${gpuTaskAmount} can " +
         s"restrict $taskNum $barrier tasks run on the different executor") {
         val taskCpus = 1
@@ -2371,13 +2370,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
         val workerOffers =
           IndexedSeq(
             WorkerOffer("executor0", "host0", executorCpus, Some("host0"),
-              new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("0" -> 1.0))))),
+              new ExecutorResourcesAmounts(Map(GPU -> toInternalResource(Map("0" -> 1.0))))),
             WorkerOffer("executor1", "host1", executorCpus, Some("host1"),
-              new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("1" -> 1.0))))),
+              new ExecutorResourcesAmounts(Map(GPU -> toInternalResource(Map("1" -> 1.0))))),
             WorkerOffer("executor2", "host2", executorCpus, Some("host2"),
-              new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("2" -> 1.0))))),
+              new ExecutorResourcesAmounts(Map(GPU -> toInternalResource(Map("2" -> 1.0))))),
             WorkerOffer("executor3", "host3", executorCpus, Some("host3"),
-              new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("3" -> 1.0))))))
+              new ExecutorResourcesAmounts(Map(GPU -> toInternalResource(Map("3" -> 1.0))))))
 
         taskScheduler.submitTasks(taskSet)
         // Launch tasks on executor that satisfies resource requirements
@@ -2406,7 +2405,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
   Seq(true, false).foreach { barrierMode =>
     val barrier = if (barrierMode) "barrier" else ""
     (1 to 20).foreach { taskNum =>
-      val gpuTaskAmount = (RESOURCE_TOTAL_AMOUNT / taskNum).toDouble / RESOURCE_TOTAL_AMOUNT
+      val gpuTaskAmount = ResourceAmountUtils.toFractionalResource(ONE_ENTIRE_RESOURCE / taskNum)
       test(s"SPARK-45527 TaskResourceProfile with task.gpu.amount=${gpuTaskAmount} can " +
         s"restrict $taskNum $barrier tasks run in the same executor") {
         val executorCpus = 100 // cpu will not limit the concurrent tasks number
@@ -2427,7 +2426,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
           FakeTask.createBarrierTaskSet(4 * taskNum, 0, 1, 1, rp.id)
         }
         val resources = new ExecutorResourcesAmounts(
-          Map(GPU -> convertMapDoubleToLong(Map("0" -> 1.0, "1" -> 1.0, "2" -> 1.0, "3" -> 1.0))))
+          Map(GPU -> toInternalResource(Map("0" -> 1.0, "1" -> 1.0, "2" -> 1.0, "3" -> 1.0))))
 
         val workerOffers = IndexedSeq(
           WorkerOffer("executor0", "host0", executorCpus, Some("host0"), resources, rp.id)
@@ -2454,7 +2453,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
   Seq(true, false).foreach { barrierMode =>
     val barrier = if (barrierMode) "barrier" else ""
     (1 to 20).foreach { taskNum =>
-      val gpuTaskAmount = (RESOURCE_TOTAL_AMOUNT / taskNum).toDouble / RESOURCE_TOTAL_AMOUNT
+      val gpuTaskAmount = ResourceAmountUtils.toFractionalResource(ONE_ENTIRE_RESOURCE / taskNum)
       test(s"SPARK-45527 TaskResourceProfile with task.gpu.amount=${gpuTaskAmount} can " +
         s"restrict $taskNum $barrier tasks run on the different executor") {
         val executorCpus = 100 // cpu will not limit the concurrent tasks number
@@ -2478,16 +2477,16 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
         val workerOffers =
           IndexedSeq(
             WorkerOffer("executor0", "host0", executorCpus, Some("host1"),
-              new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("0" -> 1.0)))),
+              new ExecutorResourcesAmounts(Map(GPU -> toInternalResource(Map("0" -> 1.0)))),
               rp.id),
             WorkerOffer("executor1", "host1", executorCpus, Some("host2"),
-              new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("1" -> 1.0)))),
+              new ExecutorResourcesAmounts(Map(GPU -> toInternalResource(Map("1" -> 1.0)))),
               rp.id),
             WorkerOffer("executor2", "host2", executorCpus, Some("host3"),
-              new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("2" -> 1.0)))),
+              new ExecutorResourcesAmounts(Map(GPU -> toInternalResource(Map("2" -> 1.0)))),
               rp.id),
             WorkerOffer("executor3", "host3", executorCpus, Some("host4"),
-              new ExecutorResourcesAmounts(Map(GPU -> convertMapDoubleToLong(Map("3" -> 1.0)))),
+              new ExecutorResourcesAmounts(Map(GPU -> toInternalResource(Map("3" -> 1.0)))),
               rp.id)
           )
 
@@ -2543,7 +2542,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       IndexedSeq(
         // cpu won't be a problem
         WorkerOffer("executor0", "host0", 1000, None, new ExecutorResourcesAmounts(
-          Map(GPU -> convertMapDoubleToLong(Map("0" -> 1.0, "1" -> 1.0, "2" -> 1.0, "3" -> 1.0)))))
+          Map(GPU -> toInternalResource(Map("0" -> 1.0, "1" -> 1.0, "2" -> 1.0, "3" -> 1.0)))))
       )
 
     taskScheduler.submitTasks(lowerTaskSet)
@@ -2559,11 +2558,12 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       assert(addresses.length == 1)
       if (index < 4) { // the first 4 tasks will grab 0.7 gpu
         assert(addresses(0) == index.toString)
-        assert(tDesc.resources.get(GPU).get(index.toString).toDouble/RESOURCE_TOTAL_AMOUNT == 0.7)
+        assert(ResourceAmountUtils.toFractionalResource(
+          tDesc.resources.get(GPU).get(index.toString)) == 0.7)
       } else {
         assert(addresses(0) == (index - 4).toString)
-        assert(tDesc.resources.get(GPU).get((index - 4).toString).toDouble/RESOURCE_TOTAL_AMOUNT
-          == 0.3)
+        assert(ResourceAmountUtils.toFractionalResource(
+          tDesc.resources.get(GPU).get((index - 4).toString)) == 0.3)
       }
       index += 1
     }
@@ -2598,13 +2598,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       IndexedSeq(
         // cpu won't be a problem
         WorkerOffer("executor0", "host0", 1000, None, new ExecutorResourcesAmounts(
-          Map(GPU -> convertMapDoubleToLong(Map("0" -> 1.0))))),
+          Map(GPU -> toInternalResource(Map("0" -> 1.0))))),
         WorkerOffer("executor1", "host1", 1000, None, new ExecutorResourcesAmounts(
-          Map(GPU -> convertMapDoubleToLong(Map("1" -> 1.0))))),
+          Map(GPU -> toInternalResource(Map("1" -> 1.0))))),
         WorkerOffer("executor2", "host2", 1000, None, new ExecutorResourcesAmounts(
-          Map(GPU -> convertMapDoubleToLong(Map("2" -> 1.0))))),
+          Map(GPU -> toInternalResource(Map("2" -> 1.0))))),
         WorkerOffer("executor3", "host3", 1000, None, new ExecutorResourcesAmounts(
-          Map(GPU -> convertMapDoubleToLong(Map("3" -> 1.0)))))
+          Map(GPU -> toInternalResource(Map("3" -> 1.0)))))
       )
 
     taskScheduler.submitTasks(lowerTaskSet)
@@ -2629,11 +2629,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       if (index % 2 == 0) {
         higherAssignedExecutorsGpus.append(
           (tDesc.executorId, address))
-        assert(tDesc.resources.get(GPU).get(address).toDouble/RESOURCE_TOTAL_AMOUNT == 0.7)
+        assert(ResourceAmountUtils.toFractionalResource(
+          tDesc.resources.get(GPU).get(address)) == 0.7)
       } else {
         lowerAssignedExecutorsGpus.append(
           (tDesc.executorId, address))
-        assert(tDesc.resources.get(GPU).get(address).toDouble/RESOURCE_TOTAL_AMOUNT == 0.3)
+        assert(ResourceAmountUtils.toFractionalResource(
+          tDesc.resources.get(GPU).get(address)) == 0.3)
       }
       index += 1
     }
@@ -2675,7 +2677,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       IndexedSeq(
         // cpu won't be a problem
         WorkerOffer("executor0", "host0", 1000, None, new ExecutorResourcesAmounts(
-          Map(GPU -> convertMapDoubleToLong(Map("0" -> 1.0, "1" -> 1.0, "2" -> 1.0, "3" -> 1.0)))))
+          Map(GPU -> toInternalResource(Map("0" -> 1.0, "1" -> 1.0, "2" -> 1.0, "3" -> 1.0)))))
       )
 
     taskScheduler.submitTasks(lowerTaskSet)
@@ -2690,7 +2692,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       val addresses = tDesc.resources.get(GPU).get.keys.toArray.sorted
       assert(addresses.length == 1)
       assert(addresses(0) == index.toString)
-      assert(tDesc.resources.get(GPU).get(index.toString).toDouble/RESOURCE_TOTAL_AMOUNT == 0.7)
+      assert(ResourceAmountUtils.toFractionalResource(
+        tDesc.resources.get(GPU).get(index.toString)) == 0.7)
       index += 1
     }
   }

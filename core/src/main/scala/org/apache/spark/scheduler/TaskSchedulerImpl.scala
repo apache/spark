@@ -551,7 +551,7 @@ private[spark] class TaskSchedulerImpl(
       // value is -1
       val numBarrierSlotsAvailable = if (taskSet.isBarrier) {
         val rpId = taskSet.taskSet.resourceProfileId
-        val resAmounts = availableResources.map(_.resourceAmount)
+        val resAmounts = availableResources.map(_.resourceAddressAmount)
         calculateAvailableSlots(this, conf, rpId, resourceProfileIds, availableCpus, resAmounts)
       } else {
         -1

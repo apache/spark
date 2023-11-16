@@ -21,17 +21,17 @@ import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.resource.ResourceAmountUtils.RESOURCE_TOTAL_AMOUNT
+import org.apache.spark.resource.ResourceAmountUtils
 import org.apache.spark.resource.ResourceUtils.GPU
 
 class ExecutorResourceInfoSuite extends SparkFunSuite {
 
   implicit def convertMapLongToDouble(resources: Map[String, Long]): Map[String, Double] = {
-    resources.map { case (k, v) => k -> v.toDouble / RESOURCE_TOTAL_AMOUNT }.toMap
+    resources.map { case (k, v) => k -> ResourceAmountUtils.toFractionalResource(v) }
   }
 
   implicit def convertMapDoubleToLong(resources: Map[String, Double]): Map[String, Long] = {
-    resources.map { case (k, v) => k -> (v * RESOURCE_TOTAL_AMOUNT).toLong }.toMap
+    resources.map { case (k, v) => k -> ResourceAmountUtils.toInternalResource(v) }
   }
 
   test("Track Executor Resource information") {
@@ -116,7 +116,7 @@ class ExecutorResourceInfoSuite extends SparkFunSuite {
       // All addresses has been assigned
       assert(info.resourcesAmounts.values.toSeq.toSet.size == 1)
       // The left amount of any address should < taskAmount
-      assert(info.resourcesAmounts("0").toDouble/RESOURCE_TOTAL_AMOUNT < taskAmount)
+      assert(ResourceAmountUtils.toFractionalResource(info.resourcesAmounts("0")) < taskAmount)
 
       addresses.foreach { addr =>
         assertThrows[SparkException] {

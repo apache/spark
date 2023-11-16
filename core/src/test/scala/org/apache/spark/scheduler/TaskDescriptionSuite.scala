@@ -24,7 +24,7 @@ import java.util.Properties
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.{JobArtifactSet, SparkFunSuite}
-import org.apache.spark.resource.ResourceAmountUtils.RESOURCE_TOTAL_AMOUNT
+import org.apache.spark.resource.ResourceAmountUtils
 import org.apache.spark.resource.ResourceUtils.GPU
 
 class TaskDescriptionSuite extends SparkFunSuite {
@@ -59,9 +59,10 @@ class TaskDescriptionSuite extends SparkFunSuite {
       }
     }
 
-    val originalResources = Map(GPU -> Map("1" -> (0.2 * RESOURCE_TOTAL_AMOUNT).toLong,
-      "2" -> (0.5 * RESOURCE_TOTAL_AMOUNT).toLong,
-      "3" -> (0.1 * RESOURCE_TOTAL_AMOUNT).toLong))
+    val originalResources = Map(GPU ->
+      Map("1" -> ResourceAmountUtils.toInternalResource(0.2),
+        "2" -> ResourceAmountUtils.toInternalResource(0.5),
+        "3" -> ResourceAmountUtils.toInternalResource(0.1)))
 
     // Create a dummy byte buffer for the task.
     val taskBuffer = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))

@@ -20,7 +20,7 @@ package org.apache.spark.resource
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
-import org.apache.spark.resource.ResourceAmountUtils.RESOURCE_TOTAL_AMOUNT
+import org.apache.spark.resource.ResourceAmountUtils.ONE_ENTIRE_RESOURCE
 
 private[spark] object ResourceAmountUtils {
   /**
@@ -50,11 +50,30 @@ private[spark] object ResourceAmountUtils {
    * assign 0.1111111111111111 for task 8, total left: 0.11111111111111094
    * ERROR Can't assign 0.1111111111111111 for task 9, total left: 0.11111111111111094
    *
-   * So we multiply RESOURCE_TOTAL_AMOUNT to convert the double to long to avoid this limitation.
+   * So we multiply ONE_ENTIRE_RESOURCE to convert the double to long to avoid this limitation.
    * Double can display up to 16 decimal places, so we set the factor to
    * 10, 000, 000, 000, 000, 000L.
    */
-  final val RESOURCE_TOTAL_AMOUNT: Long = 10000000000000000L
+  final val ONE_ENTIRE_RESOURCE: Long = 10000000000000000L
+
+  def isOneEntireResource(amount: Long): Boolean = amount == ONE_ENTIRE_RESOURCE
+
+  def toInternalResource(amount: Double): Long = (amount * ONE_ENTIRE_RESOURCE).toLong
+
+  private[spark] def toInternalResource(resources: Map[String, Double]): Map[String, Long] = {
+    resources.map { case (k, v) => k -> toInternalResource(v) }
+  }
+
+  def toFractionalResource(amount: Long): Double = amount.toDouble / ONE_ENTIRE_RESOURCE
+
+  private[spark] def toFractionalResource(resources: Map[String, Long]): Map[String, Double] = {
+    resources.map { case (k, v) => k -> toFractionalResource(v) }
+  }
+
+  private[spark] def toInternalResourceMapMap(resources: Map[String, Map[String, Double]]):
+      Map[String, Map[String, Long]] = {
+    resources.map { case (k, v) => k -> toInternalResource(v) }
+  }
 }
 
 /**
@@ -67,16 +86,16 @@ private[spark] trait ResourceAllocator {
   protected def resourceAddresses: Seq[String]
 
   /**
-   * Map from an address to its availability default to 1.0 (we multiply RESOURCE_TOTAL_AMOUNT
+   * Map from an address to its availability default to 1.0 (we multiply ONE_ENTIRE_RESOURCE
    * to avoid precision error), a value &gt; 0 means the address is available, while value of
    * 0 means the address is fully assigned.
    */
   private lazy val addressAvailabilityMap = {
-    mutable.HashMap(resourceAddresses.map(address => address -> RESOURCE_TOTAL_AMOUNT): _*)
+    mutable.HashMap(resourceAddresses.map(address => address -> ONE_ENTIRE_RESOURCE): _*)
   }
 
   /**
-   * Get the amounts of resources that have been multiplied by RESOURCE_TOTAL_AMOUNT.
+   * Get the amounts of resources that have been multiplied by ONE_ENTIRE_RESOURCE.
    * @return the resources amounts
    */
   def resourcesAmounts: Map[String, Long] = addressAvailabilityMap.toMap
@@ -91,7 +110,7 @@ private[spark] trait ResourceAllocator {
    * Sequence of currently assigned resource addresses.
    */
   private[spark] def assignedAddrs: Seq[String] = addressAvailabilityMap
-    .filter(addresses => addresses._2 < RESOURCE_TOTAL_AMOUNT).keys.toSeq.sorted
+    .filter(addresses => addresses._2 < ONE_ENTIRE_RESOURCE).keys.toSeq.sorted
 
   /**
    * Acquire a sequence of resource addresses (to a launched task), these addresses must be
@@ -108,8 +127,8 @@ private[spark] trait ResourceAllocator {
 
       if (left < 0) {
         throw new SparkException(s"Try to acquire $resourceName address $address " +
-          s"amount: ${amount.toDouble / RESOURCE_TOTAL_AMOUNT}, but only " +
-          s"${prevAmount.toDouble / RESOURCE_TOTAL_AMOUNT} left.")
+          s"amount: ${ResourceAmountUtils.toFractionalResource(amount)}, but only " +
+          s"${ResourceAmountUtils.toFractionalResource(prevAmount)} left.")
       } else {
         addressAvailabilityMap(address) = left
       }
@@ -129,10 +148,10 @@ private[spark] trait ResourceAllocator {
 
       val total = prevAmount + amount
 
-      if (total > RESOURCE_TOTAL_AMOUNT) {
+      if (total > ONE_ENTIRE_RESOURCE) {
         throw new SparkException(s"Try to release $resourceName address $address " +
-          s"amount: ${amount.toDouble / RESOURCE_TOTAL_AMOUNT}. But the total amount: " +
-          s"${total.toDouble / RESOURCE_TOTAL_AMOUNT} " +
+          s"amount: ${ResourceAmountUtils.toFractionalResource(amount)}. But the total amount: " +
+          s"${ResourceAmountUtils.toFractionalResource(total)} " +
           s"after release should be <= 1")
       } else {
         addressAvailabilityMap(address) = total

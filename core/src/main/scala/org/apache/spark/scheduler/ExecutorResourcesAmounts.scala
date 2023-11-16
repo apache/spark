@@ -20,8 +20,8 @@ package org.apache.spark.scheduler
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.SparkException
-import org.apache.spark.resource.ResourceAmountUtils.RESOURCE_TOTAL_AMOUNT
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.{ResourceAmountUtils, ResourceProfile}
+import org.apache.spark.resource.ResourceAmountUtils.ONE_ENTIRE_RESOURCE
 
 /**
  * Class to hold information about a series of resources belonging to an executor.
@@ -32,10 +32,10 @@ import org.apache.spark.resource.ResourceProfile
  * One example is GPUs, where the addresses would be the indices of the GPUs
  *
  * @param resources The executor available resources and amount. eg,
- *                  Map("gpu" -> Map("0" -> 0.2*RESOURCE_TOTAL_AMOUNT,
- *                                   "1" -> 1.0*RESOURCE_TOTAL_AMOUNT),
- *                  "fpga" -> Map("a" -> 0.3*RESOURCE_TOTAL_AMOUNT,
- *                                "b" -> 0.9*RESOURCE_TOTAL_AMOUNT)
+ *                  Map("gpu" -> Map("0" -> ResourceAmountUtils.toInternalResource(0.2),
+ *                                   "1" -> ResourceAmountUtils.toInternalResource(1.0)),
+ *                  "fpga" -> Map("a" -> ResourceAmountUtils.toInternalResource(0.3),
+ *                                "b" -> ResourceAmountUtils.toInternalResource(0.9))
  *                  )
  */
 private[spark] class ExecutorResourcesAmounts(
@@ -52,15 +52,15 @@ private[spark] class ExecutorResourcesAmounts(
 
   /**
    * The total address count of each resource. Eg,
-   * Map("gpu" -> Map("0" -> 0.5 * RESOURCE_TOTAL_AMOUNT,
-   *                  "1" -> 0.5 * RESOURCE_TOTAL_AMOUNT,
-   *                  "2" -> 0.5 * RESOURCE_TOTAL_AMOUNT),
-   *     "fpga" -> Map("a" -> 0.5 * RESOURCE_TOTAL_AMOUNT,
-   *                   "b" -> 0.5 * RESOURCE_TOTAL_AMOUNT))
+   * Map("gpu" -> Map("0" -> ResourceAmountUtils.toInternalResource(0.5),
+   *                  "1" -> ResourceAmountUtils.toInternalResource(0.5),
+   *                  "2" -> ResourceAmountUtils.toInternalResource(0.5)),
+   *     "fpga" -> Map("a" -> ResourceAmountUtils.toInternalResource(0.5),
+   *                   "b" -> ResourceAmountUtils.toInternalResource(0.5)))
    * the resourceAmount will be Map("gpu" -> 3, "fpga" -> 2)
    */
-  lazy val resourceAmount: Map[String, Int] = internalResources.map { case (rName, addressMap) =>
-    rName -> addressMap.size
+  lazy val resourceAddressAmount: Map[String, Int] = internalResources.map {
+    case (rName, addressMap) => rName -> addressMap.size
   }
 
   /**
@@ -69,7 +69,7 @@ private[spark] class ExecutorResourcesAmounts(
   private[spark] def availableResources: Map[String, Map[String, Double]] = {
     internalResources.map { case (rName, addressMap) =>
       rName -> addressMap.map { case (address, amount) =>
-        address -> amount.toDouble / RESOURCE_TOTAL_AMOUNT
+        address -> ResourceAmountUtils.toFractionalResource(amount)
       }.toMap
     }
   }
@@ -89,7 +89,8 @@ private[spark] class ExecutorResourcesAmounts(
 
         val left = prevInternalTotalAmount - amount
         if (left < 0) {
-          throw new SparkException(s"The total amount ${left.toDouble / RESOURCE_TOTAL_AMOUNT} " +
+          throw new SparkException(s"The total amount " +
+            s"${ResourceAmountUtils.toFractionalResource(left)} " +
             s"after acquiring $rName address $address should be >= 0")
         }
         internalResources(rName)(address) = left
@@ -110,9 +111,9 @@ private[spark] class ExecutorResourcesAmounts(
           throw new SparkException(s"Try to release an address that is not assigned. $rName " +
             s"address $address is not assigned."))
         val total = prevInternalTotalAmount + amount
-        if (total > RESOURCE_TOTAL_AMOUNT) {
+        if (total > ONE_ENTIRE_RESOURCE) {
           throw new SparkException(s"The total amount " +
-            s"${total.toDouble / RESOURCE_TOTAL_AMOUNT} " +
+            s"${ResourceAmountUtils.toFractionalResource(total)} " +
             s"after releasing $rName address $address should be <= 1.0")
         }
         internalResources(rName)(address) = total
@@ -128,7 +129,6 @@ private[spark] class ExecutorResourcesAmounts(
    * @return the optional resources amounts
    */
   def assignResources(taskSetProf: ResourceProfile): Option[Map[String, Map[String, Long]]] = {
-
     // only look at the resource other than cpus
     val tsResources = taskSetProf.getCustomTaskResources()
     if (tsResources.isEmpty) {
@@ -154,14 +154,14 @@ private[spark] class ExecutorResourcesAmounts(
           if (taskAmount >= 1.0) {
             for (address <- addresses if taskAmount > 0) {
               // The address is still a whole resource
-              if (addressesAmountMap(address) == RESOURCE_TOTAL_AMOUNT) {
+              if (ResourceAmountUtils.isOneEntireResource(addressesAmountMap(address))) {
                 taskAmount -= 1.0
                 // Assign the full resource of the address
-                allocatedAddressesMap(address) = RESOURCE_TOTAL_AMOUNT
+                allocatedAddressesMap(address) = ONE_ENTIRE_RESOURCE
               }
             }
           } else if (taskAmount > 0.0) { // 0 < task.amount < 1.0
-            val internalTaskAmount = (taskAmount * RESOURCE_TOTAL_AMOUNT).toLong
+            val internalTaskAmount = ResourceAmountUtils.toInternalResource(taskAmount)
             for (address <- addresses if taskAmount > 0) {
               if (addressesAmountMap(address) >= internalTaskAmount) {
                 // Assign the part of the address.
