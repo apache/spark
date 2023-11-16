@@ -171,7 +171,7 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         parser.peek match {
           case _: StartElement => inferObject(parser)
           case _: EndElement if data.isEmpty => NullType
-          case _: EndElement if options.treatEmptyValuesAsNulls => NullType
+          case _: EndElement if options.nullValue == "" => NullType
           case _: EndElement => StringType
           case _ => inferField(parser)
         }

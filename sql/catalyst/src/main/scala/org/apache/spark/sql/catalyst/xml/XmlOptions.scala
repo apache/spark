@@ -86,7 +86,6 @@ private[sql] class XmlOptions(
   val samplingRatio = parameters.get(SAMPLING_RATIO).map(_.toDouble).getOrElse(1.0)
   require(samplingRatio > 0, s"$SAMPLING_RATIO ($samplingRatio) should be greater than 0")
   val excludeAttributeFlag = getBool(EXCLUDE_ATTRIBUTE, false)
-  val treatEmptyValuesAsNulls = getBool(TREAT_EMPTY_VALUE_AS_NULLS, false)
   val attributePrefix =
     parameters.getOrElse(ATTRIBUTE_PREFIX, XmlOptions.DEFAULT_ATTRIBUTE_PREFIX)
   val valueTag = parameters.getOrElse(VALUE_TAG, XmlOptions.DEFAULT_VALUE_TAG)
@@ -188,7 +187,6 @@ private[sql] object XmlOptions extends DataSourceOptions {
   val DECLARATION = newOption("declaration")
   val ARRAY_ELEMENT_NAME = newOption("arrayElementName")
   val EXCLUDE_ATTRIBUTE = newOption("excludeAttribute")
-  val TREAT_EMPTY_VALUE_AS_NULLS = newOption("treatEmptyValuesAsNulls")
   val ATTRIBUTE_PREFIX = newOption("attributePrefix")
   val VALUE_TAG = newOption("valueTag")
   val NULL_VALUE = newOption("nullValue")
