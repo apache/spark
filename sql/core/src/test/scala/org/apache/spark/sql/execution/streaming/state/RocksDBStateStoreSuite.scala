@@ -172,6 +172,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     val provider = new RocksDBStateStoreProvider()
     provider.init(
       storeId, keySchema, valueSchema, numColsPrefixKey = numColsPrefixKey,
+      useColumnFamilies = false,
       new StateStoreConf(sqlConf.getOrElse(SQLConf.get)), conf)
     provider
   }

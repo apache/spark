@@ -174,6 +174,7 @@ private[sql] class RocksDBStateStoreProvider
       keySchema: StructType,
       valueSchema: StructType,
       numColsPrefixKey: Int,
+      useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): Unit = {
     this.stateStoreId_ = stateStoreId
@@ -181,6 +182,7 @@ private[sql] class RocksDBStateStoreProvider
     this.valueSchema = valueSchema
     this.storeConf = storeConf
     this.hadoopConf = hadoopConf
+    this.useColumnFamilies = useColumnFamilies
 
     require((keySchema.length == 0 && numColsPrefixKey == 0) ||
       (keySchema.length > numColsPrefixKey), "The number of columns in the key must be " +
@@ -238,6 +240,7 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var valueSchema: StructType = _
   @volatile private var storeConf: StateStoreConf = _
   @volatile private var hadoopConf: Configuration = _
+  @volatile private var useColumnFamilies: Boolean = _
 
   private[sql] lazy val rocksDB = {
     val dfsRootDir = stateStoreId.storeCheckpointLocation().toString
@@ -245,7 +248,8 @@ private[sql] class RocksDBStateStoreProvider
       s"partId=${stateStoreId.partitionId},name=${stateStoreId.storeName})"
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
     val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
-    new RocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr)
+    new RocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
+      useColumnFamilies)
   }
 
   @volatile private var encoder: RocksDBStateEncoder = _

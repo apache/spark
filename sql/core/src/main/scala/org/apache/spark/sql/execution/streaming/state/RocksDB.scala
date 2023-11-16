@@ -50,13 +50,15 @@ import org.apache.spark.util.{NextIterator, Utils}
  * @param localRootDir Root directory in local disk that is used to working and checkpointing dirs
  * @param hadoopConf   Hadoop configuration for talking to the remote file system
  * @param loggingId    Id that will be prepended in logs for isolating concurrent RocksDBs
+ * @param useColumnFamilies Used to determine whether a single or multiple column families are used
  */
 class RocksDB(
     dfsRootDir: String,
     val conf: RocksDBConf,
     localRootDir: File = Utils.createTempDir(),
     hadoopConf: Configuration = new Configuration,
-    loggingId: String = "") extends Logging {
+    loggingId: String = "",
+    useColumnFamilies: Boolean = false) extends Logging {
 
   case class RocksDBSnapshot(checkpointDir: File, version: Long, numKeys: Long) {
     def close(): Unit = {

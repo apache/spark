@@ -237,6 +237,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       keySchema: StructType,
       valueSchema: StructType,
       numColsPrefixKey: Int,
+      useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): Unit = {
     this.stateStoreId_ = stateStoreId

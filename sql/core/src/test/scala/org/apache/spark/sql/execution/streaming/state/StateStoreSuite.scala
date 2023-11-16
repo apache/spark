@@ -63,6 +63,7 @@ class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
       keySchema: StructType,
       valueSchema: StructType,
       numColsPrefixKey: Int,
+      useColumnFamilies: Boolean,
       storeConfs: StateStoreConf,
       hadoopConf: Configuration): Unit = {
     id = stateStoreId
@@ -844,6 +845,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       keySchema,
       valueSchema,
       numColsPrefixKey = numColsPrefixKey,
+      useColumnFamilies = false,
       new StateStoreConf(sqlConf),
       hadoopConf)
     provider

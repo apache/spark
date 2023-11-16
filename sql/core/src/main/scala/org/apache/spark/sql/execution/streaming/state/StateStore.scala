@@ -264,6 +264,8 @@ trait StateStoreProvider {
    * @param numColsPrefixKey The number of leftmost columns to be used as prefix key.
    *                         A value not greater than 0 means the operator doesn't activate prefix
    *                         key, and the operator should not call prefixScan method in StateStore.
+   * @param useColumnFamilies Whether the underlying state store uses a single or multiple column
+   *                          families
    * @param storeConfs Configurations used by the StateStores
    * @param hadoopConf Hadoop configuration that could be used by StateStore to save state data
    */
@@ -272,6 +274,7 @@ trait StateStoreProvider {
       keySchema: StructType,
       valueSchema: StructType,
       numColsPrefixKey: Int,
+      useColumnFamilies: Boolean,
       storeConfs: StateStoreConf,
       hadoopConf: Configuration): Unit
 
@@ -325,11 +328,12 @@ object StateStoreProvider {
       keySchema: StructType,
       valueSchema: StructType,
       numColsPrefixKey: Int,
+      useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStoreProvider = {
     val provider = create(storeConf.providerClass)
     provider.init(providerId.storeId, keySchema, valueSchema, numColsPrefixKey,
-      storeConf, hadoopConf)
+      useColumnFamilies, storeConf, hadoopConf)
     provider
   }
 
@@ -525,7 +529,7 @@ object StateStore extends Logging {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      numColsPrefixKey, storeConf, hadoopConf)
+      numColsPrefixKey, useColumnFamilies, storeConf, hadoopConf)
     storeProvider.getReadStore(version)
   }
 
@@ -543,7 +547,7 @@ object StateStore extends Logging {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      numColsPrefixKey, storeConf, hadoopConf)
+      numColsPrefixKey, useColumnFamilies, storeConf, hadoopConf)
     storeProvider.getStore(version)
   }
 
@@ -552,6 +556,7 @@ object StateStore extends Logging {
       keySchema: StructType,
       valueSchema: StructType,
       numColsPrefixKey: Int,
+      useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStoreProvider = {
     loadedProviders.synchronized {
@@ -586,7 +591,8 @@ object StateStore extends Logging {
         loadedProviders.getOrElseUpdate(
           storeProviderId,
           StateStoreProvider.createAndInit(
-            storeProviderId, keySchema, valueSchema, numColsPrefixKey, storeConf, hadoopConf)
+            storeProviderId, keySchema, valueSchema, numColsPrefixKey,
+            useColumnFamilies, storeConf, hadoopConf)
         )
       }
 
