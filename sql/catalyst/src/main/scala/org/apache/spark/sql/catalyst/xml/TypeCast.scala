@@ -48,8 +48,7 @@ private[sql] object TypeCast {
       datum: String,
       castType: DataType,
       options: XmlOptions): Any = {
-    if ((datum == options.nullValue) ||
-        (options.treatEmptyValuesAsNulls && datum == "")) {
+    if (datum == options.nullValue) {
       null
     } else {
       castType match {
@@ -116,8 +115,7 @@ private[sql] object TypeCast {
     } else {
       datum
     }
-    if ((value == options.nullValue) ||
-      (options.treatEmptyValuesAsNulls && value == "")) {
+    if (value == options.nullValue) {
       null
     } else {
       dataType match {

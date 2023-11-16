@@ -178,8 +178,8 @@ class StaxXmlParser(
     (parser.peek, dataType) match {
       case (_: StartElement, dt: DataType) => convertComplicatedType(dt, attributes)
       case (_: EndElement, _: StringType) =>
-        // Empty. It's null if these are explicitly treated as null, or "" is the null value
-        if (options.treatEmptyValuesAsNulls || options.nullValue == "") {
+        // Empty. It's null if "" is the null value
+        if (options.nullValue == "") {
           null
         } else {
           UTF8String.fromString("")
@@ -219,7 +219,7 @@ class StaxXmlParser(
         parser.peek match {
           case _: StartElement => convertComplicatedType(dataType, attributes)
           case _: EndElement if data.isEmpty => null
-          case _: EndElement if options.treatEmptyValuesAsNulls => null
+          case _: EndElement if options.nullValue == "" => null
           case _: EndElement => convertTo(data, dataType, options)
           case _ => convertField(parser, dataType, options, attributes)
         }

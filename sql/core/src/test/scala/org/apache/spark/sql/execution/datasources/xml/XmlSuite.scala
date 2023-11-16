@@ -75,7 +75,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
 
   test("DSL test with xml having unbalanced datatypes") {
     val results = spark.read
-      .option("treatEmptyValuesAsNulls", "true")
+      .option("nullValue", "")
       .option("multiLine", "true")
       .xml(getTestResourcePath(resDir + "gps-empty-field.xml"))
 
@@ -421,7 +421,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     assert(getLines(xmlFile).count(_.contains("<foo>")) === 2)
   }
 
-  test("DSL save with nullValue and treatEmptyValuesAsNulls") {
+  test("DSL save with nullValue") {
     val copyFilePath = getEmptyTempDir().resolve("books-copy.xml")
 
     val books = spark.read
@@ -433,7 +433,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
 
     val booksCopy = spark.read
       .option("rowTag", "book")
-      .option("treatEmptyValuesAsNulls", "true")
+      .option("nullValue", "")
       .xml(copyFilePath.toString)
 
     assert(booksCopy.count() === books.count())
@@ -721,7 +721,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       field("name", StringType, false),
       field("age", IntegerType))
     val results = spark.read.schema(schema)
-      .option("treatEmptyValuesAsNulls", true)
+      .option("nullValue", "")
       .xml(getTestResourcePath(resDir + "null-numbers.xml"))
       .select("name", "age")
       .collect()
@@ -922,9 +922,9 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       "requirement failed: 'valueTag' and 'attributePrefix' options should not be the same.")
   }
 
-  test("nullValue and treatEmptyValuesAsNulls test") {
+  test("nullValue test") {
     val resultsOne = spark.read
-      .option("treatEmptyValuesAsNulls", "true")
+      .option("nullValue", "")
       .xml(getTestResourcePath(resDir + "gps-empty-field.xml"))
     assert(resultsOne.selectExpr("extensions.TrackPointExtension").head().getStruct(0) !== null)
     assert(resultsOne.selectExpr("extensions.TrackPointExtension")

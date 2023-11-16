@@ -79,8 +79,6 @@ private[sql] class XmlOptions(
   val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
   require(samplingRatio > 0, s"samplingRatio ($samplingRatio) should be greater than 0")
   val excludeAttributeFlag = parameters.get("excludeAttribute").map(_.toBoolean).getOrElse(false)
-  val treatEmptyValuesAsNulls =
-    parameters.get("treatEmptyValuesAsNulls").map(_.toBoolean).getOrElse(false)
   val attributePrefix =
     parameters.getOrElse("attributePrefix", XmlOptions.DEFAULT_ATTRIBUTE_PREFIX)
   val valueTag = parameters.getOrElse("valueTag", XmlOptions.DEFAULT_VALUE_TAG)
