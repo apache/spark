@@ -392,6 +392,40 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
       .select(col("leftId"), col("leftTime").cast("int"),
         col("rightId"), col("rightTime").cast("int"))
   }
+
+  protected def runSessionWindowAggregationQuery(checkpointRoot: String): Unit = {
+    val input = MemoryStream[(String, Long)]
+    val sessionWindow = session_window($"eventTime", "10 seconds")
+
+    val events = input.toDF()
+      .select($"_1".as("value"), $"_2".as("timestamp"))
+      .withColumn("eventTime", $"timestamp".cast("timestamp"))
+      .withWatermark("eventTime", "30 seconds")
+      .selectExpr("explode(split(value, ' ')) AS sessionId", "eventTime")
+
+    val streamingDf = events
+      .groupBy(sessionWindow as Symbol("session"), $"sessionId")
+      .agg(count("*").as("numEvents"))
+      .selectExpr("sessionId", "CAST(session.start AS LONG)", "CAST(session.end AS LONG)",
+        "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
+        "numEvents")
+
+    testStream(streamingDf, OutputMode.Complete())(
+      StartStream(checkpointLocation = checkpointRoot),
+      AddData(input,
+        ("hello world spark streaming", 40L),
+        ("world hello structured streaming", 41L)
+      ),
+      CheckNewAnswer(
+        ("hello", 40, 51, 11, 2),
+        ("world", 40, 51, 11, 2),
+        ("streaming", 40, 51, 11, 2),
+        ("spark", 40, 50, 10, 1),
+        ("structured", 41, 51, 10, 1)
+      ),
+      StopStream
+    )
+  }
 }
 
 case class Event(sessionId: String, timestamp: Timestamp)

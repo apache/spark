@@ -406,6 +406,16 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case ShowTables(ResolvedNamespace(catalog, ns), pattern, output) =>
       ShowTablesExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
 
+    case ShowTablesExtended(
+        ResolvedNamespace(catalog, ns),
+        pattern,
+        output) =>
+      ShowTablesExtendedExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
+
+    case ShowTablePartition(r: ResolvedTable, part, output) =>
+      ShowTablePartitionExec(output, r.catalog, r.identifier,
+        r.table.asPartitionable, Seq(part).asResolvedPartitionSpecs.head) :: Nil
+
     case SetCatalogAndNamespace(ResolvedNamespace(catalog, ns)) =>
       val catalogManager = session.sessionState.catalogManager
       val namespace = if (ns.nonEmpty) Some(ns) else None
