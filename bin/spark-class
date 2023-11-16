@@ -30,12 +30,15 @@ else
   if [ "$(command -v java)" ]; then
     RUNNER="java"
   else
+<<<<<<< HEAD
     if ! command -v python &> /dev/null || ! command -v pip &> /dev/null; then
         echo "Python or pip is not installed or not in the PATH."\
         "You can manually install python and pip and retry."
         exit 1
     fi
 
+=======
+>>>>>>> 53fa541225d (add install jdk option to spark-class script)
     echo "JAVA_HOME is not set."\
     "Press Y to install JDK 17 and set JAVA_HOME, or any key to quit." >&2
 
