@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.xml
 
-import java.io.{File, FileInputStream, StringReader}
+import java.io.StringReader
 
 import scala.jdk.CollectionConverters._
 
@@ -25,10 +25,8 @@ import org.apache.hadoop.shaded.org.jline.utils.InputStreamReader
 import org.apache.ws.commons.schema._
 import org.apache.ws.commons.schema.constants.Constants
 
-import org.apache.spark.SparkFiles
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.xml.XmlOptions
+import org.apache.spark.sql.catalyst.xml.{ValidatorUtil, XmlOptions}
 import org.apache.spark.sql.types._
 
 /**
@@ -47,22 +45,7 @@ object XSDToSchema extends Logging{
    * @return Spark-compatible schema
    */
   def read(xsdPath: Path): StructType = {
-    val in = try {
-      // Handle case where file exists as specified
-      val fs = xsdPath.getFileSystem(SparkHadoopUtil.get.conf)
-      fs.open(xsdPath)
-    } catch {
-      case e: Throwable =>
-        // Handle case where it was added with sc.addFile
-        // When they are added via sc.addFile, they are always downloaded to local file system
-        logInfo(s"$xsdPath was not found, falling back to look up files added by Spark")
-        val f = new File(SparkFiles.get(xsdPath.toString))
-        if (f.exists()) {
-          new FileInputStream(f)
-        } else {
-          throw e
-        }
-    }
+    val in = ValidatorUtil.openSchemaFile(xsdPath)
     val xmlSchemaCollection = new XmlSchemaCollection()
     xmlSchemaCollection.setBaseUri(xsdPath.getParent.toString)
     val xmlSchema = xmlSchemaCollection.read(new InputStreamReader(in))
