@@ -20,6 +20,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.connect.common.config.ConnectCommon
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.buildConf
 
 object Connect {
@@ -212,6 +213,17 @@ object Connect {
       .version("3.5.0")
       .intConf
       .createWithDefault(200)
+
+  val CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL =
+    buildStaticConf("spark.connect.copyFromLocalToFs.allowDestLocal")
+      .internal()
+      .doc(s"""
+             |(Deprecated since Spark 4.0, please set
+             |'${SQLConf.ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL.key}' instead.
+             |""".stripMargin)
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val CONNECT_UI_SESSION_LIMIT = buildStaticConf("spark.sql.connect.ui.retainedSessions")
     .doc("The number of client sessions kept in the Spark Connect UI history.")

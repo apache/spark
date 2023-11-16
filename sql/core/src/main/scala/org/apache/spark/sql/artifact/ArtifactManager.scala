@@ -263,6 +263,8 @@ class ArtifactManager(session: SparkSession) extends Logging {
     if (fs.isInstanceOf[LocalFileSystem]) {
       val allowDestLocalConf =
         session.conf.get(SQLConf.ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL)
+          .getOrElse(
+            session.conf.get("spark.connect.copyFromLocalToFs.allowDestLocal").contains("true"))
 
       if (!allowDestLocalConf) {
         // To avoid security issue, by default,

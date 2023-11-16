@@ -4550,6 +4550,9 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  // Deprecate "spark.connect.copyFromLocalToFs.allowDestLocal" in favor of this config. This is
+  // currently optional because we don't want to break existing users who are using the old config.
+  // If this config is set, then we override the deprecated config.
   val ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL =
     buildConf("spark.sql.artifact.copyFromLocalToFs.allowDestLocal")
       .internal()
@@ -4562,7 +4565,7 @@ object SQLConf {
              |""".stripMargin)
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createOptional
 
   val LEGACY_RETAIN_FRACTION_DIGITS_FIRST =
     buildConf("spark.sql.legacy.decimal.retainFractionDigitsOnTruncate")
@@ -4631,7 +4634,9 @@ object SQLConf {
       DeprecatedConfig(COALESCE_PARTITIONS_MIN_PARTITION_NUM.key, "3.2",
         s"Use '${COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key}' instead."),
       DeprecatedConfig(ESCAPED_STRING_LITERALS.key, "4.0",
-        "Use raw string literals with the `r` prefix instead. ")
+        "Use raw string literals with the `r` prefix instead. "),
+      DeprecatedConfig("spark.connect.copyFromLocalToFs.allowDestLocal", "4.0",
+        s"Use '${ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL.key}' instead.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -5459,8 +5464,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyRaiseErrorWithoutErrorClass: Boolean =
     getConf(SQLConf.LEGACY_RAISE_ERROR_WITHOUT_ERROR_CLASS)
-
-  def allowDestLocalFs: Boolean = getConf(ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL)
 
   /** ********************** SQLConf functionality methods ************ */
 

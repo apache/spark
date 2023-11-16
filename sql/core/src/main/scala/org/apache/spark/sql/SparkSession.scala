@@ -248,7 +248,7 @@ class SparkSession private(
    * Returns an `ArtifactManager` that supports adding, managing and using session-scoped artifacts
    * (jars, classfiles, etc).
    *
-   * @since 3.5.1
+   * @since 4.0.0
    */
   @Experimental
   @Unstable
