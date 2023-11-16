@@ -168,6 +168,105 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
   }
 
+  test("support star except") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT * EXCEPT (b)
+          |FROM testData2
+        """.stripMargin),
+      Row(1) :: Row(1) :: Row(2) :: Row(2) :: Row(3) :: Row(3) :: Nil)
+  }
+
+  test("support table.star except") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT r.* EXCEPT (r.b)
+          |FROM testData l join testData2 r on (l.key = r.a)
+        """.stripMargin),
+      Row(1) :: Row(1) :: Row(2) :: Row(2) :: Row(3) :: Row(3) :: Nil)
+  }
+
+  test("support table.star except all columns") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT r.* EXCEPT (r.b, r.a)
+          |FROM testData l join testData2 r on (l.key = r.a)
+        """.stripMargin),
+      Row() :: Row() :: Row() :: Row() :: Row() :: Row() :: Nil)
+  }
+
+  test("support table.star except nested") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT *
+          |FROM (SELECT * EXCEPT (b) FROM testData2)
+        """.stripMargin),
+      Row(1) :: Row(1) :: Row(2) :: Row(2) :: Row(3) :: Row(3) :: Nil)
+  }
+
+  test("except errors") {
+    // Try star expanding a scalar. This should fail.
+    checkError(
+      exception = intercept[ParseException]{
+        sql("select * EXCEPT () from testData2")
+      },
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = Option("42601"),
+      parameters = Map("error" -> "')'", "hint" -> "")
+    )
+
+    // Try star expanding a scalar. This should fail.
+    checkError(
+      exception = intercept[ParseException] {
+        sql("select * EXCEPT b testData2")
+      },
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = Option("42601"),
+      parameters = Map("error" -> "'b'", "hint" -> "")
+    )
+
+    // Try star expanding a scalar. This should fail.
+    checkError(
+      exception = intercept[SparkException] {
+        sql("select * EXCEPT(b, b) from testData2")
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Cannot find main error class 'EXCEPT_OVERLAPPING_COLUMNS'")
+    )
+
+    // Try star expanding a scalar. This should fail.
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select * EXCEPT(invalid_column) from testData2")
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      sqlState = Option("42703"),
+      parameters = Map("objectName" -> "`invalid_column`", "proposal" -> "`a`, `b`"),
+      matchPVals = true,
+      queryContext = Array(
+        ExpectedContext(fragment = "* EXCEPT(invalid_column)", start = 7, stop = 30)
+      )
+    )
+
+    // Try star expanding a scalar. This should fail.
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select * EXCEPT(a, invalid_column) from testData2")
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      sqlState = Option("42703"),
+      parameters = Map("objectName" -> "`invalid_column`", "proposal" -> "`a`, `b`"),
+      matchPVals = true,
+      queryContext = Array(
+        ExpectedContext(fragment = "* EXCEPT(a, invalid_column)", start = 7, stop = 33)
+      )
+    )
+  }
+
   test("self join with alias in agg") {
     withTempView("df") {
       Seq(1, 2, 3)

@@ -1790,6 +1790,18 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   }
 
   /**
+   * Create a star-except (i.e. all - except list) expression; this selects all elements in the
+   * specified object except those in the except list.
+   * Both un-targeted (global) and targeted aliases are supported.
+   */
+  override def visitStarExcept(ctx: StarExceptContext): Expression = withOrigin(ctx) {
+    val exceptCols = ctx.exceptCols.multipartIdentifier.asScala.map(typedVisit[Seq[String]])
+    UnresolvedStarExcept(
+      Option(ctx.qualifiedName()).map(_.identifier.asScala.map(_.getText).toSeq),
+      exceptCols.toSeq)
+  }
+
+  /**
    * Create an aliased expression if an alias is specified. Both single and multi-aliases are
    * supported.
    */
