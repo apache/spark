@@ -127,7 +127,7 @@
     <protobuf.version>3.23.4</protobuf.version>
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
     <yarn.version>${hadoop.version}</yarn.version>
-    <zookeeper.version>3.6.3</zookeeper.version>
+    <zookeeper.version>3.7.2</zookeeper.version>
     <curator.version>5.2.0</curator.version>
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
