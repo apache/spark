@@ -494,6 +494,22 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
     }
   }
 
+  test("Session window aggregation") {
+    withTempDir { checkpointDir =>
+      runSessionWindowAggregationQuery(checkpointDir.getAbsolutePath)
+
+      val df = spark.read.format("statestore").load(checkpointDir.toString)
+      checkAnswer(df.selectExpr("key.sessionId", "CAST(key.sessionStartTime AS LONG)",
+        "CAST(value.session_window.start AS LONG)", "CAST(value.session_window.end AS LONG)",
+        "value.sessionId", "value.count"),
+        Seq(Row("hello", 40, 40, 51, "hello", 2),
+          Row("spark", 40, 40, 50, "spark", 1),
+          Row("streaming", 40, 40, 51, "streaming", 2),
+          Row("world", 40, 40, 51, "world", 2),
+          Row("structured", 41, 41, 51, "structured", 1)))
+    }
+  }
+
   test("flatMapGroupsWithState, state ver 1") {
     testFlatMapGroupsWithState(1)
   }

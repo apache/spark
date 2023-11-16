@@ -711,6 +711,38 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
   }
 
+  test("SPARK-45930: MapInPandas with non-deterministic UDF") {
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("a", LongType))),
+      Seq.empty,
+      PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+      false)
+    val output = DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType])
+    val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
+    val mapInPandas = MapInPandas(
+      pythonUdf,
+      output,
+      project,
+      false)
+    assertAnalysisSuccess(mapInPandas)
+  }
+
+  test("SPARK-45930: MapInArrow with non-deterministic UDF") {
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("a", LongType))),
+      Seq.empty,
+      PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
+      false)
+    val output = DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType])
+    val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
+    val mapInArrow = PythonMapInArrow(
+      pythonUdf,
+      output,
+      project,
+      false)
+    assertAnalysisSuccess(mapInArrow)
+  }
+
   test("SPARK-34741: Avoid ambiguous reference in MergeIntoTable") {
     val cond = $"a" > 1
     assertAnalysisErrorClass(

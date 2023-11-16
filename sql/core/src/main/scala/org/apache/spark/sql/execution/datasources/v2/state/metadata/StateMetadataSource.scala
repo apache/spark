@@ -195,7 +195,7 @@ class StateMetadataPartitionReader(
     }
   }
 
-  private lazy val stateMetadata: Iterator[StateMetadataTableEntry] = {
+  private[state] lazy val stateMetadata: Iterator[StateMetadataTableEntry] = {
     allOperatorStateMetadata.flatMap { operatorStateMetadata =>
       require(operatorStateMetadata.version == 1)
       val operatorStateMetadataV1 = operatorStateMetadata.asInstanceOf[OperatorStateMetadataV1]

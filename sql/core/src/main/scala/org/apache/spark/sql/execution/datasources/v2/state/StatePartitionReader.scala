@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.state
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, UnsafeRow}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
@@ -47,7 +48,7 @@ class StatePartitionReader(
     storeConf: StateStoreConf,
     hadoopConf: SerializableConfiguration,
     partition: StateStoreInputPartition,
-    schema: StructType) extends PartitionReader[InternalRow] {
+    schema: StructType) extends PartitionReader[InternalRow] with Logging {
 
   private val keySchema = SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
   private val valueSchema = SchemaUtil.getSchemaAsDataType(schema, "value").asInstanceOf[StructType]
@@ -57,12 +58,29 @@ class StatePartitionReader(
       partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
 
-    // TODO: This does not handle the case of session window aggregation; we don't have an
-    //  information whether the state store uses prefix scan or not. We will have to add such
-    //  information to determine the right encoder/decoder for the data.
+    val allStateStoreMetadata = new StateMetadataPartitionReader(
+      partition.sourceOptions.stateCheckpointLocation.getParent.toString, hadoopConf)
+      .stateMetadata.toArray
+
+    val stateStoreMetadata = allStateStoreMetadata.filter { entry =>
+      entry.operatorId == partition.sourceOptions.operatorId &&
+        entry.stateStoreName == partition.sourceOptions.storeName
+    }
+    val numColsPrefixKey = if (stateStoreMetadata.isEmpty) {
+      logWarning("Metadata for state store not found, possible cause is this checkpoint " +
+        "is created by older version of spark. If the query has session window aggregation, " +
+        "the state can't be read correctly and runtime exception will be thrown. " +
+        "Run the streaming query in newer spark version to generate state metadata " +
+        "can fix the issue.")
+      0
+    } else {
+      require(stateStoreMetadata.length == 1)
+      stateStoreMetadata.head.numColsPrefixKey
+    }
+
     StateStore.getReadOnly(stateStoreProviderId, keySchema, valueSchema,
-      numColsPrefixKey = 0, version = partition.sourceOptions.batchId + 1, storeConf = storeConf,
-      hadoopConf = hadoopConf.value)
+      numColsPrefixKey = numColsPrefixKey, version = partition.sourceOptions.batchId + 1,
+      storeConf = storeConf, hadoopConf = hadoopConf.value)
   }
 
   private lazy val iter: Iterator[InternalRow] = {

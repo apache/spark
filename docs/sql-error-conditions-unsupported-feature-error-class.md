@@ -151,7 +151,7 @@ Purge table.
 
 ## PYTHON_UDF_IN_ON_CLAUSE
 
-Python UDF in the ON clause of a `<joinType>` JOIN. In case of an INNNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause.
+Python UDF in the ON clause of a `<joinType>` JOIN. In case of an INNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause.
 
 ## REMOVE_NAMESPACE_COMMENT
 
