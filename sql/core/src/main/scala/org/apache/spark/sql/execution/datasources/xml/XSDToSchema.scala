@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.xml
 
-import java.io.StringReader
+import java.io.{File, FileInputStream, StringReader}
 
 import scala.jdk.CollectionConverters._
 
@@ -27,15 +27,15 @@ import org.apache.ws.commons.schema.constants.Constants
 
 import org.apache.spark.SparkFiles
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.xml.XmlOptions
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 /**
  * Utility to generate a Spark schema from an XSD. Not all XSD schemas are simple tabular schemas,
  * so not all elements or XSDs are supported.
  */
-object XSDToSchema {
+object XSDToSchema extends Logging{
 
   /**
    * Reads a schema from an XSD path.
@@ -52,11 +52,16 @@ object XSDToSchema {
       val fs = xsdPath.getFileSystem(SparkHadoopUtil.get.conf)
       fs.open(xsdPath)
     } catch {
-      case _: Throwable =>
+      case e: Throwable =>
         // Handle case where it was added with sc.addFile
-        val addFileUrl = SparkFiles.get(xsdPath.toString)
-        val fs = Utils.getHadoopFileSystem(addFileUrl, SparkHadoopUtil.get.conf)
-        fs.open(new Path(addFileUrl))
+        // When they are added via sc.addFile, they are always downloaded to local file system
+        logInfo(s"$xsdPath was not found, falling back to look up files added by Spark")
+        val f = new File(SparkFiles.get(xsdPath.toString))
+        if (f.exists()) {
+          new FileInputStream(f)
+        } else {
+          throw e
+        }
     }
     val xmlSchemaCollection = new XmlSchemaCollection()
     xmlSchemaCollection.setBaseUri(xsdPath.getParent.toString)

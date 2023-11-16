@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.xml.util
 
+import java.io.FileNotFoundException
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.execution.datasources.xml.TestUtils._
@@ -174,5 +176,11 @@ class XSDToSchemaSuite extends SharedSparkSession {
       )
     )
     assert(parsedSchema === expectedSchema)
+  }
+
+  test("SPARK-45912: Test XSDToSchema when open not found files") {
+    intercept[FileNotFoundException] {
+      XSDToSchema.read(new Path("/path/not/found"))
+    }
   }
 }
