@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes}
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
@@ -32,8 +32,9 @@ import org.apache.spark.util.collection.OpenHashMap
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(col[, deterministic]) - Returns the most frequent value for the values within `col`. NULL values are ignored. If all the values are NULL, or there are 0 rows, returns NULL.
-      When multiple values have the same greatest frequency then either any of values is returned if `deterministic` is false or is not defined, or the lowest value is returned if `deterministic` is true.""",
+    _FUNC_(col[, reverse]) - Returns the most frequent value for the values within `col`. NULL values are ignored. If all the values are NULL, or there are 0 rows, returns NULL.
+      When multiple values have the same greatest frequency only one value will be returned. The value will be chosen based on optional reverse value. Return the smallest value
+      if reverse is false or the largest value if reverse is true from multiple values with the same frequency. If reverse is not specified the chosen value is not determined.""",
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (0), (10), (10) AS tab(col);
@@ -54,51 +55,55 @@ case class Mode(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0,
-    deterministicExpr: Expression = Literal.FalseLiteral)
+    reverseOpt: Option[Expression] = None)
   extends TypedAggregateWithHashMapAsBuffer with ImplicitCastInputTypes
-    with BinaryLike[Expression] {
+    with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, 0, 0)
 
-  def this(child: Expression, deterministicExpr: Expression) = {
-    this(child, 0, 0, deterministicExpr)
+  def this(child: Expression, reverse: Expression) = {
+    this(child, 0, 0, Some(reverse))
   }
-
-  @transient
-  protected lazy val deterministicResult = deterministicExpr.eval().asInstanceOf[Boolean]
-
-  override def left: Expression = child
-
-  override def right: Expression = deterministicExpr
 
   // Returns null for empty inputs
   override def nullable: Boolean = true
 
   override def dataType: DataType = child.dataType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, BooleanType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
       return defaultCheck
     }
-    if (!deterministicExpr.foldable) {
-      DataTypeMismatch(
-        errorSubClass = "NON_FOLDABLE_INPUT",
-        messageParameters = Map(
-          "inputName" -> toSQLId("deterministic"),
-          "inputType" -> toSQLType(deterministicExpr.dataType),
-          "inputExpr" -> toSQLExpr(deterministicExpr)
+
+    reverseOpt.map { reverse =>
+      if (!reverse.foldable) {
+        DataTypeMismatch(
+          errorSubClass = "NON_FOLDABLE_INPUT",
+          messageParameters = Map(
+            "inputName" -> toSQLId("reverse"),
+            "inputType" -> toSQLType(reverse.dataType),
+            "inputExpr" -> toSQLExpr(reverse)
+          )
         )
-      )
-    } else if (deterministicExpr.eval() == null) {
-      DataTypeMismatch(
-        errorSubClass = "UNEXPECTED_NULL",
-        messageParameters = Map("exprName" -> toSQLId("deterministic")))
-    } else {
-      TypeCheckSuccess
-    }
+      } else if (reverse.dataType != BooleanType) {
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "2",
+            "requiredType" -> toSQLType(BooleanType),
+            "inputSql" -> toSQLExpr(reverse),
+            "inputType" -> toSQLType(reverse.dataType)))
+      } else if (reverse.eval() == null) {
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_NULL",
+          messageParameters = Map("exprName" -> toSQLId("reverse")))
+      } else {
+        TypeCheckSuccess
+      }
+    }.getOrElse(defaultCheck)
   }
 
   override def prettyName: String = "mode"
@@ -128,16 +133,15 @@ case class Mode(
       return null
     }
 
-    (if (deterministicResult) {
-      // When deterministic result is rquired but multiple keys have the same greatest frequency
-      // then let's select the lowest.
-      val defaultKeyOrdering =
+    reverseOpt.map { reverse =>
+      val defaultKeyOrdering = if (reverse.eval().asInstanceOf[Boolean]) {
+        PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]].reverse
+      } else {
         PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]]
-      val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering.reverse)
+      }
+      val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
       buffer.maxBy { case (key, count) => (count, key) }(ordering)
-    } else {
-      buffer.maxBy(_._2)
-    })._1
+    }.getOrElse(buffer.maxBy(_._2))._1
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Mode =
@@ -147,15 +151,18 @@ case class Mode(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def sql(isDistinct: Boolean): String = {
-    if (!isDistinct && deterministicResult) {
-      s"$prettyName() WITHIN GROUP (ORDER BY ${child.sql})"
-    } else {
-      super.sql(isDistinct)
-    }
+    reverseOpt.map {
+      reverse =>
+        if (reverse.eval().asInstanceOf[Boolean]) {
+          s"$prettyName() WITHIN GROUP (ORDER BY ${child.sql} DESC)"
+        } else {
+          s"$prettyName() WITHIN GROUP (ORDER BY ${child.sql})"
+        }
+    }.getOrElse(super.sql(isDistinct))
   }
 
-  override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
-    copy(child = newLeft, deterministicExpr = newRight)
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
 }
 
 /**

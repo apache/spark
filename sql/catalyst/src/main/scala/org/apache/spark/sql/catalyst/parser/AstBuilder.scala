@@ -2187,45 +2187,40 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   }
 
   /**
-   * Create a Percentile expression.
+   * Create a Inverse Distribution expression.
    */
-  override def visitPercentile(ctx: PercentileContext): Expression = withOrigin(ctx) {
-    val percentage = expression(ctx.percentage)
+  override def visitInverseDistribution(
+      ctx: InverseDistributionContext): Expression = withOrigin(ctx) {
+    ctx.name.getType match {
+      case SqlBaseParser.PERCENTILE_CONT if ctx.percentage == null =>
+        throw QueryParsingErrors.percentileMissingPercentageError(ctx, "percentile_cont")
+      case SqlBaseParser.PERCENTILE_DISC if ctx.percentage == null =>
+        throw QueryParsingErrors.percentileMissingPercentageError(ctx, "percentile_disc")
+      case SqlBaseParser.MODE if ctx.percentage != null =>
+        throw QueryParsingErrors.modeWithPercentageUnsupportedError(ctx)
+      case _ =>
+    }
+
     val sortOrder = visitSortItem(ctx.sortItem)
-    val percentile = ctx.name.getType match {
+    val func = ctx.name.getType match {
       case SqlBaseParser.PERCENTILE_CONT =>
         sortOrder.direction match {
-          case Ascending => PercentileCont(sortOrder.child, percentage)
-          case Descending => PercentileCont(sortOrder.child, percentage, true)
+          case Ascending => PercentileCont(sortOrder.child, expression(ctx.percentage))
+          case Descending => PercentileCont(sortOrder.child, expression(ctx.percentage), true)
         }
       case SqlBaseParser.PERCENTILE_DISC =>
         sortOrder.direction match {
-          case Ascending => PercentileDisc(sortOrder.child, percentage)
-          case Descending => PercentileDisc(sortOrder.child, percentage, true)
+          case Ascending => PercentileDisc(sortOrder.child, expression(ctx.percentage))
+          case Descending => PercentileDisc(sortOrder.child, expression(ctx.percentage), true)
+        }
+      case SqlBaseParser.MODE =>
+        sortOrder.direction match {
+          case Ascending => new Mode(sortOrder.child, Literal(false))
+          case Descending => new Mode(sortOrder.child, Literal(true))
         }
     }
     val filter = Option(ctx.where).map(expression(_))
-    val aggregateExpression = percentile.toAggregateExpression(false, filter)
-    ctx.windowSpec match {
-      case spec: WindowRefContext =>
-        UnresolvedWindowExpression(aggregateExpression, visitWindowRef(spec))
-      case spec: WindowDefContext =>
-        WindowExpression(aggregateExpression, visitWindowDef(spec))
-      case _ => aggregateExpression
-    }
-  }
-
-  /**
-   * Create a Mode expression.
-   */
-  override def visitModeCall(ctx: ModeCallContext): Expression = withOrigin(ctx) {
-    val sortOrder = visitSortItem(ctx.sortItem)
-    if (sortOrder.direction == Descending) {
-      throw QueryParsingErrors.modeWithSortDescUnsupportedError(ctx)
-    }
-    val filter = Option(ctx.where).map(expression(_))
-    val aggregateExpression =
-      new Mode(sortOrder.child, Literal.TrueLiteral).toAggregateExpression(false, filter)
+    val aggregateExpression = func.toAggregateExpression(false, filter)
     ctx.windowSpec match {
       case spec: WindowRefContext =>
         UnresolvedWindowExpression(aggregateExpression, visitWindowRef(spec))

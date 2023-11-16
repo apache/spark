@@ -882,7 +882,11 @@ object functions {
    * @group agg_funcs
    * @since 4.0.0
    */
-  def mode(e: Column, deterministic: Boolean): Column = Column.fn("mode", e, lit(deterministic))
+  def mode(e: Column, deterministic: Boolean): Column = if (deterministic) {
+    Column.fn("mode", e, lit(deterministic))
+  } else {
+    mode(e)
+  }
 
   /**
    * Aggregate function: returns the maximum value of the expression in a group.

@@ -24,7 +24,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Mode, PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
@@ -163,6 +163,22 @@ object ExprUtils extends QueryErrorsBase {
               errorClass = "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
               messageParameters = Map("sqlExpr" -> toSQLExpr(expr)))
           }
+        }
+
+        aggFunction match {
+          case pc: PercentileCont if expr.isDistinct =>
+            pc.failAnalysis(
+              errorClass = "DISTINCT_WITH_WITHIN_GROUP_IS_INVALID",
+              messageParameters = Map("funcName" -> toSQLId(pc.prettyName)))
+          case pd: PercentileDisc if expr.isDistinct =>
+            pd.failAnalysis(
+              errorClass = "DISTINCT_WITH_WITHIN_GROUP_IS_INVALID",
+              messageParameters = Map("funcName" -> toSQLId(pd.prettyName)))
+          case mode: Mode if expr.isDistinct && mode.reverseOpt.isDefined =>
+            mode.failAnalysis(
+              errorClass = "DISTINCT_WITH_WITHIN_GROUP_IS_INVALID",
+              messageParameters = Map("funcName" -> toSQLId(mode.prettyName)))
+          case _ =>
         }
       case _: Attribute if a.groupingExpressions.isEmpty =>
         a.failAnalysis(

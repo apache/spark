@@ -1139,8 +1139,10 @@ min_by.__doc__ = pysparkfuncs.min_by.__doc__
 
 
 def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
-    return _invoke_function("mode", _to_col(col), lit(deterministic))
-
+    if deterministic:
+        return _invoke_function("mode", _to_col(col), lit(deterministic))
+    else:
+        return _invoke_function("mode", _to_col(col))
 
 mode.__doc__ = pysparkfuncs.mode.__doc__
 

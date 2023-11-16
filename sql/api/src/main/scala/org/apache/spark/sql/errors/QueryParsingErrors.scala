@@ -100,10 +100,17 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def modeWithSortDescUnsupportedError(ctx: ParserRuleContext): Throwable = {
+  def modeWithPercentageUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE.MODE_WITH_DESC",
+      errorClass = "UNSUPPORTED_FEATURE.MODE_WITH_PERCENTAGE",
       messageParameters = Map.empty,
+      ctx)
+  }
+
+  def percentileMissingPercentageError(ctx: ParserRuleContext, funcName: String): Throwable = {
+    new ParseException(
+      errorClass = "PERCENTILE_PERCENTAGE_MISSING",
+      messageParameters = Map("funcName" -> toSQLId(funcName)),
       ctx)
   }
 

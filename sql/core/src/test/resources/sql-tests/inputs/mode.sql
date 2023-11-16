@@ -1,8 +1,4 @@
 -- Test data.
-CREATE OR REPLACE TEMPORARY VIEW aggr AS SELECT * FROM VALUES
-(0, 0), (0, 10), (0, 20), (0, 30), (0, 40), (1, 10), (1, 20), (2, 10), (2, 20), (2, 25), (2, 30), (3, 60), (4, null)
-AS aggr(k, v);
-
 CREATE OR REPLACE TEMPORARY VIEW basic_pays AS SELECT * FROM VALUES
 ('Diane Murphy','Accounting',8435),
 ('Mary Patterson','Accounting',9998),
@@ -24,21 +20,33 @@ CREATE OR REPLACE TEMPORARY VIEW basic_pays AS SELECT * FROM VALUES
 AS basic_pays(employee_name, department, salary);
 
 SELECT
-  mode() WITHIN GROUP (ORDER BY v DESC)
-FROM aggr;
+  mode() WITHIN GROUP (ORDER BY col),
+  mode() WITHIN GROUP (ORDER BY col DESC)
+FROM VALUES (null), (null), (null) AS tab(col);
 
 SELECT
-  mode() WITHIN GROUP (ORDER BY v),
-  mode() WITHIN GROUP (ORDER BY v) FILTER (WHERE k > 0)
-FROM aggr;
+  mode() WITHIN GROUP (ORDER BY salary),
+  mode() WITHIN GROUP (ORDER BY salary DESC)
+FROM basic_pays
+WHERE salary > 20000;
 
 SELECT
-  k,
-  mode() WITHIN GROUP (ORDER BY v),
-  mode() WITHIN GROUP (ORDER BY v) FILTER (WHERE k > 0)
-FROM aggr
-GROUP BY k
-ORDER BY k;
+  mode() WITHIN GROUP (ORDER BY salary),
+  mode() WITHIN GROUP (ORDER BY salary DESC)
+FROM basic_pays;
+
+SELECT
+  mode() WITHIN GROUP (ORDER BY salary),
+  mode() WITHIN GROUP (ORDER BY salary) FILTER (WHERE salary > 10000)
+FROM basic_pays;
+
+SELECT
+  department,
+  mode() WITHIN GROUP (ORDER BY salary),
+  mode() WITHIN GROUP (ORDER BY salary) FILTER (WHERE salary > 10000)
+FROM basic_pays
+GROUP BY department
+ORDER BY department;
 
 SELECT
     employee_name,
@@ -68,7 +76,6 @@ SELECT
     employee_name,
     department,
     salary,
-    median(salary) OVER w,
     mode() WITHIN GROUP (ORDER BY salary) OVER w
 FROM basic_pays
 WHERE salary > 8900
@@ -92,12 +99,14 @@ CREATE OR REPLACE TEMPORARY VIEW intervals AS SELECT * FROM VALUES
 AS intervals(k, dt, ym, dt2);
 
 SELECT
-  mode() WITHIN GROUP (ORDER BY dt)
+  mode() WITHIN GROUP (ORDER BY dt),
+  mode() WITHIN GROUP (ORDER BY dt DESC)
 FROM intervals;
 
 SELECT
   k,
-  mode() WITHIN GROUP (ORDER BY ym)
+  mode() WITHIN GROUP (ORDER BY ym),
+  mode() WITHIN GROUP (ORDER BY dt DESC)
 FROM intervals
 GROUP BY k
 ORDER BY k;
