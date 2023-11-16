@@ -465,6 +465,7 @@ object QueryExecution {
       // PartitioningCollection.
       RemoveRedundantSorts,
       RemoveRedundantWindowGroupLimits,
+      RemoveRedundantShuffles,
       DisableUnnecessaryBucketedScan,
       ApplyColumnarRulesAndInsertTransitions(
         sparkSession.sessionState.columnarRules, outputsColumnar = false),
