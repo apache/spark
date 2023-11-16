@@ -109,3 +109,16 @@ function onSearchStringChange() {
   }
 }
 /* eslint-enable no-unused-vars */
+
+/* eslint-disable no-unused-vars */
+function collapseTableAndButton(thisName, table) {
+  collapseTable(thisName, table);
+
+  const t = d3.select("." + table);
+  if (t.classed("collapsed")) {
+    d3.select("." + table + "-button").style("display", "none");
+  } else {
+    d3.select("." + table + "-button").style("display", "flex");
+  }
+}
+/* eslint-enable no-unused-vars */
