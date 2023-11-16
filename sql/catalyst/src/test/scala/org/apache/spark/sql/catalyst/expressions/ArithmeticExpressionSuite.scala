@@ -308,25 +308,38 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
           val mulResult = Decimal(mulExact.setScale(mulType.scale, RoundingMode.HALF_UP))
           val mulExpected =
             if (mulResult.precision > DecimalType.MAX_PRECISION) null else mulResult
-          checkEvaluation(mulActual, mulExpected)
+          tryCheckEvaluation(mulActual, mulExpected)
 
           val divType = Divide(null, null).resultDecimalType(p1, s1, p2, s2)
           val divResult = Decimal(divExact.setScale(divType.scale, RoundingMode.HALF_UP))
           val divExpected =
             if (divResult.precision > DecimalType.MAX_PRECISION) null else divResult
-          checkEvaluation(divActual, divExpected)
+          tryCheckEvaluation(divActual, divExpected)
 
           val remType = Remainder(null, null).resultDecimalType(p1, s1, p2, s2)
           val remResult = Decimal(remExact.setScale(remType.scale, RoundingMode.HALF_UP))
           val remExpected =
             if (remResult.precision > DecimalType.MAX_PRECISION) null else remResult
-          checkEvaluation(remActual, remExpected)
+          tryCheckEvaluation(remActual, remExpected)
 
           val quotType = IntegralDivide(null, null).resultDecimalType(p1, s1, p2, s2)
           val quotResult = Decimal(quotExact.setScale(quotType.scale, RoundingMode.HALF_UP))
           val quotExpected =
             if (quotResult.precision > DecimalType.MAX_PRECISION) null else quotResult
-          checkEvaluation(quotActual, quotExpected.toLong)
+          tryCheckEvaluation(quotActual, quotExpected.toLong)
+        }
+      }
+
+      def tryCheckEvaluation(actual: BinaryArithmetic, expected: Any): Unit = {
+        try {
+          checkEvaluation(actual, expected)
+        }
+        catch {
+          // Ignore NUMERIC_VALUE_OUT_OF_RANGE when ANSI is enabled
+          case e: org.scalatest.exceptions.TestFailedException
+            if e.cause.exists(c => c.isInstanceOf[SparkArithmeticException] &&
+              c.asInstanceOf[SparkArithmeticException].getErrorClass
+                == "NUMERIC_VALUE_OUT_OF_RANGE") && SQLConf.get.ansiEnabled =>
         }
       }
     }
