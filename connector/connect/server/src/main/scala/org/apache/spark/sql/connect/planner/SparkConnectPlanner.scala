@@ -2545,11 +2545,6 @@ class SparkConnectPlanner(
       case _ => Seq.empty
     }
 
-    val metricsDF = if (df.isStreaming) {
-      // XX Hack to avoid triggering physical plan for `df` below.
-      Dataset.ofRows(session, session.createDataFrame(Seq((0, 0))).logicalPlan, tracker)
-    } else df
-
     // To avoid explicit handling of the result on the client, we build the expected input
     // of the relation on the server. The client has to simply forward the result.
     val result = SqlCommandResult.newBuilder()
@@ -2587,9 +2582,14 @@ class SparkConnectPlanner(
               .newBuilder()
               .setData(ByteString.copyFrom(bytes))))
     } else {
-      // Trigger assertExecutedPlanPrepared to ensure post ReadyForExecution before finished
-      // executedPlan is currently called by createMetricsResponse below
-      metricsDF.queryExecution.assertExecutedPlanPrepared() // XXX This should be avoided.
+      if (df.isStreaming) {
+        tracker.setReadyForExecution() // Avoid Physical plan phase for streaming.
+      } else {
+        // Trigger assertExecutedPlanPrepared to ensure post ReadyForExecution before finished
+        // executedPlan is currently called by createMetricsResponse below
+        df.queryExecution.assertExecutedPlanPrepared() // XXX This should be avoided.
+      }
+
       result.setRelation(
         proto.Relation
           .newBuilder()
@@ -2612,8 +2612,10 @@ class SparkConnectPlanner(
         .setSqlCommandResult(result)
         .build())
 
-    // Send Metrics
-    responseObserver.onNext(MetricGenerator.createMetricsResponse(sessionHolder, metricsDF))
+    if (!df.isStreaming) {
+      // Send Metrics
+      responseObserver.onNext(MetricGenerator.createMetricsResponse(sessionHolder, df))
+    }
   }
 
   private def handleRegisterUserDefinedFunction(
