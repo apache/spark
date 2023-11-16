@@ -807,37 +807,6 @@ class Expression(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_plan_id", b"_plan_id"]
         ) -> typing_extensions.Literal["plan_id"] | None: ...
 
-    class GetColumnByOrdinal(google.protobuf.message.Message):
-        """An unresolved attribute that is represented by its column index."""
-
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        ORDINAL_FIELD_NUMBER: builtins.int
-        PLAN_ID_FIELD_NUMBER: builtins.int
-        ordinal: builtins.int
-        """(Required) 0-based column index."""
-        plan_id: builtins.int
-        """(Optional) The id of corresponding connect plan."""
-        def __init__(
-            self,
-            *,
-            ordinal: builtins.int = ...,
-            plan_id: builtins.int | None = ...,
-        ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal["_plan_id", b"_plan_id", "plan_id", b"plan_id"],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_plan_id", b"_plan_id", "ordinal", b"ordinal", "plan_id", b"plan_id"
-            ],
-        ) -> None: ...
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_plan_id", b"_plan_id"]
-        ) -> typing_extensions.Literal["plan_id"] | None: ...
-
     class UnresolvedFunction(google.protobuf.message.Message):
         """An unresolved function is not explicitly bound to one explicit function, but the function
         is resolved during analysis following Sparks name resolution rules.
@@ -1160,7 +1129,6 @@ class Expression(google.protobuf.message.Message):
     COMMON_INLINE_USER_DEFINED_FUNCTION_FIELD_NUMBER: builtins.int
     CALL_FUNCTION_FIELD_NUMBER: builtins.int
     NAMED_ARGUMENT_EXPRESSION_FIELD_NUMBER: builtins.int
-    GET_COLUMN_BY_ORDINAL_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def literal(self) -> global___Expression.Literal: ...
@@ -1199,8 +1167,6 @@ class Expression(google.protobuf.message.Message):
     @property
     def named_argument_expression(self) -> global___NamedArgumentExpression: ...
     @property
-    def get_column_by_ordinal(self) -> global___Expression.GetColumnByOrdinal: ...
-    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         relations they can add them here. During the planning the correct resolution is done.
@@ -1226,7 +1192,6 @@ class Expression(google.protobuf.message.Message):
         common_inline_user_defined_function: global___CommonInlineUserDefinedFunction | None = ...,
         call_function: global___CallFunction | None = ...,
         named_argument_expression: global___NamedArgumentExpression | None = ...,
-        get_column_by_ordinal: global___Expression.GetColumnByOrdinal | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -1246,8 +1211,6 @@ class Expression(google.protobuf.message.Message):
             b"expression_string",
             "extension",
             b"extension",
-            "get_column_by_ordinal",
-            b"get_column_by_ordinal",
             "lambda_function",
             b"lambda_function",
             "literal",
@@ -1291,8 +1254,6 @@ class Expression(google.protobuf.message.Message):
             b"expression_string",
             "extension",
             b"extension",
-            "get_column_by_ordinal",
-            b"get_column_by_ordinal",
             "lambda_function",
             b"lambda_function",
             "literal",
@@ -1340,7 +1301,6 @@ class Expression(google.protobuf.message.Message):
             "common_inline_user_defined_function",
             "call_function",
             "named_argument_expression",
-            "get_column_by_ordinal",
             "extension",
         ]
         | None

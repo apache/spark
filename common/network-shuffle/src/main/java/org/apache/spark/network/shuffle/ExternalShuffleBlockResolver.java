@@ -67,8 +67,8 @@ public class ExternalShuffleBlockResolver {
   private static final ObjectMapper mapper = new ObjectMapper();
 
   /**
-   * This a common prefix to the key for each app registration we stick in leveldb, so they
-   * are easy to find, since leveldb lets you search based on prefix.
+   * This a common prefix to the key for each app registration we stick in RocksDB, so they
+   * are easy to find, since RocksDB lets you search based on prefix.
    */
   private static final String APP_KEY_PREFIX = "AppExecShuffleInfo";
   private static final StoreVersion CURRENT_VERSION = new StoreVersion(1, 0);
@@ -126,7 +126,7 @@ public class ExternalShuffleBlockResolver {
         (filePath, indexInfo) -> indexInfo.getRetainedMemorySize())
       .build(indexCacheLoader);
     String dbBackendName =
-      conf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND, DBBackend.LEVELDB.name());
+      conf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND, DBBackend.ROCKSDB.name());
     DBBackend dbBackend = DBBackend.byName(dbBackendName);
     db = DBProvider.initDB(dbBackend, this.registeredExecutorFile, CURRENT_VERSION, mapper);
     if (db != null) {
@@ -325,8 +325,8 @@ public class ExternalShuffleBlockResolver {
             executor.localDirs,
             executor.subDirsPerLocalDir,
             "shuffle_" + shuffleId + "_" + mapId + "_0.data")),
-        shuffleIndexRecord.getOffset(),
-        shuffleIndexRecord.getLength());
+        shuffleIndexRecord.offset(),
+        shuffleIndexRecord.length());
     } catch (ExecutionException e) {
       throw new RuntimeException("Failed to open file: " + indexFilePath, e);
     }
@@ -350,7 +350,7 @@ public class ExternalShuffleBlockResolver {
       try {
         db.close();
       } catch (IOException e) {
-        logger.error("Exception closing leveldb with registered executors", e);
+        logger.error("Exception closing RocksDB with registered executors", e);
       }
     }
   }

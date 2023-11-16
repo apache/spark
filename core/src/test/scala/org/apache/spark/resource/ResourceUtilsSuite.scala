@@ -166,7 +166,7 @@ class ResourceUtilsSuite extends SparkFunSuite
       val ereqs = new ExecutorResourceRequests().resource(GPU, 2, gpuDiscovery)
       val treqs = new TaskResourceRequests().resource(GPU, 1)
 
-      val rp = rpBuilder.require(ereqs).require(treqs).build
+      val rp = rpBuilder.require(ereqs).require(treqs).build()
       val resourcesFromBoth = getOrDiscoverAllResourcesForResourceProfile(
         Some(resourcesFile), SPARK_EXECUTOR_PREFIX, rp, conf)
       val expectedGpuInfo = new ResourceInformation(GPU, Array("0", "1"))

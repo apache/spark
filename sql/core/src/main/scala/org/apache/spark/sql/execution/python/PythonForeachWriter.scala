@@ -74,7 +74,9 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
 
   private lazy val context = TaskContext.get()
   private lazy val buffer = new PythonForeachWriter.UnsafeRowBuffer(
-    context.taskMemoryManager, new File(Utils.getLocalDir(SparkEnv.get.conf)), schema.fields.length)
+    context.taskMemoryManager(),
+    new File(Utils.getLocalDir(SparkEnv.get.conf)),
+    schema.fields.length)
   private lazy val inputRowIterator = buffer.iterator
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
@@ -90,6 +92,10 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
       override val pythonExec: String =
         SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
           funcs.head.funcs.head.pythonExec)
+
+      override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
+
+      override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
     }
   }
 
@@ -101,7 +107,7 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
   override def open(partitionId: Long, version: Long): Boolean = {
     outputIterator  // initialize everything
     writerThread.start()
-    TaskContext.get.addTaskCompletionListener[Unit] { _ => buffer.close() }
+    TaskContext.get().addTaskCompletionListener[Unit] { _ => buffer.close() }
     true
   }
 

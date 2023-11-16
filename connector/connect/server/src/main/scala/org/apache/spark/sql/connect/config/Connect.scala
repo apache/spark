@@ -74,6 +74,24 @@ object Connect {
       .intConf
       .createWithDefault(1024)
 
+  val CONNECT_SESSION_MANAGER_DEFAULT_SESSION_TIMEOUT =
+    buildStaticConf("spark.connect.session.manager.defaultSessionTimeout")
+      .internal()
+      .doc("Timeout after which sessions without any new incoming RPC will be removed.")
+      .version("4.0.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("60m")
+
+  val CONNECT_SESSION_MANAGER_CLOSED_SESSIONS_TOMBSTONES_SIZE =
+    buildStaticConf("spark.connect.session.manager.closedSessionsTombstonesSize")
+      .internal()
+      .doc(
+        "Maximum size of the cache of sessions after which sessions that did not receive any " +
+          "requests will be removed.")
+      .version("4.0.0")
+      .intConf
+      .createWithDefaultString("1000")
+
   val CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT =
     buildStaticConf("spark.connect.execute.manager.detachedTimeout")
       .internal()
@@ -186,7 +204,7 @@ object Connect {
           |""".stripMargin)
       .version("3.5.0")
       .intConf
-      .createWithDefault(2048)
+      .createWithDefault(1024)
 
   val CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL =
     buildStaticConf("spark.connect.copyFromLocalToFs.allowDestLocal")

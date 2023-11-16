@@ -19,8 +19,8 @@ package org.apache.spark.unsafe.array;
 
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.types.ByteArray;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class ByteArraySuite {
   private long getPrefixByByte(byte[] bytes) {
@@ -45,7 +45,7 @@ public class ByteArraySuite {
 
       long result = ByteArray.getPrefix(bytes);
       long expected = getPrefixByByte(bytes);
-      Assert.assertEquals(result, expected);
+      Assertions.assertEquals(result, expected);
     }
   }
 
@@ -53,18 +53,18 @@ public class ByteArraySuite {
   public void testCompareBinary() {
     byte[] x1 = new byte[0];
     byte[] y1 = new byte[]{(byte) 1, (byte) 2, (byte) 3};
-    Assert.assertTrue(ByteArray.compareBinary(x1, y1) < 0);
+    Assertions.assertTrue(ByteArray.compareBinary(x1, y1) < 0);
 
     byte[] x2 = new byte[]{(byte) 200, (byte) 100};
     byte[] y2 = new byte[]{(byte) 100, (byte) 100};
-    Assert.assertTrue(ByteArray.compareBinary(x2, y2) > 0);
+    Assertions.assertTrue(ByteArray.compareBinary(x2, y2) > 0);
 
     byte[] x3 = new byte[]{(byte) 100, (byte) 200, (byte) 12};
     byte[] y3 = new byte[]{(byte) 100, (byte) 200};
-    Assert.assertTrue(ByteArray.compareBinary(x3, y3) > 0);
+    Assertions.assertTrue(ByteArray.compareBinary(x3, y3) > 0);
 
     byte[] x4 = new byte[]{(byte) 100, (byte) 200};
     byte[] y4 = new byte[]{(byte) 100, (byte) 200};
-    Assert.assertEquals(0, ByteArray.compareBinary(x4, y4));
+    Assertions.assertEquals(0, ByteArray.compareBinary(x4, y4));
   }
 }

@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Properties
 import java.util.concurrent.TimeUnit._
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.codahale.metrics._
 

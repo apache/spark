@@ -489,6 +489,7 @@ class WriteOperation(google.protobuf.message.Message):
     PARTITIONING_COLUMNS_FIELD_NUMBER: builtins.int
     BUCKET_BY_FIELD_NUMBER: builtins.int
     OPTIONS_FIELD_NUMBER: builtins.int
+    CLUSTERING_COLUMNS_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The output of the `input` relation will be persisted according to the options."""
@@ -517,6 +518,11 @@ class WriteOperation(google.protobuf.message.Message):
     @property
     def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
         """(Optional) A list of configuration options."""
+    @property
+    def clustering_columns(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional) Columns used for clustering the table."""
     def __init__(
         self,
         *,
@@ -529,6 +535,7 @@ class WriteOperation(google.protobuf.message.Message):
         partitioning_columns: collections.abc.Iterable[builtins.str] | None = ...,
         bucket_by: global___WriteOperation.BucketBy | None = ...,
         options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+        clustering_columns: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -556,6 +563,8 @@ class WriteOperation(google.protobuf.message.Message):
             b"_source",
             "bucket_by",
             b"bucket_by",
+            "clustering_columns",
+            b"clustering_columns",
             "input",
             b"input",
             "mode",
@@ -662,6 +671,7 @@ class WriteOperationV2(google.protobuf.message.Message):
     TABLE_PROPERTIES_FIELD_NUMBER: builtins.int
     MODE_FIELD_NUMBER: builtins.int
     OVERWRITE_CONDITION_FIELD_NUMBER: builtins.int
+    CLUSTERING_COLUMNS_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The output of the `input` relation will be persisted according to the options."""
@@ -693,6 +703,11 @@ class WriteOperationV2(google.protobuf.message.Message):
     @property
     def overwrite_condition(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
         """(Optional) A condition for overwrite saving mode"""
+    @property
+    def clustering_columns(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional) Columns used for clustering the table."""
     def __init__(
         self,
         *,
@@ -707,6 +722,7 @@ class WriteOperationV2(google.protobuf.message.Message):
         table_properties: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
         mode: global___WriteOperationV2.Mode.ValueType = ...,
         overwrite_condition: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+        clustering_columns: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -726,6 +742,8 @@ class WriteOperationV2(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "_provider",
             b"_provider",
+            "clustering_columns",
+            b"clustering_columns",
             "input",
             b"input",
             "mode",

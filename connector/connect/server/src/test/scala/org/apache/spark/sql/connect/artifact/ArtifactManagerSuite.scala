@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 import java.util.UUID
 
+import io.grpc.StatusRuntimeException
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
@@ -40,10 +41,10 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
   }
 
   private val artifactPath = commonResourcePath.resolve("artifact-tests")
-  private def sessionHolder(): SessionHolder = {
-    SessionHolder("test", spark.sessionUUID, spark)
+  private lazy val sessionHolder: SessionHolder = {
+    SessionHolder("test", UUID.randomUUID().toString, spark)
   }
-  private lazy val artifactManager = new SparkConnectArtifactManager(sessionHolder())
+  private lazy val artifactManager = new SparkConnectArtifactManager(sessionHolder)
 
   private def sessionUUID: String = spark.sessionUUID
 
@@ -124,7 +125,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
       val stagingPath = path.toPath
       Files.write(path.toPath, "test".getBytes(StandardCharsets.UTF_8))
       val remotePath = Paths.get("cache/abc")
-      val session = sessionHolder()
+      val session = sessionHolder
       val blockManager = spark.sparkContext.env.blockManager
       val blockId = CacheId(session.userId, session.sessionId, "abc")
       try {
@@ -150,6 +151,28 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     }
   }
 
+  test("Add artifact idempotency") {
+    val remotePath = Paths.get("pyfiles/abc.zip")
+
+    withTempPath { path =>
+      Files.write(path.toPath, "test".getBytes(StandardCharsets.UTF_8))
+      artifactManager.addArtifact(remotePath, path.toPath, None)
+    }
+
+    withTempPath { path =>
+      // subsequent call succeeds
+      Files.write(path.toPath, "test".getBytes(StandardCharsets.UTF_8))
+      artifactManager.addArtifact(remotePath, path.toPath, None)
+    }
+
+    withTempPath { path =>
+      Files.write(path.toPath, "updated file".getBytes(StandardCharsets.UTF_8))
+      assertThrows[StatusRuntimeException] {
+        artifactManager.addArtifact(remotePath, path.toPath, None)
+      }
+    }
+  }
+
   test("SPARK-43790: Forward artifact file to cloud storage path") {
     val copyDir = Utils.createTempDir().toPath
     val destFSDir = Utils.createTempDir().toPath
@@ -170,7 +193,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
       val stagingPath = path.toPath
       Files.write(path.toPath, "test".getBytes(StandardCharsets.UTF_8))
       val remotePath = Paths.get("cache/abc")
-      val session = sessionHolder()
+      val session = sessionHolder
       val blockManager = spark.sparkContext.env.blockManager
       val blockId = CacheId(session.userId, session.sessionId, "abc")
       // Setup artifact dir
@@ -271,15 +294,15 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     val stagingPath = copyDir.resolve("Hello.class")
     val remotePath = Paths.get("classes/Hello.class")
 
-    val sessionHolder =
+    val holder =
       SparkConnectService.getOrCreateIsolatedSession("c1", UUID.randomUUID.toString)
-    sessionHolder.addArtifact(remotePath, stagingPath, None)
+    holder.addArtifact(remotePath, stagingPath, None)
 
     val sessionDirectory =
-      SparkConnectArtifactManager.getArtifactDirectoryAndUriForSession(sessionHolder)._1.toFile
+      SparkConnectArtifactManager.getArtifactDirectoryAndUriForSession(holder)._1.toFile
     assert(sessionDirectory.exists())
 
-    sessionHolder.artifactManager.cleanUpResources()
+    holder.artifactManager.cleanUpResources()
     assert(!sessionDirectory.exists())
     assert(SparkConnectArtifactManager.artifactRootPath.toFile.exists())
   }

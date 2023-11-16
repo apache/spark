@@ -21,8 +21,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
@@ -68,7 +68,7 @@ public class JavaRidgeRegressionSuite extends SharedSparkSession {
     model = ridgeSGDImpl.run(testRDD.rdd());
     double regularizedErr = predictionError(validationData, model);
 
-    Assert.assertTrue(regularizedErr < unRegularizedErr);
+    Assertions.assertTrue(regularizedErr < unRegularizedErr);
   }
 
   @Test
@@ -89,6 +89,6 @@ public class JavaRidgeRegressionSuite extends SharedSparkSession {
         .run(testRDD.rdd());
     double regularizedErr = predictionError(validationData, model);
 
-    Assert.assertTrue(regularizedErr < unRegularizedErr);
+    Assertions.assertTrue(regularizedErr < unRegularizedErr);
   }
 }

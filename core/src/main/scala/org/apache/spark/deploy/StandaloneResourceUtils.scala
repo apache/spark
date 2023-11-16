@@ -29,6 +29,7 @@ import org.json4s.jackson.JsonMethods.{compact, render}
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.resource.{ResourceAllocation, ResourceID, ResourceInformation, ResourceRequirement}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 private[spark] object StandaloneResourceUtils extends Logging {
@@ -96,7 +97,7 @@ private[spark] object StandaloneResourceUtils extends Logging {
     val compShortName = componentName.substring(componentName.lastIndexOf(".") + 1)
     val tmpFile = Utils.tempFileWith(dir)
     val allocations = resources.map { case (rName, rInfo) =>
-      ResourceAllocation(new ResourceID(componentName, rName), rInfo.addresses)
+      ResourceAllocation(new ResourceID(componentName, rName), rInfo.addresses.toImmutableArraySeq)
     }.toSeq
     try {
       writeResourceAllocationJson(allocations, tmpFile)

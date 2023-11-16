@@ -26,11 +26,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_help_command(self):
         super().test_help_command()
 
-    # TODO(SPARK-41527): Implement DataFrame.observe
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_observe(self):
-        super().test_observe()
-
     # TODO(SPARK-41625): Support Structured Streaming
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_observe_str(self):

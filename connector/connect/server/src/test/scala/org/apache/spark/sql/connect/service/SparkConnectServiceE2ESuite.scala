@@ -16,12 +16,172 @@
  */
 package org.apache.spark.sql.connect.service
 
+import java.util.UUID
+
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.connect.SparkConnectServerTest
 
 class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
+
+  // Making results of these queries large enough, so that all the results do not fit in the
+  // buffers and are not pushed out immediately even when the client doesn't consume them, so that
+  // even if the connection got closed, the client would see it as succeeded because the results
+  // were all already in the buffer.
+  val BIG_ENOUGH_QUERY = "select * from range(1000000)"
+
+  test("ReleaseSession releases all queries and does not allow more requests in the session") {
+    withClient { client =>
+      val query1 = client.execute(buildPlan(BIG_ENOUGH_QUERY))
+      val query2 = client.execute(buildPlan(BIG_ENOUGH_QUERY))
+      val query3 = client.execute(buildPlan("select 1"))
+      // just creating the iterator is lazy, trigger query1 and query2 to be sent.
+      query1.hasNext
+      query2.hasNext
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        SparkConnectService.executionManager.listExecuteHolders.length == 2
+      }
+
+      // Close session
+      client.releaseSession()
+      // Calling release session again should be a no-op.
+      client.releaseSession()
+
+      // Check that queries get cancelled
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        SparkConnectService.executionManager.listExecuteHolders.length == 0
+        // SparkConnectService.sessionManager.
+      }
+
+      // query1 and query2 could get either an:
+      // OPERATION_CANCELED if it happens fast - when closing the session interrupted the queries,
+      // and that error got pushed to the client buffers before the client got disconnected.
+      // OPERATION_ABANDONED if it happens slow - when closing the session interrupted the client
+      // RPCs before it pushed out the error above. The client would then get an
+      // INVALID_CURSOR.DISCONNECTED, which it will retry with a ReattachExecute, and then get an
+      // INVALID_HANDLE.OPERATION_ABANDONED.
+      val query1Error = intercept[SparkException] {
+        while (query1.hasNext) query1.next()
+      }
+      assert(
+        query1Error.getMessage.contains("OPERATION_CANCELED") ||
+          query1Error.getMessage.contains("INVALID_HANDLE.OPERATION_ABANDONED"))
+      val query2Error = intercept[SparkException] {
+        while (query2.hasNext) query2.next()
+      }
+      assert(
+        query2Error.getMessage.contains("OPERATION_CANCELED") ||
+          query2Error.getMessage.contains("INVALID_HANDLE.OPERATION_ABANDONED"))
+
+      // query3 has not been submitted before, so it should now fail with SESSION_CLOSED
+      val query3Error = intercept[SparkException] {
+        query3.hasNext
+      }
+      assert(query3Error.getMessage.contains("INVALID_HANDLE.SESSION_CLOSED"))
+
+      // No other requests should be allowed in the session, failing with SESSION_CLOSED
+      val requestError = intercept[SparkException] {
+        client.interruptAll()
+      }
+      assert(requestError.getMessage.contains("INVALID_HANDLE.SESSION_CLOSED"))
+    }
+  }
+
+  private def testReleaseSessionTwoSessions(
+      sessionIdA: String,
+      userIdA: String,
+      sessionIdB: String,
+      userIdB: String): Unit = {
+    withClient(sessionId = sessionIdA, userId = userIdA) { clientA =>
+      withClient(sessionId = sessionIdB, userId = userIdB) { clientB =>
+        val queryA = clientA.execute(buildPlan(BIG_ENOUGH_QUERY))
+        val queryB = clientB.execute(buildPlan(BIG_ENOUGH_QUERY))
+        // just creating the iterator is lazy, trigger query1 and query2 to be sent.
+        queryA.hasNext
+        queryB.hasNext
+        Eventually.eventually(timeout(eventuallyTimeout)) {
+          SparkConnectService.executionManager.listExecuteHolders.length == 2
+        }
+        // Close session A
+        clientA.releaseSession()
+
+        // A's query gets kicked out.
+        Eventually.eventually(timeout(eventuallyTimeout)) {
+          SparkConnectService.executionManager.listExecuteHolders.length == 1
+        }
+        val queryAError = intercept[SparkException] {
+          while (queryA.hasNext) queryA.next()
+        }
+        assert(
+          queryAError.getMessage.contains("OPERATION_CANCELED") ||
+            queryAError.getMessage.contains("INVALID_HANDLE.OPERATION_ABANDONED"))
+
+        // B's query can run.
+        while (queryB.hasNext) queryB.next()
+
+        // B can submit more queries.
+        val queryB2 = clientB.execute(buildPlan("SELECT 1"))
+        while (queryB2.hasNext) queryB2.next()
+        // A can't submit more queries.
+        val queryA2 = clientA.execute(buildPlan("SELECT 1"))
+        val queryA2Error = intercept[SparkException] {
+          clientA.interruptAll()
+        }
+        assert(queryA2Error.getMessage.contains("INVALID_HANDLE.SESSION_CLOSED"))
+      }
+    }
+  }
+
+  test("ReleaseSession for different user_id with same session_id do not affect each other") {
+    testReleaseSessionTwoSessions(defaultSessionId, "A", defaultSessionId, "B")
+  }
+
+  test("ReleaseSession for different session_id with same user_id do not affect each other") {
+    val sessionIdA = UUID.randomUUID.toString()
+    val sessionIdB = UUID.randomUUID.toString()
+    testReleaseSessionTwoSessions(sessionIdA, "X", sessionIdB, "X")
+  }
+
+  test("ReleaseSession: can't create a new session with the same id and user after release") {
+    val sessionId = UUID.randomUUID.toString()
+    val userId = "Y"
+    withClient(sessionId = sessionId, userId = userId) { client =>
+      // this will create the session, and then ReleaseSession at the end of withClient.
+      val query = client.execute(buildPlan("SELECT 1"))
+      query.hasNext // trigger execution
+      client.releaseSession()
+    }
+    withClient(sessionId = sessionId, userId = userId) { client =>
+      // shall not be able to create a new session with the same id and user.
+      val query = client.execute(buildPlan("SELECT 1"))
+      val queryError = intercept[SparkException] {
+        while (query.hasNext) query.next()
+      }
+      assert(queryError.getMessage.contains("INVALID_HANDLE.SESSION_CLOSED"))
+    }
+  }
+
+  test("ReleaseSession: session with different session_id or user_id allowed after release") {
+    val sessionId = UUID.randomUUID.toString()
+    val userId = "Y"
+    withClient(sessionId = sessionId, userId = userId) { client =>
+      val query = client.execute(buildPlan("SELECT 1"))
+      query.hasNext // trigger execution
+      client.releaseSession()
+    }
+    withClient(sessionId = UUID.randomUUID.toString, userId = userId) { client =>
+      val query = client.execute(buildPlan("SELECT 1"))
+      query.hasNext // trigger execution
+      client.releaseSession()
+    }
+    withClient(sessionId = sessionId, userId = "YY") { client =>
+      val query = client.execute(buildPlan("SELECT 1"))
+      query.hasNext // trigger execution
+      client.releaseSession()
+    }
+  }
 
   test("SPARK-45133 query should reach FINISHED state when results are not consumed") {
     withRawBlockingStub { stub =>

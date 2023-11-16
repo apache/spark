@@ -22,10 +22,10 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import com.google.common.io.Files
 import org.mockito.ArgumentMatchers.any
@@ -44,9 +44,13 @@ abstract class RpcEnvSuite extends SparkFunSuite {
 
   var env: RpcEnv = _
 
+  def createSparkConf(): SparkConf = {
+    new SparkConf()
+  }
+
   override def beforeAll(): Unit = {
     super.beforeAll()
-    val conf = new SparkConf()
+    val conf = createSparkConf()
     env = createRpcEnv(conf, "local", 0)
 
     val sparkEnv = mock(classOf[SparkEnv])
@@ -93,7 +97,7 @@ abstract class RpcEnvSuite extends SparkFunSuite {
       }
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 0, clientMode = true)
+    val anotherEnv = createRpcEnv(createSparkConf(), "remote", 0, clientMode = true)
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef(env.address, "send-remotely")
     try {
@@ -145,7 +149,7 @@ abstract class RpcEnvSuite extends SparkFunSuite {
       }
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 0, clientMode = true)
+    val anotherEnv = createRpcEnv(createSparkConf(), "remote", 0, clientMode = true)
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef(env.address, "ask-remotely")
     try {
@@ -168,7 +172,7 @@ abstract class RpcEnvSuite extends SparkFunSuite {
       }
     })
 
-    val conf = new SparkConf()
+    val conf = createSparkConf()
     val shortProp = "spark.rpc.short.timeout"
     val anotherEnv = createRpcEnv(conf, "remote", 0, clientMode = true)
     // Use anotherEnv to find out the RpcEndpointRef
@@ -198,7 +202,7 @@ abstract class RpcEnvSuite extends SparkFunSuite {
       }
     })
 
-    val conf = new SparkConf()
+    val conf = createSparkConf()
     val shortProp = "spark.rpc.short.timeout"
     val anotherEnv = createRpcEnv(conf, "remote", 0, clientMode = true)
     // Use anotherEnv to find out the RpcEndpointRef
@@ -467,7 +471,7 @@ abstract class RpcEnvSuite extends SparkFunSuite {
       }
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 0, clientMode = true)
+    val anotherEnv = createRpcEnv(createSparkConf(), "remote", 0, clientMode = true)
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef(env.address, "sendWithReply-remotely")
     try {
@@ -507,7 +511,7 @@ abstract class RpcEnvSuite extends SparkFunSuite {
       }
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 0, clientMode = true)
+    val anotherEnv = createRpcEnv(createSparkConf(), "remote", 0, clientMode = true)
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef(env.address, "sendWithReply-remotely-error")
     try {
@@ -556,8 +560,8 @@ abstract class RpcEnvSuite extends SparkFunSuite {
   }
 
   test("network events in sever RpcEnv when another RpcEnv is in server mode") {
-    val serverEnv1 = createRpcEnv(new SparkConf(), "server1", 0, clientMode = false)
-    val serverEnv2 = createRpcEnv(new SparkConf(), "server2", 0, clientMode = false)
+    val serverEnv1 = createRpcEnv(createSparkConf(), "server1", 0, clientMode = false)
+    val serverEnv2 = createRpcEnv(createSparkConf(), "server2", 0, clientMode = false)
     val (_, events) = setupNetworkEndpoint(serverEnv1, "network-events")
     val (serverRef2, _) = setupNetworkEndpoint(serverEnv2, "network-events")
     try {
@@ -585,9 +589,9 @@ abstract class RpcEnvSuite extends SparkFunSuite {
   }
 
   test("network events in sever RpcEnv when another RpcEnv is in client mode") {
-    val serverEnv = createRpcEnv(new SparkConf(), "server", 0, clientMode = false)
+    val serverEnv = createRpcEnv(createSparkConf(), "server", 0, clientMode = false)
     val (serverRef, events) = setupNetworkEndpoint(serverEnv, "network-events")
-    val clientEnv = createRpcEnv(new SparkConf(), "client", 0, clientMode = true)
+    val clientEnv = createRpcEnv(createSparkConf(), "client", 0, clientMode = true)
     try {
       val serverRefInClient = clientEnv.setupEndpointRef(serverRef.address, serverRef.name)
       // Send a message to set up the connection
@@ -615,8 +619,8 @@ abstract class RpcEnvSuite extends SparkFunSuite {
   }
 
   test("network events in client RpcEnv when another RpcEnv is in server mode") {
-    val clientEnv = createRpcEnv(new SparkConf(), "client", 0, clientMode = true)
-    val serverEnv = createRpcEnv(new SparkConf(), "server", 0, clientMode = false)
+    val clientEnv = createRpcEnv(createSparkConf(), "client", 0, clientMode = true)
+    val serverEnv = createRpcEnv(createSparkConf(), "server", 0, clientMode = false)
     val (_, events) = setupNetworkEndpoint(clientEnv, "network-events")
     val (serverRef, _) = setupNetworkEndpoint(serverEnv, "network-events")
     try {
@@ -652,7 +656,7 @@ abstract class RpcEnvSuite extends SparkFunSuite {
       }
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 0, clientMode = true)
+    val anotherEnv = createRpcEnv(createSparkConf(), "remote", 0, clientMode = true)
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef =
       anotherEnv.setupEndpointRef(env.address, "sendWithReply-unserializable-error")
@@ -669,7 +673,7 @@ abstract class RpcEnvSuite extends SparkFunSuite {
   }
 
   test("port conflict") {
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", env.address.port)
+    val anotherEnv = createRpcEnv(createSparkConf(), "remote", env.address.port)
     try {
       assert(anotherEnv.address.port != env.address.port)
     } finally {
@@ -729,20 +733,20 @@ abstract class RpcEnvSuite extends SparkFunSuite {
   }
 
   test("send with authentication") {
-    testSend(new SparkConf()
+    testSend(createSparkConf()
       .set(NETWORK_AUTH_ENABLED, true)
       .set(AUTH_SECRET, "good"))
   }
 
   test("send with SASL encryption") {
-    testSend(new SparkConf()
+    testSend(createSparkConf()
       .set(NETWORK_AUTH_ENABLED, true)
       .set(AUTH_SECRET, "good")
       .set(SASL_ENCRYPTION_ENABLED, true))
   }
 
   test("send with AES encryption") {
-    testSend(new SparkConf()
+    testSend(createSparkConf()
       .set(NETWORK_AUTH_ENABLED, true)
       .set(AUTH_SECRET, "good")
       .set(Network.NETWORK_CRYPTO_ENABLED, true)
@@ -750,20 +754,20 @@ abstract class RpcEnvSuite extends SparkFunSuite {
   }
 
   test("ask with authentication") {
-    testAsk(new SparkConf()
+    testAsk(createSparkConf()
       .set(NETWORK_AUTH_ENABLED, true)
       .set(AUTH_SECRET, "good"))
   }
 
   test("ask with SASL encryption") {
-    testAsk(new SparkConf()
+    testAsk(createSparkConf()
       .set(NETWORK_AUTH_ENABLED, true)
       .set(AUTH_SECRET, "good")
       .set(SASL_ENCRYPTION_ENABLED, true))
   }
 
   test("ask with AES encryption") {
-    testAsk(new SparkConf()
+    testAsk(createSparkConf()
       .set(NETWORK_AUTH_ENABLED, true)
       .set(AUTH_SECRET, "good")
       .set(Network.NETWORK_CRYPTO_ENABLED, true)
@@ -861,7 +865,7 @@ abstract class RpcEnvSuite extends SparkFunSuite {
   test("file server") {
     withTempDir { tempDir =>
       withTempDir { destDir =>
-        val conf = new SparkConf()
+        val conf = createSparkConf()
 
         val file = new File(tempDir, "file")
         Files.write(UUID.randomUUID().toString(), file, UTF_8)
@@ -940,7 +944,7 @@ abstract class RpcEnvSuite extends SparkFunSuite {
       }
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 0)
+    val anotherEnv = createRpcEnv(createSparkConf(), "remote", 0)
     val endpoint = mock(classOf[RpcEndpoint])
     anotherEnv.setupEndpoint("SPARK-14699", endpoint)
 
@@ -960,7 +964,7 @@ abstract class RpcEnvSuite extends SparkFunSuite {
   test("isolated endpoints") {
     val latch = new CountDownLatch(1)
     val singleThreadedEnv = createRpcEnv(
-      new SparkConf().set(Network.RPC_NETTY_DISPATCHER_NUM_THREADS, 1), "singleThread", 0)
+      createSparkConf().set(Network.RPC_NETTY_DISPATCHER_NUM_THREADS, 1), "singleThread", 0)
     try {
       val blockingEndpoint = singleThreadedEnv
         .setupEndpoint("blocking", new IsolatedThreadSafeRpcEndpoint {

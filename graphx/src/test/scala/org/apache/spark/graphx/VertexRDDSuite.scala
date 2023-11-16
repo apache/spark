@@ -33,7 +33,7 @@ class VertexRDDSuite extends SparkFunSuite with LocalSparkContext {
       val n = 100
       val verts = vertices(sc, n)
       val evens = verts.filter(q => ((q._2 % 2) == 0))
-      assert(evens.count === (0 to n).count(_ % 2 == 0))
+      assert(evens.count() === (0 to n).count(_ % 2 == 0))
     }
   }
 
@@ -42,7 +42,7 @@ class VertexRDDSuite extends SparkFunSuite with LocalSparkContext {
       val n = 100
       val verts = vertices(sc, n)
       val negatives = verts.mapValues(x => -x).cache() // Allow joining b with a derived RDD of b
-      assert(negatives.count === n + 1)
+      assert(negatives.count() === n + 1)
     }
   }
 
@@ -227,11 +227,11 @@ class VertexRDDSuite extends SparkFunSuite with LocalSparkContext {
   test("count") {
     withSpark { sc =>
       val empty = VertexRDD(sc.emptyRDD[(Long, Unit)])
-      assert(empty.count === 0)
+      assert(empty.count() === 0)
 
       val n = 100
       val nonempty = vertices(sc, n)
-      assert(nonempty.count === n + 1)
+      assert(nonempty.count() === n + 1)
     }
   }
 }

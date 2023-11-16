@@ -59,4 +59,23 @@ with SharedSparkSession {
       }
     }
   }
+
+  test("IN empty list behavior conf defaults") {
+    // Currently the fixed behavior is enabled when ANSI is on, and the legacy behavior when
+    // ANSI is off.
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val legacyNullInBehavior = !ansiEnabled
+        assert(SQLConf.get.legacyNullInEmptyBehavior == legacyNullInBehavior)
+
+        val emptylist = Seq.empty[Literal]
+        val df = t.select(col("a"), col("a").isin(emptylist: _*))
+        val expectedResultForNullInEmpty =
+          if (legacyNullInBehavior) null else false
+        checkAnswer(
+          df,
+          Row(1, false) :: Row(null, expectedResultForNullInEmpty) :: Nil)
+      }
+    }
+  }
 }

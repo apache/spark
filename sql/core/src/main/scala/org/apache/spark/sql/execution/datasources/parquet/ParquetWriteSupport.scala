@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.nio.{ByteBuffer, ByteOrder}
 import java.util
 
-import scala.collection.JavaConverters.mapAsJavaMapConverter
+import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.column.ParquetProperties
@@ -132,7 +132,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
       }
     }
 
-    logInfo(
+    logDebug(
       s"""Initialized Parquet WriteSupport with Catalyst schema:
          |${schema.prettyJson}
          |and corresponding Parquet message type:
@@ -237,6 +237,18 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
       case DecimalType.Fixed(precision, scale) =>
         makeDecimalWriter(precision, scale)
+
+      case VariantType =>
+        (row: SpecializedGetters, ordinal: Int) =>
+          val v = row.getVariant(ordinal)
+          consumeGroup {
+            consumeField("value", 0) {
+              recordConsumer.addBinary(Binary.fromReusedByteArray(v.getValue))
+            }
+            consumeField("metadata", 1) {
+              recordConsumer.addBinary(Binary.fromReusedByteArray(v.getMetadata))
+            }
+          }
 
       case t: StructType =>
         val fieldWriters = t.map(_.dataType).map(makeWriter).toArray[ValueWriter]

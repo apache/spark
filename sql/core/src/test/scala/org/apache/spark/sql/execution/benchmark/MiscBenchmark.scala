@@ -126,7 +126,7 @@ object MiscBenchmark extends SqlBasedBenchmark {
         import spark.implicits._
         val df = spark.sparkContext.parallelize(Seq(("1",
           Array.fill(M)({
-            val i = math.random
+            val i = math.random()
             (i.toString, (i + 1).toString, (i + 2).toString, (i + 3).toString)
           })))).toDF("col", "arr")
 
@@ -139,7 +139,7 @@ object MiscBenchmark extends SqlBasedBenchmark {
           import spark.implicits._
           val df = spark.sparkContext.parallelize(Seq(("1",
             Array.fill(M)({
-              val i = math.random
+              val i = math.random()
               (i.toString, (i + 1).toString, (i + 2).toString, (i + 3).toString)
             })))).toDF("col", "arr")
             .selectExpr("col", "struct(col, arr) as st")

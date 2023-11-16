@@ -41,6 +41,7 @@ import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
 import org.apache.spark.util.{Utils, VersionUtils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Test HiveExternalCatalog backward compatibility.
@@ -64,11 +65,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   private val sparkTestingDir = Option(System.getProperty(SPARK_TEST_CACHE_DIR_SYSTEM_PROPERTY))
       .map(new File(_)).getOrElse(Utils.createTempDir(namePrefix = "test-spark"))
   private val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
-  val hiveVersion = if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-    HiveUtils.builtinHiveVersion
-  } else {
-    "1.2.1"
-  }
+  val hiveVersion = HiveUtils.builtinHiveVersion
 
   override def afterAll(): Unit = {
     try {
@@ -274,7 +271,7 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
         .filter(_.contains("""<a href="spark-"""))
         .filterNot(_.contains("preview"))
         .map("""<a href="spark-(\d.\d.\d)/">""".r.findFirstMatchIn(_).get.group(1))
-        .filter(_ < org.apache.spark.SPARK_VERSION)
+        .filter(_ < org.apache.spark.SPARK_VERSION).toImmutableArraySeq
     } catch {
       // Do not throw exception during object initialization.
       case NonFatal(_) => Nil

@@ -20,9 +20,9 @@ package org.apache.spark
 import java.io.File
 import java.util.Locale
 
-import scala.collection.JavaConverters._
 import scala.collection.concurrent
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.Properties
 
 import com.google.common.cache.CacheBuilder
@@ -46,6 +46,7 @@ import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManage
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.util.{RpcUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * :: DeveloperApi ::
@@ -128,7 +129,7 @@ class SparkEnv (
       pythonExec: String,
       workerModule: String,
       daemonModule: String,
-      envVars: Map[String, String]): (PythonWorker, Option[Int]) = {
+      envVars: Map[String, String]): (PythonWorker, Option[Long]) = {
     synchronized {
       val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
       pythonWorkers.getOrElseUpdate(key,
@@ -139,7 +140,7 @@ class SparkEnv (
   private[spark] def createPythonWorker(
       pythonExec: String,
       workerModule: String,
-      envVars: Map[String, String]): (PythonWorker, Option[Int]) = {
+      envVars: Map[String, String]): (PythonWorker, Option[Long]) = {
     createPythonWorker(
       pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars)
   }
@@ -308,7 +309,7 @@ object SparkEnv extends Logging {
     }
 
     ioEncryptionKey.foreach { _ =>
-      if (!securityManager.isEncryptionEnabled()) {
+      if (!(securityManager.isEncryptionEnabled() || securityManager.isSslRpcEnabled())) {
         logWarning("I/O encryption enabled without RPC encryption: keys will be visible on the " +
           "wire.")
       }
@@ -374,7 +375,12 @@ object SparkEnv extends Logging {
     }
 
     val externalShuffleClient = if (conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
-      val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores)
+      val transConf = SparkTransportConf.fromSparkConf(
+        conf,
+        "shuffle",
+        numUsableCores,
+        sslOptions = Some(securityManager.getRpcSSLOptions())
+      )
       Some(new ExternalBlockStoreClient(transConf, securityManager,
         securityManager.isAuthenticationEnabled(), conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT)))
     } else {
@@ -528,7 +534,7 @@ object SparkEnv extends Logging {
       .map(entry => (entry.getKey, entry.getValue)).toSeq.sorted
     Map[String, Seq[(String, String)]](
       "JVM Information" -> jvmInformation,
-      "Spark Properties" -> sparkProperties,
+      "Spark Properties" -> sparkProperties.toImmutableArraySeq,
       "Hadoop Properties" -> hadoopProperties,
       "System Properties" -> otherProperties,
       "Classpath Entries" -> classPaths,

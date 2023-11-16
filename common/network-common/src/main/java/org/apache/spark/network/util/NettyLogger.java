@@ -17,6 +17,9 @@
 
 package org.apache.spark.network.util;
 
+import java.io.IOException;
+import java.io.InputStream;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufHolder;
 import io.netty.channel.ChannelHandlerContext;
@@ -42,6 +45,14 @@ public class NettyLogger {
       } else if (arg instanceof ByteBufHolder) {
         return format(ctx, eventName) + " " +
           ((ByteBufHolder) arg).content().readableBytes() + "B";
+      } else if (arg instanceof InputStream) {
+        int available = -1;
+        try {
+          available = ((InputStream) arg).available();
+        } catch (IOException ex) {
+          // Swallow, but return -1 to indicate an error happened
+        }
+        return format(ctx, eventName, arg) + " " + available + "B";
       } else {
         return super.format(ctx, eventName, arg);
       }

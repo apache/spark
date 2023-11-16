@@ -29,7 +29,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.spark.CleanerListener
 import org.apache.spark.executor.DataReadMethod._
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -951,7 +952,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     val cachedData = checkIfNoJobTriggered {
       spark.range(1002).filter($"id" > 1000).orderBy($"id".desc).cache()
     }
-    assert(cachedData.collect === Seq(1001))
+    assert(cachedData.collect() === Seq(1001))
   }
 
   test("SPARK-24596 Non-cascading Cache Invalidation - uncache temporary view") {
@@ -1102,7 +1103,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         .agg(avg("c1").as("v1"), sum("c2").as("v2"))
     }
     // First, checks if there is no column statistic in cached query
-    val queryStats1 = query().cache.queryExecution.optimizedPlan.stats.attributeStats
+    val queryStats1 = query().cache().queryExecution.optimizedPlan.stats.attributeStats
     assert(queryStats1.map(_._1.name).isEmpty)
 
     val cacheManager = spark.sharedState.cacheManager
@@ -1596,8 +1597,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     withTempDir { dir =>
       val path1 = new File(dir, "t1").getCanonicalPath
       val path2 = new File(dir, "t2").getCanonicalPath
-      Seq(1).toDF.write.parquet(path1)
-      Seq(1).toDF.write.parquet(path2)
+      Seq(1).toDF().write.parquet(path1)
+      Seq(1).toDF().write.parquet(path2)
 
       val (tempViewStr, viewName) = if (ident.database.nonEmpty) {
         ("GLOBAL TEMPORARY VIEW", s"${ident.database.get}.${ident.table}")
@@ -1629,23 +1630,44 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
 
-      withTempView("t1", "t2", "t3") {
-        withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
-          sql("CACHE TABLE t1 as SELECT /*+ REPARTITION */ * FROM values(1) as t(c)")
-          assert(spark.table("t1").rdd.partitions.length == 2)
+      var finalPlan = ""
+      val listener = new SparkListener {
+        override def onOtherEvent(event: SparkListenerEvent): Unit = {
+          event match {
+            case SparkListenerSQLAdaptiveExecutionUpdate(_, physicalPlanDesc, sparkPlanInfo) =>
+              if (sparkPlanInfo.simpleString.startsWith(
+                  "AdaptiveSparkPlan isFinalPlan=true")) {
+                finalPlan = physicalPlanDesc
+              }
+            case _ => // ignore other events
+          }
         }
+      }
 
-        withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
-          assert(spark.table("t1").rdd.partitions.length == 2)
-          sql("CACHE TABLE t2 as SELECT /*+ REPARTITION */ * FROM values(2) as t(c)")
-          assert(spark.table("t2").rdd.partitions.length == 1)
-        }
+      withTempView("t0", "t1", "t2") {
+        try {
+          spark.range(10).write.saveAsTable("t0")
+          spark.sparkContext.listenerBus.waitUntilEmpty()
+          spark.sparkContext.addSparkListener(listener)
 
-        withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
-          assert(spark.table("t1").rdd.partitions.length == 2)
-          assert(spark.table("t2").rdd.partitions.length == 1)
-          sql("CACHE TABLE t3 as SELECT /*+ REPARTITION */ * FROM values(3) as t(c)")
-          assert(spark.table("t3").rdd.partitions.length == 2)
+          withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
+            sql("CACHE TABLE t1 as SELECT /*+ REPARTITION */ * FROM (" +
+              "SELECT distinct (id+1) FROM t0)")
+            assert(spark.table("t1").rdd.partitions.length == 2)
+            spark.sparkContext.listenerBus.waitUntilEmpty()
+            assert(finalPlan.nonEmpty && !finalPlan.contains("coalesced"))
+          }
+
+          finalPlan = "" // reset finalPlan
+          withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
+            sql("CACHE TABLE t2 as SELECT /*+ REPARTITION */ * FROM (" +
+              "SELECT distinct (id-1) FROM t0)")
+            assert(spark.table("t2").rdd.partitions.length == 2)
+            spark.sparkContext.listenerBus.waitUntilEmpty()
+            assert(finalPlan.nonEmpty && finalPlan.contains("coalesced"))
+          }
+        } finally {
+          spark.sparkContext.removeSparkListener(listener)
         }
       }
     }
@@ -1692,6 +1714,43 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         sql("CACHE TABLE cached_t as SELECT udf(id) FROM VALUES (1), (2) t(id)")
         checkAnswer(sql("SELECT * FROM cached_t"), Row(2) :: Row(3) :: Nil)
       }
+    }
+  }
+
+  test("SPARK-45451: Make the default storage level of dataset cache configurable") {
+    def validateStorageLevel(expected: StorageLevel): Unit = {
+      withTempView("t") {
+        spark.range(10).createOrReplaceTempView("t")
+
+        Seq(() => spark.table("t").cache(),
+          () => spark.catalog.cacheTable("t"),
+          () => spark.sql("CACHE TABLE t")).foreach { f =>
+          withCache("t") {
+            f()
+            val cached = spark.table("t")
+            val tableCache = collect(cached.queryExecution.executedPlan) {
+              case i: InMemoryTableScanExec => i
+            }
+            if (expected == StorageLevel.NONE) {
+              assert(tableCache.isEmpty)
+            } else {
+              assert(tableCache.size == 1)
+              assert(tableCache.head.relation.cacheBuilder.storageLevel == expected)
+            }
+          }
+        }
+      }
+    }
+
+    validateStorageLevel(StorageLevel.MEMORY_AND_DISK)
+    withSQLConf(SQLConf.DEFAULT_CACHE_STORAGE_LEVEL.key -> "NONE") {
+      validateStorageLevel(StorageLevel.NONE)
+    }
+    withSQLConf(SQLConf.DEFAULT_CACHE_STORAGE_LEVEL.key -> "MEMORY_AND_DISK_2") {
+      validateStorageLevel(StorageLevel.MEMORY_AND_DISK_2)
+    }
+    intercept[IllegalArgumentException] {
+      withSQLConf(SQLConf.DEFAULT_CACHE_STORAGE_LEVEL.key -> "DISK") {}
     }
   }
 }

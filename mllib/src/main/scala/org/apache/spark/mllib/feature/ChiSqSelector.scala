@@ -32,6 +32,7 @@ import org.apache.spark.mllib.stat.test.ChiSqTestResult
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Chi Squared selector model.
@@ -141,7 +142,8 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
       val dataArray = Array.tabulate(model.selectedFeatures.length) { i =>
         Data(model.selectedFeatures(i))
       }
-      spark.createDataFrame(sc.makeRDD(dataArray, 1)).write.parquet(Loader.dataPath(path))
+      spark.createDataFrame(sc.makeRDD(dataArray.toImmutableArraySeq, 1))
+        .write.parquet(Loader.dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): ChiSqSelectorModel = {

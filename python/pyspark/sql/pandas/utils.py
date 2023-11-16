@@ -15,13 +15,13 @@
 # limitations under the License.
 #
 
+from pyspark.loose_version import LooseVersion
+
 
 def require_minimum_pandas_version() -> None:
     """Raise ImportError if minimum version of Pandas is not installed"""
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
     minimum_pandas_version = "1.4.4"
-
-    from distutils.version import LooseVersion
 
     try:
         import pandas
@@ -46,7 +46,6 @@ def require_minimum_pyarrow_version() -> None:
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
     minimum_pyarrow_version = "4.0.0"
 
-    from distutils.version import LooseVersion
     import os
 
     try:

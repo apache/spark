@@ -24,41 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class CategoricalIndexParityTests(
     CategoricalIndexTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
-    def test_append(self):
-        super().test_append()
-
-    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
-    def test_astype(self):
-        super().test_astype()
-
-    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
-    def test_factorize(self):
-        super().test_factorize()
-
-    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
-    def test_intersection(self):
-        super().test_intersection()
-
-    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
-    def test_remove_categories(self):
-        super().test_remove_categories()
-
-    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
-    def test_remove_unused_categories(self):
-        super().test_remove_unused_categories()
-
-    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
-    def test_reorder_categories(self):
-        super().test_reorder_categories()
-
-    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
-    def test_set_categories(self):
-        super().test_set_categories()
-
-    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
-    def test_union(self):
-        super().test_union()
+    pass
 
 
 if __name__ == "__main__":

@@ -31,7 +31,7 @@ private[arrow] object ScalaCollectionUtils {
   def getMapCompanion(tag: ClassTag[_]): MapFactory[Map] = {
     resolveCompanion[MapFactory[Map]](tag)
   }
-  def wrap[T](array: AnyRef): mutable.WrappedArray[T] = {
-    mutable.WrappedArray.make(array.asInstanceOf[Array[T]])
+  def wrap[T](array: AnyRef): mutable.ArraySeq[T] = {
+    mutable.ArraySeq.make(array.asInstanceOf[Array[T]])
   }
 }

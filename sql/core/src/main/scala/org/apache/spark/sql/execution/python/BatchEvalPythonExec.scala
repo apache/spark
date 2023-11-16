@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.python
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.{Pickler, Unpickler}
 

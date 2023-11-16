@@ -220,7 +220,8 @@ class ContinuousExecution(
         currentBatchId,
         None,
         offsetSeqMetadata,
-        WatermarkPropagator.noop())
+        WatermarkPropagator.noop(),
+        false)
       lastExecution.executedPlan // Force the lazy generation of execution plan
     }
 

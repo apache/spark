@@ -196,7 +196,7 @@ class MemoryStoreSuite
     assert(memoryStore.currentUnrollMemoryForThisTask > 0) // we returned an iterator
     assert(!memoryStore.contains("someBlock2"))
     assert(putResult.isLeft)
-    assertSameContents(bigList, putResult.left.get.toSeq, "putIterator")
+    assertSameContents(bigList, putResult.swap.getOrElse(fail()).toSeq, "putIterator")
     // The unroll memory was freed once the iterator returned by putIterator() was fully traversed.
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
   }
@@ -264,7 +264,7 @@ class MemoryStoreSuite
     assert(memoryStore.contains("b3"))
     assert(!memoryStore.contains("b4"))
     assert(memoryStore.currentUnrollMemoryForThisTask > 0) // we returned an iterator
-    result4.left.get.close()
+    result4.swap.getOrElse(fail()).close()
     assert(memoryStore.currentUnrollMemoryForThisTask === 0) // close released the unroll memory
   }
 
@@ -340,7 +340,7 @@ class MemoryStoreSuite
     assert(memoryStore.contains("b3"))
     assert(!memoryStore.contains("b4"))
     assert(memoryStore.currentUnrollMemoryForThisTask > 0) // we returned an iterator
-    result4.left.get.discard()
+    result4.swap.getOrElse(fail()).discard()
     assert(memoryStore.currentUnrollMemoryForThisTask === 0) // discard released the unroll memory
   }
 
@@ -357,7 +357,8 @@ class MemoryStoreSuite
     blockInfoManager.unlock("b1")
     assert(res.isLeft)
     assert(memoryStore.currentUnrollMemoryForThisTask > 0)
-    val valuesReturnedFromFailedPut = res.left.get.valuesIterator.toSeq // force materialization
+    val valuesReturnedFromFailedPut = res.swap.getOrElse(fail())
+      .valuesIterator.toSeq // force materialization
     assertSameContents(
       bigList, valuesReturnedFromFailedPut, "PartiallySerializedBlock.valuesIterator()")
     // The unroll memory was freed once the iterator was fully traversed.
@@ -378,7 +379,7 @@ class MemoryStoreSuite
     assert(res.isLeft)
     assert(memoryStore.currentUnrollMemoryForThisTask > 0)
     val bos = new ByteBufferOutputStream()
-    res.left.get.finishWritingToStream(bos)
+    res.swap.getOrElse(fail()).finishWritingToStream(bos)
     // The unroll memory was freed once the block was fully written.
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
     val deserializedValues = serializerManager.dataDeserializeStream[Any](
@@ -609,7 +610,7 @@ class MemoryStoreSuite
     assert(putIteratorAsValues("b1", nativeObjIterator, ClassTag.Any).isRight)
     assert(putIteratorAsValues("b2", nativeObjIterator, ClassTag.Any).isRight)
 
-    memoryStore.clear
+    memoryStore.clear()
     // Check if allocator was cleared.
     while (allocator.getAllocatedMemory > 0) {
       Thread.sleep(500)

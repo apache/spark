@@ -17,8 +17,8 @@
 
 package org.apache.spark.deploy.yarn
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, Set}
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records.ContainerId
@@ -26,6 +26,7 @@ import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 
 import org.apache.spark.SparkConf
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.util.ArrayImplicits._
 
 private[yarn] case class ContainerLocalityPreferences(nodes: Array[String], racks: Array[String])
 
@@ -139,7 +140,7 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
         // Only filter out the ratio which is larger than 0, which means the current host can
         // still be allocated with new container request.
         val hosts = preferredLocalityRatio.filter(_._2 > 0).keys.toArray
-        val racks = resolver.resolve(hosts).map(_.getNetworkLocation)
+        val racks = resolver.resolve(hosts.toImmutableArraySeq).map(_.getNetworkLocation)
           .filter(_ != null).toSet
         containerLocalityPreferences += ContainerLocalityPreferences(hosts, racks.toArray)
 

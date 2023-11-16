@@ -21,8 +21,8 @@ import java.math.{BigDecimal => JavaBigDecimal, BigInteger, MathContext, Roundin
 
 import scala.util.Try
 
+import org.apache.spark.QueryContext
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.unsafe.types.UTF8String
@@ -277,7 +277,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   private[sql] def roundToInt(): Int =
     roundToNumeric[Int](IntegerType, Int.MaxValue, Int.MinValue) (_.toInt) (_.toInt)
 
-  private def toSqlValue: String = this + "BD"
+  private def toSqlValue: String = this.toString + "BD"
 
   private def roundToNumeric[T <: AnyVal](integralType: IntegralType, maxValue: Int, minValue: Int)
       (f1: Long => T) (f2: Double => T): T = {
@@ -341,7 +341,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       scale: Int,
       roundMode: BigDecimal.RoundingMode.Value = ROUND_HALF_UP,
       nullOnOverflow: Boolean = true,
-      context: SQLQueryContext = null): Decimal = {
+      context: QueryContext = null): Decimal = {
     val copy = clone()
     if (copy.changePrecision(precision, scale, roundMode)) {
       copy
@@ -499,7 +499,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def / (that: Decimal): Decimal =
     if (that.isZero) null else Decimal(toJavaBigDecimal.divide(that.toJavaBigDecimal,
-      DecimalType.MAX_SCALE, MATH_CONTEXT.getRoundingMode))
+      DecimalType.MAX_SCALE + 1, MATH_CONTEXT.getRoundingMode))
 
   def % (that: Decimal): Decimal =
     if (that.isZero) null
@@ -547,7 +547,11 @@ object Decimal {
 
   val POW_10 = Array.tabulate[Long](MAX_LONG_DIGITS + 1)(i => math.pow(10, i).toLong)
 
-  private val MATH_CONTEXT = new MathContext(DecimalType.MAX_PRECISION, RoundingMode.HALF_UP)
+  // SPARK-45786 Using RoundingMode.HALF_UP with MathContext may cause inaccurate SQL results
+  // because TypeCoercion later rounds again. Instead, always round down and use 1 digit longer
+  // precision than DecimalType.MAX_PRECISION. Then, TypeCoercion will properly round up/down
+  // the last extra digit.
+  private val MATH_CONTEXT = new MathContext(DecimalType.MAX_PRECISION + 1, RoundingMode.DOWN)
 
   private[sql] val ZERO = Decimal(0)
   private[sql] val ONE = Decimal(1)
@@ -617,7 +621,7 @@ object Decimal {
   def fromStringANSI(
       str: UTF8String,
       to: DecimalType = DecimalType.USER_DEFAULT,
-      context: SQLQueryContext = null): Decimal = {
+      context: QueryContext = null): Decimal = {
     try {
       val bigDecimal = stringToJavaBigDecimal(str)
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
@@ -681,9 +685,7 @@ object Decimal {
     override def toLong(x: Decimal): Long = x.toLong
     override def fromInt(x: Int): Decimal = new Decimal().set(x)
     override def compare(x: Decimal, y: Decimal): Int = x.compare(y)
-    // Added from Scala 2.13; don't override to work in 2.12
-    // TODO revisit once Scala 2.12 support is dropped
-    def parseString(str: String): Option[Decimal] = Try(Decimal(str)).toOption
+    override def parseString(str: String): Option[Decimal] = Try(Decimal(str)).toOption
   }
 
   /** A [[scala.math.Fractional]] evidence parameter for Decimals. */

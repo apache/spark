@@ -44,7 +44,7 @@ class QueryExecutionSuite extends SharedSparkSession {
 
   def checkDumpedPlans(path: String, expected: Int): Unit = Utils.tryWithResource(
     Source.fromFile(path)) { source =>
-    assert(source.getLines.toList
+    assert(source.getLines().toList
       .takeWhile(_ != "== Whole Stage Codegen ==") == List(
       "== Parsed Logical Plan ==",
       s"Range (0, $expected, step=1, splits=Some(2))",
@@ -252,20 +252,20 @@ class QueryExecutionSuite extends SharedSparkSession {
 
     val showTables = ShowTables(UnresolvedNamespace(Seq.empty[String]), None)
     val showTablesQe = qe(showTables, mockCallback1)
-    showTablesQe.assertAnalyzed
-    mockCallback1.assertAnalyzed
+    showTablesQe.assertAnalyzed()
+    mockCallback1.assertAnalyzed()
     assert(showTablesQe.commandExecuted.isInstanceOf[CommandResult])
-    mockCallback1.assertCommandExecuted
+    mockCallback1.assertCommandExecuted()
     assert(showTablesQe.executedPlan.isInstanceOf[CommandResultExec])
     val showTablesResultExec = showTablesQe.executedPlan.asInstanceOf[CommandResultExec]
     assert(showTablesResultExec.commandPhysicalPlan.isInstanceOf[ShowTablesExec])
 
     val project = Project(showTables.output, SubqueryAlias("s", showTables))
     val projectQe = qe(project, mockCallback2)
-    projectQe.assertAnalyzed
-    mockCallback2.assertAnalyzed
+    projectQe.assertAnalyzed()
+    mockCallback2.assertAnalyzed()
     assert(projectQe.commandExecuted.isInstanceOf[Project])
-    mockCallback2.assertCommandExecuted
+    mockCallback2.assertCommandExecuted()
     assert(projectQe.commandExecuted.children.length == 1)
     assert(projectQe.commandExecuted.children(0).isInstanceOf[SubqueryAlias])
     assert(projectQe.commandExecuted.children(0).children.length == 1)
@@ -284,28 +284,28 @@ class QueryExecutionSuite extends SharedSparkSession {
       showTables,
       new QueryPlanningTracker(Some(mockCallback)),
       CommandExecutionMode.SKIP)
-    showTablesQe.assertAnalyzed
-    mockCallback.assertAnalyzed
-    showTablesQe.assertOptimized
-    mockCallback.assertOptimized
-    showTablesQe.assertSparkPlanPrepared
-    mockCallback.assertSparkPlanPrepared
-    showTablesQe.assertExecutedPlanPrepared
-    mockCallback.assertExecutedPlanPrepared
+    showTablesQe.assertAnalyzed()
+    mockCallback.assertAnalyzed()
+    showTablesQe.assertOptimized()
+    mockCallback.assertOptimized()
+    showTablesQe.assertSparkPlanPrepared()
+    mockCallback.assertSparkPlanPrepared()
+    showTablesQe.assertExecutedPlanPrepared()
+    mockCallback.assertExecutedPlanPrepared()
   }
 
   test("SPARK-44145: Plan setReadyForExecution") {
     val mockCallback = MockCallback()
     val plan: LogicalPlan = org.apache.spark.sql.catalyst.plans.logical.Range(0, 1, 1, 1)
     val df = Dataset.ofRows(spark, plan, new QueryPlanningTracker(Some(mockCallback)))
-    df.queryExecution.assertAnalyzed
-    mockCallback.assertAnalyzed
-    df.queryExecution.assertOptimized
-    mockCallback.assertOptimized
-    df.queryExecution.assertSparkPlanPrepared
-    mockCallback.assertSparkPlanPrepared
-    df.queryExecution.assertExecutedPlanPrepared
-    mockCallback.assertExecutedPlanPrepared
+    df.queryExecution.assertAnalyzed()
+    mockCallback.assertAnalyzed()
+    df.queryExecution.assertOptimized()
+    mockCallback.assertOptimized()
+    df.queryExecution.assertSparkPlanPrepared()
+    mockCallback.assertSparkPlanPrepared()
+    df.queryExecution.assertExecutedPlanPrepared()
+    mockCallback.assertExecutedPlanPrepared()
   }
 
   test("SPARK-35378: Return UnsafeRow in CommandResultExecCheck execute methods") {

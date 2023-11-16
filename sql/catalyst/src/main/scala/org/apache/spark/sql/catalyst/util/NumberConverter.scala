@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.trees.SQLQueryContext
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -54,7 +54,7 @@ object NumberConverter {
       fromPos: Int,
       value: Array[Byte],
       ansiEnabled: Boolean,
-      context: SQLQueryContext): Long = {
+      context: QueryContext): Long = {
     var v: Long = 0L
     // bound will always be positive since radix >= 2
     // Note that: -1 is equivalent to 11111111...1111 which is the largest unsigned long value
@@ -134,7 +134,7 @@ object NumberConverter {
       fromBase: Int,
       toBase: Int,
       ansiEnabled: Boolean,
-      context: SQLQueryContext): UTF8String = {
+      context: QueryContext): UTF8String = {
     if (fromBase < Character.MIN_RADIX || fromBase > Character.MAX_RADIX
         || Math.abs(toBase) < Character.MIN_RADIX
         || Math.abs(toBase) > Character.MAX_RADIX) {

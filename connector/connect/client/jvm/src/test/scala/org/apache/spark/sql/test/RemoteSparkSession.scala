@@ -17,7 +17,6 @@
 package org.apache.spark.sql.test
 
 import java.io.{File, IOException, OutputStream}
-import java.lang.ProcessBuilder
 import java.lang.ProcessBuilder.Redirect
 import java.nio.file.Paths
 import java.util.concurrent.TimeUnit
@@ -28,10 +27,11 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkBuildInfo
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.client.GrpcRetryHandler.RetryPolicy
+import org.apache.spark.sql.connect.client.RetryPolicy
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.test.IntegrationTestUtils._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * An util class to start a local spark connect server in a different process for local E2E tests.
@@ -175,7 +175,7 @@ object SparkConnectServerUtils {
         (fileName.startsWith("scalatest") || fileName.startsWith("scalactic"))
       }
       .map(e => Paths.get(e).toUri)
-    spark.client.artifactManager.addArtifacts(jars)
+    spark.client.artifactManager.addArtifacts(jars.toImmutableArraySeq)
   }
 
   def createSparkSession(): SparkSession = {
@@ -188,7 +188,9 @@ object SparkConnectServerUtils {
           .builder()
           .userId("test")
           .port(port)
-          .retryPolicy(RetryPolicy(maxRetries = 7, maxBackoff = FiniteDuration(10, "s")))
+          .retryPolicy(RetryPolicy
+            .defaultPolicy()
+            .copy(maxRetries = Some(7), maxBackoff = Some(FiniteDuration(10, "s"))))
           .build())
       .create()
 

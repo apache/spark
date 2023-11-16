@@ -20,8 +20,8 @@ package org.apache.spark.util
 import java.io.Serializable
 import java.util.{PriorityQueue => JPriorityQueue}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.Growable
+import scala.jdk.CollectionConverters._
 
 /**
  * Bounded priority queue. This class wraps the original PriorityQueue
@@ -30,8 +30,6 @@ import scala.collection.mutable.Growable
  */
 private[spark] class BoundedPriorityQueue[A](maxSize: Int)(implicit ord: Ordering[A])
   extends Iterable[A] with Growable[A] with Serializable {
-
-  //  Note: this class supports Scala 2.13. A parallel source tree has a 2.12 implementation.
 
   private val underlying = new JPriorityQueue[A](maxSize, ord)
 
@@ -42,7 +40,7 @@ private[spark] class BoundedPriorityQueue[A](maxSize: Int)(implicit ord: Orderin
   override def knownSize: Int = size
 
   override def addAll(xs: IterableOnce[A]): this.type = {
-    xs.foreach { this += _ }
+    xs.iterator.foreach { this += _ }
     this
   }
 

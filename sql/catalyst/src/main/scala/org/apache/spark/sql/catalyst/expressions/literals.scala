@@ -32,6 +32,7 @@ import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffse
 import java.util
 import java.util.Objects
 
+import scala.collection.mutable
 import scala.math.{BigDecimal, BigInt}
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
@@ -52,6 +53,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 import org.apache.spark.util.collection.ImmutableBitSet
@@ -88,13 +90,14 @@ object Literal {
     case d: Duration => Literal(durationToMicros(d), DayTimeIntervalType())
     case p: Period => Literal(periodToMonths(p), YearMonthIntervalType())
     case a: Array[Byte] => Literal(a, BinaryType)
-    case a: collection.mutable.WrappedArray[_] => apply(a.array)
+    case a: mutable.ArraySeq[_] => apply(a.array)
     case a: Array[_] =>
       val elementType = componentTypeToDataType(a.getClass.getComponentType())
       val dataType = ArrayType(elementType)
       val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
       Literal(convert(a), dataType)
     case i: CalendarInterval => Literal(i, CalendarIntervalType)
+    case v: VariantVal => Literal(v, VariantType)
     case null => Literal(null, NullType)
     case v: Literal => v
     case _ =>
@@ -141,6 +144,7 @@ object Literal {
     case _ if clz == classOf[BigInt] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[CalendarInterval] => CalendarIntervalType
+    case _ if clz == classOf[VariantVal] => VariantType
 
     case _ if clz.isArray => ArrayType(componentTypeToDataType(clz.getComponentType))
 
@@ -197,7 +201,8 @@ object Literal {
     case arr: ArrayType => create(Array(), arr)
     case map: MapType => create(Map(), map)
     case struct: StructType =>
-      create(InternalRow.fromSeq(struct.fields.map(f => default(f.dataType).value)), struct)
+      create(InternalRow.fromSeq(
+        struct.fields.map(f => default(f.dataType).value).toImmutableArraySeq), struct)
     case udt: UserDefinedType[_] => Literal(default(udt.sqlType).value, udt)
     case other =>
       throw QueryExecutionErrors.noDefaultForDataTypeError(dataType)
@@ -232,6 +237,7 @@ object Literal {
         case PhysicalNullType => true
         case PhysicalShortType => v.isInstanceOf[Short]
         case PhysicalStringType => v.isInstanceOf[UTF8String]
+        case PhysicalVariantType => v.isInstanceOf[VariantVal]
         case st: PhysicalStructType =>
           v.isInstanceOf[InternalRow] && {
             val row = v.asInstanceOf[InternalRow]
@@ -479,9 +485,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case (v: UTF8String, StringType) =>
       // Escapes all backslashes and single quotes.
       "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") + "'"
-    case (v: Byte, ByteType) => v + "Y"
-    case (v: Short, ShortType) => v + "S"
-    case (v: Long, LongType) => v + "L"
+    case (v: Byte, ByteType) => s"${v}Y"
+    case (v: Short, ShortType) => s"${v}S"
+    case (v: Long, LongType) => s"${v}L"
     // Float type doesn't have a suffix
     case (v: Float, FloatType) =>
       val castedValue = v match {
@@ -496,9 +502,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case _ if v.isNaN => s"CAST('NaN' AS ${DoubleType.sql})"
         case Double.PositiveInfinity => s"CAST('Infinity' AS ${DoubleType.sql})"
         case Double.NegativeInfinity => s"CAST('-Infinity' AS ${DoubleType.sql})"
-        case _ => v + "D"
+        case _ => s"${v}D"
       }
-    case (v: Decimal, t: DecimalType) => v + "BD"
+    case (v: Decimal, t: DecimalType) => s"${v}BD"
     case (v: Int, DateType) =>
       s"DATE '$toString'"
     case (v: Long, TimestampType) =>

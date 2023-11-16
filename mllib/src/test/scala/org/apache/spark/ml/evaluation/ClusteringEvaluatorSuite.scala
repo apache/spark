@@ -152,13 +152,13 @@ class ClusteringEvaluatorSuite
       .setPredictionCol("label")
 
     val metrics1 = evaluator.getMetrics(irisDataset)
-    val silhouetteScoreEuclidean = metrics1.silhouette
+    val silhouetteScoreEuclidean = metrics1.silhouette()
 
     assert(evaluator.evaluate(irisDataset) == silhouetteScoreEuclidean)
 
     evaluator.setDistanceMeasure("cosine")
     val metrics2 = evaluator.getMetrics(irisDataset)
-    val silhouetteScoreCosin = metrics2.silhouette
+    val silhouetteScoreCosin = metrics2.silhouette()
 
     assert(evaluator.evaluate(irisDataset) == silhouetteScoreCosin)
   }

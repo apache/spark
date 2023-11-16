@@ -45,7 +45,6 @@ from collections.abc import Iterable
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
-from pyspark.sql.observation import Observation
 from pyspark.sql.types import Row, StructType, _create_row
 from pyspark.sql.dataframe import (
     DataFrame as PySparkDataFrame,
@@ -58,8 +57,8 @@ from pyspark.errors import (
     PySparkAttributeError,
     PySparkValueError,
     PySparkNotImplementedError,
+    PySparkRuntimeError,
 )
-from pyspark.errors.exceptions.connect import SparkConnectException
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
 import pyspark.sql.connect.plan as plan
@@ -68,10 +67,7 @@ from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.expressions import (
-    UnresolvedRegex,
-    GetColumnByOrdinal,
-)
+from pyspark.sql.connect.expressions import UnresolvedRegex
 from pyspark.sql.connect.functions import (
     _to_col_with_plan_id,
     _to_col,
@@ -95,6 +91,7 @@ if TYPE_CHECKING:
         PandasMapIterFunction,
         ArrowMapIterFunction,
     )
+    from pyspark.sql.connect.observation import Observation
     from pyspark.sql.connect.session import SparkSession
     from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
 
@@ -102,13 +99,24 @@ if TYPE_CHECKING:
 class DataFrame:
     def __init__(
         self,
+        plan: plan.LogicalPlan,
         session: "SparkSession",
-        schema: Optional[StructType] = None,
     ):
         """Creates a new data frame"""
-        self._schema = schema
-        self._plan: Optional[plan.LogicalPlan] = None
+        self._plan = plan
+        if self._plan is None:
+            raise PySparkRuntimeError(
+                error_class="MISSING_VALID_PLAN",
+                message_parameters={"operator": "__init__"},
+            )
+
         self._session: "SparkSession" = session
+        if self._session is None:
+            raise PySparkRuntimeError(
+                error_class="NO_ACTIVE_SESSION",
+                message_parameters={"operator": "__init__"},
+            )
+
         # Check whether _repr_html is supported or not, we use it to avoid calling RPC twice
         # by __repr__ and _repr_html_ while eager evaluation opens.
         self._support_repr_html = False
@@ -145,16 +153,15 @@ class DataFrame:
             "spark.sql.repl.eagerEval.truncate",
         )
         if repl_eager_eval_enabled == "true":
-            pdf = DataFrame.withPlan(
+            table, _ = DataFrame.withPlan(
                 plan.HtmlString(
                     child=self._plan,
                     num_rows=int(cast(str, repl_eager_eval_max_num_rows)),
                     truncate=int(cast(str, repl_eager_eval_truncate)),
                 ),
                 session=self._session,
-            ).toPandas()
-            assert pdf is not None
-            return pdf["html_string"][0]
+            )._to_table()
+            return table[0][0].as_py()
         else:
             return None
 
@@ -162,7 +169,6 @@ class DataFrame:
 
     @property
     def write(self) -> "DataFrameWriter":
-        assert self._plan is not None
         return DataFrameWriter(self._plan, self._session)
 
     write.__doc__ = PySparkDataFrame.write.__doc__
@@ -223,10 +229,7 @@ class DataFrame:
                 error_class="NOT_STR",
                 message_parameters={"arg_name": "colName", "arg_type": type(colName).__name__},
             )
-        if self._plan is not None:
-            return Column(UnresolvedRegex(colName, self._plan._plan_id))
-        else:
-            return Column(UnresolvedRegex(colName))
+        return Column(UnresolvedRegex(colName, self._plan._plan_id))
 
     colRegex.__doc__ = PySparkDataFrame.colRegex.__doc__
 
@@ -238,9 +241,6 @@ class DataFrame:
 
     @property
     def columns(self) -> List[str]:
-        if self._plan is None:
-            return []
-
         return self.schema.names
 
     columns.__doc__ = PySparkDataFrame.columns.__doc__
@@ -252,17 +252,13 @@ class DataFrame:
     sparkSession.__doc__ = PySparkDataFrame.sparkSession.__doc__
 
     def count(self) -> int:
-        pdd = self.agg(_invoke_function("count", lit(1))).toPandas()
-        return pdd.iloc[0, 0]
+        table, _ = self.agg(_invoke_function("count", lit(1)))._to_table()
+        return table[0][0].as_py()
 
     count.__doc__ = PySparkDataFrame.count.__doc__
 
     def crossJoin(self, other: "DataFrame") -> "DataFrame":
-        if self._plan is None:
-            raise Exception("Cannot cartesian join when self._plan is empty.")
-        if other._plan is None:
-            raise Exception("Cannot cartesian join when other._plan is empty.")
-        self.checkSameSparkSession(other)
+        self._check_same_session(other)
         return DataFrame.withPlan(
             plan.Join(left=self._plan, right=other._plan, on=None, how="cross"),
             session=self._session,
@@ -270,7 +266,7 @@ class DataFrame:
 
     crossJoin.__doc__ = PySparkDataFrame.crossJoin.__doc__
 
-    def checkSameSparkSession(self, other: "DataFrame") -> None:
+    def _check_same_session(self, other: "DataFrame") -> None:
         if self._session.session_id != other._session.session_id:
             raise SessionNotSameException(
                 error_class="SESSION_NOT_SAME",
@@ -581,19 +577,52 @@ class DataFrame:
         on: Optional[Union[str, List[str], Column, List[Column]]] = None,
         how: Optional[str] = None,
     ) -> "DataFrame":
-        if self._plan is None:
-            raise Exception("Cannot join when self._plan is empty.")
-        if other._plan is None:
-            raise Exception("Cannot join when other._plan is empty.")
+        self._check_same_session(other)
         if how is not None and isinstance(how, str):
             how = how.lower().replace("_", "")
-        self.checkSameSparkSession(other)
         return DataFrame.withPlan(
             plan.Join(left=self._plan, right=other._plan, on=on, how=how),
             session=self._session,
         )
 
     join.__doc__ = PySparkDataFrame.join.__doc__
+
+    def _joinAsOf(
+        self,
+        other: "DataFrame",
+        leftAsOfColumn: Union[str, Column],
+        rightAsOfColumn: Union[str, Column],
+        on: Optional[Union[str, List[str], Column, List[Column]]] = None,
+        how: Optional[str] = None,
+        *,
+        tolerance: Optional[Column] = None,
+        allowExactMatches: bool = True,
+        direction: str = "backward",
+    ) -> "DataFrame":
+        self._check_same_session(other)
+        if how is None:
+            how = "inner"
+        assert isinstance(how, str), "how should be a string"
+
+        if tolerance is not None:
+            assert isinstance(tolerance, Column), "tolerance should be Column"
+
+        return DataFrame.withPlan(
+            plan.AsOfJoin(
+                left=self._plan,
+                right=other._plan,
+                left_as_of=leftAsOfColumn,
+                right_as_of=rightAsOfColumn,
+                on=on,
+                how=how,
+                tolerance=tolerance,
+                allow_exact_matches=allowExactMatches,
+                direction=direction,
+            ),
+            session=self._session,
+        )
+
+    _joinAsOf.__doc__ = PySparkDataFrame._joinAsOf.__doc__
 
     def limit(self, n: int) -> "DataFrame":
         return DataFrame.withPlan(plan.Limit(child=self._plan, limit=n), session=self._session)
@@ -790,12 +819,16 @@ class DataFrame:
                     },
                 )
 
-        pdf = DataFrame.withPlan(
-            plan.ShowString(child=self._plan, num_rows=n, truncate=_truncate, vertical=vertical),
+        table, _ = DataFrame.withPlan(
+            plan.ShowString(
+                child=self._plan,
+                num_rows=n,
+                truncate=_truncate,
+                vertical=vertical,
+            ),
             session=self._session,
-        ).toPandas()
-        assert pdf is not None
-        return pdf["show_string"][0]
+        )._to_table()
+        return table[0][0].as_py()
 
     def withColumns(self, colsMap: Dict[str, Column]) -> "DataFrame":
         if not isinstance(colsMap, dict):
@@ -1018,6 +1051,8 @@ class DataFrame:
         observation: Union["Observation", str],
         *exprs: Column,
     ) -> "DataFrame":
+        from pyspark.sql.connect.observation import Observation
+
         if len(exprs) == 0:
             raise PySparkValueError(
                 error_class="CANNOT_BE_EMPTY",
@@ -1030,10 +1065,7 @@ class DataFrame:
             )
 
         if isinstance(observation, Observation):
-            return DataFrame.withPlan(
-                plan.CollectMetrics(self._plan, str(observation._name), list(exprs)),
-                self._session,
-            )
+            return observation._on(self, *exprs)
         elif isinstance(observation, str):
             return DataFrame.withPlan(
                 plan.CollectMetrics(self._plan, observation, list(exprs)),
@@ -1056,17 +1088,13 @@ class DataFrame:
     show.__doc__ = PySparkDataFrame.show.__doc__
 
     def union(self, other: "DataFrame") -> "DataFrame":
+        self._check_same_session(other)
         return self.unionAll(other)
 
     union.__doc__ = PySparkDataFrame.union.__doc__
 
     def unionAll(self, other: "DataFrame") -> "DataFrame":
-        if other._plan is None:
-            raise PySparkValueError(
-                error_class="MISSING_VALID_PLAN",
-                message_parameters={"operator": "Union"},
-            )
-        self.checkSameSparkSession(other)
+        self._check_same_session(other)
         return DataFrame.withPlan(
             plan.SetOperation(self._plan, other._plan, "union", is_all=True), session=self._session
         )
@@ -1074,12 +1102,7 @@ class DataFrame:
     unionAll.__doc__ = PySparkDataFrame.unionAll.__doc__
 
     def unionByName(self, other: "DataFrame", allowMissingColumns: bool = False) -> "DataFrame":
-        if other._plan is None:
-            raise PySparkValueError(
-                error_class="MISSING_VALID_PLAN",
-                message_parameters={"operator": "UnionByName"},
-            )
-        self.checkSameSparkSession(other)
+        self._check_same_session(other)
         return DataFrame.withPlan(
             plan.SetOperation(
                 self._plan,
@@ -1094,6 +1117,7 @@ class DataFrame:
     unionByName.__doc__ = PySparkDataFrame.unionByName.__doc__
 
     def subtract(self, other: "DataFrame") -> "DataFrame":
+        self._check_same_session(other)
         return DataFrame.withPlan(
             plan.SetOperation(self._plan, other._plan, "except", is_all=False),
             session=self._session,
@@ -1102,6 +1126,7 @@ class DataFrame:
     subtract.__doc__ = PySparkDataFrame.subtract.__doc__
 
     def exceptAll(self, other: "DataFrame") -> "DataFrame":
+        self._check_same_session(other)
         return DataFrame.withPlan(
             plan.SetOperation(self._plan, other._plan, "except", is_all=True), session=self._session
         )
@@ -1109,6 +1134,7 @@ class DataFrame:
     exceptAll.__doc__ = PySparkDataFrame.exceptAll.__doc__
 
     def intersect(self, other: "DataFrame") -> "DataFrame":
+        self._check_same_session(other)
         return DataFrame.withPlan(
             plan.SetOperation(self._plan, other._plan, "intersect", is_all=False),
             session=self._session,
@@ -1117,6 +1143,7 @@ class DataFrame:
     intersect.__doc__ = PySparkDataFrame.intersect.__doc__
 
     def intersectAll(self, other: "DataFrame") -> "DataFrame":
+        self._check_same_session(other)
         return DataFrame.withPlan(
             plan.SetOperation(self._plan, other._plan, "intersect", is_all=True),
             session=self._session,
@@ -1425,13 +1452,11 @@ class DataFrame:
                 error_class="NOT_STR",
                 message_parameters={"arg_name": "col2", "arg_type": type(col2).__name__},
             )
-        pdf = DataFrame.withPlan(
+        table, _ = DataFrame.withPlan(
             plan.StatCov(child=self._plan, col1=col1, col2=col2),
             session=self._session,
-        ).toPandas()
-
-        assert pdf is not None
-        return pdf["cov"][0]
+        )._to_table()
+        return table[0][0].as_py()
 
     cov.__doc__ = PySparkDataFrame.cov.__doc__
 
@@ -1453,13 +1478,11 @@ class DataFrame:
                 error_class="VALUE_NOT_PEARSON",
                 message_parameters={"arg_name": "method", "arg_value": method},
             )
-        pdf = DataFrame.withPlan(
+        table, _ = DataFrame.withPlan(
             plan.StatCorr(child=self._plan, col1=col1, col2=col2, method=method),
             session=self._session,
-        ).toPandas()
-
-        assert pdf is not None
-        return pdf["corr"][0]
+        )._to_table()
+        return table[0][0].as_py()
 
     corr.__doc__ = PySparkDataFrame.corr.__doc__
 
@@ -1526,7 +1549,7 @@ class DataFrame:
                 },
             )
         relativeError = float(relativeError)
-        pdf = DataFrame.withPlan(
+        table, _ = DataFrame.withPlan(
             plan.StatApproxQuantile(
                 child=self._plan,
                 cols=list(col),
@@ -1534,10 +1557,8 @@ class DataFrame:
                 relativeError=relativeError,
             ),
             session=self._session,
-        ).toPandas()
-
-        assert pdf is not None
-        jaq = pdf["approx_quantile"][0]
+        )._to_table()
+        jaq = [q.as_py() for q in table[0][0]]
         jaq_list = [list(j) for j in jaq]
         return jaq_list[0] if isStr else jaq_list
 
@@ -1618,16 +1639,11 @@ class DataFrame:
     sampleBy.__doc__ = PySparkDataFrame.sampleBy.__doc__
 
     def __getattr__(self, name: str) -> "Column":
-        if self._plan is None:
-            raise SparkConnectException("Cannot analyze on empty plan.")
-
-        if name in ["_jseq", "_jdf", "_jmap", "_jcols"]:
+        if name in ["_jseq", "_jdf", "_jmap", "_jcols", "rdd", "toJSON"]:
             raise PySparkAttributeError(
                 error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
             )
         elif name in [
-            "rdd",
-            "toJSON",
             "checkpoint",
             "localCheckpoint",
         ]:
@@ -1657,9 +1673,6 @@ class DataFrame:
         ...
 
     def __getitem__(self, item: Union[int, str, Column, List, Tuple]) -> Union[Column, "DataFrame"]:
-        if self._plan is None:
-            raise SparkConnectException("Cannot analyze on empty plan.")
-
         if isinstance(item, str):
             # validate the column name
             if not hasattr(self._session, "is_mock_session"):
@@ -1674,15 +1687,7 @@ class DataFrame:
         elif isinstance(item, (list, tuple)):
             return self.select(*item)
         elif isinstance(item, int):
-            n = len(self.columns)
-            # 1, convert bool; 2, covert negative index; 3, validate index
-            item = range(0, n)[int(item)]
-            return Column(
-                GetColumnByOrdinal(
-                    ordinal=item,
-                    plan_id=self._plan._plan_id,
-                )
-            )
+            return col(self.columns[item])
         else:
             raise PySparkTypeError(
                 error_class="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
@@ -1702,12 +1707,7 @@ class DataFrame:
         return ""
 
     def collect(self) -> List[Row]:
-        if self._plan is None:
-            raise Exception("Cannot collect on empty plan.")
-        if self._session is None:
-            raise Exception("Cannot collect on empty session.")
-        query = self._plan.to_proto(self._session.client)
-        table, schema = self._session.client.to_table(query)
+        table, schema = self._to_table()
 
         schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
 
@@ -1717,31 +1717,26 @@ class DataFrame:
 
     collect.__doc__ = PySparkDataFrame.collect.__doc__
 
-    def toPandas(self) -> "pandas.DataFrame":
-        if self._plan is None:
-            raise Exception("Cannot collect on empty plan.")
-        if self._session is None:
-            raise Exception("Cannot collect on empty session.")
+    def _to_table(self) -> Tuple["pa.Table", Optional[StructType]]:
         query = self._plan.to_proto(self._session.client)
-        return self._session.client.to_pandas(query)
+        table, schema = self._session.client.to_table(query, self._plan.observations)
+        assert table is not None
+        return (table, schema)
+
+    def toPandas(self) -> "pandas.DataFrame":
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client.to_pandas(query, self._plan.observations)
 
     toPandas.__doc__ = PySparkDataFrame.toPandas.__doc__
 
     @property
     def schema(self) -> StructType:
-        if self._plan is not None:
-            query = self._plan.to_proto(self._session.client)
-            if self._session is None:
-                raise Exception("Cannot analyze without SparkSession.")
-            return self._session.client.schema(query)
-        else:
-            raise Exception("Empty plan.")
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client.schema(query)
 
     schema.__doc__ = PySparkDataFrame.schema.__doc__
 
     def isLocal(self) -> bool:
-        if self._plan is None:
-            raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(method="is_local", plan=query).is_local
         assert result is not None
@@ -1751,8 +1746,6 @@ class DataFrame:
 
     @property
     def isStreaming(self) -> bool:
-        if self._plan is None:
-            raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(method="is_streaming", plan=query).is_streaming
         assert result is not None
@@ -1761,8 +1754,6 @@ class DataFrame:
     isStreaming.__doc__ = PySparkDataFrame.isStreaming.__doc__
 
     def _tree_string(self, level: Optional[int] = None) -> str:
-        if self._plan is None:
-            raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(
             method="tree_string", plan=query, level=level
@@ -1776,8 +1767,6 @@ class DataFrame:
     printSchema.__doc__ = PySparkDataFrame.printSchema.__doc__
 
     def inputFiles(self) -> List[str]:
-        if self._plan is None:
-            raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(method="input_files", plan=query).input_files
         assert result is not None
@@ -1859,13 +1848,8 @@ class DataFrame:
         elif is_extended_as_mode:
             explain_mode = cast(str, extended)
 
-        if self._plan is not None:
-            query = self._plan.to_proto(self._session.client)
-            if self._session is None:
-                raise Exception("Cannot analyze without SparkSession.")
-            return self._session.client.explain_string(query, explain_mode)
-        else:
-            return ""
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client.explain_string(query, explain_mode)
 
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
@@ -1878,7 +1862,7 @@ class DataFrame:
         command = plan.CreateView(
             child=self._plan, name=name, is_global=False, replace=False
         ).command(session=self._session.client)
-        self._session.client.execute_command(command)
+        self._session.client.execute_command(command, self._plan.observations)
 
     createTempView.__doc__ = PySparkDataFrame.createTempView.__doc__
 
@@ -1886,7 +1870,7 @@ class DataFrame:
         command = plan.CreateView(
             child=self._plan, name=name, is_global=False, replace=True
         ).command(session=self._session.client)
-        self._session.client.execute_command(command)
+        self._session.client.execute_command(command, self._plan.observations)
 
     createOrReplaceTempView.__doc__ = PySparkDataFrame.createOrReplaceTempView.__doc__
 
@@ -1894,7 +1878,7 @@ class DataFrame:
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=False
         ).command(session=self._session.client)
-        self._session.client.execute_command(command)
+        self._session.client.execute_command(command, self._plan.observations)
 
     createGlobalTempView.__doc__ = PySparkDataFrame.createGlobalTempView.__doc__
 
@@ -1902,13 +1886,11 @@ class DataFrame:
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=True
         ).command(session=self._session.client)
-        self._session.client.execute_command(command)
+        self._session.client.execute_command(command, self._plan.observations)
 
     createOrReplaceGlobalTempView.__doc__ = PySparkDataFrame.createOrReplaceGlobalTempView.__doc__
 
     def cache(self) -> "DataFrame":
-        if self._plan is None:
-            raise Exception("Cannot cache on empty plan.")
         return self.persist()
 
     cache.__doc__ = PySparkDataFrame.cache.__doc__
@@ -1917,8 +1899,6 @@ class DataFrame:
         self,
         storageLevel: StorageLevel = (StorageLevel.MEMORY_AND_DISK_DESER),
     ) -> "DataFrame":
-        if self._plan is None:
-            raise Exception("Cannot persist on empty plan.")
         relation = self._plan.plan(self._session.client)
         self._session.client._analyze(
             method="persist", relation=relation, storage_level=storageLevel
@@ -1929,8 +1909,6 @@ class DataFrame:
 
     @property
     def storageLevel(self) -> StorageLevel:
-        if self._plan is None:
-            raise Exception("Cannot persist on empty plan.")
         relation = self._plan.plan(self._session.client)
         storage_level = self._session.client._analyze(
             method="get_storage_level", relation=relation
@@ -1941,8 +1919,6 @@ class DataFrame:
     storageLevel.__doc__ = PySparkDataFrame.storageLevel.__doc__
 
     def unpersist(self, blocking: bool = False) -> "DataFrame":
-        if self._plan is None:
-            raise Exception("Cannot unpersist on empty plan.")
         relation = self._plan.plan(self._session.client)
         self._session.client._analyze(method="unpersist", relation=relation, blocking=blocking)
         return self
@@ -1954,14 +1930,12 @@ class DataFrame:
         return self.storageLevel != StorageLevel.NONE
 
     def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
-        if self._plan is None:
-            raise Exception("Cannot collect on empty plan.")
-        if self._session is None:
-            raise Exception("Cannot collect on empty session.")
         query = self._plan.to_proto(self._session.client)
 
         schema: Optional[StructType] = None
-        for schema_or_table in self._session.client.to_table_as_iterator(query):
+        for schema_or_table in self._session.client.to_table_as_iterator(
+            query, self._plan.observations
+        ):
             if isinstance(schema_or_table, StructType):
                 assert schema is None
                 schema = schema_or_table
@@ -2015,9 +1989,6 @@ class DataFrame:
     ) -> "DataFrame":
         from pyspark.sql.connect.udf import UserDefinedFunction
 
-        if self._plan is None:
-            raise Exception("Cannot mapInPandas when self._plan is empty.")
-
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
@@ -2052,8 +2023,6 @@ class DataFrame:
     mapInArrow.__doc__ = PySparkDataFrame.mapInArrow.__doc__
 
     def foreach(self, f: Callable[[Row], None]) -> None:
-        assert self._plan is not None
-
         def foreach_func(row: Any) -> None:
             f(row)
 
@@ -2064,8 +2033,6 @@ class DataFrame:
     foreach.__doc__ = PySparkDataFrame.foreach.__doc__
 
     def foreachPartition(self, f: Callable[[Iterator[Row]], None]) -> None:
-        assert self._plan is not None
-
         schema = self.schema
         field_converters = [
             ArrowTableToRowsConversion._create_converter(f.dataType) for f in schema.fields
@@ -2091,14 +2058,12 @@ class DataFrame:
 
     @property
     def writeStream(self) -> DataStreamWriter:
-        assert self._plan is not None
         return DataStreamWriter(plan=self._plan, session=self._session)
 
     writeStream.__doc__ = PySparkDataFrame.writeStream.__doc__
 
     def sameSemantics(self, other: "DataFrame") -> bool:
-        assert self._plan is not None
-        assert other._plan is not None
+        self._check_same_session(other)
         return self._session.client.same_semantics(
             plan=self._plan.to_proto(self._session.client),
             other=other._plan.to_proto(other._session.client),
@@ -2107,7 +2072,6 @@ class DataFrame:
     sameSemantics.__doc__ = PySparkDataFrame.sameSemantics.__doc__
 
     def semanticHash(self) -> int:
-        assert self._plan is not None
         return self._session.client.semantic_hash(
             plan=self._plan.to_proto(self._session.client),
         )
@@ -2115,7 +2079,6 @@ class DataFrame:
     semanticHash.__doc__ = PySparkDataFrame.semanticHash.__doc__
 
     def writeTo(self, table: str) -> "DataFrameWriterV2":
-        assert self._plan is not None
         return DataFrameWriterV2(self._plan, self._session, table)
 
     writeTo.__doc__ = PySparkDataFrame.writeTo.__doc__
@@ -2132,9 +2095,7 @@ class DataFrame:
         Main initialization method used to construct a new data frame with a child plan.
         This is for internal purpose.
         """
-        new_frame = DataFrame(session=session)
-        new_frame._plan = plan
-        return new_frame
+        return DataFrame(plan=plan, session=session)
 
 
 class DataFrameNaFunctions:

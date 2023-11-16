@@ -22,7 +22,7 @@ import javax.xml.stream.{EventFilter, XMLEventReader, XMLInputFactory, XMLStream
 import javax.xml.stream.events._
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 private[sql] object StaxXmlParserUtils {
 

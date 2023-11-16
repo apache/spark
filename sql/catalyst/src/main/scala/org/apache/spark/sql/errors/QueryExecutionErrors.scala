@@ -21,6 +21,7 @@ import java.io.{File, FileNotFoundException, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{URISyntaxException, URL}
 import java.time.DateTimeException
+import java.util.Locale
 import java.util.concurrent.TimeoutException
 
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
@@ -40,8 +41,8 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
-import org.apache.spark.sql.catalyst.trees.{Origin, SQLQueryContext, TreeNode}
-import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, DateTimeUtils, FailFastMode}
+import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
+import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, DateTimeUtils, FailFastMode, MapData}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
@@ -103,7 +104,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       value: Decimal,
       decimalPrecision: Int,
       decimalScale: Int,
-      context: SQLQueryContext = null): ArithmeticException = {
+      context: QueryContext = null): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
       messageParameters = Map(
@@ -117,7 +118,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def invalidInputSyntaxForBooleanError(
       s: UTF8String,
-      context: SQLQueryContext): SparkRuntimeException = {
+      context: QueryContext): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Map(
@@ -132,7 +133,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def invalidInputInCastToNumberError(
       to: DataType,
       s: UTF8String,
-      context: SQLQueryContext): SparkNumberFormatException = {
+      context: QueryContext): SparkNumberFormatException = {
     new SparkNumberFormatException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Map(
@@ -193,15 +194,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
-  def divideByZeroError(context: SQLQueryContext): ArithmeticException = {
+  def divideByZeroError(context: QueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DIVIDE_BY_ZERO",
       messageParameters = Map("config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = getQueryContext(context),
+      context = Array(context),
       summary = getSummary(context))
   }
 
-  def intervalDividedByZeroError(context: SQLQueryContext): ArithmeticException = {
+  def intervalDividedByZeroError(context: QueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "INTERVAL_DIVIDED_BY_ZERO",
       messageParameters = Map.empty,
@@ -212,7 +213,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def invalidArrayIndexError(
       index: Int,
       numElements: Int,
-      context: SQLQueryContext): ArrayIndexOutOfBoundsException = {
+      context: QueryContext): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "INVALID_ARRAY_INDEX",
       messageParameters = Map(
@@ -226,7 +227,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def invalidElementAtIndexError(
       index: Int,
       numElements: Int,
-      context: SQLQueryContext): ArrayIndexOutOfBoundsException = {
+      context: QueryContext): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
       messageParameters = Map(
@@ -291,15 +292,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     ansiIllegalArgumentError(e.getMessage)
   }
 
-  def overflowInSumOfDecimalError(context: SQLQueryContext): ArithmeticException = {
+  def overflowInSumOfDecimalError(context: QueryContext): ArithmeticException = {
     arithmeticOverflowError("Overflow in sum of decimals", context = context)
   }
 
-  def overflowInIntegralDivideError(context: SQLQueryContext): ArithmeticException = {
+  def overflowInIntegralDivideError(context: QueryContext): ArithmeticException = {
     arithmeticOverflowError("Overflow in integral divide", "try_divide", context)
   }
 
-  def overflowInConvError(context: SQLQueryContext): ArithmeticException = {
+  def overflowInConvError(context: QueryContext): ArithmeticException = {
     arithmeticOverflowError("Overflow in function conv()", context = context)
   }
 
@@ -624,7 +625,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def intervalArithmeticOverflowError(
       message: String,
       hint: String = "",
-      context: SQLQueryContext): ArithmeticException = {
+      context: QueryContext): ArithmeticException = {
     val alternative = if (hint.nonEmpty) {
       s" Use '$hint' to tolerate overflow and return NULL instead."
     } else ""
@@ -1341,9 +1342,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def expressionDecodingError(e: Exception, expressions: Seq[Expression]): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2151",
+      errorClass = "EXPRESSION_DECODING_FAILED",
       messageParameters = Map(
-        "e" -> e.toString(),
         "expressions" -> expressions.map(
           _.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")),
       cause = e)
@@ -1351,9 +1351,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def expressionEncodingError(e: Exception, expressions: Seq[Expression]): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2152",
+      errorClass = "EXPRESSION_ENCODING_FAILED",
       messageParameters = Map(
-        "e" -> e.toString(),
         "expressions" -> expressions.map(
           _.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")),
       cause = e)
@@ -1362,35 +1361,37 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def classHasUnexpectedSerializerError(
       clsName: String, objSerializer: Expression): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2153",
+      errorClass = "UNEXPECTED_SERIALIZER_FOR_CLASS",
       messageParameters = Map(
-        "clsName" -> clsName,
-        "objSerializer" -> objSerializer.toString()))
+        "className" -> clsName,
+        "expr" -> toSQLExpr(objSerializer)))
   }
 
   def unsupportedOperandTypeForSizeFunctionError(
-      dataType: DataType): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2156",
-      messageParameters = Map(
-        "dataType" -> dataType.getClass.getCanonicalName))
+      dataType: DataType): Throwable = {
+    SparkException.internalError(
+      s"The size function doesn't support the operand type ${toSQLType(dataType)}")
   }
 
   def unexpectedValueForStartInFunctionError(prettyName: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2157",
+      errorClass = "INVALID_PARAMETER_VALUE.START",
       messageParameters = Map(
-        "prettyName" -> prettyName))
+        "parameter" -> toSQLId("start"),
+        "functionName" -> toSQLId(prettyName)))
   }
 
-  def unexpectedValueForLengthInFunctionError(prettyName: String): SparkRuntimeException = {
+  def unexpectedValueForLengthInFunctionError(
+      prettyName: String, length: Int): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2158",
+      errorClass = "INVALID_PARAMETER_VALUE.LENGTH",
       messageParameters = Map(
-        "prettyName" -> prettyName))
+        "parameter" -> toSQLId("length"),
+        "length" -> length.toString,
+        "functionName" -> toSQLId(prettyName)))
   }
 
-  def invalidIndexOfZeroError(context: SQLQueryContext): RuntimeException = {
+  def invalidIndexOfZeroError(context: QueryContext): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "INVALID_INDEX_OF_ZERO",
       cause = null,
@@ -1399,36 +1400,27 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = getSummary(context))
   }
 
-  def concatArraysWithElementsExceedLimitError(numberOfElements: Long): SparkRuntimeException = {
+  def arrayFunctionWithElementsExceedLimitError(
+    prettyName: String, numberOfElements: Long): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2159",
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
       messageParameters = Map(
         "numberOfElements" -> numberOfElements.toString(),
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
+        "functionName" -> toSQLId(prettyName)
+      ))
   }
 
-  def flattenArraysWithElementsExceedLimitError(numberOfElements: Long): SparkRuntimeException = {
+  def createArrayWithElementsExceedLimitError(
+    prettyName: String, count: Any): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2160",
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
       messageParameters = Map(
-        "numberOfElements" -> numberOfElements.toString(),
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
-  }
-
-  def createArrayWithElementsExceedLimitError(count: Any): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2161",
-      messageParameters = Map(
-        "count" -> count.toString(),
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
-  }
-
-  def unionArrayWithElementsExceedLimitError(length: Int): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2162",
-      messageParameters = Map(
-        "length" -> length.toString(),
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
+        "numberOfElements" -> count.toString,
+        "functionName" -> toSQLId(prettyName),
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
+        "parameter" -> toSQLId("count")
+      ))
   }
 
   def initialTypeNotTargetDataTypeError(
@@ -1642,25 +1634,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map.empty)
   }
 
-  def dropTableWithPurgeUnsupportedError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2190",
-      messageParameters = Map.empty)
-  }
-
-  def alterTableWithDropPartitionAndPurgeUnsupportedError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2191",
-      messageParameters = Map.empty)
-  }
-
   def invalidPartitionFilterError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2192",
       messageParameters = Map.empty)
   }
 
-  def getPartitionMetadataByFilterError(e: InvocationTargetException): SparkRuntimeException = {
+  def getPartitionMetadataByFilterError(e: Exception): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2193",
       messageParameters = Map(
@@ -1694,17 +1674,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def cannotFetchTablesOfDatabaseError(dbName: String, e: Exception): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2196",
+      errorClass = "UNABLE_TO_FETCH_HIVE_TABLES",
       messageParameters = Map(
         "dbName" -> dbName),
       cause = e)
-  }
-
-  def illegalLocationClauseForViewPartitionError(): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2197",
-      messageParameters = Map.empty,
-      cause = null)
   }
 
   def renamePathAsExistsPathError(srcPath: Path, dstPath: Path): Throwable = {
@@ -1743,7 +1716,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "metadataPath" -> metadataPath.toString(),
         "legacyMetadataPath" -> legacyMetadataPath.toString(),
-        "StreamingCheckpointEscaptedPathCheckEnabled" ->
+        "StreamingCheckpointEscapedPathCheckEnabled" ->
           SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key),
       cause = null)
   }
@@ -2120,7 +2093,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2250",
       messageParameters = Map(
-        "autoBroadcastjoinThreshold" -> SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key,
+        "autoBroadcastJoinThreshold" -> SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key,
         "driverMemory" -> SparkLauncher.DRIVER_MEMORY,
         "analyzeTblMsg" -> analyzeTblMsg),
       cause = oe.getCause)
@@ -2555,7 +2528,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
-  def multipleRowScalarSubqueryError(context: SQLQueryContext): Throwable = {
+  def multipleRowScalarSubqueryError(context: QueryContext): Throwable = {
     new SparkException(
       errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
       messageParameters = Map.empty,
@@ -2585,13 +2558,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def tooManyArrayElementsError(
-      numElements: Int,
-      elementSize: Int): SparkIllegalArgumentException = {
+      numElements: Long,
+      maxRoundedArrayLength: Int): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "TOO_MANY_ARRAY_ELEMENTS",
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.INITIALIZE",
       messageParameters = Map(
-        "numElements" -> numElements.toString,
-        "size" -> elementSize.toString))
+        "numberOfElements" -> numElements.toString,
+        "maxRoundedArrayLength" -> maxRoundedArrayLength.toString)
+    )
   }
 
   def invalidEmptyLocationError(location: String): SparkIllegalArgumentException = {
@@ -2727,5 +2701,61 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_FEATURE.PURGE_TABLE",
       messageParameters = Map.empty)
+  }
+
+  def raiseError(
+      errorClass: UTF8String,
+      errorParms: MapData): RuntimeException = {
+    val errorClassStr = if (errorClass != null) {
+      errorClass.toString.toUpperCase(Locale.ROOT)
+    } else {
+      "null"
+    }
+    val errorParmsMap = if (errorParms != null) {
+      val errorParmsMutable = collection.mutable.Map[String, String]()
+      errorParms.foreach(StringType, StringType, { case (key, value) =>
+        errorParmsMutable += (key.toString ->
+          (if (value == null) { "null" } else { value.toString } ))
+      })
+      errorParmsMutable.toMap
+    } else {
+      Map.empty[String, String]
+    }
+
+    // Is the error class a known error class? If not raise an error
+    if (!SparkThrowableHelper.isValidErrorClass(errorClassStr)) {
+      new SparkRuntimeException(
+        errorClass = "USER_RAISED_EXCEPTION_UNKNOWN_ERROR_CLASS",
+        messageParameters = Map("errorClass" -> toSQLValue(errorClassStr)))
+    } else {
+      // Did the user provide all parameters? If not raise an error
+      val expectedParms = SparkThrowableHelper.getMessageParameters(errorClassStr).sorted
+      val providedParms = errorParmsMap.keys.toSeq.sorted
+      if (expectedParms != providedParms) {
+        new SparkRuntimeException(
+          errorClass = "USER_RAISED_EXCEPTION_PARAMETER_MISMATCH",
+          messageParameters = Map("errorClass" -> toSQLValue(errorClassStr),
+            "expectedParms" -> expectedParms.map { p => toSQLValue(p) }.mkString(","),
+            "providedParms" -> providedParms.map { p => toSQLValue(p) }.mkString(",")))
+      } else if (errorClassStr == "_LEGACY_ERROR_USER_RAISED_EXCEPTION") {
+        // Don't break old raise_error() if asked
+        new RuntimeException(errorParmsMap.head._2)
+      } else {
+        // All good, raise the error
+        new SparkRuntimeException(
+          errorClass = errorClassStr,
+          messageParameters = errorParmsMap)
+      }
+    }
+  }
+
+  def bitPositionRangeError(funcName: String, pos: Int, size: Int): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
+      messageParameters = Map(
+        "parameter" -> toSQLId("pos"),
+        "functionName" -> toSQLId(funcName),
+        "upper" -> size.toString,
+        "invalidValue" -> pos.toString))
   }
 }

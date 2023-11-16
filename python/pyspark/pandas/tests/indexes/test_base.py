@@ -17,13 +17,13 @@
 
 import inspect
 import unittest
-from distutils.version import LooseVersion
 from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.missing.indexes import (
     MissingPandasLikeDatetimeIndex,

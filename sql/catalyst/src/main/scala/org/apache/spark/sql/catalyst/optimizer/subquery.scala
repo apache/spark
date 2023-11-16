@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.ScalarSubquery._
@@ -32,6 +33,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.{DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION, OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -61,6 +63,18 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     val dedupSubplan = dedupSubqueryOnSelfJoin(outerPlan, subplan, None, condition)
     // Add subquery hint as right hint as the subquery plan is on the right side of the join
     Join(outerPlan, dedupSubplan, joinType, condition, JoinHint(None, subHint))
+  }
+
+  private def rewriteDomainJoinsIfPresent(
+      outerPlan: LogicalPlan,
+      sub: LogicalPlan,
+      joinCond: Option[Expression]): LogicalPlan = {
+    if (SQLConf.get.decorrelateInnerQueryEnabledForExistsIn) {
+      DecorrelateInnerQuery.rewriteDomainJoins(outerPlan,
+        sub, splitConjunctivePredicates(joinCond.get))
+    } else {
+      sub
+    }
   }
 
   private def dedupSubqueryOnSelfJoin(
@@ -118,16 +132,19 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       withSubquery.foldLeft(newFilter) {
         case (p, Exists(sub, _, _, conditions, subHint)) =>
           val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
-          buildJoin(outerPlan, sub, LeftSemi, joinCond, subHint)
+          buildJoin(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, sub, joinCond),
+            LeftSemi, joinCond, subHint)
         case (p, Not(Exists(sub, _, _, conditions, subHint))) =>
           val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
-          buildJoin(outerPlan, sub, LeftAnti, joinCond, subHint)
+          buildJoin(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, sub, joinCond),
+            LeftAnti, joinCond, subHint)
         case (p, InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint))) =>
           // Deduplicate conflicting attributes if any.
           val newSub = dedupSubqueryOnSelfJoin(p, sub, Some(values))
           val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
           val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions ++ conditions, p)
-          Join(outerPlan, newSub, LeftSemi, joinCond, JoinHint(None, subHint))
+          Join(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, newSub, joinCond),
+            LeftSemi, joinCond, JoinHint(None, subHint))
         case (p, Not(InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint)))) =>
           // This is a NULL-aware (left) anti join (NAAJ) e.g. col NOT IN expr
           // Construct the condition. A NULL in one of the conditions is regarded as a positive
@@ -153,10 +170,76 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // will have the final conditions in the LEFT ANTI as
           // (A.A1 = B.B1 OR ISNULL(A.A1 = B.B1)) AND (B.B2 = A.A2) AND B.B3 > 1
           val finalJoinCond = (nullAwareJoinConds ++ conditions).reduceLeft(And)
-          Join(outerPlan, newSub, LeftAnti, Option(finalJoinCond), JoinHint(None, subHint))
+          Join(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, newSub, Some(finalJoinCond)),
+            LeftAnti, Option(finalJoinCond), JoinHint(None, subHint))
         case (p, predicate) =>
           val (newCond, inputPlan) = rewriteExistentialExpr(Seq(predicate), p)
           Project(p.output, Filter(newCond.get, inputPlan))
+      }
+
+    // This case takes care of predicate subqueries in join conditions that are not pushed down
+    // to the children nodes by [[PushDownPredicates]].
+    case j: Join if j.condition.exists(cond =>
+      SubqueryExpression.hasInOrCorrelatedExistsSubquery(cond)) &&
+      conf.getConf(DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION) =>
+
+      val optimizeUncorrelatedInSubqueries =
+        conf.getConf(OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION)
+      val relevantSubqueries = j.condition.get.collect {
+        case i: InSubquery if i.query.isCorrelated => i
+        case i: InSubquery if !i.query.isCorrelated && optimizeUncorrelatedInSubqueries => i
+        case e: Exists if e.isCorrelated => e
+      }
+      if (relevantSubqueries.isEmpty) {
+        j
+      } else {
+        // `subqueriesWithJoinInputReferenceInfo`is of type Seq[(Expression, Boolean, Boolean)]
+        // (1): Expression, the join predicate containing some predicate subquery we are interested
+        // in re-writing
+        // (2): Boolean, whether (1) references the left join input
+        // (3): Boolean, whether (1) references the right join input
+        val subqueriesWithJoinInputReferenceInfo = relevantSubqueries.map { e =>
+          val referenceLeft = e.references.intersect(j.left.outputSet).nonEmpty
+          val referenceRight = e.references.intersect(j.right.outputSet).nonEmpty
+          (e, referenceLeft, referenceRight)
+        }
+        val subqueriesReferencingBothJoinInputs = subqueriesWithJoinInputReferenceInfo
+          .filter(i => i._2 && i._3)
+
+        // Currently do not support correlated subqueries in the join predicate that reference both
+        // join inputs
+        if (subqueriesReferencingBothJoinInputs.nonEmpty) {
+          throw QueryCompilationErrors.unsupportedCorrelatedSubqueryInJoinConditionError(
+            subqueriesReferencingBothJoinInputs.map(_._1))
+        }
+        val subqueriesReferencingLeft = subqueriesWithJoinInputReferenceInfo.filter(_._2).map(_._1)
+        val subqueriesReferencingRight = subqueriesWithJoinInputReferenceInfo.filter(_._3).map(_._1)
+        if (subqueriesReferencingLeft.isEmpty && subqueriesReferencingRight.isEmpty) {
+          j
+        } else {
+          var newCondition = j.condition.get
+          val newLeft = subqueriesReferencingLeft.foldLeft(j.left) {
+            case (p, e) =>
+              val (newCond, newInputPlan) = rewriteExistentialExpr(Seq(e), p)
+              // Update the join condition to rewrite the subquery expression
+              newCondition = newCondition.transform {
+                case expr if expr.fastEquals(e) => newCond.get
+              }
+              newInputPlan
+          }
+          val newRight = subqueriesReferencingRight.foldLeft(j.right) {
+            case (p, e) =>
+              val (newCond, newInputPlan) = rewriteExistentialExpr(Seq(e), p)
+              // Update the join condition to rewrite the subquery expression
+              newCondition = newCondition.transform {
+                case expr if expr.fastEquals(e) => newCond.get
+              }
+              newInputPlan
+          }
+          // Remove unwanted exists columns from new existence joins with new Project
+          Project(j.output, j.copy(left = newLeft, right = newRight,
+            condition = Some(newCondition)))
+        }
       }
 
     case u: UnaryNode if u.expressions.exists(
@@ -185,8 +268,10 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
         case Exists(sub, _, _, conditions, subHint) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           val existenceJoin = ExistenceJoin(exists)
+          val newCondition = conditions.reduceLeftOption(And)
           newPlan =
-            buildJoin(newPlan, sub, existenceJoin, conditions.reduceLeftOption(And), subHint)
+            buildJoin(newPlan, rewriteDomainJoinsIfPresent(newPlan, sub, newCondition),
+              existenceJoin, newCondition, subHint)
           exists
         case Not(InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint))) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
@@ -208,7 +293,9 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val nullAwareJoinConds = inConditions.map(c => Or(c, IsNull(c)))
           val finalJoinCond = (nullAwareJoinConds ++ conditions).reduceLeft(And)
           val joinHint = JoinHint(None, subHint)
-          newPlan = Join(newPlan, newSub, ExistenceJoin(exists), Some(finalJoinCond), joinHint)
+          newPlan = Join(newPlan,
+            rewriteDomainJoinsIfPresent(newPlan, newSub, Some(finalJoinCond)),
+            ExistenceJoin(exists), Some(finalJoinCond), joinHint)
           Not(exists)
         case InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint)) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
@@ -217,7 +304,8 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
           val newConditions = (inConditions ++ conditions).reduceLeftOption(And)
           val joinHint = JoinHint(None, subHint)
-          newPlan = Join(newPlan, newSub, ExistenceJoin(exists), newConditions, joinHint)
+          newPlan = Join(newPlan, rewriteDomainJoinsIfPresent(newPlan, newSub, newConditions),
+            ExistenceJoin(exists), newConditions, joinHint)
           exists
       }
     }
@@ -283,6 +371,15 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         } else {
           a
         }
+
+      case l @ Limit(_, _) if predicateMap.nonEmpty =>
+        // LIMIT is not supported in PullupCorrelatedPredicates, EXISTS/IN subqueries should be
+        // handled by DecorrelateInnerQuery.
+        throw new AnalysisException(
+          errorClass =
+            "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+          origin = l.origin,
+          messageParameters = Map("treeNode" -> l.toString))
       case p =>
         p
     }
@@ -329,25 +426,65 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     plan.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
       case ScalarSubquery(sub, children, exprId, conditions, hint, mayHaveCountBugOld)
         if children.nonEmpty =>
-        val (newPlan, newCond) = decorrelate(sub, plan)
-        val mayHaveCountBug = if (mayHaveCountBugOld.isEmpty) {
+
+        def mayHaveCountBugAgg(a: Aggregate): Boolean = {
+          a.groupingExpressions.isEmpty && a.aggregateExpressions.exists(_.exists {
+            case a: AggregateExpression => a.aggregateFunction.defaultResult.isDefined
+            case _ => false
+          })
+        }
+
+        // The below logic controls handling count bug for scalar subqueries in
+        // [[DecorrelateInnerQuery]], and if we don't handle it here, we handle it in
+        // [[RewriteCorrelatedScalarSubquery#constructLeftJoins]]. Note that handling it in
+        // [[DecorrelateInnerQuery]] is always correct, and turning it off to handle it in
+        // constructLeftJoins is an optimization, so that additional, redundant left outer joins are
+        // not introduced.
+        val handleCountBugInDecorrelate = SQLConf.get.decorrelateInnerQueryEnabled &&
+          !conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING) && !(sub match {
+          // Handle count bug only if there exists lower level Aggs with count bugs. It does not
+          // matter if the top level agg is count bug vulnerable or not, because:
+          // 1. If the top level agg is count bug vulnerable, it can be handled in
+          // constructLeftJoins, unless there are lower aggs that are count bug vulnerable.
+          // E.g. COUNT(COUNT + COUNT)
+          // 2. If the top level agg is not count bug vulnerable, it can be count bug vulnerable if
+          // there are lower aggs that are count bug vulnerable. E.g. SUM(COUNT)
+          case agg: Aggregate => !agg.child.exists {
+            case lowerAgg: Aggregate => mayHaveCountBugAgg(lowerAgg)
+            case _ => false
+          }
+          case _ => false
+        })
+        val (newPlan, newCond) = decorrelate(sub, plan, handleCountBugInDecorrelate)
+        val mayHaveCountBug = if (mayHaveCountBugOld.isDefined) {
+          // For idempotency, we must save this variable the first time this rule is run, because
+          // decorrelation introduces a GROUP BY is if one wasn't already present.
+          mayHaveCountBugOld.get
+        } else if (handleCountBugInDecorrelate) {
+          // Count bug was already handled in the above decorrelate function call.
+          false
+        } else {
           // Check whether the pre-rewrite subquery had empty groupingExpressions. If yes, it may
           // be subject to the COUNT bug. If it has non-empty groupingExpressions, there is
           // no COUNT bug.
           val (topPart, havingNode, aggNode) = splitSubquery(sub)
           (aggNode.isDefined && aggNode.get.groupingExpressions.isEmpty)
-        } else {
-          // For idempotency, we must save this variable the first time this rule is run, because
-          // decorrelation introduces a GROUP BY is if one wasn't already present.
-          mayHaveCountBugOld.get
         }
         ScalarSubquery(newPlan, children, exprId, getJoinCondition(newCond, conditions),
           hint, Some(mayHaveCountBug))
       case Exists(sub, children, exprId, conditions, hint) if children.nonEmpty =>
-        val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, plan)
+        val (newPlan, newCond) = if (SQLConf.get.decorrelateInnerQueryEnabledForExistsIn) {
+          decorrelate(sub, plan, handleCountBug = true)
+        } else {
+          pullOutCorrelatedPredicates(sub, plan)
+        }
         Exists(newPlan, children, exprId, getJoinCondition(newCond, conditions), hint)
       case ListQuery(sub, children, exprId, numCols, conditions, hint) if children.nonEmpty =>
-        val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, plan)
+        val (newPlan, newCond) = if (SQLConf.get.decorrelateInnerQueryEnabledForExistsIn) {
+          decorrelate(sub, plan, handleCountBug = true)
+        } else {
+          pullOutCorrelatedPredicates(sub, plan)
+        }
         val joinCond = getJoinCondition(newCond, conditions)
         ListQuery(newPlan, children, exprId, numCols, joinCond, hint)
       case LateralSubquery(sub, children, exprId, conditions, hint) if children.nonEmpty =>
@@ -371,6 +508,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       } else {
         newPlan
       }
+    case j: Join if conf.getConf(DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION) =>
+      rewriteSubQueries(j)
     // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
     case q: UnaryNode =>
       rewriteSubQueries(q)

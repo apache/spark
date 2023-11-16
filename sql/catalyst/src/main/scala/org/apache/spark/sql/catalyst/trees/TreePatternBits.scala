@@ -39,7 +39,7 @@ trait TreePatternBits {
   final def containsAllPatterns(patterns: TreePattern*): Boolean = {
     val iterator = patterns.iterator
     while (iterator.hasNext) {
-      if (!containsPattern(iterator.next)) {
+      if (!containsPattern(iterator.next())) {
         return false
       }
     }
@@ -53,7 +53,7 @@ trait TreePatternBits {
   final def containsAnyPattern(patterns: TreePattern*): Boolean = {
     val iterator = patterns.iterator
     while (iterator.hasNext) {
-      if (containsPattern(iterator.next)) {
+      if (containsPattern(iterator.next())) {
         return true
       }
     }

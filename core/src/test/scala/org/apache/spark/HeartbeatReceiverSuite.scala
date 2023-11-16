@@ -77,7 +77,7 @@ class HeartbeatReceiverSuite
     sc = spy[SparkContext](new SparkContext(conf))
     scheduler = mock(classOf[TaskSchedulerImpl])
     when(sc.taskScheduler).thenReturn(scheduler)
-    when(scheduler.excludedNodes).thenReturn(Predef.Set[String]())
+    when(scheduler.excludedNodes()).thenReturn(Predef.Set[String]())
     when(scheduler.sc).thenReturn(sc)
     heartbeatReceiverClock = new ManualClock
     heartbeatReceiver = new HeartbeatReceiver(sc, heartbeatReceiverClock)
@@ -306,7 +306,7 @@ class HeartbeatReceiverSuite
     // We may receive undesired SparkListenerExecutorAdded from LocalSchedulerBackend,
     // so exclude it from the map. See SPARK-10800.
     heartbeatReceiver.invokePrivate(_executorLastSeen()).
-      filterKeys(_ != SparkContext.DRIVER_IDENTIFIER).toMap
+      view.filterKeys(_ != SparkContext.DRIVER_IDENTIFIER).toMap
   }
 }
 

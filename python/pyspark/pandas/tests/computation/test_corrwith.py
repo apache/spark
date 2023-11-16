@@ -14,12 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from distutils.version import LooseVersion
 import unittest
 
-
 import numpy as np
-import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import ComparisonTestBase

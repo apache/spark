@@ -139,6 +139,57 @@ class DataType:
         """
         return obj
 
+    def _as_nullable(self) -> "DataType":
+        return self
+
+    @classmethod
+    def fromDDL(cls, ddl: str) -> "DataType":
+        """
+        Creates :class:`DataType` for a given DDL-formatted string.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        ddl : str
+            DDL-formatted string representation of types, e.g.
+            :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct
+            type can omit the ``struct<>`` for the compatibility reason with
+            ``spark.createDataFrame`` and Python UDFs.
+
+        Returns
+        -------
+        :class:`DataType`
+
+        Examples
+        --------
+        Create a StructType by the corresponding DDL formatted string.
+
+        >>> from pyspark.sql.types import DataType
+        >>> DataType.fromDDL("b string, a int")
+        StructType([StructField('b', StringType(), True), StructField('a', IntegerType(), True)])
+
+        Create a single DataType by the corresponding DDL formatted string.
+
+        >>> DataType.fromDDL("decimal(10,10)")
+        DecimalType(10,10)
+
+        Create a StructType by the legacy string format.
+
+        >>> DataType.fromDDL("b: string, a: int")
+        StructType([StructField('b', StringType(), True), StructField('a', IntegerType(), True)])
+        """
+        from pyspark.sql import SparkSession
+        from pyspark.sql.functions import udf
+
+        # Intentionally uses SparkSession so one implementation can be shared with/without
+        # Spark Connect.
+        schema = (
+            SparkSession.active().range(0).select(udf(lambda x: x, returnType=ddl)("id")).schema
+        )
+        assert len(schema) == 1
+        return schema[0].dataType
+
 
 # This singleton pattern does not work with pickle, you will get
 # another object after pickle and unpickle
@@ -545,6 +596,41 @@ class ArrayType(DataType):
     def simpleString(self) -> str:
         return "array<%s>" % self.elementType.simpleString()
 
+    def _as_nullable(self) -> "ArrayType":
+        return ArrayType(self.elementType._as_nullable(), containsNull=True)
+
+    def toNullable(self) -> "ArrayType":
+        """
+        Returns the same data type but set all nullability fields are true
+        (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`ArrayType`
+
+        Examples
+        --------
+        Example 1: Simple nullability conversion
+
+        >>> ArrayType(IntegerType(), containsNull=False).toNullable()
+        ArrayType(IntegerType(), True)
+
+        Example 2: Nested nullability conversion
+
+        >>> ArrayType(
+        ...     StructType([
+        ...         StructField("b", IntegerType(), nullable=False),
+        ...         StructField("c", ArrayType(IntegerType(), containsNull=False))
+        ...     ]),
+        ...     containsNull=False
+        ... ).toNullable()
+        ArrayType(StructType([StructField('b', IntegerType(), True),
+        StructField('c', ArrayType(IntegerType(), True), True)]), True)
+        """
+        return self._as_nullable()
+
     def __repr__(self) -> str:
         return "ArrayType(%s, %s)" % (self.elementType, str(self.containsNull))
 
@@ -622,6 +708,44 @@ class MapType(DataType):
 
     def simpleString(self) -> str:
         return "map<%s,%s>" % (self.keyType.simpleString(), self.valueType.simpleString())
+
+    def _as_nullable(self) -> "MapType":
+        return MapType(
+            self.keyType._as_nullable(), self.valueType._as_nullable(), valueContainsNull=True
+        )
+
+    def toNullable(self) -> "MapType":
+        """
+        Returns the same data type but set all nullability fields are true
+        (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`MapType`
+
+        Examples
+        --------
+        Example 1: Simple nullability conversion
+
+        >>> MapType(IntegerType(), StringType(), valueContainsNull=False).toNullable()
+        MapType(IntegerType(), StringType(), True)
+
+        Example 2: Nested nullability conversion
+
+        >>> MapType(
+        ...     StringType(),
+        ...     MapType(
+        ...         IntegerType(),
+        ...         ArrayType(IntegerType(), containsNull=False),
+        ...         valueContainsNull=False
+        ...     ),
+        ...     valueContainsNull=False
+        ... ).toNullable()
+        MapType(StringType(), MapType(IntegerType(), ArrayType(IntegerType(), True), True), True)
+        """
+        return self._as_nullable()
 
     def __repr__(self) -> str:
         return "MapType(%s, %s, %s)" % (self.keyType, self.valueType, str(self.valueContainsNull))
@@ -721,8 +845,8 @@ class StructField(DataType):
         return StructField(
             json["name"],
             _parse_datatype_json_value(json["type"]),
-            json["nullable"],
-            json["metadata"],
+            json.get("nullable", True),
+            json.get("metadata"),
         )
 
     def needConversion(self) -> bool:
@@ -929,6 +1053,54 @@ class StructType(DataType):
 
     def simpleString(self) -> str:
         return "struct<%s>" % (",".join(f.simpleString() for f in self))
+
+    def _as_nullable(self) -> "StructType":
+        fields = []
+        for field in self.fields:
+            fields.append(
+                StructField(
+                    field.name,
+                    field.dataType._as_nullable(),
+                    nullable=True,
+                    metadata=field.metadata,
+                )
+            )
+        return StructType(fields)
+
+    def toNullable(self) -> "StructType":
+        """
+        Returns the same data type but set all nullability fields are true
+        (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`StructType`
+
+        Examples
+        --------
+        Example 1: Simple nullability conversion
+
+        >>> StructType([StructField("a", IntegerType(), nullable=False)]).toNullable()
+        StructType([StructField('a', IntegerType(), True)])
+
+        Example 2: Nested nullability conversion
+
+        >>> StructType([
+        ...     StructField("a",
+        ...         StructType([
+        ...             StructField("b", IntegerType(), nullable=False),
+        ...             StructField("c", StructType([
+        ...                 StructField("d", IntegerType(), nullable=False)
+        ...             ]))
+        ...         ]),
+        ...         nullable=False)
+        ... ]).toNullable()
+        StructType([StructField('a', StructType([StructField('b', IntegerType(), True),
+        StructField('c', StructType([StructField('d', IntegerType(), True)]), True)]), True)])
+        """
+        return self._as_nullable()
 
     def __repr__(self) -> str:
         return "StructType([%s])" % ", ".join(str(field) for field in self)

@@ -32,10 +32,16 @@ select null not in (select e from v_empty);
 select * from t left join t2 on (t.c in (select e from t_empty)) is null;
 select * from t left join t2 on (t.c not in (select e from t_empty)) is null;
 
+-- Should have the same results as above with optimize IN subqueries enabled
+set spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled=true;
 
+-- IN subquery which IS rewritten to join
+select * from t left join t2 on (t.c in (select e from t_empty)) is null;
+select * from t left join t2 on (t.c not in (select e from t_empty)) is null;
 
--- Test legacy behavior flag
 set spark.sql.legacy.nullInEmptyListBehavior = true;
+-- Disable optimize IN subqueries to joins because it affects null semantics
+set spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled=false;
 
 -- constant null IN (empty subquery) - rewritten by NullPropagation rule
 
@@ -50,6 +56,7 @@ select * from t left join t2 on (t.c in (select e from t_empty)) is null;
 select * from t left join t2 on (t.c not in (select e from t_empty)) is null;
 
 reset spark.sql.legacy.nullInEmptyListBehavior;
+reset spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled;
 
 drop table t;
 drop table t2;

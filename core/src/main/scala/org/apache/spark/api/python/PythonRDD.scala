@@ -22,9 +22,9 @@ import java.net._
 import java.nio.charset.StandardCharsets
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
@@ -43,6 +43,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.security.{SocketAuthHelper, SocketAuthServer, SocketFuncServer}
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
 import org.apache.spark.util._
+import org.apache.spark.util.ArrayImplicits._
 
 
 private[spark] class PythonRDD(
@@ -179,7 +180,7 @@ private[spark] object PythonRDD extends Logging {
     type UnrolledPartition = Array[ByteArray]
     val allPartitions: Array[UnrolledPartition] =
       sc.runJob(rdd, (x: Iterator[ByteArray]) => x.toArray, partitions.asScala.toSeq)
-    val flattenedPartition: UnrolledPartition = Array.concat(allPartitions: _*)
+    val flattenedPartition: UnrolledPartition = Array.concat(allPartitions.toImmutableArraySeq: _*)
     serveIterator(flattenedPartition.iterator,
       s"serve RDD ${rdd.id} with partitions ${partitions.asScala.mkString(",")}")
   }

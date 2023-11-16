@@ -31,7 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
  * @since 2.0.0
  */
 @Stable
-class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
+class RuntimeConfig private[sql](val sqlConf: SQLConf = new SQLConf) {
 
   /**
    * Sets the given Spark runtime configuration property.

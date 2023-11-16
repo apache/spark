@@ -1031,10 +1031,10 @@ class FunctionsTestsMixin:
             [Row(val=None), Row(val=None), Row(val=None)],
         )
 
-        with self.assertRaisesRegex(tpe, "too big"):
+        with self.assertRaisesRegex(tpe, r"\[USER_RAISED_EXCEPTION\] too big"):
             df.select(F.assert_true(df.id < 2, "too big")).toDF("val").collect()
 
-        with self.assertRaisesRegex(tpe, "2000000"):
+        with self.assertRaisesRegex(tpe, r"\[USER_RAISED_EXCEPTION\] 2000000.0"):
             df.select(F.assert_true(df.id < 2, df.id * 1e6)).toDF("val").collect()
 
         with self.assertRaises(PySparkTypeError) as pe:

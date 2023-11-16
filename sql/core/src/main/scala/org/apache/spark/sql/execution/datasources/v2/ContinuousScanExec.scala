@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.connector.read.{InputPartition, Scan}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReaderFactory, ContinuousStream, Offset}
 import org.apache.spark.sql.execution.streaming.continuous._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Physical plan node for scanning data from a streaming data source with continuous mode.
@@ -43,7 +44,8 @@ case class ContinuousScanExec(
 
   override def hashCode(): Int = stream.hashCode()
 
-  override lazy val inputPartitions: Seq[InputPartition] = stream.planInputPartitions(start)
+  override lazy val inputPartitions: Seq[InputPartition] =
+    stream.planInputPartitions(start).toImmutableArraySeq
 
   override lazy val readerFactory: ContinuousPartitionReaderFactory = {
     stream.createContinuousReaderFactory()

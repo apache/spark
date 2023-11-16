@@ -51,6 +51,7 @@ from pyspark.sql.types import ArrayType, DataType, StringType, StructType, _from
 from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
 from pyspark.sql.udtf import OrderingColumn, PartitioningColumn  # noqa: F401
+from pyspark.sql.udtf import SkipRestOfInputTableException  # noqa: F401
 from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
@@ -163,22 +164,49 @@ def lit(col: Any) -> Column:
 
     Examples
     --------
+    Example 1: Creating a literal column with an integer value.
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.range(1)
-    >>> df.select(lit(5).alias('height'), df.id).show()
+    >>> df.select(sf.lit(5).alias('height'), df.id).show()
     +------+---+
     |height| id|
     +------+---+
     |     5|  0|
     +------+---+
 
-    Create a literal from a list.
+    Example 2: Creating a literal column from a list.
 
-    >>> spark.range(1).select(lit([1, 2, 3])).show()
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.lit([1, 2, 3])).show()
     +--------------+
     |array(1, 2, 3)|
     +--------------+
     |     [1, 2, 3]|
     +--------------+
+
+    Example 3: Creating a literal column from a string.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.range(1)
+    >>> df.select(sf.lit("PySpark").alias('framework'), df.id).show()
+    +---------+---+
+    |framework| id|
+    +---------+---+
+    |  PySpark|  0|
+    +---------+---+
+
+    Example 4: Creating a literal column from a boolean value.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(True, "Yes"), (False, "No")], ["flag", "response"])
+    >>> df.select(sf.lit(False).alias('is_approved'), df.response).show()
+    +-----------+--------+
+    |is_approved|response|
+    +-----------+--------+
+    |      false|     Yes|
+    |      false|      No|
+    +-----------+--------+
     """
     if isinstance(col, Column):
         return col
@@ -1162,15 +1190,48 @@ def count(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    Count by all columns (start), and by a column that does not count ``None``.
+    Example 1: Count all rows in a DataFrame
 
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(None,), ("a",), ("b",), ("c",)], schema=["alphabets"])
-    >>> df.select(count(expr("*")), count(df.alphabets)).show()
-    +--------+----------------+
-    |count(1)|count(alphabets)|
-    +--------+----------------+
-    |       4|               3|
-    +--------+----------------+
+    >>> df.select(sf.count(sf.expr("*"))).show()
+    +--------+
+    |count(1)|
+    +--------+
+    |       4|
+    +--------+
+
+    Example 2: Count non-null values in a specific column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df.select(sf.count(df.alphabets)).show()
+    +----------------+
+    |count(alphabets)|
+    +----------------+
+    |               3|
+    +----------------+
+
+    Example 3: Count all rows in a DataFrame with multiple columns
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [(1, "apple"), (2, "banana"), (3, None)], schema=["id", "fruit"])
+    >>> df.select(sf.count(sf.expr("*"))).show()
+    +--------+
+    |count(1)|
+    +--------+
+    |       3|
+    +--------+
+
+    Example 4: Count non-null values in multiple columns
+
+    >>> from pyspark.sql import functions as sf
+    >>> df.select(sf.count(df.id), sf.count(df.fruit)).show()
+    +---------+------------+
+    |count(id)|count(fruit)|
+    +---------+------------+
+    |        3|           2|
+    +---------+------------+
     """
     return _invoke_function_over_columns("count", col)
 
@@ -1197,13 +1258,27 @@ def sum(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Calculating the sum of values in a column
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.range(10)
-    >>> df.select(sum(df["id"])).show()
+    >>> df.select(sf.sum(df["id"])).show()
     +-------+
     |sum(id)|
     +-------+
     |     45|
     +-------+
+
+    Example 2: Using a plus expression together to calculate the sum
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 2), (3, 4)], ["A", "B"])
+    >>> df.select(sf.sum(sf.col("A") + sf.col("B"))).show()
+    +------------+
+    |sum((A + B))|
+    +------------+
+    |          10|
+    +------------+
     """
     return _invoke_function_over_columns("sum", col)
 
@@ -3751,7 +3826,8 @@ def collect_list(col: "ColumnOrName") -> Column:
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1, "John"), (2, "John"), (3, "Ana")], ("id", "name"))
-    >>> df.groupBy("name").agg(sf.sort_array(sf.collect_list('id')).alias('sorted_list')).show()
+    >>> df = df.groupBy("name").agg(sf.sort_array(sf.collect_list('id')).alias('sorted_list'))
+    >>> df.orderBy(sf.desc("name")).show()
     +----+-----------+
     |name|sorted_list|
     +----+-----------+
@@ -3842,7 +3918,8 @@ def collect_set(col: "ColumnOrName") -> Column:
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1, "John"), (2, "John"), (3, "Ana")], ("id", "name"))
-    >>> df.groupBy("name").agg(sf.sort_array(sf.collect_set('id')).alias('sorted_set')).show()
+    >>> df = df.groupBy("name").agg(sf.sort_array(sf.collect_set('id')).alias('sorted_set'))
+    >>> df.orderBy(sf.desc("name")).show()
     +----+----------+
     |name|sorted_set|
     +----+----------+
@@ -4624,26 +4701,38 @@ def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import types
-    >>> df1 = spark.createDataFrame([1, 1, 3], types.IntegerType())
-    >>> df2 = spark.createDataFrame([1, 2], types.IntegerType())
-    >>> df1.join(df2).show()
-    +-----+-----+
-    |value|value|
-    +-----+-----+
-    |    1|    1|
-    |    1|    2|
-    |    1|    1|
-    |    1|    2|
-    |    3|    1|
-    |    3|    2|
-    +-----+-----+
-    >>> df1.join(df2).select(count_distinct(df1.value, df2.value)).show()
-    +----------------------------+
-    |count(DISTINCT value, value)|
-    +----------------------------+
-    |                           4|
-    +----------------------------+
+    Example 1: Counting distinct values of a single column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1,), (1,), (3,)], ["value"])
+    >>> df.select(sf.count_distinct(df.value)).show()
+    +---------------------+
+    |count(DISTINCT value)|
+    +---------------------+
+    |                    2|
+    +---------------------+
+
+    Example 2: Counting distinct values of multiple columns
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 1), (1, 2)], ["value1", "value2"])
+    >>> df.select(sf.count_distinct(df.value1, df.value2)).show()
+    +------------------------------+
+    |count(DISTINCT value1, value2)|
+    +------------------------------+
+    |                             2|
+    +------------------------------+
+
+    Example 3: Counting distinct values with column names as strings
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 1), (1, 2)], ["value1", "value2"])
+    >>> df.select(sf.count_distinct("value1", "value2")).show()
+    +------------------------------+
+    |count(DISTINCT value1, value2)|
+    +------------------------------+
+    |                             2|
+    +------------------------------+
     """
     sc = _get_active_spark_context()
     return _invoke_function(
@@ -6782,7 +6871,7 @@ def date_format(date: "ColumnOrName", format: str) -> Column:
     Examples
     --------
     >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
-    >>> df.select(date_format('dt', 'MM/dd/yyy').alias('date')).collect()
+    >>> df.select(date_format('dt', 'MM/dd/yyyy').alias('date')).collect()
     [Row(date='04/08/2015')]
     """
     return _invoke_function("date_format", _to_java_column(date), format)
@@ -8717,11 +8806,11 @@ def current_database() -> Column:
     Examples
     --------
     >>> spark.range(1).select(current_database()).show()
-    +------------------+
-    |current_database()|
-    +------------------+
-    |           default|
-    +------------------+
+    +----------------+
+    |current_schema()|
+    +----------------+
+    |         default|
+    +----------------+
     """
     return _invoke_function("current_database")
 
@@ -8736,11 +8825,11 @@ def current_schema() -> Column:
     --------
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.current_schema()).show()
-    +------------------+
-    |current_database()|
-    +------------------+
-    |           default|
-    +------------------+
+    +----------------+
+    |current_schema()|
+    +----------------+
+    |         default|
+    +----------------+
     """
     return _invoke_function("current_schema")
 
@@ -11684,7 +11773,12 @@ def create_map(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]
 def create_map(
     *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
 ) -> Column:
-    """Creates a new map column.
+    """
+    Map function: Creates a new map column from an even number of input columns or
+    column references. The input columns are grouped into key-value pairs to form a map.
+    For instance, the input (key1, value1, key2, value2, ...) would produce a map that
+    associates key1 with value1, key2 with value2, and so on. The function supports
+    grouping columns as a list as well.
 
     .. versionadded:: 2.0.0
 
@@ -11694,16 +11788,68 @@ def create_map(
     Parameters
     ----------
     cols : :class:`~pyspark.sql.Column` or str
-        column names or :class:`~pyspark.sql.Column`\\s that are
-        grouped as key-value pairs, e.g. (key1, value1, key2, value2, ...).
+        The input column names or :class:`~pyspark.sql.Column` objects grouped into
+        key-value pairs. These can also be expressed as a list of columns.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new Column of Map type, where each value is a map formed from the corresponding
+        key-value pairs provided in the input arguments.
 
     Examples
     --------
+    Example 1: Basic usage of create_map function.
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
-    >>> df.select(create_map('name', 'age').alias("map")).collect()
-    [Row(map={'Alice': 2}), Row(map={'Bob': 5})]
-    >>> df.select(create_map([df.name, df.age]).alias("map")).collect()
-    [Row(map={'Alice': 2}), Row(map={'Bob': 5})]
+    >>> df.select(sf.create_map('name', 'age')).show()
+    +--------------+
+    |map(name, age)|
+    +--------------+
+    |  {Alice -> 2}|
+    |    {Bob -> 5}|
+    +--------------+
+
+    Example 2: Usage of create_map function with a list of columns.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
+    >>> df.select(sf.create_map([df.name, df.age])).show()
+    +--------------+
+    |map(name, age)|
+    +--------------+
+    |  {Alice -> 2}|
+    |    {Bob -> 5}|
+    +--------------+
+
+    Example 3: Usage of create_map function with more than one key-value pair.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("Alice", 2, "female"),
+    ...     ("Bob", 5, "male")], ("name", "age", "gender"))
+    >>> df.select(sf.create_map(sf.lit('name'), df['name'],
+    ...     sf.lit('gender'), df['gender'])).show(truncate=False)
+    +---------------------------------+
+    |map(name, name, gender, gender)  |
+    +---------------------------------+
+    |{name -> Alice, gender -> female}|
+    |{name -> Bob, gender -> male}    |
+    +---------------------------------+
+
+    Example 4: Usage of create_map function with values of different types.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("Alice", 2, 22.2),
+    ...     ("Bob", 5, 36.1)], ("name", "age", "weight"))
+    >>> df.select(sf.create_map(sf.lit('age'), df['age'],
+    ...     sf.lit('weight'), df['weight'])).show(truncate=False)
+    +-----------------------------+
+    |map(age, age, weight, weight)|
+    +-----------------------------+
+    |{age -> 2.0, weight -> 22.2} |
+    |{age -> 5.0, weight -> 36.1} |
+    +-----------------------------+
     """
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]  # type: ignore[assignment]
@@ -11788,50 +11934,68 @@ def array(
     Example 1: Basic usage of array function with column names.
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
-    >>> df.select(sf.array('name', 'age').alias("arr")).show()
-    +----------+
-    |       arr|
-    +----------+
-    |[Alice, 2]|
-    |  [Bob, 5]|
-    +----------+
+    >>> df = spark.createDataFrame([("Alice", "doctor"), ("Bob", "engineer")],
+    ...     ("name", "occupation"))
+    >>> df.select(sf.array('name', 'occupation').alias("arr")).show()
+    +---------------+
+    |            arr|
+    +---------------+
+    |[Alice, doctor]|
+    |[Bob, engineer]|
+    +---------------+
 
     Example 2: Usage of array function with Column objects.
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
-    >>> df.select(sf.array(df.name, df.age).alias("arr")).show()
-    +----------+
-    |       arr|
-    +----------+
-    |[Alice, 2]|
-    |  [Bob, 5]|
-    +----------+
+    >>> df = spark.createDataFrame([("Alice", "doctor"), ("Bob", "engineer")],
+    ...     ("name", "occupation"))
+    >>> df.select(sf.array(df.name, df.occupation).alias("arr")).show()
+    +---------------+
+    |            arr|
+    +---------------+
+    |[Alice, doctor]|
+    |[Bob, engineer]|
+    +---------------+
 
     Example 3: Single argument as list of column names.
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
-    >>> df.select(sf.array(['name', 'age']).alias("arr")).show()
-    +----------+
-    |       arr|
-    +----------+
-    |[Alice, 2]|
-    |  [Bob, 5]|
-    +----------+
+    >>> df = spark.createDataFrame([("Alice", "doctor"), ("Bob", "engineer")],
+    ...     ("name", "occupation"))
+    >>> df.select(sf.array(['name', 'occupation']).alias("arr")).show()
+    +---------------+
+    |            arr|
+    +---------------+
+    |[Alice, doctor]|
+    |[Bob, engineer]|
+    +---------------+
 
-    Example 4: array function with a column containing null values.
+    Example 4: Usage of array function with columns of different types.
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([("Alice", None), ("Bob", 5)], ("name", "age"))
-    >>> df.select(sf.array('name', 'age').alias("arr")).show()
-    +-------------+
-    |          arr|
-    +-------------+
-    |[Alice, NULL]|
-    |     [Bob, 5]|
-    +-------------+
+    >>> df = spark.createDataFrame(
+    ...     [("Alice", 2, 22.2), ("Bob", 5, 36.1)],
+    ...     ("name", "age", "weight"))
+    >>> df.select(sf.array(['age', 'weight']).alias("arr")).show()
+    +-----------+
+    |        arr|
+    +-----------+
+    |[2.0, 22.2]|
+    |[5.0, 36.1]|
+    +-----------+
+
+    Example 5: array function with a column containing null values.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("Alice", None), ("Bob", "engineer")],
+    ...     ("name", "occupation"))
+    >>> df.select(sf.array('name', 'occupation').alias("arr")).show()
+    +---------------+
+    |            arr|
+    +---------------+
+    |  [Alice, NULL]|
+    |[Bob, engineer]|
+    +---------------+
     """
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]  # type: ignore[assignment]
@@ -12002,8 +12166,9 @@ def slice(
     x: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]
 ) -> Column:
     """
-    Collection function: returns an array containing all the elements in `x` from index `start`
-    (array indices start at 1, or from the end if `start` is negative) with the specified `length`.
+    Array function: Returns a new array column by slicing the input array column from
+    a start index to a specific length. The indices start at 1, and can be negative to index
+    from the end of the array. The length specifies the number of elements in the resulting array.
 
     .. versionadded:: 2.4.0
 
@@ -12013,22 +12178,56 @@ def slice(
     Parameters
     ----------
     x : :class:`~pyspark.sql.Column` or str
-        column name or column containing the array to be sliced
-    start : :class:`~pyspark.sql.Column` or str or int
-        column name, column, or int containing the starting index
-    length : :class:`~pyspark.sql.Column` or str or int
-        column name, column, or int containing the length of the slice
+        Input array column or column name to be sliced.
+    start : :class:`~pyspark.sql.Column`, str, or int
+        The start index for the slice operation. If negative, starts the index from the
+        end of the array.
+    length : :class:`~pyspark.sql.Column`, str, or int
+        The length of the slice, representing number of elements in the resulting array.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a column of array type. Subset of array.
+        A new Column object of Array type, where each value is a slice of the corresponding
+        list from the input column.
 
     Examples
     --------
+    Example 1: Basic usage of the slice function.
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([([1, 2, 3],), ([4, 5],)], ['x'])
-    >>> df.select(slice(df.x, 2, 2).alias("sliced")).collect()
-    [Row(sliced=[2, 3]), Row(sliced=[5])]
+    >>> df.select(sf.slice(df.x, 2, 2)).show()
+    +--------------+
+    |slice(x, 2, 2)|
+    +--------------+
+    |        [2, 3]|
+    |           [5]|
+    +--------------+
+
+    Example 2: Slicing with negative start index.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3],), ([4, 5],)], ['x'])
+    >>> df.select(sf.slice(df.x, -1, 1)).show()
+    +---------------+
+    |slice(x, -1, 1)|
+    +---------------+
+    |            [3]|
+    |            [5]|
+    +---------------+
+
+    Example 3: Slice function with column inputs for start and length.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3], 2, 2), ([4, 5], 1, 3)], ['x', 'start', 'length'])
+    >>> df.select(sf.slice(df.x, df.start, df.length)).show()
+    +-----------------------+
+    |slice(x, start, length)|
+    +-----------------------+
+    |                 [2, 3]|
+    |                 [4, 5]|
+    +-----------------------+
     """
     start = lit(start) if isinstance(start, int) else start
     length = lit(length) if isinstance(length, int) else length
@@ -12041,8 +12240,10 @@ def array_join(
     col: "ColumnOrName", delimiter: str, null_replacement: Optional[str] = None
 ) -> Column:
     """
-    Concatenates the elements of `column` using the `delimiter`. Null values are replaced with
-    `null_replacement` if set, otherwise they are ignored.
+    Array function: Returns a string column by concatenating the elements of the input
+    array column using the delimiter. Null values within the array can be replaced with
+    a specified string through the null_replacement argument. If null_replacement is
+    not set, null values are ignored.
 
     .. versionadded:: 2.4.0
 
@@ -12052,24 +12253,79 @@ def array_join(
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column to work on.
+        The input column containing the arrays to be joined.
     delimiter : str
-        delimiter used to concatenate elements
+        The string to be used as the delimiter when joining the array elements.
     null_replacement : str, optional
-        if set then null values will be replaced by this value
+        The string to replace null values within the array. If not set, null values are ignored.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a column of string type. Concatenated values.
+        A new column of string type, where each value is the result of joining the corresponding
+        array from the input column.
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(["a", "b", "c"],), (["a", None],)], ['data'])
-    >>> df.select(array_join(df.data, ",").alias("joined")).collect()
-    [Row(joined='a,b,c'), Row(joined='a')]
-    >>> df.select(array_join(df.data, ",", "NULL").alias("joined")).collect()
-    [Row(joined='a,b,c'), Row(joined='a,NULL')]
+    Example 1: Basic usage of array_join function.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", "b", "c"],), (["a", "b"],)], ['data'])
+    >>> df.select(sf.array_join(df.data, ",")).show()
+    +-------------------+
+    |array_join(data, ,)|
+    +-------------------+
+    |              a,b,c|
+    |                a,b|
+    +-------------------+
+
+    Example 2: Usage of array_join function with null_replacement argument.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", None, "c"],)], ['data'])
+    >>> df.select(sf.array_join(df.data, ",", "NULL")).show()
+    +-------------------------+
+    |array_join(data, ,, NULL)|
+    +-------------------------+
+    |                 a,NULL,c|
+    +-------------------------+
+
+    Example 3: Usage of array_join function without null_replacement argument.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", None, "c"],)], ['data'])
+    >>> df.select(sf.array_join(df.data, ",")).show()
+    +-------------------+
+    |array_join(data, ,)|
+    +-------------------+
+    |                a,c|
+    +-------------------+
+
+    Example 4: Usage of array_join function with an array that is null.
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import StructType, StructField, ArrayType, StringType
+    >>> schema = StructType([StructField("data", ArrayType(StringType()), True)])
+    >>> df = spark.createDataFrame([(None,)], schema)
+    >>> df.select(sf.array_join(df.data, ",")).show()
+    +-------------------+
+    |array_join(data, ,)|
+    +-------------------+
+    |               NULL|
+    +-------------------+
+
+    Example 5: Usage of array_join function with an array containing only null values.
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import StructType, StructField, ArrayType, StringType
+    >>> schema = StructType([StructField("data", ArrayType(StringType()), True)])
+    >>> df = spark.createDataFrame([([None, None],)], schema)
+    >>> df.select(sf.array_join(df.data, ",", "NULL")).show()
+    +-------------------------+
+    |array_join(data, ,, NULL)|
+    +-------------------------+
+    |                NULL,NULL|
+    +-------------------------+
     """
     _get_active_spark_context()
     if null_replacement is None:
@@ -13380,6 +13636,8 @@ def json_object_keys(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("json_object_keys", col)
 
 
+# TODO: Fix and add an example for StructType with Spark Connect
+#   e.g., StructType([StructField("a", IntegerType())])
 @_try_remote_functions
 def from_xml(
     col: "ColumnOrName",
@@ -13413,40 +13671,38 @@ def from_xml(
 
     Examples
     --------
-    >>> from pyspark.sql.types import *
-    >>> from pyspark.sql.functions import from_xml, schema_of_xml, lit
+    Example 1: Parsing XML with a DDL-formatted string schema
 
-    StructType input with simple IntegerType.
-
+    >>> import pyspark.sql.functions as sf
     >>> data = [(1, '''<p><a>1</a></p>''')]
     >>> df = spark.createDataFrame(data, ("key", "value"))
-
-    TODO: Fix StructType for spark connect
-    schema = StructType([StructField("a", IntegerType())])
-
+    ... # Define the schema using a DDL-formatted string
     >>> schema = "STRUCT<a: BIGINT>"
-    >>> df.select(from_xml(df.value, schema).alias("xml")).collect()
+    ... # Parse the XML column using the DDL-formatted schema
+    >>> df.select(sf.from_xml(df.value, schema).alias("xml")).collect()
     [Row(xml=Row(a=1))]
 
-    String input.
+    Example 2: Parsing XML with :class:`ArrayType` in schema
 
-    >>> df.select(from_xml(df.value, "a INT").alias("xml")).collect()
-    [Row(xml=Row(a=1))]
-
+    >>> import pyspark.sql.functions as sf
     >>> data = [(1, '<p><a>1</a><a>2</a></p>')]
     >>> df = spark.createDataFrame(data, ("key", "value"))
-
-    TODO: Fix StructType for spark connect
-    schema = StructType([StructField("a", ArrayType(IntegerType()))])
-
+    ... # Define the schema with an Array type
     >>> schema = "STRUCT<a: ARRAY<BIGINT>>"
-    >>> df.select(from_xml(df.value, schema).alias("xml")).collect()
+    ... # Parse the XML column using the schema with an Array
+    >>> df.select(sf.from_xml(df.value, schema).alias("xml")).collect()
     [Row(xml=Row(a=[1, 2]))]
 
-    Column input generated by schema_of_xml.
+    Example 3: Parsing XML using :meth:`pyspark.sql.functions.schema_of_xml`
 
-    >>> schema = schema_of_xml(lit(data[0][1]))
-    >>> df.select(from_xml(df.value, schema).alias("xml")).collect()
+    >>> import pyspark.sql.functions as sf
+    >>> # Sample data with an XML column
+    ... data = [(1, '<p><a>1</a><a>2</a></p>')]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    ... # Generate the schema from an example XML value
+    >>> schema = sf.schema_of_xml(sf.lit(data[0][1]))
+    ... # Parse the XML column using the generated schema
+    >>> df.select(sf.from_xml(df.value, schema).alias("xml")).collect()
     [Row(xml=Row(a=[1, 2]))]
     """
 
@@ -13487,14 +13743,45 @@ def schema_of_xml(xml: "ColumnOrName", options: Optional[Dict[str, str]] = None)
 
     Examples
     --------
+    Example 1: Parsing a simple XML with a single element
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.range(1)
-    >>> df.select(schema_of_xml(lit('<p><a>1</a></p>')).alias("xml")).collect()
+    >>> df.select(sf.schema_of_xml(sf.lit('<p><a>1</a></p>')).alias("xml")).collect()
     [Row(xml='STRUCT<a: BIGINT>')]
-    >>> df.select(schema_of_xml(lit('<p><a>1</a><a>2</a></p>')).alias("xml")).collect()
+
+    Example 2: Parsing an XML with multiple elements in an array
+
+    >>> from pyspark.sql import functions as sf
+    >>> df.select(sf.schema_of_xml(sf.lit('<p><a>1</a><a>2</a></p>')).alias("xml")).collect()
     [Row(xml='STRUCT<a: ARRAY<BIGINT>>')]
-    >>> schema = schema_of_xml('<p><a attr="2">1</a></p>', {'excludeAttribute':'true'})
+
+    Example 3: Parsing XML with options to exclude attributes
+
+    >>> from pyspark.sql import functions as sf
+    >>> schema = sf.schema_of_xml('<p><a attr="2">1</a></p>', {'excludeAttribute':'true'})
     >>> df.select(schema.alias("xml")).collect()
     [Row(xml='STRUCT<a: BIGINT>')]
+
+    Example 4: Parsing XML with complex structure
+
+    >>> from pyspark.sql import functions as sf
+    >>> df.select(
+    ...     sf.schema_of_xml(
+    ...         sf.lit('<root><person><name>Alice</name><age>30</age></person></root>')
+    ...     ).alias("xml")
+    ... ).collect()
+    [Row(xml='STRUCT<person: STRUCT<age: BIGINT, name: STRING>>')]
+
+    Example 5: Parsing XML with nested arrays
+
+    >>> from pyspark.sql import functions as sf
+    >>> df.select(
+    ...     sf.schema_of_xml(
+    ...         sf.lit('<data><values><value>1</value><value>2</value></values></data>')
+    ...     ).alias("xml")
+    ... ).collect()
+    [Row(xml='STRUCT<values: STRUCT<value: ARRAY<BIGINT>>>')]
     """
     if isinstance(xml, str):
         col = _create_column_from_literal(xml)
@@ -13507,6 +13794,42 @@ def schema_of_xml(xml: "ColumnOrName", options: Optional[Dict[str, str]] = None)
         )
 
     return _invoke_function("schema_of_xml", col, _options_to_str(options))
+
+
+@_try_remote_functions
+def to_xml(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+    """
+    Converts a column containing a :class:`StructType` into a XML string.
+    Throws an exception, in the case of an unsupported type.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column containing a struct.
+    options: dict, optional
+        options to control converting. accepts the same options as the XML datasource.
+        See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option>`_
+        for the version you use.
+
+        .. # noqa
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a XML string converted from given :class:`StructType`.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Row
+    >>> data = [(1, Row(age=2, name='Alice'))]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(to_xml(df.value, {'rowTag':'person'}).alias("xml")).collect()
+    [Row(xml='<person>\\n    <age>2</age>\\n    <name>Alice</name>\\n</person>')]
+    """
+
+    return _invoke_function("to_xml", _to_java_column(col), _options_to_str(options))
 
 
 @_try_remote_functions
@@ -17015,9 +17338,9 @@ def udtf(
 
     - The number and order of arguments are the same as the UDTF inputs
     - Each argument is a :class:`pyspark.sql.udtf.AnalyzeArgument`, containing:
-      - data_type: DataType
+      - dataType: DataType
       - value: Any: the calculated value if the argument is foldable; otherwise None
-      - is_table: bool: True if the argument is a table argument
+      - isTable: bool: True if the argument is a table argument
 
     and return a :class:`pyspark.sql.udtf.AnalyzeResult`, containing.
 
@@ -17029,7 +17352,7 @@ def udtf(
     ... class TestUDTFWithAnalyze:
     ...     @staticmethod
     ...     def analyze(a: AnalyzeArgument, b: AnalyzeArgument) -> AnalyzeResult:
-    ...         return AnalyzeResult(StructType().add("a", a.data_type).add("b", b.data_type))
+    ...         return AnalyzeResult(StructType().add("a", a.dataType).add("b", b.dataType))
     ...
     ...     def eval(self, a, b):
     ...         yield a, b
@@ -17050,9 +17373,9 @@ def udtf(
     ...         a: AnalyzeArgument, b: AnalyzeArgument, **kwargs: AnalyzeArgument
     ...     ) -> AnalyzeResult:
     ...         return AnalyzeResult(
-    ...             StructType().add("a", a.data_type)
-    ...                 .add("b", b.data_type)
-    ...                 .add("x", kwargs["x"].data_type)
+    ...             StructType().add("a", a.dataType)
+    ...                 .add("b", b.dataType)
+    ...                 .add("x", kwargs["x"].dataType)
     ...         )
     ...
     ...     def eval(self, a, b, **kwargs):

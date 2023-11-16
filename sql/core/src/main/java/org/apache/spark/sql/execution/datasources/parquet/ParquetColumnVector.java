@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.MapType;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.types.VariantType;
 
 /**
  * Contains necessary information representing a Parquet column, either of primitive or nested type.
@@ -175,7 +176,7 @@ final class ParquetColumnVector {
         child.assemble();
       }
       assembleCollection();
-    } else if (type instanceof StructType) {
+    } else if (type instanceof StructType || type instanceof VariantType) {
       for (ParquetColumnVector child : children) {
         child.assemble();
       }
@@ -343,14 +344,10 @@ final class ParquetColumnVector {
   }
 
   private static WritableColumnVector allocateLevelsVector(int capacity, MemoryMode memoryMode) {
-    switch (memoryMode) {
-      case ON_HEAP:
-        return new OnHeapColumnVector(capacity, DataTypes.IntegerType);
-      case OFF_HEAP:
-        return new OffHeapColumnVector(capacity, DataTypes.IntegerType);
-      default:
-        throw new IllegalArgumentException("Unknown memory mode: " + memoryMode);
-    }
+    return switch (memoryMode) {
+      case ON_HEAP -> new OnHeapColumnVector(capacity, DataTypes.IntegerType);
+      case OFF_HEAP -> new OffHeapColumnVector(capacity, DataTypes.IntegerType);
+    };
   }
 
   /**

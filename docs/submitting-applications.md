@@ -132,17 +132,6 @@ export HADOOP_CONF_DIR=XXX
   examples/src/main/python/pi.py \
   1000
 
-# Run on a Mesos cluster in cluster deploy mode with supervise
-./bin/spark-submit \
-  --class org.apache.spark.examples.SparkPi \
-  --master mesos://207.184.161.138:7077 \
-  --deploy-mode cluster \
-  --supervise \
-  --executor-memory 20G \
-  --total-executor-cores 100 \
-  http://path/to/examples.jar \
-  1000
-
 # Run on a Kubernetes cluster in cluster deploy mode
 ./bin/spark-submit \
   --class org.apache.spark.examples.SparkPi \
@@ -172,11 +161,6 @@ The master URL passed to Spark can be in one of the following formats:
 </td></tr>
 <tr><td> <code>spark://HOST1:PORT1,HOST2:PORT2</code> </td><td> Connect to the given <a href="spark-standalone.html#standby-masters-with-zookeeper">Spark standalone
         cluster with standby masters with Zookeeper</a>. The list must have all the master hosts in the high availability cluster set up with Zookeeper. The port must be whichever each master is configured to use, which is 7077 by default.
-</td></tr>
-<tr><td> <code>mesos://HOST:PORT</code> </td><td> Connect to the given <a href="running-on-mesos.html">Mesos</a> cluster.
-        The port must be whichever one your is configured to use, which is 5050 by default.
-        Or, for a Mesos cluster using ZooKeeper, use <code>mesos://zk://...</code>.
-        To submit with <code>--deploy-mode cluster</code>, the HOST:PORT should be configured to connect to the <a href="running-on-mesos.html#cluster-mode">MesosClusterDispatcher</a>.
 </td></tr>
 <tr><td> <code>yarn</code> </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
         <code>client</code> or <code>cluster</code> mode depending on the value of <code>--deploy-mode</code>.

@@ -20,8 +20,8 @@ package org.apache.spark.ml.feature;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.sql.Dataset;
@@ -58,7 +58,7 @@ public class JavaBucketizerSuite extends SharedSparkSession {
 
     for (Row r : result) {
       double index = r.getDouble(0);
-      Assert.assertTrue((index >= 0) && (index <= 1));
+      Assertions.assertTrue((index >= 0) && (index <= 1));
     }
   }
 
@@ -90,10 +90,10 @@ public class JavaBucketizerSuite extends SharedSparkSession {
 
     for (Row r : result) {
       double index1 = r.getDouble(0);
-      Assert.assertTrue((index1 >= 0) && (index1 <= 1));
+      Assertions.assertTrue((index1 >= 0) && (index1 <= 1));
 
       double index2 = r.getDouble(1);
-      Assert.assertTrue((index2 >= 0) && (index2 <= 2));
+      Assertions.assertTrue((index2 >= 0) && (index2 <= 2));
     }
   }
 }

@@ -21,7 +21,7 @@ import java.util.{Iterator => JIterator}
 import java.util.Arrays
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.api.java.UDF2
@@ -111,7 +111,7 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
 
     val result2 = Seq((1, "a b c"), (2, "a b"), (3, "a"))
       .toDF("number", "letters")
-      .explode('letters) { case Row(letters: String) =>
+      .explode(Symbol("letters")) { case Row(letters: String) =>
         letters.split(' ').map(Tuple1.apply).toSeq
       }
       .as[(Int, String, String)]
@@ -286,7 +286,10 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
     import session.implicits._
     val df = Seq((1, 2, 3)).toDF("a", "b", "c")
     val f = udf((row: Row) => row.schema.fieldNames)
-    checkDataset(df.select(f(struct(df.columns map col: _*))), Row(Seq("a", "b", "c")))
+    import org.apache.spark.util.ArrayImplicits._
+    checkDataset(
+      df.select(f(struct((df.columns map col).toImmutableArraySeq: _*))),
+      Row(Seq("a", "b", "c")))
   }
 
   test("Filter with row input encoder") {
@@ -340,7 +343,7 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
       assert(kvgds == null)
       i + 1
     }
-    val result = df.select(f($"id")).as[Long].head
+    val result = df.select(f($"id")).as[Long].head()
     assert(result == 1L)
   }
 }

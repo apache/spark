@@ -26,6 +26,7 @@ from typing import cast
 import io
 from contextlib import redirect_stdout
 
+from pyspark import StorageLevel
 from pyspark.sql import SparkSession, Row, functions
 from pyspark.sql.functions import col, lit, count, sum, mean, struct
 from pyspark.sql.types import (
@@ -61,51 +62,6 @@ from pyspark.testing.utils import QuietTest
 
 
 class DataFrameTestsMixin:
-    def test_getitem_invalid_indices(self):
-        df = self.spark.sql(
-            "SELECT * FROM VALUES "
-            "(1, 1.1, 'a'), "
-            "(2, 2.2, 'b'), "
-            "(4, 4.4, 'c') "
-            "AS TAB(a, b, c)"
-        )
-
-        # accepted type and values
-        for index in [False, True, 0, 1, 2, -1, -2, -3]:
-            df[index]
-
-        # negative cases: ordinal out of range
-        for index in [-10, -4, 3, 10, 100]:
-            with self.assertRaises(IndexError):
-                df[index]
-
-        # negative cases: unsupported types
-        for index in [None, 1.0, Decimal(1)]:
-            with self.assertRaises(PySparkTypeError):
-                df[index]
-
-    def test_getitem_duplicated_column(self):
-        df = self.spark.sql(
-            "SELECT * FROM VALUES "
-            "(1, 1.1, 'a'), "
-            "(2, 2.2, 'b'), "
-            "(4, 4.4, 'c') "
-            "AS TAB(a, a, a)"
-        )
-
-        self.assertEqual(
-            df.select(df[0]).schema.simpleString(),
-            "struct<a:int>",
-        )
-        self.assertEqual(
-            df.select(df[1]).schema.simpleString(),
-            "struct<a:decimal(2,1)>",
-        )
-        self.assertEqual(
-            df.select(df[2]).schema.simpleString(),
-            "struct<a:string>",
-        )
-
     def test_range(self):
         self.assertEqual(self.spark.range(1, 1).count(), 0)
         self.assertEqual(self.spark.range(1, 0, -1).count(), 1)
@@ -120,6 +76,7 @@ class DataFrameTestsMixin:
         self.assertEqual(2, row[1])
         self.assertEqual("Row(c=1, c=2)", str(row))
         # Cannot access columns
+        self.assertRaises(AnalysisException, lambda: df.select(df[0]).first())
         self.assertRaises(AnalysisException, lambda: df.select(df.c).first())
         self.assertRaises(AnalysisException, lambda: df.select(df["c"]).first())
 
@@ -147,6 +104,43 @@ class DataFrameTestsMixin:
         self.assertEqual(df.drop(col("name")).columns, ["age", "active"])
         self.assertEqual(df.drop(col("name"), col("age")).columns, ["active"])
         self.assertEqual(df.drop(col("name"), col("age"), col("random")).columns, ["active"])
+
+    def test_drop_join(self):
+        left_df = self.spark.createDataFrame(
+            [(1, "a"), (2, "b"), (3, "c")],
+            ["join_key", "value1"],
+        )
+        right_df = self.spark.createDataFrame(
+            [(1, "aa"), (2, "bb"), (4, "dd")],
+            ["join_key", "value2"],
+        )
+        joined_df = left_df.join(
+            right_df,
+            on=left_df["join_key"] == right_df["join_key"],
+            how="left",
+        )
+
+        dropped_1 = joined_df.drop(left_df["join_key"])
+        self.assertEqual(dropped_1.columns, ["value1", "join_key", "value2"])
+        self.assertEqual(
+            dropped_1.sort("value1").collect(),
+            [
+                Row(value1="a", join_key=1, value2="aa"),
+                Row(value1="b", join_key=2, value2="bb"),
+                Row(value1="c", join_key=None, value2=None),
+            ],
+        )
+
+        dropped_2 = joined_df.drop(right_df["join_key"])
+        self.assertEqual(dropped_2.columns, ["join_key", "value1", "value2"])
+        self.assertEqual(
+            dropped_2.sort("value1").collect(),
+            [
+                Row(join_key=1, value1="a", value2="aa"),
+                Row(join_key=2, value1="b", value2="bb"),
+                Row(join_key=3, value1="c", value2=None),
+            ],
+        )
 
     def test_with_columns_renamed(self):
         df = self.spark.createDataFrame([("Alice", 50), ("Alice", 60)], ["name", "age"])
@@ -1065,6 +1059,45 @@ class DataFrameTestsMixin:
         self.assertTrue(hasattr(row, "sum"))
         self.assertGreaterEqual(row.cnt, 0)
         self.assertGreaterEqual(row.sum, 0)
+
+    def test_observe_with_same_name_on_different_dataframe(self):
+        # SPARK-45656: named observations with the same name on different datasets
+        from pyspark.sql import Observation
+
+        observation1 = Observation("named")
+        df1 = self.spark.range(50)
+        observed_df1 = df1.observe(observation1, count(lit(1)).alias("cnt"))
+
+        observation2 = Observation("named")
+        df2 = self.spark.range(100)
+        observed_df2 = df2.observe(observation2, count(lit(1)).alias("cnt"))
+
+        observed_df1.collect()
+        observed_df2.collect()
+
+        self.assertEqual(observation1.get, dict(cnt=50))
+        self.assertEqual(observation2.get, dict(cnt=100))
+
+    def test_observe_on_commands(self):
+        from pyspark.sql import Observation
+
+        df = self.spark.range(50)
+
+        test_table = "test_table"
+
+        # DataFrameWriter
+        with self.table(test_table):
+            for command, action in [
+                ("collect", lambda df: df.collect()),
+                ("show", lambda df: df.show(50)),
+                ("save", lambda df: df.write.format("noop").mode("overwrite").save()),
+                ("create", lambda df: df.writeTo(test_table).using("parquet").create()),
+            ]:
+                with self.subTest(command=command):
+                    observation = Observation()
+                    observed_df = df.observe(observation, count(lit(1)).alias("cnt"))
+                    action(observed_df)
+                    self.assertEqual(observation.get, dict(cnt=50))
 
     def test_sample(self):
         with self.assertRaises(PySparkTypeError) as pe:

@@ -23,9 +23,10 @@ import java.nio.file.{Files, Path, Paths, StandardCopyOption}
 import java.util.concurrent.CopyOnWriteArrayList
 import javax.ws.rs.core.UriBuilder
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
+import io.grpc.Status
 import org.apache.commons.io.{FilenameUtils, FileUtils}
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
@@ -63,7 +64,7 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
   // The base directory/URI where all class file artifacts are stored for this `sessionUUID`.
   val (classDir, classURI): (Path, String) = getClassfileDirectoryAndUriForSession(sessionHolder)
   val state: JobArtifactState =
-    JobArtifactState(sessionHolder.session.sessionUUID, Option(classURI))
+    JobArtifactState(sessionHolder.serverSessionId, Option(classURI))
 
   private val jarsList = new CopyOnWriteArrayList[Path]
   private val pythonIncludeList = new CopyOnWriteArrayList[String]
@@ -125,11 +126,18 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
     } else {
       val target = ArtifactUtils.concatenatePaths(artifactPath, remoteRelativePath)
       Files.createDirectories(target.getParent)
-      // Disallow overwriting non-classfile artifacts
+
+      // Disallow overwriting with modified version
       if (Files.exists(target)) {
-        throw new RuntimeException(
-          s"Duplicate Artifact: $remoteRelativePath. " +
+        // makes the query idempotent
+        if (FileUtils.contentEquals(target.toFile, serverLocalStagingPath.toFile)) {
+          return
+        }
+
+        throw Status.ALREADY_EXISTS
+          .withDescription(s"Duplicate Artifact: $remoteRelativePath. " +
             "Artifacts cannot be overwritten.")
+          .asRuntimeException()
       }
       Files.move(serverLocalStagingPath, target)
 

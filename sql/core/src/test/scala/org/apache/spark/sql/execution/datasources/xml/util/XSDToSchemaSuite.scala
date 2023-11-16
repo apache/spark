@@ -18,8 +18,8 @@ package org.apache.spark.sql.execution.datasources.xml.util
 
 import java.nio.file.Paths
 
-import org.apache.spark.sql.catalyst.xml.XSDToSchema
 import org.apache.spark.sql.execution.datasources.xml.TestUtils._
+import org.apache.spark.sql.execution.datasources.xml.XSDToSchema
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, DecimalType, FloatType, LongType, StringType}
 

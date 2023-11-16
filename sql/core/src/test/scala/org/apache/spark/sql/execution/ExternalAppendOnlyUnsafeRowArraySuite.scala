@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution
 import java.util
 import java.util.ConcurrentModificationException
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark._
 import org.apache.spark.memory.MemoryTestingUtils

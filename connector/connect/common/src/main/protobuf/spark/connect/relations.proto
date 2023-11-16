@@ -72,6 +72,7 @@ message Relation {
     CachedLocalRelation cached_local_relation = 36;
     CachedRemoteRelation cached_remote_relation = 37;
     CommonInlineUserDefinedTableFunction common_inline_user_defined_table_function = 38;
+    AsOfJoin as_of_join = 39;
 
     // NA functions
     NAFill fill_na = 90;
@@ -1008,4 +1009,45 @@ message Parse {
     PARSE_FORMAT_CSV = 1;
     PARSE_FORMAT_JSON = 2;
   }
+}
+
+// Relation of type [[AsOfJoin]].
+//
+// `left` and `right` must be present.
+message AsOfJoin {
+  // (Required) Left input relation for a Join.
+  Relation left = 1;
+
+  // (Required) Right input relation for a Join.
+  Relation right = 2;
+
+  // (Required) Field to join on in left DataFrame
+  Expression left_as_of = 3;
+
+  // (Required) Field to join on in right DataFrame
+  Expression right_as_of = 4;
+
+  // (Optional) The join condition. Could be unset when `using_columns` is utilized.
+  //
+  // This field does not co-exist with using_columns.
+  Expression join_expr = 5;
+
+  // Optional. using_columns provides a list of columns that should present on both sides of
+  // the join inputs that this Join will join on. For example A JOIN B USING col_name is
+  // equivalent to A JOIN B on A.col_name = B.col_name.
+  //
+  // This field does not co-exist with join_condition.
+  repeated string using_columns = 6;
+
+  // (Required) The join type.
+  string join_type = 7;
+
+  // (Optional) The asof tolerance within this range.
+  Expression tolerance = 8;
+
+  // (Required) Whether allow matching with the same value or not.
+  bool allow_exact_matches = 9;
+
+  // (Required) Whether to search for prior, subsequent, or closest matches.
+  string direction = 10;
 }

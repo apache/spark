@@ -154,7 +154,11 @@ case class NullIf(left: Expression, right: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
 
   def this(left: Expression, right: Expression) = {
-    this(left, right, If(EqualTo(left, right), Literal.create(null, left.dataType), left))
+    this(left, right, {
+      val commonExpr = CommonExpressionDef(left)
+      val ref = new CommonExpressionRef(commonExpr)
+      With(If(EqualTo(ref, right), Literal.create(null, left.dataType), ref), Seq(commonExpr))
+    })
   }
 
   override def parameters: Seq[Expression] = Seq(left, right)

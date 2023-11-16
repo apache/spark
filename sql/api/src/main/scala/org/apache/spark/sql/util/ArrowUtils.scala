@@ -19,7 +19,7 @@ package org.apache.spark.sql.util
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.complex.MapVector
@@ -28,6 +28,7 @@ import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 private[sql] object ArrowUtils {
 
@@ -182,7 +183,7 @@ private[sql] object ArrowUtils {
         st.names
       } else {
         if (errorOnDuplicatedFieldNames) {
-          throw ExecutionErrors.duplicatedFieldNameInArrowStructError(st.names)
+          throw ExecutionErrors.duplicatedFieldNameInArrowStructError(st.names.toImmutableArraySeq)
         }
         val genNawName = st.names.groupBy(identity).map {
           case (name, names) if names.length > 1 =>

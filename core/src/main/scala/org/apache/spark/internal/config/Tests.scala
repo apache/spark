@@ -83,4 +83,13 @@ private[spark] object Tests {
       .booleanConf
       .createWithDefault(false)
 
+  val TEST_SKIP_ESS_REGISTER = ConfigBuilder("spark.testing.skipESSRegister")
+    .version("4.0.0")
+    .doc("None of Spark testing modes (local, local-cluster) enables shuffle service. So it is " +
+      s"hard to test ${SHUFFLE_SERVICE_ENABLED.key} when you only want to test this flag but " +
+      s"without the real server. This config provides a way to allow tests run with " +
+      s"${SHUFFLE_SERVICE_ENABLED.key} enabled without registration failures.")
+    .booleanConf
+    .createWithDefault(false)
+
 }

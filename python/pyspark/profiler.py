@@ -27,7 +27,6 @@ from typing import (
     Union,
     cast,
 )
-
 import cProfile
 import inspect
 import pstats

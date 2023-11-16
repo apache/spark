@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.util.{Locale, Properties}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -262,7 +262,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
       val optionsWithPath = getOptionsWithPath(path)
 
-      val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
+      val finalOptions = sessionOptions.view.filterKeys(!optionsWithPath.contains(_)).toMap ++
         optionsWithPath.originalMap
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
 

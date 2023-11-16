@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.annotation.Stable
@@ -59,8 +59,8 @@ class RelationalGroupedDataset protected[sql](
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
     val aggregates = if (df.sparkSession.sessionState.conf.dataFrameRetainGroupColumns) {
       groupingExprs match {
-        // call `toList` because `Stream` can't serialize in scala 2.13
-        case s: Stream[Expression] => s.toList ++ aggExprs
+        // call `toList` because `LazyList` can't serialize in scala 2.13
+        case s: LazyList[Expression] => s.toList ++ aggExprs
         case other => other ++ aggExprs
       }
     } else {
