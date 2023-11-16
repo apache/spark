@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global d3, flamegraph */
+/* global $, d3, flamegraph */
 
 /* eslint-disable no-unused-vars */
 function drawFlamegraph() {

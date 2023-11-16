@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $ */
+/* global $, d3, collapseTable */
 /* eslint-disable no-unused-vars */
 /* Adds background colors to stripe table rows in the summary table (on the stage page). This is
  * necessary (instead of using css or the table striping provided by bootstrap) because the summary
