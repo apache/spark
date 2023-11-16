@@ -22,6 +22,7 @@ import java.util.Locale
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
+import scala.jdk.CollectionConverters._
 import scala.ref.WeakReference
 import scala.util.Try
 
@@ -120,6 +121,12 @@ class RocksDB(
     dbOptions.setWriteBufferManager(writeBufferManager)
   }
 
+  // Maintain mapping of column family name to handle
+  @volatile private var colFamilyNameToHandleMap =
+    scala.collection.mutable.Map[String, ColumnFamilyHandle]()
+
+  private val defaultColFamilyName = "default"
+
   private val dbLogger = createLogger() // for forwarding RocksDB native logs to log4j
   dbOptions.setStatistics(new Statistics())
   private val nativeStats = dbOptions.statistics()
@@ -138,6 +145,12 @@ class RocksDB(
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
+
+  // TODO: support changelog checkpointing with column families
+  if (useColumnFamilies && enableChangelogCheckpointing) {
+    throw new RuntimeException("Changelog checkpointing is not supported with multiple " +
+      "column families")
+  }
 
   @GuardedBy("acquireLock")
   @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
@@ -216,10 +229,23 @@ class RocksDB(
   }
 
   /**
+   * Create RocksDB column family, if not created already
+   */
+  def createColFamilyIfAbsent(colFamilyName: String): Unit = {
+    if (!colFamilyNameToHandleMap.contains(colFamilyName)) {
+      assert(db != null)
+      val descriptor = new ColumnFamilyDescriptor(colFamilyName.getBytes, columnFamilyOptions)
+      val handle = db.createColumnFamily(descriptor)
+      colFamilyNameToHandleMap(handle.getName.map(_.toChar).mkString) = handle
+    }
+  }
+
+  /**
    * Get the value for the given key if present, or null.
    * @note This will return the last written value even if it was uncommitted.
    */
-  def get(key: Array[Byte]): Array[Byte] = {
+  def get(key: Array[Byte],
+    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Array[Byte] = {
     db.get(readOptions, key)
   }
 
@@ -585,12 +611,43 @@ class RocksDB(
 
   private def openDB(): Unit = {
     assert(db == null)
-    db = NativeRocksDB.open(dbOptions, workingDir.toString)
-    logInfo(s"Opened DB with conf ${conf}")
+    if (useColumnFamilies) {
+      val colFamilies = NativeRocksDB.listColumnFamilies(dbOptions, workingDir.toString)
+
+      var colFamilyDescriptors: Seq[ColumnFamilyDescriptor] = Seq.empty[ColumnFamilyDescriptor]
+      // populate the list of available col family descriptors
+      colFamilies.asScala.toList.foreach(family => {
+        val descriptor = new ColumnFamilyDescriptor(family, columnFamilyOptions)
+        colFamilyDescriptors = colFamilyDescriptors :+ descriptor
+      })
+
+      if (colFamilyDescriptors.isEmpty) {
+        colFamilyDescriptors = colFamilyDescriptors :+
+          new ColumnFamilyDescriptor(NativeRocksDB.DEFAULT_COLUMN_FAMILY, columnFamilyOptions)
+      }
+
+      val colFamilyHandles = new java.util.ArrayList[ColumnFamilyHandle]()
+      db = NativeRocksDB.open(new DBOptions(dbOptions), workingDir.toString,
+        colFamilyDescriptors.asJava, colFamilyHandles)
+
+      // Store the mapping of names to handles in the internal map
+      colFamilyHandles.asScala.toList.map(
+        handle => {
+          colFamilyNameToHandleMap(handle.getName.map(_.toChar).mkString) = handle
+        })
+    } else {
+      db = NativeRocksDB.open(dbOptions, workingDir.toString)
+      logInfo(s"Opened DB with conf ${conf}")
+    }
   }
 
   private def closeDB(): Unit = {
     if (db != null) {
+      // Close the column family handles in case multiple column families are used
+      if (useColumnFamilies) {
+        colFamilyNameToHandleMap.values.map(handle => handle.close)
+      }
+
       db.close()
       db = null
     }

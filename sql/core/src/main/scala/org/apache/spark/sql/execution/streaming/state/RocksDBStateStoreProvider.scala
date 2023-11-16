@@ -46,7 +46,13 @@ private[sql] class RocksDBStateStoreProvider
 
     override def version: Long = lastVersion
 
-    override def get(key: UnsafeRow): UnsafeRow = {
+    override def createColFamilyIfAbsent(colFamilyName: String): Unit = {
+      verify(colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME,
+        s"Failed to create column family with reserved_name=$colFamilyName")
+      rocksDB.createColFamilyIfAbsent(colFamilyName)
+    }
+
+    override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
       verify(key != null, "Key cannot be null")
       val value = encoder.decodeValue(rocksDB.get(encoder.encodeKey(key)))
       if (!isValidated && value != null) {
@@ -57,20 +63,20 @@ private[sql] class RocksDBStateStoreProvider
       value
     }
 
-    override def put(key: UnsafeRow, value: UnsafeRow): Unit = {
+    override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       verify(key != null, "Key cannot be null")
       require(value != null, "Cannot put a null value")
       rocksDB.put(encoder.encodeKey(key), encoder.encodeValue(value))
     }
 
-    override def remove(key: UnsafeRow): Unit = {
+    override def remove(key: UnsafeRow, colFamilyName: String): Unit = {
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       verify(key != null, "Key cannot be null")
       rocksDB.remove(encoder.encodeKey(key))
     }
 
-    override def iterator(): Iterator[UnsafeRowPair] = {
+    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
       rocksDB.iterator().map { kv =>
         val rowPair = encoder.decode(kv)
         if (!isValidated && rowPair.value != null) {
@@ -82,7 +88,8 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
-    override def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair] = {
+    override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
+      Iterator[UnsafeRowPair] = {
       require(encoder.supportPrefixKeyScan, "Prefix scan requires setting prefix key!")
 
       val prefix = encoder.encodePrefixKey(prefixKey)

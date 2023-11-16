@@ -277,7 +277,7 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
   }
 
   private def getRows(store: StateStore, keys: Seq[UnsafeRow]): Seq[UnsafeRow] = {
-    keys.map(store.get)
+    keys.map(key => store.get(key))
   }
 
   private def loadInitialData(
