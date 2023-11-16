@@ -2007,7 +2007,7 @@ class Dataset[T] private[sql](
    * }}}
    *
    * @group untypedrel
-   * @since 3.5.0
+   * @since 4.0.0
    */
   @scala.annotation.varargs
   def groupingSets(
