@@ -99,7 +99,7 @@ RUN python3.9 -m pip install deepspeed
 # Install Python 3.10 at the last stage to avoid breaking Python 3.9
 RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y \
-    python3.10 \
+    python3.10 python3.10-distutils \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
 RUN python3.10 -m pip install numpy 'pyarrow>=14.0.0' 'pandas<=2.1.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
