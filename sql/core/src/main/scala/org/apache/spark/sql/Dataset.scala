@@ -1572,7 +1572,13 @@ class Dataset[T] private[sql](
 
         case other => other
       }
-      Project(untypedCols.map(_.named), logicalPlan)
+      val newProjList = untypedCols.map(_.named)
+      (logicalPlan, newProjList) match {
+        case EasilyFlattenable(flattendPlan) => flattendPlan
+
+        case _ => Project(newProjList, logicalPlan)
+      }
+
     }
   }
 
@@ -4453,5 +4459,42 @@ class Dataset[T] private[sql](
   // This is only used in tests, for now.
   private[sql] def toArrowBatchRdd: RDD[Array[Byte]] = {
     toArrowBatchRdd(queryExecution.executedPlan)
+  }
+}
+
+private[sql] object EasilyFlattenable {
+  def unapply(tuple: (LogicalPlan, Seq[NamedExpression])): Option[LogicalPlan] = {
+    val (logicalPlan, newProjList) = tuple
+    logicalPlan match {
+      case p @ Project(projList, child) =>
+        val newlyAddedCols = newProjList.drop(projList.size)
+        val childAttribNames = child.output.map(_.name).toSet
+        val remappedAttribsInProj = projList.collect {
+          case Alias(expr, name) if childAttribNames.contains(name) && !expr.isInstanceOf[Attribute]
+          => name
+        }.toSet
+
+        val canBeFlattend = newlyAddedCols.forall(ne => ne match {
+           // this is case of duplicating column, for now do not handle
+          case Alias(_: Attribute, _) => false
+
+          case Alias(expr, _) => if (expr.references.isEmpty) {
+            true
+          } else {
+            val attsNameInNewExpr = expr.references.map(_.name).toSet
+            attsNameInNewExpr.subsetOf(childAttribNames) &&
+             remappedAttribsInProj.forall(!attsNameInNewExpr.contains(_))
+          }
+
+          case _ => false
+      })
+      if (canBeFlattend) {
+        Option(p.copy(projList ++ newlyAddedCols))
+      } else {
+        None
+      }
+
+      case _ => None
+    }
   }
 }
