@@ -193,8 +193,8 @@ private[spark] class BlockManager(
   extends BlockDataManager with BlockEvictionHandler with Logging {
 
   // We initialize the ShuffleManager later in SparkContext and Executor, to allow
-  // user jars to define custom ShuffleManagers, as such `_shuffleManager` will be null for the
-  // executor, and we ask for the instance from the SparkEnv.
+  // user jars to define custom ShuffleManagers, as such `_shuffleManager` will be null here
+  // (except for tests) and we ask for the instance from the SparkEnv.
   private lazy val shuffleManager = Option(_shuffleManager).getOrElse(SparkEnv.get.shuffleManager)
 
   // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)`

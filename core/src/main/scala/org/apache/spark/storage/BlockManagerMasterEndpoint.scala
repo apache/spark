@@ -58,6 +58,9 @@ class BlockManagerMasterEndpoint(
     isDriver: Boolean)
   extends IsolatedThreadSafeRpcEndpoint with Logging {
 
+  // We initialize the ShuffleManager later in SparkContext and Executor, to allow
+  // user jars to define custom ShuffleManagers, as such `_shuffleManager` will be null here
+  // (except for tests) and we ask for the instance from the SparkEnv.
   private lazy val shuffleManager = Option(_shuffleManager).getOrElse(SparkEnv.get.shuffleManager)
 
   // Mapping from executor id to the block manager's local disk directories.
