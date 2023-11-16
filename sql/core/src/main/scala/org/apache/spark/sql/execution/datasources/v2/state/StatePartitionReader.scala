@@ -60,8 +60,11 @@ class StatePartitionReader(
     // TODO: This does not handle the case of session window aggregation; we don't have an
     //  information whether the state store uses prefix scan or not. We will have to add such
     //  information to determine the right encoder/decoder for the data.
+    // TODO: use column families might need to be supported for transformWithState operator
     StateStore.getReadOnly(stateStoreProviderId, keySchema, valueSchema,
-      numColsPrefixKey = 0, version = partition.sourceOptions.batchId + 1, storeConf = storeConf,
+      numColsPrefixKey = 0, version = partition.sourceOptions.batchId + 1,
+      useColumnFamilies = false,
+      storeConf = storeConf,
       hadoopConf = hadoopConf.value)
   }
 

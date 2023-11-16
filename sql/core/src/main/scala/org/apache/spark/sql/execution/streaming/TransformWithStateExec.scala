@@ -89,7 +89,8 @@ case class TransformWithStateExec(
       schemaForValueRow,
       numColsPrefixKey = 0,
       session.sqlContext.sessionState,
-      Some(session.sqlContext.streams.stateStoreCoordinator)
+      Some(session.sqlContext.streams.stateStoreCoordinator),
+      useColumnFamilies = true
     ) {
       case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
         CompletionIterator[InternalRow, Iterator[InternalRow]](null, Iterator.empty)

@@ -467,7 +467,8 @@ class SymmetricHashJoinStateManager(
         stateInfo.get, partitionId, getStateStoreName(joinSide, stateStoreType))
       val store = StateStore.get(
         storeProviderId, keySchema, valueSchema, numColsPrefixKey = 0,
-        stateInfo.get.storeVersion, storeConf, hadoopConf)
+        stateInfo.get.storeVersion, useColumnFamilies = false,
+        storeConf, hadoopConf)
       logInfo(s"Loaded store ${store.id}")
       store
     }

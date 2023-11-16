@@ -518,6 +518,7 @@ object StateStore extends Logging {
       valueSchema: StructType,
       numColsPrefixKey: Int,
       version: Long,
+      useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): ReadStateStore = {
     if (version < 0) {
@@ -535,6 +536,7 @@ object StateStore extends Logging {
       valueSchema: StructType,
       numColsPrefixKey: Int,
       version: Long,
+      useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStore = {
     if (version < 0) {
