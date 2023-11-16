@@ -59,11 +59,11 @@ public class ShuffleIndexInformationSuite {
     ShuffleIndexInformation s = new ShuffleIndexInformation(path);
     // the index file contains 3 offsets:
     //   0, sortBlock0.length, sortBlock0.length + sortBlock1.length
-    assertEquals(0L, s.getIndex(0).getOffset());
-    assertEquals(sortBlock0.length(), s.getIndex(0).getLength());
+    assertEquals(0L, s.getIndex(0).offset());
+    assertEquals(sortBlock0.length(), s.getIndex(0).length());
 
-    assertEquals(sortBlock0.length(), s.getIndex(1).getOffset());
-    assertEquals(sortBlock1.length(), s.getIndex(1).getLength());
+    assertEquals(sortBlock0.length(), s.getIndex(1).offset());
+    assertEquals(sortBlock1.length(), s.getIndex(1).length());
 
     assertEquals((3 * 8) + ShuffleIndexInformation.INSTANCE_MEMORY_FOOTPRINT,
       s.getRetainedMemorySize());
