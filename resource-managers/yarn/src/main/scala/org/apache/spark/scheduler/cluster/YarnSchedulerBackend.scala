@@ -36,7 +36,7 @@ import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.storage.{BlockManagerId, BlockManagerMaster}
-import org.apache.spark.util.{RpcUtils, ThreadUtils}
+import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
 
 /**
  * Abstract Yarn scheduler backend that contains common logic
@@ -87,6 +87,10 @@ private[spark] abstract class YarnSchedulerBackend(
 
   private val minMergersStaticThreshold =
     conf.get(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD)
+
+  private val maxNumExecutors = conf.get(config.DYN_ALLOCATION_MAX_EXECUTORS)
+
+  private val numExecutors = conf.get(config.EXECUTOR_INSTANCES).getOrElse(0)
 
   /**
    * Bind to YARN. This *must* be done before calling [[start()]].
@@ -174,6 +178,11 @@ private[spark] abstract class YarnSchedulerBackend(
       resourceProfileId: Int): Seq[BlockManagerId] = {
     // TODO (SPARK-33481) This is a naive way of calculating numMergersDesired for a stage,
     // TODO we can use better heuristics to calculate numMergersDesired for a stage.
+    val maxExecutors = if (Utils.isDynamicAllocationEnabled(sc.getConf)) {
+      maxNumExecutors
+    } else {
+      numExecutors
+    }
     val tasksPerExecutor = sc.resourceProfileManager
       .resourceProfileFromId(resourceProfileId).maxTasksPerExecutor(sc.conf)
     val numMergersDesired = math.min(

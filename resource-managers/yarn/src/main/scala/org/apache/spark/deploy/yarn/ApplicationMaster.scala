@@ -562,10 +562,12 @@ private[spark] class ApplicationMaster(
   private def allocationThreadImpl(): Unit = {
     // The number of failures in a row until the allocation thread gives up.
     val reporterMaxFailures = sparkConf.get(MAX_REPORTER_THREAD_FAILURES)
-    val maxExecutors = SchedulerBackendUtils.getMaxTargetExecutorNumber(sparkConf)
-    val minSurviveRatio: Double = sparkConf.get(SCHEDULER_MIN_RESOURCES_TO_SURVIVE_RATIO)
+    val minExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(sparkConf)
+    val minRegisteredRatio = sparkConf.get(SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO).getOrElse(0.8)
+    val keepaliveOnMinExecutors = allocator.failureTracker.keepaliveOnMinExecutors
     def insufficientResources: Boolean = {
-      allocator.getNumExecutorsRunning < maxExecutors * minSurviveRatio
+      !keepaliveOnMinExecutors ||
+        allocator.getNumExecutorsRunning < minExecutors * minRegisteredRatio
     }
     var failureCount = 0
     while (!finished) {
@@ -574,7 +576,8 @@ private[spark] class ApplicationMaster(
           val errorMsg = SchedulerBackendUtils.formatExecutorFailureError(
             maxNumExecutorFailures,
             allocator.getNumExecutorsRunning,
-            maxExecutors)
+            minExecutors,
+            keepaliveOnMinExecutors)
           finish(FinalApplicationStatus.FAILED,
             ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES, errorMsg)
         } else if (allocator.isAllNodeExcluded) {

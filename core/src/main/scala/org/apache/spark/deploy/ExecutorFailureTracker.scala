@@ -35,6 +35,7 @@ private[spark] class ExecutorFailureTracker(
 
   private val executorFailuresValidityInterval =
     sparkConf.get(EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS).getOrElse(-1L)
+  private[spark] val keepaliveOnMinExecutors: Boolean = sparkConf.get(KEEPALIVE_ON_MIN_EXECUTORS)
 
   // Queue to store the timestamp of failed executors for each host
   private val failedExecutorsTimeStampsPerHost = mutable.Map[String, mutable.Queue[Long]]()

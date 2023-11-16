@@ -61,7 +61,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
       super.minRegisteredRatio
     }
 
-  private val initialExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(conf)
+  private[k8s] val initialExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(conf)
 
   private val shouldDeleteDriverService = conf.get(KUBERNETES_DRIVER_SERVICE_DELETE_ON_TERMINATION)
 

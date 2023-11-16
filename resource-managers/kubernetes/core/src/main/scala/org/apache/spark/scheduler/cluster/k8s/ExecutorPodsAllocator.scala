@@ -144,11 +144,13 @@ class ExecutorPodsAllocator(
     snapshotsStore.addSubscriber(podAllocationDelay) { executorPodsSnapshot =>
       onNewSnapshots(applicationId, schedulerBackend, executorPodsSnapshot)
       if (getNumExecutorsFailed > maxNumExecutorFailures &&
-          schedulerBackend.insufficientResourcesRetained()) {
+          (!failureTracker.keepaliveOnMinExecutors ||
+            !schedulerBackend.sufficientResourcesRegistered())) {
         val errorMsg = SchedulerBackendUtils.formatExecutorFailureError(
           maxNumExecutorFailures,
           schedulerBackend.getNumExecutorsRunning,
-          schedulerBackend.maxExecutors)
+          schedulerBackend.initialExecutors,
+          failureTracker.keepaliveOnMinExecutors)
         logError(errorMsg)
         stopApplication(EXCEED_MAX_EXECUTOR_FAILURES)
       }

@@ -938,6 +938,18 @@ package object config {
       .intConf
       .createOptional
 
+  private[spark] val KEEPALIVE_ON_MIN_EXECUTORS =
+    ConfigBuilder("spark.executor.failureTracker.keepaliveOnMinLiveExecutors.enabled")
+      .doc("When true, the executor failure tracker ignores `spark.executor.maxNumFailures` if " +
+        "the app still have minimum available executors registered. The app fails only if " +
+        "it exceeds `spark.executor.maxNumFailures` and the current live executors is less " +
+        "than the minimum which is determined by `spark.dynamicAllocation.minExecutors` when " +
+        "dynamic allocation is on, or by `spark.executor.instances` when dynamic allocation " +
+        "is off, multiplied by `spark.scheduler.minRegisteredResourcesRatio`.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
     ConfigBuilder("spark.executor.failuresValidityInterval")
       .doc("Interval after which Executor failures will be considered independent and not " +
@@ -2085,18 +2097,8 @@ package object config {
     ConfigBuilder("spark.scheduler.minRegisteredResourcesRatio")
       .version("1.1.1")
       .doubleConf
+      .checkValue(v => v > 0 && v <= 1, "The value must be in range (0, 1].")
       .createOptional
-
-  private[spark] val SCHEDULER_MIN_RESOURCES_TO_SURVIVE_RATIO =
-    ConfigBuilder("spark.scheduler.minResourcesToSurviveRatio")
-      .doc("When encountering max number of executor failures, if the scheduler still has " +
-        "sufficient resources, which means live executors >= max number of executor * ratio. " +
-        "The application will not fail immediately. The smaller the ratio is, the more tolerant " +
-        "the application will be to executor failures.")
-      .version("4.0.0")
-      .doubleConf
-      .checkValue(x => x > 0, "must be positive")
-      .createWithDefault(0.5)
 
   private[spark] val SCHEDULER_MAX_REGISTERED_RESOURCE_WAITING_TIME =
     ConfigBuilder("spark.scheduler.maxRegisteredResourcesWaitingTime")

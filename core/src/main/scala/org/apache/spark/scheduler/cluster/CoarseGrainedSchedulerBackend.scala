@@ -65,8 +65,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // is equal to at least this value, that is double between 0 and 1.
   private val _minRegisteredRatio =
     math.min(1, conf.get(SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO).getOrElse(0.0))
-  protected val minSurviveRatio: Double = conf.get(SCHEDULER_MIN_RESOURCES_TO_SURVIVE_RATIO)
-  private[cluster] val maxExecutors: Int = SchedulerBackendUtils.getMaxTargetExecutorNumber(conf)
   // Submit tasks after maxRegisteredWaitingTime milliseconds
   // if minRegisteredRatio has not yet been reached
   private val maxRegisteredWaitingTimeNs = TimeUnit.MILLISECONDS.toNanos(
@@ -718,13 +716,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   def sufficientResourcesRegistered(): Boolean = true
-
-  // When the executor failure tracker collects enough failures, if the current resources are
-  // insufficient for keep the app running, it will fail the application directly; otherwise,
-  // it survives this check round.
-  def insufficientResourcesRetained(): Boolean = {
-    totalRegisteredExecutors.get() < maxExecutors * minSurviveRatio
-  }
 
   def getNumExecutorsRunning: Int = totalRegisteredExecutors.get()
 
