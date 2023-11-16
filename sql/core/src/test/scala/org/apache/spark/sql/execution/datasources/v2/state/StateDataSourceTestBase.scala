@@ -18,15 +18,26 @@ package org.apache.spark.sql.execution.datasources.v2.state
 
 import java.sql.Timestamp
 
+import org.scalatest.BeforeAndAfter
+
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
-trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
+trait StateDataSourceTestBase extends StreamTest with BeforeAndAfter with StateStoreMetricsTest {
   import testImplicits._
+
+  before {
+    spark.streams.stateStoreCoordinator // initialize the lazy coordinator
+  }
+
+  after {
+    StateStore.stop()
+  }
 
   protected def runCompositeKeyStreamingAggregationQuery(checkpointRoot: String): Unit = {
     val inputData = MemoryStream[Int]
