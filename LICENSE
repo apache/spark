@@ -218,11 +218,6 @@ docs/js/vendor/bootstrap.js
 connector/spark-ganglia-lgpl/src/main/java/com/codahale/metrics/ganglia/GangliaReporter.java
 
 
-Python Software Foundation License
-----------------------------------
-
-python/docs/source/_static/copybutton.js
-
 BSD 3-Clause
 ------------
 
