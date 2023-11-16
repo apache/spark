@@ -161,6 +161,18 @@ class DataFrameAggregateSuite extends QueryTest
     assert(cube0.where("date IS NULL").count() > 0)
   }
 
+  test("SPARK-45929 support grouping set operation in dataframe api") {
+    checkAnswer(
+      courseSales.groupingSets(Seq(Seq("course", "year"), Seq()), "course", "year")
+        .agg(sum("earnings"), grouping_id()),
+      Row("Java", 2012, 20000.0, 0) ::
+        Row("Java", 2013, 30000.0, 0) ::
+        Row("dotNET", 2012, 15000.0, 0) ::
+        Row("dotNET", 2013, 48000.0, 0) ::
+        Row(null, null, 113000.0, 3) :: Nil
+    )
+  }
+
   test("grouping and grouping_id") {
     checkAnswer(
       courseSales.cube("course", "year")
