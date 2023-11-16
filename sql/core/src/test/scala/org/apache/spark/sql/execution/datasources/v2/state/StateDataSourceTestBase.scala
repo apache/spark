@@ -28,14 +28,14 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
-trait StateDataSourceTestBase extends StreamTest with BeforeAndAfter with StateStoreMetricsTest {
+trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
   import testImplicits._
 
-  before {
+  override def beforeEach(): Unit = {
     spark.streams.stateStoreCoordinator // initialize the lazy coordinator
   }
 
-  after {
+  override def afterEach(): Unit = {
     StateStore.stop()
   }
 
