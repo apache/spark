@@ -4776,11 +4776,6 @@
       "Invalid bound function '<bound>: there are <argsLen> arguments but <inputTypesLen> parameters returned from 'inputTypes()'."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1200" : {
-    "message" : [
-      "<name> is not supported for v2 tables."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1201" : {
     "message" : [
       "Cannot resolve column name \"<colName>\" among (<fieldNames>)."
