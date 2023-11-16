@@ -496,7 +496,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
          |        self._last = None
          |
          |    @staticmethod
-         |    def analyze(self):
+         |    def analyze(row: Row):
          |        return AnalyzeResult(
          |            schema=StructType()
          |                .add("count", IntegerType())
@@ -523,7 +523,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
          |        self._last = ""
          |
          |    @staticmethod
-         |    def analyze(self):
+         |    def analyze(row: Row):
          |        return AnalyzeResult(
          |            schema=StructType()
          |                .add("last", StringType()))
@@ -596,7 +596,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |        self._last = None
         |
         |    @staticmethod
-        |    def analyze(self):
+        |    def analyze(row: Row):
         |        return AnalyzeResult(
         |            schema=StructType()
         |                .add("partition_col", IntegerType())
@@ -631,7 +631,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
          |        self._last = None
          |
          |    @staticmethod
-         |    def analyze(self):
+         |    def analyze(row: Row):
          |        return AnalyzeResult(
          |            schema=StructType()
          |                .add("last", IntegerType()),
@@ -658,7 +658,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
          |        self._last = None
          |
          |    @staticmethod
-         |    def analyze(self):
+         |    def analyze(row: Row):
          |        return AnalyzeResult(
          |            schema=StructType()
          |                .add("last", IntegerType()),
@@ -721,15 +721,19 @@ object IntegratedUDFTestUtils extends SQLHelper {
          |        self._analyze_result = analyze_result
          |
          |    @staticmethod
-         |    def analyze(**wkargs):
-         |        argument = wkargs["argument"]
-         |        assert(argument.dataType == StringType())
+         |    def analyze(**kwargs):
+         |        argument = kwargs.get("argument")
+         |        if argument is not None:
+         |            assert(argument.dataType == StringType())
+         |            argument_value = argument.value
+         |        else:
+         |            argument_value = None
          |        return AnalyzeResultWithBuffer(
          |            schema=StructType()
          |                .add("result", StringType()),
-         |            buffer=argument.value)
+         |            buffer=argument_value)
          |
-         |    def eval(self, argument):
+         |    def eval(self, argument: str):
          |        pass
          |
          |    def terminate(self):

@@ -22,7 +22,7 @@ import os
 import sys
 import dataclasses
 import time
-from inspect import getfullargspec
+import inspect
 import json
 from typing import Any, Callable, Iterable, Iterator, Optional
 import faulthandler
@@ -616,12 +616,12 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
     elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
         return args_offsets, wrap_arrow_batch_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
-        argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
+        argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
         return args_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
         return args_offsets, wrap_grouped_map_pandas_udf_with_state(func, return_type)
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
-        argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
+        argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
         return args_offsets, wrap_cogrouped_map_pandas_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
         return wrap_grouped_agg_pandas_udf(func, args_offsets, kwargs_offsets, return_type)
@@ -708,13 +708,14 @@ def read_udtf(pickleSer, infile, eval_type):
     # with one argument containing the previous AnalyzeResult. If that fails, then try a constructor
     # with no arguments. In this way each UDTF class instance can decide if it wants to inspect the
     # AnalyzeResult.
-    udtf_init_args = getfullargspec(handler)
+    udtf_init_args = inspect.getfullargspec(handler)
 
+    udtf_name = handler.__name__
     if has_pickled_analyze_result:
         if len(udtf_init_args.args) > 2:
             raise PySparkRuntimeError(
                 error_class="UDTF_CONSTRUCTOR_INVALID_IMPLEMENTS_ANALYZE_METHOD",
-                message_parameters={"name": handler.__name__},
+                message_parameters={"name": udtf_name},
             )
         elif len(udtf_init_args.args) == 2:
             prev_handler = handler
@@ -727,7 +728,7 @@ def read_udtf(pickleSer, infile, eval_type):
     elif len(udtf_init_args.args) > 1:
         raise PySparkRuntimeError(
             error_class="UDTF_CONSTRUCTOR_INVALID_NO_ANALYZE_METHOD",
-            message_parameters={"name": handler.__name__},
+            message_parameters={"name": udtf_name},
         )
 
     class UDTFWithPartitions:
@@ -855,6 +856,16 @@ def read_udtf(pickleSer, infile, eval_type):
             "implemented the 'eval' method. Please add the 'eval' method and try "
             "the query again."
         )
+
+    # Check that the arguments provided to the UDTF call match the expected parameters defined
+    # in the 'eval' method signature.
+    try:
+        inspect.signature(udtf.eval).bind(*args_offsets, **kwargs_offsets)
+    except TypeError as e:
+        raise PySparkRuntimeError(
+            error_class="UDTF_EVAL_METHOD_ARGUMENTS_DO_NOT_MATCH_SIGNATURE",
+            message_parameters={"name": udtf_name, "reason": str(e)},
+        ) from None
 
     def build_null_checker(return_type: StructType) -> Optional[Callable[[Any], None]]:
         def raise_(result_column_index):

@@ -768,6 +768,11 @@ ERROR_CLASSES_JSON = """
       "Failed to evaluate the user-defined table function '<name>' because its constructor is invalid: the function does not implement the 'analyze' method, and its constructor has more than one argument (including the 'self' reference). Please update the table function so that its constructor accepts exactly one 'self' argument, and try the query again."
     ]
   },
+  "UDTF_EVAL_METHOD_ARGUMENTS_DO_NOT_MATCH_SIGNATURE" : {
+    "message" : [
+      "Failed to evaluate the user-defined table function '<name>' because the function arguments did not match the expected signature of the 'eval' method (<reason>). Please update the query so that this table function call provides arguments matching the expected signature, or else update the table function so that its 'eval' method accepts the provided arguments, and then try the query again."
+    ]
+  },
   "UDTF_EXEC_ERROR" : {
     "message" : [
       "User defined table function encountered an error in the '<method_name>' method: <error>"
