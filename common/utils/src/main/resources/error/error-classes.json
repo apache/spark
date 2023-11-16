@@ -317,6 +317,12 @@
     ],
     "sqlState" : "58030"
   },
+  "CANNOT_SAVE_VARIANT" : {
+    "message" : [
+      "Cannot save variant data type into external storage."
+    ],
+    "sqlState" : "0A000"
+  },
   "CANNOT_UPDATE_FIELD" : {
     "message" : [
       "Cannot update <table> field <fieldName> type:"
@@ -3537,7 +3543,7 @@
       },
       "PYTHON_UDF_IN_ON_CLAUSE" : {
         "message" : [
-          "Python UDF in the ON clause of a <joinType> JOIN. In case of an INNNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
+          "Python UDF in the ON clause of a <joinType> JOIN. In case of an INNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
         ]
       },
       "REMOVE_NAMESPACE_COMMENT" : {
@@ -3915,7 +3921,7 @@
     "message" : [
       "<rowTag> option is required for reading files in XML format."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42KDF"
   },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
@@ -4768,11 +4774,6 @@
   "_LEGACY_ERROR_TEMP_1199" : {
     "message" : [
       "Invalid bound function '<bound>: there are <argsLen> arguments but <inputTypesLen> parameters returned from 'inputTypes()'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1200" : {
-    "message" : [
-      "<name> is not supported for v2 tables."
     ]
   },
   "_LEGACY_ERROR_TEMP_1201" : {
@@ -5972,7 +5973,7 @@
       "Please move the data from the incorrect directory to the correct one, delete the",
       "incorrect directory, and then restart this query. If you believe you are receiving",
       "this message in error, you can disable it with the SQL conf",
-      "<StreamingCheckpointEscaptedPathCheckEnabled>."
+      "<StreamingCheckpointEscapedPathCheckEnabled>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2201" : {
@@ -6202,7 +6203,7 @@
   },
   "_LEGACY_ERROR_TEMP_2250" : {
     "message" : [
-      "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastjoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg>"
+      "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastJoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2251" : {

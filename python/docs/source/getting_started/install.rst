@@ -86,7 +86,7 @@ Using Conda
 
 Conda is an open-source package management and environment management system (developed by
 `Anaconda <https://www.anaconda.com/>`_), which is best installed through
-`Miniconda <https://docs.conda.io/en/latest/miniconda.html/>`_ or `Miniforge <https://github.com/conda-forge/miniforge/>`_.
+`Miniconda <https://docs.conda.io/en/latest/miniconda.html>`_ or `Miniforge <https://github.com/conda-forge/miniforge/>`_.
 The tool is both cross-platform and language agnostic, and in practice, conda can replace both
 `pip <https://pip.pypa.io/en/latest/>`_ and `virtualenv <https://virtualenv.pypa.io/en/latest/>`_.
 
@@ -119,7 +119,7 @@ While using pip in a conda environment is technically feasible (with the same co
 because pip does not interoperate with conda.
 
 For a short summary about useful conda commands, see their
-`cheat sheet <https://docs.conda.io/projects/conda/en/latest/user-guide/cheatsheet.html/>`_.
+`cheat sheet <https://docs.conda.io/projects/conda/en/latest/user-guide/cheatsheet.html>`_.
 
 
 Manually Downloading

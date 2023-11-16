@@ -168,7 +168,7 @@ private object ResourceRequestHelper extends Logging {
           if (numResourceErrors < 2) {
             logWarning(s"YARN doesn't know about resource $name, your resource discovery " +
               s"has to handle properly discovering and isolating the resource! Error: " +
-              s"${e.getCause.getMessage}")
+              s"${e.getMessage}")
             numResourceErrors += 1
           }
       }

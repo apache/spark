@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkThrowableHelper, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, QualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -1564,6 +1564,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
+  def cannotSaveVariantIntoExternalStorageError(): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_SAVE_VARIANT",
+      messageParameters = Map.empty)
+  }
+
   def cannotResolveAttributeError(name: String, outputStr: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1137",
@@ -2139,12 +2145,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "inputTypesLen" -> bound.inputTypes().length.toString))
   }
 
-  def commandUnsupportedInV2TableError(name: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1200",
-      messageParameters = Map("name" -> name))
-  }
-
   def cannotResolveColumnNameAmongAttributesError(
       colName: String, fieldNames: String): Throwable = {
     new AnalysisException(
@@ -2471,7 +2471,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "_LEGACY_ERROR_TEMP_1231",
       messageParameters = Map(
         "key" -> key,
-        "tblName" -> tblName))
+        "tblName" -> toSQLId(tblName)))
   }
 
   def invalidPartitionSpecError(
@@ -2483,7 +2483,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "specKeys" -> specKeys,
         "partitionColumnNames" -> partitionColumnNames.mkString(", "),
-        "tableName" -> tableName))
+        "tableName" -> toSQLId(tableName)))
   }
 
   def columnAlreadyExistsError(columnName: String): Throwable = {
@@ -2539,6 +2539,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       table: String,
       partition: TablePartitionSpec): Throwable = {
     new NoSuchPartitionException(db, table, partition)
+  }
+
+  def notExistPartitionError(
+      table: Identifier,
+      partitionIdent: InternalRow,
+      partitionSchema: StructType): Throwable = {
+    new NoSuchPartitionException(table.toString, partitionIdent, partitionSchema)
   }
 
   def analyzingColumnStatisticsNotSupportedForColumnTypeError(

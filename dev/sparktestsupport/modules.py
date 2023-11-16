@@ -113,6 +113,14 @@ tags = Module(
     ],
 )
 
+utils = Module(
+    name="utils",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/utils/",
+    ],
+)
+
 kvstore = Module(
     name="kvstore",
     dependencies=[tags],
@@ -126,7 +134,7 @@ kvstore = Module(
 
 network_common = Module(
     name="network-common",
-    dependencies=[tags],
+    dependencies=[tags, utils],
     source_file_regexes=[
         "common/network-common/",
     ],
@@ -148,20 +156,12 @@ network_shuffle = Module(
 
 unsafe = Module(
     name="unsafe",
-    dependencies=[tags],
+    dependencies=[tags, utils],
     source_file_regexes=[
         "common/unsafe",
     ],
     sbt_test_goals=[
         "unsafe/test",
-    ],
-)
-
-utils = Module(
-    name="utils",
-    dependencies=[tags],
-    source_file_regexes=[
-        "common/utils/",
     ],
 )
 
@@ -178,7 +178,7 @@ launcher = Module(
 
 core = Module(
     name="core",
-    dependencies=[kvstore, network_common, network_shuffle, unsafe, launcher],
+    dependencies=[kvstore, network_common, network_shuffle, unsafe, launcher, utils],
     source_file_regexes=[
         "core/",
     ],

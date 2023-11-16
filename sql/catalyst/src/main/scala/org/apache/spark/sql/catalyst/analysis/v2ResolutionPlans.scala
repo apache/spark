@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, LeafExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
@@ -28,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, I
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
-import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, StructField}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
@@ -188,14 +189,14 @@ case class ResolvedFieldPosition(position: ColumnPosition) extends FieldPosition
 case class ResolvedPersistentView(
     catalog: CatalogPlugin,
     identifier: Identifier,
-    viewSchema: StructType) extends LeafNodeWithoutStats {
+    metadata: CatalogTable) extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = Nil
 }
 
 /**
  * A plan containing resolved (global) temp views.
  */
-case class ResolvedTempView(identifier: Identifier, viewSchema: StructType)
+case class ResolvedTempView(identifier: Identifier, metadata: CatalogTable)
   extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = Nil
 }

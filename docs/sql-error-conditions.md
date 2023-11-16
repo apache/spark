@@ -280,6 +280,12 @@ SQLSTATE: 58030
 
 Failed to set permissions on created path `<path>` back to `<permission>`.
 
+### CANNOT_SAVE_VARIANT
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Cannot save variant data type into external storage.
+
 ### [CANNOT_UPDATE_FIELD](sql-error-conditions-cannot-update-field-error-class.html)
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
@@ -2372,6 +2378,6 @@ For more details see [WRONG_NUM_ARGS](sql-error-conditions-wrong-num-args-error-
 
 ### XML_ROW_TAG_MISSING
 
-[SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+[SQLSTATE: 42KDF](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 `<rowTag>` option is required for reading files in XML format.
