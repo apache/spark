@@ -214,6 +214,7 @@ Missing data handling
 
    Series.backfill
    Series.bfill
+   Series.ffill
    Series.isna
    Series.isnull
    Series.notna
