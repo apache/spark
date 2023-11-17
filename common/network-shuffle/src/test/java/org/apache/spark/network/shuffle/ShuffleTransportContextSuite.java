@@ -123,7 +123,7 @@ public class ShuffleTransportContextSuite {
     Assertions.assertEquals(1, out.size());
     Assertions.assertTrue(out.get(0) instanceof ShuffleTransportContext.RpcRequestInternal);
     Assertions.assertEquals(BlockTransferMessage.Type.FINALIZE_SHUFFLE_MERGE,
-        ((ShuffleTransportContext.RpcRequestInternal) out.get(0)).messageType);
+        ((ShuffleTransportContext.RpcRequestInternal) out.get(0)).messageType());
   }
 
   @Test

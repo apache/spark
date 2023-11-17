@@ -15,10 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.shuffle;
+package org.apache.spark.sql.connect.client
 
 /**
- * Contains offset and length of the shuffle block data.
+ * Represents an exception which was considered retriable but has exceeded retry limits.
+ *
+ * The actual exceptions incurred can be retrieved with getSuppressed()
  */
-public record ShuffleIndexRecord(long offset, long length) {
-}
+class RetriesExceeded extends Throwable

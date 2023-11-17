@@ -73,5 +73,12 @@ class VariantSuite extends QueryTest with SharedSparkSession {
       values.map(v => if (v == null) "null" else v.debugString()).sorted
     }
     assert(prepareAnswer(input) == prepareAnswer(result))
+
+    withTempDir { dir =>
+      val tempDir = new File(dir, "files").getCanonicalPath
+      df.write.parquet(tempDir)
+      val readResult = spark.read.parquet(tempDir).collect().map(_.get(0).asInstanceOf[VariantVal])
+      assert(prepareAnswer(input) == prepareAnswer(readResult))
+    }
   }
 }

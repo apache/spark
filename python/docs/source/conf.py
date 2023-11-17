@@ -102,9 +102,9 @@ rst_epilog = """
 .. |examples| replace:: Examples
 .. _examples: https://github.com/apache/spark/tree/{0}/examples/src/main/python
 .. |downloading| replace:: Downloading
-.. _downloading: https://spark.apache.org/docs/{1}/building-spark.html
+.. _downloading: https://spark.apache.org/docs/{1}/#downloading
 .. |building_spark| replace:: Building Spark
-.. _building_spark: https://spark.apache.org/docs/{1}/#downloading
+.. _building_spark: https://spark.apache.org/docs/{1}/building-spark.html
 """.format(
     os.environ.get("GIT_HASH", "master"),
     os.environ.get("RELEASE_VERSION", "latest"),

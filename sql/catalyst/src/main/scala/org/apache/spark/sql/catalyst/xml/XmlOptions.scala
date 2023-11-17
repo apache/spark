@@ -30,7 +30,7 @@ import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 /**
  * Options for the XML data source.
  */
-private[sql] class XmlOptions(
+class XmlOptions(
     val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String,
@@ -172,7 +172,7 @@ private[sql] class XmlOptions(
   }
 }
 
-private[sql] object XmlOptions extends DataSourceOptions {
+object XmlOptions extends DataSourceOptions {
   val DEFAULT_ATTRIBUTE_PREFIX = "_"
   val DEFAULT_VALUE_TAG = "_VALUE"
   val DEFAULT_ROW_TAG = "ROW"

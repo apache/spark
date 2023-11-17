@@ -72,6 +72,7 @@ from pyspark.pandas.utils import (
     validate_index_loc,
     ERROR_MESSAGE_CANNOT_COMBINE,
     log_advice,
+    xor,
 )
 from pyspark.pandas.internal import (
     InternalField,
@@ -1468,8 +1469,7 @@ class Index(IndexOpsMixin):
 
         sdf_self = self._psdf._internal.spark_frame.select(self._internal.index_spark_columns)
         sdf_other = other._psdf._internal.spark_frame.select(other._internal.index_spark_columns)
-
-        sdf_symdiff = sdf_self.union(sdf_other).subtract(sdf_self.intersect(sdf_other))
+        sdf_symdiff = xor(sdf_self, sdf_other)
 
         if sort:
             sdf_symdiff = sdf_symdiff.sort(*self._internal.index_spark_column_names)

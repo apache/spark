@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.util.{DateFormatter, PermissiveMode, Timest
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.types._
 
-private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
+class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     extends Serializable
     with Logging {
 
