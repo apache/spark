@@ -39,14 +39,15 @@ class HiveSourceRowLevelOperationSuite extends QueryTest with TestHiveSingleton
     val inMemCatNs = "cat.ns1"
     val inMemCatTable = "in_mem_cat_table"
     withTable("hive_table", s"$inMemCatNs.$inMemCatTable") {
-
       // create hive table without stats
       sql("create table hive_table(pk int, salary int, dep string)")
 
       sql(
         s"""
-           |create table $inMemCatNs.$inMemCatTable (pk INT NOT NULL, salary INT, dep STRING)
-           |USING iceberg
+           |create table $inMemCatNs.$inMemCatTable (
+           |  pk INT NOT NULL,
+           |  salary INT,
+           |  dep STRING)
            |PARTITIONED BY (dep)
            | """.stripMargin)
 
