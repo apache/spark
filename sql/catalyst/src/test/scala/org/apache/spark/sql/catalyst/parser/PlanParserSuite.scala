@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import scala.annotation.nowarn
+
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedParameter, PosParameter, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
@@ -1677,23 +1679,28 @@ class PlanParserSuite extends AnalysisTest {
         ScriptInputOutputSchema(List.empty, List.empty, None, None,
           List.empty, List.empty, None, None, false)))
 
-    // verify with ROW FORMAT DELIMITED
+    // verify with ROW FORMAT DELIMETED
+    @nowarn("cat=deprecation")
+    val sqlWithRowFormatDelimiters: String =
+      """
+        |SELECT TRANSFORM(a, b, c)
+        |  ROW FORMAT DELIMITED
+        |  FIELDS TERMINATED BY '\t'
+        |  COLLECTION ITEMS TERMINATED BY '\u0002'
+        |  MAP KEYS TERMINATED BY '\u0003'
+        |  LINES TERMINATED BY '\n'
+        |  NULL DEFINED AS 'null'
+        |  USING 'cat' AS (a, b, c)
+        |  ROW FORMAT DELIMITED
+        |  FIELDS TERMINATED BY '\t'
+        |  COLLECTION ITEMS TERMINATED BY '\u0004'
+        |  MAP KEYS TERMINATED BY '\u0005'
+        |  LINES TERMINATED BY '\n'
+        |  NULL DEFINED AS 'NULL'
+        |FROM testData
+      """.stripMargin
     assertEqual(
-      "SELECT TRANSFORM(a, b, c)\n" +
-        "  ROW FORMAT DELIMITED\n" +
-        "  FIELDS TERMINATED BY '\\t'\n" +
-        "  COLLECTION ITEMS TERMINATED BY '\u0002'\n" +
-        "  MAP KEYS TERMINATED BY '\u0003'\n" +
-        "  LINES TERMINATED BY '\\n'\n" +
-        "  NULL DEFINED AS 'null'\n" +
-        "  USING 'cat' AS (a, b, c)\n" +
-        "  ROW FORMAT DELIMITED\n" +
-        "  FIELDS TERMINATED BY '\\t'\n" +
-        "  COLLECTION ITEMS TERMINATED BY '\u0004'\n" +
-        "  MAP KEYS TERMINATED BY '\u0005'\n" +
-        "  LINES TERMINATED BY '\\n'\n" +
-        "  NULL DEFINED AS 'NULL'\n" +
-        "FROM testData",
+      sqlWithRowFormatDelimiters,
       ScriptTransformation(
         "cat",
         Seq(AttributeReference("a", StringType)(),
