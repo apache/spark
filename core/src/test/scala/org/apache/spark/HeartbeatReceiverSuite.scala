@@ -97,9 +97,9 @@ class HeartbeatReceiverSuite
   }
 
   test("task scheduler is set correctly") {
-    assert(heartbeatReceiver.scheduler === null)
+    assert(heartbeatReceiver.taskScheduler === null)
     heartbeatReceiverRef.askSync[Boolean](TaskSchedulerIsSet)
-    assert(heartbeatReceiver.scheduler !== null)
+    assert(heartbeatReceiver.taskScheduler !== null)
   }
 
   test("normal heartbeat") {

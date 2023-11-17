@@ -75,7 +75,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
 
   override val rpcEnv: RpcEnv = sc.env.rpcEnv
 
-  private[spark] var scheduler: TaskScheduler = null
+  private[spark] var taskScheduler: TaskScheduler = null
 
   // executor ID -> timestamp of when the last heartbeat from this executor was received
   private val executorLastSeen = new HashMap[String, Long]
@@ -126,7 +126,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
       executorLastSeen.remove(executorId)
       context.reply(true)
     case TaskSchedulerIsSet =>
-      scheduler = sc.taskScheduler
+      taskScheduler = sc.taskScheduler
       context.reply(true)
     case ExpireDeadHosts =>
       expireDeadHosts()
@@ -135,12 +135,12 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
     // Messages received from executors
     case heartbeat @ Heartbeat(executorId, accumUpdates, blockManagerId, executorUpdates) =>
       var reregisterBlockManager = !sc.isStopped
-      if (scheduler != null) {
+      if (taskScheduler != null) {
         if (executorLastSeen.contains(executorId)) {
           executorLastSeen(executorId) = clock.getTimeMillis()
           eventLoopThread.submit(new Runnable {
             override def run(): Unit = Utils.tryLogNonFatalError {
-              val unknownExecutor = !scheduler.executorHeartbeatReceived(
+              val unknownExecutor = !taskScheduler.executorHeartbeatReceived(
                 executorId, accumUpdates, blockManagerId, executorUpdates)
               reregisterBlockManager &= unknownExecutor
               val response = HeartbeatResponse(reregisterBlockManager)

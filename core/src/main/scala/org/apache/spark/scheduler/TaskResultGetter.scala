@@ -32,7 +32,7 @@ import org.apache.spark.util.{LongAccumulator, ThreadUtils, Utils}
 /**
  * Runs a thread pool that deserializes and remotely fetches (if necessary) task results.
  */
-private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedulerImpl)
+private[spark] class TaskResultGetter(sparkEnv: SparkEnv, taskScheduler: TaskSchedulerImpl)
   extends Logging {
 
   private val THREADS = sparkEnv.conf.getInt("spark.resultGetter.threads", 4)
@@ -65,7 +65,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
             case directResult: DirectTaskResult[_] =>
               if (!taskSetManager.canFetchMoreResults(directResult.valueByteBuffer.size)) {
                 // kill the task so that it will not become zombie task
-                scheduler.handleFailedTask(taskSetManager, tid, TaskState.KILLED, TaskKilled(
+                taskScheduler.handleFailedTask(taskSetManager, tid, TaskState.KILLED, TaskKilled(
                   "Tasks result size has exceeded maxResultSize"))
                 return
               }
@@ -79,18 +79,18 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
                 // dropped by executor if size is larger than maxResultSize
                 sparkEnv.blockManager.master.removeBlock(blockId)
                 // kill the task so that it will not become zombie task
-                scheduler.handleFailedTask(taskSetManager, tid, TaskState.KILLED, TaskKilled(
+                taskScheduler.handleFailedTask(taskSetManager, tid, TaskState.KILLED, TaskKilled(
                   "Tasks result size has exceeded maxResultSize"))
                 return
               }
               logDebug(s"Fetching indirect task result for ${taskSetManager.taskName(tid)}")
-              scheduler.handleTaskGettingResult(taskSetManager, tid)
+              taskScheduler.handleTaskGettingResult(taskSetManager, tid)
               val serializedTaskResult = sparkEnv.blockManager.getRemoteBytes(blockId)
               if (serializedTaskResult.isEmpty) {
                 /* We won't be able to get the task result if the machine that ran the task failed
                  * between when the task ended and when we tried to fetch the result, or if the
                  * block manager had to flush the result. */
-                scheduler.handleFailedTask(
+                taskScheduler.handleFailedTask(
                   taskSetManager, tid, TaskState.FINISHED, TaskResultLost)
                 return
               }
@@ -118,7 +118,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
             }
           }
 
-          scheduler.handleSuccessfulTask(taskSetManager, tid, result)
+          taskScheduler.handleSuccessfulTask(taskSetManager, tid, result)
         } catch {
           case cnf: ClassNotFoundException =>
             val loader = Thread.currentThread.getContextClassLoader
@@ -154,7 +154,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
           // If there's an error while deserializing the TaskEndReason, this Runnable
           // will die. Still tell the scheduler about the task failure, to avoid a hang
           // where the scheduler thinks the task is still running.
-          scheduler.handleFailedTask(taskSetManager, tid, taskState, reason)
+          taskScheduler.handleFailedTask(taskSetManager, tid, taskState, reason)
         }
       })
     } catch {
@@ -168,7 +168,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
   // synchronized and may hurt the throughput of the scheduler.
   def enqueuePartitionCompletionNotification(stageId: Int, partitionId: Int): Unit = {
     getTaskResultExecutor.execute(() => Utils.logUncaughtExceptions {
-      scheduler.handlePartitionCompleted(stageId, partitionId)
+      taskScheduler.handlePartitionCompleted(stageId, partitionId)
     })
   }
 

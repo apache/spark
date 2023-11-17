@@ -41,10 +41,10 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * A [[SchedulerBackend]] implementation for Spark's standalone cluster manager.
  */
 private[spark] class StandaloneSchedulerBackend(
-    scheduler: TaskSchedulerImpl,
+   taskScheduler: TaskSchedulerImpl,
     sc: SparkContext,
     masters: Array[String])
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
+  extends CoarseGrainedSchedulerBackend(taskScheduler, sc.env.rpcEnv)
   with StandaloneAppClientListener
   with Logging {
 
@@ -162,7 +162,7 @@ private[spark] class StandaloneSchedulerBackend(
       launcherBackend.setState(SparkAppHandle.State.KILLED)
       logError("Application has been killed. Reason: " + reason)
       try {
-        scheduler.error(reason)
+        taskScheduler.error(reason)
       } finally {
         // Ensure the application terminates, as we can no longer run jobs.
         sc.stopInNewThread()
