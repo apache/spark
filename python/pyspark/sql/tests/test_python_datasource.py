@@ -69,6 +69,7 @@ class BasePythonDataSourceTestsMixin:
             @classmethod
             def name(cls):
                 return "TestDataSource"
+
             def schema(self):
                 return "c INT, d INT"
 
