@@ -274,6 +274,11 @@ class BaseUDTFTestsMixin:
         df = self.spark.sql("SELECT * FROM testUDTF(null)")
         self.assertEqual(df.collect(), [Row(a=None)])
 
+    # These are expected error message substrings to be used in test cases below.
+    tooManyPositionalArguments = "too many positional arguments"
+    missingARequiredArgument = "missing a required argument"
+    multipleValuesForArgument = "multiple values for argument"
+
     def test_udtf_with_wrong_num_input(self):
         @udtf(returnType="a: int, b: int")
         class TestUDTF:
@@ -281,12 +286,12 @@ class BaseUDTFTestsMixin:
                 yield a, a + 1
 
         with self.assertRaisesRegex(
-            PythonException, r"eval\(\) missing 1 required positional argument: 'a'"
+            PythonException, BaseUDTFTestsMixin.missingARequiredArgument
         ):
             TestUDTF().collect()
 
         with self.assertRaisesRegex(
-            PythonException, r"eval\(\) takes 2 positional arguments but 3 were given"
+            PythonException, BaseUDTFTestsMixin.tooManyPositionalArguments
         ):
             TestUDTF(lit(1), lit(2)).collect()
 
@@ -1650,12 +1655,12 @@ class BaseUDTFTestsMixin:
         assertDataFrameEqual(self.spark.sql("SELECT * FROM test_udtf(a=>1)"), expected)
 
         with self.assertRaisesRegex(
-            AnalysisException, r"analyze\(\) takes 0 positional arguments but 1 was given"
+            AnalysisException, BaseUDTFTestsMixin.tooManyPositionalArguments
         ):
             TestUDTF(lit(1)).collect()
 
         with self.assertRaisesRegex(
-            AnalysisException, r"analyze\(\) takes 0 positional arguments but 2 were given"
+            AnalysisException, BaseUDTFTestsMixin.tooManyPositionalArguments
         ):
             self.spark.sql("SELECT * FROM test_udtf(1, 'x')").collect()
 
@@ -1915,12 +1920,12 @@ class BaseUDTFTestsMixin:
             self.spark.sql("SELECT * FROM test_udtf(a => 10, 'x')").show()
 
         with self.assertRaisesRegex(
-            PythonException, r"eval\(\) got an unexpected keyword argument 'c'"
+            PythonException, BaseUDTFTestsMixin.missingARequiredArgument
         ):
             self.spark.sql("SELECT * FROM test_udtf(c => 'x')").show()
 
         with self.assertRaisesRegex(
-            PythonException, r"eval\(\) got multiple values for argument 'a'"
+            PythonException, BaseUDTFTestsMixin.multipleValuesForArgument
         ):
             self.spark.sql("SELECT * FROM test_udtf(10, a => 100)").show()
 
