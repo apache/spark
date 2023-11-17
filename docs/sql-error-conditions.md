@@ -1113,6 +1113,14 @@ Invalid inline table.
 
 For more details see [INVALID_INLINE_TABLE](sql-error-conditions-invalid-inline-table-error-class.html)
 
+### [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
+
+SQLSTATE: ID001
+
+Invalid inverse distribution function `<funcName>`.
+
+For more details see [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
+
 ### INVALID_JSON_ROOT_FIELD
 
 [SQLSTATE: 22032](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -2375,3 +2383,9 @@ The operation `<operation>` requires a `<requiredType>`. But `<objectName>` is a
 The `<functionName>` requires `<expectedNum>` parameters but the actual number is `<actualNum>`.
 
 For more details see [WRONG_NUM_ARGS](sql-error-conditions-wrong-num-args-error-class.html)
+
+### XML_ROW_TAG_MISSING
+
+[SQLSTATE: 42KDF](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+`<rowTag>` option is required for reading files in XML format.

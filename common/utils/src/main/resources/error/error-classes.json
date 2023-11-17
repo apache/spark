@@ -1846,6 +1846,29 @@
     },
     "sqlState" : "42000"
   },
+  "INVALID_INVERSE_DISTRIBUTION_FUNCTION" : {
+    "message" : [
+      "Invalid inverse distribution function <funcName>."
+    ],
+    "subClass" : {
+      "DISTINCT_WITH_WITHIN_GROUP" : {
+        "message" : [
+          "Cannot use DISTINCT with WITHIN GROUP."
+        ]
+      },
+      "MODE_WITH_PERCENTAGE" : {
+        "message" : [
+          "mode does not support percentage."
+        ]
+      },
+      "PERCENTILE_PERCENTAGE_MISSING" : {
+        "message" : [
+          "Missing percentage."
+        ]
+      }
+    },
+    "sqlState" : "ID001"
+  },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
       "Cannot convert JSON root field to target Spark type."
@@ -6557,21 +6580,6 @@
   "_LEGACY_ERROR_TEMP_3042" : {
     "message" : [
       "Failed to get block <blockId>, which is not a shuffle block"
-    ]
-  },
-  "PERCENTILE_PERCENTAGE_MISSING" : {
-    "message" : [
-      "The inverse distribution function <funcName> missing percentage."
-    ]
-  },
-  "MODE_WITH_PERCENTAGE" : {
-    "message" : [
-      "mode does not support percentage."
-    ]
-  },
-  "DISTINCT_WITH_WITHIN_GROUP_IS_INVALID" : {
-    "message" : [
-      "<funcName> cannot use DISTINCT with WITHIN GROUP."
     ]
   },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {

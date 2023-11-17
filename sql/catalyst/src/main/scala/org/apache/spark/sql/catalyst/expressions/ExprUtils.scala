@@ -168,15 +168,15 @@ object ExprUtils extends QueryErrorsBase {
         aggFunction match {
           case pc: PercentileCont if expr.isDistinct =>
             pc.failAnalysis(
-              errorClass = "DISTINCT_WITH_WITHIN_GROUP_IS_INVALID",
+              errorClass = "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_WITH_WITHIN_GROUP",
               messageParameters = Map("funcName" -> toSQLId(pc.prettyName)))
           case pd: PercentileDisc if expr.isDistinct =>
             pd.failAnalysis(
-              errorClass = "DISTINCT_WITH_WITHIN_GROUP_IS_INVALID",
+              errorClass = "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_WITH_WITHIN_GROUP",
               messageParameters = Map("funcName" -> toSQLId(pd.prettyName)))
           case mode: Mode if expr.isDistinct && mode.reverseOpt.isDefined =>
             mode.failAnalysis(
-              errorClass = "DISTINCT_WITH_WITHIN_GROUP_IS_INVALID",
+              errorClass = "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_WITH_WITHIN_GROUP",
               messageParameters = Map("funcName" -> toSQLId(mode.prettyName)))
           case _ =>
         }
