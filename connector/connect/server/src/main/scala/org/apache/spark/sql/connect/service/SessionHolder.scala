@@ -82,6 +82,13 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
   def key: SessionKey = SessionKey(userId, sessionId)
 
+  // Returns the server side session ID and asserts that it must be different from the client-side
+  // session ID.
+  def serverSessionId: String = {
+    assert(session.sessionUUID != sessionId)
+    session.sessionUUID
+  }
+
   /**
    * Add ExecuteHolder to this session.
    *

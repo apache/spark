@@ -40,6 +40,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 // TODO: We should tighten up visibility of the classes here once we clean up Hive coupling.
 
@@ -343,7 +344,7 @@ object PartitioningUtils extends SQLConfHelper {
     pathFragment.split("/").map { kv =>
       val pair = kv.split("=", 2)
       (unescapePathName(pair(0)), unescapePathName(pair(1)))
-    }
+    }.toImmutableArraySeq
   }
 
   /**

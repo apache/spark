@@ -47,6 +47,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
@@ -829,7 +830,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       // Sort elements for deterministic behaviours
       truncatedString(set.toSeq.map(formatArg(_, maxFields)).sorted, "{", ", ", "}", maxFields)
     case array: Array[_] =>
-      truncatedString(array.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields)
+      truncatedString(
+        array.map(formatArg(_, maxFields)).toImmutableArraySeq, "[", ", ", "]", maxFields)
     case other =>
       other.toString
   }

@@ -64,7 +64,7 @@ jobs:
         }}
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -202,7 +202,7 @@ jobs:
       SKIP_PACKAGING: true
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       # In order to fetch changed files
       with:
         fetch-depth: 0
@@ -302,7 +302,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Checkout Spark repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         # In order to fetch changed files
         with:
           fetch-depth: 0
@@ -381,7 +381,7 @@ jobs:
       BRANCH: ${{ inputs.branch }}
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       # In order to fetch changed files
       with:
         fetch-depth: 0
@@ -496,7 +496,7 @@ jobs:
       SKIP_PACKAGING: true
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       # In order to fetch changed files
       with:
         fetch-depth: 0
@@ -564,7 +564,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -604,7 +604,7 @@ jobs:
       image: ${{ needs.precondition.outputs.image_url }}
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -704,7 +704,7 @@ jobs:
       if: inputs.branch != 'branch-3.3' && inputs.branch != 'branch-3.4'
       run: |
         # See more in "Installation" https://docs.buf.build/installation#tarball
-        curl -LO https://github.com/bufbuild/buf/releases/download/v1.26.1/buf-Linux-x86_64.tar.gz
+        curl -LO https://github.com/bufbuild/buf/releases/download/v1.28.1/buf-Linux-x86_64.tar.gz
         mkdir -p $HOME/buf
         tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
         rm buf-Linux-x86_64.tar.gz
@@ -737,7 +737,7 @@ jobs:
         #   See also https://issues.apache.org/jira/browse/SPARK-35375.
         # Pin the MarkupSafe to 2.0.1 to resolve the CI error.
         #   See also https://issues.apache.org/jira/browse/SPARK-38279.
-        python3.9 -m pip install 'sphinx<3.1.0' mkdocs pydata_sphinx_theme nbsphinx numpydoc 'jinja2<3.0.0' 'markupsafe==2.0.1' 'pyzmq<24.0.0'
+        python3.9 -m pip install 'sphinx<3.1.0' mkdocs pydata_sphinx_theme 'sphinx-copybutton==0.5.2' nbsphinx numpydoc 'jinja2<3.0.0' 'markupsafe==2.0.1' 'pyzmq<24.0.0'
         python3.9 -m pip install ipython_genutils # See SPARK-38517
         python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8'
         python3.9 -m pip install 'docutils<0.18.0' # See SPARK-39421
@@ -786,7 +786,7 @@ jobs:
     timeout-minutes: 300
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -841,7 +841,7 @@ jobs:
       SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -883,7 +883,7 @@ jobs:
         key: tpcds-${{ hashFiles('.github/workflows/build_and_test.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
     - name: Checkout tpcds-kit repository
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: databricks/tpcds-kit
         ref: 2a5078a782192ddb6efbcead8de9973d6ab4f069
@@ -946,7 +946,7 @@ jobs:
       SKIP_PACKAGING: true
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -1006,7 +1006,7 @@ jobs:
     timeout-minutes: 300
     steps:
       - name: Checkout Spark repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           repository: apache/spark
@@ -1065,7 +1065,7 @@ jobs:
           kubectl create clusterrolebinding serviceaccounts-cluster-admin --clusterrole=cluster-admin --group=system:serviceaccounts || true
           kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.8.1/installer/volcano-development.yaml || true
           eval $(minikube docker-env)
-          build/sbt -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.driverRequestCores=0.5 -Dspark.kubernetes.test.executorRequestCores=0.2 -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
+          build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.driverRequestCores=0.5 -Dspark.kubernetes.test.executorRequestCores=0.2 -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
       - name: Upload Spark on K8S integration tests log files
         if: ${{ !success() }}
         uses: actions/upload-artifact@v3

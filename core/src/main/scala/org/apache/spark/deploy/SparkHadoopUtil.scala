@@ -39,6 +39,7 @@ import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdenti
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -219,7 +220,7 @@ private[spark] class SparkHadoopUtil extends Logging {
   def listLeafStatuses(fs: FileSystem, baseStatus: FileStatus): Seq[FileStatus] = {
     def recurse(status: FileStatus): Seq[FileStatus] = {
       val (directories, leaves) = fs.listStatus(status.getPath).partition(_.isDirectory)
-      leaves ++ directories.flatMap(f => listLeafStatuses(fs, f))
+      (leaves ++ directories.flatMap(f => listLeafStatuses(fs, f))).toImmutableArraySeq
     }
 
     if (baseStatus.isDirectory) recurse(baseStatus) else Seq(baseStatus)

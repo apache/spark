@@ -141,7 +141,7 @@
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.13.1</parquet.version>
-    <orc.version>1.9.1</orc.version>
+    <orc.version>1.9.2</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>9.4.53.v20231009</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
@@ -162,6 +162,7 @@
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
     <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
+    <aws.java.sdk.v2.version>2.20.160</aws.java.sdk.v2.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
     <gcs-connector.version>hadoop3-2.2.17</gcs-connector.version>
@@ -228,7 +229,7 @@
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
-    <arrow.version>14.0.0</arrow.version>
+    <arrow.version>14.0.1</arrow.version>
     <ammonite.version>2.5.11</ammonite.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
@@ -1279,8 +1280,8 @@
       </dependency>
       <dependency>
         <groupId>com.oracle.database.jdbc</groupId>
-        <artifactId>ojdbc8</artifactId>
-        <version>23.2.0.0</version>
+        <artifactId>ojdbc11</artifactId>
+        <version>23.3.0.23.09</version>
         <scope>test</scope>
       </dependency>
       <dependency>

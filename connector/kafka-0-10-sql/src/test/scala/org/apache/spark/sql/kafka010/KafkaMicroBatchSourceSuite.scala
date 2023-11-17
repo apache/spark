@@ -2410,7 +2410,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
 
   private def sendMessagesWithTimestamp(
       topic: String,
-      msgs: Seq[String],
+      msgs: Array[String],
       part: Int,
       ts: Long): Unit = {
     val records = msgs.map { msg =>

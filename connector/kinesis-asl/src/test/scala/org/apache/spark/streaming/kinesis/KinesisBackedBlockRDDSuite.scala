@@ -21,6 +21,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException}
 import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, StreamBlockId}
+import org.apache.spark.util.ArrayImplicits._
 
 abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
   extends KinesisFunSuite with BeforeAndAfterEach with LocalSparkContext {
@@ -79,21 +80,21 @@ abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
     // Verify all data using multiple ranges in a single RDD partition
     val receivedData1 = new KinesisBackedBlockRDD[Array[Byte]](sc, testUtils.regionName,
       testUtils.endpointUrl, fakeBlockIds(1),
-      Array(SequenceNumberRanges(allRanges.toArray))
+      Array(SequenceNumberRanges(allRanges.toArray.toImmutableArraySeq))
     ).map { bytes => new String(bytes).toInt }.collect()
     assert(receivedData1.toSet === testData.toSet)
 
     // Verify all data using one range in each of the multiple RDD partitions
     val receivedData2 = new KinesisBackedBlockRDD[Array[Byte]](sc, testUtils.regionName,
       testUtils.endpointUrl, fakeBlockIds(allRanges.size),
-      allRanges.map { range => SequenceNumberRanges(Array(range)) }.toArray
+      allRanges.map { range => SequenceNumberRanges(Array(range).toImmutableArraySeq) }.toArray
     ).map { bytes => new String(bytes).toInt }.collect()
     assert(receivedData2.toSet === testData.toSet)
 
     // Verify ordering within each partition
     val receivedData3 = new KinesisBackedBlockRDD[Array[Byte]](sc, testUtils.regionName,
       testUtils.endpointUrl, fakeBlockIds(allRanges.size),
-      allRanges.map { range => SequenceNumberRanges(Array(range)) }.toArray
+      allRanges.map { range => SequenceNumberRanges(Array(range).toImmutableArraySeq) }.toArray
     ).map { bytes => new String(bytes).toInt }.collectPartitions()
     assert(receivedData3.length === allRanges.size)
     for (i <- allRanges.indices) {
@@ -184,7 +185,7 @@ abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
       SequenceNumberRanges(SequenceNumberRange("fakeStream", "fakeShardId", "xxx", "yyy", 1)))
     val realRanges = Array.tabulate(numPartitionsInKinesis) { i =>
       val range = shardIdToRange(shardIds(i + (numPartitions - numPartitionsInKinesis)))
-      SequenceNumberRanges(Array(range))
+      SequenceNumberRanges(Array(range).toImmutableArraySeq)
     }
     val ranges = (fakeRanges ++ realRanges)
 

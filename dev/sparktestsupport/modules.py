@@ -113,6 +113,17 @@ tags = Module(
     ],
 )
 
+utils = Module(
+    name="utils",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/utils/",
+    ],
+    sbt_test_goals=[
+        "common-utils/test",
+    ],
+)
+
 kvstore = Module(
     name="kvstore",
     dependencies=[tags],
@@ -126,7 +137,7 @@ kvstore = Module(
 
 network_common = Module(
     name="network-common",
-    dependencies=[tags],
+    dependencies=[tags, utils],
     source_file_regexes=[
         "common/network-common/",
     ],
@@ -148,20 +159,12 @@ network_shuffle = Module(
 
 unsafe = Module(
     name="unsafe",
-    dependencies=[tags],
+    dependencies=[tags, utils],
     source_file_regexes=[
         "common/unsafe",
     ],
     sbt_test_goals=[
         "unsafe/test",
-    ],
-)
-
-utils = Module(
-    name="utils",
-    dependencies=[tags],
-    source_file_regexes=[
-        "common/utils/",
     ],
 )
 
@@ -178,7 +181,7 @@ launcher = Module(
 
 core = Module(
     name="core",
-    dependencies=[kvstore, network_common, network_shuffle, unsafe, launcher],
+    dependencies=[kvstore, network_common, network_shuffle, unsafe, launcher, utils],
     source_file_regexes=[
         "core/",
     ],
@@ -511,6 +514,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.pandas.test_pandas_udf_window",
         "pyspark.sql.tests.pandas.test_converter",
         "pyspark.sql.tests.test_pandas_sqlmetrics",
+        "pyspark.sql.tests.test_python_datasource",
         "pyspark.sql.tests.test_readwriter",
         "pyspark.sql.tests.test_serde",
         "pyspark.sql.tests.test_session",

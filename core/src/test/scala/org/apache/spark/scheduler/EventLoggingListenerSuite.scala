@@ -39,6 +39,7 @@ import org.apache.spark.metrics.{ExecutorMetricType, MetricsSystem}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.{JsonProtocol, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Test whether EventLoggingListener logs events properly.
@@ -587,7 +588,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       } else {
         stageIds.map(id => (id, 0) -> executorMetrics).toMap
       }
-    SparkListenerExecutorMetricsUpdate(executorId, accum, executorUpdates)
+    SparkListenerExecutorMetricsUpdate(executorId, accum.toImmutableArraySeq, executorUpdates)
   }
 
   private def createTaskEndEvent(

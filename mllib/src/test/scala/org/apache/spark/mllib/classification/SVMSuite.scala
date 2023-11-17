@@ -26,6 +26,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 object SVMSuite {
@@ -52,7 +53,7 @@ object SVMSuite {
       val yD = new BDV(xi).dot(weightsMat) + intercept + 0.01 * rnd.nextGaussian()
       if (yD < 0) 0.0 else 1.0
     }
-    y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
+    y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2))).toImmutableArraySeq
   }
 
   /** Binary labels, 3 features */
@@ -129,7 +130,8 @@ class SVMSuite extends SparkFunSuite with MLlibTestSparkContext {
     val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(
+      model.predict(validationRDD.map(_.features)).collect().toImmutableArraySeq, validationData)
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
@@ -161,7 +163,8 @@ class SVMSuite extends SparkFunSuite with MLlibTestSparkContext {
     val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(
+      model.predict(validationRDD.map(_.features)).collect().toImmutableArraySeq, validationData)
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)

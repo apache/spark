@@ -29,6 +29,7 @@ import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A batch-oriented interface for consuming from Kafka.
@@ -135,7 +136,7 @@ private[spark] class KafkaRDD[K, V](
         context.runJob(
           this,
           (tc: TaskContext, it: Iterator[ConsumerRecord[K, V]]) =>
-          it.take(parts(tc.partitionId())).toArray, parts.keys.toArray
+          it.take(parts(tc.partitionId())).toArray, parts.keys.toArray.toImmutableArraySeq
         ).flatten
       }
     }

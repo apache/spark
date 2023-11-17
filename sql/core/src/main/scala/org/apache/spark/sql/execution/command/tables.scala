@@ -51,6 +51,7 @@ import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.PartitioningUtils
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A command to create a table with the same definition of the given existing table.
@@ -857,7 +858,7 @@ case class DescribeColumnCommand(
         Row(s"bin_$index",
           s"lower_bound: ${bin.lo}, upper_bound: ${bin.hi}, distinct_count: ${bin.ndv}")
     }
-    header +: bins
+    (header +: bins).toImmutableArraySeq
   }
 }
 

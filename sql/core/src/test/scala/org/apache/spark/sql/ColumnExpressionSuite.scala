@@ -38,6 +38,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -602,7 +603,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   test("||") {
     checkAnswer(
       booleanData.filter($"a" || true),
-      booleanData.collect())
+      booleanData.collect().toImmutableArraySeq)
 
     checkAnswer(
       booleanData.filter($"a" || false),
@@ -2558,7 +2559,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             StructType(Seq(StructField(nestedColName(0, 0), nestedColumnDataType, nullable))))
         }
 
-        checkAnswer(resultDf, expectedDf.collect(), expectedDf.schema)
+        checkAnswer(resultDf, expectedDf.collect().toImmutableArraySeq, expectedDf.schema)
       }
     }
   }

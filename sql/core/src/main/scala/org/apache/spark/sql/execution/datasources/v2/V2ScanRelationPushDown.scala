@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, StructType}
 import org.apache.spark.sql.util.SchemaUtils._
+import org.apache.spark.util.ArrayImplicits._
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
@@ -541,7 +542,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         }
         val pushedDownOperators = PushedDownOperators(sHolder.pushedAggregate, sHolder.pushedSample,
           sHolder.pushedLimit, sHolder.pushedOffset, sHolder.sortOrders, sHolder.pushedPredicates)
-        V1ScanWrapper(v1, pushedFilters, pushedDownOperators)
+        V1ScanWrapper(v1, pushedFilters.toImmutableArraySeq, pushedDownOperators)
       case _ => scan
     }
   }

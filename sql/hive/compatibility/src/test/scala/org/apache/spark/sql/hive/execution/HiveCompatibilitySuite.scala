@@ -26,6 +26,7 @@ import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.tags.SlowHiveTest
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Runs the test cases that are included in the hive distribution.
@@ -45,7 +46,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     TestHive.conf.getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT)
 
   def testCases: Seq[(String, File)] = {
-    hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
+    hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f).toImmutableArraySeq
   }
 
   override def beforeAll(): Unit = {

@@ -34,6 +34,7 @@ class SparkConnectReleaseExecuteHandler(
     val responseBuilder = proto.ReleaseExecuteResponse
       .newBuilder()
       .setSessionId(v.getSessionId)
+      .setServerSideSessionId(sessionHolder.serverSessionId)
 
     // ExecuteHolder may be concurrently released by SparkConnectExecutionManager if the
     // ReleaseExecute arrived after it was abandoned and timed out.

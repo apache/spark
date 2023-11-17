@@ -89,4 +89,15 @@ private[spark] object Worker {
       .version("3.2.0")
       .stringConf
       .createWithDefaultString("PWR")
+
+  val WORKER_ID_PATTERN = ConfigBuilder("spark.worker.idPattern")
+    .internal()
+    .doc("The pattern for worker ID generation based on Java `String.format` method. The " +
+      "default value is `worker-%s-%s-%d` which represents the existing worker id string, e.g.," +
+      " `worker-20231109183042-[fe80::1%lo0]-39729`. Please be careful to generate unique IDs")
+    .version("4.0.0")
+    .stringConf
+    .checkValue(!_.format("20231109000000", "host", 0).exists(_.isWhitespace),
+      "Whitespace is not allowed.")
+    .createWithDefaultString("worker-%s-%s-%d")
 }
