@@ -132,26 +132,35 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
   }
 
   test("partition not exists") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-      sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
+    Seq(true, false).foreach { dropPartitionInBatch =>
+      withSQLConf(SQLConf.DROP_PARTITION_IN_BATCH_ENABLED.key -> dropPartitionInBatch.toString) {
+        withNamespaceAndTable("ns", "tbl") { t =>
+          sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+          sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
 
-      val e = intercept[NoSuchPartitionsException] {
-        sql(s"ALTER TABLE $t DROP PARTITION (id=1), PARTITION (id=2)")
-      }
-      val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
-        "`ns`.`tbl`"
-      } else {
-        "`test_catalog`.`ns`.`tbl`"
-      }
-      checkError(e,
-        errorClass = "PARTITIONS_NOT_FOUND",
-        parameters = Map("partitionList" -> "PARTITION (`id` = 2)",
-        "tableName" -> expectedTableName))
+          val e = intercept[NoSuchPartitionsException] {
+            sql(s"ALTER TABLE $t DROP PARTITION (id=1), PARTITION (id=2)")
+          }
+          val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+            "`ns`.`tbl`"
+          } else {
+            "`test_catalog`.`ns`.`tbl`"
+          }
+          val expectedPartitionList = if (dropPartitionInBatch) {
+            "PARTITION (`id` = 1), PARTITION (`id` = 2)"
+          } else {
+            "PARTITION (`id` = 2)"
+          }
+          checkError(e,
+            errorClass = "PARTITIONS_NOT_FOUND",
+            parameters = Map("partitionList" -> expectedPartitionList,
+              "tableName" -> expectedTableName))
 
-      checkPartitions(t, Map("id" -> "1"))
-      sql(s"ALTER TABLE $t DROP IF EXISTS PARTITION (id=1), PARTITION (id=2)")
-      checkPartitions(t)
+          checkPartitions(t, Map("id" -> "1"))
+          sql(s"ALTER TABLE $t DROP IF EXISTS PARTITION (id=1), PARTITION (id=2)")
+          checkPartitions(t)
+        }
+      }
     }
   }
 

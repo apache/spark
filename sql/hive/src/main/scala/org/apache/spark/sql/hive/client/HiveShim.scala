@@ -32,8 +32,8 @@ import org.apache.hadoop.hive.metastore.api.{Database, EnvironmentContext, Funct
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.io.AcidUtils
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition, Table}
-import org.apache.hadoop.hive.ql.parse.DDLSemanticAnalyzer.makeBinaryPredicate
-import org.apache.hadoop.hive.ql.plan.{AddPartitionDesc, ExprNodeColumnDesc, ExprNodeConstantDesc}
+import org.apache.hadoop.hive.ql.parse.DDLSemanticAnalyzer
+import org.apache.hadoop.hive.ql.plan.{AddPartitionDesc, ExprNodeColumnDesc, ExprNodeConstantDesc, ExprNodeDesc, ExprNodeGenericFuncDesc}
 import org.apache.hadoop.hive.ql.plan.DropTableDesc.PartSpec
 import org.apache.hadoop.hive.ql.processors.{CommandProcessor, CommandProcessorFactory}
 import org.apache.hadoop.hive.ql.session.SessionState
@@ -45,14 +45,13 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionsException, NoSuchPermanentFunctionException}
+import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTable, CatalogTablePartition, CatalogUtils, ExternalCatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateFormatter, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AtomicType, DateType, IntegralType, IntegralTypeExpression, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -225,6 +224,14 @@ private[client] sealed abstract class Shim {
       ignoreIfNotExists: Boolean,
       purge: Boolean): Unit
 
+  def dropPartition(
+      hive: Hive,
+      dbName: String,
+      tableName: String,
+      part: JList[String],
+      deleteData: Boolean,
+      purge: Boolean): Unit
+
   def dropPartitions(
       hive: Hive,
       dbName: String,
@@ -244,6 +251,10 @@ private[client] sealed abstract class Shim {
 
   protected def findMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     klass.getMethod(name, args: _*)
+  }
+
+  protected def findDeclaredMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
+    klass.getDeclaredMethod(name, args: _*)
   }
 
   // This method should be called before a Hive client call is made.
@@ -312,6 +323,14 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       "alterPartitions",
       classOf[String],
       classOf[JList[Partition]])
+  private lazy val makeBinaryPredicateMethod =
+    findDeclaredMethod(
+      classOf[DDLSemanticAnalyzer],
+      "makeBinaryPredicate",
+      classOf[String],
+      classOf[ExprNodeDesc],
+      classOf[ExprNodeDesc])
+  makeBinaryPredicateMethod.setAccessible(true)
 
   override def setCurrentSessionState(state: SessionState): Unit =
     SessionState.setCurrentSessionState(state)
@@ -542,6 +561,20 @@ private[client] class Shim_v2_0 extends Shim with Logging {
     alterPartitionsMethod.invoke(hive, tableName, newParts)
   }
 
+  override def dropPartition(
+      hive: Hive,
+      dbName: String,
+      tableName: String,
+      part: JList[String],
+      deleteData: Boolean,
+      purge: Boolean): Unit = {
+    val dropOptions = new PartitionDropOptions
+    dropOptions.deleteData(deleteData)
+    dropOptions.purgeData(purge)
+    recordHiveCall()
+    hive.dropPartition(dbName, tableName, part, dropOptions)
+  }
+
   override def dropPartitions(
       hive: Hive,
       dbName: String,
@@ -554,40 +587,10 @@ private[client] class Shim_v2_0 extends Shim with Logging {
     dropOptions.deleteData(deleteData)
     dropOptions.purgeData(purge)
     dropOptions.ifExists(ignoreIfNotExists)
+    val table = getTable(hive, dbName, tableName, true /* throw exception */)
+    val partSpecs = createPartSpecs(table, specs)
     recordHiveCall()
-    try {
-      val table = hive.getTable(dbName, tableName)
-      val partSpecs = createPartSpecs(table, specs)
-      hive.dropPartitions(dbName, tableName, partSpecs, dropOptions)
-    } catch {
-      case e: IllegalArgumentException =>
-        logWarning(s"${e.getMessage}, falling back to drop partitions one by one.")
-        val matchingParts =
-          specs.flatMap { s =>
-            assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
-            // The provided spec here can be a partial spec, i.e. it will match all partitions
-            // whose specs are supersets of this partial spec. E.g. If a table has partitions
-            // (b='1', c='1') and (b='1', c='2'), a partial spec of (b='1') will match both.
-            val dropPartitionByName = SQLConf.get.metastoreDropPartitionsByName
-            if (dropPartitionByName) {
-              val partitionNames = hive.getPartitionNames(dbName, tableName, s.asJava, -1).asScala
-              if (partitionNames.isEmpty && !ignoreIfNotExists) {
-                throw new NoSuchPartitionsException(dbName, tableName, Seq(s))
-              }
-              partitionNames.map(HiveUtils.partitionNameToValues(_).toList.asJava)
-            } else {
-              val hiveTable = hive.getTable(dbName, tableName, true /* throw exception */)
-              val parts = hive.getPartitions(hiveTable, s.asJava).asScala
-              if (parts.isEmpty && !ignoreIfNotExists) {
-                throw new NoSuchPartitionsException(dbName, tableName, Seq(s))
-              }
-              parts.map(_.getValues)
-            }
-          }.distinct
-        matchingParts.foreach { partition =>
-          hive.dropPartition(dbName, tableName, partition, dropOptions)
-        }
-    }
+    hive.dropPartitions(dbName, tableName, partSpecs, dropOptions)
   }
 
   private def createPartSpecs(table: Table, specs: Seq[TablePartitionSpec]): JList[PartSpec] = {
@@ -598,22 +601,33 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       val outputOI = PrimitiveObjectInspectorFactory.getPrimitiveJavaObjectInspector(typeInfo)
       (partKey, (typeInfo, ObjectInspectorConverters.getConverter(inputOI, outputOI)))
     }
-    val expressions = specs.map { case partSpec =>
-      val expressions = partSpec.map { case (partKey, partVal) =>
+    def makeBinaryPredicate(
+        fn: String,
+        left: ExprNodeDesc,
+        right: ExprNodeDesc): ExprNodeGenericFuncDesc = {
+      makeBinaryPredicateMethod.invoke(null, fn, left, right).asInstanceOf[ExprNodeGenericFuncDesc]
+    }
+
+    specs.zipWithIndex.map { case (spec, index) =>
+      val expressions = spec.map { case (partKey, partVal) =>
         val colType = colTypes.get(partKey)
         assert(colType.isDefined, s"`$partKey` is not partition key.")
         val (typeInfo, converter) = partKeyToTypeInfoAndConverter.get(partKey).get
-        if (null == converter.convert(partVal)) {
+        val convertedVal = if (partVal == ExternalCatalogUtils.DEFAULT_PARTITION_NAME) {
+          null
+        } else {
+          converter.convert(partVal)
+        }
+        if (null == convertedVal) {
           throw new IllegalArgumentException(
             s"Partition value '$partVal' cannot be cast to type '${colType.get}'")
         }
         val column = new ExprNodeColumnDesc(typeInfo, partKey, null, true)
-        makeBinaryPredicate("=", column, new ExprNodeConstantDesc(typeInfo, partVal))
+        makeBinaryPredicate("=", column, new ExprNodeConstantDesc(typeInfo, convertedVal))
       }.toSeq
-      expressions.tail.foldLeft(expressions.head)(makeBinaryPredicate("and", _, _))
-    }
-    val expr = expressions.tail.foldLeft(expressions.head)(makeBinaryPredicate("or", _, _))
-    Seq(new PartSpec(expr, specs.size)).toList.asJava
+      val expr = expressions.tail.foldLeft(expressions.head)(makeBinaryPredicate("and", _, _))
+      new PartSpec(expr, index)
+    }.toList.asJava
   }
 
   private def toHiveFunction(f: CatalogFunction, db: String): HiveFunction = {

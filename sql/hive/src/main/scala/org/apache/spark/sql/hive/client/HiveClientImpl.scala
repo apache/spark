@@ -59,9 +59,10 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecutionException
-import org.apache.spark.sql.hive.HiveExternalCatalog
+import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_SCHEMA
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.DROP_PARTITION_IN_BATCH_ENABLED
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
 
@@ -657,12 +658,70 @@ private[hive] class HiveClientImpl(
       purge: Boolean,
       retainData: Boolean): Unit = withHiveState {
     def replaceNotExistException(e: Throwable): Unit = e match {
-      case _: HiveException if e.getCause.isInstanceOf[NoSuchObjectException] =>
+      case _ if e.getCause.isInstanceOf[NoSuchObjectException] =>
         throw new NoSuchPartitionsException(db, table, specs)
       case _ => throw e
     }
+    def dropPartitionsOneByOne(): Unit = {
+      // do the check at first and collect all the matching partitions
+      val matchingParts =
+        specs.flatMap { s =>
+          assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
+          // The provided spec here can be a partial spec, i.e. it will match all partitions
+          // whose specs are supersets of this partial spec. E.g. If a table has partitions
+          // (b='1', c='1') and (b='1', c='2'), a partial spec of (b='1') will match both.
+          val dropPartitionByName = SQLConf.get.metastoreDropPartitionsByName
+          if (dropPartitionByName) {
+            val partitionNames = shim.getPartitionNames(client, db, table, s.asJava, -1)
+            if (partitionNames.isEmpty && !ignoreIfNotExists) {
+              throw new NoSuchPartitionsException(db, table, Seq(s))
+            }
+            partitionNames.map(HiveUtils.partitionNameToValues(_).toList.asJava)
+          } else {
+            val hiveTable = shim.getTable(client, db, table, true /* throw exception */)
+            val parts = shim.getPartitions(client, hiveTable, s.asJava)
+            if (parts.isEmpty && !ignoreIfNotExists) {
+              throw new NoSuchPartitionsException(db, table, Seq(s))
+            }
+            parts.map(_.getValues)
+          }
+        }.distinct
+      val droppedParts = ArrayBuffer.empty[java.util.List[String]]
+      matchingParts.foreach { partition =>
+        try {
+          shim.dropPartition(client, db, table, partition, !retainData, purge)
+        } catch {
+          case e: Exception =>
+            val remainingParts = matchingParts.toBuffer --= droppedParts
+            logError(
+              s"""
+                 |======================
+                 |Attempt to drop the partition specs in table '$table' database '$db':
+                 |In this attempt, the following partitions have been dropped successfully:
+                 |${droppedParts.mkString("\n")}
+                 |The remaining partitions have not been dropped:
+                 |${remainingParts.mkString("\n")}
+                 |======================
+               """.stripMargin)
+            throw e
+        }
+        droppedParts += partition
+      }
+    }
+
     try {
-      shim.dropPartitions(client, db, table, specs, !retainData, ignoreIfNotExists, purge)
+      val enableDropPartitionInBatch = SQLConf.get.getConf(DROP_PARTITION_IN_BATCH_ENABLED)
+      if (enableDropPartitionInBatch) {
+        try {
+          shim.dropPartitions(client, db, table, specs, !retainData, ignoreIfNotExists, purge)
+        } catch {
+          case e: IllegalArgumentException if enableDropPartitionInBatch =>
+            logWarning(s"${e.getMessage}, falling back to drop partitions one by one.")
+            dropPartitionsOneByOne()
+        }
+      } else {
+        dropPartitionsOneByOne()
+      }
     } catch {
       case e: InvocationTargetException => replaceNotExistException(e.getCause)
       case e: Throwable => replaceNotExistException(e)

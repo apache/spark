@@ -501,46 +501,52 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
   }
 
   test("dropPartitions") {
-    val spec = Map("key1" -> "1", "key2" -> "3")
-    val versionsWithoutPurge =
-      if (allVersions.contains("1.2")) allVersions.takeWhile(_ != "1.2") else Nil
-    // Similar to dropTable; try with purge set, and if it fails, make sure we're running
-    // with a version that is older than the minimum (1.2 in this case).
-    try {
-      client.dropPartitions("default", "src_part", Seq(spec), ignoreIfNotExists = true,
-        purge = true, retainData = false)
-      assert(!versionsWithoutPurge.contains(version))
-    } catch {
-      case _: UnsupportedOperationException =>
-        assert(versionsWithoutPurge.contains(version))
+    // Since Hive 3.0(HIVE-19383), we can not run `Hive.dropPartitions` with JDK 11.
+    if (version != "3.0" && version != "3.1") {
+      val spec = Map("key1" -> "1", "key2" -> "3")
+      val versionsWithoutPurge =
+        if (allVersions.contains("1.2")) allVersions.takeWhile(_ != "1.2") else Nil
+      // Similar to dropTable; try with purge set, and if it fails, make sure we're running
+      // with a version that is older than the minimum (1.2 in this case).
+      try {
         client.dropPartitions("default", "src_part", Seq(spec), ignoreIfNotExists = true,
-          purge = false, retainData = false)
-    }
+          purge = true, retainData = false)
+        assert(!versionsWithoutPurge.contains(version))
+      } catch {
+        case _: UnsupportedOperationException =>
+          assert(versionsWithoutPurge.contains(version))
+          client.dropPartitions("default", "src_part", Seq(spec), ignoreIfNotExists = true,
+            purge = false, retainData = false)
+      }
 
-    assert(client.getPartitionOption("default", "src_part", spec).isEmpty)
+      assert(client.getPartitionOption("default", "src_part", spec).isEmpty)
+    }
   }
 
   test("createPartitions if already exists") {
-    val partitions = Seq(CatalogTablePartition(
-      Map("key1" -> "101", "key2" -> "102"),
-      storageFormat))
-    try {
-      client.createPartitions("default", "src_part", partitions, ignoreIfExists = false)
-      val e = intercept[PartitionsAlreadyExistException] {
+    // Since Hive 3.0(HIVE-19383), we can not run `Hive.dropPartitions` with JDK 11.
+    if (version != "3.0" && version != "3.1") {
+      val partitions = Seq(CatalogTablePartition(
+        Map("key1" -> "101", "key2" -> "102"),
+        storageFormat))
+      try {
         client.createPartitions("default", "src_part", partitions, ignoreIfExists = false)
+        val e = intercept[PartitionsAlreadyExistException] {
+          client.createPartitions("default", "src_part", partitions, ignoreIfExists = false)
+        }
+        checkError(e,
+          errorClass = "PARTITIONS_ALREADY_EXIST",
+          parameters = Map("partitionList" -> "PARTITION (`key1` = 101, `key2` = 102)",
+            "tableName" -> "`default`.`src_part`"))
+      } finally {
+        client.dropPartitions(
+          "default",
+          "src_part",
+          partitions.map(_.spec),
+          ignoreIfNotExists = true,
+          purge = false,
+          retainData = false)
       }
-      checkError(e,
-        errorClass = "PARTITIONS_ALREADY_EXIST",
-        parameters = Map("partitionList" -> "PARTITION (`key1` = 101, `key2` = 102)",
-          "tableName" -> "`default`.`src_part`"))
-    } finally {
-      client.dropPartitions(
-        "default",
-        "src_part",
-        partitions.map(_.spec),
-        ignoreIfNotExists = true,
-        purge = false,
-        retainData = false)
     }
   }
 

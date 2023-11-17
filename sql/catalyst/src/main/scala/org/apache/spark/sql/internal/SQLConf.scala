@@ -4016,6 +4016,15 @@ object SQLConf {
       .checkValue(_ > 0, "The value of spark.sql.addPartitionInBatch.size must be positive")
       .createWithDefault(100)
 
+  val DROP_PARTITION_IN_BATCH_ENABLED =
+    buildConf("spark.sql.dropPartitionInBatch.enabled")
+      .doc("When true, enable drop multiple partitions in a call to improve performance." +
+        "Spark will fall back to drop partitions one by one if the input partition value " +
+        "cannot be converted to the partition type correctly.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val DROP_PARTITION_BATCH_SIZE =
     buildConf("spark.sql.dropPartitionInBatch.size")
       .internal()
