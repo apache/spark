@@ -724,7 +724,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       new Sequence(Literal(Int.MinValue), Literal(Int.MaxValue), Literal(1)),
       EmptyRow,
       s"""
-         |Unsuccessful try to create array with ${BigInt(Int.MaxValue) - BigInt { Int.MinValue } + 1}
+         |Unsuccessful try to create array with
+         |${BigInt(Int.MaxValue) - BigInt { Int.MinValue } + 1}
          |elements due to exceeding the array size limit
          |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
        """.stripMargin.replaceAll("\n", " "))
@@ -748,7 +749,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       new Sequence(Literal(Long.MinValue), Literal(Long.MaxValue), Literal(1L)),
       EmptyRow,
       s"""
-         |Unsuccessful try to create array with ${BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1}
+         |Unsuccessful try to create array with
+         |${BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1}
          |elements due to exceeding the array size limit
          |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
        """.stripMargin.replaceAll("\n", " "))
@@ -756,7 +758,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       new Sequence(Literal(Long.MaxValue), Literal(Long.MinValue), Literal(-1L)),
       EmptyRow,
       s"""
-         |Unsuccessful try to create array with ${BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1}
+         |Unsuccessful try to create array with
+         |${BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1}
          |elements due to exceeding the array size limit
          |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
        """.stripMargin.replaceAll("\n", " "))
