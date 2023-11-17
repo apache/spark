@@ -93,6 +93,7 @@ case class TransformWithStateExec(
       useColumnFamilies = true
     ) {
       case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
+        statefulProcessor.init(new StatefulProcessorHandleImpl(store), outputMode)
         CompletionIterator[InternalRow, Iterator[InternalRow]](null, Iterator.empty)
     }
   }

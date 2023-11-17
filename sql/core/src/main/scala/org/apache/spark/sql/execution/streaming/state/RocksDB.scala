@@ -125,8 +125,6 @@ class RocksDB(
   @volatile private var colFamilyNameToHandleMap =
     scala.collection.mutable.Map[String, ColumnFamilyHandle]()
 
-  private val defaultColFamilyName = "default"
-
   private val dbLogger = createLogger() // for forwarding RocksDB native logs to log4j
   dbOptions.setStatistics(new Statistics())
   private val nativeStats = dbOptions.statistics()
@@ -246,44 +244,74 @@ class RocksDB(
    */
   def get(key: Array[Byte],
     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Array[Byte] = {
-    db.get(readOptions, key)
+    if (useColumnFamilies) {
+      db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
+    } else {
+      db.get(readOptions, key)
+    }
   }
 
   /**
    * Put the given value for the given key.
    * @note This update is not committed to disk until commit() is called.
    */
-  def put(key: Array[Byte], value: Array[Byte]): Unit = {
-    if (conf.trackTotalNumberOfRows) {
-      val oldValue = db.get(readOptions, key)
-      if (oldValue == null) {
-        numKeysOnWritingVersion += 1
+  def put(key: Array[Byte], value: Array[Byte],
+    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    if (useColumnFamilies) {
+      if (conf.trackTotalNumberOfRows) {
+        val oldValue = db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
+        if (oldValue == null) {
+          numKeysOnWritingVersion += 1
+        }
       }
+      db.put(colFamilyNameToHandleMap(colFamilyName), writeOptions, key, value)
+    } else {
+      if (conf.trackTotalNumberOfRows) {
+        val oldValue = db.get(readOptions, key)
+        if (oldValue == null) {
+          numKeysOnWritingVersion += 1
+        }
+      }
+      db.put(writeOptions, key, value)
+      changelogWriter.foreach(_.put(key, value))
     }
-    db.put(writeOptions, key, value)
-    changelogWriter.foreach(_.put(key, value))
   }
 
   /**
    * Remove the key if present.
    * @note This update is not committed to disk until commit() is called.
    */
-  def remove(key: Array[Byte]): Unit = {
-    if (conf.trackTotalNumberOfRows) {
-      val value = db.get(readOptions, key)
-      if (value != null) {
-        numKeysOnWritingVersion -= 1
+  def remove(key: Array[Byte], colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    if (useColumnFamilies) {
+      if (conf.trackTotalNumberOfRows) {
+        val value = db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
+        if (value != null) {
+          numKeysOnWritingVersion -= 1
+        }
       }
+      db.delete(colFamilyNameToHandleMap(colFamilyName), writeOptions, key)
+    } else {
+      if (conf.trackTotalNumberOfRows) {
+        val value = db.get(readOptions, key)
+        if (value != null) {
+          numKeysOnWritingVersion -= 1
+        }
+      }
+      db.delete(writeOptions, key)
+      changelogWriter.foreach(_.delete(key))
     }
-    db.delete(writeOptions, key)
-    changelogWriter.foreach(_.delete(key))
   }
 
   /**
    * Get an iterator of all committed and uncommitted key-value pairs.
    */
-  def iterator(): Iterator[ByteArrayPair] = {
-    val iter = db.newIterator()
+  def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
+    Iterator[ByteArrayPair] = {
+    val iter = if (useColumnFamilies) {
+      db.newIterator(colFamilyNameToHandleMap(colFamilyName))
+    } else {
+      db.newIterator()
+    }
     logInfo(s"Getting iterator from version $loadedVersion")
     iter.seekToFirst()
 
@@ -309,8 +337,13 @@ class RocksDB(
     }
   }
 
-  private def countKeys(): Long = {
-    val iter = db.newIterator()
+  private def countKeys(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Long = {
+    val iter = if (useColumnFamilies) {
+      db.newIterator(colFamilyNameToHandleMap(colFamilyName))
+    } else {
+      db.newIterator()
+    }
+
     try {
       logInfo(s"Counting keys - getting iterator from version $loadedVersion")
 
@@ -328,8 +361,13 @@ class RocksDB(
     }
   }
 
-  def prefixScan(prefix: Array[Byte]): Iterator[ByteArrayPair] = {
-    val iter = db.newIterator()
+  def prefixScan(prefix: Array[Byte], colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
+    Iterator[ByteArrayPair] = {
+    val iter = if (useColumnFamilies) {
+      db.newIterator(colFamilyNameToHandleMap(colFamilyName))
+    } else {
+      db.newIterator()
+    }
     iter.seek(prefix)
 
     // Attempt to close this iterator if there is a task failure, or a task interruption.
