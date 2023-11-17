@@ -31,7 +31,7 @@ import org.apache.spark.internal.Logging
 /**
  * Utilities for working with XSD validation.
  */
-private[sql] object ValidatorUtil extends Logging{
+object ValidatorUtil extends Logging {
   // Parsing XSDs may be slow, so cache them by path:
 
   private val cache = CacheBuilder.newBuilder().softValues().build(
