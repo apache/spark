@@ -14,20 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.ml import functions as PyMLFunctions
-from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.functions.builtin import _invoke_function, _to_col, lit
 
+"""PySpark Functions"""
 
-def vector_to_array(col: Column, dtype: str = "float64") -> Column:
-    return _invoke_function("vector_to_array", _to_col(col), lit(dtype))
-
-
-vector_to_array.__doc__ = PyMLFunctions.vector_to_array.__doc__
-
-
-def array_to_vector(col: Column) -> Column:
-    return _invoke_function("array_to_vector", _to_col(col))
-
-
-array_to_vector.__doc__ = PyMLFunctions.array_to_vector.__doc__
+from pyspark.sql.functions.builtin import *  # noqa: F401,F403
+from pyspark.sql.functions import partitioning  # noqa: F401,F403

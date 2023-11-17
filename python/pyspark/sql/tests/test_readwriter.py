@@ -202,7 +202,7 @@ class ReadwriterV2TestsMixin:
 
     def check_partitioning_functions(self, tpe):
         import datetime
-        from pyspark.sql.functions import years, months, days, hours, bucket
+        from pyspark.sql.functions.partitioning import years, months, days, hours, bucket
 
         df = self.spark.createDataFrame(
             [(1, datetime.datetime(2000, 1, 1), "foo")], ("id", "ts", "value")
