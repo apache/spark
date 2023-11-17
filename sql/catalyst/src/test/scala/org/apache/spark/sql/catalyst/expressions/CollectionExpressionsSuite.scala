@@ -720,42 +720,54 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       new Sequence(Literal(1), Literal(2), Literal(-1)), EmptyRow, "boundaries: 1 to 2 by -1")
 
     // SPARK-43393: test Sequence overflow checking
-    checkErrorInExpression[SparkRuntimeException](
+    checkExceptionInExpression[RuntimeException](
       new Sequence(Literal(Int.MinValue), Literal(Int.MaxValue), Literal(1)),
-      errorClass = "_LEGACY_ERROR_TEMP_2161",
-      parameters = Map(
-        "count" -> (BigInt(Int.MaxValue) - BigInt { Int.MinValue } + 1).toString,
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
-    checkErrorInExpression[SparkRuntimeException](
+      EmptyRow,
+      s"""
+         |Unsuccessful try to create array with ${BigInt(Int.MaxValue) - BigInt { Int.MinValue } + 1}
+         |elements due to exceeding the array size limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
+       """.stripMargin.replaceAll("\n", " "))
+    checkExceptionInExpression[RuntimeException](
       new Sequence(Literal(0L), Literal(Long.MaxValue), Literal(1L)),
-      errorClass = "_LEGACY_ERROR_TEMP_2161",
-      parameters = Map(
-        "count" -> (BigInt(Long.MaxValue) + 1).toString,
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
-    checkErrorInExpression[SparkRuntimeException](
+      EmptyRow,
+      s"""
+         |Unsuccessful try to create array with ${BigInt(Long.MaxValue) + 1}
+         |elements due to exceeding the array size limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
+       """.stripMargin.replaceAll("\n", " "))
+    checkExceptionInExpression[RuntimeException](
       new Sequence(Literal(0L), Literal(Long.MinValue), Literal(-1L)),
-      errorClass = "_LEGACY_ERROR_TEMP_2161",
-      parameters = Map(
-        "count" -> ((0 - BigInt(Long.MinValue)) + 1).toString(),
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
-    checkErrorInExpression[SparkRuntimeException](
+      EmptyRow,
+      s"""
+         |Unsuccessful try to create array with ${(0 - BigInt(Long.MinValue)) + 1}
+         |elements due to exceeding the array size limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
+       """.stripMargin.replaceAll("\n", " "))
+    checkExceptionInExpression[RuntimeException](
       new Sequence(Literal(Long.MinValue), Literal(Long.MaxValue), Literal(1L)),
-      errorClass = "_LEGACY_ERROR_TEMP_2161",
-      parameters = Map(
-        "count" -> (BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1).toString,
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
-    checkErrorInExpression[SparkRuntimeException](
+      EmptyRow,
+      s"""
+         |Unsuccessful try to create array with ${BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1}
+         |elements due to exceeding the array size limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
+       """.stripMargin.replaceAll("\n", " "))
+    checkExceptionInExpression[RuntimeException](
       new Sequence(Literal(Long.MaxValue), Literal(Long.MinValue), Literal(-1L)),
-      errorClass = "_LEGACY_ERROR_TEMP_2161",
-      parameters = Map(
-        "count" -> (BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1).toString,
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
-    checkErrorInExpression[SparkRuntimeException](
+      EmptyRow,
+      s"""
+         |Unsuccessful try to create array with ${BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1}
+         |elements due to exceeding the array size limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
+       """.stripMargin.replaceAll("\n", " "))
+    checkExceptionInExpression[RuntimeException](
       new Sequence(Literal(Long.MaxValue), Literal(-1L), Literal(-1L)),
-      errorClass = "_LEGACY_ERROR_TEMP_2161",
-      parameters = Map(
-        "count" -> (BigInt(Long.MaxValue) - BigInt { -1L } + 1).toString,
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
+      EmptyRow,
+      s"""
+         |Unsuccessful try to create array with ${BigInt(Long.MaxValue) - BigInt { -1L } + 1}
+         |elements due to exceeding the array size limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
+       """.stripMargin.replaceAll("\n", " "))
 
     // test sequence with one element (zero step or equal start and stop)
 

@@ -22,7 +22,6 @@ import java.util.Comparator
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
-import org.apache.spark.SparkException.internalError
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
@@ -2861,7 +2860,7 @@ object Sequence {
         if (safeLen > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
           throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(safeLen)
         }
-        throw internalError("Unreachable code reached.")
+        throw QueryExecutionErrors.unreachableError("Unreachable code reached in `sequence`.")
       case e: Exception => throw e
     }
   }
