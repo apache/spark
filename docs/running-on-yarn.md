@@ -292,12 +292,12 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>1.4.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.max.executor.failures</code></td>
+  <td><code>spark.executor.maxNumFailures</code></td>
   <td>numExecutors * 2, with minimum of 3</td>
   <td>
-    The maximum number of executor failures before failing the application.
+    Spark exits if the number of failed executors exceeds this threshold.
   </td>
-  <td>1.0.0</td>
+  <td>3.5.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.historyServer.address</code></td>
@@ -500,13 +500,13 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>3.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.executor.failuresValidityInterval</code></td>
+  <td><code>spark.executor.failuresValidityInterval</code></td>
   <td>(none)</td>
   <td>
-  Defines the validity interval for executor failure tracking.
-  Executor failures which are older than the validity interval will be ignored.
+    Interval after which Executor failures will be considered independent and
+    not accumulate towards the attempt count.
   </td>
-  <td>2.0.0</td>
+  <td>3.5.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.submit.waitAppCompletion</code></td>

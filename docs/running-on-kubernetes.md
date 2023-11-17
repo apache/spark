@@ -1650,6 +1650,27 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
   <td>3.3.0</td>
 </tr>
+<tr>
+  <td><code>spark.executor.maxNumFailures</code></td>
+  <td>numExecutors * 2, with minimum of 3</td>
+  <td>
+    Spark exits if the number of failed executors exceeds this threshold.
+    This configuration only takes effect when `spark.kubernetes.allocation.pods.allocator`
+    is set to 'direct'.
+  </td>
+  <td>3.5.0</td>
+</tr>
+<tr>
+  <td><code>spark.executor.failuresValidityInterval</code></td>
+  <td>(none)</td>
+  <td>
+    Interval after which Executor failures will be considered independent and
+    not accumulate towards the attempt count.
+    This configuration only takes effect when `spark.kubernetes.allocation.pods.allocator`
+    is set to 'direct'.
+  </td>
+  <td>3.5.0</td>
+</tr>
 </table>
 
 #### Pod template properties
