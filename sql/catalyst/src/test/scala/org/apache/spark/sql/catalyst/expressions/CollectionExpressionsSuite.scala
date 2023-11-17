@@ -781,52 +781,40 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     // SPARK-43393: test Sequence overflow checking
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(Int.MinValue), Literal(Int.MaxValue), Literal(1)),
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      errorClass = "_LEGACY_ERROR_TEMP_2161",
       parameters = Map(
-        "numberOfElements" -> (BigInt(Int.MaxValue) - BigInt { Int.MinValue } + 1).toString,
-        "functionName" -> toSQLId("sequence"),
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
-        "parameter" -> toSQLId("count")))
+        "count" -> (BigInt(Int.MaxValue) - BigInt { Int.MinValue } + 1).toString,
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(0L), Literal(Long.MaxValue), Literal(1L)),
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      errorClass = "_LEGACY_ERROR_TEMP_2161",
       parameters = Map(
-        "numberOfElements" -> (BigInt(Long.MaxValue) + 1).toString,
-        "functionName" -> toSQLId("sequence"),
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
-        "parameter" -> toSQLId("count")))
+        "count" -> (BigInt(Long.MaxValue) + 1).toString,
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(0L), Literal(Long.MinValue), Literal(-1L)),
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      errorClass = "_LEGACY_ERROR_TEMP_2161",
       parameters = Map(
-        "numberOfElements" -> ((0 - BigInt(Long.MinValue)) + 1).toString(),
-        "functionName" -> toSQLId("sequence"),
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
-        "parameter" -> toSQLId("count")))
+        "count" -> ((0 - BigInt(Long.MinValue)) + 1).toString(),
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(Long.MinValue), Literal(Long.MaxValue), Literal(1L)),
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      errorClass = "_LEGACY_ERROR_TEMP_2161",
       parameters = Map(
-        "numberOfElements" -> (BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1).toString,
-        "functionName" -> toSQLId("sequence"),
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
-        "parameter" -> toSQLId("count")))
+        "count" -> (BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1).toString,
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(Long.MaxValue), Literal(Long.MinValue), Literal(-1L)),
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      errorClass = "_LEGACY_ERROR_TEMP_2161",
       parameters = Map(
-        "numberOfElements" -> (BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1).toString,
-        "functionName" -> toSQLId("sequence"),
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
-        "parameter" -> toSQLId("count")))
+        "count" -> (BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1).toString,
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(Long.MaxValue), Literal(-1L), Literal(-1L)),
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      errorClass = "_LEGACY_ERROR_TEMP_2161",
       parameters = Map(
-        "numberOfElements" -> (BigInt(Long.MaxValue) - BigInt { -1L } + 1).toString,
-        "functionName" -> toSQLId("sequence"),
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
-        "parameter" -> toSQLId("count")))
+        "count" -> (BigInt(Long.MaxValue) - BigInt { -1L } + 1).toString,
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
 
     // test sequence with one element (zero step or equal start and stop)
 

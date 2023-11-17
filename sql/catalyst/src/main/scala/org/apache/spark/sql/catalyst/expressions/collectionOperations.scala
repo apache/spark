@@ -3024,7 +3024,7 @@ object Sequence {
       }
       val len = if (stop == start) 1L else Math.addExact(1L, (delta / step))
       if (len > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-        throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(prettyName, len)
+        throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(len)
       }
       len.toInt
     } catch {
@@ -3033,7 +3033,7 @@ object Sequence {
         val safeLen =
           BigInt(1) + (BigInt(stop) - BigInt(start)) / BigInt(step)
         if (safeLen > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-          throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(prettyName, safeLen)
+          throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(safeLen)
         }
         throw internalError("Unreachable code reached.")
       case e: Exception => throw e
