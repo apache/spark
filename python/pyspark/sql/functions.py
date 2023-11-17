@@ -3774,8 +3774,8 @@ def kurtosis(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def collect_list(col: "ColumnOrName") -> Column:
     """
-    Aggregate function: Collects the values from a column into a list (array),
-    maintaining duplicates, and returns this list of objects.
+    Aggregate function: Collects the values from a column into a list,
+    maintaining duplicates, and returns this list as an array of objects.
 
     .. versionadded:: 1.6.0
 
@@ -3866,8 +3866,8 @@ def array_agg(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def collect_set(col: "ColumnOrName") -> Column:
     """
-    Aggregate function: Collects the values from a column into a set (array),
-    eliminating duplicates, and returns this set of objects.
+    Aggregate function: Collects the values from a column into a set,
+    eliminating duplicates, and returns this set as an array of objects.
 
     .. versionadded:: 1.6.0
 
