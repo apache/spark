@@ -3840,7 +3840,7 @@ def collect_list(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def array_agg(col: "ColumnOrName") -> Column:
     """
-    Aggregate function: returns a list of objects with duplicates.
+    Aggregate function: returns a list of objects as an array with duplicates.
 
     .. versionadded:: 3.5.0
 
@@ -3852,7 +3852,7 @@ def array_agg(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        list of objects with duplicates.
+        list of objects as an array with duplicates.
 
     Examples
     --------
