@@ -19,44 +19,48 @@
 # See also in https://hub.docker.com/_/ubuntu
 FROM ubuntu:focal-20221019
 
-ENV FULL_REFRESH_DATE 20221118
+ENV FULL_REFRESH_DATE 20231117
 
 ENV DEBIAN_FRONTEND noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN true
 
 RUN apt-get update && apt-get install -y \
-    software-properties-common \
-    git \
-    pkg-config  \
-    curl  \
-    wget  \
-    openjdk-17-jdk-headless  \
-    gfortran  \
-    libopenblas-dev  \
-    liblapack-dev \
     build-essential \
+    ca-certificates \
+    curl \
+    gfortran \
+    git \
     gnupg \
-    ca-certificates  \
-    pandoc \
-    libpython3-dev  \
-    python3-pip  \
-    python3-setuptools  \
-    python3.8  \
-    python3.9 \
-    r-base  \
-    libcurl4-openssl-dev  \
-    qpdf  \
-    zlib1g-dev \
-    libssl-dev  \
-    libpng-dev \
-    libharfbuzz-dev \
-    libfribidi-dev \
-    libtiff5-dev \
-    libgit2-dev \
-    libxml2-dev  \
-    libjpeg-dev \
+    libcurl4-openssl-dev \
     libfontconfig1-dev \
     libfreetype6-dev \
+    libfribidi-dev \
+    libgit2-dev \
+    libharfbuzz-dev \
+    libjpeg-dev \
+    liblapack-dev \
+    libopenblas-dev \
+    libpng-dev \
+    libpython3-dev \
+    libssl-dev \
+    libtiff5-dev \
+    libxml2-dev \
+    nodejs \
+    npm \
+    openjdk-17-jdk-headless \
+    pandoc \
+    pkg-config \
+    python3-pip \
+    python3-setuptools \
+    python3.8 \
+    python3.9 \
+    qpdf \
+    r-base \
+    ruby \
+    ruby-dev \
+    software-properties-common \
+    wget \
+    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
