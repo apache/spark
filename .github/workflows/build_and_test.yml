@@ -930,6 +930,7 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       ORACLE_DOCKER_IMAGE_NAME: gvenzl/oracle-free:23.3
+      SKIP_UNIDOC: true
       SKIP_MIMA: true
       SKIP_PACKAGING: true
     steps:
