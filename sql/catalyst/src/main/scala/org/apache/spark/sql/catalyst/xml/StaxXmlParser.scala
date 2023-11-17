@@ -40,16 +40,12 @@ import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 class StaxXmlParser(
     schema: StructType,
-    val options: XmlOptions,
-    filters: Seq[Filter] = Seq.empty) extends Logging {
-
-  private val factory = options.buildXmlFactory()
+    val options: XmlOptions) extends Logging {
 
   private lazy val timestampFormatter = TimestampFormatter(
     options.timestampFormatInRead,
@@ -57,13 +53,6 @@ class StaxXmlParser(
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
-
-  private lazy val timestampNTZFormatter = TimestampFormatter(
-    options.timestampNTZFormatInRead,
-    options.zoneId,
-    legacyFormat = FAST_DATE_FORMAT,
-    isParsing = true,
-    forTimestampNTZ = true)
 
   private lazy val dateFormatter = DateFormatter(
     options.dateFormatInRead,
