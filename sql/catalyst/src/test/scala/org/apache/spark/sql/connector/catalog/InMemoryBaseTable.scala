@@ -622,10 +622,12 @@ class BufferedRows(val key: Seq[Any] = Seq.empty) extends WriterCommitMessage
 }
 
 /**
- * Theoretically, 'InternalRow' returned by 'HasPartitionKey#partitionKey()'
+ * Theoretically, [[org.apache.spark.sql.catalyst.InternalRow]] returned by
+ * [[org.apache.spark.sql.connector.read.HasPartitionKey#partitionKey()]]
  * does not need to implement equal and hashcode methods.
- * But 'GenericInternalRow' implements equals and hashcode methods already. Here we override it
- * to simulate that it has not been implemented to verify codes correctness.
+ * But [[org.apache.spark.sql.catalyst.expressions.GenericInternalRow]] implements
+ * equals and hashcode methods already. Here we override it to simulate that it has
+ * not been implemented to verify codes correctness.
  */
 case class PartitionInternalRow(keys: Array[Any])
   extends GenericInternalRow(keys) {
