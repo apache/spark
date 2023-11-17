@@ -18,15 +18,24 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
 
 /**
  * Remove redundant ShuffleExchangeExec node from the spark plan. A shuffle node is redundant when
  * its child is also a shuffle.
  */
 object RemoveRedundantShuffles extends Rule[SparkPlan] {
-  def apply(plan: SparkPlan): SparkPlan = plan transform {
-    case s1 @ ShuffleExchangeExec(_, s2: ShuffleExchangeExec, _, _) =>
-      s1.copy(child = s2.child)
+  def apply(plan: SparkPlan): SparkPlan = {
+    lazy val reusedShuffles = plan.collect {
+      case ReusedExchangeExec(_, cachedExchange) => cachedExchange.canonicalized
+    }
+
+    // We can only remove the redundant shuffle if it and its child is not reused.
+    plan transform {
+      case shuffle @ ShuffleExchangeExec(_, child: ShuffleExchangeExec, _, _)
+          if !reusedShuffles.contains(child.canonicalized) &&
+            !reusedShuffles.contains(shuffle.canonicalized) =>
+        shuffle.copy(child = child.child)
+    }
   }
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
@@ -29,6 +29,12 @@ abstract class RemoveRedundantShufflesSuiteBase
     with AdaptiveSparkPlanHelper {
   import testImplicits._
 
+  private def getShuffleExchangeNum(df: DataFrame): Int = {
+    collect(df.queryExecution.executedPlan) {
+      case s: ShuffleExchangeExec => s
+    }.size
+  }
+
   test("Remove redundant shuffle") {
     withTempView("t1", "t2") {
       spark.range(10).select($"id").createOrReplaceTempView("t1")
@@ -36,13 +42,51 @@ abstract class RemoveRedundantShufflesSuiteBase
       Seq(-1, 1000000).foreach { threshold =>
         withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> threshold.toString) {
           val query = spark.table("t1").repartition(10).join(spark.table("t2"), "id")
-          val shuffleNum = collect(query.queryExecution.executedPlan) {
-            case j: ShuffleExchangeExec => j
-          }.size
+          query.collect()
+          val shuffleNum = getShuffleExchangeNum(query)
           if (threshold > 0) {
             assert(shuffleNum === 1)
           } else {
             assert(shuffleNum === 2)
+          }
+        }
+      }
+    }
+  }
+
+  test("Do not remove redundant shuffle if the shuffle is reused") {
+    withTempView("t1", "t2", "t3") {
+      spark.range(10).select($"id").createOrReplaceTempView("t1")
+      spark.range(20).select($"id").createOrReplaceTempView("t2")
+      spark.range(30).select($"id").createOrReplaceTempView("t3")
+      Seq(-1, 1000000).foreach { threshold =>
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> threshold.toString) {
+          val shuffleReuse = spark.sql(
+            """
+              |WITH v (SELECT /*+ repartition */ * FROM t1 WHERE id > 1)
+              |SELECT * FROM v JOIN t2 ON v.id = t2.id
+              |UNION ALL
+              |SELECT * FROM v JOIN t3 ON v.id = t3.id
+              |""".stripMargin)
+          shuffleReuse.collect()
+          if (threshold > 0) {
+            assert(getShuffleExchangeNum(shuffleReuse) === 1)
+          } else {
+            assert(getShuffleExchangeNum(shuffleReuse) === 4)
+          }
+
+          val repartitionReuse = spark.sql(
+            """
+              |WITH v (SELECT /*+ repartition */ * FROM t1 WHERE id > 1)
+              |SELECT * FROM v JOIN t2 ON cast(v.id AS int) = cast(t2.id AS int)
+              |UNION ALL
+              |SELECT * FROM v JOIN t3 ON cast(v.id AS double) = cast(t3.id AS double)
+              |""".stripMargin)
+          repartitionReuse.collect()
+          if (threshold > 0) {
+            assert(getShuffleExchangeNum(repartitionReuse) === 1)
+          } else {
+            assert(getShuffleExchangeNum(repartitionReuse) === 5)
           }
         }
       }

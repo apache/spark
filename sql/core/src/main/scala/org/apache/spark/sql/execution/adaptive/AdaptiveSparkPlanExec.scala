@@ -128,7 +128,6 @@ case class AdaptiveSparkPlanExec(
       ReplaceHashWithSortAgg,
       RemoveRedundantSorts,
       RemoveRedundantWindowGroupLimits,
-      RemoveRedundantShuffles,
       DisableUnnecessaryBucketedScan,
       OptimizeSkewedJoin(ensureRequirements)
     ) ++ context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules

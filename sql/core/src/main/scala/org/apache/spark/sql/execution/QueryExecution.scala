@@ -465,7 +465,6 @@ object QueryExecution {
       // PartitioningCollection.
       RemoveRedundantSorts,
       RemoveRedundantWindowGroupLimits,
-      RemoveRedundantShuffles,
       DisableUnnecessaryBucketedScan,
       ApplyColumnarRulesAndInsertTransitions(
         sparkSession.sessionState.columnarRules, outputsColumnar = false),
@@ -473,7 +472,9 @@ object QueryExecution {
       (if (subquery) {
         Nil
       } else {
-        Seq(ReuseExchangeAndSubquery)
+        Seq(
+          ReuseExchangeAndSubquery,
+          RemoveRedundantShuffles)
       })
   }
 
