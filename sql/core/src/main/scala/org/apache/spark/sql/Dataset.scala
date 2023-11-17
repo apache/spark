@@ -4466,10 +4466,11 @@ private[sql] object EasilyFlattenable {
   def unapply(tuple: (LogicalPlan, Seq[NamedExpression])): Option[LogicalPlan] = {
     val (logicalPlan, newProjList) = tuple
     logicalPlan match {
-      case p @ Project(projList, child) =>
+      case p @ Project(projList, child) if !child.isStreaming =>
         val newlyAddedCols = newProjList.drop(projList.size)
         if (newlyAddedCols.nonEmpty) {
           val childAttribNames = child.output.map(_.name).toSet
+          val childAttribNameToExprids = child.output.map(x => x.name -> x.exprId).toMap
           val remappedAttribsInProj = projList.collect {
             case Alias(expr, name) if childAttribNames.contains(name) &&
               !expr.isInstanceOf[Attribute] => name
@@ -4490,7 +4491,11 @@ private[sql] object EasilyFlattenable {
             case _ => false
           })
           if (canBeFlattend) {
-            Option(p.copy(projList ++ newlyAddedCols))
+            // remap the newly added cols to correct attribute refs
+            val remappedAttribs = newlyAddedCols.map(_.transformUp {
+              case attr: AttributeReference => attr.withExprId(childAttribNameToExprids(attr.name))
+            })
+            Option(p.copy(projList ++ remappedAttribs.map(_.asInstanceOf[NamedExpression])))
           } else {
             None
           }
