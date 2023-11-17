@@ -460,6 +460,11 @@
       <artifactId>tabular-client-runtime</artifactId>
       <version>1.18.4</version>
     </dependency>
+    <dependency>
+      <groupId>mysql</groupId>
+      <artifactId>mysql-connector-java</artifactId>
+      <version>8.0.27</version>
+    </dependency>
   </dependencies>
   <dependencyManagement>
     <dependencies>
@@ -1245,10 +1250,9 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>com.mysql</groupId>
-        <artifactId>mysql-connector-j</artifactId>
-        <version>8.0.31</version>
-        <scope>test</scope>
+        <groupId>mysql</groupId>
+        <artifactId>mysql-connector-java</artifactId>
+        <version>8.0.27</version>
       </dependency>
       <dependency>
         <groupId>org.mariadb.jdbc</groupId>
