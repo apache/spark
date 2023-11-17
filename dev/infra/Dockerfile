@@ -63,6 +63,26 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
+
+RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/' >> /etc/apt/sources.list
+RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
+RUN gpg -a --export E084DAB9 | apt-key add -
+RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/'
+
+RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown',  \
+    'rmarkdown', 'testthat', 'devtools', 'e1071', 'survival', 'arrow',  \
+    'ggplot2', 'mvtnorm', 'statmod', 'xml2'), repos='https://cloud.r-project.org/')"
+
+# See more in SPARK-39959, roxygen2 < 7.2.1
+RUN Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')"
+RUN Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
+RUN Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
+RUN Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
+
+# See more in SPARK-39735
+ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
+
+
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
 
 RUN add-apt-repository ppa:pypy/ppa
@@ -74,19 +94,6 @@ RUN mkdir -p /usr/local/pypy/pypy3.8 && \
 
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
 
-RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/' >> /etc/apt/sources.list
-RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
-RUN gpg -a --export E084DAB9 | apt-key add -
-RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/'
-
-RUN Rscript -e "install.packages(c('knitr', 'markdown', 'rmarkdown', 'testthat', 'devtools', 'e1071', 'survival', 'arrow', 'roxygen2', 'xml2'), repos='https://cloud.r-project.org/')"
-
-# See more in SPARK-39959, roxygen2 < 7.2.1
-RUN Rscript -e "install.packages(c('devtools'), repos='https://cloud.r-project.org/')"
-RUN Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')"
-
-# See more in SPARK-39735
-ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
 
 RUN pypy3 -m pip install numpy 'pandas<=2.1.3' scipy coverage matplotlib
 RUN python3.9 -m pip install numpy 'pyarrow>=14.0.0' 'pandas<=2.1.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
