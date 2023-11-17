@@ -24,7 +24,7 @@ import javax.xml.stream.events._
 import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
 
-private[sql] object StaxXmlParserUtils {
+object StaxXmlParserUtils {
 
   private[sql] val factory: XMLInputFactory = {
     val factory = XMLInputFactory.newInstance()

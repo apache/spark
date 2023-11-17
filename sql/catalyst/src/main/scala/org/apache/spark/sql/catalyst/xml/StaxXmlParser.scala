@@ -587,7 +587,7 @@ class StaxXmlParser(
  *
  * This implementation is ultimately loosely based on LineRecordReader in Hadoop.
  */
-private[xml] class XmlTokenizer(
+class XmlTokenizer(
   inputStream: InputStream,
   options: XmlOptions) {
   private val reader = new InputStreamReader(inputStream, Charset.forName(options.charset))
@@ -742,7 +742,7 @@ private[xml] class XmlTokenizer(
   }
 }
 
-private[sql] object StaxXmlParser {
+object StaxXmlParser {
   /**
    * Parses a stream that contains CSV strings and turns it into an iterator of tokens.
    */
