@@ -4467,41 +4467,36 @@ private[sql] object EasilyFlattenable {
     val (logicalPlan, newProjList) = tuple
     logicalPlan match {
       case p @ Project(projList, child) if !child.isStreaming =>
-        val newlyAddedCols = newProjList.drop(projList.size)
-        if (newlyAddedCols.nonEmpty) {
-          val childAttribNames = child.output.map(_.name).toSet
-          val childAttribNameToExprids = child.output.map(x => x.name -> x.exprId).toMap
-          val remappedAttribsInProj = projList.collect {
-            case Alias(expr, name) if childAttribNames.contains(name) &&
-              !expr.isInstanceOf[Attribute] => name
-          }.toSet
-
-          val canBeFlattend = newlyAddedCols.forall(ne => ne match {
-            // this is case of duplicating column, for now do not handle
-            case Alias(_: Attribute, _) => false
-
-            case Alias(expr, _) => if (expr.references.isEmpty) {
-              true
-            } else {
-              val attsNameInNewExpr = expr.references.map(_.name).toSet
-              attsNameInNewExpr.subsetOf(childAttribNames) &&
-                remappedAttribsInProj.forall(!attsNameInNewExpr.contains(_))
-            }
-
-            case _ => false
-          })
-          if (canBeFlattend) {
-            // remap the newly added cols to correct attribute refs
-            val remappedAttribs = newlyAddedCols.map(_.transformUp {
-              case attr: AttributeReference => attr.withExprId(childAttribNameToExprids(attr.name))
-            })
-            Option(p.copy(projList ++ remappedAttribs.map(_.asInstanceOf[NamedExpression])))
-          } else {
-            None
-          }
-        } else {
-          None
-        }
+        val currentOutputAttribs = logicalPlan.output
+        // In the new column list identify those Named Expressions which are just attributes and
+        // hence pass thru
+        val (passThruAttribs, tinkeredOrNewNamedExprs) = newProjList.partition(ne => ne match {
+          case _: AttributeReference => true
+          case _ => false
+        })
+       if (passThruAttribs.size == currentOutputAttribs.size) {
+         assert(tinkeredOrNewNamedExprs.nonEmpty)
+         val attributesTinkeredInProject = AttributeSet(projList.filter(_ match {
+           case _: Alias => true
+           case _ => false
+         }).map(_.toAttribute))
+         val attributesTinkeredInProjectAsName = attributesTinkeredInProject.map(_.name).toSet
+         if (tinkeredOrNewNamedExprs.exists(ne => ne.references.exists(attr => attr match {
+           case u: UnresolvedAttribute => attributesTinkeredInProjectAsName.contains(u.name)
+           case resAttr => attributesTinkeredInProject.contains(resAttr)
+         } ))) {
+           None
+         } else {
+           val remappedNewProjList = newProjList.map(ne => ne match {
+             case attr: AttributeReference => projList.find(_.toAttribute == attr).get
+             case x => x
+           })
+           Option(p.copy(projectList = remappedNewProjList))
+         }
+       } else {
+         // for now None
+         None
+       }
 
       case _ => None
     }

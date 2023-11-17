@@ -17,17 +17,15 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.immutable.IndexedSeq
-
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionSet, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
-import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint, SubqueryAlias, UnaryNode, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
@@ -295,7 +293,25 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   /** Optionally returns cached data for the given [[LogicalPlan]]. */
   def lookupCachedData(plan: LogicalPlan): Option[CachedData] = {
-    cachedData.find(cd => plan.sameResult(cd.plan))
+    cachedData.find(cd => if (plan.sameResult(cd.plan)) {
+      true
+    } else {
+      (plan, cd.plan) match {
+        case (incomingPlan: UnaryNode, cachedPlan: UnaryNode) =>
+          if (incomingPlan.child.sameResult(cachedPlan.child)) {
+            if (incomingPlan.getClass == cachedPlan.getClass) {
+              val incomingExprs = incomingPlan.expressions
+              val cachedPlanExprs = ExpressionSet(cachedPlan.expressions)
+              incomingExprs.forall(ex => ex.references.isEmpty || cachedPlanExprs.contains(ex))
+            } else {
+              false
+            }
+          } else {
+            false
+          }
+        case _ => false
+      }
+    })
   }
 
   /** Replaces segments of the given logical plan with cached versions where possible. */
