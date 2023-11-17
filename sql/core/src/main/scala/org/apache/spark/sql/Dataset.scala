@@ -4468,31 +4468,35 @@ private[sql] object EasilyFlattenable {
     logicalPlan match {
       case p @ Project(projList, child) =>
         val newlyAddedCols = newProjList.drop(projList.size)
-        val childAttribNames = child.output.map(_.name).toSet
-        val remappedAttribsInProj = projList.collect {
-          case Alias(expr, name) if childAttribNames.contains(name) && !expr.isInstanceOf[Attribute]
-          => name
-        }.toSet
+        if (newlyAddedCols.nonEmpty) {
+          val childAttribNames = child.output.map(_.name).toSet
+          val remappedAttribsInProj = projList.collect {
+            case Alias(expr, name) if childAttribNames.contains(name) &&
+              !expr.isInstanceOf[Attribute] => name
+          }.toSet
 
-        val canBeFlattend = newlyAddedCols.forall(ne => ne match {
-           // this is case of duplicating column, for now do not handle
-          case Alias(_: Attribute, _) => false
+          val canBeFlattend = newlyAddedCols.forall(ne => ne match {
+            // this is case of duplicating column, for now do not handle
+            case Alias(_: Attribute, _) => false
 
-          case Alias(expr, _) => if (expr.references.isEmpty) {
-            true
+            case Alias(expr, _) => if (expr.references.isEmpty) {
+              true
+            } else {
+              val attsNameInNewExpr = expr.references.map(_.name).toSet
+              attsNameInNewExpr.subsetOf(childAttribNames) &&
+                remappedAttribsInProj.forall(!attsNameInNewExpr.contains(_))
+            }
+
+            case _ => false
+          })
+          if (canBeFlattend) {
+            Option(p.copy(projList ++ newlyAddedCols))
           } else {
-            val attsNameInNewExpr = expr.references.map(_.name).toSet
-            attsNameInNewExpr.subsetOf(childAttribNames) &&
-             remappedAttribsInProj.forall(!attsNameInNewExpr.contains(_))
+            None
           }
-
-          case _ => false
-      })
-      if (canBeFlattend) {
-        Option(p.copy(projList ++ newlyAddedCols))
-      } else {
-        None
-      }
+        } else {
+          None
+        }
 
       case _ => None
     }
