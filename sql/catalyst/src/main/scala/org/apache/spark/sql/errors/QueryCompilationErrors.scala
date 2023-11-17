@@ -3129,14 +3129,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "config" -> SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key))
   }
 
-  def multiplePathsUnsupportedError(provider: String, paths: Seq[String]): Throwable = {
-    new AnalysisException(
-      errorClass = "MULTIPLE_PATHS_UNSUPPORTED",
-      messageParameters = Map(
-        "provider" -> provider,
-        "paths" -> paths.mkString("[", ", ", "]")))
-  }
-
   def pathOptionNotSetCorrectlyWhenWritingError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1307",
