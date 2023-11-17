@@ -31,16 +31,13 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.{DateFormatter, PermissiveMode, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.types._
 
-private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
+class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     extends Serializable
     with Logging {
-
-  private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
   private val timestampFormatter = TimestampFormatter(
     options.timestampFormatInRead,
@@ -48,13 +45,6 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
-
-  private val timestampNTZFormatter = TimestampFormatter(
-    options.timestampNTZFormatInRead,
-    options.zoneId,
-    legacyFormat = FAST_DATE_FORMAT,
-    isParsing = true,
-    forTimestampNTZ = true)
 
   private lazy val dateFormatter = DateFormatter(
     options.dateFormatInRead,
@@ -171,7 +161,7 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         parser.peek match {
           case _: StartElement => inferObject(parser)
           case _: EndElement if data.isEmpty => NullType
-          case _: EndElement if options.treatEmptyValuesAsNulls => NullType
+          case _: EndElement if options.nullValue == "" => NullType
           case _: EndElement => StringType
           case _ => inferField(parser)
         }

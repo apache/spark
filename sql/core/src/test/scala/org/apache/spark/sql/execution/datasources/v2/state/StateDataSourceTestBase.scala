@@ -20,6 +20,7 @@ import java.sql.Timestamp
 
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
@@ -27,6 +28,17 @@ import org.apache.spark.sql.streaming.util.StreamManualClock
 
 trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
   import testImplicits._
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    spark.streams.stateStoreCoordinator // initialize the lazy coordinator
+  }
+
+  override def afterEach(): Unit = {
+    // Stop maintenance tasks because they may access already deleted checkpoint.
+    StateStore.stop()
+    super.afterEach()
+  }
 
   protected def runCompositeKeyStreamingAggregationQuery(checkpointRoot: String): Unit = {
     val inputData = MemoryStream[Int]
