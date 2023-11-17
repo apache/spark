@@ -643,7 +643,7 @@ class PandasCogroupedOps:
         field data types by position if not strings, e.g. integer indices.
         The length of the returned `pyarrow.Table` can be arbitrary.
 
-        .. versionadded:: 3.4.0
+        .. versionadded:: 4.0.0
 
         Parameters
         ----------
