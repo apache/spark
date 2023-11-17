@@ -111,8 +111,6 @@ class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
     ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, columnNameOfCorruptRecord)
     // Don't push any filter which refers to the "virtual" column which cannot present in the input.
     // Such filters will be applied later on the upper layer.
-    val actualFilters =
-      filters.filterNot(_.references.contains(columnNameOfCorruptRecord))
     val actualRequiredSchema = StructType(
       requiredSchema.filterNot(_.name == columnNameOfCorruptRecord))
     if (requiredSchema.length == 1 &&
@@ -123,8 +121,7 @@ class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
     (file: PartitionedFile) => {
       val parser = new StaxXmlParser(
         actualRequiredSchema,
-        xmlOptions,
-        actualFilters)
+        xmlOptions)
       XmlDataSource(xmlOptions).readFile(
         broadcastedHadoopConf.value.value,
         file,

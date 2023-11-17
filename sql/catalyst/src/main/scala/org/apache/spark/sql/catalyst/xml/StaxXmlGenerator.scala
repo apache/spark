@@ -48,13 +48,6 @@ class StaxXmlGenerator(
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)
 
-  private val timestampNTZFormatter = TimestampFormatter(
-    options.timestampNTZFormatInWrite,
-    options.zoneId,
-    legacyFormat = FAST_DATE_FORMAT,
-    isParsing = false,
-    forTimestampNTZ = true)
-
   private val dateFormatter = DateFormatter(
     options.dateFormatInWrite,
     options.locale,
