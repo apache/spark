@@ -429,13 +429,8 @@
     <dependency>
       <groupId>org.apache.iceberg</groupId>
       <artifactId>iceberg-spark-runtime-3.3_2.12</artifactId>
-      <version>1.3.0</version>
+      <version>1.4.2</version>
       <scope>runtime</scope>
-    </dependency>
-    <dependency>
-      <groupId>io.tabular</groupId>
-      <artifactId>tabular-client-runtime</artifactId>
-      <version>1.18.4</version>
     </dependency>
   </dependencies>
   <dependencyManagement>
