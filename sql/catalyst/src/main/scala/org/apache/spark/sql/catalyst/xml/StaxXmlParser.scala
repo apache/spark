@@ -183,8 +183,8 @@ class StaxXmlParser(
     (parser.peek, dataType) match {
       case (_: StartElement, dt: DataType) => convertComplicatedType(dt, attributes)
       case (_: EndElement, _: StringType) =>
-        // Empty. It's null if these are explicitly treated as null, or "" is the null value
-        if (options.treatEmptyValuesAsNulls || options.nullValue == "") {
+        // Empty. It's null if "" is the null value
+        if (options.nullValue == "") {
           null
         } else {
           UTF8String.fromString("")
@@ -224,7 +224,8 @@ class StaxXmlParser(
         parser.peek match {
           case _: StartElement => convertComplicatedType(dataType, attributes)
           case _: EndElement if data.isEmpty => null
-          case _: EndElement if options.treatEmptyValuesAsNulls => null
+          // treat empty values as null
+          case _: EndElement if options.nullValue == "" => null
           case _: EndElement => convertTo(data, dataType)
           case _ => convertField(parser, dataType, attributes)
         }
@@ -444,8 +445,7 @@ class StaxXmlParser(
   private def castTo(
       datum: String,
       castType: DataType): Any = {
-    if ((datum == options.nullValue) ||
-      (options.treatEmptyValuesAsNulls && datum == "")) {
+    if (datum == options.nullValue || datum == null) {
       null
     } else {
       castType match {
@@ -493,8 +493,7 @@ class StaxXmlParser(
     } else {
       datum
     }
-    if ((value == options.nullValue) ||
-      (options.treatEmptyValuesAsNulls && value == "")) {
+    if (value == options.nullValue || value == null) {
       null
     } else {
       dataType match {
