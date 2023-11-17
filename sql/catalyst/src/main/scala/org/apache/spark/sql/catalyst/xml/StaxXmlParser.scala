@@ -40,16 +40,12 @@ import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 class StaxXmlParser(
     schema: StructType,
-    val options: XmlOptions,
-    filters: Seq[Filter] = Seq.empty) extends Logging {
-
-  private val factory = options.buildXmlFactory()
+    val options: XmlOptions) extends Logging {
 
   private lazy val timestampFormatter = TimestampFormatter(
     options.timestampFormatInRead,
@@ -57,13 +53,6 @@ class StaxXmlParser(
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
-
-  private lazy val timestampNTZFormatter = TimestampFormatter(
-    options.timestampNTZFormatInRead,
-    options.zoneId,
-    legacyFormat = FAST_DATE_FORMAT,
-    isParsing = true,
-    forTimestampNTZ = true)
 
   private lazy val dateFormatter = DateFormatter(
     options.dateFormatInRead,
@@ -194,8 +183,8 @@ class StaxXmlParser(
     (parser.peek, dataType) match {
       case (_: StartElement, dt: DataType) => convertComplicatedType(dt, attributes)
       case (_: EndElement, _: StringType) =>
-        // Empty. It's null if these are explicitly treated as null, or "" is the null value
-        if (options.treatEmptyValuesAsNulls || options.nullValue == "") {
+        // Empty. It's null if "" is the null value
+        if (options.nullValue == "") {
           null
         } else {
           UTF8String.fromString("")
@@ -235,7 +224,8 @@ class StaxXmlParser(
         parser.peek match {
           case _: StartElement => convertComplicatedType(dataType, attributes)
           case _: EndElement if data.isEmpty => null
-          case _: EndElement if options.treatEmptyValuesAsNulls => null
+          // treat empty values as null
+          case _: EndElement if options.nullValue == "" => null
           case _: EndElement => convertTo(data, dataType)
           case _ => convertField(parser, dataType, attributes)
         }
@@ -455,8 +445,7 @@ class StaxXmlParser(
   private def castTo(
       datum: String,
       castType: DataType): Any = {
-    if ((datum == options.nullValue) ||
-      (options.treatEmptyValuesAsNulls && datum == "")) {
+    if (datum == options.nullValue || datum == null) {
       null
     } else {
       castType match {
@@ -504,8 +493,7 @@ class StaxXmlParser(
     } else {
       datum
     }
-    if ((value == options.nullValue) ||
-      (options.treatEmptyValuesAsNulls && value == "")) {
+    if (value == options.nullValue || value == null) {
       null
     } else {
       dataType match {
@@ -587,7 +575,7 @@ class StaxXmlParser(
  *
  * This implementation is ultimately loosely based on LineRecordReader in Hadoop.
  */
-private[xml] class XmlTokenizer(
+class XmlTokenizer(
   inputStream: InputStream,
   options: XmlOptions) {
   private val reader = new InputStreamReader(inputStream, Charset.forName(options.charset))
@@ -742,7 +730,7 @@ private[xml] class XmlTokenizer(
   }
 }
 
-private[sql] object StaxXmlParser {
+object StaxXmlParser {
   /**
    * Parses a stream that contains CSV strings and turns it into an iterator of tokens.
    */

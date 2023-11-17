@@ -119,6 +119,9 @@ utils = Module(
     source_file_regexes=[
         "common/utils/",
     ],
+    sbt_test_goals=[
+        "common-utils/test",
+    ],
 )
 
 kvstore = Module(
