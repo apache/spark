@@ -226,6 +226,7 @@ private[spark] object IvyTestUtils {
       val inside = deps.map(ivyArtifactWriter).mkString("\n")
       "\n  <dependencies>\n" + inside + "\n  </dependencies>"
     }.getOrElse("")
+    content += "\n</ivy-module>"
     writeFile(dir, "ivy.xml", content.trim)
   }
 

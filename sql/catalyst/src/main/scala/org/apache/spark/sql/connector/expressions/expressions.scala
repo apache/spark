@@ -156,7 +156,7 @@ private[sql] object BucketTransform {
 }
 
 /**
- * This class represents a transform for [[ClusterBySpec]]. This is used to bundle
+ * This class represents a transform for `ClusterBySpec`. This is used to bundle
  * ClusterBySpec in CreateTable's partitioning transforms to pass it down to analyzer.
  */
 final case class ClusterByTransform(

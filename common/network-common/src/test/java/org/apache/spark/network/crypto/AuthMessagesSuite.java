@@ -46,8 +46,8 @@ public class AuthMessagesSuite {
     msg.encode(buf);
     AuthMessage decoded = AuthMessage.decodeMessage(buf.nioBuffer());
 
-    assertEquals(msg.appId, decoded.appId);
-    assertArrayEquals(msg.salt, decoded.salt);
-    assertArrayEquals(msg.ciphertext, decoded.ciphertext);
+    assertEquals(msg.appId(), decoded.appId());
+    assertArrayEquals(msg.salt(), decoded.salt());
+    assertArrayEquals(msg.ciphertext(), decoded.ciphertext());
   }
 }

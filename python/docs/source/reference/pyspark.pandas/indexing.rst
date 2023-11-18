@@ -105,7 +105,9 @@ Missing Values
    Index.fillna
    Index.dropna
    Index.isna
+   Index.isnull
    Index.notna
+   Index.notnull
 
 Conversion
 ~~~~~~~~~~
@@ -190,6 +192,10 @@ Categorical components
    CategoricalIndex.as_ordered
    CategoricalIndex.as_unordered
    CategoricalIndex.map
+   CategoricalIndex.equals
+   CategoricalIndex.max
+   CategoricalIndex.min
+   CategoricalIndex.tolist
 
 .. _api.multiindex:
 

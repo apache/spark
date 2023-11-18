@@ -1838,10 +1838,13 @@ def cos(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> import math
-    >>> df = spark.range(1)
-    >>> df.select(cos(lit(math.pi))).first()
-    Row(COS(3.14159...)=-1.0)
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.cos(sf.pi())).show()
+    +---------+
+    |COS(PI())|
+    +---------+
+    |     -1.0|
+    +---------+
     """
     return _invoke_function_over_columns("cos", col)
 
@@ -1897,10 +1900,13 @@ def cot(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> import math
-    >>> df = spark.range(1)
-    >>> df.select(cot(lit(math.radians(45)))).first()
-    Row(COT(0.78539...)=1.00000...)
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.cot(sf.pi() / 4)).show()
+    +------------------+
+    |   COT((PI() / 4))|
+    +------------------+
+    |1.0000000000000...|
+    +------------------+
     """
     return _invoke_function_over_columns("cot", col)
 
@@ -1927,10 +1933,13 @@ def csc(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> import math
-    >>> df = spark.range(1)
-    >>> df.select(csc(lit(math.radians(90)))).first()
-    Row(CSC(1.57079...)=1.0)
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.csc(sf.pi() / 2)).show()
+    +---------------+
+    |CSC((PI() / 2))|
+    +---------------+
+    |            1.0|
+    +---------------+
     """
     return _invoke_function_over_columns("csc", col)
 
@@ -2091,10 +2100,13 @@ def log(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> import math
-    >>> df = spark.range(1)
-    >>> df.select(log(lit(math.e))).first()
-    Row(ln(2.71828...)=1.0)
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.log(sf.e())).show()
+    +-------+
+    |ln(E())|
+    +-------+
+    |    1.0|
+    +-------+
     """
     return _invoke_function_over_columns("log", col)
 
@@ -2154,15 +2166,22 @@ def log1p(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> import math
-    >>> df = spark.range(1)
-    >>> df.select(log1p(lit(math.e))).first()
-    Row(LOG1P(2.71828...)=1.31326...)
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.log1p(sf.e())).show()
+    +------------------+
+    |        LOG1P(E())|
+    +------------------+
+    |1.3132616875182...|
+    +------------------+
 
     Same as:
 
-    >>> df.select(log(lit(math.e+1))).first()
-    Row(ln(3.71828...)=1.31326...)
+    >>> spark.range(1).select(sf.log(sf.e() + 1)).show()
+    +------------------+
+    |     ln((E() + 1))|
+    +------------------+
+    |1.3132616875182...|
+    +------------------+
     """
     return _invoke_function_over_columns("log1p", col)
 
@@ -2416,10 +2435,13 @@ def sin(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> import math
-    >>> df = spark.range(1)
-    >>> df.select(sin(lit(math.radians(90)))).first()
-    Row(SIN(1.57079...)=1.0)
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.sin(sf.pi() / 2)).show()
+    +---------------+
+    |SIN((PI() / 2))|
+    +---------------+
+    |            1.0|
+    +---------------+
     """
     return _invoke_function_over_columns("sin", col)
 
@@ -2476,10 +2498,13 @@ def tan(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> import math
-    >>> df = spark.range(1)
-    >>> df.select(tan(lit(math.radians(45)))).first()
-    Row(TAN(0.78539...)=0.99999...)
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.tan(sf.pi() / 4)).show()
+    +------------------+
+    |   TAN((PI() / 4))|
+    +------------------+
+    |0.9999999999999...|
+    +------------------+
     """
     return _invoke_function_over_columns("tan", col)
 
@@ -2507,10 +2532,13 @@ def tanh(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> import math
-    >>> df = spark.range(1)
-    >>> df.select(tanh(lit(math.radians(90)))).first()
-    Row(TANH(1.57079...)=0.91715...)
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.tanh(sf.pi() / 2)).show()
+    +------------------+
+    |  TANH((PI() / 2))|
+    +------------------+
+    |0.9171523356672744|
+    +------------------+
     """
     return _invoke_function_over_columns("tanh", col)
 
@@ -3953,10 +3981,13 @@ def degrees(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> import math
-    >>> df = spark.range(1)
-    >>> df.select(degrees(lit(math.pi))).first()
-    Row(DEGREES(3.14159...)=180.0)
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.degrees(sf.pi())).show()
+    +-------------+
+    |DEGREES(PI())|
+    +-------------+
+    |        180.0|
+    +-------------+
     """
     return _invoke_function_over_columns("degrees", col)
 
