@@ -4817,15 +4817,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  2|    B|
         +---+-----+
 
-        Example 3: Intersecting two DataFrames with mismatched columns
+        Example 3: Intersecting all rows from two DataFrames with mismatched columns
 
-        >>> df1 = spark.createDataFrame([(1, 2)], ["A", "B"])
-        >>> df2 = spark.createDataFrame([(1, 2)], ["C", "D"])
+        >>> df1 = spark.createDataFrame([(1, 2), (1, 2), (3, 4)], ["A", "B"])
+        >>> df2 = spark.createDataFrame([(1, 2), (1, 2)], ["C", "D"])
         >>> result_df = df1.intersectAll(df2).sort("A", "B")
         >>> result_df.show()
         +---+---+
         |  A|  B|
         +---+---+
+        |  1|  2|
         |  1|  2|
         +---+---+
         """
