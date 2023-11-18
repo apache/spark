@@ -24,7 +24,7 @@ import javax.xml.stream.events._
 import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
 
-private[sql] object StaxXmlParserUtils {
+object StaxXmlParserUtils {
 
   private[sql] val factory: XMLInputFactory = {
     val factory = XMLInputFactory.newInstance()
@@ -96,7 +96,7 @@ private[sql] object StaxXmlParserUtils {
       attributes.map { attr =>
         val key = options.attributePrefix + getName(attr.getName, options)
         val value = attr.getValue match {
-          case v if options.treatEmptyValuesAsNulls && v.trim.isEmpty => null
+          case v if (options.nullValue == "") && v.trim.isEmpty => null
           case v => v
         }
         key -> value

@@ -61,7 +61,7 @@ Aggregate [a#x, a#x], [a#x, 1 AS 1#x, sum(b#x) AS sum(b)#xL]
 -- !query
 select a, 1, sum(b) from data group by 1, 2
 -- !query analysis
-Aggregate [a#x, 1], [a#x, 1 AS 1#x, sum(b#x) AS sum(b)#xL]
+Aggregate [a#x, 2], [a#x, 1 AS 1#x, sum(b#x) AS sum(b)#xL]
 +- SubqueryAlias data
    +- View (`data`, [a#x,b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]

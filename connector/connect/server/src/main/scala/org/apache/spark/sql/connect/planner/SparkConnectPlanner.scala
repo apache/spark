@@ -102,6 +102,8 @@ class SparkConnectPlanner(
 
   private[connect] def session: SparkSession = sessionHolder.session
 
+  private[connect] def parser = session.sessionState.sqlParser
+
   private[connect] def userId: String = sessionHolder.userId
 
   private[connect] def sessionId: String = sessionHolder.sessionId
@@ -283,7 +285,6 @@ class SparkConnectPlanner(
     val namedArguments = sql.getNamedArgumentsMap
     val posArgs = sql.getPosArgsList
     val posArguments = sql.getPosArgumentsList
-    val parser = session.sessionState.sqlParser
     val parsedPlan = parser.parsePlan(sql.getQuery)
     if (!namedArguments.isEmpty) {
       NameParameterizedQuery(
@@ -1124,7 +1125,6 @@ class SparkConnectPlanner(
   }
 
   private[connect] def parseDatatypeString(sqlText: String): DataType = {
-    val parser = session.sessionState.sqlParser
     try {
       parser.parseTableSchema(sqlText)
     } catch {
@@ -1226,11 +1226,8 @@ class SparkConnectPlanner(
 
     rel.getReadTypeCase match {
       case proto.Read.ReadTypeCase.NAMED_TABLE =>
-        val multipartIdentifier =
-          session.sessionState.sqlParser
-            .parseMultipartIdentifier(rel.getNamedTable.getUnparsedIdentifier)
         UnresolvedRelation(
-          multipartIdentifier,
+          parser.parseMultipartIdentifier(rel.getNamedTable.getUnparsedIdentifier),
           new CaseInsensitiveStringMap(rel.getNamedTable.getOptionsMap),
           isStreaming = rel.getIsStreaming)
 
@@ -1485,7 +1482,7 @@ class SparkConnectPlanner(
       fun: proto.Expression.UnresolvedFunction): Expression = {
     if (fun.getIsUserDefinedFunction) {
       UnresolvedFunction(
-        session.sessionState.sqlParser.parseFunctionIdentifier(fun.getFunctionName),
+        parser.parseFunctionIdentifier(fun.getFunctionName),
         fun.getArgumentsList.asScala.map(transformExpression).toSeq,
         isDistinct = fun.getIsDistinct)
     } else {
@@ -1527,9 +1524,8 @@ class SparkConnectPlanner(
    */
   private def transformCallFunction(fun: proto.CallFunction): Expression = {
     val funcName = fun.getFunctionName
-    val nameParts = session.sessionState.sqlParser.parseMultipartIdentifier(funcName)
     UnresolvedFunction(
-      nameParts,
+      parser.parseMultipartIdentifier(funcName),
       fun.getArgumentsList.asScala.map(transformExpression).toSeq,
       false)
   }
@@ -2067,7 +2063,7 @@ class SparkConnectPlanner(
   }
 
   private def transformExpressionString(expr: proto.Expression.ExpressionString): Expression = {
-    session.sessionState.sqlParser.parseExpression(expr.getExpression)
+    parser.parseExpression(expr.getExpression)
   }
 
   private def transformUnresolvedStar(star: proto.Expression.UnresolvedStar): UnresolvedStar = {
@@ -2091,9 +2087,7 @@ class SparkConnectPlanner(
       case proto.Expression.Cast.CastToTypeCase.TYPE =>
         Cast(transformExpression(cast.getExpr), transformDataType(cast.getType))
       case _ =>
-        Cast(
-          transformExpression(cast.getExpr),
-          session.sessionState.sqlParser.parseDataType(cast.getTypeStr))
+        Cast(transformExpression(cast.getExpr), parser.parseDataType(cast.getTypeStr))
     }
   }
 
@@ -2723,7 +2717,7 @@ class SparkConnectPlanner(
 
     val tableIdentifier =
       try {
-        session.sessionState.sqlParser.parseTableIdentifier(createView.getName)
+        parser.parseTableIdentifier(createView.getName)
       } catch {
         case _: ParseException =>
           throw QueryCompilationErrors.invalidViewNameError(createView.getName)

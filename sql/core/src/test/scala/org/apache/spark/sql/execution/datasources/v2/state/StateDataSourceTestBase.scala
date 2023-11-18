@@ -20,6 +20,7 @@ import java.sql.Timestamp
 
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
@@ -27,6 +28,17 @@ import org.apache.spark.sql.streaming.util.StreamManualClock
 
 trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
   import testImplicits._
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    spark.streams.stateStoreCoordinator // initialize the lazy coordinator
+  }
+
+  override def afterEach(): Unit = {
+    // Stop maintenance tasks because they may access already deleted checkpoint.
+    StateStore.stop()
+    super.afterEach()
+  }
 
   protected def runCompositeKeyStreamingAggregationQuery(checkpointRoot: String): Unit = {
     val inputData = MemoryStream[Int]
@@ -391,6 +403,40 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
         joinType = "inner")
       .select(col("leftId"), col("leftTime").cast("int"),
         col("rightId"), col("rightTime").cast("int"))
+  }
+
+  protected def runSessionWindowAggregationQuery(checkpointRoot: String): Unit = {
+    val input = MemoryStream[(String, Long)]
+    val sessionWindow = session_window($"eventTime", "10 seconds")
+
+    val events = input.toDF()
+      .select($"_1".as("value"), $"_2".as("timestamp"))
+      .withColumn("eventTime", $"timestamp".cast("timestamp"))
+      .withWatermark("eventTime", "30 seconds")
+      .selectExpr("explode(split(value, ' ')) AS sessionId", "eventTime")
+
+    val streamingDf = events
+      .groupBy(sessionWindow as Symbol("session"), $"sessionId")
+      .agg(count("*").as("numEvents"))
+      .selectExpr("sessionId", "CAST(session.start AS LONG)", "CAST(session.end AS LONG)",
+        "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
+        "numEvents")
+
+    testStream(streamingDf, OutputMode.Complete())(
+      StartStream(checkpointLocation = checkpointRoot),
+      AddData(input,
+        ("hello world spark streaming", 40L),
+        ("world hello structured streaming", 41L)
+      ),
+      CheckNewAnswer(
+        ("hello", 40, 51, 11, 2),
+        ("world", 40, 51, 11, 2),
+        ("streaming", 40, 51, 11, 2),
+        ("spark", 40, 50, 10, 1),
+        ("structured", 41, 51, 10, 1)
+      ),
+      StopStream
+    )
   }
 }
 
