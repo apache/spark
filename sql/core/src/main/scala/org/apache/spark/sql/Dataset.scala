@@ -4488,7 +4488,8 @@ private[sql] object EasilyFlattenable {
            None
          } else {
            val remappedNewProjList = newProjList.map(ne => ne match {
-             case attr: AttributeReference => projList.find(_.toAttribute == attr).get
+             case attr: AttributeReference => projList.find(
+               _.toAttribute.canonicalized == attr.canonicalized).get
              case x => x
            })
            Option(p.copy(projectList = remappedNewProjList))
