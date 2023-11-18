@@ -15,6 +15,7 @@
   ~ limitations under the License.
   -->
 
+
 <configuration>
     <property>
         <name>hive.in.test</name>
