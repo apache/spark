@@ -72,7 +72,9 @@ if TYPE_CHECKING:
         UserDefinedFunctionLike,
     )
 
-if _has_numpy:  # type: ignore
+assert isinstance(_has_numpy, bool)
+
+if _has_numpy:
     import numpy as np
 
 # Note to developers: all of PySpark functions here take string as column names whenever possible.
