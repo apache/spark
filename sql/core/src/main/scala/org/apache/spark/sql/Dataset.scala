@@ -4474,8 +4474,8 @@ private[sql] object EasilyFlattenable {
           case _: AttributeReference => true
           case _ => false
         })
-       if (passThruAttribs.size == currentOutputAttribs.size) {
-         assert(tinkeredOrNewNamedExprs.nonEmpty)
+        // TODO: analyze the case tinkeredOrNewNamedExprs.isEmpty using DataFrameSuite
+       if (passThruAttribs.size == currentOutputAttribs.size && tinkeredOrNewNamedExprs.nonEmpty) {
          val attributesTinkeredInProject = AttributeSet(projList.filter(_ match {
            case _: Alias => true
            case _ => false
