@@ -837,7 +837,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       dir: String = newDir(),
       minDeltasForSnapshot: Int = SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
       numOfVersToRetainInMemory: Int = SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get,
-      hadoopConf: Configuration = new Configuration): HDFSBackedStateStoreProvider = {
+      hadoopConf: Configuration = new Configuration,
+      useColumnFamilies: Boolean = false): HDFSBackedStateStoreProvider = {
     val sqlConf = getDefaultSQLConf(minDeltasForSnapshot, numOfVersToRetainInMemory)
     val provider = new HDFSBackedStateStoreProvider()
     provider.init(
@@ -853,6 +854,12 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
   override def newStoreProvider(numPrefixCols: Int): HDFSBackedStateStoreProvider = {
     newStoreProvider(opId = Random.nextInt(), partition = 0, numColsPrefixKey = numPrefixCols)
+  }
+
+  override def newStoreProvider(useColumnFamilies: Boolean): HDFSBackedStateStoreProvider = {
+    // TODO: remove multiple col families restriction when we add support for
+    // HDFSBackedStateStoreProvider
+    newStoreProvider(opId = Random.nextInt(), partition = 0, useColumnFamilies = false)
   }
 
   def checkLoadedVersions(
@@ -898,55 +905,58 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   protected val keySchema: StructType = StateStoreTestsHelper.keySchema
   protected val valueSchema: StructType = StateStoreTestsHelper.valueSchema
 
-  testWithAllCodec("get, put, remove, commit, and all data iterator") {
-    tryWithProviderResource(newStoreProvider()) { provider =>
-      // Verify state before starting a new set of updates
-      assert(getLatestData(provider).isEmpty)
+  Seq(true, false).foreach { useColumnFamilies =>
+    testWithAllCodec("get, put, remove, commit, and all data iterator " +
+      s"with useColumnFamilies=$useColumnFamilies") {
+      tryWithProviderResource(newStoreProvider(useColumnFamilies)) { provider =>
+        // Verify state before starting a new set of updates
+        assert(getLatestData(provider).isEmpty)
 
-      val store = provider.getStore(0)
-      assert(!store.hasCommitted)
-      assert(get(store, "a", 0) === None)
-      assert(store.iterator().isEmpty)
-      assert(store.metrics.numKeys === 0)
+        val store = provider.getStore(0)
+        assert(!store.hasCommitted)
+        assert(get(store, "a", 0) === None)
+        assert(store.iterator().isEmpty)
+        assert(store.metrics.numKeys === 0)
 
-      // Verify state after updating
-      put(store, "a", 0, 1)
-      assert(get(store, "a", 0) === Some(1))
+        // Verify state after updating
+        put(store, "a", 0, 1)
+        assert(get(store, "a", 0) === Some(1))
 
-      assert(store.iterator().nonEmpty)
-      assert(getLatestData(provider).isEmpty)
+        assert(store.iterator().nonEmpty)
+        assert(getLatestData(provider).isEmpty)
 
-      // Make updates, commit and then verify state
-      put(store, "b", 0, 2)
-      put(store, "aa", 0, 3)
-      remove(store, _._1.startsWith("a"))
-      assert(store.commit() === 1)
+        // Make updates, commit and then verify state
+        put(store, "b", 0, 2)
+        put(store, "aa", 0, 3)
+        remove(store, _._1.startsWith("a"))
+        assert(store.commit() === 1)
 
-      assert(store.hasCommitted)
-      assert(rowPairsToDataSet(store.iterator()) === Set(("b", 0) -> 2))
-      assert(getLatestData(provider) === Set(("b", 0) -> 2))
+        assert(store.hasCommitted)
+        assert(rowPairsToDataSet(store.iterator()) === Set(("b", 0) -> 2))
+        assert(getLatestData(provider) === Set(("b", 0) -> 2))
 
-      // Trying to get newer versions should fail
-      var e = intercept[SparkException] {
-        provider.getStore(2)
-      }
-      assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getMessage.contains("does not exist"))
+        // Trying to get newer versions should fail
+        var e = intercept[SparkException] {
+          provider.getStore(2)
+        }
+        assert(e.getCause.isInstanceOf[SparkException])
+        assert(e.getCause.getMessage.contains("does not exist"))
 
-      e = intercept[SparkException] {
-        getData(provider, 2)
-      }
-      assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getMessage.contains("does not exist"))
+        e = intercept[SparkException] {
+          getData(provider, 2)
+        }
+        assert(e.getCause.isInstanceOf[SparkException])
+        assert(e.getCause.getMessage.contains("does not exist"))
 
-      // New updates to the reloaded store with new version, and does not change old version
-      tryWithProviderResource(newStoreProvider(store.id)) { reloadedProvider =>
-        val reloadedStore = reloadedProvider.getStore(1)
-        put(reloadedStore, "c", 0, 4)
-        assert(reloadedStore.commit() === 2)
-        assert(rowPairsToDataSet(reloadedStore.iterator()) === Set(("b", 0) -> 2, ("c", 0) -> 4))
-        assert(getLatestData(provider) === Set(("b", 0) -> 2, ("c", 0) -> 4))
-        assert(getData(provider, version = 1) === Set(("b", 0) -> 2))
+        // New updates to the reloaded store with new version, and does not change old version
+        tryWithProviderResource(newStoreProvider(store.id)) { reloadedProvider =>
+          val reloadedStore = reloadedProvider.getStore(1)
+          put(reloadedStore, "c", 0, 4)
+          assert(reloadedStore.commit() === 2)
+          assert(rowPairsToDataSet(reloadedStore.iterator()) === Set(("b", 0) -> 2, ("c", 0) -> 4))
+          assert(getLatestData(provider) === Set(("b", 0) -> 2, ("c", 0) -> 4))
+          assert(getData(provider, version = 1) === Set(("b", 0) -> 2))
+        }
       }
     }
   }
@@ -1010,104 +1020,113 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
   }
 
-  testWithAllCodec("numKeys metrics") {
-    tryWithProviderResource(newStoreProvider()) { provider =>
-      // Verify state before starting a new set of updates
-      assert(getLatestData(provider).isEmpty)
+  Seq(true, false).foreach { useColumnFamilies =>
+    testWithAllCodec(s"numKeys metrics with useColumnFamilies=$useColumnFamilies") {
+      tryWithProviderResource(newStoreProvider(useColumnFamilies)) { provider =>
+        // Verify state before starting a new set of updates
+        assert(getLatestData(provider).isEmpty)
 
-      val store = provider.getStore(0)
-      put(store, "a", 0, 1)
-      put(store, "b", 0, 2)
-      put(store, "c", 0, 3)
-      put(store, "d", 0, 4)
-      put(store, "e", 0, 5)
-      assert(store.commit() === 1)
-      assert(store.metrics.numKeys === 5)
-      assert(rowPairsToDataSet(store.iterator()) ===
-        Set(("a", 0) -> 1, ("b", 0) -> 2, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
+        val store = provider.getStore(0)
+        put(store, "a", 0, 1)
+        put(store, "b", 0, 2)
+        put(store, "c", 0, 3)
+        put(store, "d", 0, 4)
+        put(store, "e", 0, 5)
+        assert(store.commit() === 1)
+        assert(store.metrics.numKeys === 5)
+        assert(rowPairsToDataSet(store.iterator()) ===
+          Set(("a", 0) -> 1, ("b", 0) -> 2, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
 
-      val reloadedProvider = newStoreProvider(store.id)
-      val reloadedStore = reloadedProvider.getStore(1)
-      remove(reloadedStore, _._1 == "b")
-      assert(reloadedStore.commit() === 2)
-      assert(reloadedStore.metrics.numKeys === 4)
-      assert(rowPairsToDataSet(reloadedStore.iterator()) ===
-        Set(("a", 0) -> 1, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
-    }
-  }
-
-  testWithAllCodec("removing while iterating") {
-    tryWithProviderResource(newStoreProvider()) { provider =>
-      // Verify state before starting a new set of updates
-      assert(getLatestData(provider).isEmpty)
-      val store = provider.getStore(0)
-      put(store, "a", 0, 1)
-      put(store, "b", 0, 2)
-
-      // Updates should work while iterating of filtered entries
-      val filtered = store.iterator().filter { tuple => keyRowToData(tuple.key) == ("a", 0) }
-      filtered.foreach { tuple =>
-        store.put(tuple.key, dataToValueRow(valueRowToData(tuple.value) + 1))
+        val reloadedProvider = newStoreProvider(store.id)
+        val reloadedStore = reloadedProvider.getStore(1)
+        remove(reloadedStore, _._1 == "b")
+        assert(reloadedStore.commit() === 2)
+        assert(reloadedStore.metrics.numKeys === 4)
+        assert(rowPairsToDataSet(reloadedStore.iterator()) ===
+          Set(("a", 0) -> 1, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
       }
-      assert(get(store, "a", 0) === Some(2))
-
-      // Removes should work while iterating of filtered entries
-      val filtered2 = store.iterator().filter { tuple => keyRowToData(tuple.key) == ("b", 0) }
-      filtered2.foreach { tuple => store.remove(tuple.key) }
-      assert(get(store, "b", 0) === None)
     }
   }
 
-  testWithAllCodec("abort") {
-    tryWithProviderResource(newStoreProvider()) { provider =>
-      val store = provider.getStore(0)
-      put(store, "a", 0, 1)
-      store.commit()
-      assert(rowPairsToDataSet(store.iterator()) === Set(("a", 0) -> 1))
+  Seq(true, false).foreach { useColumnFamilies =>
+    testWithAllCodec(s"removing while iterating with useColumnFamilies=$useColumnFamilies") {
+      tryWithProviderResource(newStoreProvider(useColumnFamilies)) { provider =>
+        // Verify state before starting a new set of updates
+        assert(getLatestData(provider).isEmpty)
+        val store = provider.getStore(0)
+        put(store, "a", 0, 1)
+        put(store, "b", 0, 2)
 
-      // cancelUpdates should not change the data in the files
-      val store1 = provider.getStore(1)
-      put(store1, "b", 0, 1)
-      store1.abort()
-    }
-  }
-
-  testWithAllCodec("getStore with invalid versions") {
-    tryWithProviderResource(newStoreProvider()) { provider =>
-      def checkInvalidVersion(version: Int): Unit = {
-        val e = intercept[SparkException] {
-          provider.getStore(version)
+        // Updates should work while iterating of filtered entries
+        val filtered = store.iterator().filter { tuple => keyRowToData(tuple.key) == ("a", 0) }
+        filtered.foreach { tuple =>
+          store.put(tuple.key, dataToValueRow(valueRowToData(tuple.value) + 1))
         }
-        checkError(
-          e,
-          errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
-          parameters = Map.empty
-        )
+        assert(get(store, "a", 0) === Some(2))
+
+        // Removes should work while iterating of filtered entries
+        val filtered2 = store.iterator().filter { tuple => keyRowToData(tuple.key) == ("b", 0) }
+        filtered2.foreach { tuple => store.remove(tuple.key) }
+        assert(get(store, "b", 0) === None)
       }
+    }
+  }
 
-      checkInvalidVersion(-1)
-      checkInvalidVersion(1)
+  Seq(true, false).foreach { useColumnFamilies =>
+    testWithAllCodec(s"abort with useColumnFamilies=$useColumnFamilies") {
+      tryWithProviderResource(newStoreProvider(useColumnFamilies)) { provider =>
+        val store = provider.getStore(0)
+        put(store, "a", 0, 1)
+        store.commit()
+        assert(rowPairsToDataSet(store.iterator()) === Set(("a", 0) -> 1))
 
-      val store = provider.getStore(0)
-      put(store, "a", 0, 1)
-      assert(store.commit() === 1)
-      assert(rowPairsToDataSet(store.iterator()) === Set(("a", 0) -> 1))
+        // cancelUpdates should not change the data in the files
+        val store1 = provider.getStore(1)
+        put(store1, "b", 0, 1)
+        store1.abort()
+      }
+    }
+  }
 
-      val store1_ = provider.getStore(1)
-      assert(rowPairsToDataSet(store1_.iterator()) === Set(("a", 0) -> 1))
+  Seq(true, false).foreach { useColumnFamilies =>
+    testWithAllCodec(s"getStore with invalid versions with " +
+      s"useColumnFamilies=$useColumnFamilies") {
+      tryWithProviderResource(newStoreProvider(useColumnFamilies)) { provider =>
+        def checkInvalidVersion(version: Int): Unit = {
+          val e = intercept[SparkException] {
+            provider.getStore(version)
+          }
+          checkError(
+            e,
+            errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+            parameters = Map.empty
+          )
+        }
 
-      checkInvalidVersion(-1)
-      checkInvalidVersion(2)
+        checkInvalidVersion(-1)
+        checkInvalidVersion(1)
 
-      // Update store version with some data
-      val store1 = provider.getStore(1)
-      assert(rowPairsToDataSet(store1.iterator()) === Set(("a", 0) -> 1))
-      put(store1, "b", 0, 1)
-      assert(store1.commit() === 2)
-      assert(rowPairsToDataSet(store1.iterator()) === Set(("a", 0) -> 1, ("b", 0) -> 1))
+        val store = provider.getStore(0)
+        put(store, "a", 0, 1)
+        assert(store.commit() === 1)
+        assert(rowPairsToDataSet(store.iterator()) === Set(("a", 0) -> 1))
 
-      checkInvalidVersion(-1)
-      checkInvalidVersion(3)
+        val store1_ = provider.getStore(1)
+        assert(rowPairsToDataSet(store1_.iterator()) === Set(("a", 0) -> 1))
+
+        checkInvalidVersion(-1)
+        checkInvalidVersion(2)
+
+        // Update store version with some data
+        val store1 = provider.getStore(1)
+        assert(rowPairsToDataSet(store1.iterator()) === Set(("a", 0) -> 1))
+        put(store1, "b", 0, 1)
+        assert(store1.commit() === 2)
+        assert(rowPairsToDataSet(store1.iterator()) === Set(("a", 0) -> 1, ("b", 0) -> 1))
+
+        checkInvalidVersion(-1)
+        checkInvalidVersion(3)
+      }
     }
   }
 
@@ -1466,6 +1485,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
   /** Return a new provider with setting prefix key */
   def newStoreProvider(numPrefixCols: Int): ProviderClass
+
+  /** Return a new provider with useColumnFamilies set to true */
+  def newStoreProvider(useColumnFamilies: Boolean): ProviderClass
 
   /** Get the latest data referred to by the given provider but not using this provider */
   def getLatestData(storeProvider: ProviderClass): Set[((String, Int), Int)]

@@ -28,8 +28,8 @@ import org.apache.spark.sql.streaming.ValueState
 import org.apache.spark.sql.types._
 
 class ValueStateImpl[S](
-  store: StateStore,
-  stateName: String) extends ValueState[S] with Logging{
+    store: StateStore,
+    stateName: String) extends ValueState[S] with Logging{
 
   private def encodeKey(): UnsafeRow = {
     val keyOption = ImplicitKeyTracker.getImplicitKeyOption

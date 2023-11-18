@@ -55,21 +55,26 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
   import StateStoreTestsHelper._
 
-  test("version encoding") {
-    import RocksDBStateStoreProvider._
+  Seq(true, false).foreach { useColumnFamilies =>
+    test(s"version encoding with useColumnFamilies=$useColumnFamilies") {
+      import RocksDBStateStoreProvider._
 
-    tryWithProviderResource(newStoreProvider()) { provider =>
-      val store = provider.getStore(0)
-      val keyRow = dataToKeyRow("a", 0)
-      val valueRow = dataToValueRow(1)
-      store.put(keyRow, valueRow)
-      val iter = provider.rocksDB.iterator()
-      assert(iter.hasNext)
-      val kv = iter.next()
+      // TODO: remove check when we add support for col families with changelog checkpointing
+      if (!isChangelogCheckpointingEnabled) {
+        tryWithProviderResource(newStoreProvider(useColumnFamilies)) { provider =>
+          val store = provider.getStore(0)
+          val keyRow = dataToKeyRow("a", 0)
+          val valueRow = dataToValueRow(1)
+          store.put(keyRow, valueRow)
+          val iter = provider.rocksDB.iterator()
+          assert(iter.hasNext)
+          val kv = iter.next()
 
-      // Verify the version encoded in first byte of the key and value byte arrays
-      assert(Platform.getByte(kv.key, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
-      assert(Platform.getByte(kv.value, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
+          // Verify the version encoded in first byte of the key and value byte arrays
+          assert(Platform.getByte(kv.key, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
+          assert(Platform.getByte(kv.value, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
+        }
+      }
     }
   }
 
@@ -122,28 +127,36 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
-  test("rocksdb file manager metrics exposed") {
-    import RocksDBStateStoreProvider._
-    def getCustomMetric(metrics: StateStoreMetrics, customMetric: StateStoreCustomMetric): Long = {
-      val metricPair = metrics.customMetrics.find(_._1.name == customMetric.name)
-      assert(metricPair.isDefined)
-      metricPair.get._2
-    }
-    withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
-      tryWithProviderResource(newStoreProvider()) { provider =>
-          val store = provider.getStore(0)
-          // Verify state after updating
-          put(store, "a", 0, 1)
-          assert(get(store, "a", 0) === Some(1))
-          assert(store.commit() === 1)
-          provider.doMaintenance()
-          assert(store.hasCommitted)
-          val storeMetrics = store.metrics
-          assert(storeMetrics.numKeys === 1)
-          assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_COPIED) > 0L)
-          assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_REUSED) == 0L)
-          assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_BYTES_COPIED) > 0L)
-          assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED) > 0L)
+  Seq(true, false).foreach { useColumnFamilies =>
+    test(s"rocksdb file manager metrics exposed with " +
+      s"useColumnFamilies=$useColumnFamilies") {
+      import RocksDBStateStoreProvider._
+      def getCustomMetric(metrics: StateStoreMetrics,
+        customMetric: StateStoreCustomMetric): Long = {
+        val metricPair = metrics.customMetrics.find(_._1.name == customMetric.name)
+        assert(metricPair.isDefined)
+        metricPair.get._2
+      }
+
+      // TODO: remove check when we add support for col families with changelog checkpointing
+      if (!isChangelogCheckpointingEnabled) {
+        withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
+          tryWithProviderResource(newStoreProvider(useColumnFamilies)) { provider =>
+            val store = provider.getStore(0)
+            // Verify state after updating
+            put(store, "a", 0, 1)
+            assert(get(store, "a", 0) === Some(1))
+            assert(store.commit() === 1)
+            provider.doMaintenance()
+            assert(store.hasCommitted)
+            val storeMetrics = store.metrics
+            assert(storeMetrics.numKeys === 1)
+            assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_COPIED) > 0L)
+            assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_REUSED) == 0L)
+            assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_BYTES_COPIED) > 0L)
+            assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED) > 0L)
+          }
+        }
       }
     }
   }
@@ -154,6 +167,11 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
   def newStoreProvider(storeId: StateStoreId): RocksDBStateStoreProvider = {
     newStoreProvider(storeId, numColsPrefixKey = 0)
+  }
+
+  override def newStoreProvider(useColumnFamilies: Boolean): RocksDBStateStoreProvider = {
+    newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0), numColsPrefixKey = 0,
+      useColumnFamilies = useColumnFamilies && !isChangelogCheckpointingEnabled)
   }
 
   def newStoreProvider(storeId: StateStoreId, conf: Configuration): RocksDBStateStoreProvider = {
@@ -168,11 +186,12 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       storeId: StateStoreId,
       numColsPrefixKey: Int,
       sqlConf: Option[SQLConf] = None,
-      conf: Configuration = new Configuration): RocksDBStateStoreProvider = {
+      conf: Configuration = new Configuration,
+      useColumnFamilies: Boolean = false): RocksDBStateStoreProvider = {
     val provider = new RocksDBStateStoreProvider()
     provider.init(
       storeId, keySchema, valueSchema, numColsPrefixKey = numColsPrefixKey,
-      useColumnFamilies = false,
+      useColumnFamilies,
       new StateStoreConf(sqlConf.getOrElse(SQLConf.get)), conf)
     provider
   }
