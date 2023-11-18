@@ -4829,13 +4829,39 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
+        Example 1: Subtracting two DataFrames with the same schema
+
         >>> df1 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3), ("c", 4)], ["C1", "C2"])
         >>> df2 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3)], ["C1", "C2"])
-        >>> df1.subtract(df2).show()
+        >>> result_df = df1.subtract(df2)
+        >>> result_df.show()
         +---+---+
         | C1| C2|
         +---+---+
         |  c|  4|
+        +---+---+
+
+        Example 2: Subtracting two DataFrames with different schemas
+
+        >>> df1 = spark.createDataFrame([(1, "A"), (2, "B")], ["id", "value"])
+        >>> df2 = spark.createDataFrame([(2, "B"), (3, "C")], ["id", "value"])
+        >>> result_df = df1.subtract(df2)
+        >>> result_df.show()
+        +---+-----+
+        | id|value|
+        +---+-----+
+        |  1|    A|
+        +---+-----+
+
+        Example 3: Subtracting two DataFrames with mismatched columns
+
+        >>> df1 = spark.createDataFrame([(1, 2)], ["A", "B"])
+        >>> df2 = spark.createDataFrame([(1, 2)], ["C", "D"])
+        >>> result_df = df1.subtract(df2)
+        >>> result_df.show()
+        +---+---+
+        |  A|  B|
+        +---+---+
         +---+---+
         """
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sparkSession)
