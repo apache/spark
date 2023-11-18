@@ -109,12 +109,12 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     "RocksDB: check changelog and snapshot version") {
     val remoteDir = Utils.createTempDir().toString
     val conf = dbConf.copy(minDeltasForSnapshot = 1)
-    new File(remoteDir).delete()  // to make sure that the directory gets created
+    new File(remoteDir).delete() // to make sure that the directory gets created
     for (version <- 0 to 49) {
       withDB(remoteDir, version = version, conf = conf) { db =>
-          db.put(version.toString, version.toString)
-          db.commit()
-          if ((version + 1) % 5 == 0) db.doMaintenance()
+        db.put(version.toString, version.toString)
+        db.commit()
+        if ((version + 1) % 5 == 0) db.doMaintenance()
       }
     }
 
@@ -147,7 +147,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     )
 
     val remoteDir = Utils.createTempDir().toString
-    new File(remoteDir).delete()  // to make sure that the directory gets created
+    new File(remoteDir).delete() // to make sure that the directory gets created
     withDB(remoteDir) { db =>
       ex = intercept[SparkException] {
         db.load(1)
@@ -165,7 +165,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   testWithChangelogCheckpointingEnabled(
     "RocksDB: purge changelog and snapshots") {
     val remoteDir = Utils.createTempDir().toString
-    new File(remoteDir).delete()  // to make sure that the directory gets created
+    new File(remoteDir).delete() // to make sure that the directory gets created
     val conf = dbConf.copy(enableChangelogCheckpointing = true,
       minVersionsToRetain = 3, minDeltasForSnapshot = 1)
     withDB(remoteDir, conf = conf) { db =>
@@ -206,7 +206,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   testWithChangelogCheckpointingEnabled(
     "RocksDB: minDeltasForSnapshot") {
     val remoteDir = Utils.createTempDir().toString
-    new File(remoteDir).delete()  // to make sure that the directory gets created
+    new File(remoteDir).delete() // to make sure that the directory gets created
     val conf = dbConf.copy(enableChangelogCheckpointing = true, minDeltasForSnapshot = 3)
     withDB(remoteDir, conf = conf) { db =>
       for (version <- 0 to 1) {
@@ -248,7 +248,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     " in different RocksDB instances") {
     val remoteDir = Utils.createTempDir().toString
     val conf = dbConf.copy(minDeltasForSnapshot = 0, compactOnCommit = false)
-    new File(remoteDir).delete()  // to make sure that the directory gets created
+    new File(remoteDir).delete() // to make sure that the directory gets created
     withDB(remoteDir, conf = conf) { db =>
       for (version <- 0 to 2) {
         db.load(version)
@@ -278,7 +278,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   testWithChangelogCheckpointingEnabled(
     "RocksDB: changelog checkpointing backward compatibility") {
     val remoteDir = Utils.createTempDir().toString
-    new File(remoteDir).delete()  // to make sure that the directory gets created
+    new File(remoteDir).delete() // to make sure that the directory gets created
     val disableChangelogCheckpointingConf =
       dbConf.copy(enableChangelogCheckpointing = false, minVersionsToRetain = 30)
     withDB(remoteDir, conf = disableChangelogCheckpointingConf) { db =>
@@ -294,8 +294,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     // Now enable changelog checkpointing in a checkpoint created by a state store
     // that disable changelog checkpointing.
     val enableChangelogCheckpointingConf =
-      dbConf.copy(enableChangelogCheckpointing = true, minVersionsToRetain = 30,
-        minDeltasForSnapshot = 1)
+    dbConf.copy(enableChangelogCheckpointing = true, minVersionsToRetain = 30,
+      minDeltasForSnapshot = 1)
     withDB(remoteDir, conf = enableChangelogCheckpointingConf) { db =>
       for (version <- 1 to 30) {
         db.load(version)
@@ -330,7 +330,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   testWithChangelogCheckpointingEnabled(
     "RocksDB: changelog checkpointing forward compatibility") {
     val remoteDir = Utils.createTempDir().toString
-    new File(remoteDir).delete()  // to make sure that the directory gets created
+    new File(remoteDir).delete() // to make sure that the directory gets created
     val enableChangelogCheckpointingConf =
       dbConf.copy(enableChangelogCheckpointing = true, minVersionsToRetain = 20,
         minDeltasForSnapshot = 3)
@@ -377,119 +377,131 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  test("RocksDB: compression conf") {
-    val remoteDir = Utils.createTempDir().toString
-    new File(remoteDir).delete()  // to make sure that the directory gets created
-
-    val conf = RocksDBConf().copy(compression = "zstd")
-    withDB(remoteDir, conf = conf) { db =>
-      assert(db.columnFamilyOptions.compressionType() == CompressionType.ZSTD_COMPRESSION)
-    }
-
-    // Test the default is LZ4
-    withDB(remoteDir, conf = RocksDBConf().copy()) { db =>
-      assert(db.columnFamilyOptions.compressionType() == CompressionType.LZ4_COMPRESSION)
-    }
-  }
-
-  test("RocksDB: get, put, iterator, commit, load") {
-    def testOps(compactOnCommit: Boolean): Unit = {
+  Seq(true, false).foreach { useColumnFamilies =>
+    test(s"RocksDB: compression conf with useColumnFamilies=$useColumnFamilies") {
       val remoteDir = Utils.createTempDir().toString
-      new File(remoteDir).delete()  // to make sure that the directory gets created
+      new File(remoteDir).delete() // to make sure that the directory gets created
 
-      val conf = RocksDBConf().copy(compactOnCommit = compactOnCommit)
-      withDB(remoteDir, conf = conf) { db =>
-        assert(db.get("a") === null)
-        assert(iterator(db).isEmpty)
-
-        db.put("a", "1")
-        assert(toStr(db.get("a")) === "1")
-        db.commit()
+      val conf = RocksDBConf().copy(compression = "zstd")
+      withDB(remoteDir, conf = conf, useColumnFamilies = useColumnFamilies) { db =>
+        assert(db.columnFamilyOptions.compressionType() == CompressionType.ZSTD_COMPRESSION)
       }
 
-      withDB(remoteDir, conf = conf, version = 0) { db =>
-        // version 0 can be loaded again
-        assert(toStr(db.get("a")) === null)
-        assert(iterator(db).isEmpty)
-      }
-
-      withDB(remoteDir, conf = conf, version = 1) { db =>
-        // version 1 data recovered correctly
-        assert(toStr(db.get("a")) === "1")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
-
-        // make changes but do not commit version 2
-        db.put("b", "2")
-        assert(toStr(db.get("b")) === "2")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
-      }
-
-      withDB(remoteDir, conf = conf, version = 1) { db =>
-        // version 1 data not changed
-        assert(toStr(db.get("a")) === "1")
-        assert(db.get("b") === null)
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
-
-        // commit version 2
-        db.put("b", "2")
-        assert(toStr(db.get("b")) === "2")
-        db.commit()
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
-      }
-
-      withDB(remoteDir, conf = conf, version = 1) { db =>
-        // version 1 data not changed
-        assert(toStr(db.get("a")) === "1")
-        assert(db.get("b") === null)
-      }
-
-      withDB(remoteDir, conf = conf, version = 2) { db =>
-        // version 2 can be loaded again
-        assert(toStr(db.get("b")) === "2")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
-
-        db.load(1)
-        assert(toStr(db.get("b")) === null)
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
-      }
-    }
-
-    for (compactOnCommit <- Seq(false, true)) {
-      withClue(s"compactOnCommit = $compactOnCommit") {
-        testOps(compactOnCommit)
+      // Test the default is LZ4
+      withDB(remoteDir, conf = RocksDBConf().copy(), useColumnFamilies = useColumnFamilies) { db =>
+        assert(db.columnFamilyOptions.compressionType() == CompressionType.LZ4_COMPRESSION)
       }
     }
   }
 
-  test("RocksDB: handle commit failures and aborts") {
-    val hadoopConf = new Configuration()
-    hadoopConf.set(
-      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
-      classOf[CreateAtomicTestManager].getName)
-    val remoteDir = Utils.createTempDir().getAbsolutePath
-    withDB(remoteDir, hadoopConf = hadoopConf) { db =>
-      // Disable failure of output stream and generate versions
-      CreateAtomicTestManager.shouldFailInCreateAtomic = false
-      for (version <- 1 to 10) {
-        db.load(version - 1)
-        db.put(version.toString, version.toString) // update "1" -> "1", "2" -> "2", ...
-        db.commit()
+  Seq(true, false).foreach { useColumnFamilies =>
+    test(s"RocksDB: get, put, iterator, commit, load with " +
+      s"useColumnFamilies=$useColumnFamilies") {
+      def testOps(compactOnCommit: Boolean): Unit = {
+        val remoteDir = Utils.createTempDir().toString
+        new File(remoteDir).delete() // to make sure that the directory gets created
+
+        val conf = RocksDBConf().copy(compactOnCommit = compactOnCommit)
+        withDB(remoteDir, conf = conf, useColumnFamilies = useColumnFamilies) { db =>
+          assert(db.get("a") === null)
+          assert(iterator(db).isEmpty)
+
+          db.put("a", "1")
+          assert(toStr(db.get("a")) === "1")
+          db.commit()
+        }
+
+        withDB(remoteDir, conf = conf, version = 0, useColumnFamilies = useColumnFamilies) { db =>
+          // version 0 can be loaded again
+          assert(toStr(db.get("a")) === null)
+          assert(iterator(db).isEmpty)
+        }
+
+        withDB(remoteDir, conf = conf, version = 1, useColumnFamilies = useColumnFamilies) { db =>
+          // version 1 data recovered correctly
+          assert(toStr(db.get("a")) === "1")
+          assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
+
+          // make changes but do not commit version 2
+          db.put("b", "2")
+          assert(toStr(db.get("b")) === "2")
+          assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+        }
+
+        withDB(remoteDir, conf = conf, version = 1, useColumnFamilies = useColumnFamilies) { db =>
+          // version 1 data not changed
+          assert(toStr(db.get("a")) === "1")
+          assert(db.get("b") === null)
+          assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
+
+          // commit version 2
+          db.put("b", "2")
+          assert(toStr(db.get("b")) === "2")
+          db.commit()
+          assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+        }
+
+        withDB(remoteDir, conf = conf, version = 1, useColumnFamilies = useColumnFamilies) { db =>
+          // version 1 data not changed
+          assert(toStr(db.get("a")) === "1")
+          assert(db.get("b") === null)
+        }
+
+        withDB(remoteDir, conf = conf, version = 2, useColumnFamilies = useColumnFamilies) { db =>
+          // version 2 can be loaded again
+          assert(toStr(db.get("b")) === "2")
+          assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+
+          db.load(1)
+          assert(toStr(db.get("b")) === null)
+          assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
+        }
       }
-      val version10Data = (1L to 10).map(_.toString).map(x => x -> x).toSet
 
-      // Fail commit for next version and verify that reloading resets the files
-      CreateAtomicTestManager.shouldFailInCreateAtomic = true
-      db.load(10)
-      db.put("11", "11")
-      intercept[IOException] { quietly { db.commit() } }
-      assert(db.load(10, readOnly = true).iterator().map(toStr).toSet === version10Data)
-      CreateAtomicTestManager.shouldFailInCreateAtomic = false
+      for (compactOnCommit <- Seq(false, true)) {
+        withClue(s"compactOnCommit = $compactOnCommit") {
+          testOps(compactOnCommit)
+        }
+      }
+    }
+  }
 
-      // Abort commit for next version and verify that reloading resets the files
-      db.load(10)
-      db.put("11", "11")
-      db.rollback()
-      assert(db.load(10, readOnly = true).iterator().map(toStr).toSet === version10Data)
+  Seq(true, false).foreach { useColumnFamilies =>
+    test(s"RocksDB: handle commit failures and aborts with " +
+      s"useColumnFamilies=$useColumnFamilies") {
+      val hadoopConf = new Configuration()
+      hadoopConf.set(
+        SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
+        classOf[CreateAtomicTestManager].getName)
+      val remoteDir = Utils.createTempDir().getAbsolutePath
+      withDB(remoteDir, hadoopConf = hadoopConf, useColumnFamilies = useColumnFamilies) { db =>
+        // Disable failure of output stream and generate versions
+        CreateAtomicTestManager.shouldFailInCreateAtomic = false
+        for (version <- 1 to 10) {
+          db.load(version - 1)
+          db.put(version.toString, version.toString) // update "1" -> "1", "2" -> "2", ...
+          db.commit()
+        }
+        val version10Data = (1L to 10).map(_.toString).map(x => x -> x).toSet
+
+        // Fail commit for next version and verify that reloading resets the files
+        CreateAtomicTestManager.shouldFailInCreateAtomic = true
+        db.load(10)
+        db.put("11", "11")
+        intercept[IOException] {
+          quietly {
+            db.commit()
+          }
+        }
+        assert(db.load(10, readOnly = true).iterator().map(toStr).toSet === version10Data)
+        CreateAtomicTestManager.shouldFailInCreateAtomic = false
+
+        // Abort commit for next version and verify that reloading resets the files
+        db.load(10)
+        db.put("11", "11")
+        db.rollback()
+        assert(db.load(10, readOnly = true).iterator().map(toStr).toSet === version10Data)
+      }
     }
   }
 
@@ -768,62 +780,71 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  test("disallow concurrent updates to the same RocksDB instance") {
-    quietly {
-      withDB(
-        Utils.createTempDir().toString,
-        conf = dbConf.copy(lockAcquireTimeoutMs = 20)) { db =>
-        // DB has been loaded so current thread has alread acquired the lock on the RocksDB instance
+  Seq(true, false).foreach { useColumnFamilies =>
+    test("disallow concurrent updates to the same RocksDB instance with " +
+      s"useColumnFamilies=$useColumnFamilies") {
+      quietly {
+        withDB(
+          Utils.createTempDir().toString,
+          conf = dbConf.copy(lockAcquireTimeoutMs = 20),
+          useColumnFamilies = useColumnFamilies) { db =>
+          // DB has been loaded so current thread has already
+          // acquired the lock on the RocksDB instance
 
-        db.load(0)  // Current thread should be able to load again
+          db.load(0) // Current thread should be able to load again
 
-        // Another thread should not be able to load while current thread is using it
-        var ex = intercept[SparkException] {
-          ThreadUtils.runInNewThread("concurrent-test-thread-1") { db.load(0) }
-        }
-        checkError(
-          ex,
-          errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
-          parameters = Map(
-            "loggingId" -> "\\[Thread-\\d+\\]",
-            "newAcquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
-            "acquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
-            "timeWaitedMs" -> "\\d+",
-            "stackTraceOutput" -> "(?s).*"
-          ),
-          matchPVals = true
-        )
+          // Another thread should not be able to load while current thread is using it
+          var ex = intercept[SparkException] {
+            ThreadUtils.runInNewThread("concurrent-test-thread-1") {
+              db.load(0)
+            }
+          }
+          checkError(
+            ex,
+            errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
+            parameters = Map(
+              "loggingId" -> "\\[Thread-\\d+\\]",
+              "newAcquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
+              "acquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
+              "timeWaitedMs" -> "\\d+",
+              "stackTraceOutput" -> "(?s).*"
+            ),
+            matchPVals = true
+          )
 
-        // Commit should release the instance allowing other threads to load new version
-        db.commit()
-        ThreadUtils.runInNewThread("concurrent-test-thread-2") {
-          db.load(1)
+          // Commit should release the instance allowing other threads to load new version
           db.commit()
-        }
+          ThreadUtils.runInNewThread("concurrent-test-thread-2") {
+            db.load(1)
+            db.commit()
+          }
 
-        // Another thread should not be able to load while current thread is using it
-        db.load(2)
-        ex = intercept[SparkException] {
-          ThreadUtils.runInNewThread("concurrent-test-thread-2") { db.load(2) }
-        }
-        checkError(
-          ex,
-          errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
-          parameters = Map(
-            "loggingId" -> "\\[Thread-\\d+\\]",
-            "newAcquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
-            "acquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
-            "timeWaitedMs" -> "\\d+",
-            "stackTraceOutput" -> "(?s).*"
-          ),
-          matchPVals = true
-        )
+          // Another thread should not be able to load while current thread is using it
+          db.load(2)
+          ex = intercept[SparkException] {
+            ThreadUtils.runInNewThread("concurrent-test-thread-2") {
+              db.load(2)
+            }
+          }
+          checkError(
+            ex,
+            errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
+            parameters = Map(
+              "loggingId" -> "\\[Thread-\\d+\\]",
+              "newAcquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
+              "acquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
+              "timeWaitedMs" -> "\\d+",
+              "stackTraceOutput" -> "(?s).*"
+            ),
+            matchPVals = true
+          )
 
-        // Rollback should release the instance allowing other threads to load new version
-        db.rollback()
-        ThreadUtils.runInNewThread("concurrent-test-thread-3") {
-          db.load(1)
-          db.commit()
+          // Rollback should release the instance allowing other threads to load new version
+          db.rollback()
+          ThreadUtils.runInNewThread("concurrent-test-thread-3") {
+            db.load(1)
+            db.commit()
+          }
         }
       }
     }
@@ -1250,13 +1271,16 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       remoteDir: String,
       version: Int = 0,
       conf: RocksDBConf = dbConf,
-      hadoopConf: Configuration = new Configuration())(
+      hadoopConf: Configuration = new Configuration(),
+      useColumnFamilies: Boolean = false)(
       func: RocksDB => T): T = {
     var db: RocksDB = null
     try {
       db = new RocksDB(
         remoteDir, conf = conf, hadoopConf = hadoopConf,
-        loggingId = s"[Thread-${Thread.currentThread.getId}]")
+        loggingId = s"[Thread-${Thread.currentThread.getId}]",
+        useColumnFamilies = useColumnFamilies && !isChangelogCheckpointingEnabled
+        )
       db.load(version)
       func(db)
     } finally {

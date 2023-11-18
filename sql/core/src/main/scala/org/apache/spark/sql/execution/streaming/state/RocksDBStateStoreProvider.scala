@@ -54,7 +54,7 @@ private[sql] class RocksDBStateStoreProvider
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
       verify(key != null, "Key cannot be null")
-      val value = encoder.decodeValue(rocksDB.get(encoder.encodeKey(key)))
+      val value = encoder.decodeValue(rocksDB.get(encoder.encodeKey(key), colFamilyName))
       if (!isValidated && value != null) {
         StateStoreProvider.validateStateRowFormat(
           key, keySchema, value, valueSchema, storeConf)
@@ -67,17 +67,17 @@ private[sql] class RocksDBStateStoreProvider
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       verify(key != null, "Key cannot be null")
       require(value != null, "Cannot put a null value")
-      rocksDB.put(encoder.encodeKey(key), encoder.encodeValue(value))
+      rocksDB.put(encoder.encodeKey(key), encoder.encodeValue(value), colFamilyName)
     }
 
     override def remove(key: UnsafeRow, colFamilyName: String): Unit = {
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       verify(key != null, "Key cannot be null")
-      rocksDB.remove(encoder.encodeKey(key))
+      rocksDB.remove(encoder.encodeKey(key), colFamilyName)
     }
 
     override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
-      rocksDB.iterator().map { kv =>
+      rocksDB.iterator(colFamilyName).map { kv =>
         val rowPair = encoder.decode(kv)
         if (!isValidated && rowPair.value != null) {
           StateStoreProvider.validateStateRowFormat(
@@ -93,7 +93,7 @@ private[sql] class RocksDBStateStoreProvider
       require(encoder.supportPrefixKeyScan, "Prefix scan requires setting prefix key!")
 
       val prefix = encoder.encodePrefixKey(prefixKey)
-      rocksDB.prefixScan(prefix).map(kv => encoder.decode(kv))
+      rocksDB.prefixScan(prefix, colFamilyName).map(kv => encoder.decode(kv))
     }
 
     override def commit(): Long = synchronized {
