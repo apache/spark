@@ -4467,7 +4467,7 @@ private[sql] object EasilyFlattenable {
     val (logicalPlan, newProjList) = tuple
     logicalPlan match {
       case p @ Project(projList, child) if !child.isStreaming =>
-        val currentOutputAttribs = logicalPlan.output
+        val currentOutputAttribs = AttributeSet(logicalPlan.output)
         // In the new column list identify those Named Expressions which are just attributes and
         // hence pass thru
         val (passThruAttribs, tinkeredOrNewNamedExprs) = newProjList.partition(ne => ne match {
@@ -4475,7 +4475,8 @@ private[sql] object EasilyFlattenable {
           case _ => false
         })
         // TODO: analyze the case tinkeredOrNewNamedExprs.isEmpty using DataFrameSuite
-       if (passThruAttribs.size == currentOutputAttribs.size && tinkeredOrNewNamedExprs.nonEmpty) {
+       if (passThruAttribs.size == currentOutputAttribs.size && passThruAttribs.forall(
+         currentOutputAttribs.contains) && tinkeredOrNewNamedExprs.nonEmpty) {
          val attributesTinkeredInProject = AttributeSet(projList.filter(_ match {
            case _: Alias => true
            case _ => false
