@@ -227,7 +227,7 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.selectExpr("""conv("-10", 16, -10)"""), Row("-16"))
   }
 
-  test("SPARK-33428 conv function should trim input string") {
+  test("SPARK-33428: conv function should trim input string") {
     val df = Seq(("abc"), ("  abc"), ("abc  "), ("  abc  ")).toDF("num")
     checkAnswer(df.select(conv($"num", 16, 10)),
       Seq(Row("2748"), Row("2748"), Row("2748"), Row("2748")))
@@ -235,7 +235,7 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row("2748"), Row("2748"), Row("2748"), Row("2748")))
   }
 
-  test("SPARK-33428 conv function shouldn't raise error if input string is too big") {
+  test("SPARK-33428: conv function shouldn't raise error if input string is too big") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
       val df = Seq((
         "aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0")).toDF("num")
@@ -244,7 +244,7 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-36229 inconsistently behaviour where returned value is above the 64 char threshold") {
+  test("SPARK-36229: inconsistent behaviour where returned value is above the 64 char threshold") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
       val df = Seq(("?" * 64), ("?" * 65), ("a" * 4 + "?" * 60), ("a" * 4 + "?" * 61)).toDF("num")
       val expectedResult = Seq(Row("0"), Row("0"), Row("43690"), Row("43690"))
@@ -253,7 +253,7 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-36229 conv should return result equal to -1 in base of toBase") {
+  test("SPARK-36229: conv should return result equal to -1 in base of toBase") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
       val df = Seq(("aaaaaaa0aaaaaaa0a"), ("aaaaaaa0aaaaaaa0")).toDF("num")
       checkAnswer(df.select(conv($"num", 16, 10)),
@@ -262,11 +262,14 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-44973 conv must allocate enough space for all digits plus negative sign") {
+  test("SPARK-44973: conv must allocate enough space for all digits plus negative sign") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
-      val df = Seq(("8" + "0"*15), ("-8" + "0" * 15)).toDF("num")
+      val df = Seq(
+        ((BigInt(Long.MaxValue) + 1).toString(16)),
+        (BigInt(Long.MinValue).toString(16))
+      ).toDF("num")
       checkAnswer(df.select(conv($"num", 16, -2)),
-        Seq(Row("-1" + "0" * 63), Row("-1" + "0" * 63)))
+        Seq(Row(BigInt(Long.MinValue).toString(2)), Row(BigInt(Long.MinValue).toString(2))))
     }
   }
 

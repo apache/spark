@@ -24,11 +24,11 @@ import org.apache.spark.unsafe.types.UTF8String
 object NumberConverter {
 
   /**
-   * The output string has a max length of one char per bit in the intermediate representation plus
-   * one char for the '-' sign.  This corresponds to the representation of `Long.MinValue` with
-   * `toBase` equal to -2.
+   * The output string has a max length of one char per bit in the 64-bit `Long` intermediate
+   * representation plus one char for the '-' sign.  This happens in practice when converting
+   * `Long.MinValue` with `toBase` equal to -2.
    */
-  private final val MAX_OUTPUT_LENGTH = 64 + 1
+  private final val MAX_OUTPUT_LENGTH = java.lang.Long.SIZE + 1
 
   /**
    * Decode v into value[].
