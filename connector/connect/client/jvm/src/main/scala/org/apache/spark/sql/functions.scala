@@ -7545,7 +7545,7 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * A transform for timestamps and dates to partition data into years.
+   * (Java-specific) A transform for timestamps and dates to partition data into years.
    *
    * @group partition_transforms
    * @since 3.4.0
@@ -7553,7 +7553,7 @@ object functions {
   def years(e: Column): Column = partitioning.years(e)
 
   /**
-   * A transform for timestamps and dates to partition data into months.
+   * (Java-specific) A transform for timestamps and dates to partition data into months.
    *
    * @group partition_transforms
    * @since 3.4.0
@@ -7561,7 +7561,7 @@ object functions {
   def months(e: Column): Column = partitioning.months(e)
 
   /**
-   * A transform for timestamps and dates to partition data into days.
+   * (Java-specific) A transform for timestamps and dates to partition data into days.
    *
    * @group partition_transforms
    * @since 3.4.0
@@ -7569,7 +7569,7 @@ object functions {
   def days(e: Column): Column = partitioning.days(e)
 
   /**
-   * A transform for timestamps to partition data into hours.
+   * (Java-specific) A transform for timestamps to partition data into hours.
    *
    * @group partition_transforms
    * @since 3.4.0
@@ -7856,7 +7856,7 @@ object functions {
   def make_ym_interval(): Column = Column.fn("make_ym_interval")
 
   /**
-   * A transform for any type that partitions by a hash of the input column.
+   * (Java-specific) A transform for any type that partitions by a hash of the input column.
    *
    * @group partition_transforms
    * @since 3.4.0
@@ -7864,7 +7864,7 @@ object functions {
   def bucket(numBuckets: Column, e: Column): Column = partitioning.bucket(numBuckets, e)
 
   /**
-   * A transform for any type that partitions by a hash of the input column.
+   * (Java-specific) A transform for any type that partitions by a hash of the input column.
    *
    * @group partition_transforms
    * @since 3.4.0
@@ -8409,7 +8409,7 @@ object functions {
   object partitioning {
     // scalastyle:on
     /**
-     * A transform for timestamps and dates to partition data into years.
+     * (Scala-specific) A transform for timestamps and dates to partition data into years.
      *
      * @group partition_transforms
      * @since 4.0.0
@@ -8417,7 +8417,7 @@ object functions {
     def years(e: Column): Column = Column.fn("years", e)
 
     /**
-     * A transform for timestamps and dates to partition data into months.
+     * (Scala-specific) A transform for timestamps and dates to partition data into months.
      *
      * @group partition_transforms
      * @since 4.0.0
@@ -8425,7 +8425,7 @@ object functions {
     def months(e: Column): Column = Column.fn("months", e)
 
     /**
-     * A transform for timestamps and dates to partition data into days.
+     * (Scala-specific) A transform for timestamps and dates to partition data into days.
      *
      * @group partition_transforms
      * @since 4.0.0
@@ -8433,7 +8433,7 @@ object functions {
     def days(e: Column): Column = Column.fn("days", e)
 
     /**
-     * A transform for timestamps to partition data into hours.
+     * (Scala-specific) A transform for timestamps to partition data into hours.
      *
      * @group partition_transforms
      * @since 4.0.0
@@ -8441,7 +8441,7 @@ object functions {
     def hours(e: Column): Column = Column.fn("hours", e)
 
     /**
-     * A transform for any type that partitions by a hash of the input column.
+     * (Scala-specific) A transform for any type that partitions by a hash of the input column.
      *
      * @group partition_transforms
      * @since 4.0.0
@@ -8449,7 +8449,7 @@ object functions {
     def bucket(numBuckets: Column, e: Column): Column = Column.fn("bucket", numBuckets, e)
 
     /**
-     * A transform for any type that partitions by a hash of the input column.
+     * (Scala-specific) A transform for any type that partitions by a hash of the input column.
      *
      * @group partition_transforms
      * @since 4.0.0
