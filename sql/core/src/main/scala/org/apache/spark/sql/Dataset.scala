@@ -4491,7 +4491,10 @@ private[sql] object EasilyFlattenable {
            val remappedNewProjList = newProjList.map(ne => (ne transformUp  {
              case attr: AttributeReference => projList.find(
                _.toAttribute.canonicalized == attr.canonicalized).get
-             case u: UnresolvedAttribute => projList.find(_.toAttribute.name == u.name).get
+             case u: UnresolvedAttribute if p.getTagValue(LogicalPlan.PLAN_ID_TAG).isDefined =>
+               p.getTagValue[Long](LogicalPlan.PLAN_ID_TAG).foreach(u.setTagValue[Long](
+                 LogicalPlan.PLAN_ID_TAG, _))
+                 u
            }).asInstanceOf[NamedExpression])
            Option(p.copy(projectList = remappedNewProjList))
          }
