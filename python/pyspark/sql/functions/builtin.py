@@ -72,8 +72,6 @@ if TYPE_CHECKING:
         UserDefinedFunctionLike,
     )
 
-assert isinstance(_has_numpy, bool)
-
 if _has_numpy:
     import numpy as np
 
