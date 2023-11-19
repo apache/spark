@@ -7268,7 +7268,7 @@ object functions {
    * @group partition_transforms
    * @since 3.0.0
    */
-  def years(e: Column): Column = withExpr { Years(e.expr) }
+  def years(e: Column): Column = partitioning.years(e)
 
   /**
    * A transform for timestamps and dates to partition data into months.
@@ -7276,7 +7276,7 @@ object functions {
    * @group partition_transforms
    * @since 3.0.0
    */
-  def months(e: Column): Column = withExpr { Months(e.expr) }
+  def months(e: Column): Column = partitioning.months(e)
 
   /**
    * A transform for timestamps and dates to partition data into days.
@@ -7284,7 +7284,7 @@ object functions {
    * @group partition_transforms
    * @since 3.0.0
    */
-  def days(e: Column): Column = withExpr { Days(e.expr) }
+  def days(e: Column): Column = partitioning.days(e)
 
   /**
    * Returns a string array of values within the nodes of xml that match the XPath expression.
@@ -7379,7 +7379,7 @@ object functions {
    * @group partition_transforms
    * @since 3.0.0
    */
-  def hours(e: Column): Column = withExpr { Hours(e.expr) }
+  def hours(e: Column): Column = partitioning.hours(e)
 
   /**
    * Converts the timestamp without time zone `sourceTs`
@@ -7662,14 +7662,7 @@ object functions {
    * @group partition_transforms
    * @since 3.0.0
    */
-  def bucket(numBuckets: Column, e: Column): Column = withExpr {
-    numBuckets.expr match {
-      case lit @ Literal(_, IntegerType) =>
-        Bucket(lit, e.expr)
-      case _ =>
-        throw QueryCompilationErrors.invalidBucketsNumberError(numBuckets.toString, e.toString)
-    }
-  }
+  def bucket(numBuckets: Column, e: Column): Column = partitioning.bucket(numBuckets, e)
 
   /**
    * A transform for any type that partitions by a hash of the input column.
@@ -7677,9 +7670,7 @@ object functions {
    * @group partition_transforms
    * @since 3.0.0
    */
-  def bucket(numBuckets: Int, e: Column): Column = withExpr {
-    Bucket(Literal(numBuckets), e.expr)
-  }
+  def bucket(numBuckets: Int, e: Column): Column = partitioning.bucket(numBuckets, e)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Predicates functions
@@ -8288,5 +8279,69 @@ object functions {
    */
   def unwrap_udt(column: Column): Column = withExpr {
     UnwrapUDT(column.expr)
+  }
+
+  // scalastyle:off
+  // TODO(SPARK-45970): Use @static annotation so Java can access to those
+  //   API in the same way. Once we land this fix, should deprecate
+  //   functions.hours, days, months, years and bucket.
+  object partitioning {
+  // scalastyle:on
+    /**
+     * A transform for timestamps and dates to partition data into years.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def years(e: Column): Column = withExpr { Years(e.expr) }
+
+    /**
+     * A transform for timestamps and dates to partition data into months.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def months(e: Column): Column = withExpr { Months(e.expr) }
+
+    /**
+     * A transform for timestamps and dates to partition data into days.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def days(e: Column): Column = withExpr { Days(e.expr) }
+
+    /**
+     * A transform for timestamps to partition data into hours.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def hours(e: Column): Column = withExpr { Hours(e.expr) }
+
+    /**
+     * A transform for any type that partitions by a hash of the input column.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def bucket(numBuckets: Column, e: Column): Column = withExpr {
+      numBuckets.expr match {
+        case lit @ Literal(_, IntegerType) =>
+          Bucket(lit, e.expr)
+        case _ =>
+          throw QueryCompilationErrors.invalidBucketsNumberError(numBuckets.toString, e.toString)
+      }
+    }
+
+    /**
+     * A transform for any type that partitions by a hash of the input column.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def bucket(numBuckets: Int, e: Column): Column = withExpr {
+      Bucket(Literal(numBuckets), e.expr)
+    }
   }
 }
