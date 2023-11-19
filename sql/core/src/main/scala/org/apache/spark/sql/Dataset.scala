@@ -4483,7 +4483,9 @@ private[sql] object EasilyFlattenable {
          }).map(_.toAttribute))
          val attributesTinkeredInProjectAsName = attributesTinkeredInProject.map(_.name).toSet
          if (tinkeredOrNewNamedExprs.exists(ne => ne.references.exists(attr => attr match {
-           case u: UnresolvedAttribute => attributesTinkeredInProjectAsName.contains(u.name)
+           case u: UnresolvedAttribute =>
+             attributesTinkeredInProjectAsName.contains(u.name) ||
+               u.getTagValue(LogicalPlan.PLAN_ID_TAG).isDefined
            case resAttr => attributesTinkeredInProject.contains(resAttr)
          } ))) {
            None
@@ -4491,10 +4493,6 @@ private[sql] object EasilyFlattenable {
            val remappedNewProjList = newProjList.map(ne => (ne transformUp  {
              case attr: AttributeReference => projList.find(
                _.toAttribute.canonicalized == attr.canonicalized).getOrElse(attr)
-             case u: UnresolvedAttribute if child.getTagValue(LogicalPlan.PLAN_ID_TAG).isDefined =>
-               child.getTagValue[Long](LogicalPlan.PLAN_ID_TAG).foreach(u.setTagValue(
-                 LogicalPlan.PLAN_ID_TAG, _))
-                 u
            }).asInstanceOf[NamedExpression])
            Option(p.copy(projectList = remappedNewProjList))
          }
