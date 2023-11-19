@@ -29,6 +29,7 @@ import scala.util.Random
 import com.google.common.cache.CacheBuilder
 
 import org.apache.spark._
+import org.apache.spark.SparkException
 import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors

@@ -35,6 +35,7 @@ import com.google.common.util.concurrent.{Futures, SettableFuture}
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.errors.SparkCoreErrors
+import org.apache.spark.SparkException
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config

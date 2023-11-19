@@ -24,6 +24,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
+import org.apache.spark.SparkException
 
 /**
  * A Schedulable entity that represents collection of Pools or TaskSetManagers
