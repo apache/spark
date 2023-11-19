@@ -203,7 +203,6 @@
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>14.0.1</guava.version>
     <janino.version>3.1.9</janino.version>
-    <jaxb-api.version>2.2.11</jaxb-api.version>
     <!--
       Please don't upgrade the version to 3.0.0+,
       Because it transitions Jakarta REST API from javax to jakarta package.
@@ -1100,7 +1099,7 @@
       <dependency>
         <groupId>javax.xml.bind</groupId>
         <artifactId>jaxb-api</artifactId>
-        <version>${jaxb-api.version}</version>
+        <version>2.2.11</version>
       </dependency>
       <dependency>
         <groupId>org.scalanlp</groupId>
