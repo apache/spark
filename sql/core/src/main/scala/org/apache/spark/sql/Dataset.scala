@@ -4492,9 +4492,9 @@ private[sql] object EasilyFlattenable {
              case attr: AttributeReference => projList.find(
                _.toAttribute.canonicalized == attr.canonicalized).get
              case u: UnresolvedAttribute if child.getTagValue(LogicalPlan.PLAN_ID_TAG).isDefined =>
-                     u.setTagValue(LogicalPlan.PLAN_ID_TAG,
-                       child.getTagValue(LogicalPlan.PLAN_ID_TAG))
-                  u
+               child.getTagValue[Long](LogicalPlan.PLAN_ID_TAG).foreach(u.setTagValue[Long](
+                 LogicalPlan.PLAN_ID_TAG, _))
+                 u
            }).asInstanceOf[NamedExpression])
            Option(p.copy(projectList = remappedNewProjList))
          }
