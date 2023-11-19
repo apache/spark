@@ -165,7 +165,7 @@ private[spark] class Benchmark(
     val best = runTimes.min
     val avg = runTimes.sum / runTimes.size
     val stdev = if (runTimes.size > 1) {
-      math.sqrt(runTimes.map(time => (time - avg) * (time - avg)).sum / (runTimes.size - 1))
+      math.sqrt(runTimes.map(time => (time - avg) * (time - avg)).sum / (runTimes.size - 1).toDouble)
     } else 0
     Result(avg / 1000000.0, num / (best / 1000.0), best / 1000000.0, stdev / 1000000.0)
   }
