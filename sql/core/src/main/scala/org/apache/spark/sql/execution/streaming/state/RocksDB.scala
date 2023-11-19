@@ -226,11 +226,20 @@ class RocksDB(
     loadedVersion = endVersion
   }
 
+  private def checkColFamilyExists(colFamilyName: String): Boolean = {
+    colFamilyNameToHandleMap.contains(colFamilyName)
+  }
+
   /**
    * Create RocksDB column family, if not created already
    */
   def createColFamilyIfAbsent(colFamilyName: String): Unit = {
-    if (!colFamilyNameToHandleMap.contains(colFamilyName)) {
+    if (colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME) {
+      throw new UnsupportedOperationException("Failed to create column family with reserved " +
+        s"name=$colFamilyName")
+    }
+
+    if (!checkColFamilyExists(colFamilyName)) {
       assert(db != null)
       val descriptor = new ColumnFamilyDescriptor(colFamilyName.getBytes, columnFamilyOptions)
       val handle = db.createColumnFamily(descriptor)
@@ -245,6 +254,10 @@ class RocksDB(
   def get(key: Array[Byte],
     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Array[Byte] = {
     if (useColumnFamilies) {
+      // if col family is not created, throw an exception
+      if (!checkColFamilyExists(colFamilyName)) {
+        throw new RuntimeException(s"Column family with name=$colFamilyName does not exist")
+      }
       db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
     } else {
       db.get(readOptions, key)
@@ -258,6 +271,11 @@ class RocksDB(
   def put(key: Array[Byte], value: Array[Byte],
     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
     if (useColumnFamilies) {
+      // if col family is not created, throw an exception
+      if (!checkColFamilyExists(colFamilyName)) {
+        throw new RuntimeException(s"Column family with name=$colFamilyName does not exist")
+      }
+
       if (conf.trackTotalNumberOfRows) {
         val oldValue = db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
         if (oldValue == null) {
@@ -283,6 +301,11 @@ class RocksDB(
    */
   def remove(key: Array[Byte], colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
     if (useColumnFamilies) {
+      // if col family is not created, throw an exception
+      if (!checkColFamilyExists(colFamilyName)) {
+        throw new RuntimeException(s"Column family with name=$colFamilyName does not exist")
+      }
+
       if (conf.trackTotalNumberOfRows) {
         val value = db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
         if (value != null) {
@@ -308,6 +331,11 @@ class RocksDB(
   def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
     Iterator[ByteArrayPair] = {
     val iter = if (useColumnFamilies) {
+      // if col family is not created, throw an exception
+      if (!checkColFamilyExists(colFamilyName)) {
+        throw new RuntimeException(s"Column family with name=$colFamilyName does not exist")
+      }
+
       db.newIterator(colFamilyNameToHandleMap(colFamilyName))
     } else {
       db.newIterator()
@@ -339,6 +367,11 @@ class RocksDB(
 
   private def countKeys(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Long = {
     val iter = if (useColumnFamilies) {
+      // if col family is not created, throw an exception
+      if (!checkColFamilyExists(colFamilyName)) {
+        throw new RuntimeException(s"Column family with name=$colFamilyName does not exist")
+      }
+
       db.newIterator(colFamilyNameToHandleMap(colFamilyName))
     } else {
       db.newIterator()
@@ -364,6 +397,11 @@ class RocksDB(
   def prefixScan(prefix: Array[Byte], colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
     Iterator[ByteArrayPair] = {
     val iter = if (useColumnFamilies) {
+      // if col family is not created, throw an exception
+      if (!checkColFamilyExists(colFamilyName)) {
+        throw new RuntimeException(s"Column family with name=$colFamilyName does not exist")
+      }
+
       db.newIterator(colFamilyNameToHandleMap(colFamilyName))
     } else {
       db.newIterator()

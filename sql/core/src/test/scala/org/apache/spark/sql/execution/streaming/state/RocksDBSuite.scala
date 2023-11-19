@@ -127,38 +127,41 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  test("RocksDB: load version that doesn't exist") {
-    val provider = new RocksDBStateStoreProvider()
-    var ex = intercept[SparkException] {
-      provider.getStore(-1)
-    }
-    checkError(
-      ex,
-      errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
-      parameters = Map.empty
-    )
-    ex = intercept[SparkException] {
-      provider.getReadStore(-1)
-    }
-    checkError(
-      ex,
-      errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
-      parameters = Map.empty
-    )
-
-    val remoteDir = Utils.createTempDir().toString
-    new File(remoteDir).delete() // to make sure that the directory gets created
-    withDB(remoteDir) { db =>
-      ex = intercept[SparkException] {
-        db.load(1)
+  Seq(true, false).foreach { useColumnFamilies =>
+    test(s"RocksDB: load version that doesn't exist " +
+      s"with useColumFamilies=$useColumnFamilies") {
+      val provider = new RocksDBStateStoreProvider()
+      var ex = intercept[SparkException] {
+        provider.getStore(-1)
       }
       checkError(
         ex,
-        errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
-        parameters = Map(
-          "fileToRead" -> s"$remoteDir/1.changelog"
-        )
+        errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+        parameters = Map.empty
       )
+      ex = intercept[SparkException] {
+        provider.getReadStore(-1)
+      }
+      checkError(
+        ex,
+        errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+        parameters = Map.empty
+      )
+
+      val remoteDir = Utils.createTempDir().toString
+      new File(remoteDir).delete() // to make sure that the directory gets created
+      withDB(remoteDir, useColumnFamilies = useColumnFamilies) { db =>
+        ex = intercept[SparkException] {
+          db.load(1)
+        }
+        checkError(
+          ex,
+          errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
+          parameters = Map(
+            "fileToRead" -> s"$remoteDir/1.changelog"
+          )
+        )
+      }
     }
   }
 
@@ -463,6 +466,122 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
           testOps(compactOnCommit)
         }
       }
+    }
+  }
+
+  testWithChangelogCheckpointingDisabled(s"RocksDB: get, put, iterator, commit, laod " +
+    s"with multiple column families") {
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete() // to make sure that the directory gets created
+    val colFamily1: String = "abc"
+    val colFamily2: String = "xyz"
+
+    val conf = RocksDBConf().copy()
+    withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
+      val ex = intercept[Exception] {
+        db.createColFamilyIfAbsent("default")
+      }
+      ex.getCause.isInstanceOf[UnsupportedOperationException]
+    }
+
+    withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
+      db.createColFamilyIfAbsent(colFamily1)
+      db.createColFamilyIfAbsent(colFamily2)
+
+      assert(db.get("a", colFamily1) === null)
+      assert(iterator(db, colFamily1).isEmpty)
+
+      db.put("a", "1", colFamily1)
+      assert(toStr(db.get("a", colFamily1)) === "1")
+
+      assert(db.get("a", colFamily2) === null)
+      assert(iterator(db, colFamily2).isEmpty)
+
+      db.put("a", "1", colFamily2)
+      assert(toStr(db.get("a", colFamily2)) === "1")
+
+      db.commit()
+    }
+
+    withDB(remoteDir, conf = conf, version = 0, useColumnFamilies = true) { db =>
+      val ex = intercept[Exception] {
+        // version 0 can be loaded again
+        assert(toStr(db.get("a", colFamily1)) === null)
+        assert(iterator(db, colFamily1).isEmpty)
+
+        // version 0 can be loaded again
+        assert(toStr(db.get("a", colFamily2)) === null)
+        assert(iterator(db, colFamily2).isEmpty)
+      }
+      assert(ex.isInstanceOf[RuntimeException])
+      assert(ex.getMessage.contains("does not exist"))
+    }
+
+    withDB(remoteDir, conf = conf, version = 1, useColumnFamilies = true) { db =>
+      // version 1 data recovered correctly
+      assert(toStr(db.get("a", colFamily1)) === "1")
+      assert(db.iterator(colFamily1).map(toStr).toSet === Set(("a", "1")))
+
+      // make changes but do not commit version 2
+      db.put("b", "2", colFamily1)
+      assert(toStr(db.get("b", colFamily1)) === "2")
+      assert(db.iterator(colFamily1).map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+
+      // version 1 data recovered correctly
+      assert(toStr(db.get("a", colFamily2)) === "1")
+      assert(db.iterator(colFamily2).map(toStr).toSet === Set(("a", "1")))
+
+      // make changes but do not commit version 2
+      db.put("b", "2", colFamily2)
+      assert(toStr(db.get("b", colFamily2)) === "2")
+      assert(db.iterator(colFamily2).map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+    }
+
+    withDB(remoteDir, conf = conf, version = 1, useColumnFamilies = true) { db =>
+      // version 1 data not changed
+      assert(toStr(db.get("a", colFamily1)) === "1")
+      assert(db.get("b", colFamily1) === null)
+      assert(db.iterator(colFamily1).map(toStr).toSet === Set(("a", "1")))
+
+      assert(toStr(db.get("a", colFamily2)) === "1")
+      assert(db.get("b", colFamily2) === null)
+      assert(db.iterator(colFamily2).map(toStr).toSet === Set(("a", "1")))
+
+      // commit version 2
+      db.put("b", "2", colFamily1)
+      assert(toStr(db.get("b", colFamily1)) === "2")
+      assert(db.iterator(colFamily1).map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+
+      db.put("b", "2", colFamily2)
+      assert(toStr(db.get("b", colFamily2)) === "2")
+      db.commit()
+      assert(db.iterator(colFamily2).map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+    }
+
+    withDB(remoteDir, conf = conf, version = 1, useColumnFamilies = true) { db =>
+      // version 1 data not changed
+      assert(toStr(db.get("a", colFamily1)) === "1")
+      assert(db.get("b", colFamily1) === null)
+
+      assert(toStr(db.get("a", colFamily2)) === "1")
+      assert(db.get("b", colFamily2) === null)
+    }
+
+    withDB(remoteDir, conf = conf, version = 2, useColumnFamilies = true) { db =>
+      // version 2 can be loaded again
+      assert(toStr(db.get("b", colFamily1)) === "2")
+      assert(db.iterator(colFamily1).map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+
+      assert(toStr(db.get("b", colFamily2)) === "2")
+      assert(db.iterator(colFamily2).map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+
+      db.load(1)
+      assert(toStr(db.get("b", colFamily1)) === null)
+      assert(db.iterator(colFamily1).map(toStr).toSet === Set(("a", "1")))
+
+      db.load(1)
+      assert(toStr(db.get("b", colFamily2)) === null)
+      assert(db.iterator(colFamily2).map(toStr).toSet === Set(("a", "1")))
     }
   }
 
@@ -1329,7 +1448,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   def toStr(kv: ByteArrayPair): (String, String) = (toStr(kv.key), toStr(kv.value))
 
-  def iterator(db: RocksDB): Iterator[(String, String)] = db.iterator().map(toStr)
+  def iterator(db: RocksDB, colFamilyName: String = "default"):
+    Iterator[(String, String)] = db.iterator(colFamilyName).map(toStr)
 
   def listFiles(file: File): Seq[File] = {
     if (!file.exists()) return Seq.empty
