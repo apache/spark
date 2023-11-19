@@ -467,7 +467,9 @@ private[spark] object HealthTracker extends Logging {
   def validateExcludeOnFailureConfs(conf: SparkConf): Unit = {
 
     def mustBePos(k: String, v: String): Unit = {
-      throw new IllegalArgumentException(s"$k was $v, but must be > 0.")
+      throw new SparkIllegalArgumentException(
+            errorClass = "HEALTH_TRACKER_NEGATIVE_CONFIG",
+            messageParameters = Map("k" -> k, "v" -> v))
     }
 
     Seq(
@@ -499,12 +501,13 @@ private[spark] object HealthTracker extends Logging {
     val maxNodeAttempts = conf.get(config.MAX_TASK_ATTEMPTS_PER_NODE)
 
     if (maxNodeAttempts >= maxTaskFailures) {
-      throw new IllegalArgumentException(s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key} " +
-        s"( = ${maxNodeAttempts}) was >= ${config.TASK_MAX_FAILURES.key} " +
-        s"( = ${maxTaskFailures} ). Though excludeOnFailure is enabled, with this configuration, " +
-        s"Spark will not be robust to one bad node. Decrease " +
-        s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key}, increase ${config.TASK_MAX_FAILURES.key}, " +
-        s"or disable excludeOnFailure with ${config.EXCLUDE_ON_FAILURE_ENABLED.key}")
+      throw new SparkIllegalArgumentException(
+            errorClass = "HEALTH_TRACKER_TOO_MANY_ATTEMPTS",
+            messageParameters = Map("maxNodeAttemptsKey" -> config.MAX_TASK_ATTEMPTS_PER_NODE.key, 
+            "maxNodeAttempts" -> maxNodeAttempts,
+            "maxTaskFailuresKey" -> config.TASK_MAX_FAILURES.key,
+            "maxTaskFailures" -> maxTaskFailures,
+            "excludeOnFailureKey" -> config.EXCLUDE_ON_FAILURE_ENABLED.key))
     }
   }
 }

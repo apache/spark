@@ -79,15 +79,16 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
         mapredInputFormat = true
       }
       else {
-        throw new IllegalArgumentException("Specified inputformat " + inputFormatClazz +
-          " is NOT a supported input format ? does not implement either of the supported hadoop " +
-            "api's")
+        throw new SparkIllegalArgumentException(
+            errorClass = "INPUT_FORMAT_NOT_SUPPORTED",
+            messageParameters = Map("inputFormatClass" -> inputFormatClazz))
       }
     }
     catch {
       case e: ClassNotFoundException =>
-        throw new IllegalArgumentException("Specified inputformat " + inputFormatClazz +
-          " cannot be found ?", e)
+        throw new SparkIllegalArgumentException(
+            errorClass = "INPUT_FORMAT_NOT_FOUND",
+            messageParameters = Map("inputFormatClass" -> inputFormatClazz, "e" -> e))
     }
   }
 

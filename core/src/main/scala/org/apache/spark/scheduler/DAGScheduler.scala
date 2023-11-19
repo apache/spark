@@ -578,10 +578,9 @@ private[spark] class DAGScheduler(
             mergedProfile
         }
       } else {
-        throw new IllegalArgumentException("Multiple ResourceProfiles specified in the RDDs for " +
-          "this stage, either resolve the conflicting ResourceProfiles yourself or enable " +
-          s"${config.RESOURCE_PROFILE_MERGE_CONFLICTS.key} and understand how Spark handles " +
-          "the merging them.")
+          throw new SparkIllegalArgumentException(
+            errorClass = "SCHEDULER_DAG_MULTIPLE_RESOURCE_PROFILES",
+            messageParameters = Map("mergeConflictsKey" -> config.RESOURCE_PROFILE_MERGE_CONFLICTS.key))
       }
     } else {
       if (stageResourceProfiles.size == 1) {
@@ -914,9 +913,10 @@ private[spark] class DAGScheduler(
     // Check to make sure we are not launching a task on a partition that does not exist.
     val maxPartitions = rdd.partitions.length
     partitions.find(p => p >= maxPartitions || p < 0).foreach { p =>
-      throw new IllegalArgumentException(
-        "Attempting to access a non-existent partition: " + p + ". " +
-          "Total number of partitions: " + maxPartitions)
+      throw new SparkIllegalArgumentException(
+            errorClass = "SCHEDULER_DAG_NON_EXISTENT_PARTITIONS",
+            messageParameters = Map("p"-> p,
+            "maxPartitions" -> maxPartitions))
     }
 
     // SPARK-23626: `RDD.getPartitions()` can be slow, so we eagerly compute

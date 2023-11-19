@@ -89,7 +89,8 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
       listener: SparkListenerInterface,
       queue: String): Unit = synchronized {
     if (stopped.get()) {
-      throw new IllegalStateException("LiveListenerBus is stopped.")
+      throw new SparkIllegalStateException(
+        errorClass = "LIVE_LISTENER_BUS_STOPPED")
     }
 
     queues.asScala.find(_.name == queue) match {
@@ -169,7 +170,8 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
    */
   def start(sc: SparkContext, metricsSystem: MetricsSystem): Unit = synchronized {
     if (!started.compareAndSet(false, true)) {
-      throw new IllegalStateException("LiveListenerBus already started.")
+      throw new SparkIllegalStateException(
+        errorClass = "LIVE_LISTENER_BUS_STARTED")
     }
 
     this.sparkContext = sc
@@ -214,7 +216,8 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
    */
   def stop(): Unit = {
     if (!started.get()) {
-      throw new IllegalStateException(s"Attempted to stop bus that has not yet started!")
+      throw new SparkIllegalStateException(
+        errorClass = "LIVE_LISTENER_BUS_STOPPED_WITHOUT_STARTING")
     }
 
     if (!stopped.compareAndSet(false, true)) {

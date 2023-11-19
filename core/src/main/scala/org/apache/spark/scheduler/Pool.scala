@@ -54,8 +54,9 @@ private[spark] class Pool(
       case SchedulingMode.FIFO =>
         new FIFOSchedulingAlgorithm()
       case _ =>
-        val msg = s"Unsupported scheduling mode: $schedulingMode. Use FAIR or FIFO instead."
-        throw new IllegalArgumentException(msg)
+        throw new SparkIllegalArgumentException(
+            errorClass = "POOL_UNSUPPORTED_SCHEDULING_MODE",
+            messageParameters = Map("schedulingMode" -> schedulingMode))
     }
   }
 

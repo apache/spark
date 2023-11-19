@@ -126,7 +126,9 @@ private class AsyncEventQueue(
       this.sc = sc
       dispatchThread.start()
     } else {
-      throw new IllegalStateException(s"$name already started!")
+        throw new SparkIllegalArgumentException(
+          errorClass = "SCHEDULER_ASYNC_STARTED",
+          messageParameters = Map("name" -> name))
     }
   }
 
@@ -136,7 +138,9 @@ private class AsyncEventQueue(
    */
   private[scheduler] def stop(): Unit = {
     if (!started.get()) {
-      throw new IllegalStateException(s"Attempted to stop $name that has not yet started!")
+      throw new SparkIllegalStateException(
+        errorClass = "SCHEDULER_ASYNC_STOP",
+        messageParameters = Map("name" -> name))
     }
     if (stopped.compareAndSet(false, true)) {
       eventCount.incrementAndGet()

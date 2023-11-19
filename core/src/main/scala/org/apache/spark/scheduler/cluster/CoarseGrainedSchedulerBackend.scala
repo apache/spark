@@ -799,9 +799,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    */
   final override def requestExecutors(numAdditionalExecutors: Int): Boolean = {
     if (numAdditionalExecutors < 0) {
-      throw new IllegalArgumentException(
-        "Attempted to request a negative number of additional executor(s) " +
-        s"$numAdditionalExecutors from the cluster manager. Please specify a positive number!")
+      throw new SparkIllegalArgumentException(
+            errorClass = "COURSE_GRAINED_SCHEDULER_NEGATIVE_EXECUTORS",
+            messageParameters = Map("numAdditionalExecutors" -> numAdditionalExecutors))
     }
     logInfo(s"Requesting $numAdditionalExecutors additional executor(s) from the cluster manager")
 
@@ -841,9 +841,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   ): Boolean = {
     val totalExecs = resourceProfileIdToNumExecutors.values.sum
     if (totalExecs < 0) {
-      throw new IllegalArgumentException(
-        "Attempted to request a negative number of executor(s) " +
-          s"$totalExecs from the cluster manager. Please specify a positive number!")
+      throw new SparkIllegalArgumentException(
+        errorClass = "COURSE_GRAINED_SCHEDULER_NEGATIVE_EXECUTORS",
+        messageParameters = Map("numAdditionalExecutors" -> totalExecs))
     }
     val resourceProfileToNumExecutors = resourceProfileIdToNumExecutors.map { case (rpid, num) =>
       (scheduler.sc.resourceProfileManager.resourceProfileFromId(rpid), num)

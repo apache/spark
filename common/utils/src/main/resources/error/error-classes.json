@@ -527,6 +527,13 @@
     ],
     "sqlState" : "22018"
   },
+  "COURSE_GRAINED_SCHEDULER_NEGATIVE_EXECUTORS" : {
+    "message" : [
+      "Attempted to request a negative number of additional executor(s) ", 
+      "<numAdditionalExecutors> from the cluster manager. Please specify a positive number!"
+    ],
+    "sqlState" : "XX000"
+  },
   "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
     "message" : [
       "Not allowed to create the permanent view <name> without explicitly assigning an alias for the expression <attr>."
@@ -1179,6 +1186,23 @@
     ],
     "sqlState" : "42822"
   },
+  "HEALTH_TRACKER_NEGATIVE_CONFIG" : {
+    "message" : [
+      "<k> was <v>, but must be > 0."
+    ],
+    "sqlState" : "XX000"
+  },
+  "HEALTH_TRACKER_TOO_MANY_ATTEMPTS" : {
+    "message" : [
+      "<maxNodeAttemptsKey>" ,
+      "( = <maxNodeAttempts>) was >= <maxTaskFailuresKey> ",
+      "( = <maxTaskFailures> ). Though excludeOnFailure is enabled, with this configuration, ",
+      "Spark will not be robust to one bad node. Decrease ",
+      "<maxNodeAttemptsKey>, increase <maxTaskFailuresKey>, ",
+      "or disable excludeOnFailure with <excludeOnFailureKey>"
+    ],
+    "sqlState" : "XX000"
+  },
   "HLL_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
       "Invalid call to <function>; only valid HLL sketch buffers are supported as inputs (such as those produced by the `hll_sketch_agg` function)."
@@ -1380,6 +1404,18 @@
     ],
     "sqlState" : "42704"
   },
+  "INPUT_FORMAT_NOT_SUPPORTED" : {
+    "message" : [
+      "Specified inputformat <inputFormatClass> is NOT a supported input format ? does not implement either of the supported hadoop api's"
+    ],
+    "sqlState" : "XX000"
+  },
+  "INPUT_FORMAT_NOT_FOUND" : {
+    "message" : [
+      "Specified inputformat <inputFormatClass> + cannot be found ? <e>"
+    ],
+    "sqlState" : "XX000"
+  },
   "INSERT_COLUMN_ARITY_MISMATCH" : {
     "message" : [
       "Cannot write to <tableName>, the reason is"
@@ -1492,6 +1528,12 @@
     "sqlState" : "XX000"
   },
   "INTERNAL_ERROR_NETWORK" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
+  "INTERNAL_ERROR_SCHEDULER" : {
     "message" : [
       "<message>"
     ],
@@ -2375,6 +2417,7 @@
     ],
     "sqlState" : "54006"
   },
+  
   "LOAD_DATA_PATH_NOT_EXISTS" : {
     "message" : [
       "LOAD DATA input path does not exist: <path>."
@@ -2921,6 +2964,32 @@
     ],
     "sqlState" : "21000"
   },
+  "SCHEDULER_ASYNC_STARTED" : {
+    "message" : [
+      "<name> already started!"
+    ],
+    "sqlState" : "XX000"
+  },
+  "SCHEDULER_ASYNC_STOP" : {
+    "message" : [
+      "Attempted to stop <name> that has not yet started!"
+    ],
+    "sqlState" : "XX000"
+  },
+  "SCHEDULER_DAG_MULTIPLE_RESOURCE_PROFILES" : {
+    "message" : [
+      "Multiple ResourceProfiles specified in the RDDs for this stage.",
+      "Either resolve the conflicting ResourceProfiles yourself or enable <mergeConflictsKey> and understand how Spark handles merging them."
+    ],
+    "sqlState" : "XX000"
+  },
+  "SCHEDULER_DAG_NON_EXISTENT_PARTITIONS" : {
+    "message" : [
+      "Attempting to access a non-existent partition: <p>.",
+      "Total number of partitions: <maxPartitions>"
+    ],
+    "sqlState" : "XX000"
+  },
   "SCHEMA_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create schema <schemaName> because it already exists.",
@@ -3065,6 +3134,18 @@
       "Task failed while writing rows to <path>."
     ],
     "sqlState" : "58030"
+  },
+  "TASK_SCHEDULER_STOPPED" : {
+    "message" : [
+      "Spark context stopped while waiting for backend"
+    ],
+    "sqlState" : "XX000"
+  },
+  "TASK_SCHEDULER_UNSUPPORTED_SCHEDULING_MODE" : {
+    "message" : [
+      "Unsupported <SCHEDULER_MODE_PROPERTY>: <schedulingMode>"
+    ],
+    "sqlState" : "XX000"
   },
   "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
@@ -3491,6 +3572,24 @@
           "Literal for '<value>' of <type>."
         ]
       },
+      "LIVE_LISTENER_BUS_STARTED" : {
+        "message" : [
+          "LiveListenerBus already started."
+        ],
+        "sqlState" : "XX000"
+      },
+      "LIVE_LISTENER_BUS_STOPPED" : {
+        "message" : [
+          "LiveListenerBus is stopped."
+        ],
+        "sqlState" : "XX000"
+      },
+      "LIVE_LISTENER_BUS_STOPPED_WITHOUT_STARTING" : {
+        "message" : [
+          "Attempted to stop bus that has not yet started!"
+        ],
+        "sqlState" : "XX000"
+      },
       "MULTIPLE_BUCKET_TRANSFORMS" : {
         "message" : [
           "Multiple bucket TRANSFORMs."
@@ -3530,6 +3629,12 @@
         "message" : [
           "Pivoting by the value '<value>' of the column data type <type>."
         ]
+      },
+      "POOL_UNSUPPORTED_SCHEDULING_MODE" : {
+        "message" : [
+          "Unsupported scheduling mode: <schedulingMode>. Use FAIR or FIFO instead."
+        ],
+        "sqlState" : "XX000"
       },
       "PURGE_PARTITION" : {
         "message" : [

@@ -253,6 +253,23 @@ private[spark] class SparkClassNotFoundException(
 }
 
 /**
+ * Illegal State exception thrown from Spark with an error class.
+ */
+
+private[spark] class SparkIllegalStateException(
+    errorClass: String,
+    messageParameters: Map[String, String],
+    cause: Throwable = null)
+  extends IllegalStateException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters), cause)
+  with SparkThrowable {
+
+  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
+
+  override def getErrorClass: String = errorClass
+}
+
+/**
  * Concurrent modification exception thrown from Spark with an error class.
  */
 private[spark] class SparkConcurrentModificationException(
@@ -320,6 +337,7 @@ private[spark] class SparkFileNotFoundException(
 
   override def getErrorClass: String = errorClass
 }
+
 
 /**
  * Number format exception thrown from Spark with an error class.

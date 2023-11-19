@@ -222,8 +222,10 @@ private[spark] class TaskSchedulerImpl(
         case SchedulingMode.FAIR =>
           new FairSchedulableBuilder(rootPool, sc)
         case _ =>
-          throw new IllegalArgumentException(s"Unsupported $SCHEDULER_MODE_PROPERTY: " +
-          s"$schedulingMode")
+          throw new SparkIllegalArgumentException(
+            errorClass = "TASK_SCHEDULER_UNSUPPORTED_SCHEDULING_MODE",
+            messageParameters = Map("SCHEDULER_MODE_PROPERTY" -> SCHEDULER_MODE_PROPERTY,
+            "schedulingMode" -> schedulingMode))
       }
     }
     schedulableBuilder.buildPools()
@@ -1221,7 +1223,7 @@ private[spark] class TaskSchedulerImpl(
       // Might take a while for backend to be ready if it is waiting on resources.
       if (sc.stopped.get) {
         // For example: the master removes the application for some reason
-        throw new IllegalStateException("Spark context stopped while waiting for backend")
+        throw new SparkIllegalStateException(errorClass = "TASK_SCHEDULER_STOPPED")
       }
       synchronized {
         this.wait(100)
