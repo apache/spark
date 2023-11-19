@@ -4490,9 +4490,9 @@ private[sql] object EasilyFlattenable {
          } else {
            val remappedNewProjList = newProjList.map(ne => (ne transformUp  {
              case attr: AttributeReference => projList.find(
-               _.toAttribute.canonicalized == attr.canonicalized).get
-             case u: UnresolvedAttribute if p.getTagValue(LogicalPlan.PLAN_ID_TAG).isDefined =>
-               p.getTagValue[Long](LogicalPlan.PLAN_ID_TAG).foreach(u.setTagValue[Long](
+               _.toAttribute.canonicalized == attr.canonicalized).getOrElse(attr)
+             case u: UnresolvedAttribute if child.getTagValue(LogicalPlan.PLAN_ID_TAG).isDefined =>
+               child.getTagValue[Long](LogicalPlan.PLAN_ID_TAG).foreach(u.setTagValue(
                  LogicalPlan.PLAN_ID_TAG, _))
                  u
            }).asInstanceOf[NamedExpression])
