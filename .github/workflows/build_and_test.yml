@@ -256,7 +256,7 @@ jobs:
     - name: Install Python packages (Python 3.8)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')) || contains(matrix.modules, 'connect')
       run: |
-        python3.8 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3'
+        python3.8 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==4.25.1'
         python3.8 -m pip list
     # Run the tests.
     - name: Run tests
@@ -708,7 +708,7 @@ jobs:
         mkdir -p $HOME/buf
         tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
         rm buf-Linux-x86_64.tar.gz
-        python3.9 -m pip install 'protobuf==3.20.3' 'mypy-protobuf==3.3.0'
+        python3.9 -m pip install 'protobuf==4.25.1' 'mypy-protobuf==3.3.0'
     - name: Python code generation check
       if: inputs.branch != 'branch-3.3' && inputs.branch != 'branch-3.4'
       run: if test -f ./dev/connect-check-protos.py; then PATH=$PATH:$HOME/buf/bin PYTHON_EXECUTABLE=python3.9 ./dev/connect-check-protos.py; fi
