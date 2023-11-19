@@ -4488,11 +4488,13 @@ private[sql] object EasilyFlattenable {
          } ))) {
            None
          } else {
-           val remappedNewProjList = newProjList.map(ne => ne match {
+           val remappedNewProjList = newProjList.map(ne => (ne transformUp  {
              case attr: AttributeReference => projList.find(
                _.toAttribute.canonicalized == attr.canonicalized).get
-             case x => x
-           })
+             case u: UnresolvedAttribute if u.getTagValue(LogicalPlan.PLAN_ID_TAG).isDefined =>
+                     u.setTagValue(LogicalPlan.PLAN_ID_TAG, child)
+                     u
+           }).asInstanceOf[NamedExpression])
            Option(p.copy(projectList = remappedNewProjList))
          }
        } else {
