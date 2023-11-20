@@ -58,7 +58,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, FileTable}
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{EasilyFlattenable, SQLConf}
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -1575,7 +1575,7 @@ class Dataset[T] private[sql](
       val newProjList = untypedCols.map(_.named)
       (logicalPlan, newProjList) match {
         case EasilyFlattenable(flattendPlan) if !this.isStreaming &&
-          logicalPlan.collectLeaves().forall(_.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty) =>
+          !logicalPlan.exists(_.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty) =>
           flattendPlan
 
         case _ => Project(newProjList, logicalPlan)
@@ -4464,47 +4464,4 @@ class Dataset[T] private[sql](
   }
 }
 
-private[sql] object EasilyFlattenable {
-  def unapply(tuple: (LogicalPlan, Seq[NamedExpression])): Option[LogicalPlan] = {
-    val (logicalPlan, newProjList) = tuple
-    logicalPlan match {
-      case p @ Project(projList, child) if !child.isStreaming =>
-        val currentOutputAttribs = AttributeSet(logicalPlan.output)
-        // In the new column list identify those Named Expressions which are just attributes and
-        // hence pass thru
-        val (passThruAttribs, tinkeredOrNewNamedExprs) = newProjList.partition(ne => ne match {
-          case _: AttributeReference => true
-          case _ => false
-        })
 
-       if (passThruAttribs.size == currentOutputAttribs.size && passThruAttribs.forall(
-         currentOutputAttribs.contains) && tinkeredOrNewNamedExprs.nonEmpty) {
-         val attributesTinkeredInProject = AttributeSet(projList.filter(_ match {
-           case _: Alias => true
-           case _ => false
-         }).map(_.toAttribute))
-         val attributesTinkeredInProjectAsName = attributesTinkeredInProject.map(_.name).toSet
-         if (tinkeredOrNewNamedExprs.exists(ne => ne.references.exists(attr => attr match {
-           case u: UnresolvedAttribute => attributesTinkeredInProjectAsName.contains(u.name)
-           case resAttr => attributesTinkeredInProject.contains(resAttr)
-         } ))) {
-           None
-         } else {
-           val remappedNewProjList = newProjList.map(ne => (ne transformUp  {
-             case attr: AttributeReference => projList.find(
-               _.toAttribute.canonicalized == attr.canonicalized).getOrElse(attr)
-           }).asInstanceOf[NamedExpression])
-           val newProj = p.copy(projectList = remappedNewProjList)
-           p.getTagValue[Long](LogicalPlan.PLAN_ID_TAG).foreach(newProj.setTagValue[Long](
-             LogicalPlan.PLAN_ID_TAG, _))
-           Option(newProj)
-         }
-       } else {
-         // for now None
-         None
-       }
-
-      case _ => None
-    }
-  }
-}
