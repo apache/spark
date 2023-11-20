@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+export {drawFlamegraph};
+
 /* global $, d3, flamegraph */
 
 /* eslint-disable no-unused-vars */

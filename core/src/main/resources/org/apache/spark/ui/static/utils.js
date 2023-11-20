@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+export {formatDuration, formatBytes, formatTimeMillis, errorSummary};
+
 /* global $, uiRoot */
 /* eslint-disable no-unused-vars */
 // this function works exactly the same as UIUtils.formatDuration
