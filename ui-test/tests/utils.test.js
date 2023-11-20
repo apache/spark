@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {expect, test} from 'jest';
+
 import {formatDuration, formatBytes, formatTimeMillis, errorSummary} from '../../core/src/main/resources/org/apache/spark/ui/static/utils.js';
 
 test('formatDuration', function () {

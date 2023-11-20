@@ -15,16 +15,17 @@
  * limitations under the License.
  */
 
+
 import '../../core/src/main/resources/org/apache/spark/ui/static/d3.min.js';
 import '../../core/src/main/resources/org/apache/spark/ui/static/d3-flamegraph.min.js';
 import '../../core/src/main/resources/org/apache/spark/ui/static/flamegraph.js';
 import {drawFlamegraph} from '../../core/src/main/resources/org/apache/spark/ui/static/flamegraph.js';
-
 import $ from 'jquery';
-import {expect, test} from 'jest';
 
 /**
  * @jest-environment jsdom
+ *
+ * eslint-disable no-unused-vars
  */
 test('drawFlamegraph', function () {
   document.body.innerHTML = `'<div>' +
