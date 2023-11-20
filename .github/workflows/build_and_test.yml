@@ -712,6 +712,7 @@ jobs:
     - name: Python code generation check
       if: inputs.branch != 'branch-3.3' && inputs.branch != 'branch-3.4'
       run: if test -f ./dev/connect-check-protos.py; then PATH=$PATH:$HOME/buf/bin PYTHON_EXECUTABLE=python3.9 ./dev/connect-check-protos.py; fi
+    # Should delete this section after SPARK 3.5 EOL.
     - name: Install JavaScript linter dependencies for branch-3.3, branch-3.4, branch-3.5
       if: inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4' || inputs.branch == 'branch-3.5'
       run: |
@@ -719,6 +720,7 @@ jobs:
         apt-get install -y nodejs npm
     - name: JS linter
       run: ./dev/lint-js
+    # Should delete this section after SPARK 3.5 EOL.
     - name: Install R linter dependencies for branch-3.3, branch-3.4, branch-3.5
       if: inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4' || inputs.branch == 'branch-3.5'
       run: |
@@ -730,6 +732,7 @@ jobs:
         Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
     - name: Install R linter dependencies and SparkR
       run: ./R/install-dev.sh
+    # Should delete this section after SPARK 3.5 EOL.
     - name: Install dependencies for documentation generation for branch-3.3, branch-3.4, branch-3.5
       if: inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4' || inputs.branch == 'branch-3.5'
       run: |
