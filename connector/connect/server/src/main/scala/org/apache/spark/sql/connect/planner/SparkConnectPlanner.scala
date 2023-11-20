@@ -2587,7 +2587,7 @@ class SparkConnectPlanner(
       } else {
         // Trigger assertExecutedPlanPrepared to ensure post ReadyForExecution before finished
         // executedPlan is currently called by createMetricsResponse below
-        df.queryExecution.assertExecutedPlanPrepared() // XXX This should be avoided.
+        df.queryExecution.assertExecutedPlanPrepared() // Ideally, this should be avoided.
       }
 
       result.setRelation(
