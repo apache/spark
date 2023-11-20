@@ -280,10 +280,12 @@ class UserDefinedFunction:
                 try:
                     to_arrow_type(self._returnType_placeholder)
                 except TypeError:
-                    raise NotImplementedError(
-                        "Invalid return type with grouped map Arrow UDFs or "
-                        "at groupby.applyInArrow: %s is not supported"
-                        % str(self._returnType_placeholder)
+                    raise PySparkNotImplementedError(
+                        error_class="NOT_IMPLEMENTED",
+                        message_parameters={
+                            "feature": "Invalid return type with grouped map Arrow UDFs or "
+                            f"at groupby.applyInArrow: {self._returnType_placeholder}"
+                        },
                     )
             else:
                 raise TypeError(
@@ -316,9 +318,12 @@ class UserDefinedFunction:
                 try:
                     to_arrow_type(self._returnType_placeholder)
                 except TypeError:
-                    raise NotImplementedError(
-                        "Invalid return type in cogroup.applyInArrow: "
-                        "%s is not supported" % str(self._returnType_placeholder)
+                    raise PySparkNotImplementedError(
+                        error_class="NOT_IMPLEMENTED",
+                        message_parameters={
+                            "feature": "Invalid return type in cogroup.applyInArrow: "
+                            f"{self._returnType_placeholder}"
+                        },
                     )
             else:
                 raise TypeError(
