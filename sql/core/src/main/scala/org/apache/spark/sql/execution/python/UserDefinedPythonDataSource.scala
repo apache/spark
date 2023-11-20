@@ -42,12 +42,11 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
   def builder(
       sparkSession: SparkSession,
       provider: String,
-      paths: Seq[String],
       userSpecifiedSchema: Option[StructType],
       options: CaseInsensitiveMap[String]): LogicalPlan = {
 
     val runner = new UserDefinedPythonDataSourceRunner(
-      dataSourceCls, provider, paths, userSpecifiedSchema, options)
+      dataSourceCls, provider, userSpecifiedSchema, options)
 
     val result = runner.runInPython()
     val pickledDataSourceInstance = result.dataSource
@@ -68,10 +67,9 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
   def apply(
       sparkSession: SparkSession,
       provider: String,
-      paths: Seq[String] = Seq.empty,
       userSpecifiedSchema: Option[StructType] = None,
       options: CaseInsensitiveMap[String] = CaseInsensitiveMap(Map.empty)): DataFrame = {
-    val plan = builder(sparkSession, provider, paths, userSpecifiedSchema, options)
+    val plan = builder(sparkSession, provider, userSpecifiedSchema, options)
     Dataset.ofRows(sparkSession, plan)
   }
 }
@@ -89,7 +87,6 @@ case class PythonDataSourceCreationResult(
 class UserDefinedPythonDataSourceRunner(
     dataSourceCls: PythonFunction,
     provider: String,
-    paths: Seq[String],
     userSpecifiedSchema: Option[StructType],
     options: CaseInsensitiveMap[String])
   extends PythonPlannerRunner[PythonDataSourceCreationResult](dataSourceCls) {
@@ -102,10 +99,6 @@ class UserDefinedPythonDataSourceRunner(
 
     // Send the provider name
     PythonWorkerUtils.writeUTF(provider, dataOut)
-
-    // Send the paths
-    dataOut.writeInt(paths.length)
-    paths.foreach(PythonWorkerUtils.writeUTF(_, dataOut))
 
     // Send the user-specified schema, if provided
     dataOut.writeBoolean(userSpecifiedSchema.isDefined)
