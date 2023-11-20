@@ -712,10 +712,37 @@ jobs:
     - name: Python code generation check
       if: inputs.branch != 'branch-3.3' && inputs.branch != 'branch-3.4'
       run: if test -f ./dev/connect-check-protos.py; then PATH=$PATH:$HOME/buf/bin PYTHON_EXECUTABLE=python3.9 ./dev/connect-check-protos.py; fi
+    # Should delete this section after SPARK 3.5 EOL.
+    - name: Install JavaScript linter dependencies for branch-3.3, branch-3.4, branch-3.5
+      if: inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4' || inputs.branch == 'branch-3.5'
+      run: |
+        apt update
+        apt-get install -y nodejs npm
     - name: JS linter
       run: ./dev/lint-js
+    # Should delete this section after SPARK 3.5 EOL.
+    - name: Install R linter dependencies for branch-3.3, branch-3.4, branch-3.5
+      if: inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4' || inputs.branch == 'branch-3.5'
+      run: |
+        apt update
+        apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev \
+          libfontconfig1-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev \
+          libtiff5-dev libjpeg-dev
+        Rscript -e "install.packages(c('devtools'), repos='https://cloud.r-project.org/')"
+        Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
     - name: Install R linter dependencies and SparkR
       run: ./R/install-dev.sh
+    # Should delete this section after SPARK 3.5 EOL.
+    - name: Install dependencies for documentation generation for branch-3.3, branch-3.4, branch-3.5
+      if: inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4' || inputs.branch == 'branch-3.5'
+      run: |
+        # pandoc is required to generate PySpark APIs as well in nbsphinx.
+        apt-get update -y
+        apt-get install -y libcurl4-openssl-dev pandoc
+        apt-get install -y ruby ruby-dev
+        Rscript -e "install.packages(c('devtools', 'testthat', 'knitr', 'rmarkdown', 'markdown', 'e1071', 'roxygen2', 'ggplot2', 'mvtnorm', 'statmod'), repos='https://cloud.r-project.org/')"
+        Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
+        Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
     - name: Install dependencies for documentation generation
       run: |
         # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
