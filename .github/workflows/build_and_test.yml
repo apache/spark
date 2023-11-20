@@ -600,7 +600,6 @@ jobs:
       PYSPARK_DRIVER_PYTHON: python3.9
       PYSPARK_PYTHON: python3.9
       GITHUB_PREV_SHA: ${{ github.event.before }}
-      BRANCH: ${{ inputs.branch }}
     container:
       image: ${{ needs.precondition.outputs.image_url }}
     steps:
@@ -713,37 +712,36 @@ jobs:
     - name: Python code generation check
       if: inputs.branch != 'branch-3.3' && inputs.branch != 'branch-3.4'
       run: if test -f ./dev/connect-check-protos.py; then PATH=$PATH:$HOME/buf/bin PYTHON_EXECUTABLE=python3.9 ./dev/connect-check-protos.py; fi
-    - name: Install JavaScript linter dependencies
+    - name: Install JavaScript linter dependencies for branch-3.3, branch-3.4, branch-3.5
       if: inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4' || inputs.branch == 'branch-3.5'
       run: |
         apt update
         apt-get install -y nodejs npm
     - name: JS linter
       run: ./dev/lint-js
+    - name: Install R linter dependencies for branch-3.3, branch-3.4, branch-3.5
+      if: inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4' || inputs.branch == 'branch-3.5'
+      run: |
+        apt update
+        apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev \
+          libfontconfig1-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev \
+          libtiff5-dev libjpeg-dev
+        Rscript -e "install.packages(c('devtools'), repos='https://cloud.r-project.org/')"
+        Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
     - name: Install R linter dependencies and SparkR
-      shell: 'script -q -e -c "bash {0}"'
+      run: ./R/install-dev.sh
+    - name: Install dependencies for documentation generation for branch-3.3, branch-3.4, branch-3.5
+      if: inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4' || inputs.branch == 'branch-3.5'
       run: |
-        if [[ "$BRANCH" == "branch-3.3" ]] || [[ "$BRANCH" == "branch-3.4" ]] || [[ "$BRANCH" == "branch-3.5" ]]; then
-          apt update
-          apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev \
-            libfontconfig1-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev \
-            libtiff5-dev libjpeg-dev
-          Rscript -e "install.packages(c('devtools'), repos='https://cloud.r-project.org/')"
-          Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
-        fi
-        ./R/install-dev.sh
+        # pandoc is required to generate PySpark APIs as well in nbsphinx.
+        apt-get update -y
+        apt-get install -y libcurl4-openssl-dev pandoc
+        apt-get install -y ruby ruby-dev
+        Rscript -e "install.packages(c('devtools', 'testthat', 'knitr', 'rmarkdown', 'markdown', 'e1071', 'roxygen2', 'ggplot2', 'mvtnorm', 'statmod'), repos='https://cloud.r-project.org/')"
+        Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
+        Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
     - name: Install dependencies for documentation generation
-      shell: 'script -q -e -c "bash {0}"'
       run: |
-        if [[ "$BRANCH" == "branch-3.3" ]] || [[ "$BRANCH" == "branch-3.4" ]] || [[ "$BRANCH" == "branch-3.5" ]]; then
-          # pandoc is required to generate PySpark APIs as well in nbsphinx.
-          apt-get update -y
-          apt-get install -y libcurl4-openssl-dev pandoc
-          apt-get install -y ruby ruby-dev
-          Rscript -e "install.packages(c('devtools', 'testthat', 'knitr', 'rmarkdown', 'markdown', 'e1071', 'roxygen2', 'ggplot2', 'mvtnorm', 'statmod'), repos='https://cloud.r-project.org/')"
-          Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
-          Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
-        fi
         # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
         #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
         # Jinja2 3.0.0+ causes error when building with Sphinx.
