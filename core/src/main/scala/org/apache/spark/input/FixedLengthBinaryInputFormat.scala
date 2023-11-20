@@ -74,7 +74,7 @@ private[spark] class FixedLengthBinaryInputFormat
     if (defaultSize < recordLength) {
       recordLength.toLong
     } else {
-      (Math.floor(defaultSize.toDouble / recordLength.toDouble) * recordLength).toLong
+      defaultSize / recordLength * recordLength
     }
   }
 
