@@ -96,7 +96,7 @@ case class InlineCTE(alwaysInline: Boolean = false) extends Rule[LogicalPlan] {
         }
         buildCTEMap(child, cteMap, outerCTEId)
 
-      case ref: CTERelationRef =>
+      case ref: CTERelationRef if cteMap.contains(ref.cteId) =>
         val (cteDef, refCount, refMap) = cteMap(ref.cteId)
         cteMap(ref.cteId) = (cteDef, refCount + 1, refMap)
         outerCTEId.foreach { cteId =>
