@@ -60,7 +60,7 @@ def require_minimum_grpcio_status_version() -> None:
     minimum_grpc_version = "1.48.1"
 
     try:
-        import grpc_status
+        import grpc_status  # noqa
     except ImportError as error:
         raise ImportError(
             f"grpcio-status >= {minimum_grpc_version} must be installed; however, it was not found."
@@ -72,7 +72,7 @@ def require_minimum_googleapis_common_protos_version() -> None:
     minimum_common_protos_version = "1.56.4"
 
     try:
-        import google.rpc
+        import google.rpc  # noqa
     except ImportError as error:
         raise ImportError(
             f"googleapis-common-protos >= {minimum_common_protos_version} must be installed; "
