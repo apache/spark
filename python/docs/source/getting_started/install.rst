@@ -161,7 +161,7 @@ Package                    Supported version Note
 `numpy`                    >=1.21                    Required for pandas API on Spark and MLLib DataFrame-based API; Optional for Spark SQL
 `grpcio`                   >=1.48,<1.57              Required for Spark Connect
 `grpcio-status`            >=1.48,<1.57              Required for Spark Connect
-`googleapis-common-protos` ==1.56.4                  Required for Spark Connect
+`googleapis-common-protos` >=1.56.4                  Required for Spark Connect
 ========================== ========================= ======================================================================================
 
 Note that PySpark requires Java 17 or later with ``JAVA_HOME`` properly set.
