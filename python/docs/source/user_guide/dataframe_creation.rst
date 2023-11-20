@@ -15,14 +15,11 @@
     specific language governing permissions and limitations
     under the License.
 
-=====================
-10 minutes to PySpark
-=====================
+==================
+DataFrame creation
+==================
 
 .. currentmodule:: pyspark.sql
-
-This is a short introduction to pyspark, geared mainly for new users.
-You can see more complex recipes in the :ref:`/reference/index.rst`.
 
 Basic data structures
 ---------------------
@@ -31,19 +28,9 @@ Pyspark provides an important class for handling data:
 
 1. :class:`DataFrame`: a distributed collection of data grouped into named columns.
 
-SparkSession creation
----------------------
-PySpark applications start with initializing :class:`SparkSession` which is the entry point of PySpark as below.
-In case of running it in PySpark shell via pyspark executable, the shell automatically creates the session
-in the variable spark for users.
+Creating through `createDataFrame`
+----------------------------------
 
-.. code-block:: python
-
-    from pyspark.sql import SparkSession
-    spark = SparkSession.builder.getOrCreate()
-
-DataFrame creation
-------------------
 A PySpark :class:`DataFrame` can be created via :meth:`SparkSession.createDataFrame` typically by passing
 a list of lists, tuples, dictionaries and :class:`Row`, a pandas :class:`pandas.DataFrame`
 and an :class:`pyspark.RDD` consisting of such a list.
@@ -134,6 +121,9 @@ Creating a PySpark :class:`DataFrame` from an :class:`pyspark.RDD`
 DataFrame[name: string, age: bigint]
 
 
+Creating through `read.format(...).load(...)`
+---------------------------------------------
+
 Creating a PySpark :class:`DataFrame` by reading existing **json** format file data
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -186,3 +176,4 @@ Creating a PySpark :class:`DataFrame` by reading data from other databases using
     df
 
 DataFrame[age: bigint, name: string]
+
