@@ -169,10 +169,9 @@ private[spark] object ResourceUtils extends Logging {
 
   // Used to take a fraction amount from a task resource requirement and split into a real
   // integer amount and the number of slots per address. For instance, if the amount is 0.5,
-  // the we get (1, 2) back out. This indicates that for each 1 address, it has 2 slots per
-  // address, which allows you to put 2 tasks on that address. Note if amount is greater
-  // than 1, then the number of parts per address has to be 1. This would indicate that a
-  // would have multiple addresses assigned per task. This can be used for calculating
+  // the we get (1, 2) back out. This indicates that for each 1 address, it allows you to
+  // put 2 tasks on that address. Note if amount is greater than 1, then the number of
+  // running tasks per address has to be 1. This can be used for calculating
   // the number of tasks per executor -> (executorAmount * numParts) / (integer amount).
   // Returns tuple of (integer amount, numParts)
   def calculateAmountAndPartsForFraction(doubleAmount: Double): (Int, Int) = {
