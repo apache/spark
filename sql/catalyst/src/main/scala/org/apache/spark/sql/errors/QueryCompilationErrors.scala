@@ -640,6 +640,30 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
+  def unsupportedInverseDistributionFunctionError(funcName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_INVERSE_DISTRIBUTION_FUNCTION.FUNCTION_UNSUPPORTED",
+      messageParameters = Map("funcName" -> toSQLId(funcName)))
+  }
+
+  def distinctInverseDistributionFunctionUnsupportedError(funcName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_UNSUPPORTED",
+      messageParameters = Map("funcName" -> toSQLId(funcName)))
+  }
+
+  def inverseDistributionFunctionMissingPercentageError(funcName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_INVERSE_DISTRIBUTION_FUNCTION.PERCENTILE_PERCENTAGE_MISSING",
+      messageParameters = Map("funcName" -> toSQLId(funcName)))
+  }
+
+  def inverseDistributionFunctionMissingWithinGroupError(funcName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WITHIN_GROUP_MISSING",
+      messageParameters = Map("funcName" -> toSQLId(funcName)))
+  }
+
   def aliasNumberNotMatchColumnNumberError(
       columnSize: Int, outputSize: Int, t: TreeNode[_]): Throwable = {
     new AnalysisException(

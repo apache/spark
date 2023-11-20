@@ -2043,7 +2043,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       val externalFunctionNameSet = new mutable.HashSet[Seq[String]]()
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
-        case f @ UnresolvedFunction(nameParts, _, _, _, _) =>
+        case f @ UnresolvedFunction(nameParts, _, _, _, _, _) =>
           if (ResolveFunctions.lookupBuiltinOrTempFunction(nameParts).isDefined) {
             f
           } else {
@@ -2203,7 +2203,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         q.transformExpressionsUpWithPruning(
           _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR),
           ruleId) {
-          case u @ UnresolvedFunction(nameParts, arguments, _, _, _)
+          case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _)
               if hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
             resolveBuiltinOrTempFunction(nameParts, arguments, Some(u)).map {
               case func: HigherOrderFunction => func
@@ -2232,7 +2232,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             }
           }
 
-          case u @ UnresolvedFunction(nameParts, arguments, _, _, _) => withPosition(u) {
+          case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _) => withPosition(u) {
             resolveBuiltinOrTempFunction(nameParts, arguments, Some(u)).getOrElse {
               val CatalogAndIdentifier(catalog, ident) = expandIdentifier(nameParts)
               if (CatalogV2Util.isSessionCatalog(catalog)) {
@@ -2367,6 +2367,21 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         case agg: AggregateFunction =>
           // Note: PythonUDAF does not support these advanced clauses.
           if (agg.isInstanceOf[PythonUDAF]) checkUnsupportedAggregateClause(agg, u)
+          val newAgg = agg match {
+            case factory: InverseDistributionFactory if u.sortOrder.isDefined =>
+              if (u.isDistinct) {
+                throw QueryCompilationErrors.distinctInverseDistributionFunctionUnsupportedError(
+                  factory.prettyName)
+              }
+              factory.createInverseDistributionFunction(u.sortOrder.get)
+            case factory: InverseDistributionFactory =>
+              throw QueryCompilationErrors.inverseDistributionFunctionMissingWithinGroupError(
+                factory.prettyName)
+            case other if u.sortOrder.isDefined =>
+              throw QueryCompilationErrors.unsupportedInverseDistributionFunctionError(
+                other.prettyName)
+            case _ => agg
+          }
 
           u.filter match {
             case Some(filter) if !filter.deterministic =>
@@ -2380,17 +2395,17 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             case _ =>
           }
           if (u.ignoreNulls) {
-            val aggFunc = agg match {
+            val aggFunc = newAgg match {
               case first: First => first.copy(ignoreNulls = u.ignoreNulls)
               case last: Last => last.copy(ignoreNulls = u.ignoreNulls)
               case any_value: AnyValue => any_value.copy(ignoreNulls = u.ignoreNulls)
               case _ =>
                 throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                  agg.prettyName, "IGNORE NULLS")
+                  newAgg.prettyName, "IGNORE NULLS")
             }
             aggFunc.toAggregateExpression(u.isDistinct, u.filter)
           } else {
-            agg.toAggregateExpression(u.isDistinct, u.filter)
+            newAgg.toAggregateExpression(u.isDistinct, u.filter)
           }
         // This function is not an aggregate function, just return the resolved one.
         case other =>

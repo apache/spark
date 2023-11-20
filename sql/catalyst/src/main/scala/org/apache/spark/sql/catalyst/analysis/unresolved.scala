@@ -298,11 +298,12 @@ case class UnresolvedFunction(
     arguments: Seq[Expression],
     isDistinct: Boolean,
     filter: Option[Expression] = None,
-    ignoreNulls: Boolean = false)
+    ignoreNulls: Boolean = false,
+    sortOrder: Option[SortOrder] = None)
   extends Expression with Unevaluable {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  override def children: Seq[Expression] = arguments ++ filter.toSeq
+  override def children: Seq[Expression] = arguments ++ filter.toSeq ++ sortOrder.toSeq
 
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
@@ -318,7 +319,16 @@ case class UnresolvedFunction(
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): UnresolvedFunction = {
     if (filter.isDefined) {
-      copy(arguments = newChildren.dropRight(1), filter = Some(newChildren.last))
+      if (sortOrder.isDefined) {
+        val newSortOrder = Some(newChildren.last.asInstanceOf[SortOrder])
+        val args = newChildren.dropRight(1)
+        copy(arguments = args.dropRight(1), filter = Some(args.last), sortOrder = newSortOrder)
+      } else {
+        copy(arguments = newChildren.dropRight(1), filter = Some(newChildren.last))
+      }
+    } else if (sortOrder.isDefined) {
+      val newSortOrder = Some(newChildren.last.asInstanceOf[SortOrder])
+      copy(arguments = newChildren.dropRight(1), sortOrder = newSortOrder)
     } else {
       copy(arguments = newChildren)
     }

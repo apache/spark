@@ -151,6 +151,94 @@ Aggregate [median(v#x) AS median(v)#x, percentile(v#x, cast(0.5 as double), 1, 0
 
 -- !query
 SELECT
+  percentile(v, 0.5) WITHIN GROUP (ORDER BY v)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.FUNCTION_UNSUPPORTED",
+  "sqlState" : "ID001",
+  "messageParameters" : {
+    "funcName" : "`percentile`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 53,
+    "fragment" : "percentile(v, 0.5) WITHIN GROUP (ORDER BY v)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont(DISTINCT 0.5) WITHIN GROUP (ORDER BY v)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_UNSUPPORTED",
+  "sqlState" : "ID001",
+  "messageParameters" : {
+    "funcName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 64,
+    "fragment" : "percentile_cont(DISTINCT 0.5) WITHIN GROUP (ORDER BY v)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont() WITHIN GROUP (ORDER BY v)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.PERCENTILE_PERCENTAGE_MISSING",
+  "sqlState" : "ID001",
+  "messageParameters" : {
+    "funcName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 52,
+    "fragment" : "percentile_cont() WITHIN GROUP (ORDER BY v)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont(0.5)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WITHIN_GROUP_MISSING",
+  "sqlState" : "ID001",
+  "messageParameters" : {
+    "funcName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 29,
+    "fragment" : "percentile_cont(0.5)"
+  } ]
+}
+
+
+-- !query
+SELECT
   k,
   median(v),
   percentile(v, 0.5),

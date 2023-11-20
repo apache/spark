@@ -64,6 +64,22 @@ SELECT
 FROM aggr;
 
 SELECT
+  percentile(v, 0.5) WITHIN GROUP (ORDER BY v)
+FROM aggr;
+
+SELECT
+  percentile_cont(DISTINCT 0.5) WITHIN GROUP (ORDER BY v)
+FROM aggr;
+
+SELECT
+  percentile_cont() WITHIN GROUP (ORDER BY v)
+FROM aggr;
+
+SELECT
+  percentile_cont(0.5)
+FROM aggr;
+
+SELECT
   k,
   median(v),
   percentile(v, 0.5),
