@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.Serializable
+
 import org.apache.spark.annotation.{Evolving, Experimental}
 
 /**
@@ -29,11 +31,11 @@ trait StatefulProcessor[K, I, O] extends Serializable {
 
   def init(
     handle: StatefulProcessorHandle,
-    processorOutputMode: OutputMode): Unit
+    outputMode: OutputMode): Unit
 
-  def handleInputRow(
+  def handleInputRows(
     key: K,
-    inputRows: I,
+    inputRows: Iterator[I],
     timerValues: TimerValues): Iterator[O]
 
   def close (): Unit

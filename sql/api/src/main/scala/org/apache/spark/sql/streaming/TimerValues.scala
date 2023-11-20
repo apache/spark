@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.Serializable
+
 import org.apache.spark.annotation.{Evolving, Experimental}
 
 /**

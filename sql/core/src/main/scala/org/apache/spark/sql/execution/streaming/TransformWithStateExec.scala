@@ -83,24 +83,22 @@ case class TransformWithStateExec(
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq(
     groupingAttributes.map(SortOrder(_, Ascending)))
 
-  private val getKeyObj =
-    ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
-
-  private val getValueObj =
-    ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
-
-  private val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
-
   private def handleInputRows(keyRow: UnsafeRow, valueRowIter: Iterator[InternalRow]):
     Iterator[InternalRow] = {
+    val getKeyObj =
+      ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
+
+    val getValueObj =
+      ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
+
+    val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
+
     val keyObj = getKeyObj(keyRow)  // convert key to objects
     ImplicitKeyTracker.setImplicitKey(keyObj)
     val valueObjIter = valueRowIter.map(getValueObj.apply)
-    val mappedIterator = valueObjIter.flatMap { valueObj =>
-        statefulProcessor.handleInputRow(keyObj, valueObj,
-          new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForLateEvents)).map { obj =>
-          getOutputRow(obj)
-        }
+    val mappedIterator = statefulProcessor.handleInputRows(keyObj, valueObjIter,
+      new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForLateEvents)).map { obj =>
+        getOutputRow(obj)
     }
     ImplicitKeyTracker.removeImplicitKey()
     mappedIterator
@@ -142,6 +140,7 @@ case class TransformWithStateExec(
       commitTimeMs += timeTakenMs {
         store.commit()
       }
+      statefulProcessor.close()
       setStoreMetrics(store)
       setOperatorMetrics()
     })
@@ -161,7 +160,7 @@ case class TransformWithStateExec(
       case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
         statefulProcessor.init(new StatefulProcessorHandleImpl(store), outputMode)
         val result = processDataWithPartition(singleIterator, store)
-        statefulProcessor.close()
+//        statefulProcessor.close()
         result
     }
   }
