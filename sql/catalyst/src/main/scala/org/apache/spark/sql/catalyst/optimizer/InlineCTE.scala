@@ -161,7 +161,7 @@ case class InlineCTE(alwaysInline: Boolean = false) extends Rule[LogicalPlan] {
         }
         inlineCTE(child, cteMap, notInlined)
 
-      case ref: CTERelationRef =>
+      case ref: CTERelationRef if cteMap.contains(ref.cteId) =>
         val (cteDef, refCount, _) = cteMap(ref.cteId)
         if (shouldInline(cteDef, refCount)) {
           if (ref.outputSet == cteDef.outputSet) {
