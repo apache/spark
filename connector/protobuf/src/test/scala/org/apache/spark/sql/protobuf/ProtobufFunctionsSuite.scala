@@ -1031,7 +1031,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         |         bff: STRUCT<name: STRING> -- 2nd level. Inner 3rd level Person is dropped.
         |     >
         | >
-        |""".stripMargin).asInstanceOf[StructType]
+        |""".stripMargin)
     val expectedWrapperDfTwo = spark.createDataFrame(
       spark.sparkContext.parallelize(Seq(Row(Row(Row("person0", Row("person1", null)))))),
       wrapperSchemaOne)
