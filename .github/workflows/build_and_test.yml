@@ -733,6 +733,7 @@ jobs:
         fi
         ./R/install-dev.sh
     - name: Install dependencies for documentation generation
+      shell: 'script -q -e -c "bash {0}"'
       run: |
         if [[ "$BRANCH" == "branch-3.3" ]] || [[ "$BRANCH" == "branch-3.4" ]] || [[ "$BRANCH" == "branch-3.5" ]]; then
           # pandoc is required to generate PySpark APIs as well in nbsphinx.
