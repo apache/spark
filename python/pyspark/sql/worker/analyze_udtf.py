@@ -126,7 +126,7 @@ def main(infile: IO, outfile: IO) -> None:
         # Check that the arguments provided to the UDTF call match the expected parameters defined
         # in the static 'analyze' method signature.
         try:
-            inspect.signature(handler.analyze).bind(*args, **kwargs)
+            inspect.signature(handler.analyze).bind(*args, **kwargs)  # type: ignore[attr-defined]
         except TypeError as e:
             # The UDTF call's arguments did not match the expected signature.
             raise PySparkValueError(
