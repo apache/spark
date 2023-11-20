@@ -524,7 +524,7 @@ class PandasCogroupedOps:
         self, func: "PandasCogroupedMapFunction", schema: Union[StructType, str]
     ) -> DataFrame:
         """
-        Applies a function to each cogroup using Pandas and returns the result
+        Applies a function to each cogroup using pandas and returns the result
         as a `DataFrame`.
 
         The function should take two `pandas.DataFrame`\\s and return another
@@ -582,7 +582,7 @@ class PandasCogroupedOps:
         the grouping key(s) will be passed as the first argument and the data will be passed as the
         second and third arguments.  The grouping key(s) will be passed as a tuple of numpy data
         types, e.g., `numpy.int32` and `numpy.float64`. The data will still be passed in as two
-        `pandas.DataFrame`\\s containing all columns from the original Spark DataFrames.
+        `pandas.DataFrame` containing all columns from the original Spark DataFrames.
 
         >>> def asof_join(k, l, r):
         ...     if k == (1,):
@@ -630,9 +630,9 @@ class PandasCogroupedOps:
         Applies a function to each cogroup using Arrow and returns the result
         as a `DataFrame`.
 
-        The function should take two `pyarrow.Table`\\s and return another
+        The function should take two `pyarrow.Table`s and return another
         `pyarrow.Table`. Alternatively, the user can pass a function that takes
-        a tuple of `pyarrow.Scalar` grouping key(s) and the two `pyarrow.Table`\\s.
+        a tuple of `pyarrow.Scalar` grouping key(s) and the two `pyarrow.Table`s.
         For each side of the cogroup, all columns are passed together as a
         `pyarrow.Table` to the user-function and the returned `pyarrow.Table` are combined as
         a :class:`DataFrame`.
@@ -648,9 +648,9 @@ class PandasCogroupedOps:
         Parameters
         ----------
         func : function
-            a Python native function that takes two `pyarrow.Table`\\s, and
+            a Python native function that takes two `pyarrow.Table`s, and
             outputs a `pyarrow.Table`, or that takes one tuple (grouping keys) and two
-            ``pyarrow.Table``\\s, and outputs a ``pyarrow.Table``.
+            ``pyarrow.Table``s, and outputs a ``pyarrow.Table``.
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
@@ -679,7 +679,7 @@ class PandasCogroupedOps:
         the grouping key(s) will be passed as the first argument and the data will be passed as the
         second and third arguments.  The grouping key(s) will be passed as a tuple of Arrow scalars
         types, e.g., `pyarrow.Int32Scalar` and `pyarrow.FloatScalar`. The data will still be passed
-        in as two `pyarrow.Table`\\s containing all columns from the original Spark DataFrames.
+        in as two `pyarrow.Table`s containing all columns from the original Spark DataFrames.
 
         >>> def summarize(key, l, r):
         ...     return pyarrow.Table.from_pydict({
