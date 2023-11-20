@@ -4466,7 +4466,8 @@ private[sql] object EasilyFlattenable {
   def unapply(tuple: (LogicalPlan, Seq[NamedExpression])): Option[LogicalPlan] = {
     val (logicalPlan, newProjList) = tuple
     logicalPlan match {
-      case p @ Project(projList, child) if !child.isStreaming =>
+      case p @ Project(projList, child) if !child.isStreaming &&
+        p.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty =>
         val currentOutputAttribs = AttributeSet(logicalPlan.output)
         // In the new column list identify those Named Expressions which are just attributes and
         // hence pass thru
@@ -4483,9 +4484,7 @@ private[sql] object EasilyFlattenable {
          }).map(_.toAttribute))
          val attributesTinkeredInProjectAsName = attributesTinkeredInProject.map(_.name).toSet
          if (tinkeredOrNewNamedExprs.exists(ne => ne.references.exists(attr => attr match {
-           case u: UnresolvedAttribute =>
-             attributesTinkeredInProjectAsName.contains(u.name) ||
-               u.getTagValue(LogicalPlan.PLAN_ID_TAG).isDefined
+           case u: UnresolvedAttribute => attributesTinkeredInProjectAsName.contains(u.name)
            case resAttr => attributesTinkeredInProject.contains(resAttr)
          } ))) {
            None
