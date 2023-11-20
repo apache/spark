@@ -252,22 +252,6 @@ private[spark] class SparkClassNotFoundException(
   override def getErrorClass: String = errorClass
 }
 
-/**
- * Illegal State exception thrown from Spark with an error class.
- */
-
-private[spark] class SparkIllegalStateException(
-    errorClass: String,
-    messageParameters: Map[String, String],
-    cause: Throwable = null)
-  extends IllegalStateException(
-    SparkThrowableHelper.getMessage(errorClass, messageParameters), cause)
-  with SparkThrowable {
-
-  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
-
-  override def getErrorClass: String = errorClass
-}
 
 /**
  * Concurrent modification exception thrown from Spark with an error class.
@@ -393,6 +377,49 @@ private[spark] class SparkIllegalArgumentException(
   def this(
     errorClass: String,
     messageParameters: Map[String, String],
+    context: Array[QueryContext] = Array.empty,
+    summary: String = "",
+    cause: Throwable = null) = {
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters, summary),
+      Option(cause),
+      Option(errorClass),
+      messageParameters,
+      context
+    )
+  }
+
+  def this(message: String, cause: Option[Throwable]) = {
+    this(
+      message,
+      cause = cause,
+      errorClass = None,
+      messageParameters = Map.empty,
+      context = Array.empty
+    )
+  }
+
+  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
+
+  override def getErrorClass: String = errorClass.orNull
+  override def getQueryContext: Array[QueryContext] = context
+}
+
+/**
+ * Illegal state exception thrown from Spark with an error class.
+ */
+private[spark] class SparkIllegalStateException(
+    message: String,
+    cause: Option[Throwable],
+    errorClass: Option[String],
+    messageParameters: Map[String, String],
+    context: Array[QueryContext])
+  extends IllegalStateException(message, cause.orNull)
+  with SparkThrowable {
+
+  def this(
+    errorClass: String,
+    messageParameters: Map[String, String] = Map.empty,
     context: Array[QueryContext] = Array.empty,
     summary: String = "",
     cause: Throwable = null) = {

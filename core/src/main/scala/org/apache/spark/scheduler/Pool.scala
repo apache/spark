@@ -22,9 +22,9 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
-import org.apache.spark.SparkException
 
 /**
  * A Schedulable entity that represents collection of Pools or TaskSetManagers
@@ -57,7 +57,7 @@ private[spark] class Pool(
       case _ =>
         throw new SparkIllegalArgumentException(
             errorClass = "POOL_UNSUPPORTED_SCHEDULING_MODE",
-            messageParameters = Map("schedulingMode" -> schedulingMode))
+            messageParameters = Map("schedulingMode" -> schedulingMode.toString))
     }
   }
 

@@ -27,7 +27,7 @@ import scala.concurrent.Future
 import com.google.common.cache.CacheBuilder
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.{ExecutorAllocationClient, SparkEnv, TaskState, SparkException}
+import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkIllegalArgumentException, TaskState}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.errors.SparkCoreErrors
@@ -801,7 +801,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     if (numAdditionalExecutors < 0) {
       throw new SparkIllegalArgumentException(
             errorClass = "COURSE_GRAINED_SCHEDULER_NEGATIVE_EXECUTORS",
-            messageParameters = Map("numAdditionalExecutors" -> numAdditionalExecutors))
+            messageParameters = Map("numAdditionalExecutors" -> numAdditionalExecutors.toString))
     }
     logInfo(s"Requesting $numAdditionalExecutors additional executor(s) from the cluster manager")
 
@@ -843,7 +843,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     if (totalExecs < 0) {
       throw new SparkIllegalArgumentException(
         errorClass = "COURSE_GRAINED_SCHEDULER_NEGATIVE_EXECUTORS",
-        messageParameters = Map("numAdditionalExecutors" -> totalExecs))
+        messageParameters = Map("numAdditionalExecutors" -> totalExecs.toString))
     }
     val resourceProfileToNumExecutors = resourceProfileIdToNumExecutors.map { case (rpid, num) =>
       (scheduler.sc.resourceProfileManager.resourceProfileFromId(rpid), num)

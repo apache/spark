@@ -21,7 +21,8 @@ import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
-import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkContext, SparkException}
+import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkContext}
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.util.{Clock, SystemClock, Utils}
@@ -469,7 +470,7 @@ private[spark] object HealthTracker extends Logging {
     def mustBePos(k: String, v: String): Unit = {
       throw new SparkIllegalArgumentException(
             errorClass = "HEALTH_TRACKER_NEGATIVE_CONFIG",
-            messageParameters = Map("k" -> k, "v" -> v))
+            messageParameters = Map("k" -> k.toString, "v" -> v.toString))
     }
 
     Seq(
@@ -503,11 +504,12 @@ private[spark] object HealthTracker extends Logging {
     if (maxNodeAttempts >= maxTaskFailures) {
       throw new SparkIllegalArgumentException(
             errorClass = "HEALTH_TRACKER_TOO_MANY_ATTEMPTS",
-            messageParameters = Map("maxNodeAttemptsKey" -> config.MAX_TASK_ATTEMPTS_PER_NODE.key, 
-            "maxNodeAttempts" -> maxNodeAttempts,
-            "maxTaskFailuresKey" -> config.TASK_MAX_FAILURES.key,
-            "maxTaskFailures" -> maxTaskFailures,
-            "excludeOnFailureKey" -> config.EXCLUDE_ON_FAILURE_ENABLED.key))
+            messageParameters = Map(
+            "maxNodeAttemptsKey" -> config.MAX_TASK_ATTEMPTS_PER_NODE.key.toString,
+            "maxNodeAttempts" -> maxNodeAttempts.toString,
+            "maxTaskFailuresKey" -> config.TASK_MAX_FAILURES.key.toString,
+            "maxTaskFailures" -> maxTaskFailures.toString,
+            "excludeOnFailureKey" -> config.EXCLUDE_ON_FAILURE_ENABLED.key.toString))
     }
   }
 }

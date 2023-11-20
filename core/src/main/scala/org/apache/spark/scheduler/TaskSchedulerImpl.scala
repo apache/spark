@@ -29,7 +29,7 @@ import scala.util.Random
 import com.google.common.cache.CacheBuilder
 
 import org.apache.spark._
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkIllegalStateException}
 import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
@@ -225,8 +225,8 @@ private[spark] class TaskSchedulerImpl(
         case _ =>
           throw new SparkIllegalArgumentException(
             errorClass = "TASK_SCHEDULER_UNSUPPORTED_SCHEDULING_MODE",
-            messageParameters = Map("SCHEDULER_MODE_PROPERTY" -> SCHEDULER_MODE_PROPERTY,
-            "schedulingMode" -> schedulingMode))
+            messageParameters = Map("SCHEDULER_MODE_PROPERTY" -> SCHEDULER_MODE_PROPERTY.toString,
+            "schedulingMode" -> schedulingMode.toString))
       }
     }
     schedulableBuilder.buildPools()
@@ -1224,7 +1224,8 @@ private[spark] class TaskSchedulerImpl(
       // Might take a while for backend to be ready if it is waiting on resources.
       if (sc.stopped.get) {
         // For example: the master removes the application for some reason
-        throw new SparkIllegalStateException(errorClass = "TASK_SCHEDULER_STOPPED")
+        throw new SparkIllegalStateException(
+          errorClass = "TASK_SCHEDULER_STOPPED")
       }
       synchronized {
         this.wait(100)

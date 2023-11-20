@@ -28,7 +28,7 @@ import scala.util.DynamicVariable
 
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 
-import org.apache.spark.{SparkConf, SparkContext, SparkException}
+import org.apache.spark.{SparkConf, SparkContext, SparkIllegalStateException}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._

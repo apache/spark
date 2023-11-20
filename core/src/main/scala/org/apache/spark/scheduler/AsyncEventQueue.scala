@@ -22,8 +22,8 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import com.codahale.metrics.{Gauge, Timer}
 
+import org.apache.spark.{SparkIllegalArgumentException, SparkIllegalStateException}
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
@@ -129,7 +129,7 @@ private class AsyncEventQueue(
     } else {
         throw new SparkIllegalArgumentException(
           errorClass = "SCHEDULER_ASYNC_STARTED",
-          messageParameters = Map("name" -> name))
+          messageParameters = Map("name" -> name.toString))
     }
   }
 
@@ -141,7 +141,7 @@ private class AsyncEventQueue(
     if (!started.get()) {
       throw new SparkIllegalStateException(
         errorClass = "SCHEDULER_ASYNC_STOP",
-        messageParameters = Map("name" -> name))
+        messageParameters = Map("name" -> name.toString))
     }
     if (stopped.compareAndSet(false, true)) {
       eventCount.incrementAndGet()

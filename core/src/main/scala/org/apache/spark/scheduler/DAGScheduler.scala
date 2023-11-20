@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.annotation.tailrec
 import scala.collection.Map
+import scala.collection.immutable
 import scala.collection.mutable
 import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
 import scala.concurrent.duration._
@@ -33,9 +34,9 @@ import scala.util.control.NonFatal
 import com.google.common.util.concurrent.{Futures, SettableFuture}
 
 import org.apache.spark._
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.SparkException
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
@@ -581,7 +582,9 @@ private[spark] class DAGScheduler(
       } else {
           throw new SparkIllegalArgumentException(
             errorClass = "SCHEDULER_DAG_MULTIPLE_RESOURCE_PROFILES",
-            messageParameters = Map("mergeConflictsKey" -> config.RESOURCE_PROFILE_MERGE_CONFLICTS.key))
+            messageParameters = immutable.Map(
+              "mergeConflictsKey" -> config.RESOURCE_PROFILE_MERGE_CONFLICTS.key.toString
+              ))
       }
     } else {
       if (stageResourceProfiles.size == 1) {
@@ -916,8 +919,8 @@ private[spark] class DAGScheduler(
     partitions.find(p => p >= maxPartitions || p < 0).foreach { p =>
       throw new SparkIllegalArgumentException(
             errorClass = "SCHEDULER_DAG_NON_EXISTENT_PARTITIONS",
-            messageParameters = Map("p"-> p,
-            "maxPartitions" -> maxPartitions))
+            messageParameters = immutable.Map("p"-> p.toString,
+            "maxPartitions" -> maxPartitions.toString))
     }
 
     // SPARK-23626: `RDD.getPartitions()` can be slow, so we eagerly compute

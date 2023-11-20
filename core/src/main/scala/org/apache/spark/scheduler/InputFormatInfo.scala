@@ -26,10 +26,11 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.util.ReflectionUtils
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.SparkException
+
 
 /**
  * :: DeveloperApi ::
@@ -82,14 +83,16 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
       else {
         throw new SparkIllegalArgumentException(
             errorClass = "INPUT_FORMAT_NOT_SUPPORTED",
-            messageParameters = Map("inputFormatClass" -> inputFormatClazz))
+            messageParameters = Map("inputFormatClass" -> inputFormatClazz.toString))
       }
     }
     catch {
       case e: ClassNotFoundException =>
         throw new SparkIllegalArgumentException(
             errorClass = "INPUT_FORMAT_NOT_FOUND",
-            messageParameters = Map("inputFormatClass" -> inputFormatClazz, "e" -> e))
+            messageParameters = Map(
+              "inputFormatClass" -> inputFormatClazz.toString,
+              "e" -> e.toString))
     }
   }
 
