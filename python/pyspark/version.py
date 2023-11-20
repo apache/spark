@@ -16,4 +16,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-__version__: str = "2815!3.3.2+affirm.1"
+__version__: str = "2815!3.3.2+affirm.2"
