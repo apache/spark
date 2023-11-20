@@ -21,7 +21,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.StringJoiner;
 
-import org.apache.spark.sql.catalyst.util.QuotingUtils;
 import org.apache.spark.sql.connector.expressions.Cast;
 import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.Extract;
@@ -48,6 +47,35 @@ import org.apache.spark.sql.types.DataType;
  * @since 3.3.0
  */
 public class V2ExpressionSQLBuilder {
+
+  /**
+   * Escape the special chars for like pattern.
+   *
+   * Note: This method adopts the escape representation within Spark and is not bound to any JDBC
+   * dialect. JDBC dialect should overwrite this API if the underlying database have more special
+   * chars other than _ and %.
+   */
+  protected String escapeSpecialCharsForLikePattern(String str) {
+    StringBuilder builder = new StringBuilder();
+
+    for (char c : str.toCharArray()) {
+      switch (c) {
+        case '_':
+          builder.append("\\_");
+          break;
+        case '%':
+          builder.append("\\%");
+          break;
+        case '\'':
+          builder.append("\\\'");
+          break;
+        default:
+          builder.append(c);
+      }
+    }
+
+    return builder.toString();
+  }
 
   public String build(Expression expr) {
     if (expr instanceof Literal) {
@@ -239,21 +267,21 @@ public class V2ExpressionSQLBuilder {
     // Remove quotes at the beginning and end.
     // e.g. converts "'str'" to "str".
     String value = r.substring(1, r.length() - 1);
-    return l + " LIKE '" + QuotingUtils.escapeSpecialChar(value) + "%'";
+    return l + " LIKE '" + escapeSpecialCharsForLikePattern(value) + "%' ESCAPE '\\'";
   }
 
   protected String visitEndsWith(String l, String r) {
     // Remove quotes at the beginning and end.
     // e.g. converts "'str'" to "str".
     String value = r.substring(1, r.length() - 1);
-    return l + " LIKE '%" + QuotingUtils.escapeSpecialChar(value) + "'";
+    return l + " LIKE '%" + escapeSpecialCharsForLikePattern(value) + "' ESCAPE '\\'";
   }
 
   protected String visitContains(String l, String r) {
     // Remove quotes at the beginning and end.
     // e.g. converts "'str'" to "str".
     String value = r.substring(1, r.length() - 1);
-    return l + " LIKE '%" + QuotingUtils.escapeSpecialChar(value) + "%'";
+    return l + " LIKE '%" + escapeSpecialCharsForLikePattern(value) + "%' ESCAPE '\\'";
   }
 
   private String inputToSQL(Expression input) {
