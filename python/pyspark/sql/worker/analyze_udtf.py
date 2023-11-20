@@ -162,10 +162,9 @@ def main(infile: IO, outfile: IO) -> None:
                     but the 'schema' field had the wrong type: {type(result.schema)}"""
                 )
             )
-        has_table_arg = (
-            len([arg for arg in args if arg.isTable])
-            + len([arg for arg in kwargs.items() if arg[-1].isTable])
-        ) > 0
+        has_table_arg = any(arg.isTable for arg in args) or any(
+            arg.isTable for arg in kwargs.values()
+        )
         if not has_table_arg and result.withSinglePartition:
             raise PySparkValueError(
                 format_error(
@@ -190,13 +189,9 @@ def main(infile: IO, outfile: IO) -> None:
                     set to empty, and then try the query again."""
                 )
             )
-        elif (
-            hasattr(result, "partitionBy")
-            and isinstance(result.partitionBy, (list, tuple))
-            and (
-                len(result.partitionBy) > 0
-                and not all([isinstance(val, PartitioningColumn) for val in result.partitionBy])
-            )
+        elif isinstance(result.partitionBy, (list, tuple)) and (
+            len(result.partitionBy) > 0
+            and not all([isinstance(val, PartitioningColumn) for val in result.partitionBy])
         ):
             raise PySparkValueError(
                 format_error(

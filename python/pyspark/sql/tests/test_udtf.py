@@ -285,14 +285,10 @@ class BaseUDTFTestsMixin:
             def eval(self, a: int):
                 yield a, a + 1
 
-        with self.assertRaisesRegex(
-            PythonException, BaseUDTFTestsMixin.missingARequiredArgument
-        ):
+        with self.assertRaisesRegex(PythonException, BaseUDTFTestsMixin.missingARequiredArgument):
             TestUDTF().collect()
 
-        with self.assertRaisesRegex(
-            PythonException, BaseUDTFTestsMixin.tooManyPositionalArguments
-        ):
+        with self.assertRaisesRegex(PythonException, BaseUDTFTestsMixin.tooManyPositionalArguments):
             TestUDTF(lit(1), lit(2)).collect()
 
     def test_udtf_init_with_additional_args(self):
@@ -1919,14 +1915,10 @@ class BaseUDTFTestsMixin:
         with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
             self.spark.sql("SELECT * FROM test_udtf(a => 10, 'x')").show()
 
-        with self.assertRaisesRegex(
-            PythonException, BaseUDTFTestsMixin.missingARequiredArgument
-        ):
+        with self.assertRaisesRegex(PythonException, BaseUDTFTestsMixin.missingARequiredArgument):
             self.spark.sql("SELECT * FROM test_udtf(c => 'x')").show()
 
-        with self.assertRaisesRegex(
-            PythonException, BaseUDTFTestsMixin.multipleValuesForArgument
-        ):
+        with self.assertRaisesRegex(PythonException, BaseUDTFTestsMixin.multipleValuesForArgument):
             self.spark.sql("SELECT * FROM test_udtf(10, a => 100)").show()
 
     def test_udtf_with_kwargs(self):
