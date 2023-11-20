@@ -30,7 +30,7 @@ class BasePythonDataSourceTestsMixin:
             ...
 
         options = dict(a=1, b=2)
-        ds = MyDataSource(paths=[], userSpecifiedSchema=None, options=options)
+        ds = MyDataSource(options=options)
         self.assertEqual(ds.options, options)
         self.assertEqual(ds.name(), "MyDataSource")
         with self.assertRaises(NotImplementedError):
@@ -53,8 +53,7 @@ class BasePythonDataSourceTestsMixin:
         class InMemDataSourceReader(DataSourceReader):
             DEFAULT_NUM_PARTITIONS: int = 3
 
-            def __init__(self, paths, options):
-                self.paths = paths
+            def __init__(self, options):
                 self.options = options
 
             def partitions(self):
@@ -76,7 +75,7 @@ class BasePythonDataSourceTestsMixin:
                 return "x INT, y STRING"
 
             def reader(self, schema) -> "DataSourceReader":
-                return InMemDataSourceReader(self.paths, self.options)
+                return InMemDataSourceReader(self.options)
 
         self.spark.dataSource.register(InMemoryDataSource)
         df = self.spark.read.format("memory").load()
@@ -91,14 +90,13 @@ class BasePythonDataSourceTestsMixin:
         import json
 
         class JsonDataSourceReader(DataSourceReader):
-            def __init__(self, paths, options):
-                self.paths = paths
+            def __init__(self, options):
                 self.options = options
 
-            def partitions(self):
-                return iter(self.paths)
-
-            def read(self, path):
+            def read(self, partition):
+                path = self.options.get("path")
+                if path is None:
+                    raise Exception("path is not specified")
                 with open(path, "r") as file:
                     for line in file.readlines():
                         if line.strip():
@@ -114,28 +112,18 @@ class BasePythonDataSourceTestsMixin:
                 return "name STRING, age INT"
 
             def reader(self, schema) -> "DataSourceReader":
-                return JsonDataSourceReader(self.paths, self.options)
+                return JsonDataSourceReader(self.options)
 
         self.spark.dataSource.register(JsonDataSource)
         path1 = os.path.join(SPARK_HOME, "python/test_support/sql/people.json")
         path2 = os.path.join(SPARK_HOME, "python/test_support/sql/people1.json")
-        df1 = self.spark.read.format("my-json").load(path1)
-        self.assertEqual(df1.rdd.getNumPartitions(), 1)
         assertDataFrameEqual(
-            df1,
+            self.spark.read.format("my-json").load(path1),
             [Row(name="Michael", age=None), Row(name="Andy", age=30), Row(name="Justin", age=19)],
         )
-
-        df2 = self.spark.read.format("my-json").load([path1, path2])
-        self.assertEqual(df2.rdd.getNumPartitions(), 2)
         assertDataFrameEqual(
-            df2,
-            [
-                Row(name="Michael", age=None),
-                Row(name="Andy", age=30),
-                Row(name="Justin", age=19),
-                Row(name="Jonathan", age=None),
-            ],
+            self.spark.read.format("my-json").load(path2),
+            [Row(name="Jonathan", age=None)],
         )
 
 

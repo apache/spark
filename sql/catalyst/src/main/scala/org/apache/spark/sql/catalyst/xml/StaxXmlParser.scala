@@ -349,7 +349,7 @@ class StaxXmlParser(
     while (!shouldStop) {
       parser.nextEvent match {
         case e: StartElement => try {
-          val attributes = e.getAttributes.asScala.map(_.asInstanceOf[Attribute]).toArray
+          val attributes = e.getAttributes.asScala.toArray
           val field = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
 
           nameToIndex.get(field) match {
