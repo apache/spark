@@ -6580,16 +6580,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrameWriterV2(self, table)
 
-    # Keep to_pandas_on_spark for backward compatibility for now.
-    def to_pandas_on_spark(
-        self, index_col: Optional[Union[str, List[str]]] = None
-    ) -> "PandasOnSparkDataFrame":
-        warnings.warn(
-            "DataFrame.to_pandas_on_spark is deprecated. Use DataFrame.pandas_api instead.",
-            FutureWarning,
-        )
-        return self.pandas_api(index_col)
-
     def pandas_api(
         self, index_col: Optional[Union[str, List[str]]] = None
     ) -> "PandasOnSparkDataFrame":
@@ -6651,12 +6641,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             index_names=index_names,  # type: ignore[arg-type]
         )
         return PandasOnSparkDataFrame(internal)
-
-    # Keep to_koalas for backward compatibility for now.
-    def to_koalas(
-        self, index_col: Optional[Union[str, List[str]]] = None
-    ) -> "PandasOnSparkDataFrame":
-        return self.pandas_api(index_col)
 
 
 def _to_scala_map(sc: SparkContext, jm: Dict) -> JavaObject:
