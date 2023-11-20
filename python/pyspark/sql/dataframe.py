@@ -4755,14 +4755,41 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
+        Example 1: Intersecting two DataFrames with the same schema
+
         >>> df1 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3), ("c", 4)], ["C1", "C2"])
         >>> df2 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3)], ["C1", "C2"])
-        >>> df1.intersect(df2).sort(df1.C1.desc()).show()
+        >>> result_df = df1.intersect(df2).sort("C1", "C2")
+        >>> result_df.show()
         +---+---+
         | C1| C2|
         +---+---+
-        |  b|  3|
         |  a|  1|
+        |  b|  3|
+        +---+---+
+
+        Example 2: Intersecting two DataFrames with different schemas
+
+        >>> df1 = spark.createDataFrame([(1, "A"), (2, "B")], ["id", "value"])
+        >>> df2 = spark.createDataFrame([(2, "B"), (3, "C")], ["id", "value"])
+        >>> result_df = df1.intersect(df2).sort("id", "value")
+        >>> result_df.show()
+        +---+-----+
+        | id|value|
+        +---+-----+
+        |  2|    B|
+        +---+-----+
+
+        Example 3: Intersecting all rows from two DataFrames with mismatched columns
+
+        >>> df1 = spark.createDataFrame([(1, 2), (1, 2), (3, 4)], ["A", "B"])
+        >>> df2 = spark.createDataFrame([(1, 2), (1, 2)], ["C", "D"])
+        >>> result_df = df1.intersect(df2).sort("A", "B")
+        >>> result_df.show()
+        +---+---+
+        |  A|  B|
+        +---+---+
+        |  1|  2|
         +---+---+
         """
         return DataFrame(self._jdf.intersect(other._jdf), self.sparkSession)
@@ -4791,15 +4818,43 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
+        Example 1: Intersecting two DataFrames with the same schema
+
         >>> df1 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3), ("c", 4)], ["C1", "C2"])
         >>> df2 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3)], ["C1", "C2"])
-        >>> df1.intersectAll(df2).sort("C1", "C2").show()
+        >>> result_df = df1.intersectAll(df2).sort("C1", "C2")
+        >>> result_df.show()
         +---+---+
         | C1| C2|
         +---+---+
         |  a|  1|
         |  a|  1|
         |  b|  3|
+        +---+---+
+
+        Example 2: Intersecting two DataFrames with different schemas
+
+        >>> df1 = spark.createDataFrame([(1, "A"), (2, "B")], ["id", "value"])
+        >>> df2 = spark.createDataFrame([(2, "B"), (3, "C")], ["id", "value"])
+        >>> result_df = df1.intersectAll(df2).sort("id", "value")
+        >>> result_df.show()
+        +---+-----+
+        | id|value|
+        +---+-----+
+        |  2|    B|
+        +---+-----+
+
+        Example 3: Intersecting all rows from two DataFrames with mismatched columns
+
+        >>> df1 = spark.createDataFrame([(1, 2), (1, 2), (3, 4)], ["A", "B"])
+        >>> df2 = spark.createDataFrame([(1, 2), (1, 2)], ["C", "D"])
+        >>> result_df = df1.intersectAll(df2).sort("A", "B")
+        >>> result_df.show()
+        +---+---+
+        |  A|  B|
+        +---+---+
+        |  1|  2|
+        |  1|  2|
         +---+---+
         """
         return DataFrame(self._jdf.intersectAll(other._jdf), self.sparkSession)
@@ -4829,13 +4884,39 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
+        Example 1: Subtracting two DataFrames with the same schema
+
         >>> df1 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3), ("c", 4)], ["C1", "C2"])
         >>> df2 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3)], ["C1", "C2"])
-        >>> df1.subtract(df2).show()
+        >>> result_df = df1.subtract(df2)
+        >>> result_df.show()
         +---+---+
         | C1| C2|
         +---+---+
         |  c|  4|
+        +---+---+
+
+        Example 2: Subtracting two DataFrames with different schemas
+
+        >>> df1 = spark.createDataFrame([(1, "A"), (2, "B")], ["id", "value"])
+        >>> df2 = spark.createDataFrame([(2, "B"), (3, "C")], ["id", "value"])
+        >>> result_df = df1.subtract(df2)
+        >>> result_df.show()
+        +---+-----+
+        | id|value|
+        +---+-----+
+        |  1|    A|
+        +---+-----+
+
+        Example 3: Subtracting two DataFrames with mismatched columns
+
+        >>> df1 = spark.createDataFrame([(1, 2)], ["A", "B"])
+        >>> df2 = spark.createDataFrame([(1, 2)], ["C", "D"])
+        >>> result_df = df1.subtract(df2)
+        >>> result_df.show()
+        +---+---+
+        |  A|  B|
+        +---+---+
         +---+---+
         """
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sparkSession)
@@ -6499,16 +6580,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrameWriterV2(self, table)
 
-    # Keep to_pandas_on_spark for backward compatibility for now.
-    def to_pandas_on_spark(
-        self, index_col: Optional[Union[str, List[str]]] = None
-    ) -> "PandasOnSparkDataFrame":
-        warnings.warn(
-            "DataFrame.to_pandas_on_spark is deprecated. Use DataFrame.pandas_api instead.",
-            FutureWarning,
-        )
-        return self.pandas_api(index_col)
-
     def pandas_api(
         self, index_col: Optional[Union[str, List[str]]] = None
     ) -> "PandasOnSparkDataFrame":
@@ -6570,12 +6641,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             index_names=index_names,  # type: ignore[arg-type]
         )
         return PandasOnSparkDataFrame(internal)
-
-    # Keep to_koalas for backward compatibility for now.
-    def to_koalas(
-        self, index_col: Optional[Union[str, List[str]]] = None
-    ) -> "PandasOnSparkDataFrame":
-        return self.pandas_api(index_col)
 
 
 def _to_scala_map(sc: SparkContext, jm: Dict) -> JavaObject:

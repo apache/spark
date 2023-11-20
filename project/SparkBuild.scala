@@ -89,7 +89,7 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "3.23.4"
+  val protoVersion = "3.25.1"
   // GRPC version used for Spark Connect.
   val gprcVersion = "1.56.0"
 }
@@ -1361,7 +1361,7 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/io")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/kvstore")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalyst")))
-      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/connect")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/connect/")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))

@@ -29,9 +29,10 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.SqlApiAnalysis
 import org.apache.spark.sql.catalyst.parser.{DataTypeParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.catalyst.util.{SparkCollectionUtils, SparkStringUtils, StringConcat}
+import org.apache.spark.sql.catalyst.util.{SparkStringUtils, StringConcat}
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.util.SparkCollectionUtils
 
 /**
  * A [[StructType]] object can be constructed by

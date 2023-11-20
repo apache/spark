@@ -17,7 +17,6 @@
 package org.apache.spark.sql.test
 
 import java.io.{File, IOException, OutputStream}
-import java.lang.ProcessBuilder
 import java.lang.ProcessBuilder.Redirect
 import java.nio.file.Paths
 import java.util.concurrent.TimeUnit
@@ -28,7 +27,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkBuildInfo
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.client.GrpcRetryHandler.RetryPolicy
+import org.apache.spark.sql.connect.client.RetryPolicy
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.test.IntegrationTestUtils._
@@ -189,7 +188,9 @@ object SparkConnectServerUtils {
           .builder()
           .userId("test")
           .port(port)
-          .retryPolicy(RetryPolicy(maxRetries = 7, maxBackoff = FiniteDuration(10, "s")))
+          .retryPolicy(RetryPolicy
+            .defaultPolicy()
+            .copy(maxRetries = Some(7), maxBackoff = Some(FiniteDuration(10, "s"))))
           .build())
       .create()
 

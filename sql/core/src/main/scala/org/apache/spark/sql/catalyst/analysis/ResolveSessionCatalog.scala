@@ -241,19 +241,31 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case ShowTables(DatabaseInSessionCatalog(db), pattern, output) if conf.useV1Command =>
       ShowTablesCommand(Some(db), pattern, output)
 
-    case ShowTableExtended(
+    case ShowTablesExtended(
         DatabaseInSessionCatalog(db),
         pattern,
-        partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _))),
         output) =>
       val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
-        assert(output.length == 4)
         output.head.withName("database") +: output.tail
       } else {
         output
       }
-      val tablePartitionSpec = partitionSpec.map(_.asInstanceOf[UnresolvedPartitionSpec].spec)
-      ShowTablesCommand(Some(db), Some(pattern), newOutput, true, tablePartitionSpec)
+      ShowTablesCommand(Some(db), Some(pattern), newOutput, isExtended = true)
+
+    case ShowTablePartition(
+        ResolvedTable(catalog, _, table: V1Table, _),
+        partitionSpec,
+        output) if isSessionCatalog(catalog) =>
+      val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
+        output.head.withName("database") +: output.tail
+      } else {
+        output
+      }
+      val tablePartitionSpec = Option(partitionSpec).map(
+        _.asInstanceOf[UnresolvedPartitionSpec].spec)
+      ShowTablesCommand(table.catalogTable.identifier.database,
+        Some(table.catalogTable.identifier.table), newOutput,
+        isExtended = true, tablePartitionSpec)
 
     // ANALYZE TABLE works on permanent views if the views are cached.
     case AnalyzeTable(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, noScan) =>

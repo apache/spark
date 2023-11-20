@@ -17,24 +17,23 @@
 
 package org.apache.spark.sql.connect.client
 
-import scala.concurrent.duration.{Duration, FiniteDuration}
-import scala.util.Random
 import scala.util.control.NonFatal
 
-import io.grpc.{Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.internal.Logging
 
 private[sql] class GrpcRetryHandler(
-    private val retryPolicy: GrpcRetryHandler.RetryPolicy,
+    private val policies: Seq[RetryPolicy],
     private val sleep: Long => Unit = Thread.sleep) {
+
+  def this(policy: RetryPolicy, sleep: Long => Unit) = this(List(policy), sleep)
+  def this(policy: RetryPolicy) = this(policy, Thread.sleep)
 
   /**
    * Retries the given function with exponential backoff according to the client's retryPolicy.
    */
-  def retry[T](fn: => T): T =
-    GrpcRetryHandler.retry(retryPolicy, sleep)(fn)
+  def retry[T](fn: => T): T = new GrpcRetryHandler.Retrying(policies, sleep, fn).retry()
 
   /**
    * Generalizes the retry logic for RPC calls that return an iterator.
@@ -151,125 +150,86 @@ private[sql] class GrpcRetryHandler(
 private[sql] object GrpcRetryHandler extends Logging {
 
   /**
-   * Retries the given function with exponential backoff according to the client's retryPolicy.
-   *
-   * @param retryPolicy
-   *   The retry policy
+   * Class managing the state of the retrying logic during a single retryable block.
+   * @param retryPolicies
+   *   list of policies to apply (in order)
    * @param sleep
-   *   The function which sleeps (takes number of milliseconds to sleep)
+   *   typically Thread.sleep
    * @param fn
-   *   The function to retry.
+   *   the function to compute
    * @tparam T
-   *   The return type of the function.
-   * @return
-   *   The result of the function.
+   *   result of function fn
    */
-  final def retry[T](retryPolicy: RetryPolicy, sleep: Long => Unit = Thread.sleep)(
-      fn: => T): T = {
-    var currentRetryNum = 0
-    var exceptionList: Seq[Throwable] = Seq.empty
-    var nextBackoff: Duration = retryPolicy.initialBackoff
+  class Retrying[T](retryPolicies: Seq[RetryPolicy], sleep: Long => Unit, fn: => T) {
+    private var currentRetryNum: Int = 0
+    private var exceptionList: Seq[Throwable] = Seq.empty
+    private val policies: Seq[RetryPolicy.RetryPolicyState] = retryPolicies.map(_.toState)
 
-    if (retryPolicy.maxRetries < 0) {
-      throw new IllegalArgumentException("Can't have negative number of retries")
+    def canRetry(throwable: Throwable): Boolean = {
+      throwable.isInstanceOf[RetryException] || policies.exists(p => p.canRetry(throwable))
     }
 
-    while (currentRetryNum <= retryPolicy.maxRetries) {
-      if (currentRetryNum != 0) {
-        var currentBackoff = nextBackoff
-        nextBackoff = nextBackoff * retryPolicy.backoffMultiplier min retryPolicy.maxBackoff
-
-        if (currentBackoff >= retryPolicy.minJitterThreshold) {
-          currentBackoff += Random.nextDouble() * retryPolicy.jitter
-        }
-
-        sleep(currentBackoff.toMillis)
-      }
-
+    def makeAttempt(): Option[T] = {
       try {
-        return fn
+        Some(fn)
       } catch {
-        case NonFatal(e) if retryPolicy.canRetry(e) && currentRetryNum < retryPolicy.maxRetries =>
+        case NonFatal(e) if canRetry(e) =>
           currentRetryNum += 1
           exceptionList = e +: exceptionList
-
-          if (currentRetryNum <= retryPolicy.maxRetries) {
-            logWarning(
-              s"Non-Fatal error during RPC execution: $e, " +
-                s"retrying (currentRetryNum=$currentRetryNum)")
-          } else {
-            logWarning(
-              s"Non-Fatal error during RPC execution: $e, " +
-                s"exceeded retries (currentRetryNum=$currentRetryNum)")
-          }
+          None
       }
     }
 
-    val exception = exceptionList.head
-    exceptionList.tail.foreach(exception.addSuppressed(_))
-    throw exception
-  }
+    def waitAfterAttempt(): Unit = {
+      // find policy which will accept this exception
+      val lastException = exceptionList.head
 
-  /**
-   * Default canRetry in [[RetryPolicy]].
-   * @param e
-   *   The exception to check.
-   * @return
-   *   true if the exception is a [[StatusRuntimeException]] with code UNAVAILABLE.
-   */
-  private[client] def retryException(e: Throwable): Boolean = {
-    e match {
-      case e: StatusRuntimeException =>
-        val statusCode: Status.Code = e.getStatus.getCode
+      if (lastException.isInstanceOf[RetryException]) {
+        // retry exception is considered immediately retriable without any policies.
+        logWarning(
+          s"Non-Fatal error during RPC execution: $lastException, retrying " +
+            s"(currentRetryNum=$currentRetryNum)")
+        return
+      }
 
-        if (statusCode == Status.Code.INTERNAL) {
-          val msg: String = e.toString
+      for (policy <- policies if policy.canRetry(lastException)) {
+        val time = policy.nextAttempt()
 
-          // This error happens if another RPC preempts this RPC.
-          if (msg.contains("INVALID_CURSOR.DISCONNECTED")) {
-            return true
-          }
+        if (time.isDefined) {
+          logWarning(
+            s"Non-Fatal error during RPC execution: $lastException, retrying " +
+              s"(wait=${time.get.toMillis}, currentRetryNum=$currentRetryNum, " +
+              s"policy: ${policy.getName})")
+
+          sleep(time.get.toMillis)
+          return
         }
+      }
 
-        if (statusCode == Status.Code.UNAVAILABLE) {
-          return true
-        }
-        false
-      case _ => false
+      logWarning(
+        s"Non-Fatal error during RPC execution: $lastException, exceeded retries " +
+          s"(currentRetryNum=$currentRetryNum)")
+
+      val error = new RetriesExceeded()
+      exceptionList.foreach(error.addSuppressed)
+      throw error
+    }
+
+    def retry(): T = {
+      var result = makeAttempt()
+
+      while (result.isEmpty) {
+        waitAfterAttempt()
+        result = makeAttempt()
+      }
+
+      result.get
     }
   }
 
   /**
-   * [[RetryPolicy]] configure the retry mechanism in [[GrpcRetryHandler]]
-   *
-   * @param maxRetries
-   *   Maximum number of retries.
-   * @param initialBackoff
-   *   Start value of the exponential backoff (ms).
-   * @param maxBackoff
-   *   Maximal value of the exponential backoff (ms).
-   * @param backoffMultiplier
-   *   Multiplicative base of the exponential backoff.
-   * @param canRetry
-   *   Function that determines whether a retry is to be performed in the event of an error.
-   */
-  case class RetryPolicy(
-      // Please synchronize changes here with Python side:
-      // pyspark/sql/connect/client/core.py
-      //
-      // Note: these constants are selected so that the maximum tolerated wait is guaranteed
-      // to be at least 10 minutes
-      maxRetries: Int = 15,
-      initialBackoff: FiniteDuration = FiniteDuration(50, "ms"),
-      maxBackoff: FiniteDuration = FiniteDuration(1, "min"),
-      backoffMultiplier: Double = 4.0,
-      jitter: FiniteDuration = FiniteDuration(500, "ms"),
-      minJitterThreshold: FiniteDuration = FiniteDuration(2, "s"),
-      canRetry: Throwable => Boolean = retryException) {}
-
-  /**
-   * An exception that can be thrown upstream when inside retry and which will be retryable
-   * regardless of policy.
+   * An exception that can be thrown upstream when inside retry and which will be always retryable
+   * without any policies.
    */
   class RetryException extends Throwable
 }
