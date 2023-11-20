@@ -20,5 +20,8 @@
     "sorttable.js",
     "jquery.mustache.js",
     "dataTables.rowsGroup.js"
-  ]
+  ],
+  "parserOptions": {
+    "sourceType": "module"
+  }
 }

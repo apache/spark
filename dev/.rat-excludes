@@ -146,3 +146,5 @@ TimSort.java
 xml-resources/*
 loose_version.py
 people.xml
+ui-test/package.json
+ui-test/package-lock.json

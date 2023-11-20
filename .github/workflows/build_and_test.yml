@@ -1076,8 +1076,7 @@ jobs:
         with:
           node-version: 20
           cache: 'npm'
-          cache-dependency-path: |
-            ui-test/package-lock.json
+          cache-dependency-path: ui-test/package-lock.json
       - run: |
           cd ui-test
           npm install --save-dev

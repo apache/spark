@@ -21,12 +21,12 @@ import '../../core/src/main/resources/org/apache/spark/ui/static/flamegraph.js';
 import {drawFlamegraph} from '../../core/src/main/resources/org/apache/spark/ui/static/flamegraph.js';
 
 import $ from 'jquery';
+import {expect, test} from 'jest';
 
 /**
  * @jest-environment jsdom
  */
 test('drawFlamegraph', function () {
-
   document.body.innerHTML = `'<div>' +
     '<div id="executor-flamegraph-data" class="d-none">{"name":"apache","value":2,"children":[{"name":"spark","value":1,"children":[ ]}, {"name":"kyuubi","value":1,"children":[ ]} ]}</div>' +
     '<div id="executor-flamegraph-chart"></div></div>'`
