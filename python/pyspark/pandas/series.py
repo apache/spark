@@ -6982,7 +6982,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     psser.spark.data_type.simpleString(),
                 )
             )
-        return psser._cum(lambda c: SF.product(c, True), skipna, part_cols)
+        return psser._cum(lambda c: SF.product(c, skipna), skipna, part_cols)
 
     # ----------------------------------------------------------------------
     # Accessor Methods
