@@ -4466,8 +4466,7 @@ private[sql] object EasilyFlattenable {
   def unapply(tuple: (LogicalPlan, Seq[NamedExpression])): Option[LogicalPlan] = {
     val (logicalPlan, newProjList) = tuple
     logicalPlan match {
-      case p @ Project(projList, child) if !child.isStreaming &&
-        p.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty =>
+      case p @ Project(projList, child) if !child.isStreaming =>
         val currentOutputAttribs = AttributeSet(logicalPlan.output)
         // In the new column list identify those Named Expressions which are just attributes and
         // hence pass thru
@@ -4475,7 +4474,7 @@ private[sql] object EasilyFlattenable {
           case _: AttributeReference => true
           case _ => false
         })
-        // TODO: analyze the case tinkeredOrNewNamedExprs.isEmpty using DataFrameSuite
+
        if (passThruAttribs.size == currentOutputAttribs.size && passThruAttribs.forall(
          currentOutputAttribs.contains) && tinkeredOrNewNamedExprs.nonEmpty) {
          val attributesTinkeredInProject = AttributeSet(projList.filter(_ match {
@@ -4493,7 +4492,10 @@ private[sql] object EasilyFlattenable {
              case attr: AttributeReference => projList.find(
                _.toAttribute.canonicalized == attr.canonicalized).getOrElse(attr)
            }).asInstanceOf[NamedExpression])
-           Option(p.copy(projectList = remappedNewProjList))
+           val newProj = p.copy(projectList = remappedNewProjList)
+           p.getTagValue[Long](LogicalPlan.PLAN_ID_TAG).foreach(newProj.setTagValue[Long](
+             LogicalPlan.PLAN_ID_TAG, _))
+           Option(newProj)
          }
        } else {
          // for now None
