@@ -63,6 +63,16 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
+
+RUN add-apt-repository ppa:pypy/ppa
+
+RUN mkdir -p /usr/local/pypy/pypy3.8 && \
+    curl -sqL https://downloads.python.org/pypy/pypy3.8-v7.3.11-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.8 --strip-components=1 && \
+    ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3.8 && \
+    ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3
+
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
 
 RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/' >> /etc/apt/sources.list
 RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
@@ -81,19 +91,6 @@ RUN Rscript -e "devtools::install_version('preferably', version='0.4', repos='ht
 
 # See more in SPARK-39735
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
-
-
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
-
-RUN add-apt-repository ppa:pypy/ppa
-
-RUN mkdir -p /usr/local/pypy/pypy3.8 && \
-    curl -sqL https://downloads.python.org/pypy/pypy3.8-v7.3.11-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.8 --strip-components=1 && \
-    ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3.8 && \
-    ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3
-
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
-
 
 RUN pypy3 -m pip install numpy 'pandas<=2.1.3' scipy coverage matplotlib
 RUN python3.9 -m pip install numpy 'pyarrow>=14.0.0' 'pandas<=2.1.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
