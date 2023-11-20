@@ -51,10 +51,7 @@ private[sql] object EasilyFlattenable {
               case attr: AttributeReference => projList.find(
                 _.toAttribute.canonicalized == attr.canonicalized).getOrElse(attr)
             }).asInstanceOf[NamedExpression])
-            val newProj = p.copy(projectList = remappedNewProjList)
-            p.getTagValue[Long](LogicalPlan.PLAN_ID_TAG).foreach(newProj.setTagValue[Long](
-              LogicalPlan.PLAN_ID_TAG, _))
-            Option(newProj)
+            Option(p.copy(projectList = remappedNewProjList))
           }
         } else {
           // for now None

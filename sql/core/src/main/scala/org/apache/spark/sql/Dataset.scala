@@ -1580,7 +1580,6 @@ class Dataset[T] private[sql](
 
         case _ => Project(newProjList, logicalPlan)
       }
-
     }
   }
 
