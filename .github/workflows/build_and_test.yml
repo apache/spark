@@ -99,6 +99,7 @@ jobs:
               \"lint\" : \"true\",
               \"k8s-integration-tests\" : \"true\",
               \"breaking-changes-buf\" : \"true\",
+              \"ui\" : \"true\",
             }"
           echo $precondition # For debugging
           # Remove `\n` to avoid "Invalid format" error
@@ -1061,3 +1062,21 @@ jobs:
         with:
           name: spark-on-kubernetes-it-log
           path: "**/target/integration-tests.log"
+
+  ui:
+    needs: [precondition]
+    if: fromJson(needs.precondition.outputs.required).ui == 'true'
+    name: Run Spark UI tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - run: |
+          cd ui-test
+          npm install --save-dev
+          node --experimental-vm-modules node_modules/.bin/jest
