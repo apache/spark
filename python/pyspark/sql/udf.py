@@ -288,10 +288,12 @@ class UserDefinedFunction:
                         },
                     )
             else:
-                raise TypeError(
-                    "Invalid return type for grouped map Arrow "
-                    "UDFs or at groupby.applyInArrow: return type must be a "
-                    "StructType."
+                raise PySparkTypeError(
+                    error_class="INVALID_RETURN_TYPE_FOR_ARROW_UDF",
+                    message_parameters={
+                        "eval_type": "SQL_GROUPED_MAP_ARROW_UDF",
+                        "return_type": str(self._returnType_placeholder),
+                    },
                 )
         elif self.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
             if isinstance(self._returnType_placeholder, StructType):
@@ -326,9 +328,12 @@ class UserDefinedFunction:
                         },
                     )
             else:
-                raise TypeError(
-                    "Invalid return type in cogroup.applyInArrow: "
-                    "return type must be a StructType."
+                raise PySparkTypeError(
+                    error_class="INVALID_RETURN_TYPE_FOR_ARROW_UDF",
+                    message_parameters={
+                        "eval_type": "SQL_COGROUPED_MAP_ARROW_UDF",
+                        "return_type": str(self._returnType_placeholder),
+                    },
                 )
         elif self.evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
             try:

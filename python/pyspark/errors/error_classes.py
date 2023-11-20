@@ -282,6 +282,11 @@ ERROR_CLASSES_JSON = """
       "`<arg_name>` should be one the values from PandasUDFType, got <arg_type>"
     ]
   },
+  "INVALID_RETURN_TYPE_FOR_ARROW_UDF": {
+    "message": [
+      "Grouped and Cogrouped map Arrow UDF should return StructType for <eval_type>, got <return_type>."
+    ]
+  },
   "INVALID_RETURN_TYPE_FOR_PANDAS_UDF": {
     "message": [
       "Pandas UDF should return StructType for <eval_type>, got <return_type>."
