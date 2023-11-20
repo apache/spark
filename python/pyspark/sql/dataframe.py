@@ -5226,7 +5226,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |NULL|  NULL| NULL| true|
         +----+------+-----+-----+
 
-        Example 3: Fill all null values with to 50 and "unknown" for 'age' and 'name' column respectively.
+        Example 3: Fill all null values with to 50 and "unknown" for
+            'age' and 'name' column respectively.
 
         >>> df.na.fill({'age': 50, 'name': 'unknown'}).show()
         +---+------+-------+----+
