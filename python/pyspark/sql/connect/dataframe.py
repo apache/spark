@@ -68,7 +68,7 @@ from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import UnresolvedRegex
-from pyspark.sql.connect.functions import (
+from pyspark.sql.connect.functions.builtin import (
     _to_col_with_plan_id,
     _to_col,
     _invoke_function,
@@ -1947,15 +1947,6 @@ class DataFrame:
                 yield from ArrowTableToRowsConversion.convert(table, schema)
 
     toLocalIterator.__doc__ = PySparkDataFrame.toLocalIterator.__doc__
-
-    def to_pandas_on_spark(
-        self, index_col: Optional[Union[str, List[str]]] = None
-    ) -> "PandasOnSparkDataFrame":
-        warnings.warn(
-            "DataFrame.to_pandas_on_spark is deprecated. Use DataFrame.pandas_api instead.",
-            FutureWarning,
-        )
-        return self.pandas_api(index_col)
 
     def pandas_api(
         self, index_col: Optional[Union[str, List[str]]] = None

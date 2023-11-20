@@ -40,7 +40,7 @@ from pyspark.sql.types import StructType
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.functions import _invoke_function, col, lit
+from pyspark.sql.connect.functions.builtin import _invoke_function, col, lit
 from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
 
 if TYPE_CHECKING:

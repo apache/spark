@@ -15467,6 +15467,9 @@ def years(col: "ColumnOrName") -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. deprecated:: 4.0.0
+        Use :func:`partitioning.years` instead.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -15490,7 +15493,11 @@ def years(col: "ColumnOrName") -> Column:
     method of the `DataFrameWriterV2`.
 
     """
-    return _invoke_function_over_columns("years", col)
+    from pyspark.sql.functions import partitioning
+
+    warnings.warn("Deprecated in 4.0.0, use partitioning.years instead.", FutureWarning)
+
+    return partitioning.years(col)
 
 
 @_try_remote_functions
@@ -15503,6 +15510,9 @@ def months(col: "ColumnOrName") -> Column:
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    .. deprecated:: 4.0.0
+        Use :func:`partitioning.months` instead.
 
     Parameters
     ----------
@@ -15527,7 +15537,11 @@ def months(col: "ColumnOrName") -> Column:
     method of the `DataFrameWriterV2`.
 
     """
-    return _invoke_function_over_columns("months", col)
+    from pyspark.sql.functions import partitioning
+
+    warnings.warn("Deprecated in 4.0.0, use partitioning.months instead.", FutureWarning)
+
+    return partitioning.months(col)
 
 
 @_try_remote_functions
@@ -15540,6 +15554,9 @@ def days(col: "ColumnOrName") -> Column:
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    .. deprecated:: 4.0.0
+        Use :func:`partitioning.months` instead.
 
     Parameters
     ----------
@@ -15564,7 +15581,11 @@ def days(col: "ColumnOrName") -> Column:
     method of the `DataFrameWriterV2`.
 
     """
-    return _invoke_function_over_columns("days", col)
+    from pyspark.sql.functions import partitioning
+
+    warnings.warn("Deprecated in 4.0.0, use partitioning.days instead.", FutureWarning)
+
+    return partitioning.days(col)
 
 
 @_try_remote_functions
@@ -15577,6 +15598,9 @@ def hours(col: "ColumnOrName") -> Column:
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    .. deprecated:: 4.0.0
+        Use :func:`partitioning.hours` instead.
 
     Parameters
     ----------
@@ -15601,7 +15625,11 @@ def hours(col: "ColumnOrName") -> Column:
     method of the `DataFrameWriterV2`.
 
     """
-    return _invoke_function_over_columns("hours", col)
+    from pyspark.sql.functions import partitioning
+
+    warnings.warn("Deprecated in 4.0.0, use partitioning.hours instead.", FutureWarning)
+
+    return partitioning.hours(col)
 
 
 @_try_remote_functions
@@ -16081,6 +16109,9 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. deprecated:: 4.0.0
+        Use :func:`partitioning.bucket` instead.
+
     Examples
     --------
     >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKIP
@@ -16104,19 +16135,11 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     method of the `DataFrameWriterV2`.
 
     """
-    if not isinstance(numBuckets, (int, Column)):
-        raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INT",
-            message_parameters={"arg_name": "numBuckets", "arg_type": type(numBuckets).__name__},
-        )
+    from pyspark.sql.functions import partitioning
 
-    _get_active_spark_context()
-    numBuckets = (
-        _create_column_from_literal(numBuckets)
-        if isinstance(numBuckets, int)
-        else _to_java_column(numBuckets)
-    )
-    return _invoke_function("bucket", numBuckets, _to_java_column(col))
+    warnings.warn("Deprecated in 4.0.0, use partitioning.bucket instead.", FutureWarning)
+
+    return partitioning.bucket(numBuckets, col)
 
 
 @_try_remote_functions
@@ -17474,15 +17497,17 @@ def udtf(
 def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
-    import pyspark.sql.functions
+    import pyspark.sql.functions.builtin
 
-    globs = pyspark.sql.functions.__dict__.copy()
-    spark = SparkSession.builder.master("local[4]").appName("sql.functions tests").getOrCreate()
+    globs = pyspark.sql.functions.builtin.__dict__.copy()
+    spark = (
+        SparkSession.builder.master("local[4]").appName("sql.functions.builtin tests").getOrCreate()
+    )
     sc = spark.sparkContext
     globs["sc"] = sc
     globs["spark"] = spark
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.functions,
+        pyspark.sql.functions.builtin,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
     )
