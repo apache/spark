@@ -374,14 +374,6 @@ public class LevelDB implements KVStore {
     return _db;
   }
 
-  /**
-   * Return the reference of org.iq80.leveldb.DB. The org.apache.spark.util.kvstore.LevelDBIterator
-   *  will add a lock to avoid use-after close since that has the tendency of crashing the JVM.
-   */
-  AtomicReference<DB> getLevelDB() {
-    return _db;
-  }
-
   private byte[] getTypeAlias(Class<?> klass) throws Exception {
     byte[] alias = typeAliases.get(klass.getName());
     if (alias == null) {
