@@ -304,13 +304,7 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     @Override
     public void run() {
       if (started.compareAndSet(true, false)) {
-        rocksDB.notifyIteratorClosed(rocksIterator);
-        synchronized (rocksDB.getRocksDB()) {
-          org.rocksdb.RocksDB _db = rocksDB.getRocksDB().get();
-          if (_db != null) {
-            rocksIterator.close();
-          }
-        }
+        rocksDB.closeIterator(rocksIterator);
       }
     }
 

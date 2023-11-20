@@ -324,6 +324,20 @@ public class LevelDB implements KVStore {
   }
 
   /**
+   * Closes the given iterator if the DB is still open. Trying to close a JNI LevelDB handle
+   * with a closed DB can cause JVM crashes, so this ensures that situation does not happen.
+   */
+  void closeIterator(DBIterator it) throws IOException {
+    notifyIteratorClosed(it);
+    synchronized (this._db) {
+      DB _db = this._db.get();
+      if (_db != null) {
+        it.close();
+      }
+    }
+  }
+
+  /**
    * Remove iterator from iterator tracker. `LevelDBIterator` calls it to notify
    * iterator is closed.
    */

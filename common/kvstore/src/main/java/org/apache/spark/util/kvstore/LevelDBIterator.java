@@ -18,7 +18,6 @@
 package org.apache.spark.util.kvstore;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.lang.ref.Cleaner;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,8 +28,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
-import org.iq80.leveldb.DB;
 import org.iq80.leveldb.DBIterator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 class LevelDBIterator<T> implements KVStoreIterator<T> {
 
@@ -213,7 +213,6 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     this.cleanable.clean();
   }
 
-  @VisibleForTesting
   DBIterator internalIterator() {
     return it;
   }
@@ -303,6 +302,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   }
 
   static class ResourceCleaner implements Runnable {
+    private static final Logger LOG = LoggerFactory.getLogger(ResourceCleaner.class);
 
     private final DBIterator dbIterator;
 
@@ -318,16 +318,10 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     @Override
     public void run() {
       if (started.compareAndSet(true, false)) {
-        levelDB.notifyIteratorClosed(dbIterator);
-        synchronized (levelDB.getLevelDB()) {
-          DB _db = levelDB.getLevelDB().get();
-          if (_db != null) {
-            try {
-              dbIterator.close();
-            } catch (IOException e) {
-              throw new UncheckedIOException(e);
-            }
-          }
+        try {
+          levelDB.closeIterator(dbIterator);
+        } catch (IOException e) {
+          LOG.warn("Failed to close iterator", e);
         }
       }
     }

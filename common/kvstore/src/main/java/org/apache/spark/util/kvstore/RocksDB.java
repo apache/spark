@@ -356,11 +356,17 @@ public class RocksDB implements KVStore {
   }
 
   /**
-   * Return the reference of org.rocksdb.RocksDB. The org.apache.spark.util.kvstore.RocksDBIterator
-   *  will add a lock to avoid use-after close since that has the tendency of crashing the JVM.
+   * Closes the given iterator if the DB is still open. Trying to close a JNI RocksDB handle
+   * with a closed DB can cause JVM crashes, so this ensures that situation does not happen.
    */
-  AtomicReference<org.rocksdb.RocksDB> getRocksDB() {
-    return _db;
+  void closeIterator(RocksIterator it) {
+    notifyIteratorClosed(it);
+    synchronized (this._db) {
+      org.rocksdb.RocksDB _db = this._db.get();
+      if (_db != null) {
+        it.close();
+      }
+    }
   }
 
   /**
