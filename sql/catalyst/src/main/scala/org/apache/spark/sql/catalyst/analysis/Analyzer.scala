@@ -2505,15 +2505,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         outer: LogicalPlan)(
         f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
       val newSubqueryPlan = AnalysisContext.withOuterPlan(outer) {
-        val analyzed = executeSameContext(e.plan)
-        checkAnalysis(analyzed)
-        analyzed
+        executeSameContext(e.plan)
       }
 
       // If the subquery plan is fully resolved, pull the outer references and record
       // them as children of SubqueryExpression.
-      if (newSubqueryPlan.analyzed) {
+      if (newSubqueryPlan.resolved) {
         // Record the outer references as children of subquery expression.
+        newSubqueryPlan.setAnalyzed()
         f(newSubqueryPlan, SubExprUtils.getOuterReferences(newSubqueryPlan))
       } else {
         e.withNewPlan(newSubqueryPlan)
