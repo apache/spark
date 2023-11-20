@@ -34,9 +34,9 @@ license: |
 
 ## Upgrading from Core 3.4 to 3.5
 
-- Since Spark 3.5, `spark.yarn.executor.failuresValidityInterval` is deprecated though still works. Use `spark.executor.failuresValidityInterval` instead.
+- Since Spark 3.5, `spark.yarn.executor.failuresValidityInterval` is deprecated. Use `spark.executor.failuresValidityInterval` instead.
 
-- Since Spark 3.5, `spark.yarn.max.executor.failures` is deprecated though still works. Use `spark.executor.maxNumFailures` instead.
+- Since Spark 3.5, `spark.yarn.max.executor.failures` is deprecated. Use `spark.executor.maxNumFailures` instead.
 
 ## Upgrading from Core 3.3 to 3.4
 
