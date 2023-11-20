@@ -1845,10 +1845,10 @@ class Dataset[T] private[sql](
    * @since 4.0.0
    */
   @scala.annotation.varargs
-  def groupingSets(
-                    groupingSets: Seq[Seq[Column]],
-                    cols: Column*): RelationalGroupedDataset = {
-    RelationalGroupedDataset(toDF(), cols.map(_.expr),
+  def groupingSets(groupingSets: Seq[Seq[Column]], cols: Column*): RelationalGroupedDataset = {
+    RelationalGroupedDataset(
+      toDF(),
+      cols.map(_.expr),
       RelationalGroupedDataset.GroupingSetsType(groupingSets.map(_.map(_.expr))))
   }
 
@@ -1985,42 +1985,6 @@ class Dataset[T] private[sql](
     val colNames: Seq[String] = col1 +: cols
     RelationalGroupedDataset(
       toDF(), colNames.map(colName => resolve(colName)), RelationalGroupedDataset.CubeType)
-  }
-
-  /**
-   * Create multi-dimensional aggregation for the current Dataset using the specified grouping sets,
-   * so we can run aggregation on them.
-   * See [[RelationalGroupedDataset]] for all the available aggregate functions.
-   *
-   * This is a variant of groupingSets that can only group by existing columns using column names
-   * (i.e. cannot construct expressions).
-   *
-   * {{{
-   *   // Compute the average for all numeric columns group by specific grouping sets.
-   *   ds.groupingSets(Seq(Seq("department", "group"),Seq()),"department", "group").avg()
-   *
-   *   // Compute the max age and average salary, group by specific grouping sets.
-   *   ds.groupingSets(Seq($"department", $"gender"), Seq($"department"), Seq()).agg(Map(
-   *     "salary" -> "avg",
-   *     "age" -> "max"
-   *   ))
-   * }}}
-   *
-   * @group untypedrel
-   * @since 4.0.0
-   */
-  @scala.annotation.varargs
-  def groupingSets(
-                    groupingSets: Seq[Seq[String]],
-                    col1: String,
-                    cols: String*): RelationalGroupedDataset = {
-    val colNames: Seq[String] = col1 +: cols
-    RelationalGroupedDataset(
-      toDF(),
-      colNames.map(colName => resolve(colName)),
-      RelationalGroupedDataset.GroupingSetsType(
-        groupingSets.map(_.map(colName => resolve(colName))))
-    )
   }
 
   /**
