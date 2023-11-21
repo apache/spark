@@ -17223,7 +17223,7 @@ def udf(
     returnType : :class:`pyspark.sql.types.DataType` or str, optional
         the return type of the user-defined function. The value can be either a
         :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
-        Defaults to :class:`StringType.
+        Defaults to :class:`StringType`.
     useArrow : bool, optional
         whether to use Arrow to optimize the (de)serialization. When it is None, the
         Spark config "spark.sql.execution.pythonUDF.arrow.enabled" takes effect.
