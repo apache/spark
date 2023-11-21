@@ -16,25 +16,25 @@
     under the License.
 
 ==================
-DataFrame creation
+DataFrame Creation
 ==================
 
 .. currentmodule:: pyspark.sql
 
-Basic data structures
+Basic Data Structures
 ---------------------
 
-Pyspark provides an important class for handling data:
+PySpark provides an important class for handling data:
 
 1. :class:`DataFrame`: a distributed collection of data grouped into named columns.
 
-Creating through `createDataFrame`
+Creating Through `createDataFrame`
 ----------------------------------
 
 A PySpark :class:`DataFrame` can be created via :meth:`SparkSession.createDataFrame` typically by passing
-a list of lists, tuples, dictionaries and :class:`Row`, a pandas :class:`pandas.DataFrame`
-and an :class:`pyspark.RDD` consisting of such a list.
-:meth:`SparkSession.createDataFrame` takes the `schema` argument to specify the schema of the DataFrame.
+a list of lists, tuples, dictionaries and :class:`Row`, a pandas :class:`pandas.DataFrame`,
+a NumPy :class:`numpy.ndarray` and an :class:`pyspark.RDD`.
+:meth:`SparkSession.createDataFrame` takes the `schema` argument to specify the schema of the :class:`DataFrame`.
 When it is omitted, PySpark infers the corresponding schema by taking a sample from the data.
 
 Creating a PySpark :class:`DataFrame` from a list of lists
@@ -57,6 +57,19 @@ Creating a PySpark :class:`DataFrame` from a list of tuples
     df
 
 DataFrame[_1: string, _2: bigint]
+
+
+Creating a PySpark :class:`DataFrame` with the explicit schema specified
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    from pyspark.sql.types import *
+    schema = StructType([StructField("name", StringType(), True), StructField("age", IntegerType(), True)])
+    df = spark.createDataFrame([('Alice', 1), ('Bob', 5)], schema)
+    df
+
+DataFrame[name: string, age: int]
 
 
 Creating a PySpark :class:`DataFrame` from a list of dictionaries
@@ -108,20 +121,7 @@ Creating a PySpark :class:`DataFrame` from a :class:`numpy.ndarray`
 DataFrame[a: bigint, b: bigint]
 
 
-Creating a PySpark :class:`DataFrame` from an :class:`pyspark.RDD`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-    from pyspark.sql import Row
-    rdd = spark.sparkContext.parallelize([Row(name = "Alice", age = 2), Row(name = "Bob", age = 5)])
-    df = spark.createDataFrame(rdd)
-    df
-
-DataFrame[name: string, age: bigint]
-
-
-Creating through `read.format(...).load(...)`
+Creating Through `read.format(...).load(...)`
 ---------------------------------------------
 
 Creating a PySpark :class:`DataFrame` by reading existing **json** format file data
