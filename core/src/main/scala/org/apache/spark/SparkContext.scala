@@ -2609,15 +2609,14 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Cancel active jobs for the specified group. If `cancelFutureJobs` is true, future jobs
-   * submitted in this job group will also be cancelled.
+   * Cancel active jobs for the specified group, as well as the future jobs in this job group.
    * Note: the maximum number of job groups that can be recorded is set by
    * `spark.scheduler.job.cancelledJobGroupSet.size`. Once the limit is reached and a new job group
    * is to be added, the oldest job group recorded will be discarded.
    */
-  def cancelJobGroup(groupId: String, cancelFutureJobs: Boolean): Unit = {
+  def cancelJobGroupAndFutureJobs(groupId: String): Unit = {
     assertNotStopped()
-    dagScheduler.cancelJobGroup(groupId, cancelFutureJobs)
+    dagScheduler.cancelJobGroup(groupId, cancelFutureJobs = true)
   }
 
   /**

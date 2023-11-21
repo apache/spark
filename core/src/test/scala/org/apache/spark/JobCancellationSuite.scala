@@ -153,7 +153,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     assert(jobB.get() === 100)
   }
 
-  test("when cancelFutureJobs is true, skip running jobs in the same job group") {
+  test("if cancel job group and future jobs, skip running jobs in the same job group") {
     sc = new SparkContext("local[2]", "test")
 
     val sem = new Semaphore(0)
@@ -171,8 +171,8 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     }
     // Block until jobA starts
     sem.acquire(1)
-    // Cancel the job group with cancelFutureJobs = true
-    sc.cancelJobGroup(jobGroupName, cancelFutureJobs = true)
+    // Cancel the job group and future jobs
+    sc.cancelJobGroupAndFutureJobs(jobGroupName)
     ThreadUtils.awaitReady(jobA, Duration.Inf).failed.foreach { case e: SparkException =>
       checkError(
         exception = e,
@@ -225,7 +225,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
         sc.parallelize(1 to 1000).map { i => Thread.sleep (100); i}.count()
       }
       sem.acquire(1)
-      sc.cancelJobGroup(s"job-group-$idx", cancelFutureJobs = true)
+      sc.cancelJobGroupAndFutureJobs(s"job-group-$idx")
       ThreadUtils.awaitReady(job, Duration.Inf).failed.foreach { case e: SparkException =>
         assert(e.getErrorClass == "SPARK_JOB_CANCELLED")
       }
