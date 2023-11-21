@@ -1755,4 +1755,27 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       cached.unpersist()
     }
   }
+
+  test("SPARK-46037: When Left Join build Left, ShuffledHashJoinExec may " +
+    "result in incorrect results") {
+    withSQLConf(SQLConf.ENABLE_BUILD_SIDE_OUTER_SHUFFLED_HASH_JOIN_CODEGEN.key -> "false") {
+      val df1 = sql(
+        """
+          |SELECT /*+ SHUFFLE_HASH(t1) */ *
+          |FROM testData t1
+          |LEFT OUTER JOIN
+          |testData2 t2
+          |ON key = a AND concat(value, b) = '12'
+          |""".stripMargin)
+      val df2 = sql(
+        """
+          |SELECT /*+ SHUFFLE_MERGE(t1) */ *
+          |FROM testData t1
+          |LEFT OUTER JOIN
+          |testData2 t2
+          |ON key = a AND concat(value, b) = '12'
+          |""".stripMargin)
+      checkAnswer(df1, df2.collect())
+    }
+  }
 }
