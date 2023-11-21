@@ -252,7 +252,6 @@ private[spark] class SparkClassNotFoundException(
   override def getErrorClass: String = errorClass
 }
 
-
 /**
  * Concurrent modification exception thrown from Spark with an error class.
  */
@@ -321,7 +320,6 @@ private[spark] class SparkFileNotFoundException(
 
   override def getErrorClass: String = errorClass
 }
-
 
 /**
  * Number format exception thrown from Spark with an error class.
@@ -402,6 +400,7 @@ private[spark] class SparkIllegalArgumentException(
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass.orNull
+
   override def getQueryContext: Array[QueryContext] = context
 }
 
