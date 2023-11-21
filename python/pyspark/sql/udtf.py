@@ -95,9 +95,9 @@ class OrderingColumn:
     ascending : bool, default True
         If this column is in an ascending order or not.
     overrideNullsFirst : str, optional
-        If this is None, use the default behavior to sort NULL values first when sorting in ascending
-        order, or last when sorting in descending order. Otherwise, if this is True or False, override
-        the default behavior accordingly.
+        If this is None, use the default behavior to sort NULL values first when sorting in
+        ascending order, or last when sorting in descending order. Otherwise, if this is
+        True or False, override the default behavior accordingly.
     """
 
     name: str
