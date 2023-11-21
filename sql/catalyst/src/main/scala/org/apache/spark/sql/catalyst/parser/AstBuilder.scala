@@ -1786,7 +1786,12 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    * Both un-targeted (global) and targeted aliases are supported.
    */
   override def visitStar(ctx: StarContext): Expression = withOrigin(ctx) {
-    UnresolvedStar(Option(ctx.qualifiedName()).map(_.identifier.asScala.map(_.getText).toSeq))
+    if (ctx.exceptClause != null) {
+      visitStarExcept(ctx)
+    }
+    else {
+      UnresolvedStar(Option(ctx.qualifiedName()).map(_.identifier.asScala.map(_.getText).toSeq))
+    }
   }
 
   /**
@@ -1794,8 +1799,9 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    * specified object except those in the except list.
    * Both un-targeted (global) and targeted aliases are supported.
    */
-  override def visitStarExcept(ctx: StarExceptContext): Expression = withOrigin(ctx) {
-    val exceptCols = ctx.exceptCols.multipartIdentifier.asScala.map(typedVisit[Seq[String]])
+  def visitStarExcept(ctx: StarContext): Expression = withOrigin(ctx) {
+    val exceptCols = ctx.exceptClause
+      .exceptCols.multipartIdentifier.asScala.map(typedVisit[Seq[String]])
     UnresolvedStarExcept(
       Option(ctx.qualifiedName()).map(_.identifier.asScala.map(_.getText).toSeq),
       exceptCols.toSeq)

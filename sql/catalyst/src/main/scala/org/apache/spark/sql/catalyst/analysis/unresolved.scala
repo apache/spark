@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions._
@@ -482,26 +483,18 @@ case class UnresolvedStarExcept(target: Option[Seq[String]], excepts: Seq[Seq[St
           UnresolvedAttribute(exceptParts).name, expandedCols.map(a => a.qualifier :+ a.name))
         // if target is defined and expandedCols does not include any Attributes, it must be struct
         // expansion; give message suggesting to use unqualified names of nested fields.
-        if (target.isDefined && !expandedCols.exists(_.isInstanceOf[Attribute])) {
-            throw new AnalysisException(
-              errorClass = "EXCEPT_UNRESOLVED_COLUMN_IN_STRUCT_EXPANSION",
-              messageParameters = Map(
-                "objectName" -> UnresolvedAttribute(exceptParts).sql,
-                "objectList" -> orderedCandidates.mkString(", ")))
-        } else {
-            throw QueryCompilationErrors
-              .unresolvedColumnError(UnresolvedAttribute(exceptParts).name, orderedCandidates)
-        }
+        throw QueryCompilationErrors
+          .unresolvedColumnError(UnresolvedAttribute(exceptParts).name, orderedCandidates)
       }
     }
 
     // Convert each resolved except into a pair of (col: Attribute, nestedColumn) representing the
     // top level column in expandedCols that we must 'filter' based on nestedColumn.
     @scala.annotation.tailrec
-    def getRootStruct(expr: Expression, nestedColumn: Seq[String] = Nil)
+    def getRootColumn(expr: Expression, nestedColumn: Seq[String] = Nil)
       : (NamedExpression, Seq[String]) = expr match {
       case GetStructField(fieldExpr, _, Some(fieldName)) =>
-        getRootStruct(fieldExpr, fieldName +: nestedColumn)
+        getRootColumn(fieldExpr, fieldName +: nestedColumn)
       case e: NamedExpression => e -> nestedColumn
       case other: ExtractValue => throw new AnalysisException(
         errorClass = "EXCEPT_NESTED_COLUMN_INVALID_TYPE",
@@ -514,7 +507,7 @@ case class UnresolvedStarExcept(target: Option[Seq[String]], excepts: Seq[Seq[St
     // INVARIANT: we rely on the structure of the resolved except being an Alias of GetStructField
     // in the case of nested columns.
     val exceptPairs = resolvedExcepts.map {
-      case Alias(exceptExpr, name) => getRootStruct(exceptExpr)
+      case Alias(exceptExpr, name) => getRootColumn(exceptExpr)
       case except: NamedExpression => except -> Seq.empty
     }
 
@@ -555,12 +548,9 @@ case class UnresolvedStarExcept(target: Option[Seq[String]], excepts: Seq[Seq[St
         case (col, Some(nestedExcepts)) if !nestedExcepts.exists(_.isEmpty) =>
           val fields = col.dataType match {
             case s: StructType => s.fields
-            // we shouldn't be here since we throw the same error above (in getRootStruct), but
-            // nonetheless just throw the same error
-            case _ => throw new AnalysisException(
-              errorClass = "EXCEPT_NESTED_COLUMN_INVALID_TYPE",
-              messageParameters =
-                Map("columnName" -> col.qualifiedName, "dataType" -> col.dataType.toString))
+            // we shouldn't be here since we EXCEPT_NEXTED_COLUMN_INVALID_TYPE in getRootColumn
+            // for this case - just throw internal error
+            case _ => throw SparkException.internalError("Invalid column type")
           }
           val extractedFields = fields.zipWithIndex.map { case (f, i) =>
             Alias(GetStructField(col, i), f.name)()
