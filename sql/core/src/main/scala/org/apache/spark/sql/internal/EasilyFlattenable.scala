@@ -18,7 +18,7 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, AttributeSet, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 
 private[sql] object EasilyFlattenable {
@@ -26,25 +26,26 @@ private[sql] object EasilyFlattenable {
     val (logicalPlan, newProjList) = tuple
     logicalPlan match {
       case p@Project(projList, child) =>
-        val currentOutputAttribs = AttributeSet(logicalPlan.output)
+
         // In the new column list identify those Named Expressions which are just attributes and
         // hence pass thru
         val (passThruAttribs, tinkeredOrNewNamedExprs) = newProjList.partition {
           case _: AttributeReference => true
           case _ => false
         }
+        val currentOutputAttribs = AttributeSet(p.output)
 
         if (passThruAttribs.size == currentOutputAttribs.size && passThruAttribs.forall(
           currentOutputAttribs.contains) && tinkeredOrNewNamedExprs.nonEmpty) {
-          val attributesTinkeredInProject = AttributeSet(projList.filter(_ match {
-            case _: Alias => true
-            case _ => false
-          }).map(_.toAttribute))
-          val attributesTinkeredInProjectAsName = attributesTinkeredInProject.map(_.name).toSet
-          if (tinkeredOrNewNamedExprs.exists(ne => ne.references.exists(attr => attr match {
-            case u: UnresolvedAttribute => attributesTinkeredInProjectAsName.contains(u.name)
-            case resAttr => attributesTinkeredInProject.contains(resAttr)
-          }))) {
+
+          val attribsReassignedInProj = AttributeSet(projList.filter(ne => ne match {
+            case _: AttributeReference => false
+            case _ => true
+          }).map(_.toAttribute)).intersect(AttributeSet(child.output))
+          if (tinkeredOrNewNamedExprs.exists(ne => ne.references.exists {
+            case attr: AttributeReference => attribsReassignedInProj.contains(attr)
+            case u: UnresolvedAttribute => attribsReassignedInProj.exists(_.name == u.name)
+          })) {
             None
           } else {
             val remappedNewProjList = newProjList.map(ne => (ne transformUp {
