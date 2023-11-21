@@ -594,7 +594,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        level : int, optional, default None
+        level : int, optional
             How many levels to print for nested schemas.
 
             .. versionadded:: 3.5.0
@@ -4940,7 +4940,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        subset : List of column names, optional
+        subset : list of column names, optional
             List of columns to use for duplicate comparison (default All columns).
 
         Returns
@@ -6656,7 +6656,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        index_col: str or list of str, optional, default: None
+        index_col: str or list of str, optional
             Index column of table in Spark.
 
         Returns
