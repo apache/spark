@@ -92,7 +92,7 @@ final class ParquetColumnVector {
       // the appendObjects method. This delegates to some specific append* method depending on the
       // type of 'defaultValue'; for example, if 'defaultValue' is a Float, then we call the
       // appendFloats method.
-      if (!vector.appendObjects(capacity, defaultValue).isPresent()) {
+      if (vector.appendObjects(capacity, defaultValue).isEmpty()) {
         throw new IllegalArgumentException("Cannot assign default column value to result " +
           "column batch in vectorized Parquet reader because the data type is not supported: " +
           defaultValue);

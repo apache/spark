@@ -27,18 +27,16 @@ import scala.jdk.CollectionConverters._
 import com.google.common.base.Ticker
 import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.{JobArtifactSet, SparkException, SparkSQLException}
+import org.apache.spark.{SparkException, SparkSQLException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.planner.PythonStreamingQueryListener
 import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper
 import org.apache.spark.sql.connect.service.SessionHolder.{ERROR_CACHE_SIZE, ERROR_CACHE_TIMEOUT_SEC}
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.util.SystemClock
-import org.apache.spark.util.Utils
 
 // Unique key identifying session by combination of user, and session id
 case class SessionKey(userId: String, sessionId: String)
@@ -166,7 +164,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     interruptedIds.toSeq
   }
 
-  private[connect] lazy val artifactManager = new SparkConnectArtifactManager(this)
+  private[connect] def artifactManager = session.artifactManager
 
   /**
    * Add an artifact to this SparkConnect session.
@@ -239,26 +237,12 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   /**
-   * Execute a block of code using this session's classloader.
-   * @param f
-   * @tparam T
-   */
-  def withContextClassLoader[T](f: => T): T = {
-    // Needed for deserializing and evaluating the UDF on the driver
-    Utils.withContextClassLoader(classloader) {
-      JobArtifactSet.withActiveJobArtifactState(artifactManager.state) {
-        f
-      }
-    }
-  }
-
-  /**
    * Execute a block of code with this session as the active SparkConnect session.
    * @param f
    * @tparam T
    */
   def withSession[T](f: SparkSession => T): T = {
-    withContextClassLoader {
+    artifactManager.withResources {
       session.withActive {
         f(session)
       }
