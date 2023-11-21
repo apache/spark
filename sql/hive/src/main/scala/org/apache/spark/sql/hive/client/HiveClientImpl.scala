@@ -659,7 +659,10 @@ private[hive] class HiveClientImpl(
       retainData: Boolean): Unit = withHiveState {
     def replaceNotExistException(e: Throwable): Unit = e match {
       case _ if e.getCause.isInstanceOf[NoSuchObjectException] =>
-        throw new NoSuchPartitionsException(db, table, specs)
+        val missingSpecs = specs.filter { spec =>
+          shim.getPartitionNames(client, db, table, spec.asJava, -1).isEmpty
+        }
+        throw new NoSuchPartitionsException(db, table, missingSpecs)
       case _ => throw e
     }
     def dropPartitionsOneByOne(): Unit = {

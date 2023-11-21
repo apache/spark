@@ -146,14 +146,9 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
           } else {
             "`test_catalog`.`ns`.`tbl`"
           }
-          val expectedPartitionList = if (dropPartitionInBatch) {
-            "PARTITION (`id` = 1), PARTITION (`id` = 2)"
-          } else {
-            "PARTITION (`id` = 2)"
-          }
           checkError(e,
             errorClass = "PARTITIONS_NOT_FOUND",
-            parameters = Map("partitionList" -> expectedPartitionList,
+            parameters = Map("partitionList" -> "PARTITION (`id` = 2)",
               "tableName" -> expectedTableName))
 
           checkPartitions(t, Map("id" -> "1"))
