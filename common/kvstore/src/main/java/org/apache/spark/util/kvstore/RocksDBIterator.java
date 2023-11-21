@@ -18,7 +18,9 @@
 package org.apache.spark.util.kvstore;
 
 import java.io.IOException;
+import java.lang.ref.Cleaner;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -27,6 +29,7 @@ import org.rocksdb.RocksIterator;
 
 class RocksDBIterator<T> implements KVStoreIterator<T> {
 
+  private static final Cleaner CLEANER = Cleaner.create();
   private final RocksDB db;
   private final boolean ascending;
   private final RocksIterator it;
@@ -36,6 +39,8 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
   private final byte[] indexKeyPrefix;
   private final byte[] end;
   private final long max;
+  private final Cleaner.Cleanable cleanable;
+  private final RocksDBIterator.ResourceCleaner resourceCleaner;
 
   private boolean checkedNext;
   private byte[] next;
@@ -50,6 +55,8 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     this.ti = db.getTypeInfo(type);
     this.index = ti.index(params.index);
     this.max = params.max;
+    this.resourceCleaner = new RocksDBIterator.ResourceCleaner(it, db);
+    this.cleanable = CLEANER.register(this, resourceCleaner);
 
     Preconditions.checkArgument(!index.isChild() || params.parent != null,
       "Cannot iterate over child index %s without parent value.", params.index);
@@ -176,22 +183,33 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
 
   @Override
   public synchronized void close() throws IOException {
-    db.notifyIteratorClosed(this);
+    db.notifyIteratorClosed(it);
     if (!closed) {
-      it.close();
-      closed = true;
-      next = null;
+      try {
+        it.close();
+      } finally {
+        closed = true;
+        next = null;
+        cancelResourceClean();
+      }
     }
   }
 
   /**
-   * Because it's tricky to expose closeable iterators through many internal APIs, especially
-   * when Scala wrappers are used, this makes sure that, hopefully, the JNI resources held by
-   * the iterator will eventually be released.
+   * Prevent ResourceCleaner from actually releasing resources after close it.
    */
-  @Override
-  protected void finalize() throws Throwable {
-    db.closeIterator(this);
+  private void cancelResourceClean() {
+    this.resourceCleaner.setStartedToFalse();
+    this.cleanable.clean();
+  }
+
+  @VisibleForTesting
+  ResourceCleaner getResourceCleaner() {
+    return resourceCleaner;
+  }
+
+  RocksIterator internalIterator() {
+    return it;
   }
 
   private byte[] loadNext() {
@@ -272,4 +290,31 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     return a.length - b.length;
   }
 
+  static class ResourceCleaner implements Runnable {
+
+    private final RocksIterator rocksIterator;
+    private final RocksDB rocksDB;
+    private final AtomicBoolean started = new AtomicBoolean(true);
+
+    ResourceCleaner(RocksIterator rocksIterator, RocksDB rocksDB) {
+      this.rocksIterator = rocksIterator;
+      this.rocksDB = rocksDB;
+    }
+
+    @Override
+    public void run() {
+      if (started.compareAndSet(true, false)) {
+        rocksDB.closeIterator(rocksIterator);
+      }
+    }
+
+    void setStartedToFalse() {
+      started.set(false);
+    }
+
+    @VisibleForTesting
+    boolean isCompleted() {
+      return !started.get();
+    }
+  }
 }
