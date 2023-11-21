@@ -526,7 +526,7 @@ of the most common options to set are:
   <td><code>spark.executor.maxNumFailures</code></td>
   <td>numExecutors * 2, with minimum of 3</td>
   <td>
-    Spark exits if the number of failed executors exceeds this threshold.
+    The maximum number of executor failures before failing the application.
     This configuration only takes effect on YARN, or Kubernetes when 
     `spark.kubernetes.allocation.pods.allocator` is set to 'direct'.
   </td>
@@ -536,7 +536,7 @@ of the most common options to set are:
   <td><code>spark.executor.failuresValidityInterval</code></td>
   <td>(none)</td>
   <td>
-    Interval after which Executor failures will be considered independent and
+    Interval after which executor failures will be considered independent and
     not accumulate towards the attempt count.
     This configuration only takes effect on YARN, or Kubernetes when 
     `spark.kubernetes.allocation.pods.allocator` is set to 'direct'.
