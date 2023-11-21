@@ -96,7 +96,7 @@ def _invoke_function(name: str, *args: Union[Column, Expression]) -> Column:
     Parameters
     ----------
     name Name of the function to be called.
-    args The list of arguments.
+        args The list of arguments.
 
     Returns
     -------
