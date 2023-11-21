@@ -117,6 +117,7 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
       matchingRowsPlan: LogicalPlan,
       buildKeys: Seq[Attribute],
       pruningKeys: Seq[Attribute]): Expression = {
+    assert(buildKeys.nonEmpty && pruningKeys.nonEmpty)
 
     val buildQuery = Aggregate(buildKeys, buildKeys, matchingRowsPlan)
     DynamicPruningExpression(

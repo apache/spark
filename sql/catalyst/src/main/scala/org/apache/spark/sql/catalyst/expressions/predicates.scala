@@ -356,8 +356,6 @@ case class Not(child: Expression)
 case class InSubquery(values: Seq[Expression], query: ListQuery)
   extends Predicate with Unevaluable {
 
-  assert(query.plan.output.nonEmpty, "The subquery must have output.")
-
   @transient private lazy val value: Expression = if (values.length > 1) {
     CreateNamedStruct(values.zipWithIndex.flatMap {
       case (v: NamedExpression, _) => Seq(Literal(v.name), v)
