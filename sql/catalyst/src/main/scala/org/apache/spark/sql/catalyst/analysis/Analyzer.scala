@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.trees.AlwaysProcess
+import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -2493,6 +2493,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * Note: CTEs are handled in CTESubstitution.
    */
   object ResolveSubquery extends Rule[LogicalPlan] {
+    // This tag is used to mark resolved subquery to avoid resolving it repeatedly.
+    private val RESOLVED_SUBQUERY_TAG = TreeNodeTag[Unit]("resolved_subquery")
+
     /**
      * Resolves the subquery plan that is referenced in a subquery expression, by invoking the
      * entire analyzer recursively. We set outer plan in `AnalysisContext`, so that the analyzer
@@ -2507,12 +2510,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       val newSubqueryPlan = AnalysisContext.withOuterPlan(outer) {
         executeSameContext(e.plan)
       }
+      newSubqueryPlan.setTagValue(RESOLVED_SUBQUERY_TAG, ())
 
       // If the subquery plan is fully resolved, pull the outer references and record
       // them as children of SubqueryExpression.
       if (newSubqueryPlan.resolved) {
         // Record the outer references as children of subquery expression.
-        newSubqueryPlan.setAnalyzed()
         f(newSubqueryPlan, SubExprUtils.getOuterReferences(newSubqueryPlan))
       } else {
         e.withNewPlan(newSubqueryPlan)
@@ -2530,19 +2533,22 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      */
     private def resolveSubQueries(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
       plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
-        case s @ ScalarSubquery(sub, _, exprId, _, _, _) if !sub.analyzed =>
+        case s @ ScalarSubquery(sub, _, exprId, _, _, _)
+          if sub.getTagValue(RESOLVED_SUBQUERY_TAG).isEmpty =>
           resolveSubQuery(s, outer)(ScalarSubquery(_, _, exprId))
-        case e @ Exists(sub, _, exprId, _, _) if !sub.analyzed =>
+        case e @ Exists(sub, _, exprId, _, _) if sub.getTagValue(RESOLVED_SUBQUERY_TAG).isEmpty =>
           resolveSubQuery(e, outer)(Exists(_, _, exprId))
         case InSubquery(values, l @ ListQuery(_, _, exprId, _, _, _))
-            if values.forall(_.resolved) && !l.plan.analyzed =>
+            if values.forall(_.resolved) && l.plan.getTagValue(RESOLVED_SUBQUERY_TAG).isEmpty =>
           val expr = resolveSubQuery(l, outer)((plan, exprs) => {
             ListQuery(plan, exprs, exprId, plan.output.length)
           })
           InSubquery(values, expr.asInstanceOf[ListQuery])
-        case s @ LateralSubquery(sub, _, exprId, _, _) if !sub.analyzed =>
+        case s @ LateralSubquery(sub, _, exprId, _, _)
+          if sub.getTagValue(RESOLVED_SUBQUERY_TAG).isEmpty =>
           resolveSubQuery(s, outer)(LateralSubquery(_, _, exprId))
-        case a: FunctionTableSubqueryArgumentExpression if !a.plan.analyzed =>
+        case a: FunctionTableSubqueryArgumentExpression
+          if a.plan.getTagValue(RESOLVED_SUBQUERY_TAG).isEmpty =>
           resolveSubQuery(a, outer)(
             (plan, outerAttrs) => a.copy(plan = plan, outerAttrs = outerAttrs))
       }
