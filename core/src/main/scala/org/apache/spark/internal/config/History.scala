@@ -203,7 +203,9 @@ private[spark] object History {
     .createOptional
 
   val EVENT_LOG_XATTR_ENABLED = ConfigBuilder("spark.history.fs.eventLog.xattr.enabled")
-    .version("3.5.0")
+    .doc("Whether to use HDFS extended attributes to store metadata about event logs. " +
+      "This can only be leveraged when the underlying file system supports extended attributes.")
+    .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
 
