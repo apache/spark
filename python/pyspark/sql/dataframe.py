@@ -5055,7 +5055,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
     ) -> "DataFrame":
         """Returns a new :class:`DataFrame` omitting rows with null values.
-        :func:`DataFrame.dropna` and :func:`DataFrameNaFunctions.drop` are aliases of each other.
+        :func:`DataFrame.dropna` and :func:`DataFrameNaFunctions.drop` are
+        aliases of each other.
 
         .. versionadded:: 1.3.1
 
@@ -5064,12 +5065,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        how : str, optional
-            'any' or 'all'.
+        how : str, optional, the values that can be 'any' or 'all', default 'any'.
             If 'any', drop a row if it contains any nulls.
             If 'all', drop a row only if all its values are null.
-        thresh: int, optional
-            default None
+        thresh: int, optional, default None.
             If specified, drop rows that have less than `thresh` non-null values.
             This overwrites the `how` parameter.
         subset : str, tuple or list, optional
@@ -5089,11 +5088,45 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...     Row(age=None, height=None, name="Tom"),
         ...     Row(age=None, height=None, name=None),
         ... ])
+
+        Example 1: Drop the row if it contains any nulls.
+
         >>> df.na.drop().show()
         +---+------+-----+
         |age|height| name|
         +---+------+-----+
         | 10|    80|Alice|
+        +---+------+-----+
+
+        Example 2: Drop the row only if all its values are null.
+
+        >>> df.na.drop(how='all').show()
+        +----+------+-----+
+        | age|height| name|
+        +----+------+-----+
+        |  10|    80|Alice|
+        |   5|  NULL|  Bob|
+        |NULL|  NULL|  Tom|
+        +----+------+-----+
+
+        Example 3: Drop rows that have less than `thresh` non-null values.
+
+        >>> df.na.drop(thresh=2).show()
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        | 10|    80|Alice|
+        |  5|  NULL|  Bob|
+        +---+------+-----+
+
+        Example 4: Drop rows with non-null values in the specified columns.
+
+        >>> df.na.drop(subset=['age', 'name']).show()
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        | 10|    80|Alice|
+        |  5|  NULL|  Bob|
         +---+------+-----+
         """
         if how is not None and how not in ["any", "all"]:
@@ -5134,8 +5167,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         value: Union["LiteralType", Dict[str, "LiteralType"]],
         subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
     ) -> "DataFrame":
-        """Replace null values, alias for ``na.fill()``.
-        :func:`DataFrame.fillna` and :func:`DataFrameNaFunctions.fill` are aliases of each other.
+        """Returns a new :class:`DataFrame` which null values are filled with new value.
+        :func:`DataFrame.fillna` and :func:`DataFrameNaFunctions.fill` are
+        aliases of each other.
 
         .. versionadded:: 1.3.1
 
@@ -5144,8 +5178,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        value : int, float, string, bool or dict
-            Value to replace null values with.
+        value : int, float, string, bool or dict, the value to replace null values with.
             If the value is a dict, then `subset` is ignored and `value` must be a mapping
             from column name (string) to replacement value. The replacement value must be
             an int, float, boolean, or string.
@@ -5165,11 +5198,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df = spark.createDataFrame([
         ...     (10, 80.5, "Alice", None),
         ...     (5, None, "Bob", None),
-        ... 	(None, None, "Tom", None),
+        ...     (None, None, "Tom", None),
         ...     (None, None, None, True)],
         ...     schema=["age", "height", "name", "bool"])
 
-        Fill all null values with 50 for numeric columns.
+        Example 1: Fill all null values with 50 for numeric columns.
 
         >>> df.na.fill(50).show()
         +---+------+-----+----+
@@ -5181,7 +5214,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 50|  50.0| NULL|true|
         +---+------+-----+----+
 
-        Fill all null values with ``False`` for boolean columns.
+        Example 2: Fill all null values with ``False`` for boolean columns.
 
         >>> df.na.fill(False).show()
         +----+------+-----+-----+
@@ -5193,7 +5226,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |NULL|  NULL| NULL| true|
         +----+------+-----+-----+
 
-        Fill all null values with to 50 and "unknown" for 'age' and 'name' column respectively.
+        Example 3: Fill all null values with to 50 and "unknown" for
+            'age' and 'name' column respectively.
 
         >>> df.na.fill({'age': 50, 'name': 'unknown'}).show()
         +---+------+-------+----+
@@ -5204,6 +5238,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 50|  NULL|    Tom|NULL|
         | 50|  NULL|unknown|true|
         +---+------+-------+----+
+
+        Example 4: Fill all null values with "Spark" for 'name' column.
+
+        >>> df.na.fill(value = 'Spark', subset = 'name').show()
+        +----+------+-----+----+
+        | age|height| name|bool|
+        +----+------+-----+----+
+        |  10|  80.5|Alice|NULL|
+        |   5|  NULL|  Bob|NULL|
+        |NULL|  NULL|  Tom|NULL|
+        |NULL|  NULL|Spark|true|
+        +----+------+-----+----+
         """
         if not isinstance(value, (float, int, str, bool, dict)):
             raise PySparkTypeError(
@@ -5294,8 +5340,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        to_replace : bool, int, float, string, list or dict
-            Value to be replaced.
+        to_replace : bool, int, float, string, list or dict, the value to be replaced.
             If the value is a dict, then `value` is ignored or can be omitted, and `to_replace`
             must be a mapping between a value and a replacement.
         value : bool, int, float, string or None, optional
@@ -5323,7 +5368,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...     (None, None, None)],
         ...     schema=["age", "height", "name"])
 
-        Replace 10 to 20 in all columns.
+        Example 1: Replace 10 to 20 in all columns.
 
         >>> df.na.replace(10, 20).show()
         +----+------+-----+
@@ -5335,7 +5380,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |NULL|  NULL| NULL|
         +----+------+-----+
 
-        Replace 'Alice' to null in all columns.
+        Example 2: Replace 'Alice' to null in all columns.
 
         >>> df.na.replace('Alice', None).show()
         +----+------+----+
@@ -5347,7 +5392,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |NULL|  NULL|NULL|
         +----+------+----+
 
-        Replace 'Alice' to 'A', and 'Bob' to 'B' in the 'name' column.
+        Example 3: Replace 'Alice' to 'A', and 'Bob' to 'B' in the 'name' column.
 
         >>> df.na.replace(['Alice', 'Bob'], ['A', 'B'], 'name').show()
         +----+------+----+
@@ -5358,6 +5403,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |NULL|    10| Tom|
         |NULL|  NULL|NULL|
         +----+------+----+
+
+        Example 4: Replace 10 to 20 in the 'name' column.
+
+        >>> df.na.replace(10, 18, 'age').show()
+        +----+------+-----+
+        | age|height| name|
+        +----+------+-----+
+        |  18|    80|Alice|
+        |   5|  NULL|  Bob|
+        |NULL|    10|  Tom|
+        |NULL|  NULL| NULL|
+        +----+------+-----+
         """
         if value is _NoValue:
             if isinstance(to_replace, dict):
