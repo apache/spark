@@ -19,9 +19,10 @@ package org.apache.spark.ui.exec
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.{Node, Text}
+import scala.xml.{Node, Text, Unparsed}
 
 import org.apache.spark.SparkContext
+
 import org.apache.spark.internal.config.UI.UI_FLAMEGRAPH_ENABLED
 import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.ui.{SparkUITab, UIUtils, WebUIPage}
@@ -128,8 +129,15 @@ private[ui] class ExecutorThreadDumpPage(
 
   // scalastyle:off
   private def drawExecutorFlamegraph(request: HttpServletRequest, thread: Array[ThreadStackTrace]): Seq[Node] = {
+    val js =
+      s"""
+         |import {drawFlamegraph} from "/static/flamegraph.js";
+         |
+         |drawFlamegraph();
+         |""".stripMargin
     <div>
       <div>
+        <script type="module">{Unparsed("import {toggleFlamegraph} from '/static/flamegraph.js';")}</script>
         <span style="cursor: pointer;" onclick="toggleFlamegraph();">
           <h4>
             <span id="executor-flamegraph-arrow" class="arrow-open"></span>
@@ -142,8 +150,8 @@ private[ui] class ExecutorThreadDumpPage(
         <link rel="stylesheet" type="text/css" href={prependBaseUri(request, "/static/d3-flamegraph.css")}></link>
         <script src={UIUtils.prependBaseUri(request, "/static/d3-flamegraph.min.js")}></script>
         <script src={UIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
-        <script src={UIUtils.prependBaseUri(request, "/static/flamegraph.js")}></script>
-        <script>drawFlamegraph()</script>
+        <script type="module" src={UIUtils.prependBaseUri(request, "/static/flamegraph.js")}></script>
+        <script type="module">{Unparsed(js)}</script>
       </div>
     </div>
   }
