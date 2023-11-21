@@ -40,6 +40,7 @@ import org.apache.spark.scheduler.{ExecutorDecommission, ExecutorDecommissionInf
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 private[spark] class KubernetesClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
@@ -225,7 +226,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     // If decommissioning is triggered by the executor the K8s cluster manager has already
     // picked the pod to evict so we don't need to update the labels.
     if (!triggeredByExecutor) {
-      labelDecommissioningExecs(executorsAndDecomInfo.map(_._1))
+      labelDecommissioningExecs(executorsAndDecomInfo.map(_._1).toImmutableArraySeq)
     }
     super.decommissionExecutors(executorsAndDecomInfo, adjustTargetNumExecutors,
       triggeredByExecutor)

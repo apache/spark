@@ -37,6 +37,7 @@ numpydoc
 jinja2<3.0.0
 sphinx<3.1.0
 sphinx-plotly-directive
+sphinx-copybutton
 docutils<0.18.0
 # See SPARK-38279.
 markupsafe==2.0.1
@@ -52,8 +53,8 @@ py
 # Spark Connect (required)
 grpcio>=1.48,<1.57
 grpcio-status>=1.48,<1.57
-protobuf==3.20.3
-googleapis-common-protos==1.56.4
+protobuf==4.25.1
+googleapis-common-protos>=1.56.4
 
 # Spark Connect python proto generation plugin (optional)
 mypy-protobuf==3.3.0

@@ -55,16 +55,16 @@ class CapturedException(PySparkException):
             origin is None and desc is not None and stackTrace is not None
         )
 
-        self.desc = desc if desc is not None else cast(Py4JJavaError, origin).getMessage()
+        self._desc = desc if desc is not None else cast(Py4JJavaError, origin).getMessage()
         assert SparkContext._jvm is not None
-        self.stackTrace = (
+        self._stackTrace = (
             stackTrace
             if stackTrace is not None
             else (SparkContext._jvm.org.apache.spark.util.Utils.exceptionString(origin))
         )
-        self.cause = convert_exception(cause) if cause is not None else None
-        if self.cause is None and origin is not None and origin.getCause() is not None:
-            self.cause = convert_exception(origin.getCause())
+        self._cause = convert_exception(cause) if cause is not None else None
+        if self._cause is None and origin is not None and origin.getCause() is not None:
+            self._cause = convert_exception(origin.getCause())
         self._origin = origin
 
     def __str__(self) -> str:
@@ -80,9 +80,9 @@ class CapturedException(PySparkException):
         except BaseException:
             pass
 
-        desc = self.desc
+        desc = self._desc
         if debug_enabled:
-            desc = desc + "\n\nJVM stacktrace:\n%s" % self.stackTrace
+            desc = desc + "\n\nJVM stacktrace:\n%s" % self._stackTrace
         return str(desc)
 
     def getErrorClass(self) -> Optional[str]:
@@ -152,6 +152,8 @@ def convert_exception(e: Py4JJavaError) -> CapturedException:
         return SparkRuntimeException(origin=e)
     elif is_instance_of(gw, e, "org.apache.spark.SparkUpgradeException"):
         return SparkUpgradeException(origin=e)
+    elif is_instance_of(gw, e, "org.apache.spark.SparkNoSuchElementException"):
+        return SparkNoSuchElementException(origin=e)
 
     c: Py4JJavaError = e.getCause()
     stacktrace: str = jvm.org.apache.spark.util.Utils.exceptionString(e)
@@ -298,6 +300,12 @@ class SparkRuntimeException(CapturedException, BaseSparkRuntimeException):
 class SparkUpgradeException(CapturedException, BaseSparkUpgradeException):
     """
     Exception thrown because of Spark upgrade.
+    """
+
+
+class SparkNoSuchElementException(CapturedException, BaseUnknownException):
+    """
+    No such element exception.
     """
 
 

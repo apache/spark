@@ -711,6 +711,38 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
   }
 
+  test("SPARK-45930: MapInPandas with non-deterministic UDF") {
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("a", LongType))),
+      Seq.empty,
+      PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+      false)
+    val output = DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType])
+    val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
+    val mapInPandas = MapInPandas(
+      pythonUdf,
+      output,
+      project,
+      false)
+    assertAnalysisSuccess(mapInPandas)
+  }
+
+  test("SPARK-45930: MapInArrow with non-deterministic UDF") {
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("a", LongType))),
+      Seq.empty,
+      PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
+      false)
+    val output = DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType])
+    val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
+    val mapInArrow = PythonMapInArrow(
+      pythonUdf,
+      output,
+      project,
+      false)
+    assertAnalysisSuccess(mapInArrow)
+  }
+
   test("SPARK-34741: Avoid ambiguous reference in MergeIntoTable") {
     val cond = $"a" > 1
     assertAnalysisErrorClass(
@@ -794,9 +826,20 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // No columns
     assert(!CollectMetrics("evt", Nil, testRelation, 0).resolved)
 
-    def checkAnalysisError(exprs: Seq[NamedExpression], errors: String*): Unit = {
-      assertAnalysisError(CollectMetrics("event", exprs, testRelation, 0), errors)
-    }
+    // non-deterministic expression inside an aggregate function is valid
+    val tsLiteral = Literal.create(java.sql.Timestamp.valueOf("2023-11-30 21:05:00.000000"),
+      TimestampType)
+
+    assertAnalysisSuccess(
+      CollectMetrics(
+        "invalid",
+        Count(
+          GreaterThan(tsLiteral, CurrentBatchTimestamp(1699485296000L, TimestampType))
+        ).as("count") :: Nil,
+        testRelation,
+        0
+      )
+    )
 
     // Unwrapped attribute
     assertAnalysisErrorClass(

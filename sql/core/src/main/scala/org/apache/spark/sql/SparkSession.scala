@@ -33,6 +33,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
+import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
@@ -54,6 +55,7 @@ import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.{CallSite, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The entry point to programming Spark with the Dataset and DataFrame API.
@@ -241,6 +243,16 @@ class SparkSession private(
    */
   @Unstable
   def streams: StreamingQueryManager = sessionState.streamingQueryManager
+
+  /**
+   * Returns an `ArtifactManager` that supports adding, managing and using session-scoped artifacts
+   * (jars, classfiles, etc).
+   *
+   * @since 4.0.0
+   */
+  @Experimental
+  @Unstable
+  private[sql] def artifactManager: ArtifactManager = sessionState.artifactManager
 
   /**
    * Start a new session with isolated SQL configurations, temporary tables, registered
@@ -635,7 +647,7 @@ class SparkSession private(
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
         if (args.nonEmpty) {
-          PosParameterizedQuery(parsedPlan, args.map(lit(_).expr))
+          PosParameterizedQuery(parsedPlan, args.map(lit(_).expr).toImmutableArraySeq)
         } else {
           parsedPlan
         }
@@ -890,7 +902,7 @@ class SparkSession private(
     val (dataType, _) = JavaTypeInference.inferDataType(beanClass)
     dataType.asInstanceOf[StructType].fields.map { f =>
       AttributeReference(f.name, f.dataType, f.nullable)()
-    }
+    }.toImmutableArraySeq
   }
 
   /**

@@ -43,6 +43,7 @@ import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
 import org.apache.spark.scheduler.{HDFSCacheTaskLocation, HostTaskLocation}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{NextIterator, SerializableConfiguration, ShutdownHookManager, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
@@ -399,7 +400,7 @@ class HadoopRDD[K, V](
         HadoopRDD.convertSplitLocationInfo(lsplit.getLocationInfo)
       case _ => None
     }
-    locs.getOrElse(hsplit.getLocations.filter(_ != "localhost"))
+    locs.getOrElse(hsplit.getLocations.filter(_ != "localhost").toImmutableArraySeq)
   }
 
   override def checkpoint(): Unit = {
@@ -482,6 +483,6 @@ private[spark] object HadoopRDD extends Logging {
       } else {
         None
       }
-    })
+    }.toImmutableArraySeq)
   }
 }

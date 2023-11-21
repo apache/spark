@@ -37,6 +37,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A [[TableCatalog]] that translates calls to the v1 SessionCatalog.
@@ -244,7 +245,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
         case Array(db) =>
           TableIdentifier(ident.name, Some(db))
         case other =>
-          throw QueryCompilationErrors.requiresSinglePartNamespaceError(other)
+          throw QueryCompilationErrors.requiresSinglePartNamespaceError(other.toImmutableArraySeq)
       }
     }
 
@@ -253,7 +254,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
         case Array(db) =>
           FunctionIdentifier(ident.name, Some(db))
         case other =>
-          throw QueryCompilationErrors.requiresSinglePartNamespaceError(other)
+          throw QueryCompilationErrors.requiresSinglePartNamespaceError(other.toImmutableArraySeq)
       }
     }
   }
@@ -346,7 +347,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   def isTempView(ident: Identifier): Boolean = {
-    catalog.isTempView(ident.namespace() :+ ident.name())
+    catalog.isTempView((ident.namespace() :+ ident.name()).toImmutableArraySeq)
   }
 
   override def loadFunction(ident: Identifier): UnboundFunction = {
