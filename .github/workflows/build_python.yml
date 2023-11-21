@@ -36,7 +36,7 @@ jobs:
       hadoop: hadoop3
       envs: >-
         {
-          "PYTHON_TO_TEST": "pypy3,python3.10,python3.11.python3.12"
+          "PYTHON_TO_TEST": "pypy3,python3.10,python3.11,python3.12"
         }
       jobs: >-
         {
