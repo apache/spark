@@ -703,14 +703,13 @@ def read_udtf(pickleSer, infile, eval_type):
         raise PySparkRuntimeError(
             f"The return type of a UDTF must be a struct type, but got {type(return_type)}."
         )
+    udtf_name = utf8_deserializer.loads(infile)
 
     # Update the handler that creates a new UDTF instance to first try calling the UDTF constructor
     # with one argument containing the previous AnalyzeResult. If that fails, then try a constructor
     # with no arguments. In this way each UDTF class instance can decide if it wants to inspect the
     # AnalyzeResult.
     udtf_init_args = inspect.getfullargspec(handler)
-
-    udtf_name = handler.__name__
     if has_pickled_analyze_result:
         if len(udtf_init_args.args) > 2:
             raise PySparkRuntimeError(
