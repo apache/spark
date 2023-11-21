@@ -22,7 +22,6 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.{Node, Text, Unparsed}
 
 import org.apache.spark.SparkContext
-
 import org.apache.spark.internal.config.UI.UI_FLAMEGRAPH_ENABLED
 import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.ui.{SparkUITab, UIUtils, WebUIPage}
