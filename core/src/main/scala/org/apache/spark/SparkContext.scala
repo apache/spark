@@ -1822,7 +1822,7 @@ class SparkContext(config: SparkConf) extends Logging {
       logInfo(s"Added file $path at $key with timestamp $timestamp")
       // Fetch the file locally so that closures which are run on the driver can still use the
       // SparkFiles API to access files.
-      Utils.fetchFile(uri.toString, root, conf, hadoopConfiguration, timestamp, useCache = false)
+      Utils.fetchFile(uri.toString, root, conf, hadoopConfiguration, timestamp, useCache = true)
       postEnvironmentUpdate()
     } else if (
       isArchive &&
@@ -1836,7 +1836,7 @@ class SparkContext(config: SparkConf) extends Logging {
       val uriToUse = if (!isLocal && scheme == "file") uri else new URI(key)
       val uriToDownload = UriBuilder.fromUri(uriToUse).fragment(null).build()
       val source = Utils.fetchFile(uriToDownload.toString, Utils.createTempDir(), conf,
-        hadoopConfiguration, timestamp, useCache = false, shouldUntar = false)
+        hadoopConfiguration, timestamp, useCache = true, shouldUntar = false)
       val dest = new File(
         root,
         if (uri.getFragment != null) uri.getFragment else source.getName)
