@@ -369,7 +369,7 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
         # copies when the function is wrapped.
         assert SparkContext._active_spark_context is not None
         properties = SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
-        session = SparkSession.getActiveSession()
+        active_spark_session = SparkSession.getActiveSession()
         assert callable(f)
 
         @functools.wraps(f)
@@ -377,8 +377,10 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
             # Set local properties in child thread.
             assert SparkContext._active_spark_context is not None
             SparkContext._active_spark_context._jsc.sc().setLocalProperties(properties)
-            if session is not None:
-                session._jsparkSession.setActiveSession(session._jsparkSession)
+            if active_spark_session is not None:
+                active_spark_session._jsparkSession.setActiveSession(
+                    active_spark_session._jsparkSession
+                )
             return f(*args, **kwargs)  # type: ignore[misc, operator]
 
         return wrapped
