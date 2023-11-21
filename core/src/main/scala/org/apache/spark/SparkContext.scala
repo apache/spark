@@ -2609,6 +2609,18 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   * Cancel active jobs for the specified group. If `cancelFutureJobs` is true, future jobs
+   * submitted in this job group will also be cancelled.
+   * Note: the maximum number of job groups that can be recorded is set by
+   * `spark.scheduler.job.cancelledJobGroupSet.size`. Once the limit is reached and a new job group
+   * is to be added, the oldest job group recorded will be discarded.
+   */
+  def cancelJobGroup(groupId: String, cancelFutureJobs: Boolean): Unit = {
+    assertNotStopped()
+    dagScheduler.cancelJobGroup(groupId, cancelFutureJobs)
+  }
+
+  /**
    * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.
    *
    * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.

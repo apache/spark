@@ -2961,6 +2961,12 @@
     ],
     "sqlState" : "42601"
   },
+  "SPARK_JOB_CANCELLED" : {
+    "message" : [
+      "Job <jobId> cancelled <reason>"
+    ],
+    "sqlState" : "XXKDA"
+  },
   "SPECIFY_BUCKETING_IS_NOT_ALLOWED" : {
     "message" : [
       "A CREATE TABLE without explicit column list cannot specify bucketing information.",

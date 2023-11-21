@@ -1728,6 +1728,16 @@ package object config {
       .checkValue(v => v > 0, "The max failures should be a positive value.")
       .createWithDefault(40)
 
+  private[spark] val CANCELLED_JOB_GROUP_SET_SIZE =
+    ConfigBuilder("spark.scheduler.job.cancelledJobGroupSet.size")
+      .doc("The size of the set to store cancelled job groups, if the job group is cancelled " +
+        "with cancelFutureJobs = true. If the size of the set exceeds this value, the oldest job " +
+        "group will be removed from the set.")
+      .version("3.5.0")
+      .intConf
+      .checkValue(v => v > 0, "The size of the set should be a positive value.")
+      .createWithDefault(1000)
+
   private[spark] val UNSAFE_EXCEPTION_ON_MEMORY_LEAK =
     ConfigBuilder("spark.unsafe.exceptionOnMemoryLeak")
       .internal()
