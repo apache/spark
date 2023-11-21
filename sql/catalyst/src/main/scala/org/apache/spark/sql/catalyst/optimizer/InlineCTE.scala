@@ -96,7 +96,7 @@ case class InlineCTE(alwaysInline: Boolean = false) extends Rule[LogicalPlan] {
         }
         buildCTEMap(child, cteMap, outerCTEId)
 
-      case ref: CTERelationRef if cteMap.contains(ref.cteId) =>
+      case ref: CTERelationRef =>
         val (cteDef, refCount, refMap) = cteMap(ref.cteId)
         cteMap(ref.cteId) = (cteDef, refCount + 1, refMap)
         outerCTEId.foreach { cteId =>
@@ -161,7 +161,7 @@ case class InlineCTE(alwaysInline: Boolean = false) extends Rule[LogicalPlan] {
         }
         inlineCTE(child, cteMap, notInlined)
 
-      case ref: CTERelationRef if cteMap.contains(ref.cteId) =>
+      case ref: CTERelationRef =>
         val (cteDef, refCount, _) = cteMap(ref.cteId)
         if (shouldInline(cteDef, refCount)) {
           if (ref.outputSet == cteDef.outputSet) {
