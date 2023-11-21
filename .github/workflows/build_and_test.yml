@@ -200,7 +200,6 @@ jobs:
       SKIP_UNIDOC: true
       SKIP_MIMA: true
       SKIP_PACKAGING: true
-      LIVE_UI_LOCAL_STORE_DIR: "/tmp/kvStore"
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -380,7 +379,6 @@ jobs:
       SKIP_PACKAGING: true
       METASPACE_SIZE: 1g
       BRANCH: ${{ inputs.branch }}
-      LIVE_UI_LOCAL_STORE_DIR: "/tmp/kvStore"
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
