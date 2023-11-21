@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect.artifact.util
+package org.apache.spark.sql.artifact.util
 
 import java.nio.file.{Path, Paths}
 
 object ArtifactUtils {
 
-  private[connect] def concatenatePaths(basePath: Path, otherPath: Path): Path = {
+  private[sql] def concatenatePaths(basePath: Path, otherPath: Path): Path = {
     require(!otherPath.isAbsolute)
     // We avoid using the `.resolve()` method here to ensure that we're concatenating the two
     // paths.
@@ -37,7 +37,7 @@ object ArtifactUtils {
     normalizedPath
   }
 
-  private[connect] def concatenatePaths(basePath: Path, otherPath: String): Path = {
+  private[sql] def concatenatePaths(basePath: Path, otherPath: String): Path = {
     concatenatePaths(basePath, Paths.get(otherPath))
   }
 }
