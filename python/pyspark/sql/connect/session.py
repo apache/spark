@@ -241,7 +241,7 @@ class SparkSession:
 
         Parameters
         ----------
-        connection: Union[str,ChannelBuilder]
+        connection: str or class:`ChannelBuilder`
             Connection string that is used to extract the connection parameters and configure
             the GRPC connection. Or instance of ChannelBuilder that creates GRPC connection.
             Defaults to `sc://localhost`.

@@ -33,7 +33,7 @@ class SparkConnectArtifactStatusesHandler(
       .getOrCreateIsolatedSession(userId, sessionId)
       .session
     val blockManager = session.sparkContext.env.blockManager
-    blockManager.getStatus(CacheId(userId, sessionId, hash)).isDefined
+    blockManager.getStatus(CacheId(session.sessionUUID, hash)).isDefined
   }
 
   def handle(request: proto.ArtifactStatusesRequest): Unit = {

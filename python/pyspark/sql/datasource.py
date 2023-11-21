@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from abc import ABC, abstractmethod
-from typing import final, Any, Dict, Iterator, List, Optional, Tuple, Type, Union, TYPE_CHECKING
+from typing import final, Any, Dict, Iterator, List, Tuple, Type, Union, TYPE_CHECKING
 
 from pyspark import since
 from pyspark.sql import Row
@@ -45,21 +45,12 @@ class DataSource(ABC):
     """
 
     @final
-    def __init__(
-        self,
-        paths: List[str],
-        userSpecifiedSchema: Optional[StructType],
-        options: Dict[str, "OptionalPrimitiveType"],
-    ) -> None:
+    def __init__(self, options: Dict[str, "OptionalPrimitiveType"]) -> None:
         """
-        Initializes the data source with user-provided information.
+        Initializes the data source with user-provided options.
 
         Parameters
         ----------
-        paths : list
-            A list of paths to the data source.
-        userSpecifiedSchema : StructType, optional
-            The user-specified schema of the data source.
         options : dict
             A dictionary representing the options for this data source.
 
@@ -67,8 +58,6 @@ class DataSource(ABC):
         -----
         This method should not be overridden.
         """
-        self.paths = paths
-        self.userSpecifiedSchema = userSpecifiedSchema
         self.options = options
 
     @classmethod

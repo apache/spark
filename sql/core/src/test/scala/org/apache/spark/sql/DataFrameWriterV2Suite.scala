@@ -463,7 +463,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     spark.table("source")
         .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
         .writeTo("testcat.table_name")
-        .partitionedBy(years($"ts"))
+        .partitionedBy(partitioning.years($"ts"))
         .create()
 
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
@@ -476,7 +476,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     spark.table("source")
         .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
         .writeTo("testcat.table_name")
-        .partitionedBy(months($"ts"))
+        .partitionedBy(partitioning.months($"ts"))
         .create()
 
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
@@ -489,7 +489,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     spark.table("source")
         .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
         .writeTo("testcat.table_name")
-        .partitionedBy(days($"ts"))
+        .partitionedBy(partitioning.days($"ts"))
         .create()
 
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
@@ -502,7 +502,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     spark.table("source")
         .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
         .writeTo("testcat.table_name")
-        .partitionedBy(hours($"ts"))
+        .partitionedBy(partitioning.hours($"ts"))
         .create()
 
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
@@ -514,7 +514,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
   test("Create: partitioned by bucket(4, id)") {
     spark.table("source")
         .writeTo("testcat.table_name")
-        .partitionedBy(bucket(4, $"id"))
+        .partitionedBy(partitioning.bucket(4, $"id"))
         .create()
 
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
@@ -764,7 +764,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         lit("2019-09-02 07:00:00.000000").cast("timestamp") as "modified",
         lit("America/Los_Angeles") as "timezone"))
       .writeTo("testcat.table_name")
-      .partitionedBy(bucket(4, $"ts.timezone"))
+      .partitionedBy(partitioning.bucket(4, $"ts.timezone"))
       .create()
 
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))

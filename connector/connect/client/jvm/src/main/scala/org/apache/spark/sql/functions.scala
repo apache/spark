@@ -7545,36 +7545,36 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * A transform for timestamps and dates to partition data into years.
+   * (Java-specific) A transform for timestamps and dates to partition data into years.
    *
    * @group partition_transforms
    * @since 3.4.0
    */
-  def years(e: Column): Column = Column.fn("years", e)
+  def years(e: Column): Column = partitioning.years(e)
 
   /**
-   * A transform for timestamps and dates to partition data into months.
+   * (Java-specific) A transform for timestamps and dates to partition data into months.
    *
    * @group partition_transforms
    * @since 3.4.0
    */
-  def months(e: Column): Column = Column.fn("months", e)
+  def months(e: Column): Column = partitioning.months(e)
 
   /**
-   * A transform for timestamps and dates to partition data into days.
+   * (Java-specific) A transform for timestamps and dates to partition data into days.
    *
    * @group partition_transforms
    * @since 3.4.0
    */
-  def days(e: Column): Column = Column.fn("days", e)
+  def days(e: Column): Column = partitioning.days(e)
 
   /**
-   * A transform for timestamps to partition data into hours.
+   * (Java-specific) A transform for timestamps to partition data into hours.
    *
    * @group partition_transforms
    * @since 3.4.0
    */
-  def hours(e: Column): Column = Column.fn("hours", e)
+  def hours(e: Column): Column = partitioning.hours(e)
 
   /**
    * Converts the timestamp without time zone `sourceTs` from the `sourceTz` time zone to
@@ -7856,22 +7856,20 @@ object functions {
   def make_ym_interval(): Column = Column.fn("make_ym_interval")
 
   /**
-   * A transform for any type that partitions by a hash of the input column.
+   * (Java-specific) A transform for any type that partitions by a hash of the input column.
    *
    * @group partition_transforms
    * @since 3.4.0
    */
-  def bucket(numBuckets: Column, e: Column): Column =
-    Column.fn("bucket", numBuckets, e)
+  def bucket(numBuckets: Column, e: Column): Column = partitioning.bucket(numBuckets, e)
 
   /**
-   * A transform for any type that partitions by a hash of the input column.
+   * (Java-specific) A transform for any type that partitions by a hash of the input column.
    *
    * @group partition_transforms
    * @since 3.4.0
    */
-  def bucket(numBuckets: Int, e: Column): Column =
-    Column.fn("bucket", lit(numBuckets), e)
+  def bucket(numBuckets: Int, e: Column): Column = partitioning.bucket(numBuckets, e)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Predicates functions
@@ -8404,4 +8402,58 @@ object functions {
       .addAllArguments(cols.map(_.expr).asJava)
   }
 
+  // scalastyle:off
+  // TODO(SPARK-45970): Use @static annotation so Java can access to those
+  //   API in the same way. Once we land this fix, should deprecate
+  //   functions.hours, days, months, years and bucket.
+  object partitioning {
+    // scalastyle:on
+    /**
+     * (Scala-specific) A transform for timestamps and dates to partition data into years.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def years(e: Column): Column = Column.fn("years", e)
+
+    /**
+     * (Scala-specific) A transform for timestamps and dates to partition data into months.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def months(e: Column): Column = Column.fn("months", e)
+
+    /**
+     * (Scala-specific) A transform for timestamps and dates to partition data into days.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def days(e: Column): Column = Column.fn("days", e)
+
+    /**
+     * (Scala-specific) A transform for timestamps to partition data into hours.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def hours(e: Column): Column = Column.fn("hours", e)
+
+    /**
+     * (Scala-specific) A transform for any type that partitions by a hash of the input column.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def bucket(numBuckets: Column, e: Column): Column = Column.fn("bucket", numBuckets, e)
+
+    /**
+     * (Scala-specific) A transform for any type that partitions by a hash of the input column.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def bucket(numBuckets: Int, e: Column): Column = Column.fn("bucket", lit(numBuckets), e)
+  }
 }

@@ -326,7 +326,8 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
           val quotResult = Decimal(quotExact.setScale(quotType.scale, RoundingMode.HALF_UP))
           val quotExpected =
             if (quotResult.precision > DecimalType.MAX_PRECISION) null else quotResult
-          checkEvaluationOrException(quotActual, quotExpected.toLong)
+          checkEvaluationOrException(quotActual,
+            if (quotExpected == null) null else quotExpected.toLong)
         }
       }
 
