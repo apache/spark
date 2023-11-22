@@ -51,7 +51,8 @@ public class SslSampleConfigs {
   public static final String untrustedKeyStorePath = getAbsolutePath("/untrusted-keystore");
   public static final String trustStorePath = getAbsolutePath("/truststore");
   public static final String unencryptedPrivateKeyPath = getAbsolutePath("/unencrypted-key.pem");
-  public static final String unencryptedCertChainPath = getAbsolutePath("/unencrypted-certchain.pem");
+  public static final String unencryptedCertChainPath = 
+    getAbsolutePath("/unencrypted-certchain.pem");
 
   /**
    * Creates a config map containing the settings needed to enable the RPC SSL feature
