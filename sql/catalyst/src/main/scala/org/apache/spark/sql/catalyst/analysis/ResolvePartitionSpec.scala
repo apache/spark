@@ -57,13 +57,13 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
       tableName: String,
       partSpec: UnresolvedPartitionSpec,
       partSchema: StructType,
-      allowPartitionSpec: Boolean): ResolvedPartitionSpec = {
+      allowPartialPartitionSpec: Boolean): ResolvedPartitionSpec = {
     val normalizedSpec = normalizePartitionSpec(
       partSpec.spec,
       partSchema,
       tableName,
       conf.resolver)
-    if (!allowPartitionSpec) {
+    if (!allowPartialPartitionSpec) {
       requireExactMatchedPartitionSpec(tableName, normalizedSpec,
         partSchema.fieldNames.toImmutableArraySeq)
     }
