@@ -487,6 +487,8 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
   }
 
   test("GRPC stub unary call throws error immediately") {
+    // Spark Connect error retry handling depends on the error being returned from the unary
+    // call immediately.
     val channel = SparkConnectClient.Configuration(host = "ABC").createChannel()
     val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
     // The request is invalid, but it shouldn't even reach the server.
@@ -500,6 +502,8 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
   }
 
   test("GRPC stub server streaming call throws error on first next() / hasNext()") {
+    // Spark Connect error retry handling depends on the error being returned from the response
+    // iterator and not immediately upon iterator creation.
     val channel = SparkConnectClient.Configuration(host = "ABC").createChannel()
     val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
     // The request is invalid, but it shouldn't even reach the server.
@@ -515,6 +519,8 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
   }
 
   test("GRPC stub client streaming call throws error on first client request sent") {
+    // Spark Connect error retry handling depends on the error being returned from the response
+    // iterator and not immediately upon iterator creation or request being sent.
     val channel = SparkConnectClient.Configuration(host = "ABC").createChannel()
     val stub = proto.SparkConnectServiceGrpc.newStub(channel)
 

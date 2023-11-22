@@ -33,6 +33,8 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
   val BIG_ENOUGH_QUERY = "select * from range(1000000)"
 
   test("Execute is sent eagerly to the server upon iterator creation") {
+    // This behavior changed with grpc upgrade from 1.56.0 to 1.59.0.
+    // Testing to be aware of future changes.
     withClient { client =>
       val query = client.execute(buildPlan(BIG_ENOUGH_QUERY))
       // just creating the iterator triggers query to be sent to server.
