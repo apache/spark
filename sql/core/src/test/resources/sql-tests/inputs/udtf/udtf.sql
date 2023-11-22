@@ -63,10 +63,10 @@ SELECT * FROM
 --             .add("total", IntegerType())
 --             .add("last", IntegerType()),
 --         partition_by=[
---             PartitioningColumn("partition_col")
+--             PartitioningExpression("partition_col")
 --         ],
 --         order_by=[
---             OrderingColumn("input")
+--             OrderingExpression("input")
 --         ])
 SELECT * FROM UDTFPartitionByOrderBy(TABLE(t2));
 SELECT * FROM UDTFPartitionByOrderBy(TABLE(t2) WITH SINGLE PARTITION);
@@ -81,7 +81,7 @@ SELECT * FROM
 --             .add("last", IntegerType()),
 --         with_single_partition=True,
 --         partition_by=[
---             PartitioningColumn("partition_col")
+--             PartitioningExpression("partition_col")
 --         ])
 SELECT * FROM UDTFInvalidPartitionByAndWithSinglePartition(TABLE(t2));
 SELECT * FROM UDTFInvalidPartitionByAndWithSinglePartition(TABLE(t2) WITH SINGLE PARTITION);
@@ -95,7 +95,7 @@ SELECT * FROM
 --         schema=StructType()
 --             .add("last", IntegerType()),
 --         order_by=[
---             OrderingColumn("input")
+--             OrderingExpression("input")
 --         ])
 SELECT * FROM UDTFInvalidOrderByWithoutPartitionBy(TABLE(t2));
 SELECT * FROM UDTFInvalidOrderByWithoutPartitionBy(TABLE(t2) WITH SINGLE PARTITION);

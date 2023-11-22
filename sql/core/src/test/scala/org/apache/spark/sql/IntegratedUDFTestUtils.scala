@@ -489,7 +489,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     val name: String = "UDTFCountSumLast"
     val pythonScript: String =
       s"""
-         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
+         |from pyspark.sql.functions import AnalyzeResult
          |from pyspark.sql.types import IntegerType, Row, StructType
          |class $name:
          |    def __init__(self):
@@ -567,7 +567,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
       s"""
         |import json
         |from dataclasses import dataclass
-        |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
+        |from pyspark.sql.functions import AnalyzeResult, OrderingExpression
         |from pyspark.sql.types import IntegerType, Row, StructType
         |
         |@dataclass
@@ -595,8 +595,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |                .add("last", IntegerType()),
         |            withSinglePartition=True,
         |            orderBy=[
-        |                OrderingColumn("input"),
-        |                OrderingColumn("partition_col")],
+        |                OrderingExpression("input"),
+        |                OrderingExpression("partition_col")],
         |            buffer=buffer)
         |
         |    def eval(self, initial_count, row):
@@ -623,7 +623,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     val name: String = "UDTFPartitionByOrderBy"
     val pythonScript: String =
       s"""
-        |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
+        |from pyspark.sql.functions import AnalyzeResult, OrderingExpression, PartitioningExpression
         |from pyspark.sql.types import IntegerType, Row, StructType
         |class $name:
         |    def __init__(self):
@@ -641,10 +641,10 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |                .add("total", IntegerType())
         |                .add("last", IntegerType()),
         |            partitionBy=[
-        |                PartitioningColumn("partition_col")
+        |                PartitioningExpression("partition_col")
         |            ],
         |            orderBy=[
-        |                OrderingColumn("input")
+        |                OrderingExpression("input")
         |            ])
         |
         |    def eval(self, row: Row):
@@ -673,7 +673,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     val name: String = "UDTFInvalidPartitionByAndWithSinglePartition"
     val pythonScript: String =
       s"""
-         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
+         |from pyspark.sql.functions import AnalyzeResult, PartitioningExpression
          |from pyspark.sql.types import IntegerType, Row, StructType
          |class $name:
          |    def __init__(self):
@@ -686,7 +686,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
          |                .add("last", IntegerType()),
          |            withSinglePartition=True,
          |            partitionBy=[
-         |                PartitioningColumn("partition_col")
+         |                PartitioningExpression("partition_col")
          |            ])
          |
          |    def eval(self, row: Row):
@@ -713,7 +713,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     val name: String = "UDTFInvalidOrderByWithoutPartitionBy"
     val pythonScript: String =
       s"""
-         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
+         |from pyspark.sql.functions import AnalyzeResult, OrderingExpression
          |from pyspark.sql.types import IntegerType, Row, StructType
          |class $name:
          |    def __init__(self):
@@ -725,7 +725,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
          |            schema=StructType()
          |                .add("last", IntegerType()),
          |            orderBy=[
-         |                OrderingColumn("input")
+         |                OrderingExpression("input")
          |            ])
          |
          |    def eval(self, row: Row):
