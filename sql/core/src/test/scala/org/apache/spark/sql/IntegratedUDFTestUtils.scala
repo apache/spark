@@ -683,6 +683,12 @@ object IntegratedUDFTestUtils extends SQLHelper {
       partitionBy = "partition_col + 1",
       orderBy = "RANDOM(42)")
 
+  object InvalidTestPythonUDTFPartitionByOrderByParseError
+    extends TestPythonUDTFPartitionByOrderByBase(
+      name = "InvalidUDTFPartitionByComplexExprParseError",
+      partitionBy = "unparsable",
+      orderBy = "input")
+
   object InvalidPartitionByAndWithSinglePartition extends TestUDTF {
     val name: String = "UDTFInvalidPartitionByAndWithSinglePartition"
     val pythonScript: String =

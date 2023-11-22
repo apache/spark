@@ -117,6 +117,7 @@ SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnArrayType(TABLE(t2))
 SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnArrayElementType(TABLE(t2));
 SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnStructType(TABLE(t2));
 SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnMapType(TABLE(t2));
+SELECT * FROM InvalidUDTFPartitionByComplexExprParseError(TABLE(t2));
 
 -- cleanup
 DROP VIEW t1;

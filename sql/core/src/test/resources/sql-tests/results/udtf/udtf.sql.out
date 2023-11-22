@@ -625,6 +625,29 @@ pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defin
 
 
 -- !query
+SELECT * FROM InvalidUDTFPartitionByComplexExprParseError(TABLE(t2))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`unparsable`",
+    "proposal" : "`input`, `partition_col`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 10,
+    "fragment" : "unparsable"
+  } ]
+}
+
+
+-- !query
 DROP VIEW t1
 -- !query schema
 struct<>
