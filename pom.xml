@@ -120,7 +120,7 @@
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.6</asm.version>
     <slf4j.version>2.0.9</slf4j.version>
-    <log4j.version>2.21.0</log4j.version>
+    <log4j.version>2.22.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.3.6</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
@@ -800,7 +800,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.5-7</version>
+        <version>1.5.5-10</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
