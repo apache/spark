@@ -152,6 +152,8 @@ def convert_exception(e: Py4JJavaError) -> CapturedException:
         return SparkRuntimeException(origin=e)
     elif is_instance_of(gw, e, "org.apache.spark.SparkUpgradeException"):
         return SparkUpgradeException(origin=e)
+    elif is_instance_of(gw, e, "org.apache.spark.SparkNoSuchElementException"):
+        return SparkNoSuchElementException(origin=e)
 
     c: Py4JJavaError = e.getCause()
     stacktrace: str = jvm.org.apache.spark.util.Utils.exceptionString(e)
@@ -298,6 +300,12 @@ class SparkRuntimeException(CapturedException, BaseSparkRuntimeException):
 class SparkUpgradeException(CapturedException, BaseSparkUpgradeException):
     """
     Exception thrown because of Spark upgrade.
+    """
+
+
+class SparkNoSuchElementException(CapturedException, BaseUnknownException):
+    """
+    No such element exception.
     """
 
 

@@ -51,8 +51,8 @@ black==23.9.1
 py
 
 # Spark Connect (required)
-grpcio>=1.48,<1.57
-grpcio-status>=1.48,<1.57
+grpcio==1.59.3
+grpcio-status==1.59.3
 protobuf==4.25.1
 googleapis-common-protos>=1.56.4
 
