@@ -109,10 +109,12 @@ RUN python3.9 -m pip install deepspeed
 #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
 # Jinja2 3.0.0+ causes error when building with Sphinx.
 #   See also https://issues.apache.org/jira/browse/SPARK-35375.
-RUN python3.9 -m pip install 'flake8==3.9.0' 'mypy==0.982' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' 'jinja2<3.0.0' 'black==23.9.1'
-RUN python3.9 -m pip install 'pandas-stubs==1.2.0.53' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
-RUN python3.9 -m pip install 'sphinx<3.1.0' pydata_sphinx_theme mkdocs sphinx-copybutton nbsphinx numpydoc 'markupsafe==2.0.1' 'pyzmq<24.0.0'
-RUN python3.9 -m pip install  ipython ipython_genutils sphinx_plotly_directive 'docutils<0.18.0'
+RUN python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.982' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==23.9.1'
+RUN python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.59.3' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0' \
+RUN python3.9 -m pip install 'sphinx<3.1.0' mkdocs pydata_sphinx_theme sphinx-copybutton nbsphinx numpydoc 'jinja2<3.0.0' 'markupsafe==2.0.1' 'pyzmq<24.0.0'
+RUN python3.9 -m pip install ipython_genutils
+RUN python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8'
+RUN python3.9 -m pip install 'docutils<0.18.0'
 
 # Install Python 3.10 at the last stage to avoid breaking Python 3.9
 RUN add-apt-repository ppa:deadsnakes/ppa
