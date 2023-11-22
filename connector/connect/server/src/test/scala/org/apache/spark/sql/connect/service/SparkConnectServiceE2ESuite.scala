@@ -32,11 +32,21 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
   // were all already in the buffer.
   val BIG_ENOUGH_QUERY = "select * from range(1000000)"
 
+  test("Execute is sent eagerly to the server upon iterator creation") {
+    withClient { client =>
+      val query = client.execute(buildPlan(BIG_ENOUGH_QUERY))
+      // just creating the iterator triggers query to be sent to server.
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        assert(SparkConnectService.executionManager.listExecuteHolders.length == 1)
+      }
+      assert(query.hasNext)
+    }
+  }
+
   test("ReleaseSession releases all queries and does not allow more requests in the session") {
     withClient { client =>
       val query1 = client.execute(buildPlan(BIG_ENOUGH_QUERY))
       val query2 = client.execute(buildPlan(BIG_ENOUGH_QUERY))
-      // just creating the iterator triggers queries to be sent to server.
       Eventually.eventually(timeout(eventuallyTimeout)) {
         assert(SparkConnectService.executionManager.listExecuteHolders.length == 2)
       }
@@ -88,7 +98,6 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       withClient(sessionId = sessionIdB, userId = userIdB) { clientB =>
         val queryA = clientA.execute(buildPlan(BIG_ENOUGH_QUERY))
         val queryB = clientB.execute(buildPlan(BIG_ENOUGH_QUERY))
-        // just creating the iterator sends the queries to the server.
         Eventually.eventually(timeout(eventuallyTimeout)) {
           assert(SparkConnectService.executionManager.listExecuteHolders.length == 2)
         }
