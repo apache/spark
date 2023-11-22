@@ -172,7 +172,7 @@ private[spark] object ResourceUtils extends Logging {
   // the we get (1, 2) back out. This indicates that for each 1 address, it allows you to
   // put 2 tasks on that address. Note if amount is greater than 1, then the number of
   // running tasks per address has to be 1. This can be used for calculating
-  // the number of tasks per executor -> (executorAmount * numParts) / (integer amount).
+  // the number of tasks per executor = (executorAmount * numParts) / (integer amount).
   // Returns tuple of (integer amount, numParts)
   def calculateAmountAndPartsForFraction(doubleAmount: Double): (Int, Int) = {
     val parts = if (doubleAmount <= 1.0) {

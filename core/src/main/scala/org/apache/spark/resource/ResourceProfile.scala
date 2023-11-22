@@ -120,7 +120,7 @@ class ResourceProfile(
 
   /*
    * This function takes into account fractional amounts for the task resource requirement.
-   * Spark only supports fractional amounts < 1 to basically allow for multiple tasks
+   * Spark only supports fractional amounts &lt; 1 to basically allow for multiple tasks
    * to use the same resource address or a whole number to use the multiple whole addresses.
    */
   private[spark] def getSchedulerTaskResourceAmount(resource: String): Int = {
