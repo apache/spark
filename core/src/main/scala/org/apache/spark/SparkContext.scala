@@ -1836,7 +1836,7 @@ class SparkContext(config: SparkConf) extends Logging {
       val uriToUse = if (!isLocal && scheme == "file") uri else new URI(key)
       val uriToDownload = UriBuilder.fromUri(uriToUse).fragment(null).build()
       val source = Utils.fetchFile(uriToDownload.toString, Utils.createTempDir(), conf,
-        hadoopConfiguration, timestamp, useCache = true, shouldUntar = false)
+        hadoopConfiguration, timestamp, useCache = false, shouldUntar = false)
       val dest = new File(
         root,
         if (uri.getFragment != null) uri.getFragment else source.getName)
