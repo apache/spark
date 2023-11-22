@@ -78,8 +78,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
         DataSourceV2Utils.getTableProvider(catalogTable.provider.get, conf) match {
           case Some(tableProvider) =>
             import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-            // TODO: should we use the session property?
-            // val sessionOptions = DataSourceV2Utils.extractSessionConfigs(tableProvider, conf)
             val dsOptions = catalogTable.properties
             val pathOption = catalogTable.storage.locationUri.map(CatalogUtils.URIToString)
             val optionsWithPath = if (pathOption.isDefined) {
