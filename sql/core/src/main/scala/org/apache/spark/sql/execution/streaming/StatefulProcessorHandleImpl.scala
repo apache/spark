@@ -21,6 +21,20 @@ import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.streaming.{StatefulProcessorHandle, ValueState}
 
 /**
+ * Object used to assign/retrieve/remove grouping key passed implicitly for various state
+ * manipulation actions using the store handle.
+ */
+object ImplicitKeyTracker {
+  val implicitKey: InheritableThreadLocal[Any] = new InheritableThreadLocal[Any]
+
+  def getImplicitKeyOption: Option[Any] = Option(implicitKey.get())
+
+  def setImplicitKey(key: Any): Unit = implicitKey.set(key)
+
+  def removeImplicitKey(): Unit = implicitKey.remove()
+}
+
+/**
  * Enum used to track valid states for the StatefulProcessorHandle
  */
 object StatefulProcessorHandleState extends Enumeration {
@@ -31,7 +45,7 @@ object StatefulProcessorHandleState extends Enumeration {
 /**
  * Class that provides a concrete implementation of a StatefulProcessorHandle. Note that we keep
  * track of valid transitions as various functions are invoked to track object lifecycle.
- * @param store
+ * @param store - instance of state store
  */
 class StatefulProcessorHandleImpl(store: StateStore)
   extends StatefulProcessorHandle
@@ -59,18 +73,4 @@ class StatefulProcessorHandleImpl(store: StateStore)
     val resultState = new ValueStateImpl[T](store, stateName)
     resultState
   }
-}
-
-/**
- * Object used to assign/retrieve/remove grouping key passed implicitly for various state
- * manipulation actions using the store handle.
- */
-object ImplicitKeyTracker {
-  val implicitKey: InheritableThreadLocal[Any] = new InheritableThreadLocal[Any]
-
-  def getImplicitKeyOption: Option[Any] = Option(implicitKey.get())
-
-  def setImplicitKey(key: Any): Unit = implicitKey.set(key)
-
-  def removeImplicitKey(): Unit = implicitKey.remove()
 }

@@ -18,16 +18,24 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.streaming.TimerValues
 
+/**
+ * Class that provides a concrete implementation for TimerValues used for fetching
+ * processing time and event time (watermark).
+ * @param currentProcessingTimeOpt - option to current processing time
+ * @param currentWatermarkOpt - option to current watermark
+ */
 class TimerValuesImpl(
     currentProcessingTimeOpt: Option[Long],
     currentWatermarkOpt: Option[Long]) extends TimerValues {
 
+  // Return available processing time or -1 otherwise
   override def getCurrentProcessingTimeInMs(): Long = if (currentProcessingTimeOpt.isDefined) {
     currentProcessingTimeOpt.get
   } else {
     -1L
   }
 
+  // Return available watermark or -1 otherwise
   override def getCurrentWatermarkInMs(): Long = if (currentWatermarkOpt.isDefined) {
     currentWatermarkOpt.get
   } else {

@@ -28,7 +28,15 @@ import org.apache.spark.annotation.{Evolving, Experimental}
 @Experimental
 @Evolving
 trait TimerValues extends Serializable {
+  /**
+   * Function to return processing time seen before method invocation
+   * @return - processing time if available in milliseconds or -1 otherwise
+   */
   def getCurrentProcessingTimeInMs(): Long
 
+  /**
+   * Function to return current watermark seen before method invocation
+   * @return - watermark if defined and available in milliseconds or -1 otherwise
+   */
   def getCurrentWatermarkInMs(): Long
 }

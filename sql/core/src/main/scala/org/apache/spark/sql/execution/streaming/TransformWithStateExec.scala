@@ -62,7 +62,6 @@ case class TransformWithStateExec(
 
   override def shortName: String = "transformWithStateExec"
 
-  // TODO: fix this for existing state instances
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = false
 
   override protected def withNewChildInternal(
@@ -162,6 +161,7 @@ case class TransformWithStateExec(
     ) {
       case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
         val processorHandle = new StatefulProcessorHandleImpl(store)
+        assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
         statefulProcessor.init(processorHandle, outputMode)
         processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
         val result = processDataWithPartition(singleIterator, store, processorHandle)
