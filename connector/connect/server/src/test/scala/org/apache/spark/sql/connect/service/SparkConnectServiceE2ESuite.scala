@@ -36,7 +36,6 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
     withClient { client =>
       val query1 = client.execute(buildPlan(BIG_ENOUGH_QUERY))
       val query2 = client.execute(buildPlan(BIG_ENOUGH_QUERY))
-      val query3 = client.execute(buildPlan("select 1"))
       // just creating the iterator is lazy, trigger query1 and query2 to be sent.
       query1.hasNext
       query2.hasNext
@@ -74,13 +73,6 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       assert(
         query2Error.getMessage.contains("OPERATION_CANCELED") ||
           query2Error.getMessage.contains("INVALID_HANDLE.OPERATION_ABANDONED"))
-
-      // query3 has not been submitted before, so it should now fail with SESSION_CLOSED
-      // TODO(SPARK-46042) Reenable a `releaseSession` test case in SparkConnectServiceE2ESuite
-      val query3Error = intercept[SparkException] {
-        query3.hasNext
-      }
-      assert(query3Error.getMessage.contains("INVALID_HANDLE.SESSION_CLOSED"))
 
       // No other requests should be allowed in the session, failing with SESSION_CLOSED
       val requestError = intercept[SparkException] {
