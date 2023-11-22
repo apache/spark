@@ -31,8 +31,8 @@ import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Lo
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1, DataSource}
-import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
+import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
@@ -163,7 +163,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider, tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
         ctas = false)
-      if (!isV2Provider(provider)) {
+      if (!DataSourceV2Utils.isV2Provider(provider, conf)) {
         constructV1TableCmd(None, c.tableSpec, ident, c.tableSchema, c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
@@ -179,7 +179,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c.tableSpec.serde,
         ctas = true)
 
-      if (!isV2Provider(provider)) {
+      if (!DataSourceV2Utils.isV2Provider(provider, conf)) {
         constructV1TableCmd(Some(c.query), c.tableSpec, ident, new StructType, c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
@@ -193,7 +193,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     // session catalog and the table provider is not v2.
     case c @ ReplaceTable(ResolvedV1Identifier(ident), _, _, _, _) =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
-      if (!isV2Provider(provider)) {
+      if (!DataSourceV2Utils.isV2Provider(provider, conf)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
           ident, "REPLACE TABLE")
       } else {
@@ -202,7 +202,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case c @ ReplaceTableAsSelect(ResolvedV1Identifier(ident), _, _, _, _, _, _) =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
-      if (!isV2Provider(provider)) {
+      if (!DataSourceV2Utils.isV2Provider(provider, conf)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
           ident, "REPLACE TABLE AS SELECT")
       } else {
@@ -609,18 +609,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       value: String => builder.putString(DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, value)
     }
     StructField(col.name.head, col.dataType, nullable = true, builder.build())
-  }
-
-  private def isV2Provider(provider: String): Boolean = {
-    // Return earlier since `lookupDataSourceV2` may fail to resolve provider "hive" to
-    // `HiveFileFormat`, when running tests in sql/core.
-    if (DDLUtils.isHiveTable(Some(provider))) return false
-    DataSource.lookupDataSourceV2(provider, conf) match {
-      // TODO(SPARK-28396): Currently file source v2 can't work with tables.
-      case Some(_: FileDataSourceV2) => false
-      case Some(_) => true
-      case _ => false
-    }
   }
 
   private object DatabaseInSessionCatalog {

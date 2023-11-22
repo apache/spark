@@ -73,7 +73,45 @@ class V2SessionCatalog(catalog: SessionCatalog)
 
   override def loadTable(ident: Identifier): Table = {
     try {
-      V1Table(catalog.getTableMetadata(ident.asTableIdentifier))
+      val catalogTable = catalog.getTableMetadata(ident.asTableIdentifier)
+      if (catalogTable.provider.isDefined) {
+        DataSourceV2Utils.getTableProvider(catalogTable.provider.get, conf) match {
+          case Some(tableProvider) =>
+            import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+            // TODO: should we use the session property?
+            // val sessionOptions = DataSourceV2Utils.extractSessionConfigs(tableProvider, conf)
+            val dsOptions = catalogTable.properties
+            val pathOption = catalogTable.storage.locationUri.map(CatalogUtils.URIToString)
+            val optionsWithPath = if (pathOption.isDefined) {
+              dsOptions ++ Map("path" -> pathOption.get)
+            } else {
+              dsOptions
+            }
+            // If the source accepts external table metadata, we can pass the schema and
+            // partitioning information stored in Hive to `getTable` to avoid schema/partitioning
+            // inference, which can be very expensive.
+            if (tableProvider.supportsExternalMetadata()) {
+              val v2Partitioning = catalogTable.partitionColumnNames.asTransforms
+              val v2Bucketing = catalogTable.bucketSpec.map(
+                spec => Array(spec.asTransform)).getOrElse(Array.empty)
+              val v2Clustering = catalogTable.clusterBySpec.map(
+                spec => Array(spec.asTransform)).getOrElse(Array.empty)
+              val partitioning = v2Partitioning ++ v2Bucketing ++ v2Clustering
+              tableProvider.getTable(
+                catalogTable.schema,
+                partitioning,
+                optionsWithPath.asJava)
+            } else {
+              val options = new CaseInsensitiveStringMap(optionsWithPath.asJava)
+              DataSourceV2Utils.getTableFromProvider(
+                tableProvider, options, userSpecifiedSchema = None)
+            }
+          case _ =>
+            V1Table(catalogTable)
+        }
+      } else {
+        V1Table(catalogTable)
+      }
     } catch {
       case _: NoSuchDatabaseException =>
         throw QueryCompilationErrors.noSuchTableError(ident)

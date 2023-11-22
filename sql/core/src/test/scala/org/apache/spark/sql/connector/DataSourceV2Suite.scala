@@ -633,6 +633,38 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       }
     }
   }
+
+  test("SPARK-46043: Support create table using DSv2 sources") {
+    Seq(classOf[SimpleDataSourceV2], classOf[JavaSimpleDataSourceV2]).foreach { cls =>
+      withClue(cls.getName) {
+        withTable("test") {
+          sql(s"CREATE TABLE test USING ${cls.getName}")
+          checkAnswer(
+            sql(s"SELECT * FROM test WHERE i < 3"),
+            Seq(Row(0, 0), Row(1, -1), Row(2, -2)))
+        }
+      }
+    }
+    withTable("test") {
+      val cls = classOf[SchemaRequiredDataSource]
+      withClue(cls.getName) {
+        sql(s"CREATE TABLE test USING ${cls.getName}")
+        checkAnswer(sql(s"SELECT * FROM test"), Nil)
+      }
+    }
+    withTable("test") {
+      val cls = classOf[SupportsExternalMetadataWritableDataSource]
+      withClue(cls.getName) {
+        withTempDir { dir =>
+          sql(s"CREATE TABLE test USING ${cls.getName} OPTIONS (path '${dir.getCanonicalPath}')")
+          checkAnswer(sql(s"SELECT * FROM test"), Nil)
+          sql(s"CREATE OR REPLACE TABLE test USING ${cls.getName} " +
+            s"LOCATION '${dir.getCanonicalPath}'")
+          checkAnswer(sql(s"SELECT * FROM test"), Nil)
+        }
+      }
+    }
+  }
 }
 
 
