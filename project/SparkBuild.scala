@@ -544,7 +544,7 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.streaming.RocksDBStateStoreStreamingAggregationSuite",
     "org.apache.spark.shuffle.KubernetesLocalDiskShuffleDataIOSuite",
     "org.apache.spark.sql.hive.HiveScalaReflectionSuite"
-  )
+  ) ++ sys.env.get("DEDICATED_JVM_SBT_TESTS").map(_.split(",")).getOrElse(Array.empty).toSet
 
   private val DEFAULT_TEST_GROUP = "default_test_group"
   private val HIVE_EXECUTION_TEST_GROUP = "hive_execution_test_group"
