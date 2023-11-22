@@ -28,5 +28,6 @@ import org.apache.spark.annotation.{Evolving, Experimental}
 @Evolving
 trait StatefulProcessorHandle extends Serializable {
 
+  /** Function to create new or return existing single value state variable of given type */
   def getValueState[T](stateName: String): ValueState[T]
 }
