@@ -22,21 +22,19 @@ SELECT * EXCEPT (data.s2) FROM tbl_view;
 SELECT * EXCEPT (data.s2.f2) FROM tbl_view;
 -- EXCEPT all columns
 SELECT * EXCEPT (id, name, data) FROM tbl_view;
--- CREATE TABLE with SELECT
-CREATE TABLE namesTbl USING CSV AS SELECT * EXCEPT (id, data) FROM tbl_view;
-SELECT * FROM namesTbl;
 -- EXCEPT special character names
 SELECT * EXCEPT (`a-b-c`) FROM (SELECT 1 a_b_c, 2 `a-b-c`);
 -- EXCEPT qualified star
 SELECT tbl_view.* EXCEPT (name) FROM tbl_view;
--- EXCEPT insert into select
 INSERT INTO ids
 SELECT * EXCEPT (name, data) FROM tbl_view;
 SELECT * FROM ids;
 -- EXCEPT qualified columns
 SELECT * EXCEPT (ids.id) FROM ids;
--- EXCEPT nested
-SELECT * FROM (SELECT * EXCEPT (name) FROM tbl_view);
+-- EXCEPT structs
+SELECT data.* EXCEPT (s2) FROM tbl_view;
+SELECT data.* EXCEPT (s2.f2) FROM tbl_view;
+SELECT data.s2.* EXCEPT (f2) FROM tbl_view;
 
 -- Errors
 -- EXCEPT missing brackets

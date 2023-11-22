@@ -473,7 +473,7 @@ case class UnresolvedStarExcept(target: Option[Seq[String]], excepts: Seq[Seq[St
     // Use the UnresolvedStarBase expand method to get a seq of NamedExpressions corresponding to
     // the star expansion. This will yield a list of top-level columns from the logical plan's
     // output, or in the case of struct expansion (e.g. target=`x` for SELECT x.*) it will give
-    // a seq of NamedExpressions corresponding to struct fields.
+    // a seq of Alias wrapping the struct field extraction.
     val expandedCols = super.expand(input, resolver)
 
     // resolve except list with respect to the expandedCols
@@ -545,7 +545,7 @@ case class UnresolvedStarExcept(target: Option[Seq[String]], excepts: Seq[Seq[St
         // pass through columns that don't match anything in groupedExcepts
         case (col, None) => col
         // found a match but nestedExcepts has remaining excepts - recurse to rewrite the struct
-        case (col, Some(nestedExcepts)) if !nestedExcepts.exists(_.isEmpty) =>
+        case (col, Some(nestedExcepts)) if nestedExcepts.exists(_.nonEmpty) =>
           val fields = col.dataType match {
             case s: StructType => s.fields
             // we shouldn't be here since we EXCEPT_NEXTED_COLUMN_INVALID_TYPE in getRootColumn
@@ -566,7 +566,10 @@ case class UnresolvedStarExcept(target: Option[Seq[String]], excepts: Seq[Seq[St
         // if there are multiple nestedExcepts but one is empty we must have overlapping except
         // columns. throw an error.
         case (col, Some(nestedExcepts)) if nestedExcepts.size > 1 =>
-          throw new AnalysisException(errorClass = "EXCEPT_OVERLAPPING_COLUMNS", Map.empty)
+          throw new AnalysisException(
+            errorClass = "EXCEPT_OVERLAPPING_COLUMNS",
+            messageParameters = Map(
+              "columns" -> this.excepts.map(_.mkString(".")).mkString(", ")))
       }
     }
 

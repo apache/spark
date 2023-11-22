@@ -134,27 +134,6 @@ Project
 
 
 -- !query
-CREATE TABLE namesTbl USING CSV AS SELECT * EXCEPT (id, data) FROM tbl_view
--- !query analysis
-org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-{
-  "errorClass" : "TABLE_OR_VIEW_ALREADY_EXISTS",
-  "sqlState" : "42P07",
-  "messageParameters" : {
-    "relationName" : "`spark_catalog`.`default`.`namesTbl`"
-  }
-}
-
-
--- !query
-SELECT * FROM namesTbl
--- !query analysis
-Project [name#x]
-+- SubqueryAlias spark_catalog.default.namestbl
-   +- Relation spark_catalog.default.namestbl[name#x] csv
-
-
--- !query
 SELECT * EXCEPT (`a-b-c`) FROM (SELECT 1 a_b_c, 2 `a-b-c`)
 -- !query analysis
 Project [a_b_c#x]
@@ -206,17 +185,39 @@ Project
 
 
 -- !query
-SELECT * FROM (SELECT * EXCEPT (name) FROM tbl_view)
+SELECT data.* EXCEPT (s2) FROM tbl_view
 -- !query analysis
-Project [id#x, data#x]
-+- SubqueryAlias __auto_generated_subquery_name
-   +- Project [id#x, data#x]
-      +- SubqueryAlias tbl_view
-         +- View (`tbl_view`, [id#x,name#x,data#x])
-            +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
-               +- Project [id#x, name#x, data#x]
-                  +- SubqueryAlias tbl_view
-                     +- LocalRelation [id#x, name#x, data#x]
+Project [data#x.f1 AS f1#x]
++- SubqueryAlias tbl_view
+   +- View (`tbl_view`, [id#x,name#x,data#x])
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+         +- Project [id#x, name#x, data#x]
+            +- SubqueryAlias tbl_view
+               +- LocalRelation [id#x, name#x, data#x]
+
+
+-- !query
+SELECT data.* EXCEPT (s2.f2) FROM tbl_view
+-- !query analysis
+Project [data#x.f1 AS f1#x, named_struct(f3, data#x.s2.f3) AS s2#x]
++- SubqueryAlias tbl_view
+   +- View (`tbl_view`, [id#x,name#x,data#x])
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+         +- Project [id#x, name#x, data#x]
+            +- SubqueryAlias tbl_view
+               +- LocalRelation [id#x, name#x, data#x]
+
+
+-- !query
+SELECT data.s2.* EXCEPT (f2) FROM tbl_view
+-- !query analysis
+Project [data#x.s2.f3 AS f3#x]
++- SubqueryAlias tbl_view
+   +- View (`tbl_view`, [id#x,name#x,data#x])
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+         +- Project [id#x, name#x, data#x]
+            +- SubqueryAlias tbl_view
+               +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
@@ -296,6 +297,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "EXCEPT_OVERLAPPING_COLUMNS",
   "sqlState" : "42702",
+  "messageParameters" : {
+    "columns" : "id, id"
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -309,15 +313,5 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT * EXCEPT(data.s2, data.s2.f2) FROM tbl_view
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "EXCEPT_OVERLAPPING_COLUMNS",
-  "sqlState" : "42702",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 36,
-    "fragment" : "* EXCEPT(data.s2, data.s2.f2)"
-  } ]
-}
+java.util.NoSuchElementException
+head of empty list

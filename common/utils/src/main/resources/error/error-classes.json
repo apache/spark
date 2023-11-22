@@ -995,7 +995,7 @@
   },
   "EXCEPT_OVERLAPPING_COLUMNS" : {
     "message" : [
-      "Columns in an EXCEPT list must be distinct and non-overlapping."
+      "Columns in an EXCEPT list must be distinct and non-overlapping, but got (<columns>)."
     ],
     "sqlState" : "42702"
   },
