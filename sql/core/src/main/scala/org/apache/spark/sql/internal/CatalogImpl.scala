@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, LogicalPlan, OptionList, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, UnresolvedTableSpec, View}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, DescribeNamespace, LocalRelation, LogicalPlan, OptionList, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, UnresolvedTableSpec, View}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, MultipartIdentifierHelper, NamespaceHelper, TransformHelper}
@@ -439,12 +439,12 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * `Database` can be found.
    */
   override def getDatabase(dbName: String): Database = {
-    val namespace = resolveNamespace(dbName)
-    val plan = UnresolvedNamespace(namespace)
+    val plan = DescribeNamespace(UnresolvedNamespace(resolveNamespace(dbName)), false)
     sparkSession.sessionState.executePlan(plan).analyzed match {
-      case ResolvedNamespace(catalog, namespace) =>
+      case DescribeNamespace(ResolvedNamespace(catalog, namespace), _, _) =>
         getNamespace(catalog, namespace)
-      case _ => new Database(name = dbName, description = null, locationUri = null)
+      case DescribeNamespace(_, _, _) =>
+        new Database(name = dbName, description = null, locationUri = null)
     }
   }
 
@@ -516,18 +516,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Checks if the database with the specified name exists.
    */
   override def databaseExists(dbName: String): Boolean = {
-    // To maintain backwards compatibility, we first treat the input is a simple dbName and check
-    // if sessionCatalog contains it. If no, we try to parse it, resolve catalog and namespace,
-    // and check if namespace exists in the catalog.
-    if (!sessionCatalog.databaseExists(dbName)) {
-      val plan = UnresolvedNamespace(parseIdent(dbName))
-      sparkSession.sessionState.executePlan(plan).analyzed match {
-        case ResolvedNamespace(catalog: SupportsNamespaces, ns) =>
-          catalog.namespaceExists(ns.toArray)
-        case _ => true
-      }
-    } else {
-      true
+    val plan = DescribeNamespace(UnresolvedNamespace(resolveNamespace(dbName)), false)
+    sparkSession.sessionState.executePlan(plan).analyzed match {
+      case DescribeNamespace(ResolvedNamespace(catalog: SupportsNamespaces, ns), _, _) =>
+        catalog.namespaceExists(ns.toArray)
+      case DescribeNamespace(_, _, _) => true
     }
   }
 
