@@ -103,7 +103,7 @@ class OrderingColumn:
         True or False, we override the default behavior accordingly.
     """
 
-    value: str
+    name: str
     ascending: bool = True
     overrideNullsFirst: Optional[bool] = None
 

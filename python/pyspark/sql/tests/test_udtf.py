@@ -2354,7 +2354,7 @@ class BaseUDTFTestsMixin:
                     .add("total", IntegerType())
                     .add("last", IntegerType()),
                     partitionBy=[PartitioningColumn("partition_col + 1")],
-                    orderBy=[OrderingColumn(value="input", ascending=True, overrideNullsFirst=False)
+                    orderBy=[OrderingColumn(name="input", ascending=True, overrideNullsFirst=False)
                     ],
                 )
 
