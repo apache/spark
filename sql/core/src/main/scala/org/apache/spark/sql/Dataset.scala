@@ -1574,8 +1574,7 @@ class Dataset[T] private[sql](
       }
       val newProjList = untypedCols.map(_.named)
       (logicalPlan, newProjList) match {
-        case EasilyFlattenable(flattendPlan) if !this.isStreaming &&
-          !logicalPlan.exists(_.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty) =>
+        case EasilyFlattenable(flattendPlan) if !this.isStreaming =>
           flattendPlan
 
         case _ => Project(newProjList, logicalPlan)
