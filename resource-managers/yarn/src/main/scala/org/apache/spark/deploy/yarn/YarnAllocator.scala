@@ -385,8 +385,6 @@ private[yarn] class YarnAllocator(
     this.hostToLocalTaskCountPerResourceProfileId = hostToLocalTaskCountPerResourceProfileId
 
     if (resourceProfileToTotalExecs.isEmpty) {
-      logInfo("To prevent Yarn allocator from requesting backup for the executors which " +
-        "was Stopped by SchedulerBackend..")
       targetNumExecutorsPerResourceProfileId.clear()
       allocatorNodeHealthTracker.setSchedulerExcludedNodes(excludedNodes)
       true
