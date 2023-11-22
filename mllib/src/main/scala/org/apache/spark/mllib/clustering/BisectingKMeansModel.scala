@@ -188,7 +188,7 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
     }
 
     def load(sc: SparkContext, path: String): BisectingKMeansModel = {
-      implicit val formats: Formats = DefaultFormats
+      implicit val formats: DefaultFormats = DefaultFormats
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
