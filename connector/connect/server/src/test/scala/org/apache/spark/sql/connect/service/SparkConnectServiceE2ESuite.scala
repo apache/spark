@@ -36,11 +36,9 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
     withClient { client =>
       val query1 = client.execute(buildPlan(BIG_ENOUGH_QUERY))
       val query2 = client.execute(buildPlan(BIG_ENOUGH_QUERY))
-      // just creating the iterator is lazy, trigger query1 and query2 to be sent.
-      query1.hasNext
-      query2.hasNext
+      // just creating the iterator triggers queries to be sent to server.
       Eventually.eventually(timeout(eventuallyTimeout)) {
-        SparkConnectService.executionManager.listExecuteHolders.length == 2
+        assert(SparkConnectService.executionManager.listExecuteHolders.length == 2)
       }
 
       // Close session
@@ -50,8 +48,7 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
 
       // Check that queries get cancelled
       Eventually.eventually(timeout(eventuallyTimeout)) {
-        SparkConnectService.executionManager.listExecuteHolders.length == 0
-        // SparkConnectService.sessionManager.
+        assert(SparkConnectService.executionManager.listExecuteHolders.length == 0)
       }
 
       // query1 and query2 could get either an:
@@ -91,18 +88,16 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       withClient(sessionId = sessionIdB, userId = userIdB) { clientB =>
         val queryA = clientA.execute(buildPlan(BIG_ENOUGH_QUERY))
         val queryB = clientB.execute(buildPlan(BIG_ENOUGH_QUERY))
-        // just creating the iterator is lazy, trigger query1 and query2 to be sent.
-        queryA.hasNext
-        queryB.hasNext
+        // just creating the iterator sends the queries to the server.
         Eventually.eventually(timeout(eventuallyTimeout)) {
-          SparkConnectService.executionManager.listExecuteHolders.length == 2
+          assert(SparkConnectService.executionManager.listExecuteHolders.length == 2)
         }
         // Close session A
         clientA.releaseSession()
 
         // A's query gets kicked out.
         Eventually.eventually(timeout(eventuallyTimeout)) {
-          SparkConnectService.executionManager.listExecuteHolders.length == 1
+          assert(SparkConnectService.executionManager.listExecuteHolders.length == 1)
         }
         val queryAError = intercept[SparkException] {
           while (queryA.hasNext) queryA.next()
@@ -143,7 +138,7 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
     withClient(sessionId = sessionId, userId = userId) { client =>
       // this will create the session, and then ReleaseSession at the end of withClient.
       val query = client.execute(buildPlan("SELECT 1"))
-      query.hasNext // trigger execution
+      query.hasNext // guarantees the request was received by server.
       client.releaseSession()
     }
     withClient(sessionId = sessionId, userId = userId) { client =>
@@ -161,17 +156,17 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
     val userId = "Y"
     withClient(sessionId = sessionId, userId = userId) { client =>
       val query = client.execute(buildPlan("SELECT 1"))
-      query.hasNext // trigger execution
+      query.hasNext // guarantees the request was received by server.
       client.releaseSession()
     }
     withClient(sessionId = UUID.randomUUID.toString, userId = userId) { client =>
       val query = client.execute(buildPlan("SELECT 1"))
-      query.hasNext // trigger execution
+      query.hasNext // guarantees the request was received by server.
       client.releaseSession()
     }
     withClient(sessionId = sessionId, userId = "YY") { client =>
       val query = client.execute(buildPlan("SELECT 1"))
-      query.hasNext // trigger execution
+      query.hasNext // guarantees the request was received by server.
       client.releaseSession()
     }
   }
@@ -180,10 +175,9 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
     withRawBlockingStub { stub =>
       val iter =
         stub.executePlan(buildExecutePlanRequest(buildPlan("select * from range(1000000)")))
-      iter.hasNext
       val execution = eventuallyGetExecutionHolder
       Eventually.eventually(timeout(30.seconds)) {
-        execution.eventsManager.status == ExecuteStatus.Finished
+        assert(execution.eventsManager.status == ExecuteStatus.Finished)
       }
     }
   }
@@ -191,10 +185,9 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
   test("SPARK-45133 local relation should reach FINISHED state when results are not consumed") {
     withClient { client =>
       val iter = client.execute(buildLocalRelation((1 to 1000000).map(i => (i, i + 1))))
-      iter.hasNext
       val execution = eventuallyGetExecutionHolder
       Eventually.eventually(timeout(30.seconds)) {
-        execution.eventsManager.status == ExecuteStatus.Finished
+        assert(execution.eventsManager.status == ExecuteStatus.Finished)
       }
     }
   }
