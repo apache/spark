@@ -27,6 +27,13 @@ import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.streaming.ValueState
 import org.apache.spark.sql.types._
 
+/**
+ * Class that provides a concrete implementation for a single value state associated with state
+ * variables used in the streaming transformWithState operator.
+ * @param store - reference to the StateStore instance to be used for storing state
+ * @param stateName - name of logical state partition
+ * @tparam S - data type of object that will be stored
+ */
 class ValueStateImpl[S](
     store: StateStore,
     stateName: String) extends ValueState[S] with Logging{
@@ -53,6 +60,7 @@ class ValueStateImpl[S](
     valueRow
   }
 
+  /** Function to check if state exists. Returns true if present and false otherwise */
   override def exists(): Boolean = {
     val retRow = store.get(encodeKey(), stateName)
     if (retRow == null) {
@@ -62,6 +70,7 @@ class ValueStateImpl[S](
     }
   }
 
+  /** Function to return Option of value if exists and None otherwise */
   override def getOption(): Option[S] = {
     if (exists()) {
       Some(get())
@@ -70,19 +79,26 @@ class ValueStateImpl[S](
     }
   }
 
+  /** Function to return associated value with key if exists and null otherwise */
   override def get(): S = {
-    val retRow = store.get(encodeKey(), stateName)
+    if (exists()) {
+      val retRow = store.get(encodeKey(), stateName)
 
-    val resState = SerializationUtils
-      .deserialize(retRow.getBinary(0))
-      .asInstanceOf[S]
-    resState
+      val resState = SerializationUtils
+        .deserialize(retRow.getBinary(0))
+        .asInstanceOf[S]
+      resState
+    } else {
+      null.asInstanceOf[S]
+    }
   }
 
+  /** Function to update and overwrite state associated with given key */
   override def update(newState: S): Unit = {
     store.put(encodeKey(), encodeValue(newState), stateName)
   }
 
+  /** Function to remove state for given key */
   override def remove(): Unit = {
     store.remove(encodeKey(), stateName)
   }

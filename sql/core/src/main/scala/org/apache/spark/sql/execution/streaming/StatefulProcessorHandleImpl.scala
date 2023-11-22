@@ -20,17 +20,51 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.streaming.{StatefulProcessorHandle, ValueState}
 
+/**
+ * Enum used to track valid states for the StatefulProcessorHandle
+ */
+object StatefulProcessorHandleState extends Enumeration {
+  type StatefulProcessorHandleState = Value
+  val CREATED, INITIALIZED, DATA_PROCESSED, CLOSED = Value
+}
+
+/**
+ * Class that provides a concrete implementation of a StatefulProcessorHandle. Note that we keep
+ * track of valid transitions as various functions are invoked to track object lifecycle.
+ * @param store
+ */
 class StatefulProcessorHandleImpl(store: StateStore)
   extends StatefulProcessorHandle
   with Logging {
+  import StatefulProcessorHandleState._
+
+  private var currState: StatefulProcessorHandleState = CREATED
+
+  private def verify(condition: => Boolean, msg: String): Unit = {
+    if (!condition) {
+      throw new IllegalStateException(msg)
+    }
+  }
+
+  def setHandleState(newState: StatefulProcessorHandleState): Unit = {
+    currState = newState
+  }
+
+  def getHandleState: StatefulProcessorHandleState = currState
 
   override def getValueState[T](stateName: String): ValueState[T] = {
+    verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
+      "initialization is complete")
     store.createColFamilyIfAbsent(stateName)
     val resultState = new ValueStateImpl[T](store, stateName)
     resultState
   }
 }
 
+/**
+ * Object used to assign/retrieve/remove grouping key passed implicitly for various state
+ * manipulation actions using the store handle.
+ */
 object ImplicitKeyTracker {
   val implicitKey: InheritableThreadLocal[Any] = new InheritableThreadLocal[Any]
 

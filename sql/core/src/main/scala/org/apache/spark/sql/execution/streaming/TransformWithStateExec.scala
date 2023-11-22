@@ -158,9 +158,10 @@ case class TransformWithStateExec(
       useColumnFamilies = true
     ) {
       case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
-        statefulProcessor.init(new StatefulProcessorHandleImpl(store), outputMode)
+        val processorHandle = new StatefulProcessorHandleImpl(store)
+        statefulProcessor.init(processorHandle, outputMode)
+        processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
         val result = processDataWithPartition(singleIterator, store)
-//        statefulProcessor.close()
         result
     }
   }
