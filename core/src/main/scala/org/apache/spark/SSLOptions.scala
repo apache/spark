@@ -328,7 +328,8 @@ private[spark] object SSLOptions extends Logging {
       trustStoreReloadIntervalMs,
       openSslEnabled,
       protocol,
-      enabledAlgorithms)
+      enabledAlgorithms,
+      privateKeyPassword)
   }
 
   // Config names and environment variables for propagating SSL passwords
