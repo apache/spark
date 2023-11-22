@@ -137,9 +137,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     out.write(Serialization.write(entry).getBytes(UTF_8))
   }
 
-  private def deserializeEntry(line: String): T = {
-    Serialization.read[T](line)
-  }
+  private def deserializeEntry(line: String): T = Serialization.read[T](line)
 
   override def serialize(logData: Array[T], out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
