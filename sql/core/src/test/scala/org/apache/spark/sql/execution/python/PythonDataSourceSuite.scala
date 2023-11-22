@@ -147,7 +147,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
     val ds1 = spark.sessionState.dataSourceManager.lookupDataSource(dataSourceName)
     checkAnswer(
-      ds1(spark, dataSourceName, Seq.empty, None, CaseInsensitiveMap(Map.empty)),
+      ds1(spark, dataSourceName, None, CaseInsensitiveMap(Map.empty)),
       Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
 
     // Should be able to override an already registered data source.
@@ -171,7 +171,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
 
     val ds2 = spark.sessionState.dataSourceManager.lookupDataSource(dataSourceName)
     checkAnswer(
-      ds2(spark, dataSourceName, Seq.empty, None, CaseInsensitiveMap(Map.empty)),
+      ds2(spark, dataSourceName, None, CaseInsensitiveMap(Map.empty)),
       Seq(Row(0)))
   }
 
