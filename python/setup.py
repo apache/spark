@@ -133,7 +133,7 @@ if in_spark:
 _minimum_pandas_version = "1.4.4"
 _minimum_numpy_version = "1.21"
 _minimum_pyarrow_version = "4.0.0"
-_minimum_grpc_version = "1.56.0"
+_minimum_grpc_version = "1.59.3"
 _minimum_googleapis_common_protos_version = "1.56.4"
 
 
@@ -249,9 +249,11 @@ try:
             "pyspark.sql.connect",
             "pyspark.sql.connect.avro",
             "pyspark.sql.connect.client",
+            "pyspark.sql.connect.functions",
             "pyspark.sql.connect.proto",
             "pyspark.sql.connect.streaming",
             "pyspark.sql.connect.streaming.worker",
+            "pyspark.sql.functions",
             "pyspark.sql.pandas",
             "pyspark.sql.protobuf",
             "pyspark.sql.streaming",

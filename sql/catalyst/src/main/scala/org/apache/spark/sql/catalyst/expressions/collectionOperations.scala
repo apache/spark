@@ -3186,7 +3186,7 @@ object Sequence {
     (elemType: IntegralType)(implicit num: Integral[T]) extends InternalSequence {
 
     override val defaultStep: DefaultStep = new DefaultStep(
-      (PhysicalDataType.ordering(elemType).lteq _).asInstanceOf[LessThanOrEqualFn],
+      PhysicalDataType.ordering(elemType).lteq _,
       elemType,
       num.one)
 

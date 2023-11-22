@@ -187,11 +187,16 @@ private[spark] class BlockManager(
     val conf: SparkConf,
     memoryManager: MemoryManager,
     mapOutputTracker: MapOutputTracker,
-    shuffleManager: ShuffleManager,
+    private val _shuffleManager: ShuffleManager,
     val blockTransferService: BlockTransferService,
     securityManager: SecurityManager,
     externalBlockStoreClient: Option[ExternalBlockStoreClient])
   extends BlockDataManager with BlockEvictionHandler with Logging {
+
+  // We initialize the ShuffleManager later in SparkContext and Executor, to allow
+  // user jars to define custom ShuffleManagers, as such `_shuffleManager` will be null here
+  // (except for tests) and we ask for the instance from the SparkEnv.
+  private lazy val shuffleManager = Option(_shuffleManager).getOrElse(SparkEnv.get.shuffleManager)
 
   // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)`
   private[spark] val externalShuffleServiceEnabled: Boolean = externalBlockStoreClient.isDefined
@@ -587,12 +592,15 @@ private[spark] class BlockManager(
 
   private def registerWithExternalShuffleServer(): Unit = {
     logInfo("Registering executor with local external shuffle service.")
+    // we obtain the class name from the configuration, instead of the ShuffleManager
+    // instance because the ShuffleManager has not been created at this point.
+    val shuffleMgrClass = ShuffleManager.getShuffleManagerClassName(conf)
     val shuffleManagerMeta =
       if (Utils.isPushBasedShuffleEnabled(conf, isDriver = isDriver, checkSerializer = false)) {
-        s"${shuffleManager.getClass.getName}:" +
+        s"${shuffleMgrClass}:" +
           s"${diskBlockManager.getMergeDirectoryAndAttemptIDJsonString()}}}"
       } else {
-        shuffleManager.getClass.getName
+        shuffleMgrClass
       }
     val shuffleConfig = new ExecutorShuffleInfo(
       diskBlockManager.localDirsString,
@@ -2049,10 +2057,10 @@ private[spark] class BlockManager(
    *
    * @return The number of blocks removed.
    */
-  def removeCache(userId: String, sessionId: String): Int = {
-    logDebug(s"Removing cache of user id = $userId in the session $sessionId")
+  def removeCache(sessionUUID: String): Int = {
+    logDebug(s"Removing cache of spark session with UUID: $sessionUUID")
     val blocksToRemove = blockInfoManager.entries.map(_._1).collect {
-      case cid: CacheId if cid.userId == userId && cid.sessionId == sessionId => cid
+      case cid: CacheId if cid.sessionUUID == sessionUUID => cid
     }
     blocksToRemove.foreach { blockId => removeBlock(blockId) }
     blocksToRemove.size

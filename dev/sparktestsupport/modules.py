@@ -113,6 +113,17 @@ tags = Module(
     ],
 )
 
+utils = Module(
+    name="utils",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/utils/",
+    ],
+    sbt_test_goals=[
+        "common-utils/test",
+    ],
+)
+
 kvstore = Module(
     name="kvstore",
     dependencies=[tags],
@@ -126,7 +137,7 @@ kvstore = Module(
 
 network_common = Module(
     name="network-common",
-    dependencies=[tags],
+    dependencies=[tags, utils],
     source_file_regexes=[
         "common/network-common/",
     ],
@@ -148,20 +159,12 @@ network_shuffle = Module(
 
 unsafe = Module(
     name="unsafe",
-    dependencies=[tags],
+    dependencies=[tags, utils],
     source_file_regexes=[
         "common/unsafe",
     ],
     sbt_test_goals=[
         "unsafe/test",
-    ],
-)
-
-utils = Module(
-    name="utils",
-    dependencies=[tags],
-    source_file_regexes=[
-        "common/utils/",
     ],
 )
 
@@ -178,7 +181,7 @@ launcher = Module(
 
 core = Module(
     name="core",
-    dependencies=[kvstore, network_common, network_shuffle, unsafe, launcher],
+    dependencies=[kvstore, network_common, network_shuffle, unsafe, launcher, utils],
     source_file_regexes=[
         "core/",
     ],
@@ -468,7 +471,8 @@ pyspark_sql = Module(
         "pyspark.sql.dataframe",
         "pyspark.sql.datasource",
         "pyspark.sql.group",
-        "pyspark.sql.functions",
+        "pyspark.sql.functions.builtin",
+        "pyspark.sql.functions.partitioning",
         "pyspark.sql.readwriter",
         "pyspark.sql.streaming.query",
         "pyspark.sql.streaming.readwriter",
@@ -856,7 +860,8 @@ pyspark_connect = Module(
         "pyspark.sql.connect.column",
         "pyspark.sql.connect.readwriter",
         "pyspark.sql.connect.dataframe",
-        "pyspark.sql.connect.functions",
+        "pyspark.sql.connect.functions.builtin",
+        "pyspark.sql.connect.functions.partitioning",
         "pyspark.sql.connect.observation",
         "pyspark.sql.connect.avro.functions",
         "pyspark.sql.connect.protobuf.functions",

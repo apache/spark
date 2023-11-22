@@ -50,7 +50,7 @@ if TYPE_CHECKING:
     from pyspark.sql.window import Window
     from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 
-has_numpy = False
+has_numpy: bool = False
 try:
     import numpy as np  # noqa: F401
 
@@ -188,6 +188,21 @@ def try_remote_functions(f: FuncT) -> FuncT:
             from pyspark.sql.connect import functions
 
             return getattr(functions, f.__name__)(*args, **kwargs)
+        else:
+            return f(*args, **kwargs)
+
+    return cast(FuncT, wrapped)
+
+
+def try_partitioning_remote_functions(f: FuncT) -> FuncT:
+    """Mark API supported from Spark Connect."""
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.sql.connect.functions import partitioning
+
+            return getattr(partitioning, f.__name__)(*args, **kwargs)
         else:
             return f(*args, **kwargs)
 

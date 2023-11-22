@@ -244,9 +244,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   private def loadUserDefinedDataSource(paths: Seq[String]): DataFrame = {
     val builder = sparkSession.sharedState.dataSourceManager.lookupDataSource(source)
-    // Unless the legacy path option behavior is enabled, the extraOptions here
-    // should not include "path" or "paths" as keys.
-    val plan = builder(sparkSession, source, paths, userSpecifiedSchema, extraOptions)
+    // Add `path` and `paths` options to the extra options if specified.
+    val optionsWithPath = DataSourceV2Utils.getOptionsWithPaths(extraOptions, paths: _*)
+    val plan = builder(sparkSession, source, userSpecifiedSchema, optionsWithPath)
     Dataset.ofRows(sparkSession, plan)
   }
 

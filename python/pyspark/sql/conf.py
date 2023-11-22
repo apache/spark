@@ -37,17 +37,52 @@ class RuntimeConfig:
         """Create a new RuntimeConfig that wraps the underlying JVM object."""
         self._jconf = jconf
 
-    @since(2.0)
     def set(self, key: str, value: Union[str, int, bool]) -> None:
-        """Sets the given Spark runtime configuration property."""
+        """
+        Sets the given Spark runtime configuration property.
+
+        .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        key : str
+            key of the configuration to set.
+        value : str, int, or bool
+            value of the configuration to set.
+
+        Examples
+        --------
+        >>> spark.conf.set("key1", "value1")
+        """
         self._jconf.set(key, value)
 
-    @since(2.0)
     def get(
         self, key: str, default: Union[Optional[str], _NoValueType] = _NoValue
     ) -> Optional[str]:
-        """Returns the value of Spark runtime configuration property for the given key,
+        """
+        Returns the value of Spark runtime configuration property for the given key,
         assuming it is set.
+
+        .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        key : str
+            key of the configuration to get.
+        default : str, optional
+            value of the configuration to get if the key does not exist.
+
+        Returns
+        -------
+        The string value of the configuration set, or None.
+
+        Examples
+        --------
+        >>> spark.conf.get("non-existent-key", "my_default")
+        'my_default'
+        >>> spark.conf.set("my_key", "my_value")
+        >>> spark.conf.get("my_key")
+        'my_value'
         """
         self._checkType(key, "key")
         if default is _NoValue:
@@ -57,9 +92,28 @@ class RuntimeConfig:
                 self._checkType(default, "default")
             return self._jconf.get(key, default)
 
-    @since(2.0)
     def unset(self, key: str) -> None:
-        """Resets the configuration property for the given key."""
+        """
+        Resets the configuration property for the given key.
+
+        .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        key : str
+            key of the configuration to unset.
+
+        Examples
+        --------
+        >>> spark.conf.set("my_key", "my_value")
+        >>> spark.conf.get("my_key")
+        'my_value'
+        >>> spark.conf.unset("my_key")
+        >>> spark.conf.get("my_key")
+        Traceback (most recent call last):
+           ...
+        pyspark...SparkNoSuchElementException: ... The SQL config "my_key" cannot be found...
+        """
         self._jconf.unset(key)
 
     def _checkType(self, obj: Any, identifier: str) -> None:
@@ -87,9 +141,10 @@ def _test() -> None:
 
     globs = pyspark.sql.conf.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("sql.conf tests").getOrCreate()
-    globs["sc"] = spark.sparkContext
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(pyspark.sql.conf, globs=globs)
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.conf, globs=globs, optionflags=doctest.ELLIPSIS
+    )
     spark.stop()
     if failure_count:
         sys.exit(-1)

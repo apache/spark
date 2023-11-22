@@ -35,7 +35,6 @@ class DataSourceManager {
   private type DataSourceBuilder = (
     SparkSession,  // Spark session
     String,  // provider name
-    Seq[String],  // paths
     Option[StructType],  // user specified schema
     CaseInsensitiveMap[String]  // options
   ) => LogicalPlan

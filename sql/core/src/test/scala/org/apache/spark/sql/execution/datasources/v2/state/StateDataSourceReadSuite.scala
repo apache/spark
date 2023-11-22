@@ -270,9 +270,9 @@ class StateDataSourceSQLConfigSuite extends StateDataSourceTestBase {
     checkAnswer(
       resultDf,
       Seq(
-        Row(0, 5, 60, 30, 0), // 0, 10, 20, 30
-        Row(1, 5, 65, 31, 1), // 1, 11, 21, 31
-        Row(2, 5, 70, 32, 2), // 2, 12, 22, 32
+        Row(0, 5, 60, 30, 0), // 0, 0, 10, 20, 30
+        Row(1, 5, 65, 31, 1), // 1, 1, 11, 21, 31
+        Row(2, 5, 70, 32, 2), // 2, 2, 12, 22, 32
         Row(3, 4, 72, 33, 3), // 3, 13, 23, 33
         Row(4, 4, 76, 34, 4), // 4, 14, 24, 34
         Row(5, 4, 80, 35, 5), // 5, 15, 25, 35
@@ -491,6 +491,22 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
           Row("c", 23000000)
         )
       )
+    }
+  }
+
+  test("Session window aggregation") {
+    withTempDir { checkpointDir =>
+      runSessionWindowAggregationQuery(checkpointDir.getAbsolutePath)
+
+      val df = spark.read.format("statestore").load(checkpointDir.toString)
+      checkAnswer(df.selectExpr("key.sessionId", "CAST(key.sessionStartTime AS LONG)",
+        "CAST(value.session_window.start AS LONG)", "CAST(value.session_window.end AS LONG)",
+        "value.sessionId", "value.count"),
+        Seq(Row("hello", 40, 40, 51, "hello", 2),
+          Row("spark", 40, 40, 50, "spark", 1),
+          Row("streaming", 40, 40, 51, "streaming", 2),
+          Row("world", 40, 40, 51, "world", 2),
+          Row("structured", 41, 41, 51, "structured", 1)))
     }
   }
 
