@@ -336,6 +336,15 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT * FROM UDTFPartitionByComplexExpr(TABLE(t2))
+-- !query schema
+struct<partition_col:int,count:int,total:int,last:int>
+-- !query output
+0	1	1	1
+1	2	5	3
+
+
+-- !query
 SELECT * FROM UDTFInvalidPartitionByAndWithSinglePartition(TABLE(t2))
 -- !query schema
 struct<>

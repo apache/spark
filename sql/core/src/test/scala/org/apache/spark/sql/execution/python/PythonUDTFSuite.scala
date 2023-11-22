@@ -56,7 +56,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
   private val pythonUDTFPartitionByOrderBy: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
-      TestPythonUDTFPartitionBy.name, TestPythonUDTFPartitionBy.pythonScript, None)
+      TestPythonUDTFPartitionByOrderBy.name, TestPythonUDTFPartitionByOrderBy.pythonScript, None)
 
   private val arrowPythonUDTF: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
@@ -239,7 +239,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         failure(plan)
     }
 
-    spark.udtf.registerPython(TestPythonUDTFPartitionBy.name, pythonUDTFPartitionByOrderBy)
+    spark.udtf.registerPython(TestPythonUDTFPartitionByOrderBy.name, pythonUDTFPartitionByOrderBy)
     plan = sql(
       s"""
         |WITH t AS (
@@ -248,7 +248,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         |    SELECT id AS partition_col, 2 AS input FROM range(1, 21)
         |)
         |SELECT partition_col, count, total, last
-        |FROM ${TestPythonUDTFPartitionBy.name}(TABLE(t))
+        |FROM ${TestPythonUDTFPartitionByOrderBy.name}(TABLE(t))
         |ORDER BY 1, 2
         |""".stripMargin).queryExecution.analyzed
     plan.collectFirst { case r: RepartitionByExpression => r } match {

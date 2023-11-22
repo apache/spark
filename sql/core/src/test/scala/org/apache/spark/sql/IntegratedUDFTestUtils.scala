@@ -619,8 +619,10 @@ object IntegratedUDFTestUtils extends SQLHelper {
     val prettyName: String = "Python UDTF exporting single-partition requirement from 'analyze'"
   }
 
-  object TestPythonUDTFPartitionBy extends TestUDTF {
-    val name: String = "UDTFPartitionByOrderBy"
+  class TestPythonUDTFPartitionByOrderByBase(
+      override val name: String,
+      partitionBy: String,
+      orderBy: String) extends TestUDTF {
     val pythonScript: String =
       s"""
         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
@@ -641,10 +643,10 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |                .add("total", IntegerType())
         |                .add("last", IntegerType()),
         |            partitionBy=[
-        |                PartitioningColumn("partition_col")
+        |                PartitioningColumn("$partitionBy")
         |            ],
         |            orderBy=[
-        |                OrderingColumn("input")
+        |                OrderingColumn("$orderBy")
         |            ])
         |
         |    def eval(self, row: Row):
@@ -668,6 +670,18 @@ object IntegratedUDFTestUtils extends SQLHelper {
     val prettyName: String =
       "Python UDTF exporting input table partitioning and ordering requirement from 'analyze'"
   }
+
+  object TestPythonUDTFPartitionByOrderBy
+    extends TestPythonUDTFPartitionByOrderByBase(
+      name = "UDTFPartitionByOrderBy",
+      partitionBy = "partition_col",
+      orderBy = "input")
+
+  object TestPythonUDTFPartitionByOrderByComplexExpr
+    extends TestPythonUDTFPartitionByOrderByBase(
+      name = "UDTFPartitionByComplexExpr",
+      partitionBy = "partition_col + 1",
+      orderBy = "RANDOM(42)")
 
   object InvalidPartitionByAndWithSinglePartition extends TestUDTF {
     val name: String = "UDTFInvalidPartitionByAndWithSinglePartition"

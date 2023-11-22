@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.python.UserDefinedPythonTableFunction
 
 /**
@@ -44,6 +45,7 @@ class UDTFRegistration private[sql] (tableFunctionRegistry: TableFunctionRegistr
          | udfDeterministic: ${udtf.udfDeterministic}
       """.stripMargin)
 
-    tableFunctionRegistry.createOrReplaceTempFunction(name, udtf.builder, "python_udtf")
+    tableFunctionRegistry.createOrReplaceTempFunction(
+      name, udtf.builder(_, new CatalystSqlParser()), "python_udtf")
   }
 }

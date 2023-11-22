@@ -26,7 +26,7 @@ import net.razorvine.pickle.Pickler
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, SortOrder, UnresolvedPolymorphicPythonUDTF}
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -106,7 +106,7 @@ case class UserDefinedPythonTableFunction(
     this(name, func, None, pythonEvalType, udfDeterministic)
   }
 
-  def builder(exprs: Seq[Expression]): LogicalPlan = {
+  def builder(exprs: Seq[Expression], parser: ParserInterface): LogicalPlan = {
     /*
      * Check if the named arguments:
      * - don't have duplicated names
@@ -133,7 +133,8 @@ case class UserDefinedPythonTableFunction(
           case _ => false
         }
         val runAnalyzeInPython = (func: PythonFunction, exprs: Seq[Expression]) => {
-          val runner = new UserDefinedPythonTableFunctionAnalyzeRunner(func, exprs, tableArgs)
+          val runner =
+            new UserDefinedPythonTableFunctionAnalyzeRunner(func, exprs, tableArgs, parser)
           runner.runInPython()
         }
         UnresolvedPolymorphicPythonUDTF(
@@ -156,7 +157,7 @@ case class UserDefinedPythonTableFunction(
 
   /** Returns a [[DataFrame]] that will evaluate to calling this UDTF with the given input. */
   def apply(session: SparkSession, exprs: Column*): DataFrame = {
-    val udtf = builder(exprs.map(_.expr))
+    val udtf = builder(exprs.map(_.expr), session.sessionState.sqlParser)
     Dataset.ofRows(session, udtf)
   }
 }
@@ -186,11 +187,11 @@ case class UserDefinedPythonTableFunction(
 class UserDefinedPythonTableFunctionAnalyzeRunner(
     func: PythonFunction,
     exprs: Seq[Expression],
-    tableArgs: Seq[Boolean]) extends PythonPlannerRunner[PythonUDTFAnalyzeResult](func) {
+    tableArgs: Seq[Boolean],
+    parser: ParserInterface)
+  extends PythonPlannerRunner[PythonUDTFAnalyzeResult](func) {
 
   override val workerModule = "pyspark.sql.worker.analyze_udtf"
-
-  private lazy val parser = new CatalystSqlParser()
 
   override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
     // Send Python UDTF

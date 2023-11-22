@@ -2353,7 +2353,7 @@ class BaseUDTFTestsMixin:
                     .add("count", IntegerType())
                     .add("total", IntegerType())
                     .add("last", IntegerType()),
-                    partitionBy=[PartitioningColumn("partition_col + 1")],
+                    partitionBy=[PartitioningColumn("partition_col")],
                     orderBy=[
                         OrderingColumn(name="input", ascending=True, overrideNullsFirst=False)
                     ],

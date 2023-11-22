@@ -75,6 +75,7 @@ SELECT * FROM
     VALUES (0), (1) AS t(col)
     JOIN LATERAL
     UDTFPartitionByOrderBy(TABLE(t2) PARTITION BY partition_col);
+SELECT * FROM UDTFPartitionByComplexExpr(TABLE(t2));
 -- As a reminder, UDTFInvalidPartitionByAndWithSinglePartition returns this analyze result:
 --     AnalyzeResult(
 --         schema=StructType()
