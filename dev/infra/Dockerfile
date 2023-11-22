@@ -96,7 +96,7 @@ RUN pypy3 -m pip install numpy 'pandas<=2.1.3' scipy coverage matplotlib
 RUN python3.9 -m pip install numpy 'pyarrow>=14.0.0' 'pandas<=2.1.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.8.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn>=1.3.2'
 
 # Add Python deps for Spark Connect.
-RUN python3.9 -m pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==4.25.1' 'googleapis-common-protos==1.56.4'
+RUN python3.9 -m pip install 'grpcio==1.59.3' 'grpcio-status==1.59.3' 'protobuf==4.25.1' 'googleapis-common-protos==1.56.4'
 
 # Add torch as a testing dependency for TorchDistributor
 RUN python3.9 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu
@@ -111,7 +111,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
 RUN python3.10 -m pip install numpy 'pyarrow>=14.0.0' 'pandas<=2.1.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.8.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn>=1.3.2'
-RUN python3.10 -m pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==4.25.1' 'googleapis-common-protos==1.56.4'
+RUN python3.10 -m pip install 'grpcio==1.59.3' 'grpcio-status==1.59.3' 'protobuf==4.25.1' 'googleapis-common-protos==1.56.4'
 RUN python3.10 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu
 RUN python3.10 -m pip install torcheval
 RUN python3.10 -m pip install deepspeed
@@ -123,7 +123,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
 RUN python3.11 -m pip install numpy 'pyarrow>=14.0.0' 'pandas<=2.1.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.8.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn>=1.3.2'
-RUN python3.11 -m pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==4.25.1' 'googleapis-common-protos==1.56.4'
+RUN python3.11 -m pip install 'grpcio==1.59.3' 'grpcio-status==1.59.3' 'protobuf==4.25.1' 'googleapis-common-protos==1.56.4'
 RUN python3.11 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu
 RUN python3.11 -m pip install torcheval
 RUN python3.11 -m pip install deepspeed
@@ -135,4 +135,4 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
 RUN python3.12 -m pip install numpy 'pyarrow>=14.0.0' 'pandas<=2.1.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.8.1' coverage matplotlib openpyxl 'scikit-learn>=1.3.2'
-RUN python3.12 -m pip install 'protobuf==4.25.1' 'googleapis-common-protos==1.56.4'
+RUN python3.12 -m pip install 'grpcio==1.59.3' 'grpcio-status==1.59.3' 'protobuf==4.25.1' 'googleapis-common-protos==1.56.4'
