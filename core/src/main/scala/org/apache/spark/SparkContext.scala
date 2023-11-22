@@ -2610,9 +2610,9 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * Cancel active jobs for the specified group, as well as the future jobs in this job group.
-   * Note: the maximum number of job groups that can be recorded is set by
-   * `spark.scheduler.job.cancelledJobGroupSet.size`. Once the limit is reached and a new job group
-   * is to be added, the oldest job group recorded will be discarded.
+   * Note: the maximum number of job groups that can be tracked is set by
+   * 'spark.scheduler.numCancelledJobGroupsToTrack'. Once the limit is reached and a new job group
+   * is to be added, the oldest job group tracked will be discarded.
    */
   def cancelJobGroupAndFutureJobs(groupId: String): Unit = {
     assertNotStopped()

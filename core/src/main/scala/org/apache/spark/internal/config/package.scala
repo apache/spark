@@ -1728,12 +1728,13 @@ package object config {
       .checkValue(v => v > 0, "The max failures should be a positive value.")
       .createWithDefault(40)
 
-  private[spark] val CANCELLED_JOB_GROUP_SET_SIZE =
-    ConfigBuilder("spark.scheduler.job.cancelledJobGroupSet.size")
-      .doc("The size of the set to store cancelled job groups, if the job group is cancelled " +
-        "with cancelFutureJobs = true. If the size of the set exceeds this value, the oldest job " +
-        "group will be removed from the set.")
-      .version("3.5.0")
+  private[spark] val NUM_CANCELLED_JOB_GROUPS_TO_TRACK =
+    ConfigBuilder("spark.scheduler.numCancelledJobGroupsToTrack")
+      .doc("The maximum number of tracked job groups that are cancelled with " +
+        "`cancelJobGroupAndFutureJobs`. If this maximum number is hit, the oldest job group " +
+        "will no longer be tracked that future jobs belonging to this job group will not " +
+        "be cancelled.")
+      .version("4.0.0")
       .intConf
       .checkValue(v => v > 0, "The size of the set should be a positive value.")
       .createWithDefault(1000)

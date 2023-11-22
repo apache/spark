@@ -1850,6 +1850,12 @@ The seed expression `<seedExpr>` of the expression `<exprWithSeed>` must be fold
 
 sortBy must be used together with bucketBy.
 
+### SPARK_JOB_CANCELLED
+
+[SQLSTATE: XXKDA](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+Job `<jobId>` cancelled `<reason>`
+
 ### SPECIFY_BUCKETING_IS_NOT_ALLOWED
 
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)

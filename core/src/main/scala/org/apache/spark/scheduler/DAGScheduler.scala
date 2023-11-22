@@ -169,11 +169,11 @@ private[spark] class DAGScheduler(
 
   private[scheduler] val activeJobs = new HashSet[ActiveJob]
 
-  // Job groups that are canceled with `cancelFutureJobs` as true, with at most
-  // `CANCELLED_JOB_GROUP_SET_SIZE` stored. On a new job submission, if the job group is in this
-  // set, the job will be immediately canceled.
-  private[scheduler] val canceledJobGroups =
-    new LimitedSizeFIFOSet[String](sc.getConf.get(config.CANCELLED_JOB_GROUP_SET_SIZE))
+  // Job groups that are cancelled with `cancelFutureJobs` as true, with at most
+  // `NUM_CANCELLED_JOB_GROUPS_TO_TRACK` stored. On a new job submission, if its job group is in
+  // this set, the job will be immediately cancelled.
+  private[scheduler] val cancelledJobGroups =
+    new LimitedSizeFIFOSet[String](sc.getConf.get(config.NUM_CANCELLED_JOB_GROUPS_TO_TRACK))
 
   /**
    * Contains the locations that each RDD's partitions are cached on.  This map's keys are RDD ids
@@ -1190,11 +1190,11 @@ private[spark] class DAGScheduler(
   private[scheduler] def handleJobGroupCancelled(
       groupId: String,
       cancelFutureJobs: Boolean): Unit = {
-    // If cancelFutureJobs is true, store the canceled job group id into internal states.
+    // If cancelFutureJobs is true, store the cancelled job group id into internal states.
     // When a job belonging to this job group is submitted, skip running it.
     if (cancelFutureJobs) {
       logInfo(s"Add job group $groupId into cancelled job groups")
-      canceledJobGroups.add(groupId)
+      cancelledJobGroups.add(groupId)
     }
 
     // Cancel all jobs belonging to this job group.
@@ -1291,7 +1291,7 @@ private[spark] class DAGScheduler(
       properties: Properties): Unit = {
     // If this job belongs to a cancelled job group, skip running it
     val jobGroupIdOpt = Option(properties).map(_.getProperty(SparkContext.SPARK_JOB_GROUP_ID))
-    if (jobGroupIdOpt.exists(canceledJobGroups.contains(_))) {
+    if (jobGroupIdOpt.exists(cancelledJobGroups.contains(_))) {
       listener.jobFailed(
         SparkCoreErrors.sparkJobCancelledAsPartOfJobGroupError(jobId, jobGroupIdOpt.get))
       logInfo(s"Skip running a job that belongs to the cancelled job group ${jobGroupIdOpt.get}.")
