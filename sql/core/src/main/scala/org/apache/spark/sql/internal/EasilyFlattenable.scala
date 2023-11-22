@@ -18,7 +18,7 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, AttributeSet, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 
 private[sql] object EasilyFlattenable {
@@ -48,10 +48,24 @@ private[sql] object EasilyFlattenable {
           })) {
             None
           } else {
-            val remappedNewProjList = newProjList.map(ne => (ne transformUp {
+            val remappedNewProjList = newProjList.map(ne => ne match {
               case attr: AttributeReference => projList.find(
                 _.toAttribute.canonicalized == attr.canonicalized).getOrElse(attr)
-            }).asInstanceOf[NamedExpression])
+              case anyOtherExpr => (anyOtherExpr transformUp {
+                case attr: AttributeReference => projList.find(
+                  _.toAttribute.canonicalized == attr.canonicalized).map(x => x match {
+                  case al: Alias => al.child
+                  case _ => x
+                }).getOrElse(attr)
+
+                case u: UnresolvedAttribute => projList.find(
+                  _.toAttribute.name == u.name).map(x => x match {
+                  case al: Alias => al.child
+                  case _ => x
+                }).getOrElse(u)
+
+              }).asInstanceOf[NamedExpression]
+            })
             Option(p.copy(projectList = remappedNewProjList))
           }
         } else {

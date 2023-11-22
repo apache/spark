@@ -18,14 +18,13 @@
 package org.apache.spark.sql.execution
 
 import org.apache.hadoop.fs.{FileSystem, Path}
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionSet, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
-import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint, SubqueryAlias, UnaryNode, View}
+import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, Project, ResolvedHint, SubqueryAlias, UnaryNode, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
@@ -38,7 +37,8 @@ import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 import org.apache.spark.util.ArrayImplicits._
 
 /** Holds a cached logical plan and its data */
-case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryRelation)
+case class CachedData(plan: LogicalPlan,
+                      cachedRepresentation: Either[LogicalPlan, InMemoryRelation])
 
 /**
  * Provides support in a SQLContext for caching query results and automatically using these cached
@@ -71,7 +71,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   /** Clears all cached tables. */
   def clearCache(): Unit = this.synchronized {
-    cachedData.foreach(_.cachedRepresentation.cacheBuilder.clearCache())
+    cachedData.foreach(_.cachedRepresentation.toOption.get.cacheBuilder.clearCache())
     cachedData = IndexedSeq[CachedData]()
   }
 
@@ -114,7 +114,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       storageLevel: StorageLevel): Unit = {
     if (storageLevel == StorageLevel.NONE) {
       // Do nothing for StorageLevel.NONE since it will not actually cache any data.
-    } else if (lookupCachedData(planToCache).nonEmpty) {
+    } else if (lookupCachedData(planToCache).exists(_.cachedRepresentation.isRight)) {
       logWarning("Asked to cache already cached data.")
     } else {
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
@@ -127,10 +127,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       }
 
       this.synchronized {
-        if (lookupCachedData(planToCache).nonEmpty) {
+        if (lookupCachedData(planToCache).exists(_.cachedRepresentation.isRight)) {
           logWarning("Data has already been cached.")
         } else {
-          cachedData = CachedData(planToCache, inMemoryRelation) +: cachedData
+          cachedData = CachedData(planToCache, Right(inMemoryRelation)) +: cachedData
         }
       }
     }
@@ -216,7 +216,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     this.synchronized {
       cachedData = cachedData.filterNot(cd => plansToUncache.exists(_ eq cd))
     }
-    plansToUncache.foreach { _.cachedRepresentation.cacheBuilder.clearCache(blocking) }
+    plansToUncache.foreach { _.cachedRepresentation.toOption.get.cacheBuilder.clearCache(blocking) }
 
     // Re-compile dependent cached queries after removing the cached query.
     if (!cascade) {
@@ -233,7 +233,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         // 2) The buffer has been cleared, but `isCachedColumnBuffersLoaded` returns true, then we
         //    will keep it as it is. It means the physical plan has been re-compiled already in the
         //    other thread.
-        val cacheAlreadyLoaded = cd.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded
+        val cacheAlreadyLoaded = cd.cachedRepresentation.toOption.get.cacheBuilder.
+          isCachedColumnBuffersLoaded
         cd.plan.exists(isMatchedPlan) && !cacheAlreadyLoaded
       })
     }
@@ -246,8 +247,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       column: Seq[Attribute]): Unit = {
     val relation = cachedData.cachedRepresentation
     val (rowCount, newColStats) =
-      CommandUtils.computeColumnStats(sparkSession, relation, column)
-    relation.updateStats(rowCount, newColStats)
+      CommandUtils.computeColumnStats(sparkSession, relation.toOption.get, column)
+    relation.toOption.get.updateStats(rowCount, newColStats)
   }
 
   /**
@@ -269,15 +270,15 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       cachedData = cachedData.filterNot(cd => needToRecache.exists(_ eq cd))
     }
     needToRecache.foreach { cd =>
-      cd.cachedRepresentation.cacheBuilder.clearCache()
+      cd.cachedRepresentation.toOption.get.cacheBuilder.clearCache()
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
       val newCache = sessionWithConfigsOff.withActive {
         val qe = sessionWithConfigsOff.sessionState.executePlan(cd.plan)
-        InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
+        InMemoryRelation(cd.cachedRepresentation.toOption.get.cacheBuilder, qe)
       }
-      val recomputedPlan = cd.copy(cachedRepresentation = newCache)
+      val recomputedPlan = cd.copy(cachedRepresentation = Right(newCache))
       this.synchronized {
-        if (lookupCachedData(recomputedPlan.plan).nonEmpty) {
+        if (lookupCachedData(recomputedPlan.plan).exists(_.cachedRepresentation.isRight)) {
           logWarning("While recaching, data was already added to cache.")
         } else {
           cachedData = recomputedPlan +: cachedData
@@ -293,24 +294,66 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   /** Optionally returns cached data for the given [[LogicalPlan]]. */
   def lookupCachedData(plan: LogicalPlan): Option[CachedData] = {
-    cachedData.find(cd => if (plan.sameResult(cd.plan)) {
-      true
-    } else {
-      (plan, cd.plan) match {
-        case (incomingPlan: UnaryNode, cachedPlan: UnaryNode) =>
-          if (incomingPlan.child.sameResult(cachedPlan.child)) {
-            if (incomingPlan.getClass == cachedPlan.getClass) {
-              val incomingExprs = incomingPlan.expressions
-              val cachedPlanExprs = ExpressionSet(cachedPlan.expressions)
-              incomingExprs.forall(ex => ex.references.isEmpty || cachedPlanExprs.contains(ex))
-            } else {
-              false
+    val fullMatch = cachedData.find(cd => plan.sameResult(cd.plan))
+    fullMatch.map(Option(_)).getOrElse({
+      var foundMatch = false
+      var partialMatch: Option[CachedData] = None
+      for (cd <- cachedData if !foundMatch) {
+        (plan, cd.plan) match {
+          case (incomingPlan: UnaryNode, cachedPlan: UnaryNode) =>
+            if (incomingPlan.child.sameResult(cachedPlan.child)) {
+              if (incomingPlan.getClass == cachedPlan.getClass &&
+                incomingPlan.isInstanceOf[Project]) {
+                val incomingProject = incomingPlan.asInstanceOf[Project]
+                val cdPlanProject = cachedPlan.asInstanceOf[Project]
+                val canonicalizedInProj = incomingProject.canonicalized.asInstanceOf[Project]
+                val canonicalizedCdProj = cdPlanProject.canonicalized.asInstanceOf[Project]
+                // index if -1 indicates it is created out of existing output attribs
+                val (equivMapping, inComingProjNeedingMod) = canonicalizedInProj.projectList.
+                  zipWithIndex.map {
+                  case (ne, index) => index -> canonicalizedCdProj.projectList.indexWhere(_ == ne)
+                }.partition(_._2 != -1)
+
+                val cdAttribToInAttrib = equivMapping.map {
+                  case (inAttribIndex, cdAttribIndex) =>
+                    cdPlanProject.projectList(cdAttribIndex).toAttribute ->
+                      incomingProject.projectList(inAttribIndex).toAttribute
+                }.toMap
+                if (cdAttribToInAttrib.size == cachedPlan.output.size &&
+                  canonicalizedInProj.projectList.map(_.references).reduce(_ ++ _).
+                    subsetOf(canonicalizedCdProj.outputSet)) {
+                val projectionToForceOnCdPlan = cachedPlan.output.map(cdAttribToInAttrib)
+                val modifiedInProj = incomingProject.projectList.zipWithIndex.map {
+                  case (ne, indx) => if (equivMapping.exists(_._1 == indx)) {
+                    ne.toAttribute
+                  } else {
+                    ne.transformUp {
+                      case attr: Attribute => val indexInChildOutput =
+                        incomingPlan.child.output.indexWhere(_.canonicalized == attr.canonicalized)
+                        val attribInChildCdPlan = cachedPlan.child.output(indexInChildOutput)
+                        val attribInCdPlan = cdPlanProject.projectList.find {
+                          case attr: Attribute =>
+                            attr.canonicalized == attribInChildCdPlan.canonicalized
+                          case al: Alias =>
+                            al.child.canonicalized == attribInChildCdPlan.canonicalized
+                        }.get.toAttribute
+                        cdAttribToInAttrib.find(
+                          _._1.canonicalized == attribInCdPlan.canonicalized).map(_._2).get
+                      }.asInstanceOf[NamedExpression]
+                    }
+                  }
+                  val newPartialPlan = Project(modifiedInProj, cd.cachedRepresentation.toOption.
+                    get.withOutput(projectionToForceOnCdPlan))
+                  partialMatch = Option(cd.copy(cachedRepresentation = Left(newPartialPlan)))
+                  foundMatch = true
+                }
+              }
             }
-          } else {
-            false
-          }
-        case _ => false
+
+          case _ =>
+        }
       }
+      partialMatch
     })
   }
 
@@ -319,11 +362,13 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     val newPlan = plan transformDown {
       case command: IgnoreCachedData => command
 
-      case currentFragment =>
+      case currentFragment if !currentFragment.isInstanceOf[InMemoryRelation] =>
         lookupCachedData(currentFragment).map { cached =>
           // After cache lookup, we should still keep the hints from the input plan.
           val hints = EliminateResolvedHint.extractHintsFromPlan(currentFragment)._2
-          val cachedPlan = cached.cachedRepresentation.withOutput(currentFragment.output)
+          val cachedPlan = cached.cachedRepresentation.map(_.withOutput(currentFragment.output)).
+            merge
+
           // The returned hint list is in top-down order, we should create the hint nodes from
           // right to left.
           hints.foldRight[LogicalPlan](cachedPlan) { case (hint, p) =>

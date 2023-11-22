@@ -201,7 +201,8 @@ case class AlterTableRenameCommand(
       // If `optStorageLevel` is defined, the old table was cached.
       val optCachedData = sparkSession.sharedState.cacheManager.lookupCachedData(
         sparkSession.table(oldName.unquotedString))
-      val optStorageLevel = optCachedData.map(_.cachedRepresentation.cacheBuilder.storageLevel)
+      val optStorageLevel = optCachedData.map(_.cachedRepresentation.toOption.get.cacheBuilder.
+        storageLevel)
       if (optStorageLevel.isDefined) {
         CommandUtils.uncacheTableOrView(sparkSession, oldName.unquotedString)
       }

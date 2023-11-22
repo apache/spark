@@ -73,7 +73,7 @@ trait AlterTableRenameSuiteBase extends QueryTest with DDLCommandTestUtils {
       def getStorageLevel(tableName: String): StorageLevel = {
         val table = spark.table(tableName)
         val cachedData = spark.sharedState.cacheManager.lookupCachedData(table).get
-        cachedData.cachedRepresentation.cacheBuilder.storageLevel
+        cachedData.cachedRepresentation.toOption.get.cacheBuilder.storageLevel
       }
       sql(s"CREATE TABLE $src (c0 INT) $defaultUsing")
       sql(s"INSERT INTO $src SELECT 0")
