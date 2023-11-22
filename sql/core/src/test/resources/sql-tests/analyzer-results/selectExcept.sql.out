@@ -313,5 +313,18 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT * EXCEPT(data.s2, data.s2.f2) FROM tbl_view
 -- !query analysis
-java.util.NoSuchElementException
-head of empty list
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "EXCEPT_OVERLAPPING_COLUMNS",
+  "sqlState" : "42702",
+  "messageParameters" : {
+    "columns" : "data.s2, data.s2.f2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "* EXCEPT(data.s2, data.s2.f2)"
+  } ]
+}

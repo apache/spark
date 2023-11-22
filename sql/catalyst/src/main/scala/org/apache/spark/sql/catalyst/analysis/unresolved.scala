@@ -545,7 +545,7 @@ case class UnresolvedStarExcept(target: Option[Seq[String]], excepts: Seq[Seq[St
         // pass through columns that don't match anything in groupedExcepts
         case (col, None) => col
         // found a match but nestedExcepts has remaining excepts - recurse to rewrite the struct
-        case (col, Some(nestedExcepts)) if nestedExcepts.exists(_.nonEmpty) =>
+        case (col, Some(nestedExcepts)) if nestedExcepts.forall(_.nonEmpty) =>
           val fields = col.dataType match {
             case s: StructType => s.fields
             // we shouldn't be here since we EXCEPT_NEXTED_COLUMN_INVALID_TYPE in getRootColumn
