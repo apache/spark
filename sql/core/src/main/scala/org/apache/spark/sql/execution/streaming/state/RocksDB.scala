@@ -449,7 +449,14 @@ class RocksDB(
         // Need to flush the change to disk before creating a checkpoint
         // because rocksdb wal is disabled.
         logInfo(s"Flushing updates for $newVersion")
-        flushTimeMs = timeTakenMs { db.flush(flushOptions) }
+        flushTimeMs = timeTakenMs {
+          if (useColumnFamilies) {
+            db.flush(flushOptions, colFamilyNameToHandleMap.values.toSeq.asJava)
+          } else {
+            db.flush(flushOptions)
+          }
+        }
+
         if (conf.compactOnCommit) {
           logInfo("Compacting")
           compactTimeMs = timeTakenMs { db.compactRange() }
