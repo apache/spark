@@ -184,6 +184,9 @@ abstract class BaseSessionStateBuilder(
    * Note: this depends on the `conf` and `catalog` fields.
    */
   protected def analyzer: Analyzer = new Analyzer(catalogManager) {
+    override val extendedSubstitutionRules: Seq[Rule[LogicalPlan]] =
+      customSubstitutionRules
+
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
@@ -221,6 +224,16 @@ abstract class BaseSessionStateBuilder(
    */
   protected def customResolutionRules: Seq[Rule[LogicalPlan]] = {
     extensions.buildResolutionRules(session)
+  }
+
+  /**
+   * Custom substitution rules to add to the Analyzer. Prefer overriding this instead of creating
+   * your own Analyzer.
+   *
+   * Note that this may NOT depend on the `analyzer` function.
+   */
+  protected def customSubstitutionRules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildSubstitutionRules(session)
   }
 
   /**

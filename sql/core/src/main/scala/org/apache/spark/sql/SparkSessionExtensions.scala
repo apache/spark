@@ -284,6 +284,20 @@ class SparkSessionExtensions {
     preCBORules += builder
   }
 
+  private[this] val substitutionRules = mutable.Buffer.empty[RuleBuilder]
+
+  private[sql] def buildSubstitutionRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
+    substitutionRules.map(_.apply(session)).toSeq
+  }
+
+  /**
+   * Inject a substitution `Rule` builder into the [[SparkSession]]. The injected rules will be
+   * executed during the substitution batch.
+   */
+  def injectSubstitutionRule(builder: RuleBuilder): Unit = {
+    substitutionRules += builder
+  }
+
   private[this] val plannerStrategyBuilders = mutable.Buffer.empty[StrategyBuilder]
 
   private[sql] def buildPlannerStrategies(session: SparkSession): Seq[Strategy] = {

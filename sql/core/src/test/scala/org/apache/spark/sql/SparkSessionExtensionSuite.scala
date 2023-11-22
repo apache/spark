@@ -77,6 +77,12 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
     }
   }
 
+  test("SPARK-46050: inject substitution rule") {
+    withSession(Seq(_.injectSubstitutionRule(MyRule))) { session =>
+      assert(session.sessionState.analyzer.extendedSubstitutionRules.contains(MyRule(session)))
+    }
+  }
+
   test("inject post hoc resolution analyzer rule") {
     withSession(Seq(_.injectPostHocResolutionRule(MyRule))) { session =>
       assert(session.sessionState.analyzer.postHocResolutionRules.contains(MyRule(session)))
