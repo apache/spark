@@ -1822,7 +1822,11 @@ class SparkContext(config: SparkConf) extends Logging {
       logInfo(s"Added file $path at $key with timestamp $timestamp")
       // Fetch the file locally so that closures which are run on the driver can still use the
       // SparkFiles API to access files.
-      Utils.fetchFile(uri.toString, root, conf, hadoopConfiguration, timestamp, useCache = true)
+      Utils.fetchFile(uri.toString, root, conf, hadoopConfiguration, timestamp, useCache = false)
+      if (master == "yarn" && deployMode == "cluster") {
+        Utils.fetchFile(
+          uri.toString, new File("."), conf, hadoopConfiguration, timestamp, useCache = false)
+      }
       postEnvironmentUpdate()
     } else if (
       isArchive &&
@@ -1844,6 +1848,14 @@ class SparkContext(config: SparkConf) extends Logging {
         s"Unpacking an archive $path from ${source.getAbsolutePath} to ${dest.getAbsolutePath}")
       Utils.deleteRecursively(dest)
       Utils.unpack(source, dest)
+      if (master == "yarn" && deployMode == "cluster") {
+        val dest =
+          new File(new File("."), if (uri.getFragment != null) uri.getFragment else source.getName)
+        logInfo(
+          s"Unpacking an archive $path from ${source.getAbsolutePath} to ${dest.getAbsolutePath}")
+        Utils.deleteRecursively(dest)
+        Utils.unpack(source, dest)
+      }
       postEnvironmentUpdate()
     } else {
       logWarning(s"The path $path has been added already. Overwriting of added paths " +
