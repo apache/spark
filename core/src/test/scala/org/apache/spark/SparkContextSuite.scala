@@ -32,7 +32,7 @@ import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.apache.logging.log4j.{Level, LogManager}
-import org.json4s._
+import org.json4s.{DefaultFormats, Extraction, Formats}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.must.Matchers._
 

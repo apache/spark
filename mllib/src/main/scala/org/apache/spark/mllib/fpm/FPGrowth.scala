@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe._
 
-import org.json4s._
+import org.json4s.{DefaultFormats, Formats}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, render}
 

@@ -46,16 +46,14 @@ import org.apache.spark.util.ArrayImplicits._
  * Note: [[HDFSMetadataLog]] doesn't support S3-like file systems as they don't guarantee listing
  * files in a directory always shows the latest files.
  */
-class HDFSMetadataLog[T <: AnyRef: ClassTag](sparkSession: SparkSession, path: String)(
-    private final implicit val manifest: Manifest[T])
-    extends MetadataLog[T]
-    with Logging {
+class HDFSMetadataLog[T <: AnyRef: ClassTag](sparkSession: SparkSession, path: String)
+                                            (private final implicit val manifest: Manifest[T])
+    extends MetadataLog[T] with Logging {
 
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
   // Avoid serializing generic sequences, see SPARK-17372
-  require(
-    implicitly[ClassTag[T]].runtimeClass != classOf[Seq[_]],
+  require(implicitly[ClassTag[T]].runtimeClass != classOf[Seq[_]],
     "Should not create a log with type Seq, use Arrays instead - see SPARK-17372")
 
   val metadataPath = new Path(path)

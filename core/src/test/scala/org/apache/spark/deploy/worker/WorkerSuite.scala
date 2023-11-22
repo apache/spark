@@ -23,7 +23,7 @@ import java.util.function.Supplier
 
 import scala.concurrent.duration._
 
-import org.json4s._
+import org.json4s.{DefaultFormats, Extraction, Formats}
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatchers.any

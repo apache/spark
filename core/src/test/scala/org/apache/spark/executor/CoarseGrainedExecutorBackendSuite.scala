@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration._
 
-import org.json4s._
+import org.json4s.{DefaultFormats, Extraction, Formats}
 import org.json4s.JsonAST.{JArray, JObject}
 import org.json4s.JsonDSL._
 import org.mockito.ArgumentMatchers.any

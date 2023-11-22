@@ -21,7 +21,7 @@ import java.io.File
 import java.nio.file.{Files => JavaFiles}
 import java.util.Optional
 
-import org.json4s._
+import org.json4s.{DefaultFormats, Extraction, Formats}
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.TestUtils._

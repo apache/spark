@@ -29,7 +29,7 @@ import scala.jdk.CollectionConverters._
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
-import org.json4s.{DefaultFormats, Formats}
+import org.json4s.Formats
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods._
@@ -382,7 +382,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
 
   test("incomplete apps get refreshed") {
     implicit val webDriver: WebDriver = new HtmlUnitDriver
-    implicit val formats: Formats = DefaultFormats
+    implicit val formats: Formats = org.json4s.DefaultFormats
 
     // this test dir is explicitly deleted on successful runs; retained for diagnostics when
     // not
