@@ -34,6 +34,8 @@ def check_dependencies(mod_name: str) -> None:
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
         require_minimum_grpc_version()
+        require_minimum_grpcio_status_version()
+        require_minimum_googleapis_common_protos_version()
 
 
 def require_minimum_grpc_version() -> None:
@@ -44,13 +46,38 @@ def require_minimum_grpc_version() -> None:
         import grpc
     except ImportError as error:
         raise ImportError(
-            "grpcio >= %s must be installed; however, " "it was not found." % minimum_grpc_version
+            f"grpcio >= {minimum_grpc_version} must be installed; however, it was not found."
         ) from error
     if LooseVersion(grpc.__version__) < LooseVersion(minimum_grpc_version):
         raise ImportError(
-            "grpcio >= %s must be installed; however, "
-            "your version was %s." % (minimum_grpc_version, grpc.__version__)
+            f"grpcio >= {minimum_grpc_version} must be installed; however, "
+            f"your version was {grpc.__version__}."
         )
+
+
+def require_minimum_grpcio_status_version() -> None:
+    """Raise ImportError if grpcio-status is not installed"""
+    minimum_grpc_version = "1.48.1"
+
+    try:
+        import grpc_status  # noqa
+    except ImportError as error:
+        raise ImportError(
+            f"grpcio-status >= {minimum_grpc_version} must be installed; however, it was not found."
+        ) from error
+
+
+def require_minimum_googleapis_common_protos_version() -> None:
+    """Raise ImportError if googleapis-common-protos is not installed"""
+    minimum_common_protos_version = "1.56.4"
+
+    try:
+        import google.rpc  # noqa
+    except ImportError as error:
+        raise ImportError(
+            f"googleapis-common-protos >= {minimum_common_protos_version} must be installed; "
+            "however, it was not found."
+        ) from error
 
 
 def get_python_ver() -> str:

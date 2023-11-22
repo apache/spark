@@ -126,7 +126,7 @@ class Catalog:
 
         Parameters
         ----------
-        pattern : str
+        pattern : str, optional
             The pattern that the catalog name needs to match.
 
             .. versionadded: 3.5.0
@@ -197,7 +197,7 @@ class Catalog:
 
         Parameters
         ----------
-        pattern : str
+        pattern : str, optional
             The pattern that the database name needs to match.
 
             .. versionadded: 3.5.0
@@ -314,13 +314,13 @@ class Catalog:
 
         Parameters
         ----------
-        dbName : str
+        dbName : str, optional
             name of the database to list the tables.
 
             .. versionchanged:: 3.4.0
                Allow ``dbName`` to be qualified with catalog name.
 
-        pattern : str
+        pattern : str, optional
             The pattern that the database name needs to match.
 
             .. versionadded: 3.5.0
@@ -446,10 +446,10 @@ class Catalog:
 
         Parameters
         ----------
-        dbName : str
+        dbName : str, optional
             name of the database to list the functions.
             ``dbName`` can be qualified with catalog name.
-        pattern : str
+        pattern : str, optional
             The pattern that the function name needs to match.
 
             .. versionadded: 3.5.0
@@ -1005,7 +1005,7 @@ class Catalog:
             .. versionchanged:: 3.4.0
                 Allow ``tableName`` to be qualified with catalog name.
 
-        storageLevel : :class:`StorageLevel`
+        storageLevel : :class:`StorageLevel`, optional
             storage level to set for persistence.
 
             .. versionchanged:: 3.5.0

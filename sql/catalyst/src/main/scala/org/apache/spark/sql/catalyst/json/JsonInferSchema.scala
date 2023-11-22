@@ -37,7 +37,7 @@ import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
+class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 

@@ -330,13 +330,20 @@ private[spark] class Executor(
     }
   updateDependencies(initialUserFiles, initialUserJars, initialUserArchives, defaultSessionState)
 
-  // Plugins need to load using a class loader that includes the executor's user classpath.
-  // Plugins also needs to be initialized after the heartbeater started
-  // to avoid blocking to send heartbeat (see SPARK-32175).
+  // Plugins and shuffle managers need to load using a class loader that includes the executor's
+  // user classpath. Plugins also needs to be initialized after the heartbeater started
+  // to avoid blocking to send heartbeat (see SPARK-32175 and SPARK-45762).
   private val plugins: Option[PluginContainer] =
     Utils.withContextClassLoader(defaultSessionState.replClassLoader) {
       PluginContainer(env, resources.asJava)
     }
+
+  // Skip local mode because the ShuffleManager is already initialized
+  if (!isLocal) {
+    Utils.withContextClassLoader(defaultSessionState.replClassLoader) {
+      env.initializeShuffleManager()
+    }
+  }
 
   metricsPoller.start()
 
