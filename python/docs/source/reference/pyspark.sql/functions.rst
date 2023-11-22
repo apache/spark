@@ -496,6 +496,18 @@ Generator Functions
     stack
 
 
+Partition Transformation Functions
+----------------------------------
+.. autosummary::
+    :toctree: api/
+
+    partitioning.years
+    partitioning.months
+    partitioning.days
+    partitioning.hours
+    partitioning.bucket
+
+
 CSV Functions
 -------------
 .. autosummary::
