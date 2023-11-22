@@ -20,12 +20,12 @@ package org.apache.spark.sql.streaming
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
+import org.apache.spark.sql.execution.streaming.state.{RocksDBConf, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
 
 class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (String, String)] {
   @transient private var _countState: ValueState[Long] = _
-  @transient private var _processorHandle: StatefulProcessorHandle = _
+  @transient var _processorHandle: StatefulProcessorHandle = _
 
   override def init(handle: StatefulProcessorHandle,
     outputMode: OutputMode) : Unit = {
@@ -50,11 +50,29 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
   override def close(): Unit = {}
 }
 
+class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcessor {
+  @transient private var _tempState: ValueState[Long] = _
+
+  override def handleInputRows(key: String,
+    inputRows: Iterator[String],
+    timerValues: TimerValues): Iterator[(String, String)] = {
+    // Trying to create value state here should fail
+    _tempState = _processorHandle.getValueState[Long]("tempState")
+    Iterator.empty
+  }
+}
+
+/**
+ * Class that adds tests for transformWithState stateful streaming operator
+ */
 class TransformWithStateSuite extends StateStoreMetricsTest {
 
   import testImplicits._
 
-  test("transformWithState - batch") {
+  val rocksdbChangelogCheckpointingConfKey: String = RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX +
+    ".changelogCheckpointing.enabled"
+
+  test("transformWithState - batch should fail") {
     val ex = intercept[Exception] {
       val df = Seq("a", "a", "b").toDS()
         .groupByKey(x => x)
@@ -68,7 +86,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest {
     assert(ex.getMessage.contains("not supported"))
   }
 
-  test("transformWithState - streaming") {
+  test("transformWithState - streaming with hdfsStateStoreProvider should fail") {
     val inputData = MemoryStream[String]
     val result = inputData.toDS()
       .groupByKey(x => x)
@@ -82,7 +100,46 @@ class TransformWithStateSuite extends StateStoreMetricsTest {
     )
   }
 
-  test("transformWithState - streaming with rocksdb") {
+  test("transformWithState - streaming with RocksDB and changelog checkpointing " +
+    "should fail") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      rocksdbChangelogCheckpointingConfKey -> "true") {
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new RunningCountStatefulProcessor(), OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        AddData(inputData, "a"),
+        ExpectFailure[SparkException] {
+          (t: Throwable) => {
+            assert(t.getCause.getMessage.contains("not supported"))
+          }
+        }
+      )
+    }
+  }
+
+  test("transformWithState - streaming with rocksdb and invalid processor should fail") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new RunningCountStatefulProcessorWithError(), OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        AddData(inputData, "a"),
+        ExpectFailure[SparkException] {
+          (t: Throwable) => { assert(t.getCause
+            .getMessage.contains("Cannot create state variable")) }
+        }
+      )
+    }
+  }
+
+  test("transformWithState - streaming with rocksdb should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
       val inputData = MemoryStream[String]
