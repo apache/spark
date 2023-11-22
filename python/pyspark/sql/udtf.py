@@ -41,8 +41,8 @@ if TYPE_CHECKING:
 __all__ = [
     "AnalyzeArgument",
     "AnalyzeResult",
-    "PartitioningExpression",
-    "OrderingExpression",
+    "PartitioningColumn",
+    "OrderingColumn",
     "SkipRestOfInputTableException",
     "UDTFRegistration",
 ]
@@ -69,7 +69,7 @@ class AnalyzeArgument:
 
 
 @dataclass(frozen=True)
-class PartitioningExpression:
+class PartitioningColumn:
     """
     Represents an expression that the UDTF is specifying for Catalyst to partition the input table
     by. This can be either the name of a single column from the input table (such as "columnA"), or
@@ -77,15 +77,15 @@ class PartitioningExpression:
 
     Parameters
     ----------
-    value : str
-        The contents of the partitioning expression represented as a SQL string.
+    name : str
+        The contents of the partitioning column name or expression represented as a SQL string.
     """
 
-    value: str
+    name: str
 
 
 @dataclass(frozen=True)
-class OrderingExpression:
+class OrderingColumn:
     """
     Represents an expression that the UDTF is specifying for Catalyst to order the input partition
     by. This can be either the name of a single column from the input table (such as "columnA"),
@@ -93,8 +93,8 @@ class OrderingExpression:
 
     Parameters
     ----------
-    value : str
-        The contents of the ordering expression represented as a SQL string.
+    name : str
+        The contents of the ordering column name or expression represented as a SQL string.
     ascending : bool, default True
         This is if this expression specifies an ascending sorting order.
     overrideNullsFirst : str, optional
@@ -124,12 +124,12 @@ class AnalyzeResult:
         If true, the UDTF is specifying for Catalyst to repartition all rows of the input TABLE
         argument to one collection for consumption by exactly one instance of the correpsonding
         UDTF class.
-    partitionBy : sequence of :class:`PartitioningExpression`
+    partitionBy : sequence of :class:`PartitioningColumn`
         If non-empty, this is a sequence of expressions that the UDTF is specifying for Catalyst to
         partition the input TABLE argument by. In this case, calls to the UDTF may not include any
         explicit PARTITION BY clause, in which case Catalyst will return an error. This option is
         mutually exclusive with 'withSinglePartition'.
-    orderBy: sequence of :class:`OrderingExpression`
+    orderBy: sequence of :class:`OrderingColumn`
         If non-empty, this is a sequence of expressions that the UDTF is specifying for Catalyst to
         sort the input TABLE argument by. Note that the 'partitionBy' list must also be non-empty
         in this case.
@@ -137,8 +137,8 @@ class AnalyzeResult:
 
     schema: StructType
     withSinglePartition: bool = False
-    partitionBy: Sequence[PartitioningExpression] = field(default_factory=tuple)
-    orderBy: Sequence[OrderingExpression] = field(default_factory=tuple)
+    partitionBy: Sequence[PartitioningColumn] = field(default_factory=tuple)
+    orderBy: Sequence[OrderingColumn] = field(default_factory=tuple)
 
 
 class SkipRestOfInputTableException(Exception):

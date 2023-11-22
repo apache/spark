@@ -42,8 +42,8 @@ from pyspark.sql.functions import (
     udtf,
     AnalyzeArgument,
     AnalyzeResult,
-    OrderingExpression,
-    PartitioningExpression,
+    OrderingColumn,
+    PartitioningColumn,
     SkipRestOfInputTableException,
 )
 from pyspark.sql.types import (
@@ -2300,7 +2300,7 @@ class BaseUDTFTestsMixin:
                     .add("total", IntegerType())
                     .add("last", IntegerType()),
                     withSinglePartition=True,
-                    orderBy=[OrderingExpression("input"), OrderingExpression("partition_col")],
+                    orderBy=[OrderingColumn("input"), OrderingColumn("partition_col")],
                 )
 
             def eval(self, row: Row):
@@ -2353,9 +2353,8 @@ class BaseUDTFTestsMixin:
                     .add("count", IntegerType())
                     .add("total", IntegerType())
                     .add("last", IntegerType()),
-                    partitionBy=[PartitioningExpression("partition_col + 1")],
-                    orderBy=[
-                        OrderingExpression(value="input", ascending=True, overrideNullsFirst=False)
+                    partitionBy=[PartitioningColumn("partition_col + 1")],
+                    orderBy=[OrderingColumn(value="input", ascending=True, overrideNullsFirst=False)
                     ],
                 )
 

@@ -98,8 +98,8 @@ To implement a Python UDTF, you first need to define a class implementing the me
 
                 schema: StructType
                 withSinglePartition: bool = False
-                partitionBy: Sequence[PartitioningExpression] = field(default_factory=tuple)
-                orderBy: Sequence[OrderingExpression] = field(default_factory=tuple)
+                partitionBy: Sequence[PartitioningColumn] = field(default_factory=tuple)
+                orderBy: Sequence[OrderingColumn] = field(default_factory=tuple)
 
             Notes
             -----

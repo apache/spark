@@ -567,7 +567,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
       s"""
         |import json
         |from dataclasses import dataclass
-        |from pyspark.sql.functions import AnalyzeResult, OrderingExpression
+        |from pyspark.sql.functions import AnalyzeResult, OrderingColumn
         |from pyspark.sql.types import IntegerType, Row, StructType
         |
         |@dataclass
@@ -595,8 +595,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |                .add("last", IntegerType()),
         |            withSinglePartition=True,
         |            orderBy=[
-        |                OrderingExpression("input"),
-        |                OrderingExpression("partition_col")],
+        |                OrderingColumn("input"),
+        |                OrderingColumn("partition_col")],
         |            buffer=buffer)
         |
         |    def eval(self, initial_count, row):
@@ -623,7 +623,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     val name: String = "UDTFPartitionByOrderBy"
     val pythonScript: String =
       s"""
-        |from pyspark.sql.functions import AnalyzeResult, OrderingExpression, PartitioningExpression
+        |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
         |from pyspark.sql.types import IntegerType, Row, StructType
         |class $name:
         |    def __init__(self):
@@ -641,10 +641,10 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |                .add("total", IntegerType())
         |                .add("last", IntegerType()),
         |            partitionBy=[
-        |                PartitioningExpression("partition_col")
+        |                PartitioningColumn("partition_col")
         |            ],
         |            orderBy=[
-        |                OrderingExpression("input")
+        |                OrderingColumn("input")
         |            ])
         |
         |    def eval(self, row: Row):
@@ -673,7 +673,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     val name: String = "UDTFInvalidPartitionByAndWithSinglePartition"
     val pythonScript: String =
       s"""
-         |from pyspark.sql.functions import AnalyzeResult, PartitioningExpression
+         |from pyspark.sql.functions import AnalyzeResult, PartitioningColumn
          |from pyspark.sql.types import IntegerType, Row, StructType
          |class $name:
          |    def __init__(self):
@@ -686,7 +686,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
          |                .add("last", IntegerType()),
          |            withSinglePartition=True,
          |            partitionBy=[
-         |                PartitioningExpression("partition_col")
+         |                PartitioningColumn("partition_col")
          |            ])
          |
          |    def eval(self, row: Row):
@@ -713,7 +713,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     val name: String = "UDTFInvalidOrderByWithoutPartitionBy"
     val pythonScript: String =
       s"""
-         |from pyspark.sql.functions import AnalyzeResult, OrderingExpression
+         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn
          |from pyspark.sql.types import IntegerType, Row, StructType
          |class $name:
          |    def __init__(self):
@@ -725,7 +725,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
          |            schema=StructType()
          |                .add("last", IntegerType()),
          |            orderBy=[
-         |                OrderingExpression("input")
+         |                OrderingColumn("input")
          |            ])
          |
          |    def eval(self, row: Row):
