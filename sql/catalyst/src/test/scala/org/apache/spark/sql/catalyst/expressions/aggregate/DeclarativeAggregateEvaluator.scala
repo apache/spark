@@ -43,7 +43,7 @@ case class DeclarativeAggregateEvaluator(function: DeclarativeAggregate, input: 
   def update(values: InternalRow*): InternalRow = {
     val joiner = new JoinedRow
     val buffer = values.foldLeft(initialize()) { (buffer, input) =>
-      updater(joiner(buffer, input))
+      updater(joiner(buffer, input)).copy()
     }
     buffer.copy()
   }
