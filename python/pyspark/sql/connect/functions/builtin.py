@@ -96,7 +96,7 @@ def _invoke_function(name: str, *args: Union[Column, Expression]) -> Column:
     Parameters
     ----------
     name Name of the function to be called.
-    args The list of arguments.
+        args The list of arguments.
 
     Returns
     -------
@@ -3406,48 +3406,45 @@ to_timestamp_ntz.__doc__ = pysparkfuncs.to_timestamp_ntz.__doc__
 
 
 def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
-    if isinstance(numBuckets, int):
-        _numBuckets = lit(numBuckets)
-    elif isinstance(numBuckets, Column):
-        _numBuckets = numBuckets
-    else:
-        raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INT",
-            message_parameters={
-                "arg_name": "numBuckets",
-                "arg_type": type(numBuckets).__name__,
-            },
-        )
+    from pyspark.sql.connect.functions import partitioning
 
-    return _invoke_function("bucket", _numBuckets, _to_col(col))
+    return partitioning.bucket(numBuckets, col)
 
 
 bucket.__doc__ = pysparkfuncs.bucket.__doc__
 
 
 def years(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("years", col)
+    from pyspark.sql.connect.functions import partitioning
+
+    return partitioning.years(col)
 
 
 years.__doc__ = pysparkfuncs.years.__doc__
 
 
 def months(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("months", col)
+    from pyspark.sql.connect.functions import partitioning
+
+    return partitioning.months(col)
 
 
 months.__doc__ = pysparkfuncs.months.__doc__
 
 
 def days(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("days", col)
+    from pyspark.sql.connect.functions import partitioning
+
+    return partitioning.days(col)
 
 
 days.__doc__ = pysparkfuncs.days.__doc__
 
 
 def hours(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("hours", col)
+    from pyspark.sql.connect.functions import partitioning
+
+    return partitioning.hours(col)
 
 
 hours.__doc__ = pysparkfuncs.hours.__doc__
@@ -3994,9 +3991,9 @@ def _test() -> None:
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    import pyspark.sql.connect.functions
+    import pyspark.sql.connect.functions.builtin
 
-    globs = pyspark.sql.connect.functions.__dict__.copy()
+    globs = pyspark.sql.connect.functions.builtin.__dict__.copy()
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.functions tests")
@@ -4005,7 +4002,7 @@ def _test() -> None:
     )
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.connect.functions,
+        pyspark.sql.connect.functions.builtin,
         globs=globs,
         optionflags=doctest.ELLIPSIS
         | doctest.NORMALIZE_WHITESPACE

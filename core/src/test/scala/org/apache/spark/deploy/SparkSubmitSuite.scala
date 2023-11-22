@@ -1414,6 +1414,83 @@ class SparkSubmitSuite
     runSparkSubmit(args)
   }
 
+  test("SPARK-45762: The ShuffleManager plugin to use can be defined in a user jar") {
+    val shuffleManagerBody = """
+      |@Override
+      |public <K, V, C> org.apache.spark.shuffle.ShuffleHandle registerShuffle(
+      |    int shuffleId,
+      |    org.apache.spark.ShuffleDependency<K, V, C> dependency) {
+      |  throw new java.lang.UnsupportedOperationException("This is a test ShuffleManager!");
+      |}
+      |
+      |@Override
+      |public <K, V> org.apache.spark.shuffle.ShuffleWriter<K, V> getWriter(
+      |    org.apache.spark.shuffle.ShuffleHandle handle,
+      |    long mapId,
+      |    org.apache.spark.TaskContext context,
+      |    org.apache.spark.shuffle.ShuffleWriteMetricsReporter metrics) {
+      |  throw new java.lang.UnsupportedOperationException("This is a test ShuffleManager!");
+      |}
+      |
+      |@Override
+      |public <K, C> org.apache.spark.shuffle.ShuffleReader<K, C> getReader(
+      |    org.apache.spark.shuffle.ShuffleHandle handle,
+      |    int startMapIndex,
+      |    int endMapIndex,
+      |    int startPartition,
+      |    int endPartition,
+      |    org.apache.spark.TaskContext context,
+      |    org.apache.spark.shuffle.ShuffleReadMetricsReporter metrics) {
+      |  throw new java.lang.UnsupportedOperationException("This is a test ShuffleManager!");
+      |}
+      |
+      |@Override
+      |public boolean unregisterShuffle(int shuffleId) {
+      |  throw new java.lang.UnsupportedOperationException("This is a test ShuffleManager!");
+      |}
+      |
+      |@Override
+      |public org.apache.spark.shuffle.ShuffleBlockResolver shuffleBlockResolver() {
+      |  throw new java.lang.UnsupportedOperationException("This is a test ShuffleManager!");
+      |}
+      |
+      |@Override
+      |public void stop() {
+      |}
+  """.stripMargin
+
+    val tempDir = Utils.createTempDir()
+    val compiledShuffleManager = TestUtils.createCompiledClass(
+      "TestShuffleManager",
+      tempDir,
+      "",
+      null,
+      Seq.empty,
+      Seq("org.apache.spark.shuffle.ShuffleManager"),
+      shuffleManagerBody)
+
+    val jarUrl = TestUtils.createJar(
+      Seq(compiledShuffleManager),
+      new File(tempDir, "testplugin.jar"))
+
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val argsBase = Seq(
+      "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--master", "local-cluster[1,1,1024]",
+      "--conf", "spark.shuffle.manager=TestShuffleManager",
+      "--conf", "spark.ui.enabled=false")
+
+    val argsError = argsBase :+ unusedJar.toString
+    // check process error exit code
+    assertResult(1)(runSparkSubmit(argsError, expectFailure = true))
+
+    val argsSuccess = (argsBase ++ Seq("--jars", jarUrl.toString)) :+ unusedJar.toString
+    // check process success exit code
+    assertResult(0)(
+      runSparkSubmit(argsSuccess, expectFailure = false))
+  }
+
   private def testRemoteResources(
       enableHttpFs: Boolean,
       forceDownloadSchemes: Seq[String] = Nil): Unit = {

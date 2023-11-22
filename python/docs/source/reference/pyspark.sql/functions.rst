@@ -509,11 +509,11 @@ Partition Transformation Functions
 .. autosummary::
     :toctree: api/
 
-    years
-    months
-    days
-    hours
-    bucket
+    partitioning.years
+    partitioning.months
+    partitioning.days
+    partitioning.hours
+    partitioning.bucket
 
 
 CSV Functions

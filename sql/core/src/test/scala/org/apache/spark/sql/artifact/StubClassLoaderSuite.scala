@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.connect.artifact
+package org.apache.spark.sql.artifact
 
 import java.io.File
 
@@ -23,8 +23,11 @@ import org.apache.spark.util.{ChildFirstURLClassLoader, StubClassLoader}
 
 class StubClassLoaderSuite extends SparkFunSuite {
 
-  // See src/test/resources/StubClassDummyUdf for how the UDFs and jars are created.
-  private val udfNoAJar = new File("src/test/resources/udf_noA.jar").toURI.toURL
+  // TODO: Modify JAR to remove references to connect.
+  // See connector/client/jvm/src/test/resources/StubClassDummyUdf for how the UDFs and jars are
+  // created.
+  private val udfNoAJar = new File(
+    "src/test/resources/artifact-tests/udf_noA.jar").toURI.toURL
   private val classDummyUdf = "org.apache.spark.sql.connect.client.StubClassDummyUdf"
   private val classA = "org.apache.spark.sql.connect.client.A"
 

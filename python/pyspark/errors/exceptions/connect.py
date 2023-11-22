@@ -177,6 +177,14 @@ def convert_exception(
             "\n  An exception was thrown from the Python worker. "
             "Please see the stack trace below.\n%s" % message
         )
+    elif "org.apache.spark.SparkNoSuchElementException" in classes:
+        return SparkNoSuchElementException(
+            message,
+            error_class=error_class,
+            sql_state=sql_state,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
+        )
     # Make sure that the generic SparkException is handled last.
     elif "org.apache.spark.SparkException" in classes:
         return SparkException(
@@ -359,3 +367,9 @@ class SparkUpgradeException(SparkConnectGrpcException, BaseSparkUpgradeException
 
 class SparkException(SparkConnectGrpcException):
     """ """
+
+
+class SparkNoSuchElementException(SparkConnectGrpcException, BaseSparkUpgradeException):
+    """
+    No such element exception.
+    """

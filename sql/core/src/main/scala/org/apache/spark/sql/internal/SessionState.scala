@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql._
+import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
@@ -84,7 +85,8 @@ private[sql] class SessionState(
     createClone: (SparkSession, SessionState) => SessionState,
     val columnarRules: Seq[ColumnarRule],
     val adaptiveRulesHolder: AdaptiveRulesHolder,
-    val planNormalizationRules: Seq[Rule[LogicalPlan]]) {
+    val planNormalizationRules: Seq[Rule[LogicalPlan]],
+    val artifactManagerBuilder: () => ArtifactManager) {
 
   // The following fields are lazy to avoid creating the Hive client when creating SessionState.
   lazy val catalog: SessionCatalog = catalogBuilder()
@@ -98,6 +100,8 @@ private[sql] class SessionState(
   // The streamingQueryManager is lazy to avoid creating a StreamingQueryManager for each session
   // when connecting to ThriftServer.
   lazy val streamingQueryManager: StreamingQueryManager = streamingQueryManagerBuilder()
+
+  lazy val artifactManager: ArtifactManager = artifactManagerBuilder()
 
   def catalogManager: CatalogManager = analyzer.catalogManager
 
