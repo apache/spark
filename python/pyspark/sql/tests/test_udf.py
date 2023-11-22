@@ -435,7 +435,6 @@ class BaseUDFTestsMixin(object):
             self.check_err_udf_registration()
 
     def check_err_udf_registration(self):
-        f = UserDefinedFunction(lambda x: x, StringType())
         with self.assertRaises(PySparkTypeError) as pe:
             self.spark.udf.register("f", UserDefinedFunction("x", StringType()), "int")
 
