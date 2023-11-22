@@ -1899,21 +1899,6 @@ private[spark] class DAGScheduler(
                     markStageAsFinished(resultStage)
                     cancelRunningIndependentStages(job, s"Job ${job.jobId} is finished.")
                     cleanupStateForJobAndIndependentStages(job)
-                    try {
-                      // killAllTaskAttempts will fail if a SchedulerBackend does not implement
-                      // killTask.
-                      logInfo(s"Job ${job.jobId} is finished. Cancelling potential speculative " +
-                        "or zombie tasks for this job")
-                      // ResultStage is only used by this job. It's safe to kill speculative or
-                      // zombie tasks in this stage.
-                      taskScheduler.killAllTaskAttempts(
-                        stageId,
-                        shouldInterruptTaskThread(job),
-                        reason = "Stage finished")
-                    } catch {
-                      case e: UnsupportedOperationException =>
-                        logWarning(s"Could not cancel tasks for stage $stageId", e)
-                    }
                     listenerBus.post(
                       SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
                   }
@@ -2207,12 +2192,12 @@ private[spark] class DAGScheduler(
           val message = s"Stage failed because barrier task $task finished unsuccessfully.\n" +
             failure.toErrorString
           try {
-            // killAllTaskAttempts will fail if a SchedulerBackend does not implement killTask.
+            // cancelTasks will fail if a SchedulerBackend does not implement killTask.
             val reason = s"Task $task from barrier stage $failedStage (${failedStage.name}) " +
               "failed."
             val job = jobIdToActiveJob.get(failedStage.firstJobId)
             val shouldInterrupt = job.exists(j => shouldInterruptTaskThread(j))
-            taskScheduler.killAllTaskAttempts(stageId, shouldInterrupt, reason)
+            taskScheduler.cancelTasks(stageId, shouldInterrupt, reason)
           } catch {
             case e: UnsupportedOperationException =>
               // Cannot continue with barrier stage if failed to cancel zombie barrier tasks.

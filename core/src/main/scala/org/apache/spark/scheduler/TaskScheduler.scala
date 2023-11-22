@@ -54,7 +54,7 @@ private[spark] trait TaskScheduler {
   // Submit a sequence of tasks to run.
   def submitTasks(taskSet: TaskSet): Unit
 
-  // Kill all the tasks in a stage and fail the stage and all the jobs that depend on the stage.
+  // Kill all the tasks in all the stage attempts of the same stage Id and abort the stage attempts
   // Throw UnsupportedOperationException if the backend doesn't support kill tasks.
   def cancelTasks(stageId: Int, interruptThread: Boolean, reason: String): Unit
 
@@ -65,10 +65,6 @@ private[spark] trait TaskScheduler {
    * @return Whether the task was successfully killed.
    */
   def killTaskAttempt(taskId: Long, interruptThread: Boolean, reason: String): Boolean
-
-  // Kill all the running task attempts in a stage.
-  // Throw UnsupportedOperationException if the backend doesn't support kill tasks.
-  def killAllTaskAttempts(stageId: Int, interruptThread: Boolean, reason: String): Unit
 
   // Notify the corresponding `TaskSetManager`s of the stage, that a partition has already completed
   // and they can skip running tasks for it.
