@@ -24,6 +24,7 @@ import scala.util.Random
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.VariantVal
+import org.apache.spark.util.ArrayImplicits._
 
 class VariantSuite extends QueryTest with SharedSparkSession {
   test("basic tests") {
@@ -72,13 +73,13 @@ class VariantSuite extends QueryTest with SharedSparkSession {
     def prepareAnswer(values: Seq[VariantVal]): Seq[String] = {
       values.map(v => if (v == null) "null" else v.debugString()).sorted
     }
-    assert(prepareAnswer(input) == prepareAnswer(result))
+    assert(prepareAnswer(input) == prepareAnswer(result.toImmutableArraySeq))
 
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath
       df.write.parquet(tempDir)
       val readResult = spark.read.parquet(tempDir).collect().map(_.get(0).asInstanceOf[VariantVal])
-      assert(prepareAnswer(input) == prepareAnswer(readResult))
+      assert(prepareAnswer(input) == prepareAnswer(readResult.toImmutableArraySeq))
     }
   }
 }
