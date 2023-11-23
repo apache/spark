@@ -98,7 +98,7 @@ WithCTE
       +- Window [sum(x#xL) windowspecdefinition(x#xL ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, 1)) AS sum(x) OVER (ORDER BY x ASC NULLS FIRST ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL], [x#xL ASC NULLS FIRST]
          +- Project [x#xL]
             +- SubqueryAlias cte
-               +- CTERelationRef xxxx, true, [x#xL]
+               +- CTERelationRef xxxx, true, [x#xL], false
 
 
 -- !query
@@ -120,7 +120,7 @@ WithCTE
       +- Window [sum(x#xL) windowspecdefinition(x#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as bigint), cast(1 as bigint))) AS sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#xL], [x#xL ASC NULLS FIRST]
          +- Project [x#xL]
             +- SubqueryAlias cte
-               +- CTERelationRef xxxx, true, [x#xL]
+               +- CTERelationRef xxxx, true, [x#xL], false
 
 
 -- !query
@@ -153,7 +153,7 @@ WithCTE
       +- Window [sum(x#xL) windowspecdefinition(x#xL ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, 1)) AS sum(x) OVER (ORDER BY x ASC NULLS FIRST ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL], [x#xL ASC NULLS FIRST]
          +- Project [x#xL]
             +- SubqueryAlias cte
-               +- CTERelationRef xxxx, true, [x#xL]
+               +- CTERelationRef xxxx, true, [x#xL], false
 
 
 -- !query
@@ -186,7 +186,7 @@ WithCTE
       +- Window [sum(x#xL) windowspecdefinition(x#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as bigint), cast(1 as bigint))) AS sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#xL], [x#xL ASC NULLS FIRST]
          +- Project [x#xL]
             +- SubqueryAlias cte
-               +- CTERelationRef xxxx, true, [x#xL]
+               +- CTERelationRef xxxx, true, [x#xL], false
 
 
 -- !query

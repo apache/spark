@@ -434,7 +434,7 @@ Project [a1#x AS a2#x]
                   :           +- OneRowRelation
                   +- Project [a#x]
                      +- SubqueryAlias v
-                        +- CTERelationRef xxxx, true, [a#x]
+                        +- CTERelationRef xxxx, true, [a#x], false
 
 
 -- !query
