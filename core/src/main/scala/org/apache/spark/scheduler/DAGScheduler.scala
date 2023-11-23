@@ -169,6 +169,12 @@ private[spark] class DAGScheduler(
 
   private[scheduler] val activeJobs = new HashSet[ActiveJob]
 
+  // Job groups that are cancelled with `cancelFutureJobs` as true, with at most
+  // `NUM_CANCELLED_JOB_GROUPS_TO_TRACK` stored. On a new job submission, if its job group is in
+  // this set, the job will be immediately cancelled.
+  private[scheduler] val cancelledJobGroups =
+    new LimitedSizeFIFOSet[String](sc.getConf.get(config.NUM_CANCELLED_JOB_GROUPS_TO_TRACK))
+
   /**
    * Contains the locations that each RDD's partitions are cached on.  This map's keys are RDD ids
    * and its values are arrays indexed by partition numbers. Each array value is the set of
@@ -1081,10 +1087,11 @@ private[spark] class DAGScheduler(
 
   /**
    * Cancel all jobs in the given job group ID.
+   * @param cancelFutureJobs if true, future submitted jobs in this job group will be cancelled
    */
-  def cancelJobGroup(groupId: String): Unit = {
-    logInfo("Asked to cancel job group " + groupId)
-    eventProcessLoop.post(JobGroupCancelled(groupId))
+  def cancelJobGroup(groupId: String, cancelFutureJobs: Boolean = false): Unit = {
+    logInfo(s"Asked to cancel job group $groupId with cancelFutureJobs=$cancelFutureJobs")
+    eventProcessLoop.post(JobGroupCancelled(groupId, cancelFutureJobs))
   }
 
   /**
@@ -1180,7 +1187,16 @@ private[spark] class DAGScheduler(
     jobsThatUseStage.find(jobIdToActiveJob.contains)
   }
 
-  private[scheduler] def handleJobGroupCancelled(groupId: String): Unit = {
+  private[scheduler] def handleJobGroupCancelled(
+      groupId: String,
+      cancelFutureJobs: Boolean): Unit = {
+    // If cancelFutureJobs is true, store the cancelled job group id into internal states.
+    // When a job belonging to this job group is submitted, skip running it.
+    if (cancelFutureJobs) {
+      logInfo(s"Add job group $groupId into cancelled job groups")
+      cancelledJobGroups.add(groupId)
+    }
+
     // Cancel all jobs belonging to this job group.
     // First finds all active jobs with this group id, and then kill stages for them.
     val activeInGroup = activeJobs.filter { activeJob =>
@@ -1264,7 +1280,8 @@ private[spark] class DAGScheduler(
     listenerBus.post(SparkListenerTaskGettingResult(taskInfo))
   }
 
-  private[scheduler] def handleJobSubmitted(jobId: Int,
+  private[scheduler] def handleJobSubmitted(
+      jobId: Int,
       finalRDD: RDD[_],
       func: (TaskContext, Iterator[_]) => _,
       partitions: Array[Int],
@@ -1272,6 +1289,15 @@ private[spark] class DAGScheduler(
       listener: JobListener,
       artifacts: JobArtifactSet,
       properties: Properties): Unit = {
+    // If this job belongs to a cancelled job group, skip running it
+    val jobGroupIdOpt = Option(properties).map(_.getProperty(SparkContext.SPARK_JOB_GROUP_ID))
+    if (jobGroupIdOpt.exists(cancelledJobGroups.contains(_))) {
+      listener.jobFailed(
+        SparkCoreErrors.sparkJobCancelledAsPartOfJobGroupError(jobId, jobGroupIdOpt.get))
+      logInfo(s"Skip running a job that belongs to the cancelled job group ${jobGroupIdOpt.get}.")
+      return
+    }
+
     var finalStage: ResultStage = null
     try {
       // New stage creation may throw an exception if, for example, jobs are run on a
@@ -2727,7 +2753,9 @@ private[spark] class DAGScheduler(
       logDebug("Trying to cancel unregistered job " + jobId)
     } else {
       failJobAndIndependentStages(
-        jobIdToActiveJob(jobId), "Job %d cancelled %s".format(jobId, reason.getOrElse("")))
+        job = jobIdToActiveJob(jobId),
+        error = SparkCoreErrors.sparkJobCancelled(jobId, reason.getOrElse(""), null)
+      )
     }
   }
 
@@ -2787,7 +2815,10 @@ private[spark] class DAGScheduler(
     failedStage.latestInfo.completionTime = Some(clock.getTimeMillis())
     updateStageInfoForPushBasedShuffle(failedStage)
     for (job <- dependentJobs) {
-      failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason", exception)
+      failJobAndIndependentStages(
+        job,
+        new SparkException(s"Job aborted due to stage failure: $reason", cause = exception.orNull)
+      )
     }
     if (dependentJobs.isEmpty) {
       logInfo("Ignoring failure of " + failedStage + " because all jobs depending on it are done")
@@ -2845,13 +2876,11 @@ private[spark] class DAGScheduler(
   /** Fails a job and all stages that are only used by that job, and cleans up relevant state. */
   private def failJobAndIndependentStages(
       job: ActiveJob,
-      failureReason: String,
-      exception: Option[Throwable] = None): Unit = {
-    if (cancelRunningIndependentStages(job, failureReason)) {
+      error: SparkException): Unit = {
+    if (cancelRunningIndependentStages(job, error.getMessage)) {
       // SPARK-15783 important to cleanup state first, just for tests where we have some asserts
       // against the state.  Otherwise we have a *little* bit of flakiness in the tests.
       cleanupStateForJobAndIndependentStages(job)
-      val error = new SparkException(failureReason, exception.orNull)
       job.listener.jobFailed(error)
       listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobFailed(error)))
     }
@@ -3010,8 +3039,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case JobCancelled(jobId, reason) =>
       dagScheduler.handleJobCancellation(jobId, reason)
 
-    case JobGroupCancelled(groupId) =>
-      dagScheduler.handleJobGroupCancelled(groupId)
+    case JobGroupCancelled(groupId, cancelFutureJobs) =>
+      dagScheduler.handleJobGroupCancelled(groupId, cancelFutureJobs)
 
     case JobTagCancelled(tag) =>
       dagScheduler.handleJobTagCancelled(tag)
@@ -3091,4 +3120,18 @@ private[spark] object DAGScheduler {
   // this is a simplistic way to avoid resubmitting tasks in the non-fetchable map stage one by one
   // as more failure events come in
   val RESUBMIT_TIMEOUT = 200
+}
+
+/**
+ * A NOT thread-safe set that only keeps the last `capacity` elements added to it.
+ */
+private[scheduler] class LimitedSizeFIFOSet[T](val capacity: Int) {
+  private val set = scala.collection.mutable.LinkedHashSet[T]()
+  def add(t: T): Unit = {
+    set += t
+    if (set.size > capacity) {
+      set -= set.head
+    }
+  }
+  def contains(t: T): Boolean = set.contains(t)
 }
