@@ -42,10 +42,14 @@ Creating a PySpark :class:`DataFrame` from a list of lists
 
 .. code-block:: python
 
-    df = spark.createDataFrame([['Alice', 1], ['Bob', 5]])
-    df
-
-DataFrame[_1: string, _2: bigint]
+    >>> df = spark.createDataFrame([['Alice', 1], ['Bob', 5]])
+    >>> df.show()
+    +-----+---+
+    |   _1| _2|
+    +-----+---+
+    |Alice|  1|
+    |  Bob|  5|
+    +-----+---+
 
 
 Creating a PySpark :class:`DataFrame` from a list of tuples
@@ -53,10 +57,14 @@ Creating a PySpark :class:`DataFrame` from a list of tuples
 
 .. code-block:: python
 
-    df = spark.createDataFrame([('Alice', 1), ('Bob', 5)])
-    df
-
-DataFrame[_1: string, _2: bigint]
+    >>> df = spark.createDataFrame([('Alice', 1), ('Bob', 5)])
+    >>> df.show()
+    +-----+---+
+    |   _1| _2|
+    +-----+---+
+    |Alice|  1|
+    |  Bob|  5|
+    +-----+---+
 
 
 Creating a PySpark :class:`DataFrame` with the explicit schema specified
@@ -64,12 +72,17 @@ Creating a PySpark :class:`DataFrame` with the explicit schema specified
 
 .. code-block:: python
 
-    from pyspark.sql.types import *
-    schema = StructType([StructField("name", StringType(), True), StructField("age", IntegerType(), True)])
-    df = spark.createDataFrame([('Alice', 1), ('Bob', 5)], schema)
-    df
-
-DataFrame[name: string, age: int]
+    >>> from pyspark.sql.types import *
+    >>> schema = StructType([StructField("name", StringType(), True),
+    ...     StructField("age", IntegerType(), True)])
+    >>> df = spark.createDataFrame([('Alice', 1), ('Bob', 5)], schema)
+    >>> df.show()
+    +-----+---+
+    | name|age|
+    +-----+---+
+    |Alice|  1|
+    |  Bob|  5|
+    +-----+---+
 
 
 Creating a PySpark :class:`DataFrame` from a list of dictionaries
@@ -77,10 +90,13 @@ Creating a PySpark :class:`DataFrame` from a list of dictionaries
 
 .. code-block:: python
 
-    df = spark.createDataFrame([{'name': 'Alice', 'age': 1}])
-    df
-
-DataFrame[age: bigint, name: string]
+    >>> df = spark.createDataFrame([{'name': 'Alice', 'age': 1}])
+    >>> df.show()
+    +---+-----+
+    |age| name|
+    +---+-----+
+    |  1|Alice|
+    +---+-----+
 
 
 Creating a PySpark :class:`DataFrame` from a list of :class:`Row`
@@ -88,12 +104,16 @@ Creating a PySpark :class:`DataFrame` from a list of :class:`Row`
 
 .. code-block:: python
 
-    from pyspark.sql import Row
-    Person = Row('name', 'age')
-    df = spark.createDataFrame([Person("Alice", 1), Person("Bob", 5)])
-    df
-
-DataFrame[name: string, age: bigint]
+    >>> from pyspark.sql import Row
+    >>> Person = Row('name', 'age')
+    >>> df = spark.createDataFrame([Person("Alice", 1), Person("Bob", 5)])
+    >>> df.show()
+    +-----+---+
+    | name|age|
+    +-----+---+
+    |Alice|  1|
+    |  Bob|  5|
+    +-----+---+
 
 
 Creating a PySpark :class:`DataFrame` from a :class:`pandas.DataFrame`
@@ -101,11 +121,14 @@ Creating a PySpark :class:`DataFrame` from a :class:`pandas.DataFrame`
 
 .. code-block:: python
 
-    import pandas as pd
-    df = spark.createDataFrame(pd.DataFrame([[1, 2]]))
-    df
-
-DataFrame[0: bigint, 1: bigint]
+    >>> import pandas as pd
+    >>> df = spark.createDataFrame(pd.DataFrame([[1, 2]]))
+    >>> df.show()
+    +---+---+
+    |  0|  1|
+    +---+---+
+    |  1|  2|
+    +---+---+
 
 
 Creating a PySpark :class:`DataFrame` from a :class:`numpy.ndarray`
@@ -113,12 +136,17 @@ Creating a PySpark :class:`DataFrame` from a :class:`numpy.ndarray`
 
 .. code-block:: python
 
-    import numpy as np
-    import pandas as pd
-    df = spark.createDataFrame(pd.DataFrame(data=np.array([[1, 2], [3, 4]]), columns=['a', 'b']))
-    df
-
-DataFrame[a: bigint, b: bigint]
+    >>> import numpy as np
+    >>> import pandas as pd
+    >>> df = spark.createDataFrame(pd.DataFrame(data=np.array([[1, 2], [3, 4]]),
+    ...     columns=['a', 'b']))
+    >>> df.show()
+    +---+---+
+    |  a|  b|
+    +---+---+
+    |  1|  2|
+    |  3|  4|
+    +---+---+
 
 
 Creating Through `read.format(...).load(...)`
@@ -129,10 +157,15 @@ Creating a PySpark :class:`DataFrame` by reading existing **json** format file d
 
 .. code-block:: python
 
-    df = spark.read.format("json").load("python/test_support/sql/people.json")
-    df
-
-DataFrame[age: bigint, name: string]
+    >>> df = spark.read.format("json").load("python/test_support/sql/people.json")
+    >>> df.show()
+    +----+-------+
+    | age|   name|
+    +----+-------+
+    |NULL|Michael|
+    |  30|   Andy|
+    |  19| Justin|
+    +----+-------+
 
 
 Creating a PySpark :class:`DataFrame` by reading existing **csv** format file data
@@ -140,10 +173,16 @@ Creating a PySpark :class:`DataFrame` by reading existing **csv** format file da
 
 .. code-block:: python
 
-    df = spark.read.format("csv").load("python/test_support/sql/people.csv")
-    df
-
-DataFrame[age: bigint, name: string]
+    >>> df = spark.read.format("csv").option("header", "true").
+    ...     load("python/test_support/sql/people.csv")
+    >>> df.show()
+    +----+-------+
+    | age|   name|
+    +----+-------+
+    |NULL|Michael|
+    |  30|   Andy|
+    |  19| Justin|
+    +----+-------+
 
 
 Creating a PySpark :class:`DataFrame` by reading existing **parquet** format file data
@@ -151,20 +190,30 @@ Creating a PySpark :class:`DataFrame` by reading existing **parquet** format fil
 
 .. code-block:: python
 
-    df = spark.read.format("parquet").load("python/test_support/sql/people.parquet")
-    df
-
-DataFrame[age: bigint, name: string]
+    >>> df = spark.read.format("parquet").load("python/test_support/sql/people.parquet")
+    >>> df.show()
+    +----+-------+
+    | age|   name|
+    +----+-------+
+    |NULL|Michael|
+    |  30|   Andy|
+    |  19| Justin|
+    +----+-------+
 
 Creating a PySpark :class:`DataFrame` by reading existing **orc** format file data
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
-    df = spark.read.format("parquet").load("python/test_support/sql/people.orc")
-    df
-
-DataFrame[age: bigint, name: string]
+    >>> df = spark.read.format("parquet").load("python/test_support/sql/people.orc")
+    >>> df.show()
+    +----+-------+
+    | age|   name|
+    +----+-------+
+    |NULL|Michael|
+    |  30|   Andy|
+    |  19| Justin|
+    +----+-------+
 
 
 Creating a PySpark :class:`DataFrame` by reading data from other databases using **JDBC**
@@ -172,8 +221,13 @@ Creating a PySpark :class:`DataFrame` by reading data from other databases using
 
 .. code-block:: python
 
-    df = spark.read.format("jdbc").options(url=url, dbtable=dbtable).load()
-    df
-
-DataFrame[age: bigint, name: string]
+    >>> df = spark.read.format("jdbc").options(url=url, dbtable=dbtable).load()
+    >>> df.show()
+    +----+-------+
+    | age|   name|
+    +----+-------+
+    |NULL|Michael|
+    |  30|   Andy|
+    |  19| Justin|
+    +----+-------+
 
