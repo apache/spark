@@ -37,14 +37,14 @@ trait SparkDateTimeUtils {
 
   final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
 
-  final val tzRegexShort = Pattern.compile("(\\+|\\-)(\\d):")
-  final val tzRegexLong = Pattern.compile("(\\+|\\-)(\\d\\d):(\\d)$")
+  final val singleHourTz = Pattern.compile("(\\+|\\-)(\\d):")
+  final val singleMinuteTz = Pattern.compile("(\\+|\\-)(\\d\\d):(\\d)$")
 
   def getZoneId(timeZoneId: String): ZoneId = {
     // To support the (+|-)h:mm format because it was supported before Spark 3.0.
-    var formattedZoneId = tzRegexShort.matcher(timeZoneId).replaceFirst("$10$2:")
+    var formattedZoneId = singleHourTz.matcher(timeZoneId).replaceFirst("$10$2:")
     // To support the (+|-)hh:m format because it was supported before Spark 3.0.
-    formattedZoneId = tzRegexLong.matcher(formattedZoneId).replaceFirst("$1$2:0$3")
+    formattedZoneId = singleMinuteTz.matcher(formattedZoneId).replaceFirst("$1$2:0$3")
 
     ZoneId.of(formattedZoneId, ZoneId.SHORT_IDS)
   }
