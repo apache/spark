@@ -251,7 +251,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         new GraphUIData(
           "aggregated-num-removed-state-rows-timeline",
           "aggregated-num-removed-state-rows-histogram",
-          numRowsRemovedData,
+          numRowsRemovedData.toImmutableArraySeq,
           minBatchTime,
           maxBatchTime,
           0,

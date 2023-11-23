@@ -1724,7 +1724,7 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     ----------
     col : :class:`~pyspark.sql.Column` or str
         The target column or column name to compute the ceiling on.
-    scale : :class:`~pyspark.sql.Column` or int
+    scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
 
             .. versionadded:: 4.0.0
@@ -2038,7 +2038,7 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     ----------
     col : :class:`~pyspark.sql.Column` or str
         The target column or column name to compute the floor on.
-    scale : :class:`~pyspark.sql.Column` or int
+    scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
 
             .. versionadded:: 4.0.0
@@ -5416,7 +5416,7 @@ def rand(seed: Optional[int] = None) -> Column:
 
     Parameters
     ----------
-    seed : int (default: None)
+    seed : int, optional
         Seed value for the random generator.
 
     Returns
@@ -5521,7 +5521,7 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     ----------
     col : :class:`~pyspark.sql.Column` or str
         The target column or column name to compute the round on.
-    scale : :class:`~pyspark.sql.Column` or int
+    scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
 
             .. versionchanged:: 4.0.0
@@ -5576,7 +5576,7 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     ----------
     col : :class:`~pyspark.sql.Column` or str
         The target column or column name to compute the round on.
-    scale : :class:`~pyspark.sql.Column` or int
+    scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
 
             .. versionchanged:: 4.0.0
@@ -6031,7 +6031,7 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
     ----------
     arg1 : :class:`~pyspark.sql.Column`, str or float
         base number or actual number (in this case base is `e`)
-    arg2 : :class:`~pyspark.sql.Column`, str or float
+    arg2 : :class:`~pyspark.sql.Column`, str or float, optional
         number to calculate logariphm for.
 
     Returns
@@ -6441,7 +6441,7 @@ def any_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = 
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to work on.
-    ignorenulls : :class:`~pyspark.sql.Column` or bool
+    ignorenulls : :class:`~pyspark.sql.Column` or bool, optional
         if first value is null then look for first non-null value.
 
     Returns
@@ -6479,7 +6479,7 @@ def first_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] 
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to work on.
-    ignorenulls : :class:`~pyspark.sql.Column` or bool
+    ignoreNulls : :class:`~pyspark.sql.Column` or bool, optional
         if first value is null then look for first non-null value.
 
     Returns
@@ -6527,7 +6527,7 @@ def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] =
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to work on.
-    ignorenulls : :class:`~pyspark.sql.Column` or bool
+    ignoreNulls : :class:`~pyspark.sql.Column` or bool, optional
         if first value is null then look for first non-null value.
 
     Returns
@@ -10360,7 +10360,7 @@ def regexp_extract_all(
         target column to work on.
     regexp : :class:`~pyspark.sql.Column` or str
         regex pattern to apply.
-    idx : int
+    idx : int, optional
         matched group id.
 
     Returns
@@ -10478,7 +10478,7 @@ def regexp_instr(
         target column to work on.
     regexp : :class:`~pyspark.sql.Column` or str
         regex pattern to apply.
-    idx : int
+    idx : int, optional
         matched group id.
 
     Returns
@@ -11317,7 +11317,7 @@ def btrim(str: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
     ----------
     str : :class:`~pyspark.sql.Column` or str
         Input column or strings.
-    trim : :class:`~pyspark.sql.Column` or str
+    trim : :class:`~pyspark.sql.Column` or str, optional
         The trim string characters to trim, the default value is a single space
 
     Examples
@@ -11560,7 +11560,7 @@ def like(
         When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it falls back
         to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
         enabled, the pattern to match "\abc" should be "\abc".
-    escape : :class:`~pyspark.sql.Column`
+    escape : :class:`~pyspark.sql.Column`, optional
         An character added since Spark 3.0. The default escape character is the '\'.
         If an escape character precedes a special symbol or another escape character, the
         following character is matched literally. It is invalid to escape any other character.
@@ -11610,7 +11610,7 @@ def ilike(
         When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it falls back
         to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
         enabled, the pattern to match "\abc" should be "\abc".
-    escape : :class:`~pyspark.sql.Column`
+    escape : :class:`~pyspark.sql.Column`, optional
         An character added since Spark 3.0. The default escape character is the '\'.
         If an escape character precedes a special symbol or another escape character, the
         following character is matched literally. It is invalid to escape any other character.
@@ -11750,13 +11750,13 @@ def mask(
     ----------
     col: :class:`~pyspark.sql.Column` or str
         target column to compute on.
-    upperChar: :class:`~pyspark.sql.Column` or str
+    upperChar: :class:`~pyspark.sql.Column` or str, optional
         character to replace upper-case characters with. Specify NULL to retain original character.
-    lowerChar: :class:`~pyspark.sql.Column` or str
+    lowerChar: :class:`~pyspark.sql.Column` or str, optional
         character to replace lower-case characters with. Specify NULL to retain original character.
-    digitChar: :class:`~pyspark.sql.Column` or str
+    digitChar: :class:`~pyspark.sql.Column` or str, optional
         character to replace digit characters with. Specify NULL to retain original character.
-    otherChar: :class:`~pyspark.sql.Column` or str
+    otherChar: :class:`~pyspark.sql.Column` or str, optional
         character to replace all other characters with. Specify NULL to retain original character.
 
     Returns
@@ -15072,7 +15072,7 @@ def aggregate(
     merge : function
         a binary function ``(acc: Column, x: Column) -> Column...`` returning expression
         of the same type as ``zero``
-    finish : function
+    finish : function, optional
         an optional unary function ``(x: Column) -> Column: ...``
         used to convert accumulated value.
 
@@ -15145,7 +15145,7 @@ def reduce(
     merge : function
         a binary function ``(acc: Column, x: Column) -> Column...`` returning expression
         of the same type as ``zero``
-    finish : function
+    finish : function, optional
         an optional unary function ``(x: Column) -> Column: ...``
         used to convert accumulated value.
 
@@ -15644,7 +15644,7 @@ def convert_timezone(
 
     Parameters
     ----------
-    sourceTz : :class:`~pyspark.sql.Column`
+    sourceTz : :class:`~pyspark.sql.Column`, optional
         the time zone for the input timestamp. If it is missed,
         the current session time zone is used as the source time zone.
     targetTz : :class:`~pyspark.sql.Column`
@@ -15697,13 +15697,13 @@ def make_dt_interval(
 
     Parameters
     ----------
-    days : :class:`~pyspark.sql.Column` or str
+    days : :class:`~pyspark.sql.Column` or str, optional
         the number of days, positive or negative
-    hours : :class:`~pyspark.sql.Column` or str
+    hours : :class:`~pyspark.sql.Column` or str, optional
         the number of hours, positive or negative
-    mins : :class:`~pyspark.sql.Column` or str
+    mins : :class:`~pyspark.sql.Column` or str, optional
         the number of minutes, positive or negative
-    secs : :class:`~pyspark.sql.Column` or str
+    secs : :class:`~pyspark.sql.Column` or str, optional
         the number of seconds with the fractional part in microsecond precision.
 
     Examples
@@ -15775,19 +15775,19 @@ def make_interval(
 
     Parameters
     ----------
-    years : :class:`~pyspark.sql.Column` or str
+    years : :class:`~pyspark.sql.Column` or str, optional
         the number of years, positive or negative
-    months : :class:`~pyspark.sql.Column` or str
+    months : :class:`~pyspark.sql.Column` or str, optional
         the number of months, positive or negative
-    weeks : :class:`~pyspark.sql.Column` or str
+    weeks : :class:`~pyspark.sql.Column` or str, optional
         the number of weeks, positive or negative
-    days : :class:`~pyspark.sql.Column` or str
+    days : :class:`~pyspark.sql.Column` or str, optional
         the number of days, positive or negative
-    hours : :class:`~pyspark.sql.Column` or str
+    hours : :class:`~pyspark.sql.Column` or str, optional
         the number of hours, positive or negative
-    mins : :class:`~pyspark.sql.Column` or str
+    mins : :class:`~pyspark.sql.Column` or str, optional
         the number of minutes, positive or negative
-    secs : :class:`~pyspark.sql.Column` or str
+    secs : :class:`~pyspark.sql.Column` or str, optional
         the number of seconds with the fractional part in microsecond precision.
 
     Examples
@@ -15900,7 +15900,7 @@ def make_timestamp(
         The value can be either an integer like 13 , or a fraction like 13.123.
         If the sec argument equals to 60, the seconds field is set
         to 0 and 1 minute is added to the final timestamp.
-    timezone : :class:`~pyspark.sql.Column` or str
+    timezone : :class:`~pyspark.sql.Column` or str, optional
         the time zone identifier. For example, CET, UTC and etc.
 
     Examples
@@ -15971,7 +15971,7 @@ def make_timestamp_ltz(
         The value can be either an integer like 13 , or a fraction like 13.123.
         If the sec argument equals to 60, the seconds field is set
         to 0 and 1 minute is added to the final timestamp.
-    timezone : :class:`~pyspark.sql.Column` or str
+    timezone : :class:`~pyspark.sql.Column` or str, optional
         the time zone identifier. For example, CET, UTC and etc.
 
     Examples
@@ -16076,9 +16076,9 @@ def make_ym_interval(
 
     Parameters
     ----------
-    years : :class:`~pyspark.sql.Column` or str
+    years : :class:`~pyspark.sql.Column` or str, optional
         the number of years, positive or negative
-    months : :class:`~pyspark.sql.Column` or str
+    months : :class:`~pyspark.sql.Column` or str, optional
         the number of months, positive or negative
 
     Examples
@@ -17218,12 +17218,13 @@ def udf(
 
     Parameters
     ----------
-    f : function
+    f : function, optional
         python function if used as a standalone function
-    returnType : :class:`pyspark.sql.types.DataType` or str
+    returnType : :class:`pyspark.sql.types.DataType` or str, optional
         the return type of the user-defined function. The value can be either a
         :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
-    useArrow : bool or None
+        Defaults to :class:`StringType`.
+    useArrow : bool, optional
         whether to use Arrow to optimize the (de)serialization. When it is None, the
         Spark config "spark.sql.execution.pythonUDF.arrow.enabled" takes effect.
 
@@ -17344,13 +17345,13 @@ def udtf(
 
     Parameters
     ----------
-    cls : class
+    cls : class, optional
         the Python user-defined table function handler class.
     returnType : :class:`pyspark.sql.types.StructType` or str, optional
         the return type of the user-defined table function. The value can be either a
         :class:`pyspark.sql.types.StructType` object or a DDL-formatted struct type string.
         If None, the handler class must provide `analyze` static method.
-    useArrow : bool or None, optional
+    useArrow : bool, optional
         whether to use Arrow to optimize the (de)serializations. When it's set to None, the
         Spark config "spark.sql.execution.pythonUDTF.arrow.enabled" is used.
 

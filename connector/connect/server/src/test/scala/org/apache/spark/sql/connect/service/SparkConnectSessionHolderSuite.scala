@@ -163,7 +163,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     SimplePythonFunction(
       command = fcn(sparkPythonPath).toImmutableArraySeq,
       envVars = mutable.Map("PYTHONPATH" -> sparkPythonPath).asJava,
-      pythonIncludes = sessionHolder.artifactManager.getSparkConnectPythonIncludes.asJava,
+      pythonIncludes = sessionHolder.artifactManager.getPythonIncludes.asJava,
       pythonExec = IntegratedUDFTestUtils.pythonExec,
       pythonVer = IntegratedUDFTestUtils.pythonVer,
       broadcastVars = Lists.newArrayList(),

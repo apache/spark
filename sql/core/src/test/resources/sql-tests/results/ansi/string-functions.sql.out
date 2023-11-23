@@ -804,6 +804,40 @@ Wabca
 
 
 -- !query
+select encode('hello', 'Windows-xxx')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "Windows-xxx",
+    "functionName" : "`encode`",
+    "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
+select encode(scol, ecol) from values('hello', 'Windows-xxx') as t(scol, ecol)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "Windows-xxx",
+    "functionName" : "`encode`",
+    "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
 select decode()
 -- !query schema
 struct<>

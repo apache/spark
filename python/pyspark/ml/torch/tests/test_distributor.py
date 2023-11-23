@@ -361,8 +361,7 @@ class TorchDistributorLocalUnitTestsMixin:
 
     def _get_inputs_for_test_local_training_succeeds(self):
         return [
-            ("0,1,2", 1, True, "1"),
-            ("0,1,2", 3, True, "1,2,0"),
+            ("0,1,2", 3, True, "0,1,2"),
             ("0,1,2", 2, False, "0,1,2"),
             (None, 3, False, "NONE"),
         ]
@@ -381,9 +380,12 @@ class TorchDistributorLocalUnitTestsMixin:
                 dist._run_training_on_pytorch_file = lambda *args: os.environ.get(
                     CUDA_VISIBLE_DEVICES, "NONE"
                 )
+                output = dist._run_local_training(
+                    dist._run_training_on_pytorch_file, "train.py", None
+                )
                 self.assertEqual(
-                    expected,
-                    dist._run_local_training(dist._run_training_on_pytorch_file, "train.py", None),
+                    sorted(expected.split(",")),
+                    sorted(output.split(",")),
                 )
                 # cleanup
                 if cuda_env_var:

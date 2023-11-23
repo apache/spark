@@ -778,8 +778,7 @@ class Dataset[T] private[sql](
       val parsedDelay = IntervalUtils.fromIntervalString(delayThreshold)
       require(!IntervalUtils.isNegative(parsedDelay),
         s"delay threshold ($delayThreshold) should not be negative.")
-      EliminateEventTimeWatermark(
-        EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan))
+      EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan)
     }
   }
 
@@ -1823,6 +1822,33 @@ class Dataset[T] private[sql](
   @scala.annotation.varargs
   def cube(cols: Column*): RelationalGroupedDataset = {
     RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.CubeType)
+  }
+
+  /**
+   * Create multi-dimensional aggregation for the current Dataset using the specified grouping sets,
+   * so we can run aggregation on them.
+   * See [[RelationalGroupedDataset]] for all the available aggregate functions.
+   *
+   * {{{
+   *   // Compute the average for all numeric columns group by specific grouping sets.
+   *   ds.groupingSets(Seq(Seq($"department", $"group"), Seq()), $"department", $"group").avg()
+   *
+   *   // Compute the max age and average salary, group by specific grouping sets.
+   *   ds.groupingSets(Seq($"department", $"gender"), Seq()), $"department", $"group").agg(Map(
+   *     "salary" -> "avg",
+   *     "age" -> "max"
+   *   ))
+   * }}}
+   *
+   * @group untypedrel
+   * @since 4.0.0
+   */
+  @scala.annotation.varargs
+  def groupingSets(groupingSets: Seq[Seq[Column]], cols: Column*): RelationalGroupedDataset = {
+    RelationalGroupedDataset(
+      toDF(),
+      cols.map(_.expr),
+      RelationalGroupedDataset.GroupingSetsType(groupingSets.map(_.map(_.expr))))
   }
 
   /**

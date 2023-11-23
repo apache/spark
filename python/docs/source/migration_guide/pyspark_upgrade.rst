@@ -62,6 +62,9 @@ Upgrading from PySpark 3.5 to 4.0
 * In Spark 4.0, ``Index.is_all_dates`` has been removed from pandas API on Spark.
 * In Spark 4.0, ``convert_float`` parameter from ``read_excel`` has been removed from pandas API on Spark.
 * In Spark 4.0, ``mangle_dupe_cols`` parameter from ``read_excel`` has been removed from pandas API on Spark.
+* In Spark 4.0, ``DataFrame.koalas`` has been removed from pandas API on Spark, use ``DataFrame.pandas_on_spark`` instead.
+* In Spark 4.0, ``DataFrame.to_koalas`` has been removed from PySpark, use ``DataFrame.pandas_api`` instead.
+* In Spark 4.0, ``DataFrame.to_pandas_on_spark`` has been removed from PySpark, use ``DataFrame.pandas_api`` instead.
 
 
 

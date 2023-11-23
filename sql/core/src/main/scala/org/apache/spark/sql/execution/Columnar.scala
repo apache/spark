@@ -279,7 +279,7 @@ private object RowToColumnConverter {
 
     if (nullable) {
       dataType match {
-        case CalendarIntervalType => new StructNullableTypeConverter(core)
+        case CalendarIntervalType | VariantType => new StructNullableTypeConverter(core)
         case st: StructType => new StructNullableTypeConverter(core)
         case _ => new BasicNullableTypeConverter(core)
       }
