@@ -32,16 +32,20 @@ import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types.{DateType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
+import java.util.regex.Pattern
+
 trait SparkDateTimeUtils {
 
   final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
 
+  final val tzRegexShort = Pattern.compile("(\\+|\\-)(\\d):")
+  final val tzRegexLong = Pattern.compile("(\\+|\\-)(\\d\\d):(\\d)$")
+
   def getZoneId(timeZoneId: String): ZoneId = {
-    val formattedZoneId = timeZoneId
-      // To support the (+|-)h:mm format because it was supported before Spark 3.0.
-      .replaceFirst("(\\+|\\-)(\\d):", "$10$2:")
-      // To support the (+|-)hh:m format because it was supported before Spark 3.0.
-      .replaceFirst("(\\+|\\-)(\\d\\d):(\\d)$", "$1$2:0$3")
+    // To support the (+|-)h:mm format because it was supported before Spark 3.0.
+    var formattedZoneId = tzRegexShort.matcher(timeZoneId).replaceFirst("$10$2:")
+    // To support the (+|-)hh:m format because it was supported before Spark 3.0.
+    formattedZoneId = tzRegexLong.matcher(formattedZoneId).replaceFirst("$1$2:0$3")
 
     ZoneId.of(formattedZoneId, ZoneId.SHORT_IDS)
   }
