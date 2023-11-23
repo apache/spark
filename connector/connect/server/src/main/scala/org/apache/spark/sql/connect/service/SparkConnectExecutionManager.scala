@@ -100,6 +100,8 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     executionsLock.synchronized {
       executeHolder = executions.remove(key)
       executeHolder.foreach { e =>
+        // Put into abandonedTombstones under lock, so that if it's accessed it will end up
+        // with INVALID_HANDLE.OPERATION_ABANDONED error.
         if (abandoned) {
           abandonedTombstones.put(key, e.getExecuteInfo)
         }
@@ -111,7 +113,11 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       logInfo(s"ExecuteHolder $key is removed.")
     }
     // close the execution outside the lock
-    executeHolder.foreach(_.close())
+    executeHolder.foreach { e =>
+      e.close()
+      // Update in abandonedTombstones: above it wasn't yet updated with closedTime etc.
+      abandonedTombstones.put(key, e.getExecuteInfo)
+    }
   }
 
   private[connect] def getExecuteHolder(key: ExecuteKey): Option[ExecuteHolder] = {
@@ -162,6 +168,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       executor.awaitTermination(1, TimeUnit.MINUTES)
     }
     scheduledExecutor = None
+    // note: this does not cleanly shut down the executions, but the server is shutting down.
     executions.clear()
     abandonedTombstones.invalidateAll()
     if (!lastExecutionTime.isDefined) {
@@ -175,12 +182,11 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
    * removes them after a timeout.
    */
   private def schedulePeriodicChecks(): Unit = executionsLock.synchronized {
-    val interval = SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL).toLong
-    val timeout = SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT).toLong
-
     scheduledExecutor match {
       case Some(_) => // Already running.
       case None =>
+        val interval = SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL).toLong
+        val timeout = SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT).toLong
         logInfo(s"Starting thread for cleanup of abandoned executions every $interval ms")
         scheduledExecutor = Some(Executors.newSingleThreadScheduledExecutor())
         scheduledExecutor.get.scheduleAtFixedRate(

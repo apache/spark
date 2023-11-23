@@ -93,6 +93,22 @@ object Connect {
       .intConf
       .createWithDefaultString("1000")
 
+  val CONNECT_SESSION_MANAGER_MAINTENANCE_INTERVAL =
+    buildStaticConf("spark.connect.session.manager.maintenanceInterval")
+      .internal()
+      .doc("Interval at which session manager will search for expired sessions to remove.")
+      .version("4.0.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("30s")
+
+  val CONNECT_SESSION_EXTEND_TIME =
+    buildStaticConf("spark.connect.session.manager.extendTime")
+      .internal()
+      .doc("Amount of time by which a  extends the session expiration time.")
+      .version("4.0.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("60m")
+
   val CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT =
     buildStaticConf("spark.connect.execute.manager.detachedTimeout")
       .internal()
