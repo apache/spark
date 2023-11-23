@@ -18,7 +18,7 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction}
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, AttributeSet, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, AttributeSet, NamedExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 
 private[sql] object EasilyFlattenable {
@@ -48,6 +48,7 @@ private[sql] object EasilyFlattenable {
           } || ne.collectFirst{
             case u: UnresolvedFunction => u
             case ex if !ex.deterministic => ex
+            case ex if ex.isInstanceOf[UserDefinedExpression] => ex
           }.nonEmpty)) {
             None
           } else {
