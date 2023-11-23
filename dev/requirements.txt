@@ -4,6 +4,7 @@ py4j
 # PySpark dependencies (optional)
 numpy
 pyarrow
+six==1.16.0
 pandas
 scipy
 plotly
