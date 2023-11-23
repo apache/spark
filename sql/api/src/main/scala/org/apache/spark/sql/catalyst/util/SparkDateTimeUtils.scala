@@ -20,6 +20,7 @@ import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZonedDateTime, ZoneId, ZoneOffset}
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit.{MICROSECONDS, NANOSECONDS}
+import java.util.regex.Pattern
 
 import scala.util.control.NonFatal
 
@@ -31,8 +32,6 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulia
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types.{DateType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
-
-import java.util.regex.Pattern
 
 trait SparkDateTimeUtils {
 
