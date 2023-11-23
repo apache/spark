@@ -1055,7 +1055,7 @@
   },
   "FAILED_EXECUTE_UDF" : {
     "message" : [
-      "Failed to execute user defined function (<functionName>: (<signature>) => <result>)."
+      "User defined function (<functionName>: (<signature>) => <result>) failed due to: <reason>."
     ],
     "sqlState" : "39000"
   },
