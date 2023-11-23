@@ -16,14 +16,11 @@
  */
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CodegenObjectFactoryMode}
-import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.types.DoubleType
 
-class CentralMomentAggSuite  extends SparkFunSuite with SQLHelper {
+class CentralMomentAggSuite extends WithAndWithoutCodegen {
   val input = AttributeReference("input", DoubleType, nullable = true)()
 
   testBothCodegenAndInterpreted("pandas_kurtosis eval") {
@@ -49,31 +46,32 @@ class CentralMomentAggSuite  extends SparkFunSuite with SQLHelper {
       InternalRow(2.0d),
       InternalRow(100.0d))
     val result = evaluator.eval(buffer)
-    assert(result === InternalRow(2.4489389171333733))
+    assert(result === InternalRow(2.4489389171333733d))
   }
 
-
-  testBothCodegenAndInterpreted("pandas_skew eval") {
-    val evaluator = DeclarativeAggregateEvaluator(PandasSkewness(input), Seq(input))
+  testBothCodegenAndInterpreted("pandas_stddev eval") {
+    val evaluator = DeclarativeAggregateEvaluator(PandasStddev(input, 1), Seq(input))
     val buffer = evaluator.update(
       InternalRow(1.0d),
       InternalRow(2.0d),
-      InternalRow(2.0d),
-      InternalRow(2.0d),
-      InternalRow(2.0d),
-      InternalRow(100.0d))
+      InternalRow(3.0d),
+      InternalRow(7.0d),
+      InternalRow(9.0d),
+      InternalRow(8.0d))
     val result = evaluator.eval(buffer)
-    assert(result === InternalRow(2.4489389171333733))
+    assert(result === InternalRow(3.40587727318528d))
   }
 
-  def testBothCodegenAndInterpreted(name: String)(f: => Unit): Unit = {
-    val modes = Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
-    for (fallbackMode <- modes) {
-      test(s"$name with $fallbackMode") {
-        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
-          f
-        }
-      }
-    }
+  testBothCodegenAndInterpreted("pandas_variance eval") {
+    val evaluator = DeclarativeAggregateEvaluator(PandasVariance(input, 1), Seq(input))
+    val buffer = evaluator.update(
+      InternalRow(1.0d),
+      InternalRow(2.0d),
+      InternalRow(3.0d),
+      InternalRow(7.0d),
+      InternalRow(9.0d),
+      InternalRow(8.0d))
+    val result = evaluator.eval(buffer)
+    assert(result === InternalRow(11.6d))
   }
 }
