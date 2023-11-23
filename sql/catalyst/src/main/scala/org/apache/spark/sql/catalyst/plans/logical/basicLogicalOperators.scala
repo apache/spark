@@ -869,7 +869,7 @@ case class CTERelationRef(
 
   override lazy val resolved: Boolean = _resolved
 
-  override lazy val isStreaming: Boolean = _isStreaming
+  override val isStreaming: Boolean = _isStreaming
 
   override def newInstance(): LogicalPlan = {
     // CTERelationRef inherits the output attributes from a query, which may contain duplicated
