@@ -4204,7 +4204,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         return GroupedData(jgd, self)
 
-    # TODO(SPARK-46048): Add it to Python Spark Connect client.
     def groupingSets(
         self, groupingSets: Sequence[Sequence["ColumnOrName"]], *cols: "ColumnOrName"
     ) -> "GroupedData":
