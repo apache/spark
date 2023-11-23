@@ -844,11 +844,9 @@ class Aggregate(LogicalPlan):
             plan.aggregate.group_type = proto.Aggregate.GroupType.GROUP_TYPE_GROUPING_SETS
             assert self._grouping_sets is not None
             for grouping_set in self._grouping_sets:
-                plan.aggregate.grouping_sets.extend(
-                    plan.aggregate.grouping_sets.grouping_set.extend(
-                        [c.to_plan(session) for c in grouping_set]
-                    )
-                )
+                plan.aggregate.grouping_sets.append(
+                    proto.Aggregate.GroupingSets(
+                        grouping_set=[c.to_plan(session) for c in grouping_set]))
         return plan
 
 

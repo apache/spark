@@ -184,6 +184,7 @@ class GroupedData:
                 aggregate_cols=[_invoke_function(function, col(c)) for c in agg_cols],
                 pivot_col=self._pivot_col,
                 pivot_values=self._pivot_values,
+                grouping_sets=self._grouping_sets,
             ),
             session=self._df._session,
         )
