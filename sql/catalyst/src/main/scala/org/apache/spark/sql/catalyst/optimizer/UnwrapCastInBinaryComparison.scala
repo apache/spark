@@ -138,6 +138,11 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         if AnyTimestampType.acceptsType(fromExp.dataType) && value != null =>
       Some(unwrapDateToTimestamp(be, fromExp, date, timeZoneId, evalMode))
 
+    case be @ BinaryComparison(
+      Cast(fromExp, _, timeZoneId, evalMode), ts @ Literal(value, _))
+        if AnyTimestampType.acceptsType(ts.dataType) && value != null =>
+      Some(unwrapTimeStampToDate(be, fromExp, ts, timeZoneId, evalMode))
+
     // As the analyzer makes sure that the list of In is already of the same data type, then the
     // rule can simply check the first literal in `in.list` can implicitly cast to `toType` or not,
     // and note that:
@@ -325,6 +330,49 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         LessThan(fromExp, Cast(date, fromExp.dataType, tz, evalMode))
       case _: LessThanOrEqual =>
         LessThan(fromExp, Cast(dateAddOne, fromExp.dataType, tz, evalMode))
+      case _ => exp
+    }
+  }
+
+  /**
+   * Move the cast from the date type to the timestamp type side.
+   * Add two new expressions:
+   * 1. floorDate: the largest date that is less than or equal to the input timestamp
+   * 2. ceilDate: the smallest date that is greater than or equal to the input timestamp
+   * Expression changes:
+   * 1. CAST(date AS timestamp) > ts ===> date > floorDate
+   * 2. CAST(date AS timestamp) >= ts ===> date >= ceilDate
+   * 3. CAST(date AS timestamp) === ts ===> date === floorDate AND date == ceilDate
+   * 4. CAST(date AS timestamp) <=> ts ===> date <=> floorDate AND date <=> ceilDate
+   * 5. CAST(date AS timestamp) < ts ===> date < ceilDate
+   * 6. CAST(date AS timestamp) <= ts ===> date <= floorDate
+   * Such as: CAST(date AS timestamp) > TIMESTAMP '2023-01-02 10:00:00' ===>
+   *  date > CAST(TIMESTAMP '2023-01-02 10:00:00' AS date)
+   */
+  private def unwrapTimeStampToDate(
+      exp: BinaryComparison,
+      fromExp: Expression,
+      ts: Literal,
+      tz: Option[String],
+      evalMode: EvalMode.Value): Expression = {
+    val floorDate = Cast(ts, fromExp.dataType, tz, evalMode)
+    val isStartOfDay =
+      EqualTo(ts, Cast(floorDate, ts.dataType, tz, evalMode)).eval(EmptyRow).asInstanceOf[Boolean]
+    val ceilDate = if (isStartOfDay) floorDate else DateAdd(floorDate, Literal(1, IntegerType))
+
+    exp match {
+      case _: GreaterThan =>
+        GreaterThan(fromExp, floorDate)
+      case _: GreaterThanOrEqual =>
+        GreaterThanOrEqual(fromExp, ceilDate)
+      case _: EqualTo =>
+        And(EqualTo(fromExp, floorDate), EqualTo(fromExp, ceilDate))
+      case EqualNullSafe(_, _) =>
+        And(EqualNullSafe(fromExp, floorDate), EqualNullSafe(fromExp, ceilDate))
+      case _: LessThan =>
+        LessThan(fromExp, ceilDate)
+      case _: LessThanOrEqual =>
+        LessThanOrEqual(fromExp, floorDate)
       case _ => exp
     }
   }
