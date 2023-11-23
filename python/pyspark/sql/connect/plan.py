@@ -846,7 +846,9 @@ class Aggregate(LogicalPlan):
             for grouping_set in self._grouping_sets:
                 plan.aggregate.grouping_sets.append(
                     proto.Aggregate.GroupingSets(
-                        grouping_set=[c.to_plan(session) for c in grouping_set]))
+                        grouping_set=[c.to_plan(session) for c in grouping_set]
+                    )
+                )
         return plan
 
 
