@@ -816,24 +816,23 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
   }
 
   /**
-   * (Scala-specific)
-   * Invokes methods defined in the stateful processor used in arbitrary state API v2.
-   * We allow the user to act on per-group set of input rows along with keyed state and the
-   * user can choose to output/return 0 or more rows.
-   * For a static/batch dataset, this operator is not supported and will throw an exception.
-   * For a streaming dataframe, we will repeatedly invoke the interface methods for new rows
-   * in each trigger and the user's state/state variables will be stored persistently across
-   * invocations.
-   * Currently this operator is not supported with Spark Connect.
+   * (Scala-specific) Invokes methods defined in the stateful processor used in arbitrary state
+   * API v2. We allow the user to act on per-group set of input rows along with keyed state and
+   * the user can choose to output/return 0 or more rows. For a static/batch dataset, this
+   * operator is not supported and will throw an exception. For a streaming dataframe, we will
+   * repeatedly invoke the interface methods for new rows in each trigger and the user's
+   * state/state variables will be stored persistently across invocations. Currently this operator
+   * is not supported with Spark Connect.
    *
-   * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
-   * @param statefulProcessor Instance of statefulProcessor whose functions will be invoked by the
-   *                          operator.
-   * @param outputMode The output mode of the stateful processor. Defaults to APPEND mode.
-   *
+   * @tparam U
+   *   The type of the output objects. Must be encodable to Spark SQL types.
+   * @param statefulProcessor
+   *   Instance of statefulProcessor whose functions will be invoked by the operator.
+   * @param outputMode
+   *   The output mode of the stateful processor. Defaults to APPEND mode.
    */
-  def transformWithState[U: Encoder]
-    (statefulProcessor: StatefulProcessor[K, V, U],
+  def transformWithState[U: Encoder](
+      statefulProcessor: StatefulProcessor[K, V, U],
       outputMode: OutputMode = OutputMode.Append()): Dataset[U] = {
     throw new UnsupportedOperationException
   }
