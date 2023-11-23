@@ -862,11 +862,14 @@ case class CTERelationRef(
     cteId: Long,
     _resolved: Boolean,
     override val output: Seq[Attribute],
+    _isStreaming: Boolean,
     statsOpt: Option[Statistics] = None) extends LeafNode with MultiInstanceRelation {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
   override lazy val resolved: Boolean = _resolved
+
+  override lazy val isStreaming: Boolean = _isStreaming
 
   override def newInstance(): LogicalPlan = {
     // CTERelationRef inherits the output attributes from a query, which may contain duplicated
