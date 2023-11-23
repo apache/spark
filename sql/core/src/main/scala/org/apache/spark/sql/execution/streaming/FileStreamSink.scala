@@ -131,12 +131,12 @@ class FileStreamSink(
   import FileStreamSink._
 
   protected val hadoopConf: Configuration = sparkSession.sessionState.newHadoopConf()
-  protected val basePath = new Path(path)
+  protected val basePath: Path = new Path(path)
   protected val logPath: Path = getMetadataLogPath(basePath.getFileSystem(hadoopConf), basePath,
     sparkSession.sessionState.conf)
   protected val retention: Option[Long] = options.get("retention").map(Utils.timeStringAsMs)
-  protected val fileLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession,
-    logPath.toString, retention)
+  protected val fileLog: FileStreamSinkLog =
+    new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession, logPath.toString, retention)
 
   protected def basicWriteJobStatsTracker: BasicWriteJobStatsTracker = {
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
