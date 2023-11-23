@@ -1443,4 +1443,27 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val rel = LocalRelation(attr)
     checkAnalysis(rel.select($"a"), rel.select(attr.markAsAllowAnyAccess()))
   }
+
+  test("SPARK-46064 Basic functionality of elimination for watermark node in batch query") {
+    val dfWithEventTimeWatermark = EventTimeWatermark($"ts",
+      IntervalUtils.fromIntervalString("10 seconds"), batchRelationWithTs)
+
+    val analyzed = getAnalyzer.executeAndCheck(dfWithEventTimeWatermark, new QueryPlanningTracker)
+
+    // EventTimeWatermark node is eliminated via EliminateEventTimeWatermark.
+    assert(!analyzed.exists(_.isInstanceOf[EventTimeWatermark]))
+  }
+
+  test("SPARK-46064 EliminateEventTimeWatermark properly handles the case where the child of " +
+    "EventTimeWatermark changes the isStreaming flag during resolution") {
+    // UnresolvedRelation which is batch initially and will be resolved as streaming
+    val dfWithTempView = UnresolvedRelation(TableIdentifier("streamingTable"))
+    val dfWithEventTimeWatermark = EventTimeWatermark($"ts",
+      IntervalUtils.fromIntervalString("10 seconds"), dfWithTempView)
+
+    val analyzed = getAnalyzer.executeAndCheck(dfWithEventTimeWatermark, new QueryPlanningTracker)
+
+    // EventTimeWatermark node is NOT eliminated.
+    assert(analyzed.exists(_.isInstanceOf[EventTimeWatermark]))
+  }
 }
