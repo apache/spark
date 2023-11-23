@@ -394,7 +394,7 @@ class MapInPandasTestsMixin:
 
             for offheap in ["true", "false"]:
                 with self.sql_conf({"spark.sql.columnVector.offheap.enabled": offheap}):
-                    self.assertEquals(
+                    self.assertEqual(
                         self.spark.read.parquet(path).mapInPandas(func, "id long").head(), Row(0)
                     )
         finally:

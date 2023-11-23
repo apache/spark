@@ -80,7 +80,7 @@ class UtilTests(PySparkTestCase):
         origin = os.environ["SPARK_HOME"]
         try:
             del os.environ["SPARK_HOME"]
-            self.assertEquals(origin, _find_spark_home())
+            self.assertEqual(origin, _find_spark_home())
         finally:
             os.environ["SPARK_HOME"] = origin
 

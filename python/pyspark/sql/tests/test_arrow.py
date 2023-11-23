@@ -877,7 +877,7 @@ class ArrowTestsMixin:
                     }
                 ):
                     if arrow_enabled and struct_in_pandas == "legacy":
-                        with self.assertRaisesRegexp(
+                        with self.assertRaisesRegex(
                             UnsupportedOperationException, "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT"
                         ):
                             df.toPandas()
