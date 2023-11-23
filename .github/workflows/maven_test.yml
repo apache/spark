@@ -152,20 +152,20 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ matrix.java }}
-      - name: Install Python 3.8
+      - name: Install Python 3.9
         uses: actions/setup-python@v4
         # We should install one Python that is higher than 3+ for SQL and Yarn because:
         # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
         # - Yarn has a Python specific test too, for example, YarnClusterSuite.
         if: contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core'))
         with:
-          python-version: 3.8
+          python-version: '3.9'
           architecture: x64
-      - name: Install Python packages (Python 3.8)
+      - name: Install Python packages (Python 3.9)
         if: (contains(matrix.modules, 'sql#core'))
         run: |
-          python3.8 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'grpcio==1.56.0' 'protobuf==3.20.3'
-          python3.8 -m pip list
+          python3.9 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'grpcio==1.59.3' 'grpcio-status==1.59.3' 'protobuf==4.25.1'
+          python3.9 -m pip list
       # Run the tests.
       - name: Run tests
         env: ${{ fromJSON(inputs.envs) }}

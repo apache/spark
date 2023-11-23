@@ -16,27 +16,22 @@
     under the License.
 
 
-===================
-Pandas API on Spark
-===================
+.. _api.options:
 
-This page gives an overview of all public pandas API on Spark.
+====================
+Options and settings
+====================
+.. currentmodule:: pyspark.pandas
 
-.. note::
-   pandas API on Spark follows the API specifications of latest pandas release.
+API for configuring global behavior. See :ref:`the User Guide <user_guide.options>` for more.
 
-.. toctree::
-   :maxdepth: 2
+Working with options
+--------------------
 
-   io
-   general_functions
-   series
-   frame
-   indexing
-   window
-   groupby
-   resampling
-   options
-   ml
-   extensions
-   testing
+.. autosummary::
+   :toctree: api/
+
+    reset_option
+    get_option
+    set_option
+    option_context

@@ -1525,9 +1525,15 @@ class SparkConnectClient(object):
         from pyspark.sql.connect.conf import RuntimeConf
 
         conf = RuntimeConf(self)
-        if conf.get("spark.sql.connect.serverStacktrace.enabled") == "true":
+        try:
+            if conf.get("spark.sql.connect.serverStacktrace.enabled") == "true":
+                return True
+            return conf.get("spark.sql.pyspark.jvmStacktrace.enabled") == "true"
+        except Exception as e:  # noqa: F841
+            # Falls back to true if an exception occurs during reading the config.
+            # Otherwise, it will recursively try to get the conf when it consistently
+            # fails, ending up with `RecursionError`.
             return True
-        return conf.get("spark.sql.pyspark.jvmStacktrace.enabled") == "true"
 
     def _handle_rpc_error(self, rpc_error: grpc.RpcError) -> NoReturn:
         """
@@ -1614,7 +1620,10 @@ class SparkConnectClient(object):
                 f"{response.session_id} != {self._session_id}"
             )
         if self._server_session_id is not None:
-            if response.server_side_session_id != self._server_session_id:
+            if (
+                response.server_side_session_id
+                and response.server_side_session_id != self._server_session_id
+            ):
                 raise PySparkAssertionError(
                     "Received incorrect server side session identifier for request. "
                     "Please create a new Spark Session to reconnect. ("
