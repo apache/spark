@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -30,7 +31,7 @@ import org.apache.spark.sql.types.StructType
  * A manager for user-defined data sources. It is used to register and lookup data sources by
  * their short names or fully qualified names.
  */
-class DataSourceManager {
+class DataSourceManager extends Logging {
 
   private type DataSourceBuilder = (
     SparkSession,  // Spark session
@@ -49,10 +50,10 @@ class DataSourceManager {
    */
   def registerDataSource(name: String, builder: DataSourceBuilder): Unit = {
     val normalizedName = normalize(name)
-    if (dataSourceBuilders.containsKey(normalizedName)) {
-      throw QueryCompilationErrors.dataSourceAlreadyExists(name)
+    val previousValue = dataSourceBuilders.put(normalizedName, builder)
+    if (previousValue != null) {
+      logWarning(f"The data source $name replaced a previously registered data source.")
     }
-    dataSourceBuilders.put(normalizedName, builder)
   }
 
   /**
@@ -72,5 +73,11 @@ class DataSourceManager {
    */
   def dataSourceExists(name: String): Boolean = {
     dataSourceBuilders.containsKey(normalize(name))
+  }
+
+  override def clone(): DataSourceManager = {
+    val manager = new DataSourceManager
+    dataSourceBuilders.forEach((k, v) => manager.registerDataSource(k, v))
+    manager
   }
 }

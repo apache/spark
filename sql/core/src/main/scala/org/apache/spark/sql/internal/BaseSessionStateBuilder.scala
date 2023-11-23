@@ -121,6 +121,13 @@ abstract class BaseSessionStateBuilder(
   }
 
   /**
+   * Manages the registration of data sources
+   */
+  protected lazy val dataSourceManager: DataSourceManager = {
+    parentState.map(_.dataSourceManager.clone()).getOrElse(new DataSourceManager)
+  }
+
+  /**
    * Experimental methods that can be used to define custom optimization rules and custom planning
    * strategies.
    *
@@ -177,6 +184,12 @@ abstract class BaseSessionStateBuilder(
   protected def udfRegistration: UDFRegistration = new UDFRegistration(functionRegistry)
 
   protected def udtfRegistration: UDTFRegistration = new UDTFRegistration(tableFunctionRegistry)
+
+  /**
+   * A collection of method used for registering user-defined data sources.
+   */
+  protected def dataSourceRegistration: DataSourceRegistration =
+    new DataSourceRegistration(dataSourceManager)
 
   /**
    * Logical query plan analyzer for resolving unresolved attributes and relations.
@@ -376,6 +389,8 @@ abstract class BaseSessionStateBuilder(
       tableFunctionRegistry,
       udfRegistration,
       udtfRegistration,
+      dataSourceManager,
+      dataSourceRegistration,
       () => catalog,
       sqlParser,
       () => analyzer,
