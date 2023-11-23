@@ -91,7 +91,7 @@ object BuildCommons {
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
   val protoVersion = "3.25.1"
   // GRPC version used for Spark Connect.
-  val grpcVersion = "1.56.0"
+  val grpcVersion = "1.59.0"
 }
 
 object SparkBuild extends PomBuild {
@@ -235,7 +235,7 @@ object SparkBuild extends PomBuild {
         // SPARK-33775 Suppress compilation warnings that contain the following contents.
         // TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after
         //  fixed.
-        "-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s",
+        "-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:e",
         "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s",
         // SPARK-45610 Convert "Auto-application to `()` is deprecated" to compile error, as it will become a compile error in Scala 3.
         "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated:e",
@@ -544,7 +544,7 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.streaming.RocksDBStateStoreStreamingAggregationSuite",
     "org.apache.spark.shuffle.KubernetesLocalDiskShuffleDataIOSuite",
     "org.apache.spark.sql.hive.HiveScalaReflectionSuite"
-  )
+  ) ++ sys.env.get("DEDICATED_JVM_SBT_TESTS").map(_.split(",")).getOrElse(Array.empty).toSet
 
   private val DEFAULT_TEST_GROUP = "default_test_group"
   private val HIVE_EXECUTION_TEST_GROUP = "hive_execution_test_group"

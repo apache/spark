@@ -757,7 +757,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       for (int i = 0; i < length; ++i) {
         appendArray(arrayData.numElements());
         for (Object element : arrayData.array()) {
-          if (!arrayData().appendObjects(1, element).isPresent()) {
+          if (arrayData().appendObjects(1, element).isEmpty()) {
             return Optional.empty();
           }
         }
@@ -771,7 +771,7 @@ public abstract class WritableColumnVector extends ColumnVector {
         appendStruct(false);
         for (int j = 0; j < row.values().length; ++j) {
           Object element = row.values()[j];
-          if (!childColumns[j].appendObjects(1, element).isPresent()) {
+          if (childColumns[j].appendObjects(1, element).isEmpty()) {
             return Optional.empty();
           }
         }
@@ -784,12 +784,12 @@ public abstract class WritableColumnVector extends ColumnVector {
       int result = 0;
       for (int i = 0; i < length; ++i) {
         for (Object key : data.keyArray().array()) {
-          if (!childColumns[0].appendObjects(1, key).isPresent()) {
+          if (childColumns[0].appendObjects(1, key).isEmpty()) {
             return Optional.empty();
           }
         }
         for (Object val: data.valueArray().array()) {
-          if (!childColumns[1].appendObjects(1, val).isPresent()) {
+          if (childColumns[1].appendObjects(1, val).isEmpty()) {
             return Optional.empty();
           }
         }

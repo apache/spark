@@ -57,7 +57,7 @@ class AnalyzeArgument:
     ----------
     dataType : :class:`DataType`
         The argument's data type
-    value : Optional[Any]
+    value : any, optional
         The calculated value if the argument is foldable; otherwise None
     isTable : bool
         If True, the argument is a table argument.
@@ -72,6 +72,11 @@ class AnalyzeArgument:
 class PartitioningColumn:
     """
     Represents a UDTF column for purposes of returning metadata from the 'analyze' method.
+
+    Parameters
+    ----------
+    name : str
+        The name of the partitioning column.
     """
 
     name: str
@@ -82,13 +87,21 @@ class OrderingColumn:
     """
     Represents a single ordering column name for purposes of returning metadata from the 'analyze'
     method.
+
+    Parameters
+    ----------
+    name : str
+        The name of the partitioning column.
+    ascending : bool, default True
+        If this column is in an ascending order or not.
+    overrideNullsFirst : str, optional
+        If this is None, use the default behavior to sort NULL values first when sorting in
+        ascending order, or last when sorting in descending order. Otherwise, if this is
+        True or False, override the default behavior accordingly.
     """
 
     name: str
     ascending: bool = True
-    # If this is None, use the default behavior to sort NULL values first when sorting in ascending
-    # order, or last when sorting in descending order. Otherwise, if this is True or False, override
-    # the default behavior accordingly.
     overrideNullsFirst: Optional[bool] = None
 
 
@@ -108,12 +121,12 @@ class AnalyzeResult:
         If true, the UDTF is specifying for Catalyst to repartition all rows of the input TABLE
         argument to one collection for consumption by exactly one instance of the correpsonding
         UDTF class.
-    partitionBy : Sequence[PartitioningColumn]
+    partitionBy : sequence of :class:`PartitioningColumn`
         If non-empty, this is a sequence of columns that the UDTF is specifying for Catalyst to
         partition the input TABLE argument by. In this case, calls to the UDTF may not include any
         explicit PARTITION BY clause, in which case Catalyst will return an error. This option is
         mutually exclusive with 'withSinglePartition'.
-    orderBy: Sequence[OrderingColumn]
+    orderBy: sequence of :class:`OrderingColumn`
         If non-empty, this is a sequence of columns that the UDTF is specifying for Catalyst to
         sort the input TABLE argument by. Note that the 'partitionBy' list must also be non-empty
         in this case.
