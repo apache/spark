@@ -49,6 +49,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{monotonically_increasing_id, udf}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.PeriodicCheckpointer
 import org.apache.spark.util.VersionUtils
 
@@ -593,7 +594,8 @@ abstract class LDAModel private[ml] (
       case ((termIndices, termWeights), topic) =>
         (topic, termIndices.toSeq, termWeights.toSeq)
     }
-    sparkSession.createDataFrame(topics).toDF("topic", "termIndices", "termWeights")
+    sparkSession.createDataFrame(topics.toImmutableArraySeq)
+      .toDF("topic", "termIndices", "termWeights")
   }
 
   @Since("1.6.0")

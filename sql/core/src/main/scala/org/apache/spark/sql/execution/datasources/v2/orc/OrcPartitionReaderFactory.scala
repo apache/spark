@@ -38,6 +38,7 @@ import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A factory used to create Orc readers.
@@ -73,7 +74,7 @@ case class OrcPartitionReaderFactory(
   private def pushDownPredicates(orcSchema: TypeDescription, conf: Configuration): Unit = {
     if (orcFilterPushDown && filters.nonEmpty) {
       val fileSchema = OrcUtils.toCatalystSchema(orcSchema)
-      OrcFilters.createFilter(fileSchema, filters).foreach { f =>
+      OrcFilters.createFilter(fileSchema, filters.toImmutableArraySeq).foreach { f =>
         OrcInputFormat.setSearchArgument(conf, f, fileSchema.fieldNames)
       }
     }

@@ -30,6 +30,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
 import org.apache.spark.util.{ResetSystemProperties, SystemClock, ThreadUtils}
+import org.apache.spark.util.ArrayImplicits._
 
 class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalSparkContext
     with ResetSystemProperties with Eventually {
@@ -75,7 +76,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
         val blockManagerDecommissionStatus =
           if (SparkEnv.get.blockManager.decommissioner.isEmpty) false else true
         Iterator.single(blockManagerDecommissionStatus)
-      }.collect()
+      }.collect().toImmutableArraySeq
       assert(decommissionStatus.forall(_ == isEnabled))
       sc.removeSparkListener(decommissionListener)
     }

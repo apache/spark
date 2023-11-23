@@ -28,6 +28,7 @@ import org.apache.spark.ml.tree._
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.util.ArrayImplicits._
 
 private[ml] object TreeTests extends SparkFunSuite {
 
@@ -233,7 +234,7 @@ private[ml] object TreeTests extends SparkFunSuite {
       LabeledPoint(1.0, Vectors.dense(1.0, 1.0)),
       LabeledPoint(1.0, Vectors.dense(1.0, 0.0)),
       LabeledPoint(1.0, Vectors.dense(1.0, 2.0)))
-    sc.parallelize(arr)
+    sc.parallelize(arr.toImmutableArraySeq)
   }
 
   /**

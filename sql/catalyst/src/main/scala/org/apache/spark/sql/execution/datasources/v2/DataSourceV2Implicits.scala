@@ -65,6 +65,11 @@ object DataSourceV2Implicits {
       }
     }
 
+    def supportsPartitions: Boolean = table match {
+      case _: SupportsPartitionManagement => true
+      case _ => false
+    }
+
     def asPartitionable: SupportsPartitionManagement = {
       table match {
         case support: SupportsPartitionManagement =>

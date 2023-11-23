@@ -191,6 +191,58 @@ SPARK_MASTER_OPTS supports the following system properties:
 <table class="table table-striped">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
+  <td><code>spark.master.ui.port</code></td>
+  <td><code>8080</code></td>
+  <td>
+    Specifies the port number of the Master Web UI endpoint.
+  </td>
+  <td>1.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.master.ui.decommission.allow.mode</code></td>
+  <td><code>LOCAL</code></td>
+  <td>
+    Specifies the behavior of the Master Web UI's /workers/kill endpoint. Possible choices
+    are: <code>LOCAL</code> means allow this endpoint from IP's that are local to the machine running
+    the Master, <code>DENY</code> means to completely disable this endpoint, <code>ALLOW</code> means to allow
+    calling this endpoint from any IP.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.master.ui.historyServerUrl</code></td>
+  <td>(None)</td>
+  <td>
+    The URL where Spark history server is running. Please note that this assumes
+    that all Spark jobs share the same event log location where the history server accesses.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.master.rest.enabled</code></td>
+  <td><code>false</code></td>
+  <td>
+    Whether to use the Master REST API endpoint or not.
+  </td>
+  <td>1.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.master.rest.port</code></td>
+  <td><code>6066</code></td>
+  <td>
+    Specifies the port number of the Master REST API endpoint.
+  </td>
+  <td>1.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.master.useAppNameAsAppId.enabled</code></td>
+  <td><code>false</code></td>
+  <td>
+    (Experimental) If true, Spark master uses the user-provided appName for appId.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.deploy.retainedApplications</code></td>
   <td>200</td>
   <td>
@@ -218,7 +270,7 @@ SPARK_MASTER_OPTS supports the following system properties:
 </tr>
 <tr>
   <td><code>spark.deploy.defaultCores</code></td>
-  <td>(infinite)</td>
+  <td>Int.MaxValue</td>
   <td>
     Default number of cores to give to applications in Spark's standalone mode if they don't
     set <code>spark.cores.max</code>. If not set, applications always get all available
@@ -245,6 +297,43 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>1.6.3</td>
 </tr>
 <tr>
+  <td><code>spark.deploy.maxDrivers</code></td>
+  <td>Int.MaxValue</td>
+  <td>
+    The maximum number of running drivers.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.deploy.appNumberModulo</code></td>
+  <td>(None)</td>
+  <td>
+    The modulo for app number. By default, the next of `app-yyyyMMddHHmmss-9999` is
+    `app-yyyyMMddHHmmss-10000`. If we have 10000 as modulo, it will be `app-yyyyMMddHHmmss-0000`.
+    In most cases, the prefix `app-yyyyMMddHHmmss` is increased already during creating 10000 applications.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.deploy.driverIdPattern</code></td>
+  <td>driver-%s-%04d</td>
+  <td>
+    The pattern for driver ID generation based on Java `String.format` method.
+    The default value is `driver-%s-%04d` which represents the existing driver id string, e.g., `driver-20231031224459-0019`. Please be careful to generate unique IDs.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.deploy.appIdPattern</code></td>
+  <td>app-%s-%04d</td>
+  <td>
+    The pattern for app ID generation based on Java `String.format` method.
+    The default value is `app-%s-%04d` which represents the existing app id string, e.g.,
+    `app-20231031224509-0008`. Plesae be careful to generate unique IDs.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.worker.timeout</code></td>
   <td>60</td>
   <td>
@@ -254,7 +343,15 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>0.6.2</td>
 </tr>
 <tr>
-  <td><code>spark.worker.resource.{resourceName}.amount</code></td>
+  <td><code>spark.dead.worker.persistence</code></td>
+  <td>15</td>
+  <td>
+    Number of iterations to keep the deae worker information in UI. By default, the dead worker is visible for (15 + 1) * <code>spark.worker.timeout</code> since its last heartbeat.
+  </td>
+  <td>0.8.0</td>
+</tr>
+<tr>
+  <td><code>spark.worker.resource.{name}.amount</code></td>
   <td>(none)</td>
   <td>
     Amount of a particular resource to use on the worker.
@@ -262,7 +359,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.worker.resource.{resourceName}.discoveryScript</code></td>
+  <td><code>spark.worker.resource.{name}.discoveryScript</code></td>
   <td>(none)</td>
   <td>
     Path to resource discovery script, which is used to find a particular resource while worker starting up.
@@ -275,8 +372,10 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>(none)</td>
   <td>
     Path to resources file which is used to find various resources while worker starting up.
-    The content of resources file should be formatted like <code>
-    [{"id":{"componentName": "spark.worker","resourceName":"gpu"},"addresses":["0","1","2"]}]</code>.
+    The content of resources file should be formatted like
+    <code>[{"id":{"componentName":</code>
+    <code>"spark.worker", "resourceName":"gpu"},</code>
+    <code>"addresses":["0","1","2"]}]</code>.
     If a particular resource is not found in the resources file, the discovery script would be used to
     find that resource. If the discovery script also does not find the resources, the worker will fail
     to start up.
@@ -362,6 +461,16 @@ SPARK_WORKER_OPTS supports the following system properties:
     size.
   </td>
   <td>2.0.2</td>
+</tr>
+<tr>
+  <td><code>spark.worker.idPattern</code></td>
+  <td>worker-%s-%s-%d</td>
+  <td>
+    The pattern for worker ID generation based on Java `String.format` method.
+    The default value is `worker-%s-%s-%d` which represents the existing worker id string, e.g.,
+    `worker-20231109183042-[fe80::1%lo0]-39729`. Please be careful to generate unique IDs
+  </td>
+  <td>4.0.0</td>
 </tr>
 </table>
 
@@ -542,15 +651,38 @@ ZooKeeper is the best way to go for production-level high availability, but if y
 In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env using this configuration:
 
 <table class="table table-striped">
-  <thead><tr><th style="width:21%">System property</th><th>Meaning</th><th>Since Version</th></tr></thead>
+  <thead><tr><th style="width:21%">System property</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>spark.deploy.recoveryMode</code></td>
-    <td>Set to FILESYSTEM to enable single-node recovery mode (default: NONE).</td>
+    <td>NONE</td>
+    <td>The recovery mode setting to recover submitted Spark jobs with cluster mode when it failed and relaunches.
+      Set to FILESYSTEM to enable single-node recovery mode, ZOOKEEPER to use Zookeeper-based recovery mode, and
+      CUSTOM to provide a customer provider class via additional `spark.deploy.recoveryMode.factory` configuration.
+    </td>
     <td>0.8.1</td>
   </tr>
   <tr>
     <td><code>spark.deploy.recoveryDirectory</code></td>
+    <td>""</td>
     <td>The directory in which Spark will store recovery state, accessible from the Master's perspective.</td>
+    <td>0.8.1</td>
+  </tr>
+  <tr>
+    <td><code>spark.deploy.recoveryMode.factory</code></td>
+    <td>""</td>
+    <td>A class to implement <code>StandaloneRecoveryModeFactory</code> interface</td>
+    <td>1.2.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.deploy.zookeeper.url</code></td>
+    <td>None</td>
+    <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper URL to connect to.</td>
+    <td>0.8.1</td>
+  </tr>
+  <tr>
+    <td><code>spark.deploy.zookeeper.dir</code></td>
+    <td>None</td>
+    <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper directory to store recovery state.</td>
     <td>0.8.1</td>
   </tr>
 </table>

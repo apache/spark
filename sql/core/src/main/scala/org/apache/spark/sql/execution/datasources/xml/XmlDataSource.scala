@@ -122,7 +122,8 @@ object TextInputXmlDataSource extends XmlDataSource {
       xml: Dataset[String],
       parsedOptions: XmlOptions): StructType = {
     SQLExecution.withSQLConfPropagated(xml.sparkSession) {
-      new XmlInferSchema(parsedOptions).infer(xml.rdd)
+      new XmlInferSchema(parsedOptions, xml.sparkSession.sessionState.conf.caseSensitiveAnalysis)
+        .infer(xml.rdd)
     }
   }
 
@@ -179,7 +180,9 @@ object MultiLineXmlDataSource extends XmlDataSource {
         parsedOptions)
     }
     SQLExecution.withSQLConfPropagated(sparkSession) {
-      val schema = new XmlInferSchema(parsedOptions).infer(tokenRDD)
+      val schema =
+        new XmlInferSchema(parsedOptions, sparkSession.sessionState.conf.caseSensitiveAnalysis)
+          .infer(tokenRDD)
       schema
     }
   }

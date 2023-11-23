@@ -414,7 +414,7 @@ class DecommissionWorkerSuite
     master.self.askSync[MasterStateResponse](RequestMasterState)
   }
 
-  private def getApplications(): Seq[ApplicationInfo] = {
+  private def getApplications(): Array[ApplicationInfo] = {
     getMasterState.activeApps
   }
 

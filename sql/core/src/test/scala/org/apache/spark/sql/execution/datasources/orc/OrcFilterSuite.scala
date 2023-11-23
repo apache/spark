@@ -39,6 +39,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A test suite that tests Apache ORC filter API based filter pushdown optimization.
@@ -64,7 +65,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       case PhysicalOperation(_, filters, DataSourceV2ScanRelation(_, o: OrcScan, _, _, _)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
         assert(o.pushedFilters.nonEmpty, "No filter is pushed down")
-        val maybeFilter = OrcFilters.createFilter(query.schema, o.pushedFilters)
+        val maybeFilter = OrcFilters.createFilter(query.schema, o.pushedFilters.toImmutableArraySeq)
         assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for " +
           s"${o.pushedFilters.mkString("pushedFilters(", ", ", ")")}")
         checker(maybeFilter.get)
@@ -546,7 +547,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       OrcFilters.createFilter(schema, Array(
         LessThan("a", 10),
         StringContains("b", "prefix")
-      )).get.asInstanceOf[SearchArgumentImpl].toOldString
+      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
     }
 
     // The `LessThan` should be converted while the whole inner `And` shouldn't
@@ -557,7 +558,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           GreaterThan("a", 1),
           StringContains("b", "prefix")
         ))
-      )).get.asInstanceOf[SearchArgumentImpl].toOldString
+      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
     }
 
     // Safely remove unsupported `StringContains` predicate and push down `LessThan`
@@ -567,7 +568,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           LessThan("a", 10),
           StringContains("b", "prefix")
         )
-      )).get.asInstanceOf[SearchArgumentImpl].toOldString
+      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
     }
 
     // Safely remove unsupported `StringContains` predicate, push down `LessThan` and `GreaterThan`.
@@ -581,7 +582,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           ),
           GreaterThan("a", 1)
         )
-      )).get.asInstanceOf[SearchArgumentImpl].toOldString
+      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
     }
   }
 
@@ -604,7 +605,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
             LessThan("a", 1)
           )
         )
-      )).get.asInstanceOf[SearchArgumentImpl].toOldString
+      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
     }
 
     assertResult("leaf-0 = (LESS_THAN_EQUALS a 10), leaf-1 = (LESS_THAN a 1)," +
@@ -620,7 +621,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
             LessThan("a", 1)
           )
         )
-      )).get.asInstanceOf[SearchArgumentImpl].toOldString
+      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
     }
 
     assert(OrcFilters.createFilter(schema, Array(
@@ -631,7 +632,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           LessThan("a", 1)
         )
       )
-    )).isEmpty)
+    ).toImmutableArraySeq).isEmpty)
   }
 
   test("SPARK-27160: Fix casting of the DecimalType literal") {
@@ -641,7 +642,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       OrcFilters.createFilter(schema, Array(
         LessThan(
           "a",
-          new java.math.BigDecimal(3.14, MathContext.DECIMAL64).setScale(2)))
+          new java.math.BigDecimal(3.14, MathContext.DECIMAL64).setScale(2))).toImmutableArraySeq
       ).get.asInstanceOf[SearchArgumentImpl].toOldString
     }
   }

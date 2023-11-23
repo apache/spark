@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat}
+import org.apache.spark.sql.sources.SupportsStreamSourceMetadataColumns
 
 object StreamingRelation {
   def apply(dataSource: DataSource): StreamingRelation = {
@@ -60,11 +61,11 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
   override def newInstance(): LogicalPlan = this.copy(output = output.map(_.newInstance()))
 
   override lazy val metadataOutput: Seq[AttributeReference] = {
-    dataSource.providingClass match {
-      // If the dataSource provided class is a same or subclass of FileFormat class
-      case f if classOf[FileFormat].isAssignableFrom(f) =>
-        metadataOutputWithOutConflicts(
-          Seq(dataSource.providingInstance().asInstanceOf[FileFormat].createFileMetadataCol()))
+    dataSource.providingInstance() match {
+      case f: FileFormat => metadataOutputWithOutConflicts(Seq(f.createFileMetadataCol()))
+      case s: SupportsStreamSourceMetadataColumns =>
+        metadataOutputWithOutConflicts(s.getMetadataOutput(
+          dataSource.sparkSession, dataSource.options, dataSource.userSpecifiedSchema))
       case _ => Nil
     }
   }

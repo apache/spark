@@ -778,10 +778,17 @@ class Aggregate(LogicalPlan):
         aggregate_cols: Sequence[Column],
         pivot_col: Optional[Column],
         pivot_values: Optional[Sequence[Any]],
+        grouping_sets: Optional[Sequence[Sequence[Column]]],
     ) -> None:
         super().__init__(child)
 
-        assert isinstance(group_type, str) and group_type in ["groupby", "rollup", "cube", "pivot"]
+        assert isinstance(group_type, str) and group_type in [
+            "groupby",
+            "rollup",
+            "cube",
+            "pivot",
+            "grouping_sets",
+        ]
         self._group_type = group_type
 
         assert isinstance(grouping_cols, list) and all(isinstance(c, Column) for c in grouping_cols)
@@ -795,12 +802,16 @@ class Aggregate(LogicalPlan):
         if group_type == "pivot":
             assert pivot_col is not None and isinstance(pivot_col, Column)
             assert pivot_values is None or isinstance(pivot_values, list)
+        elif group_type == "grouping_sets":
+            assert grouping_sets is None or isinstance(grouping_sets, list)
         else:
             assert pivot_col is None
             assert pivot_values is None
+            assert grouping_sets is None
 
         self._pivot_col = pivot_col
         self._pivot_values = pivot_values
+        self._grouping_sets = grouping_sets
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         from pyspark.sql.connect.functions import lit
@@ -829,7 +840,15 @@ class Aggregate(LogicalPlan):
                 plan.aggregate.pivot.values.extend(
                     [lit(v).to_plan(session).literal for v in self._pivot_values]
                 )
-
+        elif self._group_type == "grouping_sets":
+            plan.aggregate.group_type = proto.Aggregate.GroupType.GROUP_TYPE_GROUPING_SETS
+            assert self._grouping_sets is not None
+            for grouping_set in self._grouping_sets:
+                plan.aggregate.grouping_sets.append(
+                    proto.Aggregate.GroupingSets(
+                        grouping_set=[c.to_plan(session) for c in grouping_set]
+                    )
+                )
         return plan
 
 

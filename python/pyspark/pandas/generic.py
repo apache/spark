@@ -331,8 +331,6 @@ class Frame(object, metaclass=ABCMeta):
         return self._apply_series_op(lambda psser: psser._cumsum(skipna), should_resolve=True)
 
     # TODO: add 'axis' parameter
-    # TODO: use pandas_udf to support negative values and other options later
-    #  other window except unbounded ones is supported as of Spark 3.0.
     def cumprod(self: FrameLike, skipna: bool = True) -> FrameLike:
         """
         Return cumulative product over a DataFrame or Series axis.

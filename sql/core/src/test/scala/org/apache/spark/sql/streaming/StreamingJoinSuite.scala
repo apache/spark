@@ -893,7 +893,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
     ("left_outer", Row(3, null, 5, null)),
     ("right_outer", Row(null, 2, null, 5))
   ).foreach { case (joinType: String, outerResult) =>
-    test(s"${joinType.replaceAllLiterally("_", " ")} with watermark range condition") {
+    test(s"${joinType.replace("_", " ")} with watermark range condition") {
       val (leftInput, rightInput, joined) = setupJoinWithRangeCondition(joinType)
 
       testStream(joined)(

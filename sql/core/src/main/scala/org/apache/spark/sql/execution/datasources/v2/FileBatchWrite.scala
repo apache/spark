@@ -23,6 +23,7 @@ import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, PhysicalWriteInfo, WriterCommitMessage}
 import org.apache.spark.sql.execution.datasources.{WriteJobDescription, WriteTaskResult}
 import org.apache.spark.sql.execution.datasources.FileFormatWriter.processStats
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 class FileBatchWrite(
@@ -33,10 +34,12 @@ class FileBatchWrite(
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
     val results = messages.map(_.asInstanceOf[WriteTaskResult])
     logInfo(s"Start to commit write Job ${description.uuid}.")
-    val (_, duration) = Utils.timeTakenMs { committer.commitJob(job, results.map(_.commitMsg)) }
+    val (_, duration) = Utils
+      .timeTakenMs { committer.commitJob(job, results.map(_.commitMsg).toImmutableArraySeq) }
     logInfo(s"Write Job ${description.uuid} committed. Elapsed time: $duration ms.")
 
-    processStats(description.statsTrackers, results.map(_.summary.stats), duration)
+    processStats(
+      description.statsTrackers, results.map(_.summary.stats).toImmutableArraySeq, duration)
     logInfo(s"Finished processing stats for write job ${description.uuid}.")
   }
 

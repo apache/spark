@@ -24,13 +24,13 @@ import javax.xml.stream.XMLInputFactory
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, DateFormatter, DateTimeUtils, ParseMode, PermissiveMode}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 
 /**
  * Options for the XML data source.
  */
-private[sql] class XmlOptions(
+class XmlOptions(
     val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String,
@@ -66,7 +66,11 @@ private[sql] class XmlOptions(
 
   val compressionCodec = parameters.get(COMPRESSION).map(CompressionCodecs.getCodecClassName)
   val rowTagOpt = parameters.get(XmlOptions.ROW_TAG).map(_.trim)
-  require(!rowTagRequired || rowTagOpt.isDefined, s"'${XmlOptions.ROW_TAG}' option is required.")
+
+  if (rowTagRequired && rowTagOpt.isEmpty) {
+    throw QueryCompilationErrors.xmlRowTagRequiredError(XmlOptions.ROW_TAG)
+  }
+
   val rowTag = rowTagOpt.getOrElse(XmlOptions.DEFAULT_ROW_TAG)
   require(rowTag.nonEmpty, s"'$ROW_TAG' option should not be an empty string.")
   require(!rowTag.startsWith("<") && !rowTag.endsWith(">"),
@@ -82,7 +86,6 @@ private[sql] class XmlOptions(
   val samplingRatio = parameters.get(SAMPLING_RATIO).map(_.toDouble).getOrElse(1.0)
   require(samplingRatio > 0, s"$SAMPLING_RATIO ($samplingRatio) should be greater than 0")
   val excludeAttributeFlag = getBool(EXCLUDE_ATTRIBUTE, false)
-  val treatEmptyValuesAsNulls = getBool(TREAT_EMPTY_VALUE_AS_NULLS, false)
   val attributePrefix =
     parameters.getOrElse(ATTRIBUTE_PREFIX, XmlOptions.DEFAULT_ATTRIBUTE_PREFIX)
   val valueTag = parameters.getOrElse(VALUE_TAG, XmlOptions.DEFAULT_VALUE_TAG)
@@ -168,7 +171,7 @@ private[sql] class XmlOptions(
   }
 }
 
-private[sql] object XmlOptions extends DataSourceOptions {
+object XmlOptions extends DataSourceOptions {
   val DEFAULT_ATTRIBUTE_PREFIX = "_"
   val DEFAULT_VALUE_TAG = "_VALUE"
   val DEFAULT_ROW_TAG = "ROW"
@@ -184,7 +187,6 @@ private[sql] object XmlOptions extends DataSourceOptions {
   val DECLARATION = newOption("declaration")
   val ARRAY_ELEMENT_NAME = newOption("arrayElementName")
   val EXCLUDE_ATTRIBUTE = newOption("excludeAttribute")
-  val TREAT_EMPTY_VALUE_AS_NULLS = newOption("treatEmptyValuesAsNulls")
   val ATTRIBUTE_PREFIX = newOption("attributePrefix")
   val VALUE_TAG = newOption("valueTag")
   val NULL_VALUE = newOption("nullValue")

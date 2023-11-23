@@ -16,7 +16,9 @@
  */
 package org.apache.spark.sql.execution.datasources.xml.util
 
-import java.nio.file.Paths
+import java.io.FileNotFoundException
+
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.execution.datasources.xml.TestUtils._
 import org.apache.spark.sql.execution.datasources.xml.XSDToSchema
@@ -28,8 +30,7 @@ class XSDToSchemaSuite extends SharedSparkSession {
   private val resDir = "test-data/xml-resources/"
 
   test("Basic parsing") {
-    val parsedSchema = XSDToSchema.read(Paths.get(testFile(resDir + "basket.xsd")
-      .replace("file:/", "/")))
+    val parsedSchema = XSDToSchema.read(new Path(testFile(resDir + "basket.xsd")))
     val expectedSchema = buildSchema(
       field("basket",
         structField(
@@ -40,8 +41,7 @@ class XSDToSchemaSuite extends SharedSparkSession {
   }
 
   test("Relative path parsing") {
-    val parsedSchema = XSDToSchema.read(Paths.get(testFile(resDir + "include-example/first.xsd")
-      .replace("file:/", "/")))
+    val parsedSchema = XSDToSchema.read(new Path(testFile(resDir + "include-example/first.xsd")))
     val expectedSchema = buildSchema(
       field("basket",
         structField(
@@ -52,8 +52,7 @@ class XSDToSchemaSuite extends SharedSparkSession {
   }
 
   test("Test schema types and attributes") {
-    val parsedSchema = XSDToSchema.read(Paths.get(testFile(resDir + "catalog.xsd")
-      .replace("file:/", "/")))
+    val parsedSchema = XSDToSchema.read(new Path(testFile(resDir + "catalog.xsd")))
     val expectedSchema = buildSchema(
       field("catalog",
         structField(
@@ -76,23 +75,20 @@ class XSDToSchemaSuite extends SharedSparkSession {
   }
 
   test("Test xs:choice nullability") {
-    val parsedSchema = XSDToSchema.read(Paths.get(testFile(resDir + "choice.xsd")
-      .replace("file:/", "/")))
+    val parsedSchema = XSDToSchema.read(new Path(testFile(resDir + "choice.xsd")))
     val expectedSchema = buildSchema(
       field("el", structField(field("foo"), field("bar"), field("baz")), nullable = false))
     assert(expectedSchema === parsedSchema)
   }
 
   test("Two root elements") {
-    val parsedSchema = XSDToSchema.read(Paths.get(testFile(resDir + "twoelements.xsd")
-      .replace("file:/", "/")))
+    val parsedSchema = XSDToSchema.read(new Path(testFile(resDir + "twoelements.xsd")))
     val expectedSchema = buildSchema(field("bar", nullable = false), field("foo", nullable = false))
     assert(expectedSchema === parsedSchema)
   }
 
   test("xs:any schema") {
-    val parsedSchema = XSDToSchema.read(Paths.get(testFile(resDir + "xsany.xsd")
-      .replace("file:/", "/")))
+    val parsedSchema = XSDToSchema.read(new Path(testFile(resDir + "xsany.xsd")))
     val expectedSchema = buildSchema(
       field("root",
         structField(
@@ -117,8 +113,7 @@ class XSDToSchemaSuite extends SharedSparkSession {
   }
 
   test("Tests xs:long type / Issue 520") {
-    val parsedSchema = XSDToSchema.read(Paths.get(testFile(resDir + "long.xsd")
-      .replace("file:/", "/")))
+    val parsedSchema = XSDToSchema.read(new Path(testFile(resDir + "long.xsd")))
     val expectedSchema = buildSchema(
       field("test",
         structField(field("userId", LongType, nullable = false)), nullable = false))
@@ -126,8 +121,7 @@ class XSDToSchemaSuite extends SharedSparkSession {
   }
 
   test("Test xs:decimal type with restriction[fractionalDigits]") {
-    val parsedSchema = XSDToSchema.read(Paths.get(testFile(resDir +
-      "decimal-with-restriction.xsd").replace("file:/", "/")))
+    val parsedSchema = XSDToSchema.read(new Path(testFile(resDir + "decimal-with-restriction.xsd")))
     val expectedSchema = buildSchema(
       field("decimal_type_3", DecimalType(12, 6), nullable = false),
       field("decimal_type_1", DecimalType(38, 18), nullable = false),
@@ -137,8 +131,7 @@ class XSDToSchemaSuite extends SharedSparkSession {
   }
 
   test("Test ref attribute / Issue 617") {
-    val parsedSchema = XSDToSchema.read(Paths.get(testFile(resDir + "ref-attribute.xsd")
-      .replace("file:/", "/")))
+    val parsedSchema = XSDToSchema.read(new Path(testFile(resDir + "ref-attribute.xsd")))
     val expectedSchema = buildSchema(
       field(
         "book",
@@ -166,8 +159,8 @@ class XSDToSchemaSuite extends SharedSparkSession {
   }
 
   test("Test complex content with extension element / Issue 554") {
-    val parsedSchema = XSDToSchema.read(Paths.get(testFile(resDir +
-      "complex-content-extension.xsd").replace("file:/", "/")))
+    val parsedSchema =
+      XSDToSchema.read(new Path(testFile(resDir + "complex-content-extension.xsd")))
 
     val expectedSchema = buildSchema(
       field(
@@ -183,5 +176,11 @@ class XSDToSchemaSuite extends SharedSparkSession {
       )
     )
     assert(parsedSchema === expectedSchema)
+  }
+
+  test("SPARK-45912: Test XSDToSchema when open not found files") {
+    intercept[FileNotFoundException] {
+      XSDToSchema.read(new Path("/path/not/found"))
+    }
   }
 }

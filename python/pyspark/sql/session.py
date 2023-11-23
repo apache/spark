@@ -481,6 +481,14 @@ class SparkSession(SparkConversionMixin):
                         ):
                             url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
 
+                            if url is None:
+                                raise RuntimeError(
+                                    "Cannot create a Spark Connect session because the "
+                                    "Spark Connect remote URL has not been set. Please define "
+                                    "the remote URL by setting either the 'spark.remote' option "
+                                    "or the 'SPARK_REMOTE' environment variable."
+                                )
+
                             if url.startswith("local"):
                                 os.environ["SPARK_LOCAL_REMOTE"] = "1"
                                 RemoteSparkSession._start_connect_server(url, opts)
@@ -884,6 +892,10 @@ class SparkSession(SparkConversionMixin):
         Returns
         -------
         :class:`DataSourceRegistration`
+
+        Notes
+        -----
+        This feature is experimental and unstable.
         """
         from pyspark.sql.datasource import DataSourceRegistration
 
