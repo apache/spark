@@ -44,12 +44,12 @@ public class ReloadingX509TrustManagerSuite {
    */
   private void waitForReloadCount(ReloadingX509TrustManager tm, int count, int attempts)
           throws InterruptedException {
-    if (tm.reloadCount > count) {
+    if (tm.reloadCountValue() > count) {
       throw new IllegalStateException(
-        "Passed invalid count " + count + " to waitForReloadCount, already have " + tm.reloadCount);
+        "Passed invalid count " + count + " to waitForReloadCount, already have " + tm.reloadCountValue());
     }
     for (int i = 0; i < attempts; i++) {
-      if (tm.reloadCount >= count) {
+      if (tm.reloadCountValue() >= count) {
         return;
       }
       // Adapted from SystemClock.waitTillTime
@@ -74,14 +74,14 @@ public class ReloadingX509TrustManagerSuite {
    */
   private void waitForNoReload(ReloadingX509TrustManager tm, int attempts)
           throws InterruptedException {
-    int oldReloadCount = tm.reloadCount;
-    int checkCount = tm.needsReloadCheckCounts;
+    int oldReloadCount = tm.reloadCountValue();
+    int checkCount = tm.needsReloadCheckCountsValue();
     int target = checkCount + attempts;
     while (checkCount < target) {
       Thread.sleep(100);
-      checkCount = tm.needsReloadCheckCounts;
+      checkCount = tm.needsReloadCheckCountsValue();
     }
-    assertEquals(oldReloadCount, tm.reloadCount);
+    assertEquals(oldReloadCount, tm.reloadCountValue());
   }
 
   /**
@@ -154,12 +154,12 @@ public class ReloadingX509TrustManagerSuite {
     ReloadingX509TrustManager tm =
       new ReloadingX509TrustManager("jks", trustStore, "password", 1);
     assertEquals(1, tm.getReloadInterval());
-    assertEquals(0, tm.reloadCount);
+    assertEquals(0, tm.reloadCountValue());
     try {
       tm.init();
       assertEquals(1, tm.getAcceptedIssuers().length);
       // At this point we haven't reloaded, just the initial load
-      assertEquals(0, tm.reloadCount);
+      assertEquals(0, tm.reloadCountValue());
 
       // Wait so that the file modification time is different
       Thread.sleep((tm.getReloadInterval() + 1000));
@@ -196,7 +196,7 @@ public class ReloadingX509TrustManagerSuite {
 
     ReloadingX509TrustManager tm =
       new ReloadingX509TrustManager("jks", trustStore, "password", 1);
-    assertEquals(0, tm.reloadCount);
+    assertEquals(0, tm.reloadCountValue());
     try {
       tm.init();
       assertEquals(1, tm.getAcceptedIssuers().length);
@@ -227,7 +227,7 @@ public class ReloadingX509TrustManagerSuite {
 
     ReloadingX509TrustManager tm =
       new ReloadingX509TrustManager("jks", corruptStore, "password", 1);
-    assertEquals(0, tm.reloadCount);
+    assertEquals(0, tm.reloadCountValue());
     try {
       tm.init();
       assertEquals(1, tm.getAcceptedIssuers().length);
@@ -278,12 +278,12 @@ public class ReloadingX509TrustManagerSuite {
     ReloadingX509TrustManager tm =
             new ReloadingX509TrustManager("jks", trustStoreSymlink, "password", 1);
     assertEquals(1, tm.getReloadInterval());
-    assertEquals(0, tm.reloadCount);
+    assertEquals(0, tm.reloadCountValue());
     try {
       tm.init();
       assertEquals(1, tm.getAcceptedIssuers().length);
       // At this point we haven't reloaded, just the initial load
-      assertEquals(0, tm.reloadCount);
+      assertEquals(0, tm.reloadCountValue());
 
       // Repoint to trustStore2, which has another cert
       trustStoreSymlink.delete();

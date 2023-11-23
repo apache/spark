@@ -26,6 +26,7 @@ import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -55,10 +56,8 @@ public final class ReloadingX509TrustManager
   private final String password;
   private long lastLoaded;
   private final long reloadInterval;
-  @VisibleForTesting
-  protected volatile int reloadCount;
-  @VisibleForTesting
-  protected volatile int needsReloadCheckCounts;
+  private final AtomicInteger reloadCount;
+  private final AtomicInteger needsReloadCheckCounts;
   private final AtomicReference<X509TrustManager> trustManagerRef;
 
   private volatile boolean running;
@@ -88,8 +87,8 @@ public final class ReloadingX509TrustManager
     this.trustManagerRef = new AtomicReference<X509TrustManager>();
     this.trustManagerRef.set(loadTrustManager());
     this.reloadInterval = reloadInterval;
-    this.reloadCount = 0;
-    this.needsReloadCheckCounts = 0;
+    this.reloadCount = new AtomicInteger(0);
+    this.needsReloadCheckCounts = new AtomicInteger(0);
   }
 
   /**
@@ -210,7 +209,7 @@ public final class ReloadingX509TrustManager
         if (running && needsReload()) {
           try {
             trustManagerRef.set(loadTrustManager());
-            this.reloadCount += 1;
+            this.reloadCount.incrementAndGet();
           } catch (Exception ex) {
             logger.warn(
               "Could not load truststore (keep using existing one) : " + ex.toString(),
@@ -221,7 +220,17 @@ public final class ReloadingX509TrustManager
       } catch (IOException ex) {
        logger.warn("Could not check whether truststore needs reloading: " + ex.toString(), ex);
       }
-      needsReloadCheckCounts++;
+      needsReloadCheckCounts.incrementAndGet();
     }
+  }
+
+  @VisibleForTesting
+  int reloadCountValue() {
+    return reloadCount.get();
+  }
+
+  @VisibleForTesting
+  int needsReloadCheckCountsValue() {
+    return needsReloadCheckCounts.get();
   }
 }
