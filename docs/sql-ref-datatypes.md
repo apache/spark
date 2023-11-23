@@ -103,7 +103,7 @@ Spark SQL and DataFrames support the following data types:
   - `StructType(fields)`: Represents values with the structure described by
   a sequence of `StructField`s (`fields`). When sorting on multi field structs,
   the natural order is defined as the natural order of the fields in the field sequence
-  order (i.e. they are ordered by f0, f1).
+  order (i.e. they are ordered by f0, f1 etc.).
     * `StructField(name, dataType, nullable)`: Represents a field in a `StructType`.
     The name of a field is indicated by `name`. The data type of a field is indicated
     by `dataType`. `nullable` is used to indicate if values of these fields can have
