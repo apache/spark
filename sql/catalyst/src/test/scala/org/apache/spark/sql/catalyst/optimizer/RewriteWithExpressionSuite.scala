@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CommonExpressionDef, CommonExpressionRef, With}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Coalesce, CommonExpressionDef, CommonExpressionRef, With}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -152,6 +152,29 @@ class RewriteWithExpressionSuite extends PlanTest {
           // Can't pre-evaluate, have to inline
           condition = Some((a + x) < 10 && (a + x) > 0)
         )
+    )
+  }
+
+  test("WITH expression inside conditional expression") {
+    val a = testRelation.output.head
+    val commonExprDef = CommonExpressionDef(a + a)
+    val ref = new CommonExpressionRef(commonExprDef)
+    val expr = Coalesce(Seq(a, With(ref * ref, Seq(commonExprDef))))
+    val inlinedExpr = Coalesce(Seq(a, (a + a) * (a + a)))
+    val plan = testRelation.select(expr.as("col"))
+    // With in the conditional branches is always inlined.
+    comparePlans(Optimizer.execute(plan), testRelation.select(inlinedExpr.as("col")))
+
+    val expr2 = Coalesce(Seq(With(ref * ref, Seq(commonExprDef)), a))
+    val plan2 = testRelation.select(expr2.as("col"))
+    val commonExprName = "_common_expr_0"
+    // With in the always-evaluated branches can still be optimized.
+    comparePlans(
+      Optimizer.execute(plan2),
+      testRelation
+        .select((testRelation.output :+ (a + a).as(commonExprName)): _*)
+        .select(Coalesce(Seq(($"$commonExprName" * $"$commonExprName"), a)).as("col"))
+        .analyze
     )
   }
 }
