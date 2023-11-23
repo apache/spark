@@ -2445,6 +2445,17 @@ class SparkConnectPlanner(
           aggregates = aggExprs,
           child = input)
 
+      case proto.Aggregate.GroupType.GROUP_TYPE_GROUPING_SETS =>
+        val groupingSetsExprs = rel.getGroupingSetsList.asScala.toSeq.map { getGroupingSets =>
+          getGroupingSets.getGroupingSetList.asScala.toSeq.map(transformExpression)
+        }
+        logical.Aggregate(
+          groupingExpressions = Seq(
+            GroupingSets(
+              groupingSets = groupingSetsExprs,
+              userGivenGroupByExprs = groupingExprs)),
+          aggregateExpressions = aliasedAgg,
+          child = input)
       case other => throw InvalidPlanInput(s"Unknown Group Type $other")
     }
   }
