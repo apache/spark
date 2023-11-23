@@ -517,10 +517,14 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def databaseExists(dbName: String): Boolean = {
     val plan = DescribeNamespace(UnresolvedNamespace(resolveNamespace(dbName)), false)
-    sparkSession.sessionState.executePlan(plan).analyzed match {
-      case DescribeNamespace(ResolvedNamespace(catalog: SupportsNamespaces, ns), _, _) =>
-        catalog.namespaceExists(ns.toArray)
-      case DescribeNamespace(_, _, _) => true
+    try {
+      sparkSession.sessionState.executePlan(plan).analyzed match {
+        case DescribeNamespace(ResolvedNamespace(catalog: SupportsNamespaces, ns), _, _) =>
+          catalog.namespaceExists(ns.toArray)
+        case DescribeNamespace(_, _, _) => true
+      }
+    } catch {
+      case _: AnalysisException => false
     }
   }
 
