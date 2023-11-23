@@ -27,7 +27,7 @@ State data source provides functionality to manipulate the state from the checkp
 
 As of Spark 4.0, state data source provides the read functionality with a batch query. Additional functionalities including write is on the future roadmap.
 
-NOTE: This data source is under experimental - source options and the behavior (output) might be subject to change.
+NOTE: this data source is currently marked as experimental - source options and the behavior (output) might be subject to change.
 
 ## Reading state key-values from the checkpoint
 
@@ -50,7 +50,7 @@ provide the users friendly approach to read the state. See the section for strea
 {% highlight python %}
 
 df = spark \
-.readStream \
+.read \
 .format("statestore") \
 .load("<checkpointLocation>")
 
@@ -61,7 +61,7 @@ df = spark \
 {% highlight scala %}
 
 val df = spark
-.readStream
+.read
 .format("statestore")
 .load("<checkpointLocation>")
 
@@ -72,7 +72,7 @@ val df = spark
 {% highlight java %}
 
 Dataset<Row> df = spark
-.readStream()
+.read()
 .format("statestore")
 .load("<checkpointLocation>");
 
@@ -170,7 +170,7 @@ Note: The metadata is constructed when the streaming query is running with Spark
 {% highlight python %}
 
 df = spark \
-.readStream \
+.read \
 .format("state-metadata") \
 .load("<checkpointLocation>")
 
@@ -181,7 +181,7 @@ df = spark \
 {% highlight scala %}
 
 val df = spark
-.readStream
+.read
 .format("state-metadata")
 .load("<checkpointLocation>")
 
@@ -192,7 +192,7 @@ val df = spark
 {% highlight java %}
 
 Dataset<Row> df = spark
-.readStream()
+.read()
 .format("state-metadata")
 .load("<checkpointLocation>");
 
@@ -242,7 +242,7 @@ Each row in the source has the following schema:
 </tr>
 </table>
 
-The one of major use cases of this data source is to identify the operatorId to query if the query has multiple stateful operators, e.g. stream-stream join followed by deduplication.
+One of the major use cases of this data source is to identify the operatorId to query if the query has multiple stateful operators, e.g. stream-stream join followed by deduplication.
 The column 'operatorName' helps users to identify the operatorId for given operator.
 
 Additionally, if users want to query about an internal state store instance for a stateful operator (e.g. stream-stream join), the column 'stateStoreName' would be useful to determine the target.
