@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, DescribeNamespace, LocalRelation, LogicalPlan, OptionList, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, UnresolvedTableSpec, View}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, LogicalPlan, OptionList, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, UnresolvedTableSpec, View}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, MultipartIdentifierHelper, NamespaceHelper, TransformHelper}
@@ -81,17 +81,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   /**
    * Returns a list of databases available across all sessions.
    */
-  override def listDatabases(): Dataset[Database] = {
-    val plan = ShowNamespaces(UnresolvedNamespace(Nil), None)
-    val qe = sparkSession.sessionState.executePlan(plan)
-    val catalog = qe.analyzed.collectFirst {
-      case ShowNamespaces(r: ResolvedNamespace, _, _) => r.catalog
-    }.get
-    val databases = qe.toRdd.collect().map { row =>
-      getNamespace(catalog, parseIdent(row.getString(0)))
-    }
-    CatalogImpl.makeDataset(databases.toImmutableArraySeq, sparkSession)
-  }
+  override def listDatabases(): Dataset[Database] = listDatabasesInternal(None)
 
   /**
    * Returns a list of databases (namespaces) which name match the specify pattern and
@@ -99,14 +89,17 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *
    * @since 3.5.0
    */
-  override def listDatabases(pattern: String): Dataset[Database] = {
-    val plan = ShowNamespaces(UnresolvedNamespace(Nil), Some(pattern))
+  override def listDatabases(pattern: String): Dataset[Database] =
+    listDatabasesInternal(Some(pattern))
+
+  private def listDatabasesInternal(patternOpt: Option[String]): Dataset[Database] = {
+    val plan = ShowNamespaces(UnresolvedNamespace(Nil), patternOpt)
     val qe = sparkSession.sessionState.executePlan(plan)
     val catalog = qe.analyzed.collectFirst {
       case ShowNamespaces(r: ResolvedNamespace, _, _) => r.catalog
     }.get
     val databases = qe.toRdd.collect().map { row =>
-      getNamespace(catalog, parseIdent(row.getString(0)))
+      makeDatabase(Some(catalog.name()), row.getString(0))
     }
     CatalogImpl.makeDataset(databases.toImmutableArraySeq, sparkSession)
   }
@@ -415,14 +408,16 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     }
   }
 
-  private def getNamespace(catalog: CatalogPlugin, ns: Seq[String]): Database = catalog match {
+  private def getNamespace(
+    catalog: CatalogPlugin,
+    ns: Seq[String],
+    metadata: Map[String, String]): Database = catalog match {
     case catalog: SupportsNamespaces =>
-      val metadata = catalog.loadNamespaceMetadata(ns.toArray)
       new Database(
         name = ns.quoted,
         catalog = catalog.name,
-        description = metadata.get(SupportsNamespaces.PROP_COMMENT),
-        locationUri = metadata.get(SupportsNamespaces.PROP_LOCATION))
+        description = metadata.get(SupportsNamespaces.PROP_COMMENT).orNull,
+        locationUri = metadata.get(SupportsNamespaces.PROP_LOCATION).orNull)
     // If the catalog doesn't support namespaces, we assume it's an implicit namespace, which always
     // exists but has no metadata.
     case catalog: CatalogPlugin =>
@@ -439,12 +434,19 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * `Database` can be found.
    */
   override def getDatabase(dbName: String): Database = {
-    val plan = DescribeNamespace(UnresolvedNamespace(resolveNamespace(dbName)), false)
+    makeDatabase(None, dbName)
+  }
+
+  private def makeDatabase(catalogNameOpt: Option[String], dbName: String): Database = {
+    val idents = catalogNameOpt match {
+      case Some(catalogName) => catalogName +: parseIdent(dbName)
+      case None => resolveNamespace(dbName)
+    }
+    val plan = UnresolvedNamespace(idents, true)
     sparkSession.sessionState.executePlan(plan).analyzed match {
-      case DescribeNamespace(ResolvedNamespace(catalog, namespace), _, _) =>
-        getNamespace(catalog, namespace)
-      case DescribeNamespace(_, _, _) =>
-        new Database(name = dbName, description = null, locationUri = null)
+      case ResolvedNamespace(catalog, namespace, metadata) =>
+        getNamespace(catalog, namespace, metadata)
+      case _ => new Database(name = dbName, description = null, locationUri = null)
     }
   }
 
@@ -516,12 +518,10 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Checks if the database with the specified name exists.
    */
   override def databaseExists(dbName: String): Boolean = {
-    val plan = DescribeNamespace(UnresolvedNamespace(resolveNamespace(dbName)), false)
+    val plan = UnresolvedNamespace(resolveNamespace(dbName), true)
     try {
       sparkSession.sessionState.executePlan(plan).analyzed match {
-        case DescribeNamespace(ResolvedNamespace(catalog: SupportsNamespaces, ns), _, _) =>
-          catalog.namespaceExists(ns.toArray)
-        case DescribeNamespace(_, _, _) => true
+        case _ => true
       }
     } catch {
       case _: AnalysisException => false
