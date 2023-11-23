@@ -1117,4 +1117,70 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     } yield Add(Add(a_or_b, a_or_b), Add(c_or_d, c_or_d))
     assert(transformed2 == expected2)
   }
+
+  test("SPARK-46071 optimize toJSON for CaseWhen expression") {
+    compareJSON(
+      CaseWhen(Seq((EqualTo(Literal(1), Literal(2)), Literal(3))), Literal(4)).toJSON,
+      compact(
+        render(JArray(List(
+          JObject(
+            "class" -> JString(classOf[CaseWhen].getName),
+            "num-children" -> 3,
+            "branches" -> JArray(List(JObject("condition" -> 0, "value" -> 1))),
+            "elseValue" -> 2),
+          JObject(
+            "class" -> JString(classOf[EqualTo].getName),
+            "num-children" -> 2,
+            "left" -> 0,
+            "right" -> 1),
+          JObject(
+            "class" -> JString(classOf[Literal].getName),
+            "num-children" -> 0,
+            "value" -> "1",
+            "dataType" -> "integer"),
+          JObject(
+            "class" -> JString(classOf[Literal].getName),
+            "num-children" -> 0,
+            "value" -> "2",
+            "dataType" -> "integer"),
+          JObject(
+            "class" -> JString(classOf[Literal].getName),
+            "num-children" -> 0,
+            "value" -> "3",
+            "dataType" -> "integer"),
+          JObject(
+            "class" -> JString(classOf[Literal].getName),
+            "num-children" -> 0,
+            "value" -> "4",
+            "dataType" -> "integer"))))))
+
+    compareJSON(
+      CaseWhen(Seq((EqualTo(Literal(1), Literal(2)), Literal(3)))).toJSON,
+      compact(
+        render(JArray(List(
+          JObject(
+            "class" -> JString(classOf[CaseWhen].getName),
+            "num-children" -> 2,
+            "branches" -> JArray(List(JObject("condition" -> 0, "value" -> 1)))),
+          JObject(
+            "class" -> JString(classOf[EqualTo].getName),
+            "num-children" -> 2,
+            "left" -> 0,
+            "right" -> 1),
+          JObject(
+            "class" -> JString(classOf[Literal].getName),
+            "num-children" -> 0,
+            "value" -> "1",
+            "dataType" -> "integer"),
+          JObject(
+            "class" -> JString(classOf[Literal].getName),
+            "num-children" -> 0,
+            "value" -> "2",
+            "dataType" -> "integer"),
+          JObject(
+            "class" -> JString(classOf[Literal].getName),
+            "num-children" -> 0,
+            "value" -> "3",
+            "dataType" -> "integer"))))))
+  }
 }

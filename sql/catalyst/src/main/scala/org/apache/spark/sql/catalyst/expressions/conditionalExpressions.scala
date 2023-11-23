@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.json4s.JField
+import org.json4s.JsonAST.{JArray, JInt, JNothing}
+import org.json4s.JsonDSL.pair2Assoc
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -167,6 +171,17 @@ case class CaseWhen(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     super.legacyWithNewChildren(newChildren)
+
+  override protected def jsonFields: List[JField] = {
+    ("branches" -> JArray(branches.map { case (c, v) =>
+      ("condition" -> JInt(children.indexOf(c))) ~
+        ("value" -> JInt(children.indexOf(v)))
+    }.toList)) ::
+      ("elseValue" -> elseValue
+        .map(children.indexOf)
+        .map(c => JInt(c))
+        .getOrElse(JNothing)) :: Nil
+  }
 
   // both then and else expressions should be considered.
   @transient
