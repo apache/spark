@@ -22,9 +22,9 @@ import io.grpc.ManagedChannel
 
 import org.apache.spark.connect.proto._
 
-private[connect] class CustomSparkConnectBlockingStub(
-    channel: ManagedChannel,
-    stubState: SparkConnectStubState) {
+private[connect] class CustomSparkConnectBlockingStub(stubState: SparkConnectStubState) {
+
+  private val channel: ManagedChannel = stubState.channel
 
   private val stub = SparkConnectServiceGrpc.newBlockingStub(channel)
 
@@ -34,6 +34,8 @@ private[connect] class CustomSparkConnectBlockingStub(
   private val grpcExceptionConverter = stubState.exceptionConverter
 
   def executePlan(request: ExecutePlanRequest): CloseableIterator[ExecutePlanResponse] = {
+    stubState.heartbeat.ping()
+
     grpcExceptionConverter.convert(
       request.getSessionId,
       request.getUserContext,
@@ -53,6 +55,8 @@ private[connect] class CustomSparkConnectBlockingStub(
 
   def executePlanReattachable(
       request: ExecutePlanRequest): CloseableIterator[ExecutePlanResponse] = {
+    stubState.heartbeat.ping()
+
     grpcExceptionConverter.convert(
       request.getSessionId,
       request.getUserContext,
@@ -68,6 +72,8 @@ private[connect] class CustomSparkConnectBlockingStub(
   }
 
   def analyzePlan(request: AnalyzePlanRequest): AnalyzePlanResponse = {
+    stubState.heartbeat.ping()
+
     grpcExceptionConverter.convert(
       request.getSessionId,
       request.getUserContext,
@@ -81,6 +87,8 @@ private[connect] class CustomSparkConnectBlockingStub(
   }
 
   def config(request: ConfigRequest): ConfigResponse = {
+    stubState.heartbeat.ping()
+
     grpcExceptionConverter.convert(
       request.getSessionId,
       request.getUserContext,
@@ -94,6 +102,8 @@ private[connect] class CustomSparkConnectBlockingStub(
   }
 
   def interrupt(request: InterruptRequest): InterruptResponse = {
+    stubState.heartbeat.ping()
+
     grpcExceptionConverter.convert(
       request.getSessionId,
       request.getUserContext,
@@ -107,6 +117,8 @@ private[connect] class CustomSparkConnectBlockingStub(
   }
 
   def releaseSession(request: ReleaseSessionRequest): ReleaseSessionResponse = {
+    stubState.heartbeat.ping()
+
     grpcExceptionConverter.convert(
       request.getSessionId,
       request.getUserContext,
@@ -120,6 +132,8 @@ private[connect] class CustomSparkConnectBlockingStub(
   }
 
   def artifactStatus(request: ArtifactStatusesRequest): ArtifactStatusesResponse = {
+    stubState.heartbeat.ping()
+
     grpcExceptionConverter.convert(
       request.getSessionId,
       request.getUserContext,

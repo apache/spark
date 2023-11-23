@@ -21,14 +21,16 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, SparkConnectServiceGrpc}
 
-private[client] class CustomSparkConnectStub(
-    channel: ManagedChannel,
-    stubState: SparkConnectStubState) {
+private[client] class CustomSparkConnectStub(stubState: SparkConnectStubState) {
+
+  private val channel: ManagedChannel = stubState.channel
 
   private val stub = SparkConnectServiceGrpc.newStub(channel)
 
   def addArtifacts(responseObserver: StreamObserver[AddArtifactsResponse])
       : StreamObserver[AddArtifactsRequest] = {
+    stubState.heartbeat.ping()
+
     stubState.responseValidator.wrapStreamObserver(
       stubState.retryHandler.RetryStreamObserver(responseObserver, stub.addArtifacts))
   }

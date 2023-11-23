@@ -213,6 +213,22 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
         sessionId = request.getSessionId)
   }
 
+  /**
+   * Extend session.
+   */
+  override def extendSession(
+      request: proto.ExtendSessionRequest,
+      responseObserver: StreamObserver[proto.ExtendSessionResponse]): Unit = {
+    try {
+      new SparkConnectExtendSessionHandler(responseObserver).handle(request)
+    } catch
+      ErrorUtils.handleError(
+        "extendSession",
+        observer = responseObserver,
+        userId = request.getUserContext.getUserId,
+        sessionId = request.getSessionId)
+  }
+
   override def fetchErrorDetails(
       request: proto.FetchErrorDetailsRequest,
       responseObserver: StreamObserver[proto.FetchErrorDetailsResponse]): Unit = {

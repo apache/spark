@@ -18,15 +18,18 @@
 package org.apache.spark.sql.connect.service
 
 import java.util.UUID
-import java.util.concurrent.{Callable, TimeUnit}
+import java.util.concurrent.{Executors, ScheduledExecutorService, TimeUnit}
 
-import com.google.common.base.Ticker
-import com.google.common.cache.{CacheBuilder, RemovalListener, RemovalNotification}
+import scala.collection.mutable
+import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
+
+import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_SESSION_MANAGER_CLOSED_SESSIONS_TOMBSTONES_SIZE, CONNECT_SESSION_MANAGER_DEFAULT_SESSION_TIMEOUT}
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_SESSION_MANAGER_CLOSED_SESSIONS_TOMBSTONES_SIZE, CONNECT_SESSION_MANAGER_DEFAULT_SESSION_TIMEOUT, CONNECT_SESSION_MANAGER_MAINTENANCE_INTERVAL}
 
 /**
  * Global tracker of all SessionHolders holding Spark Connect sessions.
@@ -35,15 +38,7 @@ class SparkConnectSessionManager extends Logging {
 
   private val sessionsLock = new Object
 
-  private val sessionStore =
-    CacheBuilder
-      .newBuilder()
-      .ticker(Ticker.systemTicker())
-      .expireAfterAccess(
-        SparkEnv.get.conf.get(CONNECT_SESSION_MANAGER_DEFAULT_SESSION_TIMEOUT),
-        TimeUnit.MILLISECONDS)
-      .removalListener(new RemoveSessionListener)
-      .build[SessionKey, SessionHolder]()
+  private val sessionStore = mutable.HashMap[SessionKey, SessionHolder]()
 
   private val closedSessionsCache =
     CacheBuilder
@@ -51,21 +46,23 @@ class SparkConnectSessionManager extends Logging {
       .maximumSize(SparkEnv.get.conf.get(CONNECT_SESSION_MANAGER_CLOSED_SESSIONS_TOMBSTONES_SIZE))
       .build[SessionKey, SessionHolderInfo]()
 
+  /** Executor for the periodic maintenance */
+  private var scheduledExecutor: Option[ScheduledExecutorService] = None
+
   /**
    * Based on the userId and sessionId, find or create a new SparkSession.
    */
   private[connect] def getOrCreateIsolatedSession(key: SessionKey): SessionHolder = {
-    // Lock to guard against concurrent removal and insertion into closedSessionsCache.
-    sessionsLock.synchronized {
-      getSession(
-        key,
-        Some(() => {
-          validateSessionCreate(key)
-          val holder = SessionHolder(key.userId, key.sessionId, newIsolatedSession())
-          holder.initializeSession()
-          holder
-        }))
-    }
+    getSession(
+      key,
+      Some(() => {
+        // Executed under sessionsState lock in getSession,  to guard against concurrent removal
+        // and insertion into closedSessionsCache.
+        validateSessionCreate(key)
+        val holder = SessionHolder(key.userId, key.sessionId, newIsolatedSession())
+        holder.initializeSession()
+        holder
+      }))
   }
 
   /**
@@ -95,47 +92,129 @@ class SparkConnectSessionManager extends Logging {
     Option(getSession(key, None))
   }
 
-  private def getSession(
-      key: SessionKey,
-      default: Option[Callable[SessionHolder]]): SessionHolder = {
-    val session = default match {
-      case Some(callable) => sessionStore.get(key, callable)
-      case None => sessionStore.getIfPresent(key)
-    }
-    // record access time before returning
-    session match {
-      case null =>
-        null
-      case s: SessionHolder =>
-        s.updateAccessTime()
-        s
+  private def getSession(key: SessionKey, default: Option[() => SessionHolder]): SessionHolder = {
+    sessionsLock.synchronized {
+      // try to get existing session from store
+      val sessionOpt = sessionStore.get(key)
+      // create using default if missing
+      val session = sessionOpt match {
+        case Some(s) => s
+        case None =>
+          default match {
+            case Some(callable) =>
+              val session = callable()
+              sessionStore.put(key, session)
+              session
+            case None =>
+              null
+          }
+      }
+      // record access time before returning
+      session match {
+        case null =>
+          null
+        case s: SessionHolder =>
+          s.updateAccessTime()
+          s
+      }
     }
   }
 
   def closeSession(key: SessionKey): Unit = {
-    // Invalidate will trigger RemoveSessionListener
-    sessionStore.invalidate(key)
-  }
-
-  private class RemoveSessionListener extends RemovalListener[SessionKey, SessionHolder] {
-    override def onRemoval(notification: RemovalNotification[SessionKey, SessionHolder]): Unit = {
-      val sessionHolder = notification.getValue
-      sessionsLock.synchronized {
+    var sessionHolder: Option[SessionHolder] = None
+    sessionsLock.synchronized {
+      sessionHolder = sessionStore.remove(key)
+      sessionHolder.foreach { s =>
         // First put into closedSessionsCache, so that it cannot get accidentally recreated by
         // getOrCreateIsolatedSession.
-        closedSessionsCache.put(sessionHolder.key, sessionHolder.getSessionHolderInfo)
+        closedSessionsCache.put(s.key, s.getSessionHolderInfo)
       }
-      // Rest of the cleanup outside sessionLock - the session cannot be accessed anymore by
-      // getOrCreateIsolatedSession.
-      sessionHolder.close()
+    }
+    // Rest of the cleanup outside sessionLock - the session cannot be accessed anymore by
+    // getOrCreateIsolatedSession.
+    sessionHolder.foreach { s =>
+      s.close()
+      // Update in closedSessionsCache: above it wasn't updated with closedTime etc. yet.
+      closedSessionsCache.put(s.key, s.getSessionHolderInfo)
     }
   }
 
-  def shutdown(): Unit = {
+  private[connect] def shutdown(): Unit = {
     sessionsLock.synchronized {
-      sessionStore.invalidateAll()
+      sessionStore.clear()
       closedSessionsCache.invalidateAll()
     }
+  }
+
+  def listActiveSessions: Seq[SessionHolderInfo] = sessionsLock.synchronized {
+    sessionStore.values.map(_.getSessionHolderInfo).toSeq
+  }
+
+  def listClosedSessions: Seq[SessionHolderInfo] = sessionsLock.synchronized {
+    closedSessionsCache.asMap.asScala.values.toSeq
+  }
+
+  /**
+   * Schedules periodic maintenance checks if it is not already scheduled. The checks are looking
+   * for executions that have not been closed, but are left with no RPC attached to them, and
+   * removes them after a timeout.
+   */
+  private def schedulePeriodicChecks(): Unit = sessionsLock.synchronized {
+    val interval = SparkEnv.get.conf.get(CONNECT_SESSION_MANAGER_MAINTENANCE_INTERVAL).toLong
+
+    scheduledExecutor match {
+      case Some(_) => // Already running.
+      case None =>
+        logInfo(s"Starting thread for cleanup of expired sessions every $interval ms")
+        scheduledExecutor = Some(Executors.newSingleThreadScheduledExecutor())
+        scheduledExecutor.get.scheduleAtFixedRate(
+          () => {
+            try periodicMaintenance()
+            catch {
+              case NonFatal(ex) => logWarning("Unexpected exception in periodic task", ex)
+            }
+          },
+          interval,
+          interval,
+          TimeUnit.MILLISECONDS)
+    }
+  }
+
+  // Visible for testing.
+  private[connect] def periodicMaintenance(): Unit = {
+    logInfo("Started periodic run of SparkConnectSessionManager maintenance.")
+    // Default for sessions that don't have expiry time set.
+    val defaultInactiveTimeout =
+      SparkEnv.get.conf.get(CONNECT_SESSION_MANAGER_DEFAULT_SESSION_TIMEOUT).toLong
+
+    // Find any sessions that expired and should be removed.
+    val toRemove = new mutable.ArrayBuffer[SessionHolder]()
+    sessionsLock.synchronized {
+      val nowMs = System.currentTimeMillis()
+
+      sessionStore.values.foreach { sessionHolder =>
+        val info = sessionHolder.getSessionHolderInfo
+        info.expirationTime match {
+          case Some(expirationTime) =>
+            if (expirationTime <= nowMs) {
+              toRemove += sessionHolder
+            }
+          case None =>
+            if (info.lastAccessTime + defaultInactiveTimeout <= nowMs) {
+              toRemove += sessionHolder
+            }
+        }
+      }
+    }
+    if (!toRemove.isEmpty) {
+      // .. and remove them.
+      toRemove.foreach { sessionHolder =>
+        val info = sessionHolder.getSessionHolderInfo
+        logInfo(s"Found session $info that expired and will be closed.")
+        closeSession(sessionHolder.key)
+      }
+    }
+    logInfo("Finished periodic run of SparkConnectSessionManager maintenance.")
   }
 
   private def newIsolatedSession(): SparkSession = {
@@ -170,7 +249,7 @@ class SparkConnectSessionManager extends Logging {
    * Used for testing
    */
   private[connect] def invalidateAllSessions(): Unit = {
-    sessionStore.invalidateAll()
+    sessionStore.clear()
     closedSessionsCache.invalidateAll()
   }
 

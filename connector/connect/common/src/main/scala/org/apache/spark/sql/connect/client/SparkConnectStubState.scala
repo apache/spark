@@ -18,6 +18,7 @@ package org.apache.spark.sql.connect.client
 
 import io.grpc.ManagedChannel
 
+import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 
 // This is common state shared between the blocking and non-blocking stubs.
@@ -26,16 +27,31 @@ import org.apache.spark.internal.Logging
 // that the same stub instance is used for all requests from the same client. In addition,
 // this class provides access to the commonly configured retry policy and exception conversion
 // logic.
-class SparkConnectStubState(channel: ManagedChannel, retryPolicies: Seq[RetryPolicy])
+class SparkConnectStubState(
+    val channel: ManagedChannel,
+    val configuration: SparkConnectClient.Configuration)
     extends Logging {
 
+  def shutdown(): Unit = {
+    heartbeat.shutdown()
+  }
+
+  def userContext: proto.UserContext = {
+    configuration.userContext
+  }
+
   // Manages the retry handler logic used by the stubs.
-  lazy val retryHandler = new GrpcRetryHandler(retryPolicies)
+  lazy val retryHandler = new GrpcRetryHandler(configuration.retryPolicies)
 
   // Responsible to convert the GRPC Status exceptions into Spark exceptions.
   lazy val exceptionConverter: GrpcExceptionConverter = new GrpcExceptionConverter(channel)
 
+
   // Provides a helper for validating the responses processed by the stub.
   lazy val responseValidator = new ResponseValidator()
+
+  // A thread sending ExtendSession requests to the server to keep the session alive.
+  // Not lazy: it controls if it should start lazy start inside.
+  val heartbeat = new SessionHeartbeat(this)
 
 }

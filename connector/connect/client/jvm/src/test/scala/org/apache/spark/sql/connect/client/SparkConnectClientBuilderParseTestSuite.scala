@@ -48,7 +48,7 @@ class SparkConnectClientBuilderParseTestSuite extends ConnectFunSuite {
   argumentTest("user_id", "U1238", _.userId.get)
   argumentTest("user_name", "alice", _.userName.get)
   argumentTest("user_agent", "robert", _.userAgent.split(" ")(0))
-  argumentTest("session_id", UUID.randomUUID().toString, _.sessionId.get)
+  argumentTest("session_id", UUID.randomUUID().toString, _.sessionId)
 
   test("Argument - remote") {
     val builder =

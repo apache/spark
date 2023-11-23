@@ -43,11 +43,9 @@ private[sql] class SparkConnectClient(
 
   private val userContext: UserContext = configuration.userContext
 
-  private[this] val stubState = new SparkConnectStubState(channel, configuration.retryPolicies)
-  private[this] val bstub =
-    new CustomSparkConnectBlockingStub(channel, stubState)
-  private[this] val stub =
-    new CustomSparkConnectStub(channel, stubState)
+  private[this] val stubState = new SparkConnectStubState(channel, configuration)
+  private[this] val bstub = new CustomSparkConnectBlockingStub(stubState)
+  private[this] val stub = new CustomSparkConnectStub(stubState)
 
   private[client] def userAgent: String = configuration.userAgent
 
@@ -58,10 +56,10 @@ private[sql] class SparkConnectClient(
    */
   private[sql] def userId: String = userContext.getUserId
 
-  // Generate a unique session ID for this client. This UUID must be unique to allow
+  // A unique session ID for this client. This UUID must be unique to allow
   // concurrent Spark sessions of the same user. If the channel is closed, creating
   // a new client will create a new session ID.
-  private[sql] val sessionId: String = configuration.sessionId.getOrElse(UUID.randomUUID.toString)
+  private[sql] val sessionId: String = configuration.sessionId
 
   private[sql] val artifactManager: ArtifactManager = {
     new ArtifactManager(configuration, sessionId, bstub, stub)
@@ -317,6 +315,7 @@ private[sql] class SparkConnectClient(
    * Shutdown the client's connection to the server.
    */
   def shutdown(): Unit = {
+    stubState.shutdown()
     channel.shutdownNow()
   }
 
@@ -452,6 +451,12 @@ object SparkConnectClient {
       retryPolicy(List(policy))
     }
 
+    def extendSessionHeartbeat(
+        extendSessionHeartbeatConf: SessionHeartbeat.Configuration): Builder = {
+      _configuration = _configuration.copy(extendSessionHeartbeat = extendSessionHeartbeatConf)
+      this
+    }
+
     private object URIParams {
       val PARAM_USER_ID = "user_id"
       val PARAM_USE_SSL = "use_ssl"
@@ -498,11 +503,11 @@ object SparkConnectClient {
             "Parameter value 'session_id' must be a valid UUID format.",
             e)
       }
-      _configuration = _configuration.copy(sessionId = Some(value))
+      _configuration = _configuration.copy(sessionId = value)
       this
     }
 
-    def sessionId: Option[String] = _configuration.sessionId
+    def sessionId: String = _configuration.sessionId
 
     def userAgent: String = _configuration.userAgent
 
@@ -640,8 +645,9 @@ object SparkConnectClient {
         sys.env.getOrElse("SPARK_CONNECT_USER_AGENT", DEFAULT_USER_AGENT)),
       retryPolicies: Seq[RetryPolicy] = RetryPolicy.defaultPolicies(),
       useReattachableExecute: Boolean = true,
+      extendSessionHeartbeat: SessionHeartbeat.Configuration = SessionHeartbeat.Configuration(),
       interceptors: List[ClientInterceptor] = List.empty,
-      sessionId: Option[String] = None) {
+      sessionId: String = java.util.UUID.randomUUID().toString) {
 
     def userContext: proto.UserContext = {
       val builder = proto.UserContext.newBuilder()

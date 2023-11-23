@@ -20,6 +20,7 @@ syntax = 'proto3';
 package spark.connect;
 
 import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
 import "spark/connect/commands.proto";
 import "spark/connect/common.proto";
 import "spark/connect/expressions.proto";
@@ -846,6 +847,40 @@ message ReleaseSessionResponse {
   string server_side_session_id = 2;
 }
 
+// Next ID: 4
+message ExtendSessionRequest {
+  // (Required)
+  //
+  // The session_id of the request to reattach to.
+  // This must be an id of existing session.
+  string session_id = 1;
+
+  // (Required) User context
+  //
+  // user_context.user_id and session+id both identify a unique remote spark session on the
+  // server side.
+  UserContext user_context = 2;
+
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 3;
+}
+
+// Next ID: 4
+message ExtendSessionResponse {
+  // Session id of the session on which the extend executed.
+  string session_id = 1;
+
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session has not changed.
+  string server_side_session_id = 2;
+
+  // Session expiration time granted by the server.
+  // If session is to be extended, client has to make sure to call ExtendSession before that time.
+  google.protobuf.Timestamp expiration_time = 3;
+}
+
 message FetchErrorDetailsRequest {
 
   // (Required)
@@ -1008,6 +1043,14 @@ service SparkConnectService {
   // that session_id for the given user_id will fail. If the session didn't exist or was already
   // released, this is a noop.
   rpc ReleaseSession(ReleaseSessionRequest) returns (ReleaseSessionResponse) {}
+
+  // Extend a session lifetime.
+  // If an ExtendSession request is not used, the session will expire 1 hour after the last RPC,
+  // and every RPC will reset the expiration time. This is backwards compatible legacy behavior.
+  // If an ExtendSession request is ever used in a session, no other RPC request will be extending
+  // the session lifetime, and it will be defined entirely by the requested deadline in
+  // ExtendSessionRequest, and the returned granted deadline time in ExtendSessionResponse.
+  rpc ExtendSession(ExtendSessionRequest) returns (ExtendSessionResponse) {}
 
   // FetchErrorDetails retrieves the matched exception with details based on a provided error id.
   rpc FetchErrorDetails(FetchErrorDetailsRequest) returns (FetchErrorDetailsResponse) {}
