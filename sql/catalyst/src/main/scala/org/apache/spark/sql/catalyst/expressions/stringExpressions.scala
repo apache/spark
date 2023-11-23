@@ -2704,14 +2704,16 @@ case class Encode(value: Expression, charset: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (string, charset) =>
+    nullSafeCodeGen(ctx, ev, (string, charset) => {
+      val toCharset = ctx.freshName("toCharset")
       s"""
-        String toCharset = $charset.toString();
+        String $toCharset = $charset.toString();
         try {
-          ${ev.value} = $string.toString().getBytes(toCharset);
+          ${ev.value} = $string.toString().getBytes($toCharset);
         } catch (java.io.UnsupportedEncodingException e) {
-          throw QueryExecutionErrors.invalidCharsetError("$prettyName", toCharset);
-        }""")
+          throw QueryExecutionErrors.invalidCharsetError("$prettyName", $toCharset);
+        }"""
+    })
   }
 
   override protected def withNewChildrenInternal(
