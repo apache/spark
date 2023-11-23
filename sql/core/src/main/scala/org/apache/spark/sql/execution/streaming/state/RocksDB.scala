@@ -451,6 +451,8 @@ class RocksDB(
         logInfo(s"Flushing updates for $newVersion")
         flushTimeMs = timeTakenMs {
           if (useColumnFamilies) {
+            // Flush updates to all available column families
+            assert(!colFamilyNameToHandleMap.isEmpty)
             db.flush(flushOptions, colFamilyNameToHandleMap.values.toSeq.asJava)
           } else {
             db.flush(flushOptions)
@@ -459,8 +461,17 @@ class RocksDB(
 
         if (conf.compactOnCommit) {
           logInfo("Compacting")
-          compactTimeMs = timeTakenMs { db.compactRange() }
+          compactTimeMs = timeTakenMs {
+            if (useColumnFamilies) {
+              // Perform compaction on all available column families
+              assert(!colFamilyNameToHandleMap.isEmpty)
+              colFamilyNameToHandleMap.values.foreach(db.compactRange(_))
+            } else {
+              db.compactRange()
+            }
+          }
         }
+
         checkpointTimeMs = timeTakenMs {
           val checkpointDir = createTempDir("checkpoint")
           logInfo(s"Creating checkpoint for $newVersion in $checkpointDir")
@@ -689,7 +700,16 @@ class RocksDB(
   }
 
   private def getDBProperty(property: String): Long = {
-    db.getProperty(property).toLong
+    if (useColumnFamilies) {
+      // get cumulative sum across all available column families
+      assert(!colFamilyNameToHandleMap.isEmpty)
+      colFamilyNameToHandleMap
+        .values
+        .map(handle => db.getProperty(handle, property).toLong)
+        .sum
+    } else {
+      db.getProperty(property).toLong
+    }
   }
 
   private def openDB(): Unit = {
