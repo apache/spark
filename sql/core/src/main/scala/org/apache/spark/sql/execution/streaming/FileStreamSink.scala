@@ -130,15 +130,15 @@ class FileStreamSink(
 
   import FileStreamSink._
 
-  private val hadoopConf = sparkSession.sessionState.newHadoopConf()
-  private val basePath = new Path(path)
-  private val logPath = getMetadataLogPath(basePath.getFileSystem(hadoopConf), basePath,
+  protected val hadoopConf: Configuration = sparkSession.sessionState.newHadoopConf()
+  protected val basePath = new Path(path)
+  protected val logPath: Path = getMetadataLogPath(basePath.getFileSystem(hadoopConf), basePath,
     sparkSession.sessionState.conf)
-  private val retention = options.get("retention").map(Utils.timeStringAsMs)
-  private val fileLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession,
+  protected val retention: Option[Long] = options.get("retention").map(Utils.timeStringAsMs)
+  protected val fileLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession,
     logPath.toString, retention)
 
-  private def basicWriteJobStatsTracker: BasicWriteJobStatsTracker = {
+  protected def basicWriteJobStatsTracker: BasicWriteJobStatsTracker = {
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
     new BasicWriteJobStatsTracker(serializableHadoopConf, BasicWriteJobStatsTracker.metrics)
   }
@@ -147,39 +147,43 @@ class FileStreamSink(
     if (batchId <= fileLog.getLatestBatchId().getOrElse(-1L)) {
       logInfo(s"Skipping already committed batch $batchId")
     } else {
-      val committer = FileCommitProtocol.instantiate(
-        className = sparkSession.sessionState.conf.streamingFileCommitProtocolClass,
-        jobId = batchId.toString,
-        outputPath = path)
-
-      committer match {
-        case manifestCommitter: ManifestFileCommitProtocol =>
-          manifestCommitter.setupManifestOptions(fileLog, batchId)
-        case _ =>  // Do nothing
-      }
-
-      // Get the actual partition columns as attributes after matching them by name with
-      // the given columns names.
-      val partitionColumns: Seq[Attribute] = partitionColumnNames.map { col =>
-        val nameEquality = data.sparkSession.sessionState.conf.resolver
-        data.logicalPlan.output.find(f => nameEquality(f.name, col)).getOrElse {
-          throw QueryExecutionErrors.partitionColumnNotFoundInSchemaError(col, data.schema)
-        }
-      }
-      val qe = data.queryExecution
-
-      FileFormatWriter.write(
-        sparkSession = sparkSession,
-        plan = qe.executedPlan,
-        fileFormat = fileFormat,
-        committer = committer,
-        outputSpec = FileFormatWriter.OutputSpec(path, Map.empty, qe.analyzed.output),
-        hadoopConf = hadoopConf,
-        partitionColumns = partitionColumns,
-        bucketSpec = None,
-        statsTrackers = Seq(basicWriteJobStatsTracker),
-        options = options)
+      write(batchId, data)
     }
+  }
+
+  protected def write(batchId: Long, data: DataFrame): Set[String] = {
+    val committer = FileCommitProtocol.instantiate(
+      className = sparkSession.sessionState.conf.streamingFileCommitProtocolClass,
+      jobId = batchId.toString,
+      outputPath = path)
+
+    committer match {
+      case manifestCommitter: ManifestFileCommitProtocol =>
+        manifestCommitter.setupManifestOptions(fileLog, batchId)
+      case _ => // Do nothing
+    }
+
+    // Get the actual partition columns as attributes after matching them by name with
+    // the given columns names.
+    val partitionColumns: Seq[Attribute] = partitionColumnNames.map { col =>
+      val nameEquality = data.sparkSession.sessionState.conf.resolver
+      data.logicalPlan.output.find(f => nameEquality(f.name, col)).getOrElse {
+        throw QueryExecutionErrors.partitionColumnNotFoundInSchemaError(col, data.schema)
+      }
+    }
+    val qe = data.queryExecution
+
+    FileFormatWriter.write(
+      sparkSession = sparkSession,
+      plan = qe.executedPlan,
+      fileFormat = fileFormat,
+      committer = committer,
+      outputSpec = FileFormatWriter.OutputSpec(path, Map.empty, qe.analyzed.output),
+      hadoopConf = hadoopConf,
+      partitionColumns = partitionColumns,
+      bucketSpec = None,
+      statsTrackers = Seq(basicWriteJobStatsTracker),
+      options = options)
   }
 
   override def toString: String = s"FileSink[$path]"
