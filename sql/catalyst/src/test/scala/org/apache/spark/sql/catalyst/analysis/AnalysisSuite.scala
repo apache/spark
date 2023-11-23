@@ -1752,7 +1752,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val cteDef = CTERelationDef(streamingRelation.select($"a", $"ts"))
     // Intentionally marking the flag _resolved to false, so that analyzer has a chance to sync
     // the flag isStreaming on syncing the flag _resolved.
-    val cteRef = CTERelationRef(cteDef.id, _resolved = false, Nil, _isStreaming = false)
+    val cteRef = CTERelationRef(cteDef.id, _resolved = false, Nil, isStreaming = false)
     val plan = WithCTE(cteRef, Seq(cteDef)).analyze
 
     val refs = plan.collect {
