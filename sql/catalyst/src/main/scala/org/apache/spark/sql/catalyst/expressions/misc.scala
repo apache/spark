@@ -19,12 +19,13 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.UnresolvedSeed
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{MapData, RandomUUIDGenerator}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.raiseError
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -137,6 +138,35 @@ object RaiseError {
 
   def apply(errorClass: Expression, parms: Expression): RaiseError =
     new RaiseError(errorClass, parms)
+}
+
+
+/**
+ * Throw with the result of an expression (used for debugging).
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_( expr [, errorParams ]) - Throws a USER_RAISED_EXCEPTION with `expr` as message, or a defined error class in `expr` with a parameter map. A `null` errorParms is equivalent to an empty map.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('custom error message');
+       [USER_RAISED_EXCEPTION] custom error message
+
+      > SELECT _FUNC_('VIEW_NOT_FOUND', Map('relationName' -> '`V1`'));
+       [VIEW_NOT_FOUND] The view `V1` cannot be found. ...
+  """,
+  since = "3.1.0",
+  group = "misc_funcs")
+// scalastyle:on line.size.limit
+object RaiseErrorExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    // for some reason pattern matching doesn't work here...
+    if (expressions.length != 1) {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1), expressions.length)
+    } else {
+      RaiseError(expressions.head)
+    }
+  }
 }
 
 /**

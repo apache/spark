@@ -3277,6 +3277,8 @@ object functions {
    */
   def raise_error(c: Column, e: Column): Column = Column.fn("raise_error", c, e)
 
+  // TODO: How is this exposed? I guess that this should be forbidden as well?
+
   /**
    * Returns the estimated number of unique values given the binary representation
    * of a Datasketches HllSketch.
