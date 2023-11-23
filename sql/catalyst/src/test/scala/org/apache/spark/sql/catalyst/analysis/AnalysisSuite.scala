@@ -1466,4 +1466,19 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // EventTimeWatermark node is NOT eliminated.
     assert(analyzed.exists(_.isInstanceOf[EventTimeWatermark]))
   }
+
+  test("SPARK-46062: isStreaming flag is synced from CTE definition to CTE reference") {
+    val cteDef = CTERelationDef(streamingRelation.select($"a", $"ts"))
+    // Intentionally marking the flag _resolved to false, so that analyzer has a chance to sync
+    // the flag isStreaming on syncing the flag _resolved.
+    val cteRef = CTERelationRef(cteDef.id, _resolved = false, Nil, isStreaming = false)
+    val plan = WithCTE(cteRef, Seq(cteDef)).analyze
+
+    val refs = plan.collect {
+      case r: CTERelationRef => r
+    }
+    assert(refs.length == 1)
+    assert(refs.head.resolved)
+    assert(refs.head.isStreaming)
+  }
 }
