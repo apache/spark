@@ -1450,9 +1450,7 @@ class ScalarPandasUDFTestsMixin:
 
             for offheap in ["true", "false"]:
                 with self.sql_conf({"spark.sql.columnVector.offheap.enabled": offheap}):
-                    self.assertEqual(
-                        self.spark.read.parquet(path).select(udf("id")).head(), Row(0)
-                    )
+                    self.assertEqual(self.spark.read.parquet(path).select(udf("id")).head(), Row(0))
         finally:
             shutil.rmtree(path)
 
