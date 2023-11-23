@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEAMS Create="03.12.2020 16:09:21" Count="300">
+    <PERSON Name="a" Surname="b" SecId="1">
+        <TASK Name="x" Duration="100"></TASK>
+    </PERSON>
+    <MANAGER Name="a" Surname="b" SecId="1" priority="high">
+        <SECTION Name="a" ID="5"></SECTION>
+    </MANAGER>
+    <DIRECTOR Name="a" Surname="b" SecId="1" priority="high">
+        <Directorate Name="b" count="12"></Directorate>
+    </DIRECTOR>
+</TEAMS>
+    
+
+
+
+    
