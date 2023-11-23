@@ -30,7 +30,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.LocalSparkSession._
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.tags.ExtendedSQLTest
@@ -84,7 +83,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
         spark: SparkSession,
         seq: Seq[(String, Int)],
         storeVersion: Int): RDD[((String, Int), Int)] = {
-      implicit val sqlContext: SQLContext = spark.sqlContext
+      implicit val sqlContext = spark.sqlContext
       makeRDD(spark.sparkContext, Seq(("a", 0))).mapPartitionsWithStateStore(
         sqlContext, operatorStateInfo(path, version = storeVersion),
         keySchema, valueSchema, numColsPrefixKey = 0)(increment)
@@ -162,7 +161,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
       val path = Utils.createDirectory(tempDir, Random.nextFloat().toString).toString
 
       withSparkSession(SparkSession.builder().config(sparkConf).getOrCreate()) { spark =>
-        implicit val sqlContext: SQLContext = spark.sqlContext
+        implicit val sqlContext = spark.sqlContext
         val coordinatorRef = sqlContext.streams.stateStoreCoordinator
         val storeProviderId1 = StateStoreProviderId(StateStoreId(path, opId, 0), queryRunId)
         val storeProviderId2 = StateStoreProviderId(StateStoreId(path, opId, 1), queryRunId)
@@ -198,7 +197,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
         SparkSession.builder()
           .config(sparkConf.setMaster("local-cluster[2, 1, 1024]"))
           .getOrCreate()) { spark =>
-        implicit val sqlContext: SQLContext = spark.sqlContext
+        implicit val sqlContext = spark.sqlContext
         val path = Utils.createDirectory(tempDir, Random.nextFloat().toString).toString
         val opId = 0
         val rdd1 = makeRDD(spark.sparkContext, Seq(("a", 0), ("b", 0), ("a", 0)))

@@ -37,7 +37,6 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming._
@@ -609,7 +608,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       val checkpointLocation = Utils.createTempDir().getAbsoluteFile
       val spark = SparkSession.builder().master("local[2]").getOrCreate()
       SparkSession.setActiveSession(spark)
-      implicit val sqlContext: SQLContext = spark.sqlContext
+      implicit val sqlContext = spark.sqlContext
       spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
       import spark.implicits._
       val inputData = MemoryStream[Int]

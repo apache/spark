@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
-import org.scalactic.{Equality, TolerantNumerics}
+import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkUpgradeException}
@@ -720,7 +720,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("Dataset randomSplit") {
-    implicit val tolerance: Equality[Double] = TolerantNumerics.tolerantDoubleEquality(0.01)
+    implicit val tolerance = TolerantNumerics.tolerantDoubleEquality(0.01)
 
     val df = spark.range(100)
     def checkSample(

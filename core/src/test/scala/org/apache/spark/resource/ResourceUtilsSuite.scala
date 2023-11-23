@@ -21,7 +21,7 @@ import java.io.File
 import java.nio.file.{Files => JavaFiles}
 import java.util.Optional
 
-import org.json4s.{DefaultFormats, Extraction, Formats}
+import org.json4s.{DefaultFormats, Extraction}
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.TestUtils._
@@ -117,7 +117,7 @@ class ResourceUtilsSuite extends SparkFunSuite
     val conf = new SparkConf
     assume(!(Utils.isWindows))
     withTempDir { dir =>
-      implicit val formats: Formats = DefaultFormats
+      implicit val formats = DefaultFormats
       val fpgaAddrs = Seq("f1", "f2", "f3")
       val fpgaAllocation = ResourceAllocation(EXECUTOR_FPGA_ID, fpgaAddrs)
       val resourcesFile = createTempJsonFile(
@@ -146,7 +146,7 @@ class ResourceUtilsSuite extends SparkFunSuite
     val rpId = 1
     assume(!(Utils.isWindows))
     withTempDir { dir =>
-      implicit val formats: Formats = DefaultFormats
+      implicit val formats = DefaultFormats
       val fpgaAddrs = Seq("f1", "f2", "f3")
       val fpgaAllocation = ResourceAllocation(EXECUTOR_FPGA_ID, fpgaAddrs)
       val resourcesFile = createTempJsonFile(

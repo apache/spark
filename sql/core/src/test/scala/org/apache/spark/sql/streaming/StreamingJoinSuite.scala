@@ -29,7 +29,6 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -542,7 +541,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
         Utils.createDirectory(tempDir.getAbsolutePath, Random.nextFloat().toString).toString
       val stateInfo = StatefulOperatorStateInfo(path, queryId, opId, 0L, 5)
 
-      implicit val sqlContext: SQLContext = spark.sqlContext
+      implicit val sqlContext = spark.sqlContext
       val coordinatorRef = sqlContext.streams.stateStoreCoordinator
       val numPartitions = 5
       val storeNames = Seq("name1", "name2")

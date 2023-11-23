@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import java.io.{FileNotFoundException, InputStream, IOException, OutputStream}
 import java.nio.charset.StandardCharsets.UTF_8
 
+import scala.annotation.nowarn
 import scala.io.{Source => IOSource}
 import scala.reflect.ClassTag
 
@@ -44,12 +45,16 @@ import org.apache.spark.util.Utils
 abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     metadataLogVersion: Int,
     sparkSession: SparkSession,
-    path: String)(private final implicit val manifest: Manifest[T])
+    path: String)
   extends HDFSMetadataLog[Array[T]](sparkSession, path) {
 
   import CompactibleFileStreamLog._
 
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
+
+  /** Needed to serialize type T into JSON when using Jackson */
+  @nowarn
+  private implicit val manifest = Manifest.classType[T](implicitly[ClassTag[T]].runtimeClass)
 
   protected val minBatchesToRetain = sparkSession.sessionState.conf.minBatchesToRetain
 

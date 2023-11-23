@@ -21,6 +21,7 @@ import java.io._
 import java.nio.charset.StandardCharsets
 import java.util.{Collections, LinkedHashMap => JLinkedHashMap}
 
+import scala.annotation.nowarn
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
@@ -47,11 +48,14 @@ import org.apache.spark.util.ArrayImplicits._
  * Note: [[HDFSMetadataLog]] doesn't support S3-like file systems as they don't guarantee listing
  * files in a directory always shows the latest files.
  */
-class HDFSMetadataLog[T <: AnyRef: ClassTag](sparkSession: SparkSession, path: String)
-                                            (private final implicit val manifest: Manifest[T])
-    extends MetadataLog[T] with Logging {
+class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: String)
+  extends MetadataLog[T] with Logging {
 
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
+
+  /** Needed to serialize type T into JSON when using Jackson */
+  @nowarn
+  private implicit val manifest = Manifest.classType[T](implicitly[ClassTag[T]].runtimeClass)
 
   // Avoid serializing generic sequences, see SPARK-17372
   require(implicitly[ClassTag[T]].runtimeClass != classOf[Seq[_]],
