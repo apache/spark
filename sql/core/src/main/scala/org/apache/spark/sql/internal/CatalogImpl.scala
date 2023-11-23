@@ -82,7 +82,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Returns a list of databases available across all sessions.
    */
   override def listDatabases(): Dataset[Database] = {
-    val plan = ShowNamespaces(UnresolvedNamespace(Nil), None)
+    val plan = ShowNamespaces(CurrentNamespace, None)
     val qe = sparkSession.sessionState.executePlan(plan)
     val catalog = qe.analyzed.collectFirst {
       case ShowNamespaces(r: ResolvedNamespace, _, _) => r.catalog
@@ -271,7 +271,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
     // List built-in functions. We don't need to specify the namespace here as SHOW FUNCTIONS with
     // only system scope does not need to know the catalog and namespace.
-    val plan0 = ShowFunctions(UnresolvedNamespace(Nil), false, true, pattern)
+    val plan0 = ShowFunctions(CurrentNamespace, false, true, pattern)
     sparkSession.sessionState.executePlan(plan0).toRdd.collect().foreach { row =>
       // Built-in functions do not belong to any catalog or namespace. We can only look it up with
       // a single part name.

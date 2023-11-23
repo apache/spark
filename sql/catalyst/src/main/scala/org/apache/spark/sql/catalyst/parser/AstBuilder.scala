@@ -4080,7 +4080,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val ns = if (ctx.identifierReference() != null) {
       withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
     } else {
-      UnresolvedNamespace(Seq.empty[String])
+      CurrentNamespace
     }
     ShowTables(ns, Option(ctx.pattern).map(x => string(visitStringLit(x))))
   }
@@ -4107,7 +4107,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       val ns = if (ctx.identifierReference() != null) {
         withIdentClause(ctx.identifierReference, UnresolvedNamespace)
       } else {
-        UnresolvedNamespace(Seq.empty[String])
+        CurrentNamespace
       }
       ShowTablesExtended(ns, string(visitStringLit(ctx.pattern)))
     }
@@ -4120,7 +4120,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val ns = if (ctx.identifierReference() != null) {
       withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
     } else {
-      UnresolvedNamespace(Seq.empty[String])
+      CurrentNamespace
     }
     ShowViews(ns, Option(ctx.pattern).map(x => string(visitStringLit(x))))
   }
@@ -4585,7 +4585,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val ns = if (ctx.identifierReference() != null) {
       withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
     } else {
-      UnresolvedNamespace(Seq.empty[String])
+      CurrentNamespace
     }
     AnalyzeTables(ns, noScan = ctx.identifier != null)
   }
@@ -4985,7 +4985,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     } else if (legacy.isDefined) {
       ShowFunctions(UnresolvedNamespace(legacy.get.dropRight(1)), userScope, systemScope, pattern)
     } else {
-      ShowFunctions(UnresolvedNamespace(Nil), userScope, systemScope, pattern)
+      ShowFunctions(CurrentNamespace, userScope, systemScope, pattern)
     }
   }
 
