@@ -41,6 +41,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
+import org.apache.spark.util.ArrayImplicits._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines expressions for string operations.
@@ -314,7 +315,7 @@ case class Elt(
           )
         )
       }
-      TypeUtils.checkForSameTypeInputExpr(inputTypes, prettyName)
+      TypeUtils.checkForSameTypeInputExpr(inputTypes.toImmutableArraySeq, prettyName)
     }
   }
 
@@ -357,7 +358,7 @@ case class Elt(
     }
 
     val codes = ctx.splitExpressionsWithCurrentInputs(
-      expressions = assignInputValue,
+      expressions = assignInputValue.toImmutableArraySeq,
       funcName = "eltFunc",
       extraArguments = ("int", indexVal) :: Nil,
       returnType = CodeGenerator.JAVA_BOOLEAN,

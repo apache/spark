@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A base class for generated/interpreted predicate
@@ -173,7 +174,7 @@ trait PredicateHelper extends AliasHelper with Logging {
         }
         i += 2
       }
-      currentResult = nextResult
+      currentResult = nextResult.toImmutableArraySeq
     }
     currentResult.head
   }

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.{BatchEvalPythonUDTF, PythonDataSourcePartitions}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
@@ -143,16 +144,35 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
 
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
-    assert(spark.sharedState.dataSourceManager.dataSourceExists(dataSourceName))
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+    val ds1 = spark.sessionState.dataSourceManager.lookupDataSource(dataSourceName)
+    checkAnswer(
+      ds1(spark, dataSourceName, None, CaseInsensitiveMap(Map.empty)),
+      Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
 
-    // Check error when registering a data source with the same name.
-    val err = intercept[AnalysisException] {
-      spark.dataSource.registerPython(dataSourceName, dataSource)
-    }
-    checkError(
-      exception = err,
-      errorClass = "DATA_SOURCE_ALREADY_EXISTS",
-      parameters = Map("provider" -> dataSourceName))
+    // Should be able to override an already registered data source.
+    val newScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceReader
+         |class SimpleDataSourceReader(DataSourceReader):
+         |    def read(self, partition):
+         |        yield (0, )
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader()
+         |""".stripMargin
+    val newDataSource = createUserDefinedPythonDataSource(dataSourceName, newScript)
+    spark.dataSource.registerPython(dataSourceName, newDataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+
+    val ds2 = spark.sessionState.dataSourceManager.lookupDataSource(dataSourceName)
+    checkAnswer(
+      ds2(spark, dataSourceName, None, CaseInsensitiveMap(Map.empty)),
+      Seq(Row(0)))
   }
 
   test("load data source") {
@@ -160,13 +180,20 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader
+         |import json
+         |
          |class SimpleDataSourceReader(DataSourceReader):
-         |    def __init__(self, paths, options):
-         |        self.paths = paths
+         |    def __init__(self, options):
          |        self.options = options
          |
          |    def partitions(self):
-         |        return iter(self.paths)
+         |        if "paths" in self.options:
+         |            paths = json.loads(self.options["paths"])
+         |        elif "path" in self.options:
+         |            paths = [self.options["path"]]
+         |        else:
+         |            paths = []
+         |        return paths
          |
          |    def read(self, path):
          |        yield (path, 1)
@@ -180,11 +207,10 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
          |        return "id STRING, value INT"
          |
          |    def reader(self, schema):
-         |        return SimpleDataSourceReader(self.paths, self.options)
+         |        return SimpleDataSourceReader(self.options)
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
     spark.dataSource.registerPython("test", dataSource)
-
     checkAnswer(spark.read.format("test").load(), Seq(Row(null, 1)))
     checkAnswer(spark.read.format("test").load("1"), Seq(Row("1", 1)))
     checkAnswer(spark.read.format("test").load("1", "2"), Seq(Row("1", 1), Row("2", 1)))

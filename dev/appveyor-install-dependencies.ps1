@@ -120,8 +120,8 @@ $env:PATH = "$tools\sbt\bin;" + $env:PATH
 Pop-Location
 
 # ========================== Hadoop bin package
-# This must match the version at https://github.com/cdarlint/winutils/tree/master/hadoop-3.2.0
-$hadoopVer = "3.2.0"
+# This must match the version at https://github.com/cdarlint/winutils/tree/master/hadoop-3.3.5
+$hadoopVer = "3.3.5"
 $hadoopPath = "$tools\hadoop"
 if (!(Test-Path $hadoopPath)) {
     New-Item -ItemType Directory -Force -Path $hadoopPath | Out-Null
@@ -140,7 +140,7 @@ $env:PATH = "$env:HADOOP_HOME\bin;" + $env:PATH
 Pop-Location
 
 # ========================== R
-$rVer = "4.3.1"
+$rVer = "4.3.2"
 $rToolsVer = "4.0.2"
 
 InstallR

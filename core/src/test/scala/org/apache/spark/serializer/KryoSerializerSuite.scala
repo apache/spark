@@ -39,6 +39,7 @@ import org.apache.spark.scheduler.HighlyCompressedMapStatus
 import org.apache.spark.serializer.KryoTest._
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.OpenHashMap
 
 class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
@@ -294,7 +295,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("kryo with parallelize for primitive arrays") {
-    assert(sc.parallelize(Array(1, 2, 3)).count() === 3)
+    assert(sc.parallelize(Array(1, 2, 3).toImmutableArraySeq).count() === 3)
   }
 
   test("kryo with collect for specialized tuples") {
@@ -302,7 +303,8 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("kryo with SerializableHyperLogLog") {
-    assert(sc.parallelize(Array(1, 2, 3, 2, 3, 3, 2, 3, 1)).countApproxDistinct(0.01) === 3)
+    assert(sc.parallelize(Array(1, 2, 3, 2, 3, 3, 2, 3, 1).toImmutableArraySeq)
+      .countApproxDistinct(0.01) === 3)
   }
 
   test("kryo with reduce") {

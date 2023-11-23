@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A central moment is the expected value of a specified power of the deviation of a random
@@ -74,7 +75,8 @@ abstract class CentralMomentAgg(child: Expression, nullOnDivideByZero: Boolean)
 
   override val aggBufferAttributes = trimHigherOrder(Seq(n, avg, m2, m3, m4))
 
-  override val initialValues: Seq[Expression] = Array.fill(momentOrder + 1)(Literal(0.0))
+  override val initialValues: Seq[Expression] =
+    Array.fill(momentOrder + 1)(Literal(0.0)).toImmutableArraySeq
 
   override lazy val updateExpressions: Seq[Expression] = updateExpressionsDef
 

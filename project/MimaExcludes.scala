@@ -52,7 +52,9 @@ object MimaExcludes {
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.QueryContext.callSite"),
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.QueryContext.summary"),
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI$default$3"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI")
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI"),
+    // [SPARK-45762][CORE] Support shuffle managers defined in user jars by changing startup order
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkEnv.this")
   )
 
   // Default exclude rules
@@ -87,6 +89,16 @@ object MimaExcludes {
 
     // SPARK-43299: Convert StreamingQueryException in Scala Client
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryException"),
+
+    // SPARK-45856: Move ArtifactManager from Spark Connect into SparkSession (sql/core)
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.CacheId.apply"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.CacheId.userId"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.CacheId.sessionId"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.CacheId.copy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.CacheId.copy$default$3"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.CacheId.this"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.storage.CacheId$"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.CacheId.apply"),
 
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&

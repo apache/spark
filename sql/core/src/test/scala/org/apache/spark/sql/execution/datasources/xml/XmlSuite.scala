@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.xml.XmlOptions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.xml.TestUtils._
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -76,7 +77,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
   test("DSL test with xml having unbalanced datatypes") {
     val results = spark.read
       .option("rowTag", "ROW")
-      .option("treatEmptyValuesAsNulls", "true")
+      .option("nullValue", "")
       .option("multiLine", "true")
       .xml(getTestResourcePath(resDir + "gps-empty-field.xml"))
 
@@ -439,7 +440,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     assert(getLines(xmlFile).count(_.contains("<foo>")) === 2)
   }
 
-  test("DSL save with nullValue and treatEmptyValuesAsNulls") {
+  test("DSL save with nullValue") {
     val copyFilePath = getEmptyTempDir().resolve("books-copy.xml")
 
     val books = spark.read
@@ -451,7 +452,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
 
     val booksCopy = spark.read
       .option("rowTag", "book")
-      .option("treatEmptyValuesAsNulls", "true")
+      .option("nullValue", "")
       .xml(copyFilePath.toString)
 
     assert(booksCopy.count() === books.count())
@@ -740,7 +741,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       field("age", IntegerType))
     val results = spark.read.schema(schema)
       .option("rowTag", "ROW")
-      .option("treatEmptyValuesAsNulls", true)
+      .option("nullValue", "")
       .xml(getTestResourcePath(resDir + "null-numbers.xml"))
       .select("name", "age")
       .collect()
@@ -949,10 +950,10 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       "requirement failed: 'valueTag' and 'attributePrefix' options should not be the same.")
   }
 
-  test("nullValue and treatEmptyValuesAsNulls test") {
+  test("nullValue test") {
     val resultsOne = spark.read
       .option("rowTag", "ROW")
-      .option("treatEmptyValuesAsNulls", "true")
+      .option("nullValue", "")
       .xml(getTestResourcePath(resDir + "gps-empty-field.xml"))
     assert(resultsOne.selectExpr("extensions.TrackPointExtension").head().getStruct(0) !== null)
     assert(resultsOne.selectExpr("extensions.TrackPointExtension")
@@ -1975,5 +1976,143 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     assert(df.schema.toSet === expectedSchema.toSet)
     checkAnswer(df, Row(true, 10.1, -10, 10, "8E9D", "8E9F",
       Timestamp.valueOf("2015-01-01 00:00:00")))
+  }
+
+  test("case sensitivity test - attributes-only object") {
+    val schemaCaseSensitive = new StructType()
+      .add("array", ArrayType(
+        new StructType()
+          .add("_Attr2", LongType)
+          .add("_VALUE", LongType)
+          .add("_aTTr2", LongType)
+          .add("_attr2", LongType)))
+      .add("struct", new StructType()
+        .add("_Attr1", LongType)
+        .add("_VALUE", LongType)
+        .add("_attr1", LongType))
+
+    val dfCaseSensitive = Seq(
+      Row(
+        Array(
+          Row(null, 2, null, 2),
+          Row(3, 3, null, null),
+          Row(null, 4, 4, null)),
+        Row(null, 1, 1)
+      ),
+      Row(
+        null,
+        Row(5, 5, null)
+      )
+    )
+    val schemaCaseInSensitive = new StructType()
+      .add("array", ArrayType(new StructType().add("_VALUE", LongType).add("_attr2", LongType)))
+      .add("struct", new StructType().add("_VALUE", LongType).add("_attr1", LongType))
+    val dfCaseInsensitive =
+      Seq(
+        Row(
+          Array(Row(2, 2), Row(3, 3), Row(4, 4)),
+          Row(1, 1)),
+        Row(null, Row(5, 5)))
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val df = spark.read
+          .option("rowTag", "ROW")
+          .xml(getTestResourcePath(resDir + "attributes-case-sensitive.xml"))
+        assert(df.schema == (if (caseSensitive) schemaCaseSensitive else schemaCaseInSensitive))
+        checkAnswer(
+          df,
+          if (caseSensitive) dfCaseSensitive else dfCaseInsensitive)
+      }
+    }
+  }
+
+  testCaseSensitivity(
+    "basic",
+    writeData = Seq(Row(1L, null), Row(null, 2L)),
+    writeSchema = new StructType()
+      .add("A1", LongType)
+      .add("a1", LongType),
+    expectedSchema = new StructType()
+      .add("A1", LongType),
+    readDataCaseInsensitive = Seq(Row(1L), Row(2L)))
+
+  testCaseSensitivity(
+    "nested struct",
+    writeData = Seq(Row(Row(1L), null), Row(null, Row(2L))),
+    writeSchema = new StructType()
+      .add("A1", new StructType().add("B1", LongType))
+      .add("a1", new StructType().add("b1", LongType)),
+    expectedSchema = new StructType()
+      .add("A1", new StructType().add("B1", LongType)),
+    readDataCaseInsensitive = Seq(Row(Row(1L)), Row(Row(2L)))
+  )
+
+  testCaseSensitivity(
+    "convert fields into array",
+    writeData = Seq(Row(1L, 2L)),
+    writeSchema = new StructType()
+      .add("A1", LongType)
+      .add("a1", LongType),
+    expectedSchema = new StructType()
+      .add("A1", ArrayType(LongType)),
+    readDataCaseInsensitive = Seq(Row(Array(1L, 2L))))
+
+  testCaseSensitivity(
+    "basic array",
+    writeData = Seq(Row(Array(1L, 2L), Array(3L, 4L))),
+    writeSchema = new StructType()
+      .add("A1", ArrayType(LongType))
+      .add("a1", ArrayType(LongType)),
+    expectedSchema = new StructType()
+      .add("A1", ArrayType(LongType)),
+    readDataCaseInsensitive = Seq(Row(Array(1L, 2L, 3L, 4L))))
+
+  testCaseSensitivity(
+    "nested array",
+    writeData =
+      Seq(Row(Array(Row(1L, 2L), Row(3L, 4L)), null), Row(null, Array(Row(5L, 6L), Row(7L, 8L)))),
+    writeSchema = new StructType()
+      .add("A1", ArrayType(new StructType().add("B1", LongType).add("d", LongType)))
+      .add("a1", ArrayType(new StructType().add("b1", LongType).add("c", LongType))),
+    expectedSchema = new StructType()
+      .add(
+        "A1",
+        ArrayType(
+          new StructType()
+            .add("B1", LongType)
+            .add("c", LongType)
+            .add("d", LongType))),
+    readDataCaseInsensitive = Seq(
+      Row(Array(Row(1L, null, 2L), Row(3L, null, 4L))),
+      Row(Array(Row(5L, 6L, null), Row(7L, 8L, null)))))
+
+  def testCaseSensitivity(
+      name: String,
+      writeData: Seq[Row],
+      writeSchema: StructType,
+      expectedSchema: StructType,
+      readDataCaseInsensitive: Seq[Row]): Unit = {
+    test(s"case sensitivity test - $name") {
+      withTempDir { dir =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+          spark
+            .createDataFrame(writeData.asJava, writeSchema)
+            .repartition(1)
+            .write
+            .option("rowTag", "ROW")
+            .format("xml")
+            .mode("overwrite")
+            .save(dir.getCanonicalPath)
+        }
+
+        Seq(true, false).foreach { caseSensitive =>
+          withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+            val df = spark.read.option("rowTag", "ROW").xml(dir.getCanonicalPath)
+            assert(df.schema == (if (caseSensitive) writeSchema else expectedSchema))
+            checkAnswer(df, if (caseSensitive) writeData else readDataCaseInsensitive)
+          }
+        }
+      }
+    }
   }
 }

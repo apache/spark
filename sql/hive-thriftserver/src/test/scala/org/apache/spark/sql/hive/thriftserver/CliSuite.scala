@@ -193,7 +193,7 @@ class CliSuite extends SparkFunSuite {
       ThreadUtils.awaitResult(foundAllExpectedAnswers.future, timeoutForQuery)
       log.info("Found all expected output.")
     } catch { case cause: Throwable =>
-      val message =
+      val message = lock.synchronized {
         s"""
            |=======================
            |CliSuite failure output
@@ -207,6 +207,7 @@ class CliSuite extends SparkFunSuite {
            |End CliSuite failure output
            |===========================
          """.stripMargin
+      }
       logError(message, cause)
       fail(message, cause)
     } finally {
@@ -702,6 +703,7 @@ class CliSuite extends SparkFunSuite {
   testRetry("formats of error messages") {
     def check(format: ErrorMessageFormat.Value, errorMessage: String, silent: Boolean): Unit = {
       val expected = errorMessage.split(System.lineSeparator()).map("" -> _)
+      import org.apache.spark.util.ArrayImplicits._
       runCliWithin(
         1.minute,
         extraArgs = Seq(
@@ -709,7 +711,7 @@ class CliSuite extends SparkFunSuite {
           "--conf", s"${SQLConf.ERROR_MESSAGE_FORMAT.key}=$format",
           "--conf", s"${SQLConf.ANSI_ENABLED.key}=true",
           "-e", "select 1 / 0"),
-        errorResponses = Seq("DIVIDE_BY_ZERO"))(expected: _*)
+        errorResponses = Seq("DIVIDE_BY_ZERO"))(expected.toImmutableArraySeq: _*)
     }
     check(
       format = ErrorMessageFormat.PRETTY,

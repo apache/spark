@@ -153,7 +153,7 @@ case class DataFrameQueryContext(stackTrace: Seq[StackTraceElement]) extends Que
     }.getOrElse("")
   }
 
-  override val callSite: String = stackTrace.tail.headOption.map(_.toString).getOrElse("")
+  override val callSite: String = stackTrace.tail.mkString("\n")
 
   override lazy val summary: String = {
     val builder = new StringBuilder
@@ -162,7 +162,7 @@ case class DataFrameQueryContext(stackTrace: Seq[StackTraceElement]) extends Que
 
     builder ++= fragment
     builder ++= "\""
-    builder ++= " was called from "
+    builder ++= " was called from\n"
     builder ++= callSite
     builder += '\n'
     builder.result()

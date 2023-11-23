@@ -41,6 +41,7 @@ import org.apache.spark.resource.{ResourceProfile, ResourceRequirement, Resource
 import org.apache.spark.rpc._
 import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.util.{SparkUncaughtExceptionHandler, ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 private[deploy] class Master(
     override val rpcEnv: RpcEnv,
@@ -277,7 +278,8 @@ private[deploy] class Master(
       } else if (idToWorker.contains(id)) {
         workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress, true))
       } else {
-        val workerResources = resources.map(r => r._1 -> WorkerResourceInfo(r._1, r._2.addresses))
+        val workerResources =
+          resources.map(r => r._1 -> WorkerResourceInfo(r._1, r._2.addresses.toImmutableArraySeq))
         val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
           workerRef, workerWebUiUrl, workerResources)
         if (registerWorker(worker)) {

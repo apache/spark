@@ -307,6 +307,18 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan2, sparkPlan2)
   }
 
+  test("GroupingSets expressions") {
+    val connectPlan1 =
+      connectTestRelation.groupingSets(Seq(Seq("id".protoAttr), Seq.empty), "id".protoAttr)(
+        proto_min(proto.Expression.newBuilder().setLiteral(toLiteralProto(1)).build())
+          .as("agg1"))
+    val sparkPlan1 =
+      sparkTestRelation
+        .groupingSets(Seq(Seq(Column("id")), Seq.empty), Column("id"))
+        .agg(min(lit(1)).as("agg1"))
+    comparePlans(connectPlan1, sparkPlan1)
+  }
+
   test("Test as(alias: String)") {
     val connectPlan = connectTestRelation.as("target_table")
     val sparkPlan = sparkTestRelation.as("target_table")

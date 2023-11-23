@@ -28,12 +28,13 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.variant._
 import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, Range}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
-
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A catalog for looking up user defined functions, used by an [[Analyzer]].
@@ -142,7 +143,7 @@ object FunctionRegistryBase {
             .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
           throw QueryCompilationErrors.wrongNumArgsError(
-            name, validParametersCount, params.length)
+            name, validParametersCount.toImmutableArraySeq, params.length)
         }
         try {
           f.newInstance(expressions : _*).asInstanceOf[T]
@@ -807,6 +808,9 @@ object FunctionRegistry {
     expression[SchemaOfJson]("schema_of_json"),
     expression[LengthOfJsonArray]("json_array_length"),
     expression[JsonObjectKeys]("json_object_keys"),
+
+    // Variant
+    expression[ParseJson]("parse_json"),
 
     // cast
     expression[Cast]("cast"),

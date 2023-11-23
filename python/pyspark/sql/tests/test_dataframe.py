@@ -105,6 +105,43 @@ class DataFrameTestsMixin:
         self.assertEqual(df.drop(col("name"), col("age")).columns, ["active"])
         self.assertEqual(df.drop(col("name"), col("age"), col("random")).columns, ["active"])
 
+    def test_drop_join(self):
+        left_df = self.spark.createDataFrame(
+            [(1, "a"), (2, "b"), (3, "c")],
+            ["join_key", "value1"],
+        )
+        right_df = self.spark.createDataFrame(
+            [(1, "aa"), (2, "bb"), (4, "dd")],
+            ["join_key", "value2"],
+        )
+        joined_df = left_df.join(
+            right_df,
+            on=left_df["join_key"] == right_df["join_key"],
+            how="left",
+        )
+
+        dropped_1 = joined_df.drop(left_df["join_key"])
+        self.assertEqual(dropped_1.columns, ["value1", "join_key", "value2"])
+        self.assertEqual(
+            dropped_1.sort("value1").collect(),
+            [
+                Row(value1="a", join_key=1, value2="aa"),
+                Row(value1="b", join_key=2, value2="bb"),
+                Row(value1="c", join_key=None, value2=None),
+            ],
+        )
+
+        dropped_2 = joined_df.drop(right_df["join_key"])
+        self.assertEqual(dropped_2.columns, ["join_key", "value1", "value2"])
+        self.assertEqual(
+            dropped_2.sort("value1").collect(),
+            [
+                Row(join_key=1, value1="a", value2="aa"),
+                Row(join_key=2, value1="b", value2="bb"),
+                Row(join_key=3, value1="c", value2=None),
+            ],
+        )
+
     def test_with_columns_renamed(self):
         df = self.spark.createDataFrame([("Alice", 50), ("Alice", 60)], ["name", "age"])
 
@@ -1040,6 +1077,27 @@ class DataFrameTestsMixin:
 
         self.assertEqual(observation1.get, dict(cnt=50))
         self.assertEqual(observation2.get, dict(cnt=100))
+
+    def test_observe_on_commands(self):
+        from pyspark.sql import Observation
+
+        df = self.spark.range(50)
+
+        test_table = "test_table"
+
+        # DataFrameWriter
+        with self.table(test_table):
+            for command, action in [
+                ("collect", lambda df: df.collect()),
+                ("show", lambda df: df.show(50)),
+                ("save", lambda df: df.write.format("noop").mode("overwrite").save()),
+                ("create", lambda df: df.writeTo(test_table).using("parquet").create()),
+            ]:
+                with self.subTest(command=command):
+                    observation = Observation()
+                    observed_df = df.observe(observation, count(lit(1)).alias("cnt"))
+                    action(observed_df)
+                    self.assertEqual(observation.get, dict(cnt=50))
 
     def test_sample(self):
         with self.assertRaises(PySparkTypeError) as pe:

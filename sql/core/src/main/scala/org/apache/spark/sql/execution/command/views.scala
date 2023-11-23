@@ -35,6 +35,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{MetadataBuilder, StructType}
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Create or replace a view with given query plan. This command will generate some view-specific
@@ -496,14 +497,15 @@ object ViewHelper extends SQLConfHelper with Logging {
 
     // Generate the query column names, throw an AnalysisException if there exists duplicate column
     // names.
-    SchemaUtils.checkColumnNameDuplication(fieldNames, conf.resolver)
+    SchemaUtils.checkColumnNameDuplication(fieldNames.toImmutableArraySeq, conf.resolver)
 
     // Generate the view default catalog and namespace, as well as captured SQL configs.
     val manager = session.sessionState.catalogManager
     removeReferredTempNames(removeSQLConfigs(removeQueryColumnNames(properties))) ++
-      catalogAndNamespaceToProps(manager.currentCatalog.name, manager.currentNamespace) ++
+      catalogAndNamespaceToProps(
+        manager.currentCatalog.name, manager.currentNamespace.toImmutableArraySeq) ++
       sqlConfigsToProps(conf) ++
-      generateQueryColumnNames(queryOutput) ++
+      generateQueryColumnNames(queryOutput.toImmutableArraySeq) ++
       referredTempNamesToProps(tempViewNames, tempFunctionNames, tempVariableNames)
   }
 

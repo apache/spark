@@ -41,6 +41,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.util.ArrayImplicits._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines all the expressions for hashing.
@@ -456,7 +457,7 @@ abstract class HashExpression[E] extends Expression {
     }
     val hashResultType = CodeGenerator.javaType(dataType)
     val code = ctx.splitExpressions(
-      expressions = fieldsHash,
+      expressions = fieldsHash.toImmutableArraySeq,
       funcName = "computeHashForStruct",
       arguments = Seq("InternalRow" -> tmpInput, hashResultType -> result),
       returnType = hashResultType,
@@ -857,7 +858,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
     }
 
     val code = ctx.splitExpressions(
-      expressions = fieldsHash,
+      expressions = fieldsHash.toImmutableArraySeq,
       funcName = "computeHashForStruct",
       arguments = Seq("InternalRow" -> tmpInput, CodeGenerator.JAVA_INT -> result),
       returnType = CodeGenerator.JAVA_INT,

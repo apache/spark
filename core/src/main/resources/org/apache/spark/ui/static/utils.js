@@ -251,7 +251,7 @@ function errorSummary(errorMessage) {
   let isMultiline = true;
   const maybeErrorClass = errorMessage.match(ERROR_CLASS_REGEX);
   let errorClassOrBrief;
-  if (maybeErrorClass.length === 2) {
+  if (maybeErrorClass) {
     errorClassOrBrief = maybeErrorClass[1];
   } else if (errorMessage.indexOf('\n') >= 0) {
     errorClassOrBrief = errorMessage.substring(0, errorMessage.indexOf('\n'));

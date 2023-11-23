@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * An abstract class that represents [[FileIndex]]s that are aware of partitioned tables.
@@ -86,7 +87,7 @@ abstract class PartitioningAwareFileIndex(
           val files: Seq[FileStatus] = leafDirToChildrenFiles.get(path) match {
             case Some(existingDir) =>
               // Directory has children files in it, return them
-              existingDir.filter(f => matchPathPattern(f) && isNonEmptyFile(f))
+              existingDir.filter(f => matchPathPattern(f) && isNonEmptyFile(f)).toImmutableArraySeq
 
             case None =>
               // Directory does not exist, or has no children files

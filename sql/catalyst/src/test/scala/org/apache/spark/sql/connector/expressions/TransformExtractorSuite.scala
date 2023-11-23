@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.{bucket, clusterBy}
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.util.ArrayImplicits._
 
 class TransformExtractorSuite extends SparkFunSuite {
   /**
@@ -190,7 +191,7 @@ class TransformExtractorSuite extends SparkFunSuite {
     assert(arguments1(0).asInstanceOf[LiteralValue[Integer]].value === 16)
     assert(arguments1(1).asInstanceOf[NamedReference].fieldNames() === Seq("a"))
     assert(arguments1(2).asInstanceOf[NamedReference].fieldNames() === Seq("b"))
-    val copied1 = bucketTransform.withReferences(reference1)
+    val copied1 = bucketTransform.withReferences(reference1.toImmutableArraySeq)
     assert(copied1.equals(bucketTransform))
 
     val sortedBucketTransform = bucket(16, col, sortedCol)
@@ -207,7 +208,7 @@ class TransformExtractorSuite extends SparkFunSuite {
     assert(arguments2(2).asInstanceOf[LiteralValue[Integer]].value === 16)
     assert(arguments2(3).asInstanceOf[NamedReference].fieldNames() === Seq("c"))
     assert(arguments2(4).asInstanceOf[NamedReference].fieldNames() === Seq("d"))
-    val copied2 = sortedBucketTransform.withReferences(reference2)
+    val copied2 = sortedBucketTransform.withReferences(reference2.toImmutableArraySeq)
     assert(copied2.equals(sortedBucketTransform))
   }
 
@@ -248,7 +249,7 @@ class TransformExtractorSuite extends SparkFunSuite {
     assert(arguments.length == 2)
     assert(arguments(0).asInstanceOf[NamedReference].fieldNames() === Seq("a a", "b"))
     assert(arguments(1).asInstanceOf[NamedReference].fieldNames() === Seq("ts"))
-    val copied = clusterByTransform.withReferences(reference)
+    val copied = clusterByTransform.withReferences(reference.toImmutableArraySeq)
     assert(copied.equals(clusterByTransform))
   }
 }
