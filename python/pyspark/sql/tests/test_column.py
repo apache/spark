@@ -16,7 +16,9 @@
 # limitations under the License.
 #
 
+from itertools import chain
 from pyspark.sql import Column, Row
+from pyspark.sql import functions as sf
 from pyspark.sql.types import StructType, StructField, LongType
 from pyspark.errors import AnalysisException, PySparkTypeError
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -206,6 +208,15 @@ class ColumnTestsMixin:
         self.assertTrue("b" not in result["a1"] and "c" in result["a1"] and "d" in result["a1"])
 
         self.assertTrue("e" not in result["a2"]["d"] and "f" in result["a2"]["d"])
+
+    def test_getitem_column(self):
+        mapping = {"A": "20", "B": "28", "C": "34"}
+        mapping_expr = sf.create_map([sf.lit(x) for x in chain(*mapping.items())])
+        df = self.spark.createDataFrame(
+            data=[["A", "10"], ["B", "14"], ["C", "17"]],
+            schema=["key", "value"],
+        ).withColumn("square_value", mapping_expr[sf.col("key")])
+        self.assertEqual(df.count(), 3)
 
 
 class ColumnTests(ColumnTestsMixin, ReusedSQLTestCase):

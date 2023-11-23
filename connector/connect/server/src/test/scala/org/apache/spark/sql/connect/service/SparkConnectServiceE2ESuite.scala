@@ -76,6 +76,7 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
           query2Error.getMessage.contains("INVALID_HANDLE.OPERATION_ABANDONED"))
 
       // query3 has not been submitted before, so it should now fail with SESSION_CLOSED
+      // TODO(SPARK-46042) Reenable a `releaseSession` test case in SparkConnectServiceE2ESuite
       val query3Error = intercept[SparkException] {
         query3.hasNext
       }
