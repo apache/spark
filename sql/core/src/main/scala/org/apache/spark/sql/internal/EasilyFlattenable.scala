@@ -45,7 +45,10 @@ private[sql] object EasilyFlattenable {
           if (tinkeredOrNewNamedExprs.exists(ne => ne.references.exists {
             case attr: AttributeReference => attribsReassignedInProj.contains(attr)
             case u: UnresolvedAttribute => attribsReassignedInProj.exists(_.name == u.name)
-          } || ne.collectFirst{case u: UnresolvedFunction => u}.nonEmpty)) {
+          } || ne.collectFirst{
+            case u: UnresolvedFunction => u
+            case ex if !ex.deterministic => ex
+          }.nonEmpty)) {
             None
           } else {
             val remappedNewProjList = newProjList.map(ne => ne match {
