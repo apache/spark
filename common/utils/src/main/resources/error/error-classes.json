@@ -987,6 +987,12 @@
     ],
     "sqlState" : "42K09"
   },
+  "EXCEED_LIMIT_LENGTH" : {
+    "message" : [
+      "Exceeds char/varchar type length limitation: <limit>."
+    ],
+    "sqlState" : "54006"
+  },
   "EXCEPT_NESTED_COLUMN_INVALID_TYPE" : {
     "message" : [
       "EXCEPT column <columnName> was resolved and expected to be StructType, but found type <dataType>."
@@ -998,12 +1004,6 @@
       "Columns in an EXCEPT list must be distinct and non-overlapping, but got (<columns>)."
     ],
     "sqlState" : "42702"
-  },
-  "EXCEED_LIMIT_LENGTH" : {
-    "message" : [
-      "Exceeds char/varchar type length limitation: <limit>."
-    ],
-    "sqlState" : "54006"
   },
   "EXPECT_PERMANENT_VIEW_NOT_TEMP" : {
     "message" : [

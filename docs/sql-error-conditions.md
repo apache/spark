@@ -587,6 +587,18 @@ The event time `<eventName>` has the invalid type `<eventType>`, but expected "T
 
 Exceeds char/varchar type length limitation: `<limit>`.
 
+### EXCEPT_NESTED_COLUMN_INVALID_TYPE
+
+[SQLSTATE: 428H2](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+EXCEPT column `<columnName>` was resolved and expected to be StructType, but found type `<dataType>`.
+
+### EXCEPT_OVERLAPPING_COLUMNS
+
+[SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Columns in an EXCEPT list must be distinct and non-overlapping, but got (`<columns>`).
+
 ### EXPECT_PERMANENT_VIEW_NOT_TEMP
 
 [SQLSTATE: 42809](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
