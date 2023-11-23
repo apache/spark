@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, AttributeSet, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 
@@ -45,7 +45,7 @@ private[sql] object EasilyFlattenable {
           if (tinkeredOrNewNamedExprs.exists(ne => ne.references.exists {
             case attr: AttributeReference => attribsReassignedInProj.contains(attr)
             case u: UnresolvedAttribute => attribsReassignedInProj.exists(_.name == u.name)
-          })) {
+          } || ne.collectFirst{case u: UnresolvedFunction => u}.nonEmpty)) {
             None
           } else {
             val remappedNewProjList = newProjList.map(ne => ne match {
