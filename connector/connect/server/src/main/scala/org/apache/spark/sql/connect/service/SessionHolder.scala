@@ -102,7 +102,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    *
    * Called only by SparkConnectExecutionManager under executionsLock.
    */
-  private[service] def addExecuteHolder(executeHolder: ExecuteHolder): Unit = synchronized {
+  private[service] def addExecuteHolder(executeHolder: ExecuteHolder): Unit = {
     if (closedTime.isDefined) {
       // Do not accept new executions if the session is closing.
       throw new SparkSQLException(
@@ -219,38 +219,48 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    *
    * Called only by SparkConnectSessionManager.
    */
-  private[connect] def close(): Unit = synchronized {
-    if (!closedTime.isDefined) {
-      logInfo(s"Closing session with userId: $userId and sessionId: $sessionId")
-
-      // After closedTime is defined, SessionHolder.addExecuteHolder() will not allow new executions
-      // for this session. Because both SessionHolder.addExecuteHolder() and
-      // SparkConnectExecutionManager.removeAllExecutionsForSession() are executed under
-      // executionsLock, this guarantees that removeAllExecutionsForSession triggered below will
-      // remove all executions and no new executions will be added in the meanwhile.
-      closedTime = Some(System.currentTimeMillis())
-
-      // Note on the below notes about concurrency:
-      // While closing the session can potentially race with operations started on the session, the
-      // intended use is that the client session will get closed when it's really not used anymore,
-      // or that it expires due to inactivity, in which case there should be no races.
-
-      // Clean up all artifacts.
-      // Note: there can be concurrent AddArtifact calls still adding something.
-      artifactManager.cleanUpResources()
-
-      // Clean up running streaming queries.
-      // Note: there can be concurrent streaming queries being started.
-      SparkConnectService.streamingSessionManager.cleanupRunningQueries(this)
-      streamingForeachBatchRunnerCleanerCache.cleanUpAll() // Clean up any streaming workers.
-      removeAllListeners() // removes all listener and stop python listener processes if necessary.
-
-      // Clean up all executions
-      // It is guaranteed at this point that no new addExecuteHolder are getting started.
-      SparkConnectService.executionManager.removeAllExecutionsForSession(this.key)
-
-      eventManager.postClosed()
+  private[connect] def close(): Unit = {
+    // It is called only by SparkConnectSessionManager.closeSession, only after it's removed from
+    // the sessionStore there guarantees that it is called only once.
+    if (closedTime.isDefined) {
+      throw new IllegalStateException(s"Session $key is already closed.")
     }
+
+    logInfo(s"Closing session with userId: $userId and sessionId: $sessionId")
+
+    // After closedTime is defined, SessionHolder.addExecuteHolder() will not allow new executions
+    // to be added for this session. Because both SessionHolder.addExecuteHolder() and
+    // SparkConnectExecutionManager.removeAllExecutionsForSession() are executed under
+    // executionsLock, this guarantees that removeAllExecutionsForSession triggered below will
+    // remove all executions and no new executions will be added in the meanwhile.
+    closedTime = Some(System.currentTimeMillis())
+
+    if (eventManager.status == SessionStatus.Pending) {
+      // Testing-only: Some sessions created by SessionHolder.forTesting are not fully initialized
+      // and can't be closed.
+      return
+    }
+
+    // Note on the below notes about concurrency:
+    // While closing the session can potentially race with operations started on the session, the
+    // intended use is that the client session will get closed when it's really not used anymore,
+    // or that it expires due to inactivity, in which case there should be no races.
+
+    // Clean up all artifacts.
+    // Note: there can be concurrent AddArtifact calls still adding something.
+    artifactManager.cleanUpResources()
+
+    // Clean up running streaming queries.
+    // Note: there can be concurrent streaming queries being started.
+    SparkConnectService.streamingSessionManager.cleanupRunningQueries(this)
+    streamingForeachBatchRunnerCleanerCache.cleanUpAll() // Clean up any streaming workers.
+    removeAllListeners() // removes all listener and stop python listener processes if necessary.
+
+    // Clean up all executions
+    // It is guaranteed at this point that no new addExecuteHolder are getting started.
+    SparkConnectService.executionManager.removeAllExecutionsForSession(this.key)
+
+    eventManager.postClosed()
   }
 
   /**
