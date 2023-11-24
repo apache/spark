@@ -47,21 +47,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         val CatalogAndIdentifier(catalog, identifier) = nameParts
         ResolvedIdentifier(catalog, identifier)
       }
-    case s @ ShowTables(UnresolvedNamespace(Seq()), _, _) =>
-      s.copy(namespace = ResolvedNamespace(currentCatalog,
-        catalogManager.currentNamespace.toImmutableArraySeq))
-    case s @ ShowTablesExtended(UnresolvedNamespace(Seq()), _, _) =>
-      s.copy(namespace = ResolvedNamespace(currentCatalog,
-        catalogManager.currentNamespace.toImmutableArraySeq))
-    case s @ ShowViews(UnresolvedNamespace(Seq()), _, _) =>
-      s.copy(namespace = ResolvedNamespace(currentCatalog,
-        catalogManager.currentNamespace.toImmutableArraySeq))
-    case s @ ShowFunctions(UnresolvedNamespace(Seq()), _, _, _, _) =>
-      s.copy(namespace = ResolvedNamespace(currentCatalog,
-        catalogManager.currentNamespace.toImmutableArraySeq))
-    case a @ AnalyzeTables(UnresolvedNamespace(Seq()), _) =>
-      a.copy(namespace = ResolvedNamespace(currentCatalog,
-        catalogManager.currentNamespace.toImmutableArraySeq))
+
+    case CurrentNamespace =>
+      ResolvedNamespace(currentCatalog, catalogManager.currentNamespace.toImmutableArraySeq)
     case UnresolvedNamespace(Seq()) =>
       ResolvedNamespace(currentCatalog, Seq.empty[String])
     case UnresolvedNamespace(CatalogAndNamespace(catalog, ns)) =>
