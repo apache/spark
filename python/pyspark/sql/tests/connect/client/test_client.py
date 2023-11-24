@@ -31,7 +31,6 @@ if should_test_connect:
     from pyspark.sql.connect.client.retries import (
         Retrying,
         DefaultPolicy,
-        RetryException,
         RetriesExceeded,
     )
     from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
