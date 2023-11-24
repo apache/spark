@@ -117,6 +117,10 @@ SELECT lpad(x'57', 5, 'abc');
 SELECT rpad('abc', 5, x'57');
 SELECT rpad(x'57', 5, 'abc');
 
+-- encode
+select encode('hello', 'Windows-xxx');
+select encode(scol, ecol) from values('hello', 'Windows-xxx') as t(scol, ecol);
+
 -- decode
 select decode();
 select decode(encode('abc', 'utf-8'));

@@ -1728,6 +1728,17 @@ package object config {
       .checkValue(v => v > 0, "The max failures should be a positive value.")
       .createWithDefault(40)
 
+  private[spark] val NUM_CANCELLED_JOB_GROUPS_TO_TRACK =
+    ConfigBuilder("spark.scheduler.numCancelledJobGroupsToTrack")
+      .doc("The maximum number of tracked job groups that are cancelled with " +
+        "`cancelJobGroupAndFutureJobs`. If this maximum number is hit, the oldest job group " +
+        "will no longer be tracked that future jobs belonging to this job group will not " +
+        "be cancelled.")
+      .version("4.0.0")
+      .intConf
+      .checkValue(v => v > 0, "The size of the set should be a positive value.")
+      .createWithDefault(1000)
+
   private[spark] val UNSAFE_EXCEPTION_ON_MEMORY_LEAK =
     ConfigBuilder("spark.unsafe.exceptionOnMemoryLeak")
       .internal()
