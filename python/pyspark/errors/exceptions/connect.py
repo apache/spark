@@ -32,6 +32,7 @@ from pyspark.errors.exceptions.base import (
     StreamingQueryException as BaseStreamingQueryException,
     QueryExecutionException as BaseQueryExecutionException,
     SparkRuntimeException as BaseSparkRuntimeException,
+    SparkNoSuchElementException as BaseNoSuchElementException,
     SparkUpgradeException as BaseSparkUpgradeException,
 )
 
@@ -369,7 +370,7 @@ class SparkException(SparkConnectGrpcException):
     """ """
 
 
-class SparkNoSuchElementException(SparkConnectGrpcException, BaseSparkUpgradeException):
+class SparkNoSuchElementException(SparkConnectGrpcException, BaseNoSuchElementException):
     """
     No such element exception.
     """
