@@ -815,8 +815,8 @@ private[parquet] class ParquetRowConverter(
 
   /** Parquet converter for Variant */
   private final class ParquetVariantConverter(
-                                           parquetType: GroupType,
-                                           updater: ParentContainerUpdater)
+     parquetType: GroupType,
+     updater: ParentContainerUpdater)
     extends ParquetGroupConverter(updater) {
 
     private[this] var currentValue: Any = _
@@ -838,7 +838,7 @@ private[parquet] class ParquetRowConverter(
     override def end(): Unit = {
       updater.set(
         new VariantVal(currentValue.asInstanceOf[Array[Byte]],
-                       currentMetadata.asInstanceOf[Array[Byte]]))
+            currentMetadata.asInstanceOf[Array[Byte]]))
     }
 
     override def start(): Unit = {
