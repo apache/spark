@@ -42,9 +42,10 @@ private[sql] object EasilyFlattenable {
             case _: AttributeReference => false
             case _ => true
           }).map(_.toAttribute)).intersect(AttributeSet(child.output))
+
           if (tinkeredOrNewNamedExprs.exists(ne => ne.references.exists {
             case attr: AttributeReference => attribsReassignedInProj.contains(attr)
-            case u: UnresolvedAttribute => attribsReassignedInProj.exists(_.name == u.name)
+            case _: UnresolvedAttribute => true
           } || ne.collectFirst{
             case u: UnresolvedFunction => u
             case ex if !ex.deterministic => ex
@@ -53,24 +54,18 @@ private[sql] object EasilyFlattenable {
           }.nonEmpty)) {
             None
           } else {
-            val remappedNewProjList = newProjList.map(ne => ne match {
+            val remappedNewProjList = newProjList.map {
               case attr: AttributeReference => projList.find(
                 _.toAttribute.canonicalized == attr.canonicalized).getOrElse(attr)
-              case anyOtherExpr => (anyOtherExpr transformUp {
-                case attr: AttributeReference => projList.find(
-                  _.toAttribute.canonicalized == attr.canonicalized).map(x => x match {
-                  case al: Alias => al.child
-                  case _ => x
-                }).getOrElse(attr)
-
-                case u: UnresolvedAttribute => projList.find(
-                  _.toAttribute.name == u.name).map(x => x match {
-                  case al: Alias => al.child
-                  case _ => x
-                }).getOrElse(u)
-
-              }).asInstanceOf[NamedExpression]
-            })
+              case anyOtherExpr =>
+                (anyOtherExpr transformUp {
+                  case attr: AttributeReference => projList.find(
+                    _.toAttribute.canonicalized == attr.canonicalized).map {
+                    case al: Alias => al.child
+                    case x => x
+                  }.getOrElse(attr)
+                }).asInstanceOf[NamedExpression]
+            }
             Option(p.copy(projectList = remappedNewProjList))
           }
         } else {
