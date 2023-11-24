@@ -311,5 +311,5 @@ class SparkNoSuchElementException(CapturedException, BaseUnknownException):
 
 class UnknownException(CapturedException, BaseUnknownException):
     """
-    None of the above exceptions.
+    None of the other exceptions.
     """

@@ -192,7 +192,7 @@ class SparkUpgradeException(PySparkException):
 
 class UnknownException(PySparkException):
     """
-    None of the above exceptions.
+    None of the other exceptions.
     """
 
 
