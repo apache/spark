@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.io.UnsupportedEncodingException
 import java.text.{BreakIterator, DecimalFormat, DecimalFormatSymbols}
 import java.util.{Base64 => JBase64}
 import java.util.{HashMap, Locale, Map => JMap}
@@ -2694,17 +2695,25 @@ case class Encode(value: Expression, charset: Expression)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val toCharset = input2.asInstanceOf[UTF8String].toString
-    input1.asInstanceOf[UTF8String].toString.getBytes(toCharset)
+    try {
+      input1.asInstanceOf[UTF8String].toString.getBytes(toCharset)
+    } catch {
+      case _: UnsupportedEncodingException =>
+        throw QueryExecutionErrors.invalidCharsetError(prettyName, toCharset)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (string, charset) =>
+    nullSafeCodeGen(ctx, ev, (string, charset) => {
+      val toCharset = ctx.freshName("toCharset")
       s"""
+        String $toCharset = $charset.toString();
         try {
-          ${ev.value} = $string.toString().getBytes($charset.toString());
+          ${ev.value} = $string.toString().getBytes($toCharset);
         } catch (java.io.UnsupportedEncodingException e) {
-          org.apache.spark.unsafe.Platform.throwException(e);
-        }""")
+          throw QueryExecutionErrors.invalidCharsetError("$prettyName", $toCharset);
+        }"""
+    })
   }
 
   override protected def withNewChildrenInternal(

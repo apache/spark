@@ -378,7 +378,6 @@ class PandasCogroupedOps:
             evalType=PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         )
 
-        all_cols = self._extract_cols(self._gd1) + self._extract_cols(self._gd2)
         return DataFrame.withPlan(
             plan.CoGroupMap(
                 input=self._gd1._df._plan,
@@ -386,7 +385,6 @@ class PandasCogroupedOps:
                 other=self._gd2._df._plan,
                 other_grouping_cols=self._gd2._grouping_cols,
                 function=udf_obj,
-                cols=all_cols,
             ),
             session=self._gd1._df._session,
         )

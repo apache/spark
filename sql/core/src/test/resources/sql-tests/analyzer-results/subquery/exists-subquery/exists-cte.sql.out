@@ -133,7 +133,7 @@ WithCTE
       :     +- Filter (outer(emp_name#x) = emp_name#x)
       :        +- SubqueryAlias b
       :           +- SubqueryAlias bonus_cte
-      :              +- CTERelationRef xxxx, true, [emp_name#x, bonus_amt#x]
+      :              +- CTERelationRef xxxx, true, [emp_name#x, bonus_amt#x], false
       +- SubqueryAlias a
          +- SubqueryAlias bonus
             +- View (`BONUS`, [emp_name#x,bonus_amt#x])
@@ -189,10 +189,10 @@ WithCTE
       :        +- Join Inner, (dept_id#x = dept_id#x)
       :           :- SubqueryAlias a
       :           :  +- SubqueryAlias emp_cte
-      :           :     +- CTERelationRef xxxx, true, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+      :           :     +- CTERelationRef xxxx, true, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x], false
       :           +- SubqueryAlias b
       :              +- SubqueryAlias dept_cte
-      :                 +- CTERelationRef xxxx, true, [dept_id#x, dept_name#x, state#x]
+      :                 +- CTERelationRef xxxx, true, [dept_id#x, dept_name#x, state#x], false
       +- SubqueryAlias bonus
          +- View (`BONUS`, [emp_name#x,bonus_amt#x])
             +- Project [cast(emp_name#x as string) AS emp_name#x, cast(bonus_amt#x as double) AS bonus_amt#x]
@@ -253,10 +253,10 @@ WithCTE
          :        +- Join LeftOuter, (dept_id#x = dept_id#x)
          :           :- SubqueryAlias a
          :           :  +- SubqueryAlias emp_cte
-         :           :     +- CTERelationRef xxxx, true, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+         :           :     +- CTERelationRef xxxx, true, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x], false
          :           +- SubqueryAlias b
          :              +- SubqueryAlias dept_cte
-         :                 +- CTERelationRef xxxx, true, [dept_id#x, dept_name#x, state#x]
+         :                 +- CTERelationRef xxxx, true, [dept_id#x, dept_name#x, state#x], false
          +- Join Inner
             :- Join Inner
             :  :- SubqueryAlias b
@@ -268,7 +268,7 @@ WithCTE
             :  :                 +- LocalRelation [emp_name#x, bonus_amt#x]
             :  +- SubqueryAlias e
             :     +- SubqueryAlias emp_cte
-            :        +- CTERelationRef xxxx, true, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+            :        +- CTERelationRef xxxx, true, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x], false
             +- SubqueryAlias d
                +- SubqueryAlias dept
                   +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
@@ -322,7 +322,7 @@ WithCTE
       :     +- Filter (count(1)#xL > cast(1 as bigint))
       :        +- Aggregate [dept_id#x], [dept_id#x, max(salary#x) AS max(salary)#x, count(1) AS count(1)#xL]
       :           +- SubqueryAlias empdept
-      :              +- CTERelationRef xxxx, true, [id#x, salary#x, emp_name#x, dept_id#x]
+      :              +- CTERelationRef xxxx, true, [id#x, salary#x, emp_name#x, dept_id#x], false
       +- SubqueryAlias bonus
          +- View (`BONUS`, [emp_name#x,bonus_amt#x])
             +- Project [cast(emp_name#x as string) AS emp_name#x, cast(bonus_amt#x as double) AS bonus_amt#x]
@@ -375,7 +375,7 @@ WithCTE
       :     +- Filter (count(1)#xL < cast(1 as bigint))
       :        +- Aggregate [dept_id#x], [dept_id#x, max(salary#x) AS max(salary)#x, count(1) AS count(1)#xL]
       :           +- SubqueryAlias empdept
-      :              +- CTERelationRef xxxx, true, [id#x, salary#x, emp_name#x, dept_id#x]
+      :              +- CTERelationRef xxxx, true, [id#x, salary#x, emp_name#x, dept_id#x], false
       +- SubqueryAlias bonus
          +- View (`BONUS`, [emp_name#x,bonus_amt#x])
             +- Project [cast(emp_name#x as string) AS emp_name#x, cast(bonus_amt#x as double) AS bonus_amt#x]

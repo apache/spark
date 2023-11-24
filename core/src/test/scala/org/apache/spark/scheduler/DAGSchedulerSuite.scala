@@ -724,7 +724,12 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(numResults === 0)
     cancel(jobId)
     assert(failureReason.isDefined)
-    assert(failureReason.get.getMessage() === "Job 0 cancelled ")
+    checkError(
+      exception = failureReason.get.asInstanceOf[SparkException],
+      errorClass = "SPARK_JOB_CANCELLED",
+      sqlState = "XXKDA",
+      parameters = scala.collection.immutable.Map("jobId" -> "0", "reason" -> "")
+    )
   }
 
   test("run trivial job") {
@@ -841,7 +846,12 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val rdd = new MyRDD(sc, 1, Nil)
     val jobId = submit(rdd, Array(0))
     cancel(jobId)
-    assert(failure.getMessage === s"Job $jobId cancelled ")
+    checkError(
+      exception = failure.asInstanceOf[SparkException],
+      errorClass = "SPARK_JOB_CANCELLED",
+      sqlState = "XXKDA",
+      parameters = scala.collection.immutable.Map("jobId" -> jobId.toString, "reason" -> "")
+    )
     assert(sparkListener.failedStages === Seq(0))
     assertDataStructuresEmpty()
   }
