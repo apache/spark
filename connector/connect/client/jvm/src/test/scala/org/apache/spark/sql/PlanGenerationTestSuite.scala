@@ -3017,7 +3017,7 @@ class PlanGenerationTestSuite
     simple.groupBy(Column("id")).pivot("a").agg(functions.count(Column("b")))
   }
 
-  test("SPARK-46048: groupingSets") {
+  test("groupingSets") {
     simple
       .groupingSets(Seq(Seq(fn.col("a")), Seq.empty[Column]), fn.col("a"))
       .agg("a" -> "max", "a" -> "count")
