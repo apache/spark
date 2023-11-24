@@ -722,7 +722,6 @@ object FunctionRegistry {
 
     // misc functions
     expression[AssertTrue]("assert_true"),
-    // expression[RaiseError]("raise_error"), <-- old behaviour
     expressionBuilder("raise_error", RaiseErrorExpressionBuilder),
     expression[Crc32]("crc32"),
     expression[Md5]("md5"),

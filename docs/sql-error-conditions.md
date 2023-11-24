@@ -2301,12 +2301,6 @@ The `raise_error()` function was used to raise error class: `<errorClass>` which
 The provided parameters `<providedParms>` do not match the expected parameters.
 Please make sure to provide all expected parameters.
 
-### USER_RAISED_EXCEPTION_UNKNOWN_ERROR_CLASS
-
-SQLSTATE: P0001
-
-The `raise_error()` function was used to raise an unknown error class: `<errorClass>`
-
 ### VARIABLE_ALREADY_EXISTS
 
 [SQLSTATE: 42723](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)

@@ -120,59 +120,165 @@ Project [if ((v#x > 5)) cast(raise_error(USER_RAISED_EXCEPTION, map(errorMessage
 
 
 -- !query
-SELECT raise_error('VIEW_NOT_FOUND', Map('relationName', '`v`'))
+SELECT raise_error('error message', Map())
 -- !query analysis
-Project [raise_error(VIEW_NOT_FOUND, map(relationName, `v`), NullType) AS raise_error(VIEW_NOT_FOUND, map(relationName, `v`))#x]
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "2",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`raise_error`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "raise_error('error message', Map())"
+  } ]
+}
+
+
+-- !query
+SELECT raise_error('error message', 'some args')
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "2",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`raise_error`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 48,
+    "fragment" : "raise_error('error message', 'some args')"
+  } ]
+}
+
+
+-- !query
+SELECT raise_error()
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`raise_error`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "raise_error()"
+  } ]
+}
+
+
+-- !query
+SELECT raise_error(NULL)
+-- !query analysis
+Project [raise_error(USER_RAISED_EXCEPTION, cast(map(errorMessage, null) as map<string,string>), NullType) AS raise_error(USER_RAISED_EXCEPTION, map(errorMessage, NULL))#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT raise_error('VIEW_NOT_FOund', Map('relationName', '`v`'))
+SELECT raise_error(1)
 -- !query analysis
-Project [raise_error(VIEW_NOT_FOund, map(relationName, `v`), NullType) AS raise_error(VIEW_NOT_FOund, map(relationName, `v`))#x]
+Project [raise_error(USER_RAISED_EXCEPTION, cast(map(errorMessage, 1) as map<string,string>), NullType) AS raise_error(USER_RAISED_EXCEPTION, map(errorMessage, 1))#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT raise_error('VIEW_NOT_FOund', Map('relationNAME', '`v`'))
+SELECT raise_error(1 + 1)
 -- !query analysis
-Project [raise_error(VIEW_NOT_FOund, map(relationNAME, `v`), NullType) AS raise_error(VIEW_NOT_FOund, map(relationNAME, `v`))#x]
+Project [raise_error(USER_RAISED_EXCEPTION, cast(map(errorMessage, (1 + 1)) as map<string,string>), NullType) AS raise_error(USER_RAISED_EXCEPTION, map(errorMessage, (1 + 1)))#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT raise_error('VIEW_NOT_FOUND', Map())
+SELECT raise_error(Map())
 -- !query analysis
-Project [raise_error(VIEW_NOT_FOUND, cast(map() as map<string,string>), NullType) AS raise_error(VIEW_NOT_FOUND, map())#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"map(errorMessage, map())\"",
+    "inputType" : "\"MAP<STRING, MAP<VOID, VOID>>\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"MAP<STRING, STRING>\"",
+    "sqlExpr" : "\"raise_error(USER_RAISED_EXCEPTION, map(errorMessage, map()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "raise_error(Map())"
+  } ]
+}
 
 
 -- !query
-SELECT raise_error('VIEW_NOT_FOUND', Map('relationName', '`v`', 'totallymadeup', '5'))
+SELECT raise_error(array(1,2,3))
 -- !query analysis
-Project [raise_error(VIEW_NOT_FOUND, map(relationName, `v`, totallymadeup, 5), NullType) AS raise_error(VIEW_NOT_FOUND, map(relationName, `v`, totallymadeup, 5))#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"map(errorMessage, array(1, 2, 3))\"",
+    "inputType" : "\"MAP<STRING, ARRAY<INT>>\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"MAP<STRING, STRING>\"",
+    "sqlExpr" : "\"raise_error(USER_RAISED_EXCEPTION, map(errorMessage, array(1, 2, 3)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "raise_error(array(1,2,3))"
+  } ]
+}
 
 
 -- !query
-SELECT raise_error('ALL_PARTITION_COLUMNS_NOT_ALLOWED', Map())
+SELECT raise_error(array("error_message"))
 -- !query analysis
-Project [raise_error(ALL_PARTITION_COLUMNS_NOT_ALLOWED, cast(map() as map<string,string>), NullType) AS raise_error(ALL_PARTITION_COLUMNS_NOT_ALLOWED, map())#x]
-+- OneRowRelation
-
-
--- !query
-SELECT raise_error('ALL_PARTITION_COLUMNS_NOT_ALLOWED', NULL)
--- !query analysis
-Project [raise_error(ALL_PARTITION_COLUMNS_NOT_ALLOWED, cast(null as map<string,string>), NullType) AS raise_error(ALL_PARTITION_COLUMNS_NOT_ALLOWED, NULL)#x]
-+- OneRowRelation
-
-
--- !query
-SELECT raise_error(NULL, NULL)
--- !query analysis
-Project [raise_error(cast(null as string), cast(null as map<string,string>), NullType) AS raise_error(NULL, NULL)#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"map(errorMessage, array(error_message))\"",
+    "inputType" : "\"MAP<STRING, ARRAY<STRING>>\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"MAP<STRING, STRING>\"",
+    "sqlExpr" : "\"raise_error(USER_RAISED_EXCEPTION, map(errorMessage, array(error_message)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "raise_error(array(\"error_message\"))"
+  } ]
+}
 
 
 -- !query
