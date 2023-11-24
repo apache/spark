@@ -641,6 +641,21 @@ Project [rpad(cast(0x57 as string), 5, abc) AS rpad(X'57', 5, abc)#x]
 
 
 -- !query
+select encode('hello', 'Windows-xxx')
+-- !query analysis
+Project [encode(hello, Windows-xxx) AS encode(hello, Windows-xxx)#x]
++- OneRowRelation
+
+
+-- !query
+select encode(scol, ecol) from values('hello', 'Windows-xxx') as t(scol, ecol)
+-- !query analysis
+Project [encode(scol#x, ecol#x) AS encode(scol, ecol)#x]
++- SubqueryAlias t
+   +- LocalRelation [scol#x, ecol#x]
+
+
+-- !query
 select decode()
 -- !query analysis
 org.apache.spark.sql.AnalysisException

@@ -1824,7 +1824,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.assert_eq(cdf, df)
 
-        self.assertEquals(cobservation.get, observation.get)
+        self.assertEqual(cobservation.get, observation.get)
 
         observed_metrics = cdf.attrs["observed_metrics"]
         self.assert_eq(len(observed_metrics), 1)
@@ -3449,11 +3449,11 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         self.assertIsNotNone(self.spark._client)
         # Creates a new remote session.
         other = PySparkSession.builder.remote("sc://other.remote:114/").create()
-        self.assertNotEquals(self.spark, other)
+        self.assertNotEqual(self.spark, other)
 
         # Gets currently active session.
         same = PySparkSession.builder.remote("sc://other.remote.host:114/").getOrCreate()
-        self.assertEquals(other, same)
+        self.assertEqual(other, same)
         same.release_session_on_close = False  # avoid sending release to dummy connection
         same.stop()
 
