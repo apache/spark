@@ -2208,14 +2208,14 @@ class MapPartitions(LogicalPlan):
     ) -> None:
         super().__init__(child)
 
-        self._func = function._build_common_inline_user_defined_function(*cols)
+        self._function = function._build_common_inline_user_defined_function(*cols)
         self._is_barrier = is_barrier
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         plan = self._create_proto_relation()
         plan.map_partitions.input.CopyFrom(self._child.plan(session))
-        plan.map_partitions.func.CopyFrom(self._func.to_plan_udf(session))
+        plan.map_partitions.func.CopyFrom(self._function.to_plan_udf(session))
         plan.map_partitions.is_barrier = self._is_barrier
         return plan
 
@@ -2234,7 +2234,7 @@ class GroupMap(LogicalPlan):
 
         super().__init__(child)
         self._grouping_cols = grouping_cols
-        self._func = function._build_common_inline_user_defined_function(*cols)
+        self._function = function._build_common_inline_user_defined_function(*cols)
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
@@ -2243,7 +2243,7 @@ class GroupMap(LogicalPlan):
         plan.group_map.grouping_expressions.extend(
             [c.to_plan(session) for c in self._grouping_cols]
         )
-        plan.group_map.func.CopyFrom(self._func.to_plan_udf(session))
+        plan.group_map.func.CopyFrom(self._function.to_plan_udf(session))
         return plan
 
 
@@ -2257,7 +2257,6 @@ class CoGroupMap(LogicalPlan):
         other: Optional["LogicalPlan"],
         other_grouping_cols: Sequence[Column],
         function: "UserDefinedFunction",
-        cols: List[Column],
     ):
         assert isinstance(input_grouping_cols, list) and all(
             isinstance(c, Column) for c in input_grouping_cols
@@ -2272,7 +2271,7 @@ class CoGroupMap(LogicalPlan):
         self._other = cast(LogicalPlan, other)
         # The function takes entire DataFrame as inputs, no need to do
         # column binding (no input columns).
-        self._func = function._build_common_inline_user_defined_function()
+        self._function = function._build_common_inline_user_defined_function()
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
@@ -2285,7 +2284,7 @@ class CoGroupMap(LogicalPlan):
         plan.co_group_map.other_grouping_expressions.extend(
             [c.to_plan(session) for c in self._other_grouping_cols]
         )
-        plan.co_group_map.func.CopyFrom(self._func.to_plan_udf(session))
+        plan.co_group_map.func.CopyFrom(self._function.to_plan_udf(session))
         return plan
 
 
@@ -2307,7 +2306,7 @@ class ApplyInPandasWithState(LogicalPlan):
 
         super().__init__(child)
         self._grouping_cols = grouping_cols
-        self._func = function._build_common_inline_user_defined_function(*cols)
+        self._function = function._build_common_inline_user_defined_function(*cols)
         self._output_schema = output_schema
         self._state_schema = state_schema
         self._output_mode = output_mode
@@ -2320,7 +2319,7 @@ class ApplyInPandasWithState(LogicalPlan):
         plan.apply_in_pandas_with_state.grouping_expressions.extend(
             [c.to_plan(session) for c in self._grouping_cols]
         )
-        plan.apply_in_pandas_with_state.func.CopyFrom(self._func.to_plan_udf(session))
+        plan.apply_in_pandas_with_state.func.CopyFrom(self._function.to_plan_udf(session))
         plan.apply_in_pandas_with_state.output_schema = self._output_schema
         plan.apply_in_pandas_with_state.state_schema = self._state_schema
         plan.apply_in_pandas_with_state.output_mode = self._output_mode
