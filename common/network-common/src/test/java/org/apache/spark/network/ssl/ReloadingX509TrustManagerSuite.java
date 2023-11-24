@@ -46,7 +46,8 @@ public class ReloadingX509TrustManagerSuite {
           throws InterruptedException {
     if (tm.reloadCountValue() > count) {
       throw new IllegalStateException(
-        "Passed invalid count " + count + " to waitForReloadCount, already have " + tm.reloadCountValue());
+        "Passed invalid count " + count + " to waitForReloadCount, already have " +
+          tm.reloadCountValue());
     }
     for (int i = 0; i < attempts; i++) {
       if (tm.reloadCountValue() >= count) {
