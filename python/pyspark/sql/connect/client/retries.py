@@ -296,8 +296,6 @@ class DefaultPolicy(RetryPolicy):
         True if the exception can be retried, False otherwise.
 
         """
-        if isinstance(e, RetryException):
-            return True
 
         if not isinstance(e, grpc.RpcError):
             return False
