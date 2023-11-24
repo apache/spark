@@ -186,7 +186,7 @@ class ExtractPythonUDFsSuite extends SparkPlanTest with SharedSparkSession {
       .withColumn("d", col("c"))
     val pythonEvalNodes4 = collectBatchExec(df4.queryExecution.executedPlan)
     assert(pythonEvalNodes4.size == 1)
-    assert(pythonEvalNodes4.head.udfs.size == 2)
+    assert(pythonEvalNodes4.head.udfs.size == 1)
 
     val df5 = df.withColumns(Seq("c", "d"),
       Seq(batchedNondeterministicPythonUDF(col("a")), batchedNondeterministicPythonUDF(col("a"))))
