@@ -2493,7 +2493,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * Note: CTEs are handled in CTESubstitution.
    */
   object ResolveSubquery extends Rule[LogicalPlan] {
-    // This tag is used to mark resolved subquery to avoid resolving it repeatedly.
+    // This tag is used instead of plan.resolved because the post-hoc resolution rules
+    // should be run even if the plan is already resolved.
     private val RESOLVED_SUBQUERY_TAG = TreeNodeTag[Unit]("resolved_subquery")
 
     /**
