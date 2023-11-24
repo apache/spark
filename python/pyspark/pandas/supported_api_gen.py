@@ -142,7 +142,7 @@ def _create_supported_by_module(
         [
             m
             for m in getmembers(pd_module, isfunction)
-            if not m[0].startswith("_") and m[0] in pd_module.__dict__
+            if not m[0].startswith("_")
         ]
     )
     if not pd_funcs:
@@ -152,7 +152,7 @@ def _create_supported_by_module(
         [
             m
             for m in getmembers(ps_module, isfunction)
-            if not m[0].startswith("_") and m[0] in ps_module.__dict__
+            if not m[0].startswith("_")
         ]
     )
 
