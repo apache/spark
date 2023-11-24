@@ -205,7 +205,6 @@ Creating a PySpark :class:`DataFrame` by reading existing **parquet** format fil
     ...     spark.createDataFrame(
     ...         [{"age": None, "name": "Michael"}, {"age": 30, "name": "Andy"}]
     ...     ).write.mode("overwrite").format("parquet").save(d)
-    ...
     ...     # Read the Parquet file as a DataFrame
     ...     df = spark.read.format("parquet").load(d)
     ...     df.show()
@@ -228,7 +227,6 @@ Creating a PySpark :class:`DataFrame` by reading existing **orc** format file da
     ...     spark.createDataFrame(
     ...         [{"age": None, "name": "Michael"}, {"age": 30, "name": "Andy"}]
     ...     ).write.mode("overwrite").format("orc").save(d)
-    ...
     ...     # Read the Orc file as a DataFrame
     ...     df = spark.read.format("orc").load(d)
     ...     df.show()
