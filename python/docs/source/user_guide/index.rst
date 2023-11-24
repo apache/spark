@@ -26,7 +26,6 @@ PySpark specific user guides are available here:
    :maxdepth: 2
 
    python_packaging
-   dataframe_creation
    sql/index
    pandas_on_spark/index
 

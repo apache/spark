@@ -21,14 +21,7 @@ DataFrame Creation
 
 .. currentmodule:: pyspark.sql
 
-Basic Data Structures
----------------------
-
-PySpark provides an important class for handling data:
-
-1. :class:`DataFrame`: a distributed collection of data grouped into named columns.
-
-Creating Through `createDataFrame`
+Creating through `createDataFrame`
 ----------------------------------
 
 A PySpark :class:`DataFrame` can be created via :meth:`SparkSession.createDataFrame` typically by passing
@@ -76,6 +69,21 @@ Creating a PySpark :class:`DataFrame` with the explicit schema specified
     >>> schema = StructType([StructField("name", StringType(), True),
     ...     StructField("age", IntegerType(), True)])
     >>> df = spark.createDataFrame([('Alice', 1), ('Bob', 5)], schema)
+    >>> df.show()
+    +-----+---+
+    | name|age|
+    +-----+---+
+    |Alice|  1|
+    |  Bob|  5|
+    +-----+---+
+
+
+Creating a PySpark :class:`DataFrame` with the explicit DDL-formatted string schema specified
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    >>> df = spark.createDataFrame([('Alice', 1), ('Bob', 5)], schema = "name string, age int")
     >>> df.show()
     +-----+---+
     | name|age|
@@ -190,14 +198,22 @@ Creating a PySpark :class:`DataFrame` by reading existing **parquet** format fil
 
 .. code-block:: python
 
-    >>> df = spark.read.format("parquet").load("python/test_support/sql/people.parquet")
-    >>> df.show()
+    >>> # Write a Parquet file to the temporary directory, and read it back
+    >>> import tempfile
+    >>> with tempfile.TemporaryDirectory() as d:
+    ...     # Overwrite the path with a new Parquet file
+    ...     spark.createDataFrame(
+    ...         [{"age": None, "name": "Michael"}, {"age": 30, "name": "Andy"}]
+    ...     ).write.mode("overwrite").format("parquet").save(d)
+    ...
+    ...     # Read the Parquet file as a DataFrame
+    ...     df = spark.read.format("parquet").load(d)
+    ...     df.show()
     +----+-------+
     | age|   name|
     +----+-------+
-    |NULL|Michael|
     |  30|   Andy|
-    |  19| Justin|
+    |NULL|Michael|
     +----+-------+
 
 Creating a PySpark :class:`DataFrame` by reading existing **orc** format file data
@@ -205,29 +221,21 @@ Creating a PySpark :class:`DataFrame` by reading existing **orc** format file da
 
 .. code-block:: python
 
-    >>> df = spark.read.format("parquet").load("python/test_support/sql/people.orc")
-    >>> df.show()
+    >>> # Write a Orc file to the temporary directory, and read it back
+    >>> import tempfile
+    >>> with tempfile.TemporaryDirectory() as d:
+    ...     # Overwrite the path with a new Orc file
+    ...     spark.createDataFrame(
+    ...         [{"age": None, "name": "Michael"}, {"age": 30, "name": "Andy"}]
+    ...     ).write.mode("overwrite").format("orc").save(d)
+    ...
+    ...     # Read the Orc file as a DataFrame
+    ...     df = spark.read.format("orc").load(d)
+    ...     df.show()
     +----+-------+
     | age|   name|
     +----+-------+
-    |NULL|Michael|
     |  30|   Andy|
-    |  19| Justin|
-    +----+-------+
-
-
-Creating a PySpark :class:`DataFrame` by reading data from other databases using **JDBC**
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-    >>> df = spark.read.format("jdbc").options(url=url, dbtable=dbtable).load()
-    >>> df.show()
-    +----+-------+
-    | age|   name|
-    +----+-------+
     |NULL|Michael|
-    |  30|   Andy|
-    |  19| Justin|
     +----+-------+
 

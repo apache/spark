@@ -16,13 +16,14 @@
     under the License.
 
 
-=========
-Spark SQL
-=========
+=================
+DataFrame and SQL
+=================
 
 .. toctree::
    :maxdepth: 2
 
+   dataframe_creation
    arrow_pandas
    python_udtf
    type_conversions
