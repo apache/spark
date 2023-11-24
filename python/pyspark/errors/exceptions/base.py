@@ -190,6 +190,12 @@ class SparkUpgradeException(PySparkException):
     """
 
 
+class SparkNoSuchElementException(PySparkException):
+    """
+    Exception thrown for `java.util.NoSuchElementException`.
+    """
+
+
 class UnknownException(PySparkException):
     """
     None of the above exceptions.

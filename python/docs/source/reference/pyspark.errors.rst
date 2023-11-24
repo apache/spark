@@ -47,6 +47,7 @@ Classes
     QueryExecutionException
     SparkRuntimeException
     SparkUpgradeException
+    SparkNoSuchElementException
     StreamingQueryException
     TempTableAlreadyExistsException
     UnknownException
