@@ -75,10 +75,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     assert(largeValue * largeValue != BigInt(largeValue) * BigInt(largeValue))
     val stats =
       EventTimeStats(
-        max = largeValue,
-        min = largeValue,
-        avg = largeValue.toDouble,
-        count = largeValue - 1)
+        max = largeValue, min = largeValue, avg = largeValue.toDouble, count = largeValue - 1)
     stats.add(largeValue)
     stats.avg should be (largeValue.toDouble +- epsilon)
 

@@ -57,10 +57,8 @@ private[partial] object CountEvaluator {
     val low = dist.inverseCumulativeProbability((1 - confidence) / 2)
     val high = dist.inverseCumulativeProbability((1 + confidence) / 2)
     // Add 'sum' to each because distribution is just of remaining count, not observed
-    new BoundedDouble(sum + dist.getNumericalMean,
-      confidence,
-      (sum + low).toDouble,
-      (sum + high).toDouble)
+    new BoundedDouble(
+      sum + dist.getNumericalMean, confidence, (sum + low).toDouble, (sum + high).toDouble)
   }
 
 
