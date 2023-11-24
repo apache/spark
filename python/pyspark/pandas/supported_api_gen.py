@@ -138,23 +138,11 @@ def _create_supported_by_module(
         # module not implemented
         return {}
 
-    pd_funcs = dict(
-        [
-            m
-            for m in getmembers(pd_module, isfunction)
-            if not m[0].startswith("_")
-        ]
-    )
+    pd_funcs = dict([m for m in getmembers(pd_module, isfunction) if not m[0].startswith("_")])
     if not pd_funcs:
         return {}
 
-    ps_funcs = dict(
-        [
-            m
-            for m in getmembers(ps_module, isfunction)
-            if not m[0].startswith("_")
-        ]
-    )
+    ps_funcs = dict([m for m in getmembers(ps_module, isfunction) if not m[0].startswith("_")])
 
     return _organize_by_implementation_status(
         module_name, pd_funcs, ps_funcs, pd_module_group, ps_module_group
