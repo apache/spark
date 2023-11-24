@@ -425,7 +425,7 @@
     <dependency>
       <groupId>org.apache.iceberg</groupId>
       <artifactId>iceberg-spark-runtime-3.3_2.12</artifactId>
-      <version>1.4.2</version>
+      <version>1.4.2-affirm0</version>
       <scope>runtime</scope>
     </dependency>
     <dependency>
