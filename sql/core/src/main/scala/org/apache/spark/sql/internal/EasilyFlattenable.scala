@@ -44,9 +44,10 @@ private[sql] object EasilyFlattenable {
           }).map(_.toAttribute)).intersect(AttributeSet(child.output))
           if (tinkeredOrNewNamedExprs.exists(ne => ne.references.exists {
             case attr: AttributeReference => attribsReassignedInProj.contains(attr)
-            case u: UnresolvedAttribute => attribsReassignedInProj.exists(_.name == u.name)
+          //  case u: UnresolvedAttribute => attribsReassignedInProj.exists(_.name == u.name)
           } || ne.collectFirst{
             case u: UnresolvedFunction => u
+            case u: UnresolvedAttribute => u
             case ex if !ex.deterministic => ex
             case ex if ex.isInstanceOf[UserDefinedExpression] => ex
           }.nonEmpty)) {
@@ -61,13 +62,13 @@ private[sql] object EasilyFlattenable {
                   case al: Alias => al.child
                   case _ => x
                 }).getOrElse(attr)
-
+                /*
                 case u: UnresolvedAttribute => projList.find(
                   _.toAttribute.name == u.name).map(x => x match {
                   case al: Alias => al.child
                   case _ => x
                 }).getOrElse(u)
-
+               */
               }).asInstanceOf[NamedExpression]
             })
             Option(p.copy(projectList = remappedNewProjList))
