@@ -82,7 +82,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Returns a list of databases available across all sessions.
    */
   override def listDatabases(): Dataset[Database] = {
-    val plan = ShowNamespaces(CurrentNamespace, None)
+    val plan = ShowNamespaces(UnresolvedNamespace(Nil), None)
     val qe = sparkSession.sessionState.executePlan(plan)
     val catalog = qe.analyzed.collectFirst {
       case ShowNamespaces(r: ResolvedNamespace, _, _) => r.catalog

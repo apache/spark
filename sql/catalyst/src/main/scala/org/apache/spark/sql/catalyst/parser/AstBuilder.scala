@@ -4983,7 +4983,12 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         withIdentClause(ctx.ns, UnresolvedNamespace(_)),
         userScope, systemScope, pattern)
     } else if (legacy.isDefined) {
-      ShowFunctions(UnresolvedNamespace(legacy.get.dropRight(1)), userScope, systemScope, pattern)
+      val ns = if (legacy.get.length > 1) {
+        UnresolvedNamespace(legacy.get.dropRight(1))
+      } else {
+        CurrentNamespace
+      }
+      ShowFunctions(ns, userScope, systemScope, pattern)
     } else {
       ShowFunctions(CurrentNamespace, userScope, systemScope, pattern)
     }
