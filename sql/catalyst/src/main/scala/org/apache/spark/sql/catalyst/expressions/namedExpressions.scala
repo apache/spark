@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.{Objects, UUID}
+import java.util.{Locale, Objects, UUID}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -360,7 +360,8 @@ case class AttributeReference(
     ""
   }
 
-  override def toString: String = s"$name#${exprId.id}$typeSuffix$delaySuffix"
+  override def toString: String =
+    s"${name.toLowerCase(Locale.ROOT)}#${exprId.id}$typeSuffix$delaySuffix"
 
   // Since the expression id is not in the first constructor it is missing from the default
   // tree string.
