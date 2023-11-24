@@ -149,7 +149,7 @@ Creating a PySpark :class:`DataFrame` from a :class:`numpy.ndarray`
     +---+---+
 
 
-Creating Through `read.format(...).load(...)`
+Creating through `read.format(...).load(...)`
 ---------------------------------------------
 
 Creating a PySpark :class:`DataFrame` by reading existing **json** format file data
@@ -173,8 +173,8 @@ Creating a PySpark :class:`DataFrame` by reading existing **csv** format file da
 
 .. code-block:: python
 
-    >>> df = spark.read.format("csv").option("header", "true").
-    ...     load("python/test_support/sql/people.csv")
+    >>> df = spark.read.format("csv").option("header", "true").load(
+    ...     "python/test_support/sql/people.csv")
     >>> df.show()
     +----+-------+
     | age|   name|
