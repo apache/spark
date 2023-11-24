@@ -16,11 +16,14 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import scala.jdk.CollectionConverters._
+
 import io.fabric8.kubernetes.api.model.{EnvVarBuilder, VolumeBuilder, VolumeMountBuilder}
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.util.SparkConfWithEnv
 
 class LocalDirsFeatureStepSuite extends SparkFunSuite {
@@ -155,6 +158,57 @@ class LocalDirsFeatureStepSuite extends SparkFunSuite {
       new EnvVarBuilder()
         .withName("SPARK_LOCAL_DIRS")
         .withValue("/tmp")
+        .build())
+  }
+
+  test("SPARK-46091: respect the defined container SPARK_LOCAL_DIRS env") {
+    val volumes = Seq(
+      KubernetesVolumeSpec(
+        "spark-local-dir-test",
+        "/tmp",
+        "",
+        false,
+        KubernetesHostPathVolumeConf("/hostPath/tmp")),
+      KubernetesVolumeSpec(
+        "host-path-volume",
+        "/spark",
+        "",
+        false,
+        KubernetesHostPathVolumeConf("/hostPath/spark"))
+    )
+
+    val sparkConf = new SparkConf()
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set("spark.kubernetes.driverEnv.SPARK_LOCAL_DIRS", "/spark/1,/spark/2")
+      .set("spark.executorEnv.SPARK_LOCAL_DIRS", "/spark/1,/spark/2")
+
+    val expectedLocalDirs = s"/tmp,/spark/1,/spark/2"
+
+    val kubernetesDriverConf =
+      KubernetesTestConf.createDriverConf(sparkConf = sparkConf, volumes = volumes)
+    var driverPod = new BasicDriverFeatureStep(kubernetesDriverConf)
+      .configurePod(SparkPod.initialPod())
+    driverPod = new MountVolumesFeatureStep(kubernetesDriverConf).configurePod(driverPod)
+    driverPod = new LocalDirsFeatureStep(kubernetesDriverConf).configurePod(driverPod)
+    assert(driverPod.container.getEnv.asScala.filter(_.getName == "SPARK_LOCAL_DIRS").last ==
+      new EnvVarBuilder()
+        .withName("SPARK_LOCAL_DIRS")
+        .withValue(expectedLocalDirs)
+        .build())
+
+    val kubernetesExecutorConf =
+      KubernetesTestConf.createExecutorConf(sparkConf = sparkConf, volumes = volumes)
+    var executorPod = new BasicExecutorFeatureStep(
+      kubernetesExecutorConf,
+      new SecurityManager(sparkConf),
+      ResourceProfile.getOrCreateDefaultProfile(sparkConf))
+      .configurePod(SparkPod.initialPod())
+    executorPod = new MountVolumesFeatureStep(kubernetesDriverConf).configurePod(executorPod)
+    executorPod = new LocalDirsFeatureStep(kubernetesExecutorConf).configurePod(executorPod)
+    assert(executorPod.container.getEnv.asScala.filter(_.getName == "SPARK_LOCAL_DIRS").last ==
+      new EnvVarBuilder()
+        .withName("SPARK_LOCAL_DIRS")
+        .withValue(expectedLocalDirs)
         .build())
   }
 }

@@ -41,6 +41,15 @@ private[spark] class LocalDirsFeatureStep(
     var localDirVolumes: Seq[Volume] = Seq()
     var localDirVolumeMounts: Seq[VolumeMount] = Seq()
 
+    // respect the defined container SPARK_LOCAL_DIRS env
+    pod.container.getEnv.asScala
+      .filter(_.getName == "SPARK_LOCAL_DIRS")
+      .lastOption.foreach { containerEnv =>
+      if (containerEnv.getValue != null) {
+        localDirs ++= containerEnv.getValue.split(",")
+      }
+    }
+
     if (localDirs.isEmpty) {
       // Cannot use Utils.getConfiguredLocalDirs because that will default to the Java system
       // property - we want to instead default to mounting an emptydir volume that doesn't already
