@@ -104,7 +104,9 @@ package object sql {
       while (i < st.length && !sparkCode(st(i))) i += 1
       // Stop at the end of the first Spark code traces
       while (i < st.length && sparkCode(st(i))) i += 1
-      val origin = Origin(stackTrace = Some(st.slice(i - 1, i + SQLConf.get.extraOriginTraces)))
+      val origin = Origin(stackTrace = Some(st.slice(
+        from = i - 1,
+        until = i + SQLConf.get.stackTracesInDataFrameContext)))
       CurrentOrigin.withOrigin(origin)(f)
     }
   }
