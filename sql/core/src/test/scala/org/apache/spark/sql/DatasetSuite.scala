@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
-import java.util.regex.Pattern
 
 import scala.reflect.ClassTag
 import scala.util.Random
@@ -2690,14 +2689,11 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-45022: exact DatasetQueryContext call site") {
-    withSQLConf(
-      SQLConf.ANSI_ENABLED.key -> "true",
-      SQLConf.STACK_TRACES_IN_DATAFRAME_CONTEXT.key -> "2") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       val df = Seq(1).toDS()
-      val expectedCallSite = Pattern.quote(
-        """org.apache.spark.sql.DatasetSuite.$anonfun$new$625(DatasetSuite.scala:2701)
-          |org.scalatest.Assertions.intercept(Assertions.scala:749)""".stripMargin)
+      var callSitePattern: String = null
       val exception = intercept[AnalysisException] {
+        callSitePattern = getNextLineCallSitePattern()
         val c = col("a")
         df.select(c)
       }
@@ -2706,9 +2702,8 @@ class DatasetSuite extends QueryTest
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map("objectName" -> "`a`", "proposal" -> "`value`"),
-        context = ExpectedContext(fragment = "col", callSitePattern = expectedCallSite))
-      assert(exception.context.head.asInstanceOf[DataFrameQueryContext].stackTrace.length ==
-        1 + spark.conf.get(SQLConf.STACK_TRACES_IN_DATAFRAME_CONTEXT))
+        context = ExpectedContext(fragment = "col", callSitePattern = callSitePattern))
+      assert(exception.context.head.asInstanceOf[DataFrameQueryContext].stackTrace.length == 2)
     }
   }
 }
