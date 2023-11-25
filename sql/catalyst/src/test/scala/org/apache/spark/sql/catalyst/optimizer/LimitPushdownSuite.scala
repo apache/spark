@@ -352,4 +352,21 @@ class LimitPushdownSuite extends PlanTest {
       comparePlans(Optimize.execute(originalQuery2), originalQuery2)
     }
   }
+
+  test("SPARK-46097: Push down limit 1 though Union and Aggregate") {
+    val unionQuery = Union(
+      Union(
+        testRelation.groupBy($"a", $"b")($"a", $"b"),
+        testRelation2.groupBy($"d", $"e")($"d", $"e"),
+      ),
+      testRelation2.groupBy($"e", $"f")($"e", $"f")).limit(1)
+
+    val correctAnswer = Union(
+      Union(
+        LocalLimit(1, testRelation).select($"a", $"b"),
+        LocalLimit(1, testRelation2).select($"d", $"e")).limit(1),
+      LocalLimit(1, testRelation2).select($"e", $"f")).limit(1)
+
+    comparePlans(Optimize.execute(unionQuery.analyze), correctAnswer.analyze)
+  }
 }
