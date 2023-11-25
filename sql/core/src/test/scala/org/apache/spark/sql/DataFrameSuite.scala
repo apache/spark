@@ -3703,6 +3703,21 @@ class DataFrameSuite extends QueryTest
         parameters = Map("viewName" -> "AUTHORIZATION"))
     }
   }
+
+  test("withColumns: check no new project addition") {
+    val testDf =spark.range(1).select($"id" as "a", $"id" as "b")
+    val initNodes = testDf.queryExecution.logical.collect {
+      case l => l
+    }
+
+    val newDf = testDf.withColumns(Seq("newCol1", "newCol2"),
+      Seq(col("a") + 1, col("b") + 2))
+
+    val newNodes = newDf.queryExecution.logical.collect {
+      case l => l
+    }
+    assert(initNodes.size === newNodes.size)
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)

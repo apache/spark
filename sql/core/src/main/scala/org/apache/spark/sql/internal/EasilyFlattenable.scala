@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, AttributeSet, NamedExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 
@@ -44,13 +44,16 @@ private[sql] object EasilyFlattenable {
           }).map(_.toAttribute)).intersect(AttributeSet(child.output))
 
           if (tinkeredOrNewNamedExprs.exists(ne => ne.references.exists {
-            case attr: AttributeReference => attribsReassignedInProj.contains(attr)
-            case _: UnresolvedAttribute => true
+              case attr: AttributeReference => attribsReassignedInProj.contains(attr)
+              case u: UnresolvedAttribute => if (u.nameParts.size > 1) {
+                   true
+                 } else {
+                   attribsReassignedInProj.exists(attr => attr.name == u.name)
+                 }
           } || ne.collectFirst{
-            case u: UnresolvedFunction => u
             case ex if !ex.deterministic => ex
             case ex if ex.isInstanceOf[UserDefinedExpression] => ex
-            case u: UnresolvedAttribute => u
+            case u: UnresolvedAttribute if u.nameParts.size != 1 => u
           }.nonEmpty)) {
             None
           } else {
@@ -64,6 +67,12 @@ private[sql] object EasilyFlattenable {
                     case al: Alias => al.child
                     case x => x
                   }.getOrElse(attr)
+
+                  case u: UnresolvedAttribute => projList.find(
+                    _.toAttribute.name == u.name).map(x => x match {
+                    case al: Alias => al.child
+                    case _ => x
+                  }).getOrElse(u)
                 }).asInstanceOf[NamedExpression]
             }
             Option(p.copy(projectList = remappedNewProjList))
