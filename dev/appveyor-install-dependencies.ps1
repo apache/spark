@@ -108,7 +108,7 @@ $env:JAVA_HOME = "$tools\$zuluFileName"
 $env:PATH = "$JAVA_HOME\bin;" + $env:PATH
 
 # ========================== SBT
-$sbtVer = "1.9.3"
+$sbtVer = "1.9.7"
 Start-FileDownload "https://github.com/sbt/sbt/releases/download/v$sbtVer/sbt-$sbtVer.zip" "sbt.zip"
 
 # extract
