@@ -237,13 +237,13 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     // as it has 4 out of 7 bytes of output.
     val topLocs50 = tracker.getLocationsWithLargestOutputs(10, 0, 1, 0.5)
     assert(topLocs50.nonEmpty)
-    assert(topLocs50.get.size === 1)
+    assert(topLocs50.get.length === 1)
     assert(topLocs50.get.head === BlockManagerId("a", "hostA", 1000))
 
     // When the threshold is 20%, both hosts should be returned as preferred locations.
     val topLocs20 = tracker.getLocationsWithLargestOutputs(10, 0, 1, 0.2)
     assert(topLocs20.nonEmpty)
-    assert(topLocs20.get.size === 2)
+    assert(topLocs20.get.length === 2)
     assert(topLocs20.get.toSet ===
            Seq(BlockManagerId("a", "hostA", 1000), BlockManagerId("b", "hostB", 1000)).toSet)
 

@@ -289,7 +289,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     val statusRequestPath = s"$httpUrl/$v/submissions/status"
     val goodJson = constructSubmitRequest(masterUrl).toJson
     val badJson1 = goodJson.replaceAll("action", "fraction") // invalid JSON
-    val badJson2 = goodJson.substring(goodJson.size / 2) // malformed JSON
+    val badJson2 = goodJson.substring(goodJson.length / 2) // malformed JSON
     val notJson = "\"hello, world\""
     val (response1, code1) = sendHttpRequestWithResponse(submitRequestPath, "POST") // missing JSON
     val (response2, code2) = sendHttpRequestWithResponse(submitRequestPath, "POST", badJson1)

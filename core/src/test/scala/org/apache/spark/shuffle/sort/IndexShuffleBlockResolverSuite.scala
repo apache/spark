@@ -236,7 +236,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite {
         ShuffleMergedBlockId(shuffleId, shuffleMergeId, reduceId),
         dirs)
     assert(mergedBlockMeta.getNumChunks === 3)
-    assert(mergedBlockMeta.readChunkBitmaps().size === 3)
+    assert(mergedBlockMeta.readChunkBitmaps().length === 3)
     assert(mergedBlockMeta.readChunkBitmaps()(0).contains(1))
     assert(mergedBlockMeta.readChunkBitmaps()(0).contains(2))
     assert(!mergedBlockMeta.readChunkBitmaps()(0).contains(3))
