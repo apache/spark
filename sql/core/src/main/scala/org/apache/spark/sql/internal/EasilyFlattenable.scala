@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, AttributeSet, NamedExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 
@@ -55,6 +55,7 @@ private[sql] object EasilyFlattenable {
             case ex if ex.isInstanceOf[UserDefinedExpression] => ex
             case u: UnresolvedAttribute if u.nameParts.size != 1 => u
             case u: UnresolvedAlias => u
+            case u : UnresolvedFunction if u.nameParts.size == 1 & u.nameParts.head == "struct" => u
           }.nonEmpty)) {
             None
           } else {
