@@ -29,10 +29,6 @@ This error class has the following derived error classes:
 
 Cannot use DISTINCT with WITHIN GROUP.
 
-## FUNCTION_UNSUPPORTED
-
-Cannot use this function with WITHIN GROUP.
-
 ## PERCENTILE_PERCENTAGE_MISSING
 
 Missing percentage.

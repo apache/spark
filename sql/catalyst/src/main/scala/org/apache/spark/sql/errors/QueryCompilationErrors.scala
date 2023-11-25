@@ -640,12 +640,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def unsupportedInverseDistributionFunctionError(funcName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "INVALID_INVERSE_DISTRIBUTION_FUNCTION.FUNCTION_UNSUPPORTED",
-      messageParameters = Map("funcName" -> toSQLId(funcName)))
-  }
-
   def distinctInverseDistributionFunctionUnsupportedError(funcName: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_UNSUPPORTED",

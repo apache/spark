@@ -19,13 +19,11 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import java.util
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult, UnresolvedWithinGroup}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util._
@@ -353,36 +351,6 @@ case class Median(child: Expression)
 }
 
 /**
- * A factory used to create the inverse distribution function during the analysis phase.
- * This factory is also an aggregate function that cannot be evaluated.
- */
-trait InverseDistributionFactory extends AggregateFunction {
-
-  def createInverseDistributionFunction(sortOrder: SortOrder): AggregateFunction
-
-  final override def eval(input: InternalRow = null): Any =
-    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
-
-  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
-
-  final override def aggBufferSchema: StructType = {
-    throw SparkException.internalError(
-      "InverseDistributionFactory.aggBufferSchema should not be called")
-  }
-
-  final override def aggBufferAttributes: Seq[AttributeReference] = {
-    throw SparkException.internalError(
-      "InverseDistributionFactory.aggBufferAttributes should not be called")
-  }
-
-  final override def inputAggBufferAttributes: Seq[AttributeReference] = {
-    throw SparkException.internalError(
-      "InverseDistributionFactory.inputAggBufferAttributes should not be called")
-  }
-}
-
-/**
  * Return a percentile value based on a continuous distribution of
  * numeric or ANSI interval column at the given percentage (specified in ORDER BY clause).
  * The value of percentage must be between 0.0 and 1.0.
@@ -391,6 +359,7 @@ case class PercentileCont(left: Expression, right: Expression, reverse: Boolean 
   extends AggregateFunction
   with RuntimeReplaceableAggregate
   with ImplicitCastInputTypes
+  with SupportsOrderingWithinGroup
   with BinaryLike[Expression] {
   private lazy val percentile = new Percentile(left, right, reverse)
   override def replacement: Expression = percentile
@@ -406,28 +375,18 @@ case class PercentileCont(left: Expression, right: Expression, reverse: Boolean 
     percentile.checkInputDataTypes()
   }
 
-  override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): PercentileCont =
-    this.copy(left = newLeft, right = newRight)
-}
+  override def isFake: Boolean = left == UnresolvedWithinGroup
 
-case class PercentileContFactory(percentage: Expression) extends InverseDistributionFactory {
-  override def nullable: Boolean = percentage.nullable
-  override def dataType: DataType = percentage.dataType
-  override def children: Seq[Expression] = Seq(percentage)
-  override def prettyName: String = "percentile_cont"
-
-  override def createInverseDistributionFunction(sortOrder: SortOrder): AggregateFunction = {
-    sortOrder match {
-      case SortOrder(child, Ascending, _, _) => PercentileCont(child, percentage)
-      case SortOrder(child, Descending, _, _) => PercentileCont(child, percentage, true)
+  override def withOrderingWithinGroup(orderingWithGroup: SortOrder): AggregateFunction = {
+    orderingWithGroup match {
+      case SortOrder(child, Ascending, _, _) => this.copy(left = child)
+      case SortOrder(child, Descending, _, _) => this.copy(left = child, reverse = true)
     }
   }
 
   override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): Expression = {
-    copy(percentage = newChildren.head)
-  }
+      newLeft: Expression, newRight: Expression): PercentileCont =
+    this.copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -445,7 +404,7 @@ case class PercentileDisc(
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0,
     legacyCalculation: Boolean = SQLConf.get.getConf(SQLConf.LEGACY_PERCENTILE_DISC_CALCULATION))
-  extends PercentileBase with BinaryLike[Expression] {
+  extends PercentileBase with SupportsOrderingWithinGroup with BinaryLike[Expression] {
 
   val frequencyExpression: Expression = Literal(1L)
 
@@ -466,6 +425,15 @@ case class PercentileDisc(
     val distinct = if (isDistinct) "DISTINCT " else ""
     val direction = if (reverse) " DESC" else ""
     s"$prettyName($distinct${right.sql}) WITHIN GROUP (ORDER BY ${left.sql}$direction)"
+  }
+
+  override def isFake: Boolean = child == UnresolvedWithinGroup
+
+  override def withOrderingWithinGroup(orderingWithGroup: SortOrder): AggregateFunction = {
+    orderingWithGroup match {
+      case SortOrder(expr, Ascending, _, _) => this.copy(child = expr)
+      case SortOrder(expr, Descending, _, _) => this.copy(child = expr, reverse = true)
+    }
   }
 
   override protected def withNewChildrenInternal(
@@ -496,25 +464,6 @@ case class PercentileDisc(
   }
 }
 
-case class PercentileDiscFactory(percentage: Expression) extends InverseDistributionFactory {
-  override def nullable: Boolean = percentage.nullable
-  override def dataType: DataType = percentage.dataType
-  override def children: Seq[Expression] = Seq(percentage)
-  override def prettyName: String = "percentile_disc"
-
-  override def createInverseDistributionFunction(sortOrder: SortOrder): AggregateFunction = {
-    sortOrder match {
-      case SortOrder(child, Ascending, _, _) => PercentileDisc(child, percentage)
-      case SortOrder(child, Descending, _, _) => PercentileDisc(child, percentage, true)
-    }
-  }
-
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): Expression = {
-    copy(percentage = newChildren.head)
-  }
-}
-
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(percentage) WITHIN GROUP (ORDER BY col) - Return a percentile value based on " +
@@ -534,7 +483,7 @@ object PercentileContBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
     if (numArgs == 1) {
-      PercentileContFactory(expressions(0))
+      PercentileCont(UnresolvedWithinGroup, expressions(0))
     } else if (numArgs == 0) {
       throw QueryCompilationErrors.inverseDistributionFunctionMissingPercentageError(funcName)
     } else {
@@ -562,7 +511,7 @@ object PercentileDiscBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
     if (numArgs == 1) {
-      PercentileDiscFactory(expressions(0))
+      PercentileDisc(UnresolvedWithinGroup, expressions(0))
     } else if (numArgs == 0) {
       throw QueryCompilationErrors.inverseDistributionFunctionMissingPercentageError(funcName)
     } else {

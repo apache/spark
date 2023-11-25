@@ -1812,7 +1812,7 @@ class PlanParserSuite extends AnalysisTest {
         Seq(Literal(Decimal(0.1), DecimalType(1, 1))),
         false,
         None,
-        sortOrder = Some(SortOrder(UnresolvedAttribute("col"), Ascending)))
+        orderingWithinGroup = Some(SortOrder(UnresolvedAttribute("col"), Ascending)))
     )
 
     assertPercentilePlans(
@@ -1822,7 +1822,7 @@ class PlanParserSuite extends AnalysisTest {
         Seq(Literal(Decimal(0.1), DecimalType(1, 1))),
         false,
         None,
-        sortOrder = Some(SortOrder(UnresolvedAttribute("col"), Descending)))
+        orderingWithinGroup = Some(SortOrder(UnresolvedAttribute("col"), Descending)))
     )
 
     assertPercentilePlans(
@@ -1832,7 +1832,7 @@ class PlanParserSuite extends AnalysisTest {
         Seq(Literal(Decimal(0.1), DecimalType(1, 1))),
         false,
         Some(GreaterThan(UnresolvedAttribute("id"), Literal(10))),
-        sortOrder = Some(SortOrder(UnresolvedAttribute("col"), Ascending)))
+        orderingWithinGroup = Some(SortOrder(UnresolvedAttribute("col"), Ascending)))
     )
 
     assertPercentilePlans(
@@ -1842,7 +1842,7 @@ class PlanParserSuite extends AnalysisTest {
         Seq(Literal(Decimal(0.1), DecimalType(1, 1))),
         false,
         None,
-        sortOrder = Some(SortOrder(UnresolvedAttribute("col"), Ascending)))
+        orderingWithinGroup = Some(SortOrder(UnresolvedAttribute("col"), Ascending)))
     )
 
     assertPercentilePlans(
@@ -1852,7 +1852,7 @@ class PlanParserSuite extends AnalysisTest {
         Seq(Literal(Decimal(0.1), DecimalType(1, 1))),
         false,
         None,
-        sortOrder = Some(SortOrder(UnresolvedAttribute("col"), Descending)))
+        orderingWithinGroup = Some(SortOrder(UnresolvedAttribute("col"), Descending)))
     )
 
     assertPercentilePlans(
@@ -1862,7 +1862,7 @@ class PlanParserSuite extends AnalysisTest {
         Seq(Literal(Decimal(0.1), DecimalType(1, 1))),
         false,
         Some(GreaterThan(UnresolvedAttribute("id"), Literal(10))),
-        sortOrder = Some(SortOrder(UnresolvedAttribute("col"), Ascending)))
+        orderingWithinGroup = Some(SortOrder(UnresolvedAttribute("col"), Ascending)))
     )
   }
 

@@ -299,11 +299,11 @@ case class UnresolvedFunction(
     isDistinct: Boolean,
     filter: Option[Expression] = None,
     ignoreNulls: Boolean = false,
-    sortOrder: Option[SortOrder] = None)
+    orderingWithinGroup: Option[SortOrder] = None)
   extends Expression with Unevaluable {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  override def children: Seq[Expression] = arguments ++ filter.toSeq ++ sortOrder.toSeq
+  override def children: Seq[Expression] = arguments ++ filter.toSeq ++ orderingWithinGroup.toSeq
 
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
@@ -319,16 +319,17 @@ case class UnresolvedFunction(
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): UnresolvedFunction = {
     if (filter.isDefined) {
-      if (sortOrder.isDefined) {
+      if (orderingWithinGroup.isDefined) {
         val newSortOrder = Some(newChildren.last.asInstanceOf[SortOrder])
         val args = newChildren.dropRight(1)
-        copy(arguments = args.dropRight(1), filter = Some(args.last), sortOrder = newSortOrder)
+        copy(arguments = args.dropRight(1), filter = Some(args.last),
+          orderingWithinGroup = newSortOrder)
       } else {
         copy(arguments = newChildren.dropRight(1), filter = Some(newChildren.last))
       }
-    } else if (sortOrder.isDefined) {
+    } else if (orderingWithinGroup.isDefined) {
       val newSortOrder = Some(newChildren.last.asInstanceOf[SortOrder])
-      copy(arguments = newChildren.dropRight(1), sortOrder = newSortOrder)
+      copy(arguments = newChildren.dropRight(1), orderingWithinGroup = newSortOrder)
     } else {
       copy(arguments = newChildren)
     }
@@ -713,4 +714,14 @@ case class TempResolvedColumn(
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
   final override val nodePatterns: Seq[TreePattern] = Seq(TEMP_RESOLVED_COLUMN)
+}
+
+/**
+ * A place holder expression used in inverse distribution functions,
+ * will be replaced after analyze.
+ */
+case object UnresolvedWithinGroup extends LeafExpression with Unevaluable {
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override lazy val resolved = false
 }

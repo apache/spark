@@ -2368,19 +2368,25 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           // Note: PythonUDAF does not support these advanced clauses.
           if (agg.isInstanceOf[PythonUDAF]) checkUnsupportedAggregateClause(agg, u)
           val newAgg = agg match {
-            case factory: InverseDistributionFactory if u.sortOrder.isDefined =>
+            case idf: SupportsOrderingWithinGroup if u.orderingWithinGroup.isDefined =>
               if (u.isDistinct) {
                 throw QueryCompilationErrors.distinctInverseDistributionFunctionUnsupportedError(
-                  factory.prettyName)
+                  idf.prettyName)
               }
-              factory.createInverseDistributionFunction(u.sortOrder.get)
-            case factory: InverseDistributionFactory =>
+              if (idf.isFake) {
+                idf.withOrderingWithinGroup(u.orderingWithinGroup.get)
+              } else {
+                idf
+              }
+            case idf: SupportsOrderingWithinGroup =>
               throw QueryCompilationErrors.inverseDistributionFunctionMissingWithinGroupError(
-                factory.prettyName)
-            case other if u.sortOrder.isDefined =>
-              throw QueryCompilationErrors.unsupportedInverseDistributionFunctionError(
-                other.prettyName)
-            case _ => agg
+                idf.prettyName)
+            case _ =>
+              if (u.orderingWithinGroup.isDefined) {
+                throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                  func.prettyName, "WITHIN GROUP (ORDER BY clause)")
+              }
+              agg
           }
 
           u.filter match {
@@ -2434,6 +2440,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       if (u.ignoreNulls) {
         throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
           func.prettyName, "IGNORE NULLS")
+      }
+      if (u.orderingWithinGroup.isDefined) {
+        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+          func.prettyName, "WITHIN GROUP (ORDER BY clause)")
       }
     }
 

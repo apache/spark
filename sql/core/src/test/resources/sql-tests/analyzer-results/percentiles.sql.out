@@ -151,15 +151,59 @@ Aggregate [median(v#x) AS median(v)#x, percentile(v#x, cast(0.5 as double), 1, 0
 
 -- !query
 SELECT
+  round(v, 0) WITHIN GROUP (ORDER BY v)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1023",
+  "messageParameters" : {
+    "prettyName" : "round",
+    "syntax" : "WITHIN GROUP (ORDER BY clause)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 46,
+    "fragment" : "round(v, 0) WITHIN GROUP (ORDER BY v)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  round(v, 0) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1023",
+  "messageParameters" : {
+    "prettyName" : "round",
+    "syntax" : "WITHIN GROUP (ORDER BY clause)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 68,
+    "fragment" : "round(v, 0) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)"
+  } ]
+}
+
+
+-- !query
+SELECT
   percentile(v, 0.5) WITHIN GROUP (ORDER BY v)
 FROM aggr
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.FUNCTION_UNSUPPORTED",
-  "sqlState" : "ID001",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1023",
   "messageParameters" : {
-    "funcName" : "`percentile`"
+    "prettyName" : "percentile",
+    "syntax" : "WITHIN GROUP (ORDER BY clause)"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -167,6 +211,28 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 10,
     "stopIndex" : 53,
     "fragment" : "percentile(v, 0.5) WITHIN GROUP (ORDER BY v)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile(v, 0.5) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1023",
+  "messageParameters" : {
+    "prettyName" : "percentile",
+    "syntax" : "WITHIN GROUP (ORDER BY clause)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 75,
+    "fragment" : "percentile(v, 0.5) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)"
   } ]
 }
 
@@ -195,6 +261,28 @@ org.apache.spark.sql.AnalysisException
 
 -- !query
 SELECT
+  percentile_cont(DISTINCT 0.5) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_UNSUPPORTED",
+  "sqlState" : "ID001",
+  "messageParameters" : {
+    "funcName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 86,
+    "fragment" : "percentile_cont(DISTINCT 0.5) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)"
+  } ]
+}
+
+
+-- !query
+SELECT
   percentile_cont() WITHIN GROUP (ORDER BY v)
 FROM aggr
 -- !query analysis
@@ -217,6 +305,28 @@ org.apache.spark.sql.AnalysisException
 
 -- !query
 SELECT
+  percentile_cont() WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.PERCENTILE_PERCENTAGE_MISSING",
+  "sqlState" : "ID001",
+  "messageParameters" : {
+    "funcName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 74,
+    "fragment" : "percentile_cont() WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)"
+  } ]
+}
+
+
+-- !query
+SELECT
   percentile_cont(0.5)
 FROM aggr
 -- !query analysis
@@ -233,6 +343,28 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 10,
     "stopIndex" : 29,
     "fragment" : "percentile_cont(0.5)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont(0.5) OVER (PARTITION BY k)
+FROM aggr
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WITHIN_GROUP_MISSING",
+  "sqlState" : "ID001",
+  "messageParameters" : {
+    "funcName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 51,
+    "fragment" : "percentile_cont(0.5) OVER (PARTITION BY k)"
   } ]
 }
 
