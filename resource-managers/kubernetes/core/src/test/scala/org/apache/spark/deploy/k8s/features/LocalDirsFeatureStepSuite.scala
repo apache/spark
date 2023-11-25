@@ -190,11 +190,8 @@ class LocalDirsFeatureStepSuite extends SparkFunSuite {
       .configurePod(SparkPod.initialPod())
     driverPod = new MountVolumesFeatureStep(kubernetesDriverConf).configurePod(driverPod)
     driverPod = new LocalDirsFeatureStep(kubernetesDriverConf).configurePod(driverPod)
-    assert(driverPod.container.getEnv.asScala.filter(_.getName == "SPARK_LOCAL_DIRS").last ==
-      new EnvVarBuilder()
-        .withName("SPARK_LOCAL_DIRS")
-        .withValue(expectedLocalDirs)
-        .build())
+    assert(driverPod.container.getEnv.asScala.filter(_.getName == "SPARK_LOCAL_DIRS")
+      .last.getValue.split(",").toSet == Set("/tmp", "/spark/1", "/spark/2"))
 
     val kubernetesExecutorConf =
       KubernetesTestConf.createExecutorConf(sparkConf = sparkConf, volumes = volumes)
@@ -205,10 +202,7 @@ class LocalDirsFeatureStepSuite extends SparkFunSuite {
       .configurePod(SparkPod.initialPod())
     executorPod = new MountVolumesFeatureStep(kubernetesDriverConf).configurePod(executorPod)
     executorPod = new LocalDirsFeatureStep(kubernetesExecutorConf).configurePod(executorPod)
-    assert(executorPod.container.getEnv.asScala.filter(_.getName == "SPARK_LOCAL_DIRS").last ==
-      new EnvVarBuilder()
-        .withName("SPARK_LOCAL_DIRS")
-        .withValue(expectedLocalDirs)
-        .build())
+    assert(executorPod.container.getEnv.asScala.filter(_.getName == "SPARK_LOCAL_DIRS")
+      .last.getValue.split(",").toSet == Set("/tmp", "/spark/1", "/spark/2"))
   }
 }

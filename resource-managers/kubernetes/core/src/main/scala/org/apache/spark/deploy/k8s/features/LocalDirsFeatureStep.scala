@@ -46,7 +46,8 @@ private[spark] class LocalDirsFeatureStep(
       .filter(_.getName == "SPARK_LOCAL_DIRS")
       .lastOption.foreach { containerEnv =>
       if (containerEnv.getValue != null) {
-        localDirs ++= containerEnv.getValue.split(",")
+        localDirs = randomize(localDirs ++
+          containerEnv.getValue.split(",").filterNot(localDirs.contains))
       }
     }
 
