@@ -518,7 +518,7 @@ Spark applications supports the following configuration properties specific to s
 
 # Launching Spark Applications
 
-## Spark protocol
+## Spark Protocol
 
 The [`spark-submit` script](submitting-applications.html) provides the most straightforward way to
 submit a compiled Spark application to the cluster. For standalone clusters, Spark currently
@@ -587,7 +587,7 @@ via <code>http://[host:port]/[version]/submissions/[action]</code> where
 
 The following is a <code>curl</code> CLI command example with the `pi.py` and REST API.
 
-{% highlight bash %}
+```bash
 $ curl -XPOST http://IP:PORT/v1/submissions/create \
 --header "Content-Type:application/json;charset=UTF-8" \
 --data '{
@@ -605,11 +605,11 @@ $ curl -XPOST http://IP:PORT/v1/submissions/create \
   "action": "CreateSubmissionRequest",
   "appArgs": [ "/opt/spark/examples/src/main/python/pi.py", "10" ]
 }'
-{% endhighlight %}
+```
 
 The following is the response from the REST API for the above <code>create</code> request.
 
-{% highlight bash %}
+```bash
 {
   "action" : "CreateSubmissionResponse",
   "message" : "Driver successfully submitted as driver-20231124153531-0000",
@@ -617,7 +617,7 @@ The following is the response from the REST API for the above <code>create</code
   "submissionId" : "driver-20231124153531-0000",
   "success" : true
 }
-{% endhighlight %}
+```
 
 
 # Resource Scheduling
