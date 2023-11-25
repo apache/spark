@@ -3705,7 +3705,7 @@ class DataFrameSuite extends QueryTest
   }
 
   test("withColumns: check no new project addition") {
-    val testDf =spark.range(1).select($"id" as "a", $"id" as "b")
+    val testDf = spark.range(1).select($"id" as "a", $"id" as "b")
     val initNodes = testDf.queryExecution.logical.collect {
       case l => l
     }
