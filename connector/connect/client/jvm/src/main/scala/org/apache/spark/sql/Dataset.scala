@@ -1533,6 +1533,41 @@ class Dataset[T] private[sql] (
   }
 
   /**
+   * Create multi-dimensional aggregation for the current Dataset using the specified grouping
+   * sets, so we can run aggregation on them. See [[RelationalGroupedDataset]] for all the
+   * available aggregate functions.
+   *
+   * {{{
+   *   // Compute the average for all numeric columns group by specific grouping sets.
+   *   ds.groupingSets(Seq(Seq($"department", $"group"), Seq()), $"department", $"group").avg()
+   *
+   *   // Compute the max age and average salary, group by specific grouping sets.
+   *   ds.groupingSets(Seq($"department", $"gender"), Seq()), $"department", $"group").agg(Map(
+   *     "salary" -> "avg",
+   *     "age" -> "max"
+   *   ))
+   * }}}
+   *
+   * @group untypedrel
+   * @since 4.0.0
+   */
+  @scala.annotation.varargs
+  def groupingSets(groupingSets: Seq[Seq[Column]], cols: Column*): RelationalGroupedDataset = {
+    val groupingSetMsgs = groupingSets.map { groupingSet =>
+      val groupingSetMsg = proto.Aggregate.GroupingSets.newBuilder()
+      for (groupCol <- groupingSet) {
+        groupingSetMsg.addGroupingSet(groupCol.expr)
+      }
+      groupingSetMsg.build()
+    }
+    new RelationalGroupedDataset(
+      toDF(),
+      cols,
+      proto.Aggregate.GroupType.GROUP_TYPE_GROUPING_SETS,
+      groupingSets = Some(groupingSetMsgs))
+  }
+
+  /**
    * (Scala-specific) Aggregates on the entire Dataset without groups.
    * {{{
    *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
