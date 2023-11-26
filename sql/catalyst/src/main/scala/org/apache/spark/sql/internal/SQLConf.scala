@@ -4577,6 +4577,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val STACK_TRACES_IN_DATAFRAME_CONTEXT = buildConf("spark.sql.stackTracesInDataFrameContext")
+    .doc("The number of non-Spark stack traces in the captured DataFrame query context.")
+    .version("4.0.0")
+    .intConf
+    .checkValue(_ > 0, "The number of stack traces in the DataFrame context must be positive.")
+    .createWithDefault(1)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -5464,6 +5471,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyRaiseErrorWithoutErrorClass: Boolean =
     getConf(SQLConf.LEGACY_RAISE_ERROR_WITHOUT_ERROR_CLASS)
+
+  def stackTracesInDataFrameContext: Int = getConf(SQLConf.STACK_TRACES_IN_DATAFRAME_CONTEXT)
 
   /** ********************** SQLConf functionality methods ************ */
 
