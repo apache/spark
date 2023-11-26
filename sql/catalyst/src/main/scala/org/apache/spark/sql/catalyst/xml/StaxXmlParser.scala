@@ -702,7 +702,7 @@ class StaxXmlParser(
     sb.append(">")
   }
 
-  // TODO add note
+
   private class InnerRootTag(_fieldName: String, _index: Int, _stringBuilder: StringBuilder) {
     def fieldName: String = _fieldName
 

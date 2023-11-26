@@ -2523,7 +2523,6 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     }
 
     checkError(
-      // TODO: Exception was nested two level deep as opposed to just one like json/csv
       exception = exception.getCause.getCause.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
@@ -3128,7 +3127,6 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     }
 
     checkError(
-      // TODO: Exception was nested two level deep as opposed to just one like json/csv
       exception = exception.getCause.getCause.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
