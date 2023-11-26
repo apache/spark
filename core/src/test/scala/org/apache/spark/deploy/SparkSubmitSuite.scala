@@ -1736,7 +1736,7 @@ object SimpleApplicationTest {
         .map(x => SparkEnv.get.conf.get(config))
         .collect()
         .distinct
-      if (executorValues.size != 1) {
+      if (executorValues.length != 1) {
         throw new SparkException(s"Inconsistent values for $config: " +
           s"${executorValues.mkString("values(", ", ", ")")}")
       }
@@ -1795,7 +1795,7 @@ class TestFileSystem extends org.apache.hadoop.fs.LocalFileSystem {
 class TestSparkApplication extends SparkApplication with Matchers {
 
   override def start(args: Array[String], conf: SparkConf): Unit = {
-    assert(args.size === 1)
+    assert(args.length === 1)
     assert(args(0) === "hello")
     assert(conf.get("spark.test.hello") === "world")
     assert(sys.props.get("spark.test.hello") === None)
