@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.internal
 
+import scala.util.{Failure, Success, Try}
+
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, AttributeSet, NamedExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+
 
 private[sql] object EasilyFlattenable {
   def unapply(tuple: (LogicalPlan, Seq[NamedExpression])): Option[LogicalPlan] = {
@@ -59,25 +62,31 @@ private[sql] object EasilyFlattenable {
           }.nonEmpty)) {
             None
           } else {
-            val remappedNewProjList = newProjList.map {
-              case attr: AttributeReference => projList.find(
-                _.toAttribute.canonicalized == attr.canonicalized).getOrElse(attr)
-              case anyOtherExpr =>
-                (anyOtherExpr transformUp {
-                  case attr: AttributeReference => projList.find(
-                    _.toAttribute.canonicalized == attr.canonicalized).map {
-                    case al: Alias => al.child
-                    case x => x
-                  }.getOrElse(attr)
+            val remappedNewProjListResult = Try {
+              newProjList.map {
+                case attr: AttributeReference => projList.find(
+                  _.toAttribute.canonicalized == attr.canonicalized).getOrElse(attr)
+                case anyOtherExpr =>
+                  (anyOtherExpr transformUp {
+                    case attr: AttributeReference => projList.find(
+                      _.toAttribute.canonicalized == attr.canonicalized).map {
+                      case al: Alias => al.child
+                      case x => x
+                    }.getOrElse(attr)
 
-                  case u: UnresolvedAttribute => projList.find(
-                    _.toAttribute.name.equalsIgnoreCase(u.name)).map(x => x match {
-                    case al: Alias => al.child
-                    case _ => x
-                  }).getOrElse(u)
-                }).asInstanceOf[NamedExpression]
+                    case u: UnresolvedAttribute => projList.find(
+                      _.toAttribute.name.equalsIgnoreCase(u.name)).map(x => x match {
+                      case al: Alias => al.child
+                      case _ => x
+                    }).getOrElse(throw new UnsupportedOperationException("Not able to flatten" +
+                      s"  unresolved attribute $u"))
+                  }).asInstanceOf[NamedExpression]
+              }
             }
-            Option(p.copy(projectList = remappedNewProjList))
+            remappedNewProjListResult match {
+              case Success(remappedNewProjList) => Option(p.copy(projectList = remappedNewProjList))
+              case Failure(_) => None
+            }
           }
         } else {
           // for now None
