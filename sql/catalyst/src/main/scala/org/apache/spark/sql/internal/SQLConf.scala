@@ -5481,11 +5481,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyRaiseErrorWithoutErrorClass: Boolean =
     getConf(SQLConf.LEGACY_RAISE_ERROR_WITHOUT_ERROR_CLASS)
 
-<<<<<<< HEAD
-  def legacyJavaCharsets: Boolean = getConf(SQLConf.LEGACY_JAVA_CHARSETS)
-=======
   def stackTracesInDataFrameContext: Int = getConf(SQLConf.STACK_TRACES_IN_DATAFRAME_CONTEXT)
->>>>>>> origin/master
+
+  def legacyJavaCharsets: Boolean = getConf(SQLConf.LEGACY_JAVA_CHARSETS)
 
   /** ********************** SQLConf functionality methods ************ */
 
