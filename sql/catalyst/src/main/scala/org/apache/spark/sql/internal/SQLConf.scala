@@ -4577,6 +4577,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+    val LEGACY_JAVA_CHARSETS = buildConf("spark.sql.legacy.javaCharsets")
+      .internal()
+      .doc("When set to true, the functions like `encode()` can use charsets from JDK while " +
+        "encoding or decoding string values. If it is false, such functions support only one of " +
+        "the charsets: 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16'.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
