@@ -48,7 +48,7 @@ private[sql] object EasilyFlattenable {
               case u: UnresolvedAttribute => if (u.nameParts.size > 1) {
                    true
                  } else {
-                   attribsReassignedInProj.exists(attr => attr.name == u.name)
+                   attribsReassignedInProj.exists(attr => attr.name.equalsIgnoreCase(u.name))
                  }
           } || ne.collectFirst{
             case ex if !ex.deterministic => ex
@@ -71,7 +71,7 @@ private[sql] object EasilyFlattenable {
                   }.getOrElse(attr)
 
                   case u: UnresolvedAttribute => projList.find(
-                    _.toAttribute.name == u.name).map(x => x match {
+                    _.toAttribute.name.equalsIgnoreCase(u.name)).map(x => x match {
                     case al: Alias => al.child
                     case _ => x
                   }).getOrElse(u)
