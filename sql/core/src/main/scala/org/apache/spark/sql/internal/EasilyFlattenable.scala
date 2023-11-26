@@ -77,6 +77,9 @@ private[sql] object EasilyFlattenable {
                     case u: UnresolvedAttribute => projList.find(
                       _.toAttribute.name.equalsIgnoreCase(u.name)).map(x => x match {
                       case al: Alias => al.child
+                      case u: UnresolvedAttribute =>
+                        throw new UnsupportedOperationException("Not able to flatten" +
+                        s"  unresolved attribute $u")
                       case _ => x
                     }).getOrElse(throw new UnsupportedOperationException("Not able to flatten" +
                       s"  unresolved attribute $u"))
