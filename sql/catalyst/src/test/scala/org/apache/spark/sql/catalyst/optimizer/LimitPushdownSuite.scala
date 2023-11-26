@@ -357,8 +357,7 @@ class LimitPushdownSuite extends PlanTest {
     val unionQuery = Union(
       Union(
         testRelation.groupBy($"a", $"b")($"a", $"b"),
-        testRelation2.groupBy($"d", $"e")($"d", $"e"),
-      ),
+        testRelation2.groupBy($"d", $"e")($"d", $"e")),
       testRelation2.groupBy($"e", $"f")($"e", $"f")).limit(1)
 
     val correctAnswer = Union(
