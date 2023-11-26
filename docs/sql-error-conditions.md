@@ -643,7 +643,7 @@ Column expression `<expr>` cannot be sorted because its type `<exprType>` is not
 
 [SQLSTATE: 39000](sql-error-conditions-sqlstates.html#class-39-external-routine-invocation-exception)
 
-Failed to execute user defined function (`<functionName>`: (`<signature>`) => `<result>`).
+User defined function (`<functionName>`: (`<signature>`) => `<result>`) failed due to: `<reason>`.
 
 ### FAILED_FUNCTION_CALL
 
