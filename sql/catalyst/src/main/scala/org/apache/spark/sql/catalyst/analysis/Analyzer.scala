@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, TreeNodeTag}
+import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -2493,10 +2493,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * Note: CTEs are handled in CTESubstitution.
    */
   object ResolveSubquery extends Rule[LogicalPlan] {
-    // This tag is used instead of plan.resolved because the post-hoc resolution rules
-    // should be run even if the plan is already resolved.
-    private val RESOLVED_SUBQUERY_TAG = TreeNodeTag[Unit]("resolved_subquery")
-
     /**
      * Resolves the subquery plan that is referenced in a subquery expression, by invoking the
      * entire analyzer recursively. We set outer plan in `AnalysisContext`, so that the analyzer
@@ -2515,7 +2511,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       // If the subquery plan is fully resolved, pull the outer references and record
       // them as children of SubqueryExpression.
       if (newSubqueryPlan.resolved) {
-        newSubqueryPlan.setTagValue(RESOLVED_SUBQUERY_TAG, ())
         // Record the outer references as children of subquery expression.
         f(newSubqueryPlan, SubExprUtils.getOuterReferences(newSubqueryPlan))
       } else {
