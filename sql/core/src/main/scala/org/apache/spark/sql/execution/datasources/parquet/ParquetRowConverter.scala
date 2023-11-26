@@ -234,7 +234,7 @@ private[parquet] class ParquetRowConverter(
     // maintain a boolean array to track which fields have been explicitly assigned for each row.
     if (ResolveDefaultColumns.hasExistenceDefaultValues(catalystType)) {
       val existingValues = ResolveDefaultColumns.existenceDefaultValues(catalystType)
-      for (i <- 0 until existingValues.size) {
+      for (i <- 0 until existingValues.length) {
        bitmask(i) =
           // Assume the schema for a Parquet file-based table contains N fields. Then if we later
           // run a command "ALTER TABLE t ADD COLUMN c DEFAULT <value>" on the Parquet table, this

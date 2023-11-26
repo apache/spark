@@ -93,8 +93,8 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
       .partition(_.getName.contains(".checksum"))
     val (indexFiles, dataFiles) = files.partition(_.getName.endsWith(".index"))
 
-    logInfo(s"Found ${dataFiles.size} data files, ${indexFiles.size} index files, " +
-        s"and ${checksumFiles.size} checksum files.")
+    logInfo(s"Found ${dataFiles.length} data files, ${indexFiles.length} index files, " +
+        s"and ${checksumFiles.length} checksum files.")
 
     // Build a hashmap with checksum file name as a key
     val checksumFileMap = new mutable.HashMap[String, File]()

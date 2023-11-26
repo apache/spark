@@ -616,7 +616,7 @@ class DirectKafkaStreamSuite
       eventually(timeout(5.seconds), interval(10.milliseconds)) {
         // Assert that rate estimator values are used to determine maxMessagesPerPartition.
         // Funky "-" in message makes the complete assertion message read better.
-        assert(collectedData.asScala.exists(_.size == expectedSize),
+        assert(collectedData.asScala.exists(_.length == expectedSize),
           s" - No arrays of size $expectedSize for rate $rate found in $dataToString")
       }
     }

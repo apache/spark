@@ -330,7 +330,7 @@ abstract class CSVSuite
          """.stripMargin.replaceAll("\n", " "))
 
       assert(
-        spark.sql("SELECT makeName FROM carsTable where priceTag > 60000").collect().size === 1)
+        spark.sql("SELECT makeName FROM carsTable where priceTag > 60000").collect().length === 1)
     }
   }
 
@@ -343,7 +343,7 @@ abstract class CSVSuite
           .options(Map("header" -> "true", "mode" -> "dropmalformed"))
           .load(testFile(carsFile))
 
-        assert(cars.select("year").collect().size === 2)
+        assert(cars.select("year").collect().length === 2)
       }
     }
   }
@@ -354,9 +354,9 @@ abstract class CSVSuite
       .options(Map("header" -> "true", "inferSchema" -> "true"))
       .load(testFile(carsBlankColName))
 
-    assert(cars.select("customer").collect().size == 2)
-    assert(cars.select("_c0").collect().size == 2)
-    assert(cars.select("_c1").collect().size == 2)
+    assert(cars.select("customer").collect().length == 2)
+    assert(cars.select("_c0").collect().length == 2)
+    assert(cars.select("_c1").collect().length == 2)
   }
 
   test("test for FAILFAST parsing mode") {
@@ -405,8 +405,8 @@ abstract class CSVSuite
       .schema(StructType(List(StructField("column", StringType, false))))
       .load(testFile(emptyFile))
 
-    assert(result.collect().size === 0)
-    assert(result.schema.fieldNames.size === 1)
+    assert(result.collect().length === 0)
+    assert(result.schema.fieldNames.length === 1)
   }
 
   test("DDL test with empty file") {

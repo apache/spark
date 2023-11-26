@@ -145,7 +145,7 @@ object InternalRow {
         case PhysicalCalendarIntervalType => (input, ordinal) => input.getInterval(ordinal)
         case t: PhysicalDecimalType => (input, ordinal) =>
           input.getDecimal(ordinal, t.precision, t.scale)
-        case t: PhysicalStructType => (input, ordinal) => input.getStruct(ordinal, t.fields.size)
+        case t: PhysicalStructType => (input, ordinal) => input.getStruct(ordinal, t.fields.length)
         case _: PhysicalArrayType => (input, ordinal) => input.getArray(ordinal)
         case _: PhysicalMapType => (input, ordinal) => input.getMap(ordinal)
         case _ => (input, ordinal) => input.get(ordinal, dt)

@@ -703,7 +703,7 @@ class RowMatrix @Since("1.0.0") (
       colMags: Array[Double],
       gamma: Double): CoordinateMatrix = {
     require(gamma > 1.0, s"Oversampling should be greater than 1: $gamma")
-    require(colMags.size == this.numCols(), "Number of magnitudes didn't match column dimension")
+    require(colMags.length == this.numCols(), "Number of magnitudes didn't match column dimension")
     val sg = math.sqrt(gamma) // sqrt(gamma) used many times
 
     // Don't divide by zero for those columns with zero magnitude
@@ -718,11 +718,11 @@ class RowMatrix @Since("1.0.0") (
       val q = qBV.value
 
       val rand = new XORShiftRandom(index)
-      val scaled = new Array[Double](p.size)
+      val scaled = new Array[Double](p.length)
       iter.flatMap { row =>
         row match {
           case SparseVector(size, indices, values) =>
-            val nnz = indices.size
+            val nnz = indices.length
             var k = 0
             while (k < nnz) {
               scaled(k) = values(k) / q(indices(k))
@@ -747,7 +747,7 @@ class RowMatrix @Since("1.0.0") (
               buf
             }.flatten
           case DenseVector(values) =>
-            val n = values.size
+            val n = values.length
             var i = 0
             while (i < n) {
               scaled(i) = values(i) / q(i)

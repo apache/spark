@@ -60,7 +60,7 @@ object ComprehensiveExample {
     }
 
     // Restrict the graph to users with usernames and names
-    val subgraph = graph.subgraph(vpred = (vid, attr) => attr.size == 2)
+    val subgraph = graph.subgraph(vpred = (vid, attr) => attr.length == 2)
 
     // Compute the PageRank
     val pagerankGraph = subgraph.pageRank(0.001)

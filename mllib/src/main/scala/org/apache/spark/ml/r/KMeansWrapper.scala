@@ -43,7 +43,7 @@ private[r] class KMeansWrapper private (
 
   lazy val cluster: DataFrame = kMeansModel.summary.cluster
 
-  lazy val clusterSize: Int = kMeansModel.clusterCenters.size
+  lazy val clusterSize: Int = kMeansModel.clusterCenters.length
 
   def fitted(method: String): DataFrame = {
     if (method == "centers") {

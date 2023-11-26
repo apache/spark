@@ -133,7 +133,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     assert(kinesisRDD.kinesisCreds === BasicCredentials(
       awsAccessKeyId = dummyAWSAccessKey,
       awsSecretKey = dummyAWSSecretKey))
-    assert(nonEmptyRDD.partitions.size === blockInfos.size)
+    assert(nonEmptyRDD.partitions.length === blockInfos.size)
     nonEmptyRDD.partitions.foreach { _ shouldBe a [KinesisBackedBlockRDDPartition] }
     val partitions = nonEmptyRDD.partitions.map {
       _.asInstanceOf[KinesisBackedBlockRDDPartition] }.toSeq
@@ -416,7 +416,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
 
         // Verify the recovered sequence ranges
         val kRdd = rdd.asInstanceOf[KinesisBackedBlockRDD[Array[Byte]]]
-        assert(kRdd.arrayOfseqNumberRanges.size === arrayOfSeqNumRanges.size)
+        assert(kRdd.arrayOfseqNumberRanges.length === arrayOfSeqNumRanges.length)
         arrayOfSeqNumRanges.zip(kRdd.arrayOfseqNumberRanges).foreach { case (expected, found) =>
           assert(expected.ranges.toSeq === found.ranges.toSeq)
         }
