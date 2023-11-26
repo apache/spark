@@ -31,19 +31,19 @@ import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
  * Options for the XML data source.
  */
 class XmlOptions(
-    val parameters: CaseInsensitiveMap[String],
-    defaultTimeZoneId: String,
-    defaultColumnNameOfCorruptRecord: String,
-    rowTagRequired: Boolean)
+                  val parameters: CaseInsensitiveMap[String],
+                  defaultTimeZoneId: String,
+                  defaultColumnNameOfCorruptRecord: String,
+                  rowTagRequired: Boolean)
   extends FileSourceOptions(parameters) with Logging {
 
   import XmlOptions._
 
   def this(
-      parameters: Map[String, String] = Map.empty,
-      defaultTimeZoneId: String = SQLConf.get.sessionLocalTimeZone,
-      defaultColumnNameOfCorruptRecord: String = SQLConf.get.columnNameOfCorruptRecord,
-      rowTagRequired: Boolean = false) = {
+            parameters: Map[String, String] = Map.empty,
+            defaultTimeZoneId: String = SQLConf.get.sessionLocalTimeZone,
+            defaultColumnNameOfCorruptRecord: String = SQLConf.get.columnNameOfCorruptRecord,
+            rowTagRequired: Boolean = false) = {
     this(
       CaseInsensitiveMap(parameters),
       defaultTimeZoneId,
@@ -74,13 +74,13 @@ class XmlOptions(
   val rowTag = rowTagOpt.getOrElse(XmlOptions.DEFAULT_ROW_TAG)
   require(rowTag.nonEmpty, s"'$ROW_TAG' option should not be an empty string.")
   require(!rowTag.startsWith("<") && !rowTag.endsWith(">"),
-          s"'$ROW_TAG' should not include angle brackets")
+    s"'$ROW_TAG' should not include angle brackets")
   val rootTag = parameters.getOrElse(ROOT_TAG, XmlOptions.DEFAULT_ROOT_TAG)
   require(!rootTag.startsWith("<") && !rootTag.endsWith(">"),
-          s"'$ROOT_TAG' should not include angle brackets")
+    s"'$ROOT_TAG' should not include angle brackets")
   val declaration = parameters.getOrElse(DECLARATION, XmlOptions.DEFAULT_DECLARATION)
   require(!declaration.startsWith("<") && !declaration.endsWith(">"),
-          s"'$DECLARATION' should not include angle brackets")
+    s"'$DECLARATION' should not include angle brackets")
   val arrayElementName = parameters.getOrElse(ARRAY_ELEMENT_NAME,
     XmlOptions.DEFAULT_ARRAY_ELEMENT_NAME)
   val samplingRatio = parameters.get(SAMPLING_RATIO).map(_.toDouble).getOrElse(1.0)
@@ -105,6 +105,7 @@ class XmlOptions(
   // setting indent to "" disables indentation in the generated XML.
   // Each row will be written in a new line.
   val indent = parameters.getOrElse(INDENT, DEFAULT_INDENT)
+  val keepInnerXmlAsRaw = getBool(KEEP_INNER_XML_AS_RAW, DEFAULT_KEEP_INNER_XML_AS_RAW)
 
   /**
    * Infer columns with all valid date entries as date type (otherwise inferred as string or
@@ -182,6 +183,7 @@ object XmlOptions extends DataSourceOptions {
   val DEFAULT_NULL_VALUE: String = null
   val DEFAULT_WILDCARD_COL_NAME = "xs_any"
   val DEFAULT_INDENT = "    "
+  val DEFAULT_KEEP_INNER_XML_AS_RAW = false
   val ROW_TAG = newOption("rowTag")
   val ROOT_TAG = newOption("rootTag")
   val DECLARATION = newOption("declaration")
@@ -207,6 +209,7 @@ object XmlOptions extends DataSourceOptions {
   val TIMESTAMP_NTZ_FORMAT = newOption("timestampNTZFormat")
   val TIME_ZONE = newOption("timeZone")
   val INDENT = newOption("indent")
+  val KEEP_INNER_XML_AS_RAW = newOption("keepInnerXmlAsRaw")
   // Options with alternative
   val ENCODING = "encoding"
   val CHARSET = "charset"

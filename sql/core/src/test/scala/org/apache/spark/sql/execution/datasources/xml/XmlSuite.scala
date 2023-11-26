@@ -23,8 +23,10 @@ import java.time.Instant
 import java.util.TimeZone
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.jdk.CollectionConverters._
+import scala.util.{Failure, Success, Try}
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
@@ -32,9 +34,9 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, Dataset, Encoders, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, Dataset, Encoders, QueryTest, Row, RowFactory, SaveMode}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.xml.XmlOptions
+import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlInferSchema, XmlOptions}
 import org.apache.spark.sql.catalyst.xml.XmlOptions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.xml.TestUtils._
@@ -48,6 +50,8 @@ class XmlSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   private val resDir = "test-data/xml-resources/"
+
+  private val keepInnerXmlDir = "keep-inner-xml-as-raw/"
 
   private var tempDir: Path = _
 
@@ -179,7 +183,8 @@ class XmlSuite extends QueryTest with SharedSparkSession {
   }
 
   test("DDL test") {
-    spark.sql(s"""
+    spark.sql(
+      s"""
          |CREATE TEMPORARY VIEW carsTable1
          |USING org.apache.spark.sql.execution.datasources.xml
          |OPTIONS (rowTag "ROW", path "${getTestResourcePath(resDir + "cars.xml")}")
@@ -189,7 +194,8 @@ class XmlSuite extends QueryTest with SharedSparkSession {
   }
 
   test("DDL test with alias name") {
-    spark.sql(s"""
+    spark.sql(
+      s"""
          |CREATE TEMPORARY VIEW carsTable2
          |USING xml
          |OPTIONS (rowTag "ROW", path "${getTestResourcePath(resDir + "cars.xml")}")
@@ -303,11 +309,12 @@ class XmlSuite extends QueryTest with SharedSparkSession {
   }
 
   test("DDL test with empty file") {
-    spark.sql(s"""
-           |CREATE TEMPORARY VIEW carsTable3
-           |(year double, make string, model string, comments string, grp string)
-           |USING xml
-           |OPTIONS (rowTag "ROW", path "${getTestResourcePath(resDir + "empty.xml")}")
+    spark.sql(
+      s"""
+         |CREATE TEMPORARY VIEW carsTable3
+         |(year double, make string, model string, comments string, grp string)
+         |USING xml
+         |OPTIONS (rowTag "ROW", path "${getTestResourcePath(resDir + "empty.xml")}")
       """.stripMargin.replaceAll("\n", " "))
 
     assert(spark.sql("SELECT count(*) FROM carsTable3").collect().head(0) === 0)
@@ -315,12 +322,14 @@ class XmlSuite extends QueryTest with SharedSparkSession {
 
   test("SQL test insert overwrite") {
     val tempPath = getEmptyTempDir()
-    spark.sql(s"""
+    spark.sql(
+      s"""
          |CREATE TEMPORARY VIEW booksTableIO
          |USING xml
          |OPTIONS (path "${getTestResourcePath(resDir + "books.xml")}", rowTag "book")
       """.stripMargin.replaceAll("\n", " "))
-    spark.sql(s"""
+    spark.sql(
+      s"""
          |CREATE TEMPORARY VIEW booksTableEmpty
          |(author string, description string, genre string,
          |id string, price double, publish_date string, title string)
@@ -512,10 +521,10 @@ class XmlSuite extends QueryTest with SharedSparkSession {
 
     // Create the schema.
     val dataTypes = Array(
-        StringType, NullType, BooleanType,
-        ByteType, ShortType, IntegerType, LongType,
-        FloatType, DoubleType, DecimalType(25, 3), DecimalType(6, 5),
-        DateType, TimestampType, MapType(StringType, StringType))
+      StringType, NullType, BooleanType,
+      ByteType, ShortType, IntegerType, LongType,
+      FloatType, DoubleType, DecimalType(25, 3), DecimalType(6, 5),
+      DateType, TimestampType, MapType(StringType, StringType))
     val fields = dataTypes.zipWithIndex.map { case (dataType, index) =>
       field(s"col$index", dataType)
     }
@@ -919,8 +928,8 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     assert(messageOne === "requirement failed: 'rowTag' should not include angle brackets")
 
     val messageTwo = intercept[IllegalArgumentException] {
-            spark.read.option("rowTag", "ROW")
-              .option("rowTag", "<ROW").xml(getTestResourcePath(resDir + "cars.xml"))
+      spark.read.option("rowTag", "ROW")
+        .option("rowTag", "<ROW").xml(getTestResourcePath(resDir + "cars.xml"))
     }.getMessage
     assert(
       messageTwo === "requirement failed: 'rowTag' should not include angle brackets")
@@ -1028,8 +1037,8 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     val rowsCount = 1
 
     Seq("attributesStartWithNewLine.xml",
-        "attributesStartWithNewLineCR.xml",
-        "attributesStartWithNewLineLF.xml").foreach { file =>
+      "attributesStartWithNewLineCR.xml",
+      "attributesStartWithNewLineLF.xml").foreach { file =>
       val df = spark.read
         .option("ignoreNamespace", "true")
         .option("excludeAttribute", "false")
@@ -1534,12 +1543,13 @@ class XmlSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Test custom timestampFormat without timezone") {
-    val xml = s"""<book>
-                 |    <author>John Smith</author>
-                 |    <time>2011-12-03T10:15:30Z</time>
-                 |    <time2>12-03-2011 10:15:30 PST</time2>
-                 |    <time3>2011/12/03 06:15:30</time3>
-                 |</book>""".stripMargin
+    val xml =
+      s"""<book>
+         |    <author>John Smith</author>
+         |    <time>2011-12-03T10:15:30Z</time>
+         |    <time2>12-03-2011 10:15:30 PST</time2>
+         |    <time3>2011/12/03 06:15:30</time3>
+         |</book>""".stripMargin
     val input = spark.createDataset(Seq(xml))
     val df = spark.read
       .option("rowTag", "book")
@@ -2087,11 +2097,11 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       Row(Array(Row(5L, 6L, null), Row(7L, 8L, null)))))
 
   def testCaseSensitivity(
-      name: String,
-      writeData: Seq[Row],
-      writeSchema: StructType,
-      expectedSchema: StructType,
-      readDataCaseInsensitive: Seq[Row]): Unit = {
+                           name: String,
+                           writeData: Seq[Row],
+                           writeSchema: StructType,
+                           expectedSchema: StructType,
+                           readDataCaseInsensitive: Seq[Row]): Unit = {
     test(s"case sensitivity test - $name") {
       withTempDir { dir =>
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
@@ -2115,4 +2125,1554 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("keepInnerXmlAsRaw: xml with only rowTag(TEAMS)") {
+    val xmlLoad = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+
+      .xml(getTestResourcePath(resDir + keepInnerXmlDir + "single/testxml1.xml"))
+
+    // <TEAMS Create="03.12.2020 16:09:21" Count="300"></TEAMS>
+
+    val schema = xmlLoad.schema
+    assert(2 === schema.size)
+    val countIndexAsOption = getFieldIndexAsOption(schema, "_Count")
+    val createIndexAsOption = getFieldIndexAsOption(schema, "_Create")
+
+    assert(true === countIndexAsOption.nonEmpty)
+    assert(true === createIndexAsOption.nonEmpty)
+
+    assert(DataTypes.LongType === schema.fields(countIndexAsOption.get).dataType)
+    assert(DataTypes.StringType === schema.fields(createIndexAsOption.get).dataType)
+    val rows = xmlLoad.collect()
+    assert(1 === rows.length)
+    for (elem <- rows) {
+      assert(300 === elem.get(countIndexAsOption.get))
+      assert("03.12.2020 16:09:21" === elem.get(createIndexAsOption.get))
+    }
+  }
+
+
+  test("keepInnerXmlAsRaw: xml with rowTag(TEAMS) and inner <PERSON>tag. Nested tag's depth is 1") {
+    val xmlLoad = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+
+      .xml(getTestResourcePath(resDir + keepInnerXmlDir + "single/testxml2.xml"))
+
+    // <TEAMS Create="03.12.2020 16:09:21" Count="300">
+    //  <PERSON Name="a" Surname="b" SecId="1"></PERSON>
+    // </TEAMS>
+
+    val schema = xmlLoad.schema
+    assert(3 === schema.size)
+    val countIndexAsOption = getFieldIndexAsOption(schema, "_Count")
+    val createIndexAsOption = getFieldIndexAsOption(schema, "_Create")
+    val personIndexAsOption = getFieldIndexAsOption(schema, "PERSON")
+
+    assert(true === countIndexAsOption.nonEmpty)
+    assert(true === createIndexAsOption.nonEmpty)
+    assert(true === personIndexAsOption.nonEmpty)
+
+    assert(DataTypes.LongType === schema.fields(countIndexAsOption.get).dataType)
+    assert(DataTypes.StringType === schema.fields(createIndexAsOption.get).dataType)
+    assert(DataTypes.StringType === schema.fields(personIndexAsOption.get).dataType)
+    val rows = xmlLoad.collect()
+    assert(1 === rows.length)
+    for (elem <- rows) {
+      assert(300 === elem.get(countIndexAsOption.get))
+      assert("03.12.2020 16:09:21" === elem.get(createIndexAsOption.get))
+      assert("<PERSON Name=\"a\" Surname=\"b\" SecId=\"1\"></PERSON>"
+        === elem.get(personIndexAsOption.get))
+    }
+  }
+
+  test("keepInnerXmlAsRaw: xml with rowTag(TEAMS) and " +
+    "nested tags (<PERSON> <TASK> </TASK> </PERSON>). Nested tag's depth is 2") {
+    val xmlLoad = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+
+      .xml(getTestResourcePath(resDir + keepInnerXmlDir + "single/testxml3.xml"))
+
+    //    <TEAMS Create="03.12.2020 16:09:21" Count="300">
+    //      <PERSON Name="a" Surname="b" SecId="1">
+    //        <TASK Name="x" Duration="100"></TASK>
+    //      </PERSON>
+    //    </TEAMS>
+
+    val schema = xmlLoad.schema
+    assert(3 === schema.size)
+    val countIndexAsOption = getFieldIndexAsOption(schema, "_Count")
+
+    val createIndexAsOption = getFieldIndexAsOption(schema, "_Create")
+
+    val personIndexAsOption = getFieldIndexAsOption(schema, "PERSON")
+
+    assert(true === countIndexAsOption.nonEmpty)
+    assert(true === createIndexAsOption.nonEmpty)
+    assert(true === personIndexAsOption.nonEmpty)
+
+    assert(DataTypes.LongType === schema.fields(countIndexAsOption.get).dataType)
+    assert(DataTypes.StringType === schema.fields(createIndexAsOption.get).dataType)
+    assert(DataTypes.StringType === schema.fields(personIndexAsOption.get).dataType)
+    val rows = xmlLoad.collect()
+    assert(1 === rows.length)
+    for (elem <- rows) {
+      assert(300 === elem.get(countIndexAsOption.get))
+      assert("03.12.2020 16:09:21" === elem.get(createIndexAsOption.get))
+      assert("<PERSON Name=\"a\" Surname=\"b\" SecId=\"1\"><TASK Name=\"x\" " +
+        "Duration=\"100\"></TASK></PERSON>"
+        === elem.get(personIndexAsOption.get))
+    }
+  }
+
+  test("keepInnerXmlAsRaw: xml with rowTag(TEAMS) and " +
+    "nested tags (<PERSON> <TASK> </TASK> </PERSON>). Nested tag's depth is 4") {
+    val xmlLoad = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+
+      .xml(getTestResourcePath(resDir + keepInnerXmlDir + "single/testxml5.xml"))
+
+    //    <TEAMS Create="03.12.2020 16:09:21" Count="300">
+    //      <PERSON Name="a" Surname="b" SecId="1">
+    //        <TASK Name="x" Duration="100">
+    //          <COMMENT Desc="TEST">
+    //            <DESC Assignee="x"></DESC>
+    //          </COMMENT>
+    //        </TASK>
+    //      </PERSON>
+    //    </TEAMS>
+
+    val schema = xmlLoad.schema
+    assert(3 === schema.size)
+    val countIndexAsOption = getFieldIndexAsOption(schema, "_Count")
+
+
+    val createIndexAsOption = getFieldIndexAsOption(schema, "_Create")
+
+    val personIndexAsOption = getFieldIndexAsOption(schema, "PERSON")
+
+    assert(true === countIndexAsOption.nonEmpty)
+    assert(true === createIndexAsOption.nonEmpty)
+    assert(true === personIndexAsOption.nonEmpty)
+
+    assert(DataTypes.LongType === schema.fields(countIndexAsOption.get).dataType)
+    assert(DataTypes.StringType === schema.fields(createIndexAsOption.get).dataType)
+    assert(DataTypes.StringType === schema.fields(personIndexAsOption.get).dataType)
+    val rows = xmlLoad.collect()
+    assert(1 === rows.length)
+    for (elem <- rows) {
+      assert(300 === elem.get(countIndexAsOption.get))
+      assert("03.12.2020 16:09:21" === elem.get(createIndexAsOption.get))
+      assert("<PERSON Name=\"a\" Surname=\"b\" SecId=\"1\"> " +
+        "<TASK Name=\"x\" Duration=\"100\"> " +
+        "<COMMENT Desc=\"TEST\"> " +
+        "<DESC Assignee=\"x\"></DESC> " +
+        "</COMMENT> " +
+        "</TASK> </PERSON>"
+        !== elem.get(personIndexAsOption.get))
+      assert("<PERSON Name=\"a\" Surname=\"b\" SecId=\"1\"><TASK Name=\"x\" Duration=\"100\">" +
+        "<COMMENT Desc=\"TEST\">" +
+        "<DESC Assignee=\"x\">" +
+        "</DESC>" +
+        "</COMMENT>" +
+        "</TASK>" +
+        "</PERSON>"
+        === elem.get(personIndexAsOption.get))
+    }
+  }
+
+  test("keepInnerXmlAsRaw: xml with rowTag(TEAMS) and " +
+    "nested tags with the same name as the rowTag " +
+    "(<TASK> <TASK> </TASK> </TASK>). Nested tag's depth is 2") {
+    val xmlLoad = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+
+      .xml(getTestResourcePath(resDir + keepInnerXmlDir + "single/testxml8.xml"))
+
+    //    <TEAMS Create="03.12.2020 16:09:21" Count="300">
+    //      <TEAMS Duration="400">
+    //        <TEAMS Name="400"></TEAMS>
+    //      </TEAMS>
+    //    </TEAMS>
+
+    val schema = xmlLoad.schema
+    assert(3 === schema.size)
+
+    val countIndexAsOption = getFieldIndexAsOption(schema, "_Count")
+    val createIndexAsOption = getFieldIndexAsOption(schema, "_Create")
+    val teamsIndexAsOption = getFieldIndexAsOption(schema, "TEAMS")
+
+    assert(true === countIndexAsOption.nonEmpty)
+    assert(true === createIndexAsOption.nonEmpty)
+    assert(true === teamsIndexAsOption.nonEmpty)
+
+    assert(DataTypes.LongType === schema.fields(countIndexAsOption.get).dataType)
+    assert(DataTypes.StringType === schema.fields(createIndexAsOption.get).dataType)
+    assert(DataTypes.StringType === schema.fields(teamsIndexAsOption.get).dataType)
+    val rows = xmlLoad.collect()
+    assert(1 === rows.length)
+    for (elem <- rows) {
+      assert(300 === elem.get(countIndexAsOption.get))
+      assert("03.12.2020 16:09:21" === elem.get(createIndexAsOption.get))
+      assert("<TEAMS Duration=\"400\"><TEAMS Name=\"400\"></TEAMS></TEAMS>"
+        === elem.get(teamsIndexAsOption.get))
+    }
+  }
+
+  test("keepInnerXmlAsRaw: xml with rowTag(TEAMS) and " +
+    "multiple nested tags (<PERSON> <TASK> </TASK> </PERSON> " +
+    "<MANAGER> <SECTION> </SECTION> </MANAGER> " +
+    "<DIRECTOR> <Directorate> </Directorate></DIRECTOR>). Nested tag's depth is 2") {
+    val xmlLoad = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+
+      .xml(getTestResourcePath(resDir + keepInnerXmlDir + "single/testxml9.xml"))
+
+    //    <TEAMS Create="03.12.2020 16:09:21" Count="300">
+    //      <PERSON Name="a" Surname="b" SecId="1">
+    //        <TASK Name="x" Duration="100"></TASK>
+    //      </PERSON>
+    //      <MANAGER Name="a" Surname="b" SecId="1" priority="high">
+    //        <SECTION Name="a" ID="5"></SECTION>
+    //      </MANAGER>
+    //      <DIRECTOR Name="a" Surname="b" SecId="1" priority="high">
+    //        <Directorate Name="b" count="12"></Directorate>
+    //      </DIRECTOR>
+    //    </TEAMS>
+
+    val schema = xmlLoad.schema
+    assert(5 === schema.size)
+
+    val countIndexAsOption = getFieldIndexAsOption(schema, "_Count")
+    val createIndexAsOption = getFieldIndexAsOption(schema, "_Create")
+    val personIndexAsOption = getFieldIndexAsOption(schema, "PERSON")
+    val managerIndexAsOption = getFieldIndexAsOption(schema, "MANAGER")
+    val directorIndexAsOption = getFieldIndexAsOption(schema, "DIRECTOR")
+
+    assert(true === countIndexAsOption.nonEmpty)
+    assert(true === createIndexAsOption.nonEmpty)
+    assert(true === personIndexAsOption.nonEmpty)
+    assert(true === managerIndexAsOption.nonEmpty)
+    assert(true === directorIndexAsOption.nonEmpty)
+
+    assert(DataTypes.LongType === schema.fields(countIndexAsOption.get).dataType)
+    assert(DataTypes.StringType === schema.fields(createIndexAsOption.get).dataType)
+    assert(DataTypes.StringType === schema.fields(personIndexAsOption.get).dataType)
+    assert(DataTypes.StringType === schema.fields(managerIndexAsOption.get).dataType)
+    assert(DataTypes.StringType === schema.fields(directorIndexAsOption.get).dataType)
+    val rows = xmlLoad.collect()
+    assert(1 === rows.length)
+    for (elem <- rows) {
+      assert(300 === elem.get(countIndexAsOption.get))
+      assert("03.12.2020 16:09:21" === elem.get(createIndexAsOption.get))
+      assert("<PERSON Name=\"a\" Surname=\"b\" SecId=\"1\"><TASK Name=\"x\" " +
+        "Duration=\"100\"></TASK></PERSON>"
+        === elem.get(personIndexAsOption.get))
+      assert("<MANAGER Name=\"a\" Surname=\"b\" SecId=\"1\" priority=\"high\">" +
+        "<SECTION Name=\"a\" ID=\"5\"></SECTION></MANAGER>"
+        === elem.get(managerIndexAsOption.get))
+      assert("<DIRECTOR Name=\"a\" Surname=\"b\" SecId=\"1\" priority=\"high\">" +
+        "<Directorate Name=\"b\" count=\"12\"></Directorate></DIRECTOR>"
+        === elem.get(directorIndexAsOption.get))
+    }
+  }
+
+  test("keepInnerXmlAsRaw: xml with rowTag(TEAMS) and " +
+    "multiple nested tags with same name (<PERSON> <PERSON> <PERSON> " +
+    "</PERSON></PERSON> </PERSON> ). Nested tag's depth is 3") {
+    val xmlLoad = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+
+      .xml(getTestResourcePath(resDir + keepInnerXmlDir + "single/testxml10.xml"))
+
+    //    <TEAMS Create="03.12.2020 16:09:21" Count="300">
+    //      <PERSON Duration="400">
+    //        <PERSON Name="a">
+    //          <PERSON Surname="b"></PERSON>
+    //        </PERSON>
+    //      </PERSON>
+    //    </TEAMS>
+
+    val schema = xmlLoad.schema
+    assert(3 === schema.size)
+    val countIndexAsOption = getFieldIndexAsOption(schema, "_Count")
+    val createIndexAsOption = getFieldIndexAsOption(schema, "_Create")
+    val personIndexAsOption = getFieldIndexAsOption(schema, "PERSON")
+
+    assert(true === countIndexAsOption.nonEmpty)
+    assert(true === createIndexAsOption.nonEmpty)
+    assert(true === personIndexAsOption.nonEmpty)
+
+    assert(DataTypes.LongType === schema.fields(countIndexAsOption.get).dataType)
+    assert(DataTypes.StringType === schema.fields(createIndexAsOption.get).dataType)
+    assert(DataTypes.StringType === schema.fields(personIndexAsOption.get).dataType)
+    val rows = xmlLoad.collect()
+    assert(1 === rows.length)
+    for (elem <- rows) {
+      assert(300 === elem.get(countIndexAsOption.get))
+      assert("03.12.2020 16:09:21" === elem.get(createIndexAsOption.get))
+      assert("<PERSON Duration=\"400\"><PERSON Name=\"a\"><PERSON Surname=\"b\"></PERSON>" +
+        "</PERSON></PERSON>"
+        === elem.get(personIndexAsOption.get))
+    }
+  }
+
+  test("keepInnerXmlAsRaw: Comparing the results of " +
+    "keepInnerXmlAsRaw option and xml source load. Nested tag's depth is 3") {
+
+
+    //      <TEAMS Create="03.12.2020 16:09:21" Count="300">
+    //        <PERSON Name="a" Surname="b" SecId="1">
+    //          <TASK Name="x" Duration="100">
+    //            <COMMENT Desc="TEST"></COMMENT>
+    //          </TASK>
+    //        </PERSON>
+    //      </TEAMS>
+
+
+    val filePath = getTestResourcePath(resDir + keepInnerXmlDir + "single/testxml11.xml")
+    // 0th depth
+    val xmlWithKeepInnerXmlAsRaw = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+      .xml(filePath)
+
+    val xmlTeams = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    val persisted = xmlWithKeepInnerXmlAsRaw.persist()
+
+    compareOriginalAndRawXmlDataFrames(xmlTeams, persisted, List("PERSON"))
+
+
+    // 1st depth
+    val personFromRaw = persisted.select("PERSON")
+    val personDF = applyMapFunctionToDataFrame(personFromRaw, "PERSON")
+    val xmlPerson = spark.read
+      .option("rowTag", "PERSON")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+    compareOriginalAndRawXmlDataFrames(xmlPerson, personDF, List("TASK"))
+
+    // 2nd depth
+    val taskFromRaw = personDF.select("TASK")
+    val xmlTask = spark.read
+      .option("rowTag", "TASK")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    val taskDF = applyMapFunctionToDataFrame(taskFromRaw, "TASK")
+
+    compareOriginalAndRawXmlDataFrames(xmlTask, taskDF, List("COMMENT"))
+
+    // 3rd depth
+
+    val commentFromRaw = taskDF.select("COMMENT")
+    val commentDF = applyMapFunctionToDataFrame(commentFromRaw, "COMMENT")
+    val xmlComment = spark.read
+      .option("rowTag", "COMMENT")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlComment, commentDF, List.empty[String])
+    persisted.unpersist()
+  }
+
+  test("keepInnerXmlAsRaw: Test for malformed xml. Missing end tag") {
+    val exception = intercept[SparkException] {
+      val xmlLoad = spark.read
+        .option("rowTag", "TEAMS")
+        .option("inferSchema", "true")
+        .option("nullValue", "")
+        .option("keepInnerXmlAsRaw", "true")
+        .option("mode", FailFastMode.name)
+        .xml(getTestResourcePath(resDir + keepInnerXmlDir + "single/malformedxml1.xml")).count()
+    }
+
+    checkError(
+      // TODO: Exception was nested two level deep as opposed to just one like json/csv
+      exception = exception.getCause.getCause.asInstanceOf[SparkException],
+      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "badRecord" -> "[empty row]",
+        "failFastMode" -> FailFastMode.name)
+    )
+  }
+
+  test("keepInnerXmlAsRaw: xml with rowTag(TEAMS) and inner Array<Person> Tag") {
+    val xmlLoad = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+
+      .xml(getTestResourcePath(resDir + keepInnerXmlDir + "array/testarrayxml1.xml"))
+
+    val schema = xmlLoad.schema
+
+    assert(3 === schema.size)
+
+    val countIndexAsOption = getFieldIndexAsOption(schema, "_Count")
+    val createIndexAsOption = getFieldIndexAsOption(schema, "_Create")
+    val personIndexAsOption = getFieldIndexAsOption(schema, "PERSON")
+
+    assert(true === countIndexAsOption.nonEmpty)
+    assert(true === createIndexAsOption.nonEmpty)
+    assert(true === personIndexAsOption.nonEmpty)
+
+    assert(DataTypes.LongType === schema.fields(countIndexAsOption.get).dataType)
+    assert(DataTypes.StringType === schema.fields(createIndexAsOption.get).dataType)
+    assert(true === schema.fields(personIndexAsOption.get).dataType.isInstanceOf[ArrayType])
+    assert(DataTypes.StringType === schema.fields(personIndexAsOption.get)
+      .dataType.asInstanceOf[ArrayType].elementType)
+    val rows = xmlLoad.collect()
+    assert(1 === rows.length)
+    for (elem <- rows) {
+      assert(300 === elem.get(countIndexAsOption.get))
+      assert("03.12.2020 16:09:21" === elem.get(createIndexAsOption.get))
+      val arr = elem.get(personIndexAsOption.get).asInstanceOf[mutable.ArraySeq[String]]
+      assert(arr.contains("<PERSON Name=\"a\" Surname=\"b\" SecId=\"1\"></PERSON>"))
+      assert(arr.contains("<PERSON Name=\"c\" Surname=\"d\" SecId=\"2\"></PERSON>"))
+    }
+
+    val personDF = xmlLoad.select("PERSON")
+    var structType = new StructType
+    structType = structType.add(StructField("PERSON", DataTypes.StringType, true, Metadata.empty))
+
+    val encoder = Encoders.row(structType)
+    val personFlatMap = personDF.flatMap(row => row.getSeq[AnyRef](0)
+      .map(r => {
+        RowFactory.create(r)
+      }))(encoder)
+
+    val options = new XmlOptions(Map("nullValue" -> "", "inferSchema" -> "true"
+      , "rowTag" -> "PERSON", "keepInnerXmlAsRaw" -> "true"))
+
+    val xmlInferSchema = new XmlInferSchema(options, spark.sessionState.conf.caseSensitiveAnalysis)
+    val inferredSchema = xmlInferSchema.infer(personFlatMap.as(Encoders.STRING).rdd)
+
+
+    val personFinal = applyMapFunctionToDataFrame(personFlatMap, "PERSON")
+
+    assert(3 === personFinal.schema.size)
+
+    val nameIndexAsOption = getFieldIndexAsOption(inferredSchema, "_Name")
+    val secIdIndexAsOption = getFieldIndexAsOption(inferredSchema, "_SecId")
+    val surnameIndexAsOption = getFieldIndexAsOption(inferredSchema, "_Surname")
+
+    assert(true === nameIndexAsOption.nonEmpty)
+    assert(true === secIdIndexAsOption.nonEmpty)
+    assert(true === surnameIndexAsOption.nonEmpty)
+
+    assert(DataTypes.LongType === inferredSchema.fields(secIdIndexAsOption.get).dataType)
+    assert(DataTypes.StringType === inferredSchema.fields(nameIndexAsOption.get).dataType)
+    assert(DataTypes.StringType === inferredSchema.fields(surnameIndexAsOption.get).dataType)
+
+    val sortedDf = personFinal.orderBy(("_SecId")).collect()
+    assert(2 === sortedDf.length)
+
+    val range = Range(0, 2)
+    assert(1 === range.max)
+    assert(0 === range.min)
+    for (i <- range) {
+      val row = sortedDf(i)
+      if (i == 0) {
+
+        assert(1 === row.get(secIdIndexAsOption.get))
+        assert("a" === row.get(nameIndexAsOption.get))
+        assert("b" === row.get(surnameIndexAsOption.get))
+      } else {
+        assert(2 === row.get(secIdIndexAsOption.get))
+        assert("c" === row.get(nameIndexAsOption.get))
+        assert("d" === row.get(surnameIndexAsOption.get))
+      }
+    }
+  }
+
+  test("keepInnerXmlAsRaw: xml with rowTag(TEAMS) and inner Array<Person> Tag. Compare " +
+    "with keepInnerXmlAsRaw option is false") {
+    val filePath = getTestResourcePath(resDir + keepInnerXmlDir + "array/testarrayxml1.xml")
+    val xmlRaw = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+
+      .xml(filePath)
+
+    val xmlTeam = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    // 0th depth
+    compareOriginalAndRawXmlDataFrames(xmlTeam, xmlRaw, List("PERSON"))
+
+    // 1st depth
+
+    val personDFAsRaw = xmlRaw.select("PERSON")
+    val personFlatMap = applyFlatMapToDataFrame(personDFAsRaw, "PERSON")
+
+    val xmlPerson = spark.read
+      .option("rowTag", "PERSON")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+    val personDF = applyMapFunctionToDataFrame(personFlatMap, "PERSON")
+
+    compareOriginalAndRawXmlDataFrames(xmlPerson, personDF, List.empty[String])
+  }
+
+  test("keepInnerXmlAsRaw: Comparing the results of keepInnerXmlAsRaw option " +
+    "and xml source load. " +
+    "Nested tag's depth is 2. Array<Person> on 1st depth") {
+    val filePath = getTestResourcePath(resDir + keepInnerXmlDir + "array/testarrayxml2.xml")
+    val xmlRaw = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+
+      .xml(filePath)
+
+    // 1st depth
+    val personDFAsRaw = xmlRaw.select("PERSON")
+    val personFlatMap = applyFlatMapToDataFrame(personDFAsRaw, "PERSON")
+    val personDF = applyMapFunctionToDataFrame(personFlatMap, "PERSON")
+
+    val xmlPerson = spark.read
+      .option("rowTag", "PERSON")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlPerson, personDF, List("TASK"))
+
+    // 2nd depth
+    val taskDFAsRaw = personDF.select("TASK")
+    val taskDF = applyMapFunctionToDataFrame(taskDFAsRaw, "TASK")
+    val xmlTask = spark.read
+      .option("rowTag", "TASK")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlTask, taskDF, List.empty[String])
+
+  }
+
+  test("keepInnerXmlAsRaw: Comparing the results of keepInnerXmlAsRaw option " +
+    "and xml source load. " +
+    "Nested tag's depth is 2. Array<TASK> on 2nd depth") {
+    val filePath = getTestResourcePath(resDir + keepInnerXmlDir + "array/testarrayxml3.xml")
+    val xmlRaw = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+
+      .xml(filePath)
+
+    // 1st depth
+    val personDFAsRaw = xmlRaw.select("PERSON")
+    val personDF = applyMapFunctionToDataFrame(personDFAsRaw, "PERSON")
+
+    val xmlPerson = spark.read
+      .option("rowTag", "PERSON")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlPerson, personDF, List("TASK"))
+
+    // 2nd depth
+    val taskDFAsRaw = personDF.select("TASK")
+    val taskFlatMap = applyFlatMapToDataFrame(taskDFAsRaw, "TASK")
+    val taskDF = applyMapFunctionToDataFrame(taskFlatMap, "TASK")
+    val xmlTask = spark.read
+      .option("rowTag", "TASK")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlTask, taskDF, List.empty[String])
+  }
+
+  test("keepInnerXmlAsRaw: Comparing the results of keepInnerXmlAsRaw option " +
+    "and xml source load. " +
+    "Nested tag's depth is 0. Array<TEAMS> on 0th depth") {
+    val filePath = getTestResourcePath(resDir + keepInnerXmlDir + "array/testarrayxml4.xml")
+    val xmlRaw = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+
+      .xml(filePath)
+    // 0th depth
+
+    val xmlPerson = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlPerson, xmlRaw, List.empty[String])
+  }
+
+  test("keepInnerXmlAsRaw: Comparing the results of keepInnerXmlAsRaw option " +
+    "and xml source load. " +
+    "Nested tag's depth is 4. Array<PERSON> on 1st depth") {
+    val filePath = getTestResourcePath(resDir + keepInnerXmlDir + "array/testarrayxml6.xml")
+    val xmlRaw = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+
+      .xml(filePath)
+    // 0th depth
+
+    val xmlTeams = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlTeams, xmlRaw, List("PERSON"))
+
+    // 1st depth
+
+    val personRaw = xmlRaw.select("PERSON")
+    val personFlatMap = applyFlatMapToDataFrame(personRaw, "PERSON")
+    val personDF = applyMapFunctionToDataFrame(personFlatMap, "PERSON")
+    val xmlPerson = spark.read
+      .option("rowTag", "PERSON")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlPerson, personDF,
+      List("TASK"))
+
+    // 2nd depth
+
+    val taskRaw = personDF.select("TASK")
+    val taskDF = applyMapFunctionToDataFrame(taskRaw, "TASK")
+    val xmlTask = spark.read
+      .option("rowTag", "TASK")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlTask, taskDF,
+      List("COMMENT"))
+
+    // 3rd depth
+
+    val commentRaw = taskDF.select("COMMENT")
+    val commentDF = applyMapFunctionToDataFrame(commentRaw, "COMMENT")
+    val xmlComment = spark.read
+      .option("rowTag", "COMMENT")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlComment, commentDF,
+      List("DESC"))
+
+    // 4th depth
+
+    val descRaw = commentDF.select("DESC")
+    val descDF = applyMapFunctionToDataFrame(descRaw, "DESC")
+
+    val xmlDesc = spark.read
+      .option("rowTag", "DESC")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+    compareOriginalAndRawXmlDataFrames(xmlDesc, descDF,
+      List.empty[String])
+  }
+
+
+  test("keepInnerXmlAsRaw: Comparing the results of keepInnerXmlAsRaw option " +
+    "and xml source load. " +
+    "Nested tag's depth is 2. Array<PERSON> on 1st depth and Array<TASK> on 2nd depth ") {
+    val filePath = getTestResourcePath(resDir + keepInnerXmlDir + "array/testarrayxml7.xml")
+    val xmlRaw = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+
+      .xml(filePath)
+    // 0th depth
+
+    val xmlTeams = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlTeams, xmlRaw, List("PERSON"))
+
+    // 1st depth
+
+    val personRaw = xmlRaw.select("PERSON")
+    val personFlatMap = applyFlatMapToDataFrame(personRaw, "PERSON")
+    val personDF = applyMapFunctionToDataFrame(personFlatMap, "PERSON")
+    val xmlPerson = spark.read
+      .option("rowTag", "PERSON")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlPerson, personDF,
+      List("TASK"))
+
+    // 2nd depth
+
+    val taskRaw = personDF.select("TASK")
+    val taskFlatMap = applyFlatMapToDataFrame(taskRaw, "TASK")
+    val taskDF = applyMapFunctionToDataFrame(taskFlatMap, "TASK")
+    val xmlTask = spark.read
+      .option("rowTag", "TASK")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlTask, taskDF,
+      List.empty[String])
+  }
+
+
+  test("keepInnerXmlAsRaw: Comparing the results of keepInnerXmlAsRaw option " +
+    "and xml source load. " +
+    "Nested tag's depth is 2 with different tags. " +
+    "Array<PERSON>, Array<MANAGER>, Array<DIRECTOR> " +
+    "and company tags on 1st depth ") {
+    val filePath = getTestResourcePath(resDir + keepInnerXmlDir + "array/testarrayxml8.xml")
+    val xmlRaw = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+
+      .xml(filePath)
+    // 0th depth
+
+    val xmlTeams = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlTeams, xmlRaw,
+      List("PERSON", "MANAGER", "DIRECTOR", "company"))
+
+    // 1st depth
+
+    val personRaw = xmlRaw.select("PERSON")
+    val personFlatMap = applyFlatMapToDataFrame(personRaw, "PERSON")
+    val personDF = applyMapFunctionToDataFrame(personFlatMap, "PERSON")
+    val xmlPerson = spark.read
+      .option("rowTag", "PERSON")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlPerson, personDF,
+      List("TASK"))
+
+    // 2nd depth
+
+    val taskRaw = personDF.select("TASK")
+    val taskDF = applyMapFunctionToDataFrame(taskRaw, "TASK")
+    val xmlTask = spark.read
+      .option("rowTag", "TASK")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlTask, taskDF,
+      List.empty[String])
+
+
+    // 1st depth
+    val managerRaw = xmlRaw.select("MANAGER")
+    val managerFlatMap = applyFlatMapToDataFrame(managerRaw, "MANAGER")
+    val managerDF = applyMapFunctionToDataFrame(managerFlatMap, "MANAGER")
+
+    val xmlManager = spark.read
+      .option("rowTag", "MANAGER")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlManager, managerDF, List("SECTION"))
+
+    // 2nd depth
+
+    val sectionRaw = managerDF.select("SECTION")
+    val sectionDF = applyMapFunctionToDataFrame(sectionRaw, "SECTION")
+
+    val xmlSection = spark.read
+      .option("rowTag", "SECTION")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlSection, sectionDF, List.empty[String])
+
+    // 1st depth
+
+    val directorRaw = xmlRaw.select("DIRECTOR")
+    val directorFlatMap = applyFlatMapToDataFrame(directorRaw, "DIRECTOR")
+    val directorDF = applyMapFunctionToDataFrame(directorFlatMap, "DIRECTOR")
+
+    val xmlDirector = spark.read
+      .option("rowTag", "DIRECTOR")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlDirector, directorDF, List("Directorate"))
+
+    // 2nd depth
+
+    val directorateRaw = directorDF.select("Directorate")
+    val directorateDF = applyMapFunctionToDataFrame(directorateRaw, "Directorate")
+
+    val xmlDirectorate = spark.read
+      .option("rowTag", "Directorate")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlDirectorate, directorateDF, List.empty[String])
+
+    // 1st depth
+
+    val companyRaw = xmlRaw.select("company")
+    val companyDF = applyMapFunctionToDataFrame(companyRaw, "company")
+
+
+    val xmlCompany = spark.read
+      .option("rowTag", "company")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlCompany, companyDF, List.empty[String])
+
+  }
+
+
+  test("keepInnerXmlAsRaw: Comparing the results of keepInnerXmlAsRaw option " +
+    "and xml source load. " +
+    "Nested tag's depth is 4. " +
+    "Array<PERSON> on 1st depth, Array<TASK> on 2nd, <Comment> on 3rd depth " +
+    "and Array<desc> on 4th depth") {
+    val filePath = getTestResourcePath(resDir + keepInnerXmlDir + "array/testarrayxml9.xml")
+    val xmlRaw = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+
+      .xml(filePath)
+    // 0th depth
+
+    val xmlTeams = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlTeams, xmlRaw,
+      List("PERSON"))
+
+    // 1st depth
+
+    val personRaw = xmlRaw.select("PERSON")
+    val personFlatMap = applyFlatMapToDataFrame(personRaw, "PERSON")
+    val personDF = applyMapFunctionToDataFrame(personFlatMap, "PERSON")
+    val xmlPerson = spark.read
+      .option("rowTag", "PERSON")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlPerson, personDF,
+      List("TASK"))
+
+    // 2nd depth
+
+    val taskRaw = personDF.select("TASK")
+    val taskFlatMap = applyFlatMapToDataFrame(taskRaw, "TASK")
+    val taskDF = applyMapFunctionToDataFrame(taskFlatMap, "TASK")
+    val xmlTask = spark.read
+      .option("rowTag", "TASK")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlTask, taskDF,
+      List("Comment"))
+
+
+    // 3st depth
+    val commentRaw = taskDF.select("Comment")
+    val commentDF = applyMapFunctionToDataFrame(commentRaw, "Comment")
+
+    val xmlComment = spark.read
+      .option("rowTag", "Comment")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlComment, commentDF, List("desc"))
+
+    // 4th depth
+
+    val descRaw = commentDF.select("desc")
+    val descFlatMap = applyFlatMapToDataFrame(descRaw, "desc")
+    val descDF = applyMapFunctionToDataFrame(descFlatMap, "desc")
+
+    val xmlDesc = spark.read
+      .option("rowTag", "desc")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlDesc, descDF, List.empty[String])
+
+  }
+
+
+  test("keepInnerXmlAsRaw: Malformed xml. Nested tag's depth is 4. " +
+    "Array<PERSON> on 1st depth, Array<TASK> on 2nd, <Comment> on 3rd depth " +
+    "and Array<desc> on 4th depth") {
+    val filePath = getTestResourcePath(resDir + keepInnerXmlDir + "array/testarrayxml10.xml")
+    val exception = intercept[SparkException] {
+      val xmlLoad = spark.read
+        .option("rowTag", "TEAMS")
+        .option("inferSchema", "true")
+        .option("nullValue", "")
+        .option("keepInnerXmlAsRaw", "true")
+        .option("mode", FailFastMode.name)
+        .xml(filePath).count()
+    }
+
+    checkError(
+      // TODO: Exception was nested two level deep as opposed to just one like json/csv
+      exception = exception.getCause.getCause.asInstanceOf[SparkException],
+      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "badRecord" -> "[empty row]",
+        "failFastMode" -> FailFastMode.name)
+    )
+
+  }
+
+  test("keepInnerXmlAsRaw: Xml with depth 2. End element as /> " +
+    "without element name's itself on depth 2.") {
+    //    <?xml version="1.0" encoding="UTF-8"?>
+    //      <TEAMS Create="03.12.2020 16:09:21" Count="300">
+    //        <PERSON Name="a" Surname="b" SecId="1">
+    //          <TASK Name="x" Duration="100"/>
+    //        </PERSON>
+    //      </TEAMS>
+
+    val filePath = getTestResourcePath(resDir + keepInnerXmlDir + "single/testxml12.xml")
+    val xmlRaw = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+
+      .xml(filePath)
+
+    val xmlTeams = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    // 0th depth
+    compareOriginalAndRawXmlDataFrames(xmlTeams, xmlRaw, List("PERSON"))
+
+    val personRaw = xmlRaw.select("PERSON")
+    val personDF = applyMapFunctionToDataFrame(personRaw, "PERSON")
+
+    val xmlPerson = spark.read
+      .option("rowTag", "PERSON")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    // 1st depth
+    compareOriginalAndRawXmlDataFrames(xmlPerson, personDF, List("TASK"));
+
+    val taskRaw = personDF.select("TASK")
+    val taskDF = applyMapFunctionToDataFrame(taskRaw, "TASK")
+
+    val xmlTask = spark.read
+      .option("rowTag", "TASK")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlTask, taskDF, List.empty[String])
+
+  }
+
+
+  test("keepInnerXmlAsRaw: Xml with depth 2. End element as /> " +
+    "without element name's itself on depth 2. Array<TASK> on 2nd depth") {
+    //    <?xml version="1.0" encoding="UTF-8"?>
+    //      <TEAMS Create="03.12.2020 16:09:21" Count="300">
+    //        <PERSON Name="a" Surname="b" SecId="1">
+    //          <TASK Name="x" Duration="100" />
+    //          <TASK Name="x1" Duration="1001"/>
+    //        </PERSON>
+    //      </TEAMS>
+
+
+    val filePath = getTestResourcePath(resDir + keepInnerXmlDir + "array/testarrayxml11.xml")
+    val xmlRaw = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+
+      .xml(filePath)
+
+    val xmlTeams = spark.read
+      .option("rowTag", "TEAMS")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    // 0th depth
+    compareOriginalAndRawXmlDataFrames(xmlTeams, xmlRaw, List("PERSON"))
+
+    val personRaw = xmlRaw.select("PERSON")
+    val personDF = applyMapFunctionToDataFrame(personRaw, "PERSON")
+
+    val xmlPerson = spark.read
+      .option("rowTag", "PERSON")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    // 1st depth
+    compareOriginalAndRawXmlDataFrames(xmlPerson, personDF, List("TASK"));
+
+    val taskRaw = personDF.select("TASK")
+    val taskFlatMap = applyFlatMapToDataFrame(taskRaw, "TASK")
+    val taskDF = applyMapFunctionToDataFrame(taskFlatMap, "TASK")
+
+    val xmlTask = spark.read
+      .option("rowTag", "TASK")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlTask, taskDF, List.empty[String])
+    // TEST
+
+  }
+
+
+  test("keepInnerXmlAsRaw: Xml with depth 2. End element as /> " +
+    "without element name's itself on depth 2. Array<TASK> on 2nd depth. " +
+    "Read directly <Task> Element") {
+
+    val filePath = getTestResourcePath(resDir + keepInnerXmlDir + "array/testarrayxml11.xml")
+    val taskRaw = spark.read
+      .option("rowTag", "TASK")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+      .xml(filePath)
+
+    val xmlTask = spark.read
+      .option("rowTag", "TASK")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlTask, taskRaw, List.empty[String])
+
+
+    val personRaw = spark.read
+      .option("rowTag", "PERSON")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+      .xml(filePath)
+
+    val xmlPerson = spark.read
+      .option("rowTag", "PERSON")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlPerson, personRaw, List("TASK"))
+
+    val taskRaw1 = personRaw.select("TASK")
+
+    val taskFlatMap = applyFlatMapToDataFrame(taskRaw1, "TASK")
+    val taskDF = applyMapFunctionToDataFrame(taskFlatMap, "TASK")
+
+    compareOriginalAndRawXmlDataFrames(xmlTask, taskDF, List.empty[String])
+  }
+
+
+  test("keepInnerXmlAsRaw: Xml with max depth 2. Nested tags with same name") {
+    //    <?xml version="1.0" encoding="UTF-8"?>
+    //      <tag1 Create="03.12.2020 16:09:21" Count="300">
+    //        <tag2 Name="a" Surname="b" SecId="1">
+    //          <tag3 Name="x" Duration="100">
+    //            <tag2 field="test" field2="test2" field3="500"></tag2>
+    //          </tag3>
+    //          <tag3 Name="x1" Duration="1001">
+    //            <tag3 innerf="a" innerf1="b" innerf2="2000">
+    //              <tag2 col4="a" col5="b"></tag2>
+    //            </tag3>
+    //          </tag3>
+    //          <tag3 col1="x" col2="y" col3="5"></tag3>
+    //          <tag3 Name="x2" Duration="1002">
+    //            <tag2 field="test1" field2="test21" field3="5001"></tag2>
+    //          </tag3>
+    //        </tag2>
+    //      </tag1>
+    val filePath = getTestResourcePath(resDir + keepInnerXmlDir + "/xmlsample1.xml")
+
+    val tag1Raw = spark.read
+      .option("rowTag", "tag1")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+      .xml(filePath)
+
+    val xmlTag1 = spark.read
+      .option("rowTag", "tag1")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlTag1, tag1Raw, List("tag2"))
+
+    val tag2Raw = tag1Raw.select("tag2")
+    val tag2DF = applyMapFunctionToDataFrame(tag2Raw, "tag2")
+    val xmlTag2 = spark.read
+      .option("rowTag", "tag2")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+    compareOriginalAndRawXmlDataFrames(xmlTag2, tag2DF, List("tag3"))
+
+    val tag3Raw = tag2DF.select("tag3")
+    val tag3FlatMap = applyFlatMapToDataFrame(tag3Raw, "tag3")
+    val tag3DF = applyMapFunctionToDataFrame(tag3FlatMap, "tag3")
+
+    val xmlTag3 = spark.read
+      .option("rowTag", "tag3")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlTag3, tag3DF, List("tag2", "tag3"))
+
+    val tag3Persisted = tag3DF.persist()
+    val innerTag2Raw = tag3Persisted.select("tag2").filter("tag2 is not null")
+    val innerTag3Raw = tag3Persisted.select("tag3").filter("tag3 is not null")
+    val innerTag2DF = applyMapFunctionToDataFrame(innerTag2Raw, "tag2")
+
+    val innerTag2DFSchema = innerTag2DF.schema
+
+
+    assert(3 === innerTag2DFSchema.size)
+    val fieldIndexAsOption = getFieldIndexAsOption(innerTag2DFSchema, "_field")
+    val field2IndexAsOption = getFieldIndexAsOption(innerTag2DFSchema, "_field2")
+    val field3IndexAsOption = getFieldIndexAsOption(innerTag2DFSchema, "_field3")
+
+    assert(true === fieldIndexAsOption.nonEmpty)
+    assert(true === field2IndexAsOption.nonEmpty)
+    assert(true === field3IndexAsOption.nonEmpty)
+
+    assert(DataTypes.StringType === innerTag2DFSchema.fields(fieldIndexAsOption.get).dataType)
+    assert(DataTypes.StringType === innerTag2DFSchema.fields(field2IndexAsOption.get).dataType)
+    assert(DataTypes.LongType === innerTag2DFSchema.fields(field3IndexAsOption.get).dataType)
+
+    val innerTag2Rows = innerTag2DF.collect()
+    assert(2 === innerTag2Rows.length)
+    for (row <- innerTag2Rows) {
+      if ("test".equals(row.get(fieldIndexAsOption.get))) {
+        assert("test2" === row.get(field2IndexAsOption.get))
+        assert(500 === row.get(field3IndexAsOption.get))
+      } else if ("test1".equals(row.get(fieldIndexAsOption.get))) {
+        assert("test21" === row.get(field2IndexAsOption.get))
+        assert(5001 === row.get(field3IndexAsOption.get))
+      } else {
+        assert(false, "Failed")
+      }
+    }
+    val innerTag3DF = applyMapFunctionToDataFrame(innerTag3Raw, "tag3")
+    val innerTag3DFSchema = innerTag3DF.schema
+    assert(3 === innerTag2DFSchema.size)
+
+    val innerFieldIndexAsOption = getFieldIndexAsOption(innerTag3DFSchema, "_innerf")
+    val innerField1IndexAsOption = getFieldIndexAsOption(innerTag3DFSchema, "_innerf1")
+    val innerField2IndexAsOption = getFieldIndexAsOption(innerTag3DFSchema, "_innerf2")
+
+    assert(true === innerFieldIndexAsOption.nonEmpty)
+    assert(true === innerField1IndexAsOption.nonEmpty)
+    assert(true === innerField2IndexAsOption.nonEmpty)
+
+    assert(DataTypes.StringType === innerTag3DFSchema.fields(innerFieldIndexAsOption.get).dataType)
+    assert(DataTypes.StringType === innerTag3DFSchema.fields(innerField1IndexAsOption.get).dataType)
+    assert(DataTypes.LongType === innerTag3DFSchema.fields(innerField2IndexAsOption.get).dataType)
+    val innerTag3Persisted = innerTag3DF.persist()
+    val innerTag3Rows = innerTag3DF.collect()
+    assert(1 === innerTag3Rows.length)
+    for (row <- innerTag3Rows) {
+      assert("a" === row.get(innerFieldIndexAsOption.get))
+      assert("b" === row.get(innerField1IndexAsOption.get))
+      assert(2000 === row.get(innerField2IndexAsOption.get))
+    }
+
+    val finalTag2Raw = innerTag3Persisted.select("tag2")
+
+    val finalTag2DF = applyMapFunctionToDataFrame(finalTag2Raw, "tag2")
+
+    val finalTag2DFSchema = finalTag2DF.schema
+
+    assert(2 === finalTag2DFSchema.fields.length)
+    val col4Index = finalTag2DFSchema.fieldIndex("_col4")
+    val col5Index = finalTag2DFSchema.fieldIndex("_col5")
+
+    val finalTag2Rows = finalTag2DF.collect()
+    assert(1 === finalTag2Rows.length)
+
+    for (row <- finalTag2Rows) {
+      assert("a" === row.get(col4Index))
+      assert("b" === row.get(col5Index))
+    }
+
+    tag3Persisted.unpersist()
+    innerTag3Persisted.unpersist()
+  }
+
+  test("keepInnerXmlAsRaw: Xml with max depth 3. Array<tag5> on depth2. Select some tags.") {
+    //    <?xml version="1.0" encoding="UTF-8"?>
+    //      <tag1 field1="a" field2="1">
+    //        <tag2 field3="b" field4="2">
+    //          <tag3 field5="c" field6="3"></tag3>
+    //          <tag4 field7="d" field8="4"></tag4>
+    //          <tag5 field9="e" field10="5">
+    //            <tag6 field11="f" field12="6"></tag6>
+    //            <tag7 field13="g" field14="7"></tag7>
+    //            <tag8 field15="h" field16="8"></tag8>
+    //          </tag5>
+    //          <tag5 field9="e1" field10="51">
+    //            <tag6 field11="f1" field12="61"></tag6>
+    //            <tag7 field13="g1" field14="71"></tag7>
+    //            <tag8 field15="h1" field16="81"></tag8>
+    //          </tag5>
+    //        </tag2>
+    //        <tag9 field17="i" field18="9" field19="1a"></tag9>
+    //        <tag10 field20="99"></tag10>
+    //      </tag1>
+
+    val filePath = getTestResourcePath(resDir + keepInnerXmlDir + "/xmlsample2.xml")
+
+    val tag1Raw = spark.read
+      .option("rowTag", "tag1")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "true")
+      .xml(filePath)
+
+    val xmlTag1 = spark.read
+      .option("rowTag", "tag1")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlTag1, tag1Raw, List("tag2", "tag9", "tag10"))
+
+    val tag1RawProjection = tag1Raw.select("tag2")
+
+
+    val tag2Raw = applyMapFunctionToDataFrame(tag1RawProjection, "tag2")
+
+    val tag2RawProjection = tag2Raw.select("_field3", "_field4", "tag4", "tag5")
+
+    val xmlTag2 = spark.read
+      .option("rowTag", "tag2")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath).select("_field3", "_field4", "tag4", "tag5")
+
+    compareOriginalAndRawXmlDataFrames(xmlTag2, tag2RawProjection, List("tag4", "tag5"))
+
+    val tag5Raw = tag2RawProjection.select("tag5")
+    val tag5FlatMap = applyFlatMapToDataFrame(tag5Raw, "tag5")
+    val tag5DF = applyMapFunctionToDataFrame(tag5FlatMap, "tag5")
+
+    val xmlTag5 = spark.read
+      .option("rowTag", "tag5")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath).select("_field10", "tag6", "tag8")
+
+    val tag5DFProjection = tag5DF.select("_field10", "tag6", "tag8")
+
+    compareOriginalAndRawXmlDataFrames(xmlTag5, tag5DFProjection, List("tag6", "tag8"))
+
+    val tag8Raw = tag5DFProjection.select("tag8")
+
+    val tag8DF = applyMapFunctionToDataFrame(tag8Raw, "tag8")
+
+    val xmlTag8 = spark.read
+      .option("rowTag", "tag8")
+      .option("inferSchema", "true")
+      .option("nullValue", "")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(filePath)
+
+    compareOriginalAndRawXmlDataFrames(xmlTag8, tag8DF, List.empty[String])
+  }
+
+  test("keepInnerXmlAsRaw: Test root-level-value xml files") {
+    val rowsetRaw = spark.read
+      .option("rowTag", "ROWSET")
+      .option("keepInnerXmlAsRaw", "true")
+      .xml(getTestResourcePath(resDir + "root-level-value.xml"))
+
+    val rows = rowsetRaw.collect()
+    var count = 0
+    for (elem <- rows) {
+      for (innerElem <- elem.get(0).asInstanceOf[mutable.ArraySeq[String]]) {
+        if (count == 0) {
+          assert(innerElem === "<ROW>value1</ROW>")
+        } else if (count == 1) {
+          assert(innerElem === "<ROW attr=\"attr1\">value2</ROW>")
+        } else if (count == 2) {
+          assert(innerElem === "<ROW>\n        value3\n        </ROW>")
+        } else {
+          assert(false, "Failed")
+        }
+        count += 1
+      }
+    }
+
+    val rowXmlDf = spark.read
+      .option("rowTag", "ROW")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(getTestResourcePath(resDir + "root-level-value.xml"))
+
+    val rowFlatMap = applyFlatMapToDataFrame(rowsetRaw, "ROW")
+    val rowDf = applyMapFunctionToDataFrame(rowFlatMap, "ROW")
+    compareOriginalAndRawXmlDataFrames(rowXmlDf, rowDf, List.empty[String])
+
+
+    val rowNoneXmlDf = spark.read
+      .option("rowTag", "ROW")
+      .option("keepInnerXmlAsRaw", "false")
+      .xml(getTestResourcePath(resDir + "root-level-value-none.xml"))
+
+    val rowsetNoneRaw = spark.read
+      .option("rowTag", "ROWSET")
+      .option("keepInnerXmlAsRaw", "true")
+      .xml(getTestResourcePath(resDir + "root-level-value-none.xml"))
+    val rowNoneFlatMap = applyFlatMapToDataFrame(rowsetNoneRaw, "ROW")
+    val rowNoneDF = applyMapFunctionToDataFrame(rowNoneFlatMap, "ROW")
+    compareOriginalAndRawXmlDataFrames(rowNoneXmlDf, rowNoneDF, List("tag"))
+    val tagFromXml = rowNoneXmlDf.select("tag").filter("tag is not null")
+    var tagDFRaw = applyMapFunctionToDataFrame(rowNoneDF
+      .select("tag").filter("tag is not null"), "tag")
+    tagDFRaw = tagDFRaw.withColumnRenamed("_VALUE", "tag")
+    compareOriginalAndRawXmlDataFrames(tagFromXml, tagDFRaw, List.empty[String])
+  }
+
+  private def getSpecificSchemaTupleToCheckCorrectnessOfKeepInnerXmlAsRawOption
+  (originalDf: Dataset[Row], xmlAsRawDf: Dataset[Row],
+   colNameToBeExcludedList: List[String]): (Dataset[Row], Dataset[Row]) = {
+    // originalDf means keepInnerXmlAsRaw option is not active
+    val xmlSchemaSf = originalDf.schema.fields
+      .filter(sf => !colNameToBeExcludedList.contains(sf.name))
+    val rawXmlSchemaSf = xmlAsRawDf.schema.fields
+      .filter(sf => !colNameToBeExcludedList.contains(sf.name))
+    val xmlCols = xmlSchemaSf.map(sf => col(sf.name))
+    val rawXmlCols = rawXmlSchemaSf.map(sf => col(sf.name))
+    (originalDf.select(xmlCols.toIndexedSeq: _*), xmlAsRawDf.select(rawXmlCols.toIndexedSeq: _*))
+  }
+
+  private def compareOriginalAndRawXmlDataFrames
+  (originalDf: Dataset[Row], rawXml: Dataset[Row], colNameToBeExcludedList: List[String]): Unit = {
+    val dataFrameTuple =
+      getSpecificSchemaTupleToCheckCorrectnessOfKeepInnerXmlAsRawOption(originalDf
+        , rawXml, colNameToBeExcludedList)
+
+    // tuple._1 --> originalDF
+    // tuple._2 --> xmlAsRawDF
+    // Comparing schemas and apply except operator.
+    // originalDf means keepInnerXmlAsRaw option is not active
+    assert(dataFrameTuple._1.schema === dataFrameTuple._2.schema)
+    assert(dataFrameTuple._1.count() !== 0)
+    val exceptResult = dataFrameTuple._1.except(dataFrameTuple._2)
+    assert(exceptResult.collect().isEmpty)
+  }
+
+  private def applyMapFunctionToDataFrame(dataFrame: Dataset[Row], rowTag: String): Dataset[Row] = {
+    val map = Map("nullValue" -> "", "inferSchema" -> "true"
+      , "rowTag" -> rowTag, "keepInnerXmlAsRaw" -> "true")
+    val options = XmlOptions(map)
+
+    val xmlInferSchema = new XmlInferSchema(options
+      , spark.sessionState.conf.caseSensitiveAnalysis)
+    val inferredSchema = xmlInferSchema.infer(dataFrame.as(Encoders.STRING).rdd)
+
+
+    val encoder = Encoders.row(inferredSchema)
+    // I couldn't find a good solution to convert InternalRow to Row.
+    //      expressionEncoder.resolveAndBind().createDeserializer().apply(internalRow)
+    //      Above code line didn't work as expected. It threw the following exception:
+    //      "MapObjects applied with a null function.
+    //      Likely cause is failure to resolve an array expression or encoder."
+    //    val expressionEncoder = encoder.asInstanceOf[ExpressionEncoder[Row]]
+
+    val index = dataFrame.schema.fieldIndex(rowTag)
+    val staxXmlParser = new StaxXmlParser(inferredSchema, options)
+
+    dataFrame.map(row => {
+      val finalSeq: Seq[Any] = staxXmlParser
+        .parseColumn(row.getString(index), inferredSchema).toSeq(inferredSchema)
+      val arrayBuffer = new ArrayBuffer[Any]
+      for (elem <- finalSeq) {
+
+        elem match {
+          case data: GenericArrayData =>
+            val arrayBufferInner = new ArrayBuffer[Any]
+            for (elem <- data.array) {
+              if (elem.isInstanceOf[UTF8String]) {
+                arrayBufferInner.addOne(elem.toString)
+              } else {
+                arrayBufferInner.addOne(elem)
+              }
+            }
+            arrayBuffer.addOne(arrayBufferInner)
+          case data: UTF8String =>
+            arrayBuffer.addOne(data.toString)
+          case _ =>
+            arrayBuffer.addOne(elem)
+        }
+      }
+      Row.fromSeq(arrayBuffer.toSeq)
+    })(encoder)
+  }
+
+  private def applyFlatMapToDataFrame(dfAsRaw: Dataset[Row], rowTag: String): Dataset[Row] = {
+    var structType = new StructType
+    structType = structType.add(StructField(rowTag, DataTypes.StringType, true, Metadata.empty))
+    val encoder = Encoders.row(structType)
+    val flatMap = dfAsRaw.flatMap(row => row.getSeq[AnyRef](0)
+      .map(r => {
+        RowFactory.create(r)
+      }))(encoder)
+    assert(flatMap.count() > 1)
+    flatMap
+  }
+
+  private def getFieldIndexAsOption(schema: StructType, fieldName: String): Option[Int] = {
+    val fieldIndex: Try[Int] = Try(schema.fieldIndex(fieldName))
+    val fieldIndexAsOption: Option[Int] = fieldIndex match {
+      case Success(value) => Some(value)
+      case Failure(_) => None
+    }
+    fieldIndexAsOption
+  }
+
+
 }
