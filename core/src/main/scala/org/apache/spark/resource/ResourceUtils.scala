@@ -303,7 +303,7 @@ private[spark] object ResourceUtils extends Logging {
       allocations: Map[String, ResourceInformation],
       execReqs: Map[String, ExecutorResourceRequest]): Unit = {
     execReqs.foreach { case (rName, req) =>
-      require(allocations.contains(rName) && allocations(rName).addresses.size >= req.amount,
+      require(allocations.contains(rName) && allocations(rName).addresses.length >= req.amount,
         s"Resource: ${rName}, with addresses: " +
           s"${allocations(rName).addresses.mkString(",")} " +
           s"is less than what the user requested: ${req.amount})")
