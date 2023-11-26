@@ -2699,7 +2699,13 @@ case class Encode(value: Expression, charset: Expression, legacyCharsets: Boolea
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val toCharset = input2.asInstanceOf[UTF8String].toString
     try {
-      input1.asInstanceOf[UTF8String].toString.getBytes(toCharset)
+      if (legacyCharsets ||
+        toCharset.equalsIgnoreCase("UTF-8") || toCharset.equalsIgnoreCase("US-ASCII") ||
+        toCharset.equalsIgnoreCase("ISO-8859-1") ||
+        toCharset.equalsIgnoreCase("UTF-16") || toCharset.equalsIgnoreCase("UTF-16LE") ||
+        toCharset.equalsIgnoreCase("UTF-16BE")) {
+        input1.asInstanceOf[UTF8String].toString.getBytes(toCharset)
+      } else throw new UnsupportedEncodingException
     } catch {
       case _: UnsupportedEncodingException =>
         throw QueryExecutionErrors.invalidCharsetError(prettyName, toCharset)
@@ -2712,7 +2718,15 @@ case class Encode(value: Expression, charset: Expression, legacyCharsets: Boolea
       s"""
         String $toCharset = $charset.toString();
         try {
-          ${ev.value} = $string.toString().getBytes($toCharset);
+          if ($legacyCharsets ||
+            $toCharset.equalsIgnoreCase("UTF-8") || $toCharset.equalsIgnoreCase("US-ASCII") ||
+            $toCharset.equalsIgnoreCase("ISO-8859-1") ||
+            $toCharset.equalsIgnoreCase("UTF-16") || $toCharset.equalsIgnoreCase("UTF-16LE") ||
+            $toCharset.equalsIgnoreCase("UTF-16BE")) {
+            ${ev.value} = $string.toString().getBytes($toCharset);
+          } else {
+            throw new java.io.UnsupportedEncodingException();
+          }
         } catch (java.io.UnsupportedEncodingException e) {
           throw QueryExecutionErrors.invalidCharsetError("$prettyName", $toCharset);
         }"""
