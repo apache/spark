@@ -22,7 +22,9 @@ import java.net.URI
 
 import org.apache.logging.log4j.Level
 import org.scalatest.PrivateMethodTester
+import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
@@ -33,7 +35,7 @@ import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
-import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
@@ -43,8 +45,10 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.QueryExecutionListener
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
+@SlowSQLTest
 class AdaptiveQueryExecSuite
   extends QueryTest
   with SharedSparkSession
@@ -100,6 +104,12 @@ class AdaptiveQueryExecSuite
   private def findTopLevelBroadcastHashJoin(plan: SparkPlan): Seq[BroadcastHashJoinExec] = {
     collect(plan) {
       case j: BroadcastHashJoinExec => j
+    }
+  }
+
+  def findTopLevelBroadcastNestedLoopJoin(plan: SparkPlan): Seq[BaseJoinExec] = {
+    collect(plan) {
+      case j: BroadcastNestedLoopJoinExec => j
     }
   }
 
@@ -703,18 +713,24 @@ class AdaptiveQueryExecSuite
 
   test("SPARK-37753: Inhibit broadcast in left outer join when there are many empty" +
     " partitions on outer/left side") {
-    withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN.key -> "0.5") {
-      // `testData` is small enough to be broadcast but has empty partition ratio over the config.
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "200") {
-        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
-          "SELECT * FROM (select * from testData where value = '1') td" +
-            " left outer join testData2 ON key = a")
-        val smj = findTopLevelSortMergeJoin(plan)
-        assert(smj.size == 1)
-        val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
-        assert(bhj.isEmpty)
+    // if the right side is completed first and the left side is still being executed,
+    // the right side does not know whether there are many empty partitions on the left side,
+    // so there is no demote, and then the right side is broadcast in the planning stage.
+    // so retry several times here to avoid unit test failure.
+    eventually(timeout(15.seconds), interval(500.milliseconds)) {
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN.key -> "0.5") {
+        // `testData` is small enough to be broadcast but has empty partition ratio over the config.
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "200") {
+          val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+            "SELECT * FROM (select * from testData where value = '1') td" +
+              " left outer join testData2 ON key = a")
+          val smj = findTopLevelSortMergeJoin(plan)
+          assert(smj.size == 1)
+          val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+          assert(bhj.isEmpty)
+        }
       }
     }
   }
@@ -856,12 +872,11 @@ class AdaptiveQueryExecSuite
         df1.write.parquet(tableDir.getAbsolutePath)
 
         val aggregated = spark.table("bucketed_table").groupBy("i").count()
-        val error = intercept[IllegalStateException] {
+        val error = intercept[SparkException] {
           aggregated.count()
         }
-        // TODO(SPARK-39163): Throw an exception w/ error class for an invalid bucket file
-        assert(error.toString contains "Invalid bucket file")
-        assert(error.getSuppressed.size === 0)
+        assert(error.getErrorClass === "INVALID_BUCKET_FILE")
+        assert(error.getMessage contains "Invalid bucket file")
       }
     }
   }
@@ -2077,8 +2092,8 @@ class AdaptiveQueryExecSuite
         withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "150") {
           // partition size [0,258,72,72,72]
           checkPartitionNumber("SELECT /*+ REBALANCE(c1) */ * FROM v", 2, 4)
-          // partition size [72,216,216,144,72]
-          checkPartitionNumber("SELECT /*+ REBALANCE */ * FROM v", 4, 7)
+          // partition size [144,72,144,72,72,144,72]
+          checkPartitionNumber("SELECT /*+ REBALANCE */ * FROM v", 6, 7)
         }
 
         // no skewed partition should be optimized
@@ -2575,6 +2590,74 @@ class AdaptiveQueryExecSuite
       assert(findTopLevelAggregate(origin5).size == 4)
       assert(findTopLevelAggregate(adaptive5).size == 4)
     }
+  }
+
+  test("SPARK-39551: Invalid plan check - invalid broadcast query stage") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT /*+ BROADCAST(t3) */ t3.b, count(t3.a) FROM testData2 t1
+          |INNER JOIN testData2 t2
+          |ON t1.b = t2.b AND t1.a = 0
+          |RIGHT OUTER JOIN testData2 t3
+          |ON t1.a > t3.a
+          |GROUP BY t3.b
+        """.stripMargin
+      )
+      assert(findTopLevelBroadcastNestedLoopJoin(adaptivePlan).size == 1)
+    }
+  }
+
+  test("SPARK-39915: Dataset.repartition(N) may not create N partitions") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "6") {
+      // partitioning:  HashPartitioning
+      // shuffleOrigin: REPARTITION_BY_NUM
+      assert(spark.range(0).repartition(5, $"id").rdd.getNumPartitions == 5)
+      // shuffleOrigin: REPARTITION_BY_COL
+      // The minimum partition number after AQE coalesce is 1
+      assert(spark.range(0).repartition($"id").rdd.getNumPartitions == 1)
+      // through project
+      assert(spark.range(0).selectExpr("id % 3 as c1", "id % 7 as c2")
+        .repartition(5, $"c1").select($"c2").rdd.getNumPartitions == 5)
+
+      // partitioning:  RangePartitioning
+      // shuffleOrigin: REPARTITION_BY_NUM
+      // The minimum partition number of RangePartitioner is 1
+      assert(spark.range(0).repartitionByRange(5, $"id").rdd.getNumPartitions == 1)
+      // shuffleOrigin: REPARTITION_BY_COL
+      assert(spark.range(0).repartitionByRange($"id").rdd.getNumPartitions == 1)
+
+      // partitioning:  RoundRobinPartitioning
+      // shuffleOrigin: REPARTITION_BY_NUM
+      assert(spark.range(0).repartition(5).rdd.getNumPartitions == 5)
+      // shuffleOrigin: REBALANCE_PARTITIONS_BY_NONE
+      assert(spark.range(0).repartition().rdd.getNumPartitions == 0)
+      // through project
+      assert(spark.range(0).selectExpr("id % 3 as c1", "id % 7 as c2")
+        .repartition(5).select($"c2").rdd.getNumPartitions == 5)
+
+      // partitioning:  SinglePartition
+      assert(spark.range(0).repartition(1).rdd.getNumPartitions == 1)
+    }
+  }
+
+  test("SPARK-39915: Ensure the output partitioning is user-specified") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = spark.range(1).selectExpr("id as c1")
+      val df2 = spark.range(1).selectExpr("id as c2")
+      val df = df1.join(df2, col("c1") === col("c2")).repartition(3, col("c1"))
+      assert(df.rdd.getNumPartitions == 3)
+    }
+  }
+
+  test("SPARK-44040: Fix compute stats when AggregateExec nodes above QueryStageExec") {
+    val emptyDf = spark.range(1).where("false")
+    val aggDf1 = emptyDf.agg(sum("id").as("id")).withColumn("name", lit("df1"))
+    val aggDf2 = emptyDf.agg(sum("id").as("id")).withColumn("name", lit("df2"))
+    val unionDF = aggDf1.union(aggDf2)
+    checkAnswer(unionDF.select("id").distinct, Seq(Row(null)))
   }
 }
 

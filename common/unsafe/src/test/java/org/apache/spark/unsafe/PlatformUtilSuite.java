@@ -157,4 +157,11 @@ public class PlatformUtilSuite {
     Assert.assertEquals(1024 * 1024 + 7, onheap4.size());
     Assert.assertEquals(obj3, onheap4.getBaseObject());
   }
+
+  @Test
+  public void cleanerCreateMethodIsDefined() {
+    // Regression test for SPARK-45508: we don't expect the "no cleaner" fallback
+    // path to be hit in normal usage.
+    Assert.assertTrue(Platform.cleanerCreateMethodIsDefined());
+  }
 }

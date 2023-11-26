@@ -67,7 +67,7 @@ Condition : isnotnull(i_item_sk#7)
 
 (10) BroadcastExchange
 Input [5]: [i_item_sk#7, i_brand#8, i_class#9, i_category#10, i_product_name#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#12]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=1]
 
 (11) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [inv_item_sk#1]
@@ -79,57 +79,57 @@ Output [6]: [inv_warehouse_sk#2, inv_quantity_on_hand#3, i_brand#8, i_class#9, i
 Input [8]: [inv_item_sk#1, inv_warehouse_sk#2, inv_quantity_on_hand#3, i_item_sk#7, i_brand#8, i_class#9, i_category#10, i_product_name#11]
 
 (13) Scan parquet default.warehouse
-Output [1]: [w_warehouse_sk#13]
+Output [1]: [w_warehouse_sk#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/warehouse]
 PushedFilters: [IsNotNull(w_warehouse_sk)]
 ReadSchema: struct<w_warehouse_sk:int>
 
 (14) ColumnarToRow [codegen id : 3]
-Input [1]: [w_warehouse_sk#13]
+Input [1]: [w_warehouse_sk#12]
 
 (15) Filter [codegen id : 3]
-Input [1]: [w_warehouse_sk#13]
-Condition : isnotnull(w_warehouse_sk#13)
+Input [1]: [w_warehouse_sk#12]
+Condition : isnotnull(w_warehouse_sk#12)
 
 (16) BroadcastExchange
-Input [1]: [w_warehouse_sk#13]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#14]
+Input [1]: [w_warehouse_sk#12]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=2]
 
 (17) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [inv_warehouse_sk#2]
-Right keys [1]: [w_warehouse_sk#13]
+Right keys [1]: [w_warehouse_sk#12]
 Join condition: None
 
 (18) Project [codegen id : 4]
 Output [5]: [inv_quantity_on_hand#3, i_product_name#11, i_brand#8, i_class#9, i_category#10]
-Input [7]: [inv_warehouse_sk#2, inv_quantity_on_hand#3, i_brand#8, i_class#9, i_category#10, i_product_name#11, w_warehouse_sk#13]
+Input [7]: [inv_warehouse_sk#2, inv_quantity_on_hand#3, i_brand#8, i_class#9, i_category#10, i_product_name#11, w_warehouse_sk#12]
 
 (19) Expand [codegen id : 4]
 Input [5]: [inv_quantity_on_hand#3, i_product_name#11, i_brand#8, i_class#9, i_category#10]
-Arguments: [[inv_quantity_on_hand#3, i_product_name#11, i_brand#8, i_class#9, i_category#10, 0], [inv_quantity_on_hand#3, i_product_name#11, i_brand#8, i_class#9, null, 1], [inv_quantity_on_hand#3, i_product_name#11, i_brand#8, null, null, 3], [inv_quantity_on_hand#3, i_product_name#11, null, null, null, 7], [inv_quantity_on_hand#3, null, null, null, null, 15]], [inv_quantity_on_hand#3, i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19]
+Arguments: [[inv_quantity_on_hand#3, i_product_name#11, i_brand#8, i_class#9, i_category#10, 0], [inv_quantity_on_hand#3, i_product_name#11, i_brand#8, i_class#9, null, 1], [inv_quantity_on_hand#3, i_product_name#11, i_brand#8, null, null, 3], [inv_quantity_on_hand#3, i_product_name#11, null, null, null, 7], [inv_quantity_on_hand#3, null, null, null, null, 15]], [inv_quantity_on_hand#3, i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17]
 
 (20) HashAggregate [codegen id : 4]
-Input [6]: [inv_quantity_on_hand#3, i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19]
-Keys [5]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19]
+Input [6]: [inv_quantity_on_hand#3, i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17]
+Keys [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17]
 Functions [1]: [partial_avg(inv_quantity_on_hand#3)]
-Aggregate Attributes [2]: [sum#20, count#21]
-Results [7]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19, sum#22, count#23]
+Aggregate Attributes [2]: [sum#18, count#19]
+Results [7]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, sum#20, count#21]
 
 (21) Exchange
-Input [7]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19, sum#22, count#23]
-Arguments: hashpartitioning(i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19, 5), ENSURE_REQUIREMENTS, [id=#24]
+Input [7]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, sum#20, count#21]
+Arguments: hashpartitioning(i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, 5), ENSURE_REQUIREMENTS, [plan_id=3]
 
 (22) HashAggregate [codegen id : 5]
-Input [7]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19, sum#22, count#23]
-Keys [5]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19]
+Input [7]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, sum#20, count#21]
+Keys [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17]
 Functions [1]: [avg(inv_quantity_on_hand#3)]
-Aggregate Attributes [1]: [avg(inv_quantity_on_hand#3)#25]
-Results [5]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, avg(inv_quantity_on_hand#3)#25 AS qoh#26]
+Aggregate Attributes [1]: [avg(inv_quantity_on_hand#3)#22]
+Results [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, avg(inv_quantity_on_hand#3)#22 AS qoh#23]
 
 (23) TakeOrderedAndProject
-Input [5]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, qoh#26]
-Arguments: 100, [qoh#26 ASC NULLS FIRST, i_product_name#15 ASC NULLS FIRST, i_brand#16 ASC NULLS FIRST, i_class#17 ASC NULLS FIRST, i_category#18 ASC NULLS FIRST], [i_product_name#15, i_brand#16, i_class#17, i_category#18, qoh#26]
+Input [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, qoh#23]
+Arguments: 100, [qoh#23 ASC NULLS FIRST, i_product_name#13 ASC NULLS FIRST, i_brand#14 ASC NULLS FIRST, i_class#15 ASC NULLS FIRST, i_category#16 ASC NULLS FIRST], [i_product_name#13, i_brand#14, i_class#15, i_category#16, qoh#23]
 
 ===== Subqueries =====
 
@@ -142,25 +142,25 @@ BroadcastExchange (28)
 
 
 (24) Scan parquet default.date_dim
-Output [2]: [d_date_sk#6, d_month_seq#27]
+Output [2]: [d_date_sk#6, d_month_seq#24]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1200), LessThanOrEqual(d_month_seq,1211), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_month_seq:int>
 
 (25) ColumnarToRow [codegen id : 1]
-Input [2]: [d_date_sk#6, d_month_seq#27]
+Input [2]: [d_date_sk#6, d_month_seq#24]
 
 (26) Filter [codegen id : 1]
-Input [2]: [d_date_sk#6, d_month_seq#27]
-Condition : (((isnotnull(d_month_seq#27) AND (d_month_seq#27 >= 1200)) AND (d_month_seq#27 <= 1211)) AND isnotnull(d_date_sk#6))
+Input [2]: [d_date_sk#6, d_month_seq#24]
+Condition : (((isnotnull(d_month_seq#24) AND (d_month_seq#24 >= 1200)) AND (d_month_seq#24 <= 1211)) AND isnotnull(d_date_sk#6))
 
 (27) Project [codegen id : 1]
 Output [1]: [d_date_sk#6]
-Input [2]: [d_date_sk#6, d_month_seq#27]
+Input [2]: [d_date_sk#6, d_month_seq#24]
 
 (28) BroadcastExchange
 Input [1]: [d_date_sk#6]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#28]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=4]
 
 

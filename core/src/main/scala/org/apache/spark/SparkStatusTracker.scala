@@ -114,10 +114,10 @@ class SparkStatusTracker private[spark] (sc: SparkContext, store: AppStatusStore
         port,
         cachedMem,
         exec.activeTasks,
-        exec.memoryMetrics.map(_.usedOffHeapStorageMemory).getOrElse(0L),
         exec.memoryMetrics.map(_.usedOnHeapStorageMemory).getOrElse(0L),
-        exec.memoryMetrics.map(_.totalOffHeapStorageMemory).getOrElse(0L),
-        exec.memoryMetrics.map(_.totalOnHeapStorageMemory).getOrElse(0L))
+        exec.memoryMetrics.map(_.usedOffHeapStorageMemory).getOrElse(0L),
+        exec.memoryMetrics.map(_.totalOnHeapStorageMemory).getOrElse(0L),
+        exec.memoryMetrics.map(_.totalOffHeapStorageMemory).getOrElse(0L))
     }.toArray
   }
 }

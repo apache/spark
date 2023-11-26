@@ -56,7 +56,7 @@ Condition : (((isnotnull(o_orderdate#5) AND (o_orderdate#5 < 1995-03-15)) AND is
 
 (8) BroadcastExchange
 Input [4]: [o_orderkey#3, o_custkey#4, o_orderdate#5, o_shippriority#6]
-Arguments: HashedRelationBroadcastMode(List(input[1, bigint, false]),false), [id=#7]
+Arguments: HashedRelationBroadcastMode(List(input[1, bigint, false]),false), [plan_id=1]
 
 (9) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [c_custkey#1]
@@ -68,55 +68,55 @@ Output [3]: [o_orderkey#3, o_orderdate#5, o_shippriority#6]
 Input [5]: [c_custkey#1, o_orderkey#3, o_custkey#4, o_orderdate#5, o_shippriority#6]
 
 (11) Scan parquet default.lineitem
-Output [4]: [l_orderkey#8, l_extendedprice#9, l_discount#10, l_shipdate#11]
+Output [4]: [l_orderkey#7, l_extendedprice#8, l_discount#9, l_shipdate#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]
 PushedFilters: [IsNotNull(l_shipdate), GreaterThan(l_shipdate,1995-03-15), IsNotNull(l_orderkey)]
 ReadSchema: struct<l_orderkey:bigint,l_extendedprice:decimal(10,0),l_discount:decimal(10,0),l_shipdate:date>
 
 (12) ColumnarToRow [codegen id : 2]
-Input [4]: [l_orderkey#8, l_extendedprice#9, l_discount#10, l_shipdate#11]
+Input [4]: [l_orderkey#7, l_extendedprice#8, l_discount#9, l_shipdate#10]
 
 (13) Filter [codegen id : 2]
-Input [4]: [l_orderkey#8, l_extendedprice#9, l_discount#10, l_shipdate#11]
-Condition : ((isnotnull(l_shipdate#11) AND (l_shipdate#11 > 1995-03-15)) AND isnotnull(l_orderkey#8))
+Input [4]: [l_orderkey#7, l_extendedprice#8, l_discount#9, l_shipdate#10]
+Condition : ((isnotnull(l_shipdate#10) AND (l_shipdate#10 > 1995-03-15)) AND isnotnull(l_orderkey#7))
 
 (14) Project [codegen id : 2]
-Output [3]: [l_orderkey#8, l_extendedprice#9, l_discount#10]
-Input [4]: [l_orderkey#8, l_extendedprice#9, l_discount#10, l_shipdate#11]
+Output [3]: [l_orderkey#7, l_extendedprice#8, l_discount#9]
+Input [4]: [l_orderkey#7, l_extendedprice#8, l_discount#9, l_shipdate#10]
 
 (15) BroadcastExchange
-Input [3]: [l_orderkey#8, l_extendedprice#9, l_discount#10]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#12]
+Input [3]: [l_orderkey#7, l_extendedprice#8, l_discount#9]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=2]
 
 (16) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [o_orderkey#3]
-Right keys [1]: [l_orderkey#8]
+Right keys [1]: [l_orderkey#7]
 Join condition: None
 
 (17) Project [codegen id : 3]
-Output [5]: [o_orderdate#5, o_shippriority#6, l_orderkey#8, l_extendedprice#9, l_discount#10]
-Input [6]: [o_orderkey#3, o_orderdate#5, o_shippriority#6, l_orderkey#8, l_extendedprice#9, l_discount#10]
+Output [5]: [o_orderdate#5, o_shippriority#6, l_orderkey#7, l_extendedprice#8, l_discount#9]
+Input [6]: [o_orderkey#3, o_orderdate#5, o_shippriority#6, l_orderkey#7, l_extendedprice#8, l_discount#9]
 
 (18) HashAggregate [codegen id : 3]
-Input [5]: [o_orderdate#5, o_shippriority#6, l_orderkey#8, l_extendedprice#9, l_discount#10]
-Keys [3]: [l_orderkey#8, o_orderdate#5, o_shippriority#6]
-Functions [1]: [partial_sum(CheckOverflow((promote_precision(cast(l_extendedprice#9 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#10 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
-Aggregate Attributes [2]: [sum#13, isEmpty#14]
-Results [5]: [l_orderkey#8, o_orderdate#5, o_shippriority#6, sum#15, isEmpty#16]
+Input [5]: [o_orderdate#5, o_shippriority#6, l_orderkey#7, l_extendedprice#8, l_discount#9]
+Keys [3]: [l_orderkey#7, o_orderdate#5, o_shippriority#6]
+Functions [1]: [partial_sum(CheckOverflow((promote_precision(cast(l_extendedprice#8 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#9 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
+Aggregate Attributes [2]: [sum#11, isEmpty#12]
+Results [5]: [l_orderkey#7, o_orderdate#5, o_shippriority#6, sum#13, isEmpty#14]
 
 (19) Exchange
-Input [5]: [l_orderkey#8, o_orderdate#5, o_shippriority#6, sum#15, isEmpty#16]
-Arguments: hashpartitioning(l_orderkey#8, o_orderdate#5, o_shippriority#6, 5), ENSURE_REQUIREMENTS, [id=#17]
+Input [5]: [l_orderkey#7, o_orderdate#5, o_shippriority#6, sum#13, isEmpty#14]
+Arguments: hashpartitioning(l_orderkey#7, o_orderdate#5, o_shippriority#6, 5), ENSURE_REQUIREMENTS, [plan_id=3]
 
 (20) HashAggregate [codegen id : 4]
-Input [5]: [l_orderkey#8, o_orderdate#5, o_shippriority#6, sum#15, isEmpty#16]
-Keys [3]: [l_orderkey#8, o_orderdate#5, o_shippriority#6]
-Functions [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#9 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#10 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
-Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#9 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#10 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#18]
-Results [4]: [l_orderkey#8, sum(CheckOverflow((promote_precision(cast(l_extendedprice#9 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#10 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#18 AS revenue#19, o_orderdate#5, o_shippriority#6]
+Input [5]: [l_orderkey#7, o_orderdate#5, o_shippriority#6, sum#13, isEmpty#14]
+Keys [3]: [l_orderkey#7, o_orderdate#5, o_shippriority#6]
+Functions [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#8 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#9 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
+Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#8 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#9 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#15]
+Results [4]: [l_orderkey#7, sum(CheckOverflow((promote_precision(cast(l_extendedprice#8 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#9 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#15 AS revenue#16, o_orderdate#5, o_shippriority#6]
 
 (21) TakeOrderedAndProject
-Input [4]: [l_orderkey#8, revenue#19, o_orderdate#5, o_shippriority#6]
-Arguments: 10, [revenue#19 DESC NULLS LAST, o_orderdate#5 ASC NULLS FIRST], [l_orderkey#8, revenue#19, o_orderdate#5, o_shippriority#6]
+Input [4]: [l_orderkey#7, revenue#16, o_orderdate#5, o_shippriority#6]
+Arguments: 10, [revenue#16 DESC NULLS LAST, o_orderdate#5 ASC NULLS FIRST], [l_orderkey#7, revenue#16, o_orderdate#5, o_shippriority#6]
 

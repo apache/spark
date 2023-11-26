@@ -131,7 +131,7 @@ public abstract class UnsafeWriter {
     increaseCursor(roundedSize);
   }
 
-  public final void write(int ordinal, CalendarInterval input) {
+  public void write(int ordinal, CalendarInterval input) {
     // grow the global buffer before writing data.
     grow(16);
 

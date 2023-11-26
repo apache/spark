@@ -92,7 +92,7 @@ More details on parameters can be found in the [Python API documentation](api/py
 
 <div data-lang="r" markdown="1">
 
-More details on parameters can be found in the [R API documentation](api/R/spark.logit.html).
+More details on parameters can be found in the [R API documentation](api/R/reference/spark.logit.html).
 
 {% include_example binomial r/ml/logit.R %}
 </div>
@@ -195,7 +195,7 @@ training summary for evaluating the model.
 
 <div data-lang="r" markdown="1">
 
-More details on parameters can be found in the [R API documentation](api/R/spark.logit.html).
+More details on parameters can be found in the [R API documentation](api/R/reference/spark.logit.html).
 
 {% include_example multinomial r/ml/logit.R %}
 </div>
@@ -240,7 +240,7 @@ More details on parameters can be found in the [Python API documentation](api/py
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.decisionTree.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.decisionTree.html) for more details.
 
 {% include_example classification r/ml/decisionTree.R %}
 
@@ -282,7 +282,7 @@ Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classificatio
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.randomForest.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.randomForest.html) for more details.
 
 {% include_example classification r/ml/randomForest.R %}
 </div>
@@ -323,7 +323,7 @@ Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classificatio
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.gbt.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.gbt.html) for more details.
 
 {% include_example classification r/ml/gbt.R %}
 </div>
@@ -379,7 +379,7 @@ Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classificatio
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.mlp.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.mlp.html) for more details.
 
 {% include_example r/ml/mlp.R %}
 </div>
@@ -424,7 +424,7 @@ Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classificatio
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.svmLinear.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.svmLinear.html) for more details.
 
 {% include_example r/ml/svmLinear.R %}
 </div>
@@ -522,7 +522,7 @@ Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classificatio
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.naiveBayes.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.naiveBayes.html) for more details.
 
 {% include_example r/ml/naiveBayes.R %}
 </div>
@@ -565,7 +565,7 @@ Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classificatio
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.fmClassifier.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.fmClassifier.html) for more details.
 
 Note: At the moment SparkR doesn't support feature scaling.
 
@@ -616,7 +616,7 @@ More details on parameters can be found in the [Python API documentation](api/py
 
 <div data-lang="r" markdown="1">
 
-More details on parameters can be found in the [R API documentation](api/R/spark.lm.html).
+More details on parameters can be found in the [R API documentation](api/R/reference/spark.lm.html).
 
 {% include_example r/ml/lm_with_elastic_net.R %}
 </div>
@@ -763,7 +763,7 @@ Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.Ge
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.glm.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.glm.html) for more details.
 
 {% include_example r/ml/glm.R %}
 </div>
@@ -805,7 +805,7 @@ More details on parameters can be found in the [Python API documentation](api/py
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.decisionTree.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.decisionTree.html) for more details.
 
 {% include_example regression r/ml/decisionTree.R %}
 </div>
@@ -847,7 +847,7 @@ Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.Ra
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.randomForest.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.randomForest.html) for more details.
 
 {% include_example regression r/ml/randomForest.R %}
 </div>
@@ -888,7 +888,7 @@ Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.GB
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.gbt.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.gbt.html) for more details.
 
 {% include_example regression r/ml/gbt.R %}
 </div>
@@ -982,7 +982,7 @@ Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.AF
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.survreg.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.survreg.html) for more details.
 
 {% include_example r/ml/survreg.R %}
 </div>
@@ -1060,7 +1060,7 @@ Refer to the [`IsotonicRegression` Python docs](api/python/reference/api/pyspark
 
 <div data-lang="r" markdown="1">
 
-Refer to the [`IsotonicRegression` R API docs](api/R/spark.isoreg.html) for more details on the API.
+Refer to the [`IsotonicRegression` R API docs](api/R/reference/spark.isoreg.html) for more details on the API.
 
 {% include_example r/ml/isoreg.R %}
 </div>
@@ -1103,7 +1103,7 @@ Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.FM
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API documentation](api/R/spark.fmRegressor.html) for more details.
+Refer to the [R API documentation](api/R/reference/spark.fmRegressor.html) for more details.
 
 Note: At the moment SparkR doesn't support feature scaling.
 

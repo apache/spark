@@ -43,6 +43,8 @@ RUN set -ex && \
     rm -rf /var/cache/apt/*
 
 COPY jars /opt/spark/jars
+# Copy RELEASE file if exists
+COPY RELEAS[E] /opt/spark/RELEASE
 COPY bin /opt/spark/bin
 COPY sbin /opt/spark/sbin
 COPY kubernetes/dockerfiles/spark/entrypoint.sh /opt/

@@ -250,4 +250,16 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(KubernetesConf.getAppNameLabel("a" * 62 + "-aaa") === "a" * 62)
     assert(KubernetesConf.getAppNameLabel("-" + "a" * 63) === "a" * 62)
   }
+
+  test("SPARK-40869: Resource name prefix should not start with a hyphen") {
+    assert(KubernetesConf.getResourceNamePrefix("_hello_").startsWith("hello"))
+  }
+
+  test("SPARK-42906: Resource name prefix should start with an alphabetic character") {
+    // scalastyle:off nonascii
+    Seq("你好-123", "---123", "123---", "------", "123456").foreach { appName =>
+    // scalastyle:on nonascii
+      assert(KubernetesConf.getResourceNamePrefix(appName).matches("[a-z]([-a-z0-9]*[a-z0-9])?"))
+    }
+  }
 }

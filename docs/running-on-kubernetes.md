@@ -907,16 +907,6 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.executor.lostCheck.maxAttempts</code></td>
-  <td><code>10</code></td>
-  <td>
-    Number of times that the driver will try to ascertain the loss reason for a specific executor.
-    The loss reason is used to ascertain whether the executor failure is due to a framework or an application error
-    which in turn decides whether the executor is removed and replaced, or placed into a failed state for debugging.
-  </td>
-  <td>2.3.0</td>
-</tr>
-<tr>
   <td><code>spark.kubernetes.submission.waitAppCompletion</code></td>
   <td><code>true</code></td>
   <td>
@@ -1808,6 +1798,39 @@ spec:
   # Specify the queue, indicates the resource queue which the job should be submitted to
   queue: default
 ```
+
+#### Using Apache YuniKorn as Customized Scheduler for Spark on Kubernetes
+
+[Apache YuniKorn](https://yunikorn.apache.org/) is a resource scheduler for Kubernetes that provides advanced batch scheduling
+capabilities, such as job queuing, resource fairness, min/max queue capacity and flexible job ordering policies.
+For available Apache YuniKorn features, please refer to [core features](https://yunikorn.apache.org/docs/get_started/core_features).
+
+##### Prerequisites
+
+Install Apache YuniKorn:
+
+```bash
+helm repo add yunikorn https://apache.github.io/yunikorn-release
+helm repo update
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.1.0 --create-namespace --set embedAdmissionController=false
+```
+
+The above steps will install YuniKorn v1.1.0 on an existing Kubernetes cluster.
+
+##### Get started
+
+Submit Spark jobs with the following extra options:
+
+```bash
+--conf spark.kubernetes.scheduler.name=yunikorn
+--conf spark.kubernetes.driver.label.queue=root.default
+--conf spark.kubernetes.executor.label.queue=root.default
+--conf spark.kubernetes.driver.annotation.yunikorn.apache.org/app-id={{APP_ID}}
+--conf spark.kubernetes.executor.annotation.yunikorn.apache.org/app-id={{APP_ID}}
+```
+
+Note that `{{APP_ID}}` is the built-in variable that will be substituted with Spark job ID automatically.
+With the above configuration, the job will be scheduled by YuniKorn scheduler instead of the default Kubernetes scheduler.
 
 ### Stage Level Scheduling Overview
 

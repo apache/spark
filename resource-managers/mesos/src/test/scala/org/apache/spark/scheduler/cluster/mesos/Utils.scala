@@ -128,8 +128,9 @@ object Utils {
       .getEnvironment
       .getVariablesList
       .asScala
-    assert(envVars
-      .count(!_.getName.startsWith("SPARK_")) == 2) // user-defined secret env vars
+    assert(envVars.count { x =>
+      !x.getName.startsWith("SPARK_") && x.getName != "OMP_NUM_THREADS"
+    } == 2) // user-defined secret env vars
     val variableOne = envVars.filter(_.getName == "SECRET_ENV_KEY").head
     assert(variableOne.getSecret.isInitialized)
     assert(variableOne.getSecret.getType == Secret.Type.REFERENCE)
@@ -157,8 +158,9 @@ object Utils {
       .getEnvironment
       .getVariablesList
       .asScala
-    assert(envVars
-      .count(!_.getName.startsWith("SPARK_")) == 2) // user-defined secret env vars
+    assert(envVars.count { x =>
+      !x.getName.startsWith("SPARK_") && x.getName != "OMP_NUM_THREADS"
+    } == 2) // user-defined secret env vars
     val variableOne = envVars.filter(_.getName == "USER").head
     assert(variableOne.getSecret.isInitialized)
     assert(variableOne.getSecret.getType == Secret.Type.VALUE)

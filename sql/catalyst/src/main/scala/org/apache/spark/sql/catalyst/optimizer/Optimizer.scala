@@ -115,7 +115,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         RemoveDispensableExpressions,
         SimplifyBinaryComparison,
         ReplaceNullWithFalseInPredicate,
-        SimplifyConditionalsInPredicate,
         PruneFilters,
         SimplifyCasts,
         SimplifyCaseConversionExpressions,
@@ -160,7 +159,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Inline CTE", Once,
       InlineCTE()) ::
-    Batch("Union", Once,
+    Batch("Union", fixedPoint,
       RemoveNoopOperators,
       CombineUnions,
       RemoveNoopUnion) ::
@@ -513,9 +512,11 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
   }
 
   /**
-   * Remove redundant alias expression from a LogicalPlan and its subtree. A set of excludes is used
-   * to prevent the removal of seemingly redundant aliases used to deduplicate the input for a
-   * (self) join or to prevent the removal of top-level subquery attributes.
+   * Remove redundant alias expression from a LogicalPlan and its subtree.
+   * A set of excludes is used to prevent the removal of:
+   * - seemingly redundant aliases used to deduplicate the input for a (self) join,
+   * - top-level subquery attributes and
+   * - attributes of a Union's first child
    */
   private def removeRedundantAliases(plan: LogicalPlan, excluded: AttributeSet): LogicalPlan = {
     if (!plan.containsPattern(ALIAS)) {
@@ -542,6 +543,22 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         })
         Join(newLeft, newRight, joinType, newCondition, hint)
 
+      case u: Union =>
+        var first = true
+        plan.mapChildren { child =>
+          if (first) {
+            first = false
+            // `Union` inherits its first child's outputs. We don't remove those aliases from the
+            // first child's tree that prevent aliased attributes to appear multiple times in the
+            // `Union`'s output. A parent projection node on the top of an `Union` with non-unique
+            // output attributes could return incorrect result.
+            removeRedundantAliases(child, excluded ++ child.outputSet)
+          } else {
+            // We don't need to exclude those attributes that `Union` inherits from its first child.
+            removeRedundantAliases(child, excluded -- u.children.head.outputSet)
+          }
+        }
+
       case _ =>
         // Remove redundant aliases in the subtree(s).
         val currentNextAttrPairs = mutable.Buffer.empty[(Attribute, Attribute)]
@@ -551,9 +568,6 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
           newChild
         }
 
-        // Create the attribute mapping. Note that the currentNextAttrPairs can contain duplicate
-        // keys in case of Union (this is caused by the PushProjectionThroughUnion rule); in this
-        // case we use the first mapping (which should be provided by the first child).
         val mapping = AttributeMap(currentNextAttrPairs.toSeq)
 
         // Create a an expression cleaning function for nodes that can actually produce redundant
@@ -842,12 +856,13 @@ object ColumnPruning extends Rule[LogicalPlan] {
       e.copy(child = prunedChild(child, e.references))
 
     // prune unrequired references
-    // There are 2 types of pruning here:
-    // 1. For attributes in g.child.outputSet that is not used by the generator nor the project,
-    //    we directly remove it from the output list of g.child.
-    // 2. For attributes that is not used by the project but it is used by the generator, we put
-    //    it in g.unrequiredChildIndex to save memory usage.
-    case GeneratorUnrequiredChildrenPruning(rewrittenPlan) => rewrittenPlan
+    case p @ Project(_, g: Generate) if p.references != g.outputSet =>
+      val requiredAttrs = p.references -- g.producedAttributes ++ g.generator.references
+      val newChild = prunedChild(g.child, requiredAttrs)
+      val unrequired = g.generator.references -- p.references
+      val unrequiredIndices = newChild.output.zipWithIndex.filter(t => unrequired.contains(t._1))
+        .map(_._2)
+      p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices))
 
     // prune unrequired nested fields from `Generate`.
     case GeneratorNestedColumnAliasing(rewrittenPlan) => rewrittenPlan
@@ -907,7 +922,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
   })
 
   /** Applies a projection only when the child is producing unnecessary attributes */
-  def prunedChild(c: LogicalPlan, allReferences: AttributeSet): LogicalPlan =
+  private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) =
     if (!c.outputSet.subsetOf(allReferences)) {
       Project(c.output.filter(allReferences.contains), c)
     } else {
@@ -920,11 +935,23 @@ object ColumnPruning extends Rule[LogicalPlan] {
    * order, otherwise lower Projects can be missed.
    */
   private def removeProjectBeforeFilter(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case p1 @ Project(_, f @ Filter(_, p2 @ Project(_, child)))
+    case p1 @ Project(_, f @ Filter(e, p2 @ Project(_, child)))
       if p2.outputSet.subsetOf(child.outputSet) &&
         // We only remove attribute-only project.
-        p2.projectList.forall(_.isInstanceOf[AttributeReference]) =>
+        p2.projectList.forall(_.isInstanceOf[AttributeReference]) &&
+        // We can't remove project when the child has conflicting attributes
+        // with the subquery in filter predicate
+        !hasConflictingAttrsWithSubquery(e, child) =>
       p1.copy(child = f.copy(child = child))
+  }
+
+  private def hasConflictingAttrsWithSubquery(
+      predicate: Expression,
+      child: LogicalPlan): Boolean = {
+    predicate.find {
+      case s: SubqueryExpression if s.plan.outputSet.intersect(child.outputSet).nonEmpty => true
+      case _ => false
+    }.isDefined
   }
 }
 
@@ -1049,6 +1076,19 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
   }
 
   /**
+   * Check if the given expression is cheap that we can inline it.
+   */
+  def isCheap(e: Expression): Boolean = e match {
+    case _: Attribute | _: OuterReference => true
+    case _ if e.foldable => true
+    // PythonUDF is handled by the rule ExtractPythonUDFs
+    case _: PythonUDF => true
+    // Alias and ExtractValue are very cheap.
+    case _: Alias | _: ExtractValue => e.children.forall(isCheap)
+    case _ => false
+  }
+
+  /**
    * Return all the references of the given expression without deduplication, which is different
    * from `Expression.references`.
    */
@@ -1163,9 +1203,9 @@ object CollapseWindow extends Rule[LogicalPlan] {
  */
 object TransposeWindow extends Rule[LogicalPlan] {
   private def compatiblePartitions(ps1 : Seq[Expression], ps2: Seq[Expression]): Boolean = {
-    ps1.length < ps2.length && ps2.take(ps1.length).permutations.exists(ps1.zip(_).forall {
-      case (l, r) => l.semanticEquals(r)
-    })
+    ps1.length < ps2.length && ps1.forall { expr1 =>
+      ps2.exists(expr1.semanticEquals)
+    }
   }
 
   private def windowsCompatible(w1: Window, w2: Window): Boolean = {
@@ -1432,21 +1472,37 @@ object EliminateSorts extends Rule[LogicalPlan] {
       }
     case Sort(orders, false, child) if SortOrder.orderingSatisfies(child.outputOrdering, orders) =>
       applyLocally.lift(child).getOrElse(child)
-    case s @ Sort(_, _, child) => s.copy(child = recursiveRemoveSort(child))
+    case s @ Sort(_, global, child) => s.copy(child = recursiveRemoveSort(child, global))
     case j @ Join(originLeft, originRight, _, cond, _) if cond.forall(_.deterministic) =>
-      j.copy(left = recursiveRemoveSort(originLeft), right = recursiveRemoveSort(originRight))
+      j.copy(left = recursiveRemoveSort(originLeft, true),
+        right = recursiveRemoveSort(originRight, true))
     case g @ Aggregate(_, aggs, originChild) if isOrderIrrelevantAggs(aggs) =>
-      g.copy(child = recursiveRemoveSort(originChild))
+      g.copy(child = recursiveRemoveSort(originChild, true))
   }
 
-  private def recursiveRemoveSort(plan: LogicalPlan): LogicalPlan = {
+  /**
+   * If the upper sort is global then we can remove the global or local sort recursively.
+   * If the upper sort is local then we can only remove the local sort recursively.
+   */
+  private def recursiveRemoveSort(
+      plan: LogicalPlan,
+      canRemoveGlobalSort: Boolean): LogicalPlan = {
     if (!plan.containsPattern(SORT)) {
       return plan
     }
     plan match {
-      case Sort(_, _, child) => recursiveRemoveSort(child)
+      case Sort(_, global, child) if canRemoveGlobalSort || !global =>
+        recursiveRemoveSort(child, canRemoveGlobalSort)
+      case Sort(sortOrder, true, child) =>
+        // For this case, the upper sort is local so the ordering of present sort is unnecessary,
+        // so here we only preserve its output partitioning using `RepartitionByExpression`.
+        // We should use `None` as the optNumPartitions so AQE can coalesce shuffle partitions.
+        // This behavior is same with original global sort.
+        RepartitionByExpression(sortOrder, recursiveRemoveSort(child, true), None)
       case other if canEliminateSort(other) =>
-        other.withNewChildren(other.children.map(recursiveRemoveSort))
+        other.withNewChildren(other.children.map(c => recursiveRemoveSort(c, canRemoveGlobalSort)))
+      case other if canEliminateGlobalSort(other) =>
+        other.withNewChildren(other.children.map(c => recursiveRemoveSort(c, true)))
       case _ => plan
     }
   }
@@ -1454,6 +1510,10 @@ object EliminateSorts extends Rule[LogicalPlan] {
   private def canEliminateSort(plan: LogicalPlan): Boolean = plan match {
     case p: Project => p.projectList.forall(_.deterministic)
     case f: Filter => f.condition.deterministic
+    case _ => false
+  }
+
+  private def canEliminateGlobalSort(plan: LogicalPlan): Boolean = plan match {
     case r: RepartitionByExpression => r.partitionExpressions.forall(_.deterministic)
     case r: RebalancePartitions => r.partitionExpressions.forall(_.deterministic)
     case _: Repartition => true

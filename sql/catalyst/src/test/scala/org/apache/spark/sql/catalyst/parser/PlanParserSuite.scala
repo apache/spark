@@ -1326,4 +1326,13 @@ class PlanParserSuite extends AnalysisTest {
         Literal(Decimal(0.1), DecimalType(1, 1)), true).toAggregateExpression()
     )
   }
+
+  test("SPARK-42553: NonReserved keyword 'interval' can be column name") {
+    comparePlans(
+      parsePlan("SELECT interval FROM VALUES ('abc') AS tbl(interval);"),
+      UnresolvedInlineTable(
+        Seq("interval"),
+        Seq(Literal("abc")) :: Nil).as("tbl").select('interval)
+    )
+  }
 }

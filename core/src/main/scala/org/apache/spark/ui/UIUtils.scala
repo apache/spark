@@ -24,12 +24,14 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, TimeZone}
 import javax.servlet.http.HttpServletRequest
-import javax.ws.rs.core.{MediaType, Response}
+import javax.ws.rs.core.{MediaType, MultivaluedMap, Response}
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
+
+import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.scope.RDDOperationGraph
@@ -634,6 +636,22 @@ private[spark] object UIUtils extends Logging {
       decodedParam = URLDecoder.decode(param, UTF_8.name())
     }
     param
+  }
+
+  /**
+   * Decode URLParameter if URL is encoded by YARN-WebAppProxyServlet.
+   */
+  def decodeURLParameter(params: MultivaluedMap[String, String]): MultivaluedStringMap = {
+    val decodedParameters = new MultivaluedStringMap
+    params.forEach((encodeKey, encodeValues) => {
+      val decodeKey = decodeURLParameter(encodeKey)
+      val decodeValues = new java.util.LinkedList[String]
+      encodeValues.forEach(v => {
+        decodeValues.add(decodeURLParameter(v))
+      })
+      decodedParameters.addAll(decodeKey, decodeValues)
+    })
+    decodedParameters
   }
 
   def getTimeZoneOffset() : Int =

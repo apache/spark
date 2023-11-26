@@ -391,7 +391,7 @@ private[spark] class Client(
           throw new SparkException(s"Cannot find setTokensConf method in ${amContainer.getClass}." +
               s" Please check YARN version and make sure it is 2.9+ or 3.x")
       }
-      setTokensConfMethod.invoke(ByteBuffer.wrap(dob.getData))
+      setTokensConfMethod.invoke(amContainer, ByteBuffer.wrap(dob.getData))
     }
   }
 

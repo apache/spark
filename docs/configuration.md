@@ -394,7 +394,7 @@ of the most common options to set are:
 </tr>
 <tr>
   <td><code>spark.submit.deployMode</code></td>
-  <td>(none)</td>
+  <td>client</td>
   <td>
     The deploy mode of Spark driver program, either "client" or "cluster",
     Which means to launch driver program locally ("client")
@@ -612,7 +612,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.executor.logs.rolling.maxRetainedFiles</code></td>
-  <td>(none)</td>
+  <td>-1</td>
   <td>
     Sets the number of latest rolling log files that are going to be retained by the system.
     Older log files will be deleted. Disabled by default.
@@ -630,7 +630,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.executor.logs.rolling.maxSize</code></td>
-  <td>(none)</td>
+  <td>1024 * 1024</td>
   <td>
     Set the max size of the file in bytes by which the executor logs will be rolled over.
     Rolling is disabled by default. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
@@ -2056,6 +2056,14 @@ Apart from these, the following properties are also available, and may be useful
     <code>spark.rpc.lookupTimeout</code> if they are not configured.
   </td>
   <td>1.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.network.timeoutInterval</code></td>
+  <td>60s</td>
+  <td>
+    Interval for the driver to check and expire dead executors.
+  </td>
+  <td>1.3.2</td>
 </tr>
 <tr>
   <td><code>spark.network.io.preferDirectBufs</code></td>

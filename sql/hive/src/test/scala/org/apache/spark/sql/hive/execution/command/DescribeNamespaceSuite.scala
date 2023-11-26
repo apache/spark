@@ -24,5 +24,6 @@ import org.apache.spark.sql.execution.command.v1
  * table catalog.
  */
 class DescribeNamespaceSuite extends v1.DescribeNamespaceSuiteBase with CommandSuiteBase {
+  override def notFoundMsgPrefix: String = if (conf.useV1Command) "Database" else "Namespace"
   override def commandVersion: String = super[DescribeNamespaceSuiteBase].commandVersion
 }

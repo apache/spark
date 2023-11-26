@@ -31,6 +31,9 @@ ExpressionInfo = namedtuple("ExpressionInfo", "name usage examples group")
 groups = {
     "agg_funcs", "array_funcs", "datetime_funcs",
     "json_funcs", "map_funcs", "window_funcs",
+    "math_funcs", "conditional_funcs", "generator_funcs",
+    "predicate_funcs", "string_funcs", "misc_funcs",
+    "bitwise_funcs", "conversion_funcs", "csv_funcs",
 }
 
 
@@ -45,6 +48,8 @@ def _list_grouped_function_infos(jvm):
 
     for jinfo in filter(lambda x: x.getGroup() in groups, jinfos):
         name = jinfo.getName()
+        if (name == "raise_error"):
+            continue
         usage = jinfo.getUsage()
         usage = usage.replace("_FUNC_", name) if usage is not None else usage
         infos.append(ExpressionInfo(
@@ -108,7 +113,12 @@ def _make_pretty_usage(infos):
         # Expected formats are as follows;
         #  - `_FUNC_(...) - description`, or
         #  - `_FUNC_ - description`
-        usages = iter(re.split(r"(%s.*) - " % info.name, info.usage.strip())[1:])
+        func_name = info.name
+        if (info.name == "*" or info.name == "+"):
+            func_name = "\\" + func_name
+        elif (info.name == "when"):
+            func_name = "CASE WHEN"
+        usages = iter(re.split(r"(.*%s.*) - " % func_name, info.usage.strip())[1:])
         for (sig, description) in zip(usages, usages):
             result.append("    <tr>")
             result.append("      <td>%s</td>" % sig)

@@ -47,11 +47,22 @@ object SparkHadoopWriterUtils {
    * @return a job ID
    */
   def createJobID(time: Date, id: Int): JobID = {
+    val jobTrackerID = createJobTrackerID(time)
+    createJobID(jobTrackerID, id)
+  }
+
+  /**
+   * Create a job ID.
+   *
+   * @param jobTrackerID unique job track id
+   * @param id job number
+   * @return a job ID
+   */
+  def createJobID(jobTrackerID: String, id: Int): JobID = {
     if (id < 0) {
       throw new IllegalArgumentException("Job number is negative")
     }
-    val jobtrackerID = createJobTrackerID(time)
-    new JobID(jobtrackerID, id)
+    new JobID(jobTrackerID, id)
   }
 
   /**

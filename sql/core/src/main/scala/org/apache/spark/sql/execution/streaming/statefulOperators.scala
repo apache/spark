@@ -783,13 +783,15 @@ case class StreamingDeduplicateExec(
       keyExpressions, getStateInfo, conf) :: Nil
   }
 
+  private val schemaForEmptyRow: StructType = StructType(Array(StructField("__dummy__", NullType)))
+
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
     child.execute().mapPartitionsWithStateStore(
       getStateInfo,
       keyExpressions.toStructType,
-      child.output.toStructType,
+      schemaForEmptyRow,
       numColsPrefixKey = 0,
       session.sessionState,
       Some(session.streams.stateStoreCoordinator),

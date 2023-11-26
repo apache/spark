@@ -192,6 +192,12 @@ class KubernetesSuite extends SparkFunSuite
       .set("spark.kubernetes.driver.label.spark-app-locator", appLocator)
       .set("spark.kubernetes.executor.label.spark-app-locator", appLocator)
       .set(NETWORK_AUTH_ENABLED.key, "true")
+    sys.props.get(CONFIG_DRIVER_REQUEST_CORES).map { cpu =>
+      sparkAppConf.set("spark.kubernetes.driver.request.cores", cpu)
+    }
+    sys.props.get(CONFIG_EXECUTOR_REQUEST_CORES).map { cpu =>
+      sparkAppConf.set("spark.kubernetes.executor.request.cores", cpu)
+    }
     if (!kubernetesTestComponents.hasUserSpecifiedNamespace) {
       kubernetesTestComponents.createNamespace()
     }
@@ -612,6 +618,7 @@ private[spark] object KubernetesSuite {
   val k8sTestTag = Tag("k8s")
   val localTestTag = Tag("local")
   val schedulingTestTag = Tag("schedule")
+  val decomTestTag = Tag("decom")
   val rTestTag = Tag("r")
   val MinikubeTag = Tag("minikube")
   val SPARK_PI_MAIN_CLASS: String = "org.apache.spark.examples.SparkPi"

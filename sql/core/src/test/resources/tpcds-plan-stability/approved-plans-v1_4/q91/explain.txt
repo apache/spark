@@ -75,7 +75,7 @@ Condition : (isnotnull(cr_call_center_sk#6) AND isnotnull(cr_returning_customer_
 
 (7) BroadcastExchange
 Input [4]: [cr_returning_customer_sk#5, cr_call_center_sk#6, cr_net_loss#7, cr_returned_date_sk#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, false] as bigint)),false), [id=#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, false] as bigint)),false), [plan_id=1]
 
 (8) BroadcastHashJoin [codegen id : 7]
 Left keys [1]: [cc_call_center_sk#1]
@@ -87,158 +87,158 @@ Output [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_returning_customer
 Input [8]: [cc_call_center_sk#1, cc_call_center_id#2, cc_name#3, cc_manager#4, cr_returning_customer_sk#5, cr_call_center_sk#6, cr_net_loss#7, cr_returned_date_sk#8]
 
 (10) ReusedExchange [Reuses operator id: 48]
-Output [1]: [d_date_sk#11]
+Output [1]: [d_date_sk#10]
 
 (11) BroadcastHashJoin [codegen id : 7]
 Left keys [1]: [cr_returned_date_sk#8]
-Right keys [1]: [d_date_sk#11]
+Right keys [1]: [d_date_sk#10]
 Join condition: None
 
 (12) Project [codegen id : 7]
 Output [5]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_returning_customer_sk#5, cr_net_loss#7]
-Input [7]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_returning_customer_sk#5, cr_net_loss#7, cr_returned_date_sk#8, d_date_sk#11]
+Input [7]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_returning_customer_sk#5, cr_net_loss#7, cr_returned_date_sk#8, d_date_sk#10]
 
 (13) Scan parquet default.customer
-Output [4]: [c_customer_sk#12, c_current_cdemo_sk#13, c_current_hdemo_sk#14, c_current_addr_sk#15]
+Output [4]: [c_customer_sk#11, c_current_cdemo_sk#12, c_current_hdemo_sk#13, c_current_addr_sk#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
 PushedFilters: [IsNotNull(c_customer_sk), IsNotNull(c_current_addr_sk), IsNotNull(c_current_cdemo_sk), IsNotNull(c_current_hdemo_sk)]
 ReadSchema: struct<c_customer_sk:int,c_current_cdemo_sk:int,c_current_hdemo_sk:int,c_current_addr_sk:int>
 
 (14) ColumnarToRow [codegen id : 3]
-Input [4]: [c_customer_sk#12, c_current_cdemo_sk#13, c_current_hdemo_sk#14, c_current_addr_sk#15]
+Input [4]: [c_customer_sk#11, c_current_cdemo_sk#12, c_current_hdemo_sk#13, c_current_addr_sk#14]
 
 (15) Filter [codegen id : 3]
-Input [4]: [c_customer_sk#12, c_current_cdemo_sk#13, c_current_hdemo_sk#14, c_current_addr_sk#15]
-Condition : (((isnotnull(c_customer_sk#12) AND isnotnull(c_current_addr_sk#15)) AND isnotnull(c_current_cdemo_sk#13)) AND isnotnull(c_current_hdemo_sk#14))
+Input [4]: [c_customer_sk#11, c_current_cdemo_sk#12, c_current_hdemo_sk#13, c_current_addr_sk#14]
+Condition : (((isnotnull(c_customer_sk#11) AND isnotnull(c_current_addr_sk#14)) AND isnotnull(c_current_cdemo_sk#12)) AND isnotnull(c_current_hdemo_sk#13))
 
 (16) BroadcastExchange
-Input [4]: [c_customer_sk#12, c_current_cdemo_sk#13, c_current_hdemo_sk#14, c_current_addr_sk#15]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#16]
+Input [4]: [c_customer_sk#11, c_current_cdemo_sk#12, c_current_hdemo_sk#13, c_current_addr_sk#14]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=2]
 
 (17) BroadcastHashJoin [codegen id : 7]
 Left keys [1]: [cr_returning_customer_sk#5]
-Right keys [1]: [c_customer_sk#12]
+Right keys [1]: [c_customer_sk#11]
 Join condition: None
 
 (18) Project [codegen id : 7]
-Output [7]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#7, c_current_cdemo_sk#13, c_current_hdemo_sk#14, c_current_addr_sk#15]
-Input [9]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_returning_customer_sk#5, cr_net_loss#7, c_customer_sk#12, c_current_cdemo_sk#13, c_current_hdemo_sk#14, c_current_addr_sk#15]
+Output [7]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#7, c_current_cdemo_sk#12, c_current_hdemo_sk#13, c_current_addr_sk#14]
+Input [9]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_returning_customer_sk#5, cr_net_loss#7, c_customer_sk#11, c_current_cdemo_sk#12, c_current_hdemo_sk#13, c_current_addr_sk#14]
 
 (19) Scan parquet default.customer_address
-Output [2]: [ca_address_sk#17, ca_gmt_offset#18]
+Output [2]: [ca_address_sk#15, ca_gmt_offset#16]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_gmt_offset), EqualTo(ca_gmt_offset,-7.00), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_gmt_offset:decimal(5,2)>
 
 (20) ColumnarToRow [codegen id : 4]
-Input [2]: [ca_address_sk#17, ca_gmt_offset#18]
+Input [2]: [ca_address_sk#15, ca_gmt_offset#16]
 
 (21) Filter [codegen id : 4]
-Input [2]: [ca_address_sk#17, ca_gmt_offset#18]
-Condition : ((isnotnull(ca_gmt_offset#18) AND (ca_gmt_offset#18 = -7.00)) AND isnotnull(ca_address_sk#17))
+Input [2]: [ca_address_sk#15, ca_gmt_offset#16]
+Condition : ((isnotnull(ca_gmt_offset#16) AND (ca_gmt_offset#16 = -7.00)) AND isnotnull(ca_address_sk#15))
 
 (22) Project [codegen id : 4]
-Output [1]: [ca_address_sk#17]
-Input [2]: [ca_address_sk#17, ca_gmt_offset#18]
+Output [1]: [ca_address_sk#15]
+Input [2]: [ca_address_sk#15, ca_gmt_offset#16]
 
 (23) BroadcastExchange
-Input [1]: [ca_address_sk#17]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#19]
+Input [1]: [ca_address_sk#15]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
 
 (24) BroadcastHashJoin [codegen id : 7]
-Left keys [1]: [c_current_addr_sk#15]
-Right keys [1]: [ca_address_sk#17]
+Left keys [1]: [c_current_addr_sk#14]
+Right keys [1]: [ca_address_sk#15]
 Join condition: None
 
 (25) Project [codegen id : 7]
-Output [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#7, c_current_cdemo_sk#13, c_current_hdemo_sk#14]
-Input [8]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#7, c_current_cdemo_sk#13, c_current_hdemo_sk#14, c_current_addr_sk#15, ca_address_sk#17]
+Output [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#7, c_current_cdemo_sk#12, c_current_hdemo_sk#13]
+Input [8]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#7, c_current_cdemo_sk#12, c_current_hdemo_sk#13, c_current_addr_sk#14, ca_address_sk#15]
 
 (26) Scan parquet default.customer_demographics
-Output [3]: [cd_demo_sk#20, cd_marital_status#21, cd_education_status#22]
+Output [3]: [cd_demo_sk#17, cd_marital_status#18, cd_education_status#19]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
 PushedFilters: [Or(And(EqualTo(cd_marital_status,M),EqualTo(cd_education_status,Unknown             )),And(EqualTo(cd_marital_status,W),EqualTo(cd_education_status,Advanced Degree     ))), IsNotNull(cd_demo_sk)]
 ReadSchema: struct<cd_demo_sk:int,cd_marital_status:string,cd_education_status:string>
 
 (27) ColumnarToRow [codegen id : 5]
-Input [3]: [cd_demo_sk#20, cd_marital_status#21, cd_education_status#22]
+Input [3]: [cd_demo_sk#17, cd_marital_status#18, cd_education_status#19]
 
 (28) Filter [codegen id : 5]
-Input [3]: [cd_demo_sk#20, cd_marital_status#21, cd_education_status#22]
-Condition : ((((cd_marital_status#21 = M) AND (cd_education_status#22 = Unknown             )) OR ((cd_marital_status#21 = W) AND (cd_education_status#22 = Advanced Degree     ))) AND isnotnull(cd_demo_sk#20))
+Input [3]: [cd_demo_sk#17, cd_marital_status#18, cd_education_status#19]
+Condition : ((((cd_marital_status#18 = M) AND (cd_education_status#19 = Unknown             )) OR ((cd_marital_status#18 = W) AND (cd_education_status#19 = Advanced Degree     ))) AND isnotnull(cd_demo_sk#17))
 
 (29) BroadcastExchange
-Input [3]: [cd_demo_sk#20, cd_marital_status#21, cd_education_status#22]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#23]
+Input [3]: [cd_demo_sk#17, cd_marital_status#18, cd_education_status#19]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=4]
 
 (30) BroadcastHashJoin [codegen id : 7]
-Left keys [1]: [c_current_cdemo_sk#13]
-Right keys [1]: [cd_demo_sk#20]
+Left keys [1]: [c_current_cdemo_sk#12]
+Right keys [1]: [cd_demo_sk#17]
 Join condition: None
 
 (31) Project [codegen id : 7]
-Output [7]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#7, c_current_hdemo_sk#14, cd_marital_status#21, cd_education_status#22]
-Input [9]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#7, c_current_cdemo_sk#13, c_current_hdemo_sk#14, cd_demo_sk#20, cd_marital_status#21, cd_education_status#22]
+Output [7]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#7, c_current_hdemo_sk#13, cd_marital_status#18, cd_education_status#19]
+Input [9]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#7, c_current_cdemo_sk#12, c_current_hdemo_sk#13, cd_demo_sk#17, cd_marital_status#18, cd_education_status#19]
 
 (32) Scan parquet default.household_demographics
-Output [2]: [hd_demo_sk#24, hd_buy_potential#25]
+Output [2]: [hd_demo_sk#20, hd_buy_potential#21]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
 PushedFilters: [IsNotNull(hd_buy_potential), StringStartsWith(hd_buy_potential,Unknown), IsNotNull(hd_demo_sk)]
 ReadSchema: struct<hd_demo_sk:int,hd_buy_potential:string>
 
 (33) ColumnarToRow [codegen id : 6]
-Input [2]: [hd_demo_sk#24, hd_buy_potential#25]
+Input [2]: [hd_demo_sk#20, hd_buy_potential#21]
 
 (34) Filter [codegen id : 6]
-Input [2]: [hd_demo_sk#24, hd_buy_potential#25]
-Condition : ((isnotnull(hd_buy_potential#25) AND StartsWith(hd_buy_potential#25, Unknown)) AND isnotnull(hd_demo_sk#24))
+Input [2]: [hd_demo_sk#20, hd_buy_potential#21]
+Condition : ((isnotnull(hd_buy_potential#21) AND StartsWith(hd_buy_potential#21, Unknown)) AND isnotnull(hd_demo_sk#20))
 
 (35) Project [codegen id : 6]
-Output [1]: [hd_demo_sk#24]
-Input [2]: [hd_demo_sk#24, hd_buy_potential#25]
+Output [1]: [hd_demo_sk#20]
+Input [2]: [hd_demo_sk#20, hd_buy_potential#21]
 
 (36) BroadcastExchange
-Input [1]: [hd_demo_sk#24]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#26]
+Input [1]: [hd_demo_sk#20]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=5]
 
 (37) BroadcastHashJoin [codegen id : 7]
-Left keys [1]: [c_current_hdemo_sk#14]
-Right keys [1]: [hd_demo_sk#24]
+Left keys [1]: [c_current_hdemo_sk#13]
+Right keys [1]: [hd_demo_sk#20]
 Join condition: None
 
 (38) Project [codegen id : 7]
-Output [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#7, cd_marital_status#21, cd_education_status#22]
-Input [8]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#7, c_current_hdemo_sk#14, cd_marital_status#21, cd_education_status#22, hd_demo_sk#24]
+Output [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#7, cd_marital_status#18, cd_education_status#19]
+Input [8]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#7, c_current_hdemo_sk#13, cd_marital_status#18, cd_education_status#19, hd_demo_sk#20]
 
 (39) HashAggregate [codegen id : 7]
-Input [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#7, cd_marital_status#21, cd_education_status#22]
-Keys [5]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#21, cd_education_status#22]
+Input [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#7, cd_marital_status#18, cd_education_status#19]
+Keys [5]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#18, cd_education_status#19]
 Functions [1]: [partial_sum(UnscaledValue(cr_net_loss#7))]
-Aggregate Attributes [1]: [sum#27]
-Results [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#21, cd_education_status#22, sum#28]
+Aggregate Attributes [1]: [sum#22]
+Results [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#18, cd_education_status#19, sum#23]
 
 (40) Exchange
-Input [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#21, cd_education_status#22, sum#28]
-Arguments: hashpartitioning(cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#21, cd_education_status#22, 5), ENSURE_REQUIREMENTS, [id=#29]
+Input [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#18, cd_education_status#19, sum#23]
+Arguments: hashpartitioning(cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#18, cd_education_status#19, 5), ENSURE_REQUIREMENTS, [plan_id=6]
 
 (41) HashAggregate [codegen id : 8]
-Input [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#21, cd_education_status#22, sum#28]
-Keys [5]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#21, cd_education_status#22]
+Input [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#18, cd_education_status#19, sum#23]
+Keys [5]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#18, cd_education_status#19]
 Functions [1]: [sum(UnscaledValue(cr_net_loss#7))]
-Aggregate Attributes [1]: [sum(UnscaledValue(cr_net_loss#7))#30]
-Results [4]: [cc_call_center_id#2 AS Call_Center#31, cc_name#3 AS Call_Center_Name#32, cc_manager#4 AS Manager#33, MakeDecimal(sum(UnscaledValue(cr_net_loss#7))#30,17,2) AS Returns_Loss#34]
+Aggregate Attributes [1]: [sum(UnscaledValue(cr_net_loss#7))#24]
+Results [4]: [cc_call_center_id#2 AS Call_Center#25, cc_name#3 AS Call_Center_Name#26, cc_manager#4 AS Manager#27, MakeDecimal(sum(UnscaledValue(cr_net_loss#7))#24,17,2) AS Returns_Loss#28]
 
 (42) Exchange
-Input [4]: [Call_Center#31, Call_Center_Name#32, Manager#33, Returns_Loss#34]
-Arguments: rangepartitioning(Returns_Loss#34 DESC NULLS LAST, 5), ENSURE_REQUIREMENTS, [id=#35]
+Input [4]: [Call_Center#25, Call_Center_Name#26, Manager#27, Returns_Loss#28]
+Arguments: rangepartitioning(Returns_Loss#28 DESC NULLS LAST, 5), ENSURE_REQUIREMENTS, [plan_id=7]
 
 (43) Sort [codegen id : 9]
-Input [4]: [Call_Center#31, Call_Center_Name#32, Manager#33, Returns_Loss#34]
-Arguments: [Returns_Loss#34 DESC NULLS LAST], true, 0
+Input [4]: [Call_Center#25, Call_Center_Name#26, Manager#27, Returns_Loss#28]
+Arguments: [Returns_Loss#28 DESC NULLS LAST], true, 0
 
 ===== Subqueries =====
 
@@ -251,25 +251,25 @@ BroadcastExchange (48)
 
 
 (44) Scan parquet default.date_dim
-Output [3]: [d_date_sk#11, d_year#36, d_moy#37]
+Output [3]: [d_date_sk#10, d_year#29, d_moy#30]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,1998), EqualTo(d_moy,11), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (45) ColumnarToRow [codegen id : 1]
-Input [3]: [d_date_sk#11, d_year#36, d_moy#37]
+Input [3]: [d_date_sk#10, d_year#29, d_moy#30]
 
 (46) Filter [codegen id : 1]
-Input [3]: [d_date_sk#11, d_year#36, d_moy#37]
-Condition : ((((isnotnull(d_year#36) AND isnotnull(d_moy#37)) AND (d_year#36 = 1998)) AND (d_moy#37 = 11)) AND isnotnull(d_date_sk#11))
+Input [3]: [d_date_sk#10, d_year#29, d_moy#30]
+Condition : ((((isnotnull(d_year#29) AND isnotnull(d_moy#30)) AND (d_year#29 = 1998)) AND (d_moy#30 = 11)) AND isnotnull(d_date_sk#10))
 
 (47) Project [codegen id : 1]
-Output [1]: [d_date_sk#11]
-Input [3]: [d_date_sk#11, d_year#36, d_moy#37]
+Output [1]: [d_date_sk#10]
+Input [3]: [d_date_sk#10, d_year#29, d_moy#30]
 
 (48) BroadcastExchange
-Input [1]: [d_date_sk#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#38]
+Input [1]: [d_date_sk#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=8]
 
 

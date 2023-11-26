@@ -58,7 +58,7 @@ Input [2]: [s_suppkey#3, s_comment#4]
 
 (8) BroadcastExchange
 Input [1]: [s_suppkey#3]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),true), [id=#5]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),true), [plan_id=1]
 
 (9) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ps_suppkey#2]
@@ -66,73 +66,73 @@ Right keys [1]: [s_suppkey#3]
 Join condition: None
 
 (10) Scan parquet default.part
-Output [4]: [p_partkey#6, p_brand#7, p_type#8, p_size#9]
+Output [4]: [p_partkey#5, p_brand#6, p_type#7, p_size#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/part]
-PushedFilters: [IsNotNull(p_brand), IsNotNull(p_type), Not(EqualTo(p_brand,Brand#10)), Not(StringStartsWith(p_type,MEDIUM POLISHED)), In(p_size, [14,19,23,3,36,45,49,9]), IsNotNull(p_partkey)]
+PushedFilters: [IsNotNull(p_brand), IsNotNull(p_type), Not(EqualTo(p_brand,Brand#9)), Not(StringStartsWith(p_type,MEDIUM POLISHED)), In(p_size, [14,19,23,3,36,45,49,9]), IsNotNull(p_partkey)]
 ReadSchema: struct<p_partkey:bigint,p_brand:string,p_type:string,p_size:int>
 
 (11) ColumnarToRow [codegen id : 2]
-Input [4]: [p_partkey#6, p_brand#7, p_type#8, p_size#9]
+Input [4]: [p_partkey#5, p_brand#6, p_type#7, p_size#8]
 
 (12) Filter [codegen id : 2]
-Input [4]: [p_partkey#6, p_brand#7, p_type#8, p_size#9]
-Condition : (((((isnotnull(p_brand#7) AND isnotnull(p_type#8)) AND NOT (p_brand#7 = Brand#10)) AND NOT StartsWith(p_type#8, MEDIUM POLISHED)) AND p_size#9 IN (49,14,23,45,19,3,36,9)) AND isnotnull(p_partkey#6))
+Input [4]: [p_partkey#5, p_brand#6, p_type#7, p_size#8]
+Condition : (((((isnotnull(p_brand#6) AND isnotnull(p_type#7)) AND NOT (p_brand#6 = Brand#9)) AND NOT StartsWith(p_type#7, MEDIUM POLISHED)) AND p_size#8 IN (49,14,23,45,19,3,36,9)) AND isnotnull(p_partkey#5))
 
 (13) BroadcastExchange
-Input [4]: [p_partkey#6, p_brand#7, p_type#8, p_size#9]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#11]
+Input [4]: [p_partkey#5, p_brand#6, p_type#7, p_size#8]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=2]
 
 (14) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ps_partkey#1]
-Right keys [1]: [p_partkey#6]
+Right keys [1]: [p_partkey#5]
 Join condition: None
 
 (15) Project [codegen id : 3]
-Output [4]: [ps_suppkey#2, p_brand#7, p_type#8, p_size#9]
-Input [6]: [ps_partkey#1, ps_suppkey#2, p_partkey#6, p_brand#7, p_type#8, p_size#9]
+Output [4]: [ps_suppkey#2, p_brand#6, p_type#7, p_size#8]
+Input [6]: [ps_partkey#1, ps_suppkey#2, p_partkey#5, p_brand#6, p_type#7, p_size#8]
 
 (16) HashAggregate [codegen id : 3]
-Input [4]: [ps_suppkey#2, p_brand#7, p_type#8, p_size#9]
-Keys [4]: [p_brand#7, p_type#8, p_size#9, ps_suppkey#2]
+Input [4]: [ps_suppkey#2, p_brand#6, p_type#7, p_size#8]
+Keys [4]: [p_brand#6, p_type#7, p_size#8, ps_suppkey#2]
 Functions: []
 Aggregate Attributes: []
-Results [4]: [p_brand#7, p_type#8, p_size#9, ps_suppkey#2]
+Results [4]: [p_brand#6, p_type#7, p_size#8, ps_suppkey#2]
 
 (17) Exchange
-Input [4]: [p_brand#7, p_type#8, p_size#9, ps_suppkey#2]
-Arguments: hashpartitioning(p_brand#7, p_type#8, p_size#9, ps_suppkey#2, 5), ENSURE_REQUIREMENTS, [id=#12]
+Input [4]: [p_brand#6, p_type#7, p_size#8, ps_suppkey#2]
+Arguments: hashpartitioning(p_brand#6, p_type#7, p_size#8, ps_suppkey#2, 5), ENSURE_REQUIREMENTS, [plan_id=3]
 
 (18) HashAggregate [codegen id : 4]
-Input [4]: [p_brand#7, p_type#8, p_size#9, ps_suppkey#2]
-Keys [4]: [p_brand#7, p_type#8, p_size#9, ps_suppkey#2]
+Input [4]: [p_brand#6, p_type#7, p_size#8, ps_suppkey#2]
+Keys [4]: [p_brand#6, p_type#7, p_size#8, ps_suppkey#2]
 Functions: []
 Aggregate Attributes: []
-Results [4]: [p_brand#7, p_type#8, p_size#9, ps_suppkey#2]
+Results [4]: [p_brand#6, p_type#7, p_size#8, ps_suppkey#2]
 
 (19) HashAggregate [codegen id : 4]
-Input [4]: [p_brand#7, p_type#8, p_size#9, ps_suppkey#2]
-Keys [3]: [p_brand#7, p_type#8, p_size#9]
+Input [4]: [p_brand#6, p_type#7, p_size#8, ps_suppkey#2]
+Keys [3]: [p_brand#6, p_type#7, p_size#8]
 Functions [1]: [partial_count(distinct ps_suppkey#2)]
-Aggregate Attributes [1]: [count(ps_suppkey#2)#13]
-Results [4]: [p_brand#7, p_type#8, p_size#9, count#14]
+Aggregate Attributes [1]: [count(ps_suppkey#2)#10]
+Results [4]: [p_brand#6, p_type#7, p_size#8, count#11]
 
 (20) Exchange
-Input [4]: [p_brand#7, p_type#8, p_size#9, count#14]
-Arguments: hashpartitioning(p_brand#7, p_type#8, p_size#9, 5), ENSURE_REQUIREMENTS, [id=#15]
+Input [4]: [p_brand#6, p_type#7, p_size#8, count#11]
+Arguments: hashpartitioning(p_brand#6, p_type#7, p_size#8, 5), ENSURE_REQUIREMENTS, [plan_id=4]
 
 (21) HashAggregate [codegen id : 5]
-Input [4]: [p_brand#7, p_type#8, p_size#9, count#14]
-Keys [3]: [p_brand#7, p_type#8, p_size#9]
+Input [4]: [p_brand#6, p_type#7, p_size#8, count#11]
+Keys [3]: [p_brand#6, p_type#7, p_size#8]
 Functions [1]: [count(distinct ps_suppkey#2)]
-Aggregate Attributes [1]: [count(ps_suppkey#2)#13]
-Results [4]: [p_brand#7, p_type#8, p_size#9, count(ps_suppkey#2)#13 AS supplier_cnt#16]
+Aggregate Attributes [1]: [count(ps_suppkey#2)#10]
+Results [4]: [p_brand#6, p_type#7, p_size#8, count(ps_suppkey#2)#10 AS supplier_cnt#12]
 
 (22) Exchange
-Input [4]: [p_brand#7, p_type#8, p_size#9, supplier_cnt#16]
-Arguments: rangepartitioning(supplier_cnt#16 DESC NULLS LAST, p_brand#7 ASC NULLS FIRST, p_type#8 ASC NULLS FIRST, p_size#9 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#17]
+Input [4]: [p_brand#6, p_type#7, p_size#8, supplier_cnt#12]
+Arguments: rangepartitioning(supplier_cnt#12 DESC NULLS LAST, p_brand#6 ASC NULLS FIRST, p_type#7 ASC NULLS FIRST, p_size#8 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=5]
 
 (23) Sort [codegen id : 6]
-Input [4]: [p_brand#7, p_type#8, p_size#9, supplier_cnt#16]
-Arguments: [supplier_cnt#16 DESC NULLS LAST, p_brand#7 ASC NULLS FIRST, p_type#8 ASC NULLS FIRST, p_size#9 ASC NULLS FIRST], true, 0
+Input [4]: [p_brand#6, p_type#7, p_size#8, supplier_cnt#12]
+Arguments: [supplier_cnt#12 DESC NULLS LAST, p_brand#6 ASC NULLS FIRST, p_type#7 ASC NULLS FIRST, p_size#8 ASC NULLS FIRST], true, 0
 

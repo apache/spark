@@ -87,7 +87,7 @@ Condition : ((isnotnull(l_partkey#4) AND isnotnull(l_suppkey#5)) AND isnotnull(l
 
 (8) BroadcastExchange
 Input [5]: [l_orderkey#3, l_partkey#4, l_suppkey#5, l_extendedprice#6, l_discount#7]
-Arguments: HashedRelationBroadcastMode(List(input[1, bigint, false]),false), [id=#8]
+Arguments: HashedRelationBroadcastMode(List(input[1, bigint, false]),false), [plan_id=1]
 
 (9) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [p_partkey#1]
@@ -99,194 +99,194 @@ Output [4]: [l_orderkey#3, l_suppkey#5, l_extendedprice#6, l_discount#7]
 Input [6]: [p_partkey#1, l_orderkey#3, l_partkey#4, l_suppkey#5, l_extendedprice#6, l_discount#7]
 
 (11) Scan parquet default.supplier
-Output [2]: [s_suppkey#9, s_nationkey#10]
+Output [2]: [s_suppkey#8, s_nationkey#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/supplier]
 PushedFilters: [IsNotNull(s_suppkey), IsNotNull(s_nationkey)]
 ReadSchema: struct<s_suppkey:bigint,s_nationkey:bigint>
 
 (12) ColumnarToRow [codegen id : 2]
-Input [2]: [s_suppkey#9, s_nationkey#10]
+Input [2]: [s_suppkey#8, s_nationkey#9]
 
 (13) Filter [codegen id : 2]
-Input [2]: [s_suppkey#9, s_nationkey#10]
-Condition : (isnotnull(s_suppkey#9) AND isnotnull(s_nationkey#10))
+Input [2]: [s_suppkey#8, s_nationkey#9]
+Condition : (isnotnull(s_suppkey#8) AND isnotnull(s_nationkey#9))
 
 (14) BroadcastExchange
-Input [2]: [s_suppkey#9, s_nationkey#10]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#11]
+Input [2]: [s_suppkey#8, s_nationkey#9]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=2]
 
 (15) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [l_suppkey#5]
-Right keys [1]: [s_suppkey#9]
+Right keys [1]: [s_suppkey#8]
 Join condition: None
 
 (16) Project [codegen id : 8]
-Output [4]: [l_orderkey#3, l_extendedprice#6, l_discount#7, s_nationkey#10]
-Input [6]: [l_orderkey#3, l_suppkey#5, l_extendedprice#6, l_discount#7, s_suppkey#9, s_nationkey#10]
+Output [4]: [l_orderkey#3, l_extendedprice#6, l_discount#7, s_nationkey#9]
+Input [6]: [l_orderkey#3, l_suppkey#5, l_extendedprice#6, l_discount#7, s_suppkey#8, s_nationkey#9]
 
 (17) Scan parquet default.orders
-Output [3]: [o_orderkey#12, o_custkey#13, o_orderdate#14]
+Output [3]: [o_orderkey#10, o_custkey#11, o_orderdate#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/orders]
 PushedFilters: [IsNotNull(o_orderdate), GreaterThanOrEqual(o_orderdate,1995-01-01), LessThanOrEqual(o_orderdate,1996-12-31), IsNotNull(o_orderkey), IsNotNull(o_custkey)]
 ReadSchema: struct<o_orderkey:bigint,o_custkey:bigint,o_orderdate:date>
 
 (18) ColumnarToRow [codegen id : 3]
-Input [3]: [o_orderkey#12, o_custkey#13, o_orderdate#14]
+Input [3]: [o_orderkey#10, o_custkey#11, o_orderdate#12]
 
 (19) Filter [codegen id : 3]
-Input [3]: [o_orderkey#12, o_custkey#13, o_orderdate#14]
-Condition : ((((isnotnull(o_orderdate#14) AND (o_orderdate#14 >= 1995-01-01)) AND (o_orderdate#14 <= 1996-12-31)) AND isnotnull(o_orderkey#12)) AND isnotnull(o_custkey#13))
+Input [3]: [o_orderkey#10, o_custkey#11, o_orderdate#12]
+Condition : ((((isnotnull(o_orderdate#12) AND (o_orderdate#12 >= 1995-01-01)) AND (o_orderdate#12 <= 1996-12-31)) AND isnotnull(o_orderkey#10)) AND isnotnull(o_custkey#11))
 
 (20) BroadcastExchange
-Input [3]: [o_orderkey#12, o_custkey#13, o_orderdate#14]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#15]
+Input [3]: [o_orderkey#10, o_custkey#11, o_orderdate#12]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=3]
 
 (21) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [l_orderkey#3]
-Right keys [1]: [o_orderkey#12]
+Right keys [1]: [o_orderkey#10]
 Join condition: None
 
 (22) Project [codegen id : 8]
-Output [5]: [l_extendedprice#6, l_discount#7, s_nationkey#10, o_custkey#13, o_orderdate#14]
-Input [7]: [l_orderkey#3, l_extendedprice#6, l_discount#7, s_nationkey#10, o_orderkey#12, o_custkey#13, o_orderdate#14]
+Output [5]: [l_extendedprice#6, l_discount#7, s_nationkey#9, o_custkey#11, o_orderdate#12]
+Input [7]: [l_orderkey#3, l_extendedprice#6, l_discount#7, s_nationkey#9, o_orderkey#10, o_custkey#11, o_orderdate#12]
 
 (23) Scan parquet default.customer
-Output [2]: [c_custkey#16, c_nationkey#17]
+Output [2]: [c_custkey#13, c_nationkey#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
 PushedFilters: [IsNotNull(c_custkey), IsNotNull(c_nationkey)]
 ReadSchema: struct<c_custkey:bigint,c_nationkey:bigint>
 
 (24) ColumnarToRow [codegen id : 4]
-Input [2]: [c_custkey#16, c_nationkey#17]
+Input [2]: [c_custkey#13, c_nationkey#14]
 
 (25) Filter [codegen id : 4]
-Input [2]: [c_custkey#16, c_nationkey#17]
-Condition : (isnotnull(c_custkey#16) AND isnotnull(c_nationkey#17))
+Input [2]: [c_custkey#13, c_nationkey#14]
+Condition : (isnotnull(c_custkey#13) AND isnotnull(c_nationkey#14))
 
 (26) BroadcastExchange
-Input [2]: [c_custkey#16, c_nationkey#17]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#18]
+Input [2]: [c_custkey#13, c_nationkey#14]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=4]
 
 (27) BroadcastHashJoin [codegen id : 8]
-Left keys [1]: [o_custkey#13]
-Right keys [1]: [c_custkey#16]
+Left keys [1]: [o_custkey#11]
+Right keys [1]: [c_custkey#13]
 Join condition: None
 
 (28) Project [codegen id : 8]
-Output [5]: [l_extendedprice#6, l_discount#7, s_nationkey#10, o_orderdate#14, c_nationkey#17]
-Input [7]: [l_extendedprice#6, l_discount#7, s_nationkey#10, o_custkey#13, o_orderdate#14, c_custkey#16, c_nationkey#17]
+Output [5]: [l_extendedprice#6, l_discount#7, s_nationkey#9, o_orderdate#12, c_nationkey#14]
+Input [7]: [l_extendedprice#6, l_discount#7, s_nationkey#9, o_custkey#11, o_orderdate#12, c_custkey#13, c_nationkey#14]
 
 (29) Scan parquet default.nation
-Output [2]: [n_nationkey#19, n_regionkey#20]
+Output [2]: [n_nationkey#15, n_regionkey#16]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/nation]
 PushedFilters: [IsNotNull(n_nationkey), IsNotNull(n_regionkey)]
 ReadSchema: struct<n_nationkey:bigint,n_regionkey:bigint>
 
 (30) ColumnarToRow [codegen id : 5]
-Input [2]: [n_nationkey#19, n_regionkey#20]
+Input [2]: [n_nationkey#15, n_regionkey#16]
 
 (31) Filter [codegen id : 5]
-Input [2]: [n_nationkey#19, n_regionkey#20]
-Condition : (isnotnull(n_nationkey#19) AND isnotnull(n_regionkey#20))
+Input [2]: [n_nationkey#15, n_regionkey#16]
+Condition : (isnotnull(n_nationkey#15) AND isnotnull(n_regionkey#16))
 
 (32) BroadcastExchange
-Input [2]: [n_nationkey#19, n_regionkey#20]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#21]
+Input [2]: [n_nationkey#15, n_regionkey#16]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=5]
 
 (33) BroadcastHashJoin [codegen id : 8]
-Left keys [1]: [c_nationkey#17]
-Right keys [1]: [n_nationkey#19]
+Left keys [1]: [c_nationkey#14]
+Right keys [1]: [n_nationkey#15]
 Join condition: None
 
 (34) Project [codegen id : 8]
-Output [5]: [l_extendedprice#6, l_discount#7, s_nationkey#10, o_orderdate#14, n_regionkey#20]
-Input [7]: [l_extendedprice#6, l_discount#7, s_nationkey#10, o_orderdate#14, c_nationkey#17, n_nationkey#19, n_regionkey#20]
+Output [5]: [l_extendedprice#6, l_discount#7, s_nationkey#9, o_orderdate#12, n_regionkey#16]
+Input [7]: [l_extendedprice#6, l_discount#7, s_nationkey#9, o_orderdate#12, c_nationkey#14, n_nationkey#15, n_regionkey#16]
 
 (35) Scan parquet default.nation
-Output [2]: [n_nationkey#22, n_name#23]
+Output [2]: [n_nationkey#17, n_name#18]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/nation]
 PushedFilters: [IsNotNull(n_nationkey)]
 ReadSchema: struct<n_nationkey:bigint,n_name:string>
 
 (36) ColumnarToRow [codegen id : 6]
-Input [2]: [n_nationkey#22, n_name#23]
+Input [2]: [n_nationkey#17, n_name#18]
 
 (37) Filter [codegen id : 6]
-Input [2]: [n_nationkey#22, n_name#23]
-Condition : isnotnull(n_nationkey#22)
+Input [2]: [n_nationkey#17, n_name#18]
+Condition : isnotnull(n_nationkey#17)
 
 (38) BroadcastExchange
-Input [2]: [n_nationkey#22, n_name#23]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#24]
+Input [2]: [n_nationkey#17, n_name#18]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=6]
 
 (39) BroadcastHashJoin [codegen id : 8]
-Left keys [1]: [s_nationkey#10]
-Right keys [1]: [n_nationkey#22]
+Left keys [1]: [s_nationkey#9]
+Right keys [1]: [n_nationkey#17]
 Join condition: None
 
 (40) Project [codegen id : 8]
-Output [5]: [l_extendedprice#6, l_discount#7, o_orderdate#14, n_regionkey#20, n_name#23]
-Input [7]: [l_extendedprice#6, l_discount#7, s_nationkey#10, o_orderdate#14, n_regionkey#20, n_nationkey#22, n_name#23]
+Output [5]: [l_extendedprice#6, l_discount#7, o_orderdate#12, n_regionkey#16, n_name#18]
+Input [7]: [l_extendedprice#6, l_discount#7, s_nationkey#9, o_orderdate#12, n_regionkey#16, n_nationkey#17, n_name#18]
 
 (41) Scan parquet default.region
-Output [2]: [r_regionkey#25, r_name#26]
+Output [2]: [r_regionkey#19, r_name#20]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/region]
 PushedFilters: [IsNotNull(r_name), EqualTo(r_name,AMERICA), IsNotNull(r_regionkey)]
 ReadSchema: struct<r_regionkey:bigint,r_name:string>
 
 (42) ColumnarToRow [codegen id : 7]
-Input [2]: [r_regionkey#25, r_name#26]
+Input [2]: [r_regionkey#19, r_name#20]
 
 (43) Filter [codegen id : 7]
-Input [2]: [r_regionkey#25, r_name#26]
-Condition : ((isnotnull(r_name#26) AND (r_name#26 = AMERICA)) AND isnotnull(r_regionkey#25))
+Input [2]: [r_regionkey#19, r_name#20]
+Condition : ((isnotnull(r_name#20) AND (r_name#20 = AMERICA)) AND isnotnull(r_regionkey#19))
 
 (44) Project [codegen id : 7]
-Output [1]: [r_regionkey#25]
-Input [2]: [r_regionkey#25, r_name#26]
+Output [1]: [r_regionkey#19]
+Input [2]: [r_regionkey#19, r_name#20]
 
 (45) BroadcastExchange
-Input [1]: [r_regionkey#25]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#27]
+Input [1]: [r_regionkey#19]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=7]
 
 (46) BroadcastHashJoin [codegen id : 8]
-Left keys [1]: [n_regionkey#20]
-Right keys [1]: [r_regionkey#25]
+Left keys [1]: [n_regionkey#16]
+Right keys [1]: [r_regionkey#19]
 Join condition: None
 
 (47) Project [codegen id : 8]
-Output [3]: [year(o_orderdate#14) AS o_year#28, CheckOverflow((promote_precision(cast(l_extendedprice#6 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#7 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)) AS volume#29, n_name#23 AS nation#30]
-Input [6]: [l_extendedprice#6, l_discount#7, o_orderdate#14, n_regionkey#20, n_name#23, r_regionkey#25]
+Output [3]: [year(o_orderdate#12) AS o_year#21, CheckOverflow((promote_precision(cast(l_extendedprice#6 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#7 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)) AS volume#22, n_name#18 AS nation#23]
+Input [6]: [l_extendedprice#6, l_discount#7, o_orderdate#12, n_regionkey#16, n_name#18, r_regionkey#19]
 
 (48) HashAggregate [codegen id : 8]
-Input [3]: [o_year#28, volume#29, nation#30]
-Keys [1]: [o_year#28]
-Functions [2]: [partial_sum(CASE WHEN (nation#30 = BRAZIL) THEN volume#29 ELSE 0 END), partial_sum(volume#29)]
-Aggregate Attributes [4]: [sum#31, isEmpty#32, sum#33, isEmpty#34]
-Results [5]: [o_year#28, sum#35, isEmpty#36, sum#37, isEmpty#38]
+Input [3]: [o_year#21, volume#22, nation#23]
+Keys [1]: [o_year#21]
+Functions [2]: [partial_sum(CASE WHEN (nation#23 = BRAZIL) THEN volume#22 ELSE 0 END), partial_sum(volume#22)]
+Aggregate Attributes [4]: [sum#24, isEmpty#25, sum#26, isEmpty#27]
+Results [5]: [o_year#21, sum#28, isEmpty#29, sum#30, isEmpty#31]
 
 (49) Exchange
-Input [5]: [o_year#28, sum#35, isEmpty#36, sum#37, isEmpty#38]
-Arguments: hashpartitioning(o_year#28, 5), ENSURE_REQUIREMENTS, [id=#39]
+Input [5]: [o_year#21, sum#28, isEmpty#29, sum#30, isEmpty#31]
+Arguments: hashpartitioning(o_year#21, 5), ENSURE_REQUIREMENTS, [plan_id=8]
 
 (50) HashAggregate [codegen id : 9]
-Input [5]: [o_year#28, sum#35, isEmpty#36, sum#37, isEmpty#38]
-Keys [1]: [o_year#28]
-Functions [2]: [sum(CASE WHEN (nation#30 = BRAZIL) THEN volume#29 ELSE 0 END), sum(volume#29)]
-Aggregate Attributes [2]: [sum(CASE WHEN (nation#30 = BRAZIL) THEN volume#29 ELSE 0 END)#40, sum(volume#29)#41]
-Results [2]: [o_year#28, CheckOverflow((promote_precision(sum(CASE WHEN (nation#30 = BRAZIL) THEN volume#29 ELSE 0 END)#40) / promote_precision(sum(volume#29)#41)), DecimalType(38,6)) AS mkt_share#42]
+Input [5]: [o_year#21, sum#28, isEmpty#29, sum#30, isEmpty#31]
+Keys [1]: [o_year#21]
+Functions [2]: [sum(CASE WHEN (nation#23 = BRAZIL) THEN volume#22 ELSE 0 END), sum(volume#22)]
+Aggregate Attributes [2]: [sum(CASE WHEN (nation#23 = BRAZIL) THEN volume#22 ELSE 0 END)#32, sum(volume#22)#33]
+Results [2]: [o_year#21, CheckOverflow((promote_precision(sum(CASE WHEN (nation#23 = BRAZIL) THEN volume#22 ELSE 0 END)#32) / promote_precision(sum(volume#22)#33)), DecimalType(38,6)) AS mkt_share#34]
 
 (51) Exchange
-Input [2]: [o_year#28, mkt_share#42]
-Arguments: rangepartitioning(o_year#28 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#43]
+Input [2]: [o_year#21, mkt_share#34]
+Arguments: rangepartitioning(o_year#21 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=9]
 
 (52) Sort [codegen id : 10]
-Input [2]: [o_year#28, mkt_share#42]
-Arguments: [o_year#28 ASC NULLS FIRST], true, 0
+Input [2]: [o_year#21, mkt_share#34]
+Arguments: [o_year#21 ASC NULLS FIRST], true, 0
 

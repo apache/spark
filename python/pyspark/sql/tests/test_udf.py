@@ -24,7 +24,7 @@ import datetime
 
 from pyspark import SparkContext, SQLContext
 from pyspark.sql import SparkSession, Column, Row
-from pyspark.sql.functions import udf, assert_true, lit
+from pyspark.sql.functions import udf, assert_true, lit, rand
 from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.types import (
     StringType,
@@ -682,6 +682,24 @@ class UDFTests(ReusedSQLTestCase):
         finally:
             shutil.rmtree(path)
 
+    # SPARK-42134
+    def test_file_dsv2_with_udf_filter(self):
+        from pyspark.sql.functions import lit
+
+        path = tempfile.mkdtemp()
+        shutil.rmtree(path)
+
+        try:
+            with self.sql_conf({"spark.sql.sources.useV1SourceList": ""}):
+                self.spark.range(1).write.mode("overwrite").format("parquet").save(path)
+                df = self.spark.read.parquet(path).toDF("i")
+                f = udf(lambda x: False, "boolean")(lit(1))
+                result = df.filter(f)
+                self.assertEqual(0, result.count())
+
+        finally:
+            shutil.rmtree(path)
+
     # SPARK-25591
     def test_same_accumulator_in_udfs(self):
         data_schema = StructType(
@@ -797,6 +815,12 @@ class UDFTests(ReusedSQLTestCase):
                     )
         finally:
             shutil.rmtree(path)
+
+    def test_udf_with_rand(self):
+        # SPARK-40121: rand() with Python UDF.
+        self.assertEqual(
+            len(self.spark.range(10).select(udf(lambda x: x, DoubleType())(rand())).collect()), 10
+        )
 
 
 class UDFInitializationTests(unittest.TestCase):

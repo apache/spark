@@ -31,10 +31,12 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowSQLTest
 
 /**
  * Window function testing for DataFrame API.
  */
+@SlowSQLTest
 class DataFrameWindowFunctionsSuite extends QueryTest
   with SharedSparkSession
   with AdaptiveSparkPlanHelper{
@@ -812,6 +814,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         lead($"value", 1, null, true).over(window),
         lead($"value", 2, null, true).over(window),
         lead($"value", 3, null, true).over(window),
+        // offset > rowCount: SPARK-45430
+        lead($"value", 100, null, true).over(window),
         lead(concat($"value", $"key"), 1, null, true).over(window),
         lag($"value", 1).over(window),
         lag($"value", 2).over(window),
@@ -819,27 +823,29 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         lag($"value", 1, null, true).over(window),
         lag($"value", 2, null, true).over(window),
         lag($"value", 3, null, true).over(window),
+        // abs(offset) > rowCount: SPARK-45430
+        lag($"value", -100, null, true).over(window),
         lag(concat($"value", $"key"), 1, null, true).over(window))
         .orderBy($"order"),
       Seq(
-        Row("a", 0, null, "x", null, null, "x", "y", "z", "xa",
-          null, null, null, null, null, null, null),
-        Row("a", 1, "x", null, null, "x", "y", "z", "v", "ya",
-          null, null, "x", null, null, null, null),
-        Row("b", 2, null, null, "y", null, "y", "z", "v", "ya",
-          "x", null, null, "x", null, null, "xa"),
-        Row("c", 3, null, "y", null, null, "y", "z", "v", "ya",
-          null, "x", null, "x", null, null, "xa"),
-        Row("a", 4, "y", null, "z", "y", "z", "v", null, "za",
-          null, null, "y", "x", null, null, "xa"),
-        Row("b", 5, null, "z", "v", null, "z", "v", null, "za",
-          "y", null, null, "y", "x", null, "ya"),
-        Row("a", 6, "z", "v", null, "z", "v", null, null, "va",
-          null, "y", "z", "y", "x", null, "ya"),
-        Row("a", 7, "v", null, null, "v", null, null, null, null,
-          "z", null, "v", "z", "y", "x", "za"),
-        Row("a", 8, null, null, null, null, null, null, null, null,
-          "v", "z", null, "v", "z", "y", "va")))
+        Row("a", 0, null, "x", null, null, "x", "y", "z", null, "xa",
+          null, null, null, null, null, null, null, null),
+        Row("a", 1, "x", null, null, "x", "y", "z", "v", null, "ya",
+          null, null, "x", null, null, null, null, null),
+        Row("b", 2, null, null, "y", null, "y", "z", "v", null, "ya",
+          "x", null, null, "x", null, null, null, "xa"),
+        Row("c", 3, null, "y", null, null, "y", "z", "v", null, "ya",
+          null, "x", null, "x", null, null, null, "xa"),
+        Row("a", 4, "y", null, "z", "y", "z", "v", null, null, "za",
+          null, null, "y", "x", null, null, null, "xa"),
+        Row("b", 5, null, "z", "v", null, "z", "v", null, null, "za",
+          "y", null, null, "y", "x", null, null, "ya"),
+        Row("a", 6, "z", "v", null, "z", "v", null, null, null, "va",
+          null, "y", "z", "y", "x", null, null, "ya"),
+        Row("a", 7, "v", null, null, "v", null, null, null, null, null,
+          "z", null, "v", "z", "y", "x", null, "za"),
+        Row("a", 8, null, null, null, null, null, null, null, null, null,
+          "v", "z", null, "v", "z", "y", null, "va")))
   }
 
   test("SPARK-12989 ExtractWindowExpressions treats alias as regular attribute") {
@@ -1187,6 +1193,32 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         Row(7, 3.5),
         Row(5, 5),
         Row(11, 5.5)
+      )
+    )
+  }
+
+  test("SPARK-38614: percent_rank should apply before limit") {
+    val df = Seq.tabulate(101)(identity).toDF("id")
+    val w = Window.orderBy("id")
+    checkAnswer(
+      df.select($"id", percent_rank().over(w)).limit(3),
+      Seq(
+        Row(0, 0.0d),
+        Row(1, 0.01d),
+        Row(2, 0.02d)
+      )
+    )
+  }
+
+  test("SPARK-40002: ntile should apply before limit") {
+    val df = Seq.tabulate(101)(identity).toDF("id")
+    val w = Window.orderBy("id")
+    checkAnswer(
+      df.select($"id", ntile(10).over(w)).limit(3),
+      Seq(
+        Row(0, 1),
+        Row(1, 1),
+        Row(2, 1)
       )
     )
   }

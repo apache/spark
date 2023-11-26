@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import org.apache.hadoop.fs.{Path, PathFilter}
 import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
@@ -29,6 +30,7 @@ import org.apache.spark.TestUtils.withListener
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
@@ -769,6 +771,8 @@ class DatasetSuite extends QueryTest
 
     observe(spark.range(100), Map("percentile_approx_val" -> 49))
     observe(spark.range(0), Map("percentile_approx_val" -> null))
+    observe(spark.range(1, 10), Map("percentile_approx_val" -> 5))
+    observe(spark.range(1, 10, 1, 11), Map("percentile_approx_val" -> 5))
   }
 
   test("sample with replacement") {
@@ -1000,24 +1004,6 @@ class DatasetSuite extends QueryTest
     }
 
     checkDataset(cogrouped, "a13", "b24")
-  }
-
-  test("give nice error message when the real number of fields doesn't match encoder schema") {
-    val ds = Seq(ClassData("a", 1), ClassData("b", 2)).toDS()
-
-    val message = intercept[AnalysisException] {
-      ds.as[(String, Int, Long)]
-    }.message
-    assert(message ==
-      "Try to map struct<a:string,b:int> to Tuple3, " +
-        "but failed as the number of fields does not line up.")
-
-    val message2 = intercept[AnalysisException] {
-      ds.as[Tuple1[String]]
-    }.message
-    assert(message2 ==
-      "Try to map struct<a:string,b:int> to Tuple1, " +
-        "but failed as the number of fields does not line up.")
   }
 
   test("SPARK-13440: Resolving option fields") {
@@ -2149,6 +2135,67 @@ class DatasetSuite extends QueryTest
       (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11),
       (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
       (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13))
+  }
+
+  test("SPARK-40407: repartition should not result in severe data skew") {
+    val df = spark.range(0, 100, 1, 50).repartition(4)
+    val result = df.mapPartitions(iter => Iterator.single(iter.length)).collect()
+    assert(result.sorted.toSeq === Seq(23, 25, 25, 27))
+  }
+
+  test("SPARK-40660: Switch to XORShiftRandom to distribute elements") {
+    withTempDir { dir =>
+      spark.range(10).repartition(10).write.mode(SaveMode.Overwrite).parquet(dir.getCanonicalPath)
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(spark.sessionState.newHadoopConf())
+      val parquetFiles = fs.listStatus(new Path(dir.getAbsolutePath), new PathFilter {
+        override def accept(path: Path): Boolean = path.getName.endsWith("parquet")
+      })
+      assert(parquetFiles.size === 10)
+    }
+  }
+
+  test("SPARK-37829: DataFrame outer join") {
+    // Same as "SPARK-15441: Dataset outer join" but using DataFrames instead of Datasets
+    val left = Seq(ClassData("a", 1), ClassData("b", 2)).toDF().as("left")
+    val right = Seq(ClassData("x", 2), ClassData("y", 3)).toDF().as("right")
+    val joined = left.joinWith(right, $"left.b" === $"right.b", "left")
+
+    val leftFieldSchema = StructType(
+      Seq(
+        StructField("a", StringType),
+        StructField("b", IntegerType, nullable = false)
+      )
+    )
+    val rightFieldSchema = StructType(
+      Seq(
+        StructField("a", StringType),
+        StructField("b", IntegerType, nullable = false)
+      )
+    )
+    val expectedSchema = StructType(
+      Seq(
+        StructField(
+          "_1",
+          leftFieldSchema,
+          nullable = false
+        ),
+        // This is a left join, so the right output is nullable:
+        StructField(
+          "_2",
+          rightFieldSchema
+        )
+      )
+    )
+    assert(joined.schema === expectedSchema)
+
+    val result = joined.collect().toSet
+    val expected = Set(
+      new GenericRowWithSchema(Array("a", 1), leftFieldSchema) ->
+        null,
+      new GenericRowWithSchema(Array("b", 2), leftFieldSchema) ->
+        new GenericRowWithSchema(Array("x", 2), rightFieldSchema)
+    )
+    assert(result == expected)
   }
 }
 

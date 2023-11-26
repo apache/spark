@@ -18,12 +18,12 @@ Results [2]: [sum#5, isEmpty#6]
 
 (3) Exchange
 Input [2]: [sum#5, isEmpty#6]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#7]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=1]
 
 (4) HashAggregate [codegen id : 2]
 Input [2]: [sum#5, isEmpty#6]
 Keys: []
 Functions [1]: [sum(CheckOverflow((promote_precision(l_extendedprice#1) * promote_precision(l_discount#2)), DecimalType(21,0)))]
-Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(l_extendedprice#1) * promote_precision(l_discount#2)), DecimalType(21,0)))#8]
-Results [1]: [sum(CheckOverflow((promote_precision(l_extendedprice#1) * promote_precision(l_discount#2)), DecimalType(21,0)))#8 AS revenue#9]
+Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(l_extendedprice#1) * promote_precision(l_discount#2)), DecimalType(21,0)))#7]
+Results [1]: [sum(CheckOverflow((promote_precision(l_extendedprice#1) * promote_precision(l_discount#2)), DecimalType(21,0)))#7 AS revenue#8]
 

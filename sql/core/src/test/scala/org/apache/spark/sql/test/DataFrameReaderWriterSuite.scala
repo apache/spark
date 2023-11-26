@@ -24,7 +24,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.parquet.hadoop.ParquetFileReader
 import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.PrimitiveType
@@ -32,7 +32,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type.Repetition
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkContext, TestUtils}
+import org.apache.spark.{SparkContext, SparkException, TestUtils}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -1132,7 +1132,8 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         val jobDescriptions = new ConcurrentLinkedQueue[String]()
         val jobListener = new SparkListener {
           override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-            jobDescriptions.add(jobStart.properties.getProperty(SparkContext.SPARK_JOB_DESCRIPTION))
+            val desc = jobStart.properties.getProperty(SparkContext.SPARK_JOB_DESCRIPTION)
+            if (desc != null) jobDescriptions.add(desc)
           }
         }
         sparkContext.addSparkListener(jobListener)
@@ -1271,6 +1272,28 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
               spark.table("t1").orderBy("k1"))
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-43327: location exists when insertoverwrite fails") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("t", "t1") {
+        sql("CREATE TABLE t(c1 int) USING parquet")
+        sql("CREATE TABLE t1(c2 long) USING parquet")
+        sql("INSERT OVERWRITE TABLE t1 SELECT 6000044164")
+
+        val identifier = TableIdentifier("t")
+        val location = spark.sessionState.catalog.getTableMetadata(identifier).location
+
+        intercept[SparkException] {
+          sql("INSERT OVERWRITE TABLE t SELECT c2 FROM " +
+            "(SELECT cast(c2 as int) as c2 FROM t1 distribute by c2)")
+        }
+        // scalastyle:off hadoopconfiguration
+        val fs = FileSystem.get(location, spark.sparkContext.hadoopConfiguration)
+        // scalastyle:on hadoopconfiguration
+        assert(fs.exists(new Path(location)))
       }
     }
   }

@@ -29,9 +29,10 @@ import org.apache.spark._
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.CreateAtomicTestManager
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.tags.ExtendedRocksDBTest
+import org.apache.spark.tags.{ExtendedRocksDBTest, SlowSQLTest}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
+@SlowSQLTest
 @ExtendedRocksDBTest
 class RocksDBSuite extends SparkFunSuite {
 
@@ -118,7 +119,11 @@ class RocksDBSuite extends SparkFunSuite {
     withDB(remoteDir, conf = conf) { db =>
       // Generate versions without cleaning up
       for (version <- 1 to 50) {
-        db.put(version.toString, version.toString)  // update "1" -> "1", "2" -> "2", ...
+        if (version > 1) {
+          // remove keys we wrote in previous iteration to ensure compaction happens
+          db.remove((version - 1).toString)
+        }
+        db.put(version.toString, version.toString)
         db.commit()
       }
 
@@ -134,7 +139,7 @@ class RocksDBSuite extends SparkFunSuite {
       versionsPresent.foreach { version =>
         db.load(version)
         val data = db.iterator().map(toStr).toSet
-        assert(data === (1L to version).map(_.toString).map(x => x -> x).toSet)
+        assert(data === Set((version.toString, version.toString)))
       }
     }
   }

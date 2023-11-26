@@ -710,18 +710,18 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql("create table t(b int) using parquet")
         val outOfRangeValue1 = (Int.MaxValue + 1L).toString
+        val expectedMsg = "Fail to insert a value of \"BIGINT\" type into the \"INT\" type column" +
+          " `b` due to an overflow."
         var msg = intercept[SparkException] {
           sql(s"insert into t values($outOfRangeValue1)")
         }.getCause.getMessage
-        assert(msg.contains(
-          s"""The value ${outOfRangeValue1}L of the type "BIGINT" cannot be cast to "INT""""))
+        assert(msg.contains(expectedMsg))
 
         val outOfRangeValue2 = (Int.MinValue - 1L).toString
         msg = intercept[SparkException] {
           sql(s"insert into t values($outOfRangeValue2)")
         }.getCause.getMessage
-        assert(msg.contains(
-          s"""The value ${outOfRangeValue2}L of the type "BIGINT" cannot be cast to "INT""""))
+        assert(msg.contains(expectedMsg))
       }
     }
   }
@@ -732,18 +732,18 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql("create table t(b long) using parquet")
         val outOfRangeValue1 = Math.nextUp(Long.MaxValue)
+        val expectedMsg = "Fail to insert a value of \"DOUBLE\" type into the \"BIGINT\" type " +
+          "column `b` due to an overflow."
         var msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue1}D)")
         }.getCause.getMessage
-        assert(msg.contains(
-          s"""The value ${outOfRangeValue1}D of the type "DOUBLE" cannot be cast to "BIGINT""""))
+        assert(msg.contains(expectedMsg))
 
         val outOfRangeValue2 = Math.nextDown(Long.MinValue)
         msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue2}D)")
         }.getCause.getMessage
-        assert(msg.contains(
-          s"""The value ${outOfRangeValue2}D of the type "DOUBLE" cannot be cast to "BIGINT""""))
+        assert(msg.contains(expectedMsg))
       }
     }
   }
@@ -754,10 +754,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql("create table t(b decimal(3,2)) using parquet")
         val outOfRangeValue = "123.45"
+        val expectedMsg = "Fail to insert a value of \"DECIMAL(5,2)\" type into the " +
+          "\"DECIMAL(3,2)\" type column `b` due to an overflow."
         val msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue})")
         }.getCause.getMessage
-        assert(msg.contains("cannot be represented as Decimal(3, 2)"))
+        assert(msg.contains(expectedMsg))
       }
     }
   }
@@ -1102,6 +1104,16 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
               Row(7, Period.ofYears(8), Duration.ofDays(9))))
         }
       }
+    }
+  }
+
+  test("SPARK-42286: Insert into a table select from case when with cast, positive test") {
+    withTable("t1", "t2") {
+      sql("create table t1 (x int) using parquet")
+      sql("insert into t1 values (1), (2)")
+      sql("create table t2 (x Decimal(9, 0)) using parquet")
+      sql("insert into t2 select 0 - (case when x = 1 then 1 else x end) from t1 where x = 1")
+      checkAnswer(spark.table("t2"), Row(-1))
     }
   }
 }

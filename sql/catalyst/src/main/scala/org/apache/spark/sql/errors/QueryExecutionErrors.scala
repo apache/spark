@@ -59,7 +59,7 @@ import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.CircularBuffer
+import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
  * Object for grouping error messages from (most) exceptions thrown during query execution.
@@ -91,6 +91,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         toSQLType(from),
         toSQLType(to),
         toSQLConf(SQLConf.ANSI_ENABLED.key)))
+  }
+
+  def castingCauseOverflowErrorInTableInsert(
+      from: DataType,
+      to: DataType,
+      columnName: String): ArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
+      messageParameters = Array(
+        toSQLType(from),
+        toSQLType(to),
+        toSQLId(columnName))
+    )
   }
 
   def cannotChangeDecimalPrecisionError(
@@ -652,8 +665,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
        """.stripMargin)
   }
 
-  def unsupportedSaveModeError(saveMode: String, pathExists: Boolean): Throwable = {
-    new IllegalStateException(s"unsupported save mode $saveMode ($pathExists)")
+  def saveModeUnsupportedError(saveMode: Any, pathExists: Boolean): Throwable = {
+    pathExists match {
+      case true => new SparkIllegalArgumentException(errorClass = "UNSUPPORTED_SAVE_MODE",
+        messageParameters = Array("EXISTENT_PATH", toSQLValue(saveMode, StringType)))
+      case _ => new SparkIllegalArgumentException(errorClass = "UNSUPPORTED_SAVE_MODE",
+        messageParameters = Array("NON_EXISTENT_PATH", toSQLValue(saveMode, StringType)))
+    }
   }
 
   def cannotClearOutputDirectoryError(staticPrefixPath: Path): Throwable = {
@@ -1810,7 +1828,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def cannotBroadcastTableOverMaxTableBytesError(
       maxBroadcastTableBytes: Long, dataSize: Long): Throwable = {
     new SparkException("Cannot broadcast the table that is larger than" +
-      s" ${maxBroadcastTableBytes >> 30}GB: ${dataSize >> 30} GB")
+      s" ${Utils.bytesToString(maxBroadcastTableBytes)}: ${Utils.bytesToString(dataSize)}")
   }
 
   def notEnoughMemoryToBuildAndBroadcastTableError(oe: OutOfMemoryError): Throwable = {
@@ -2064,5 +2082,24 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Array(
         s"add ${toSQLValue(amount, IntegerType)} $unit to " +
         s"${toSQLValue(DateTimeUtils.microsToInstant(micros), TimestampType)}"))
+  }
+
+  def nullComparisonResultError(): Throwable = {
+    new SparkException(errorClass = "NULL_COMPARISON_RESULT",
+      messageParameters = Array(), cause = null)
+  }
+
+  def invalidBucketFile(path: String): Throwable = {
+    new SparkException(errorClass = "INVALID_BUCKET_FILE", messageParameters = Array(path),
+      cause = null)
+  }
+
+  def invalidPatternError(funcName: String, pattern: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters = Array(
+        "regexp",
+        toSQLId(funcName),
+        toSQLValue(pattern, StringType)))
   }
 }

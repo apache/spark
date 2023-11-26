@@ -17,8 +17,8 @@
       url: sql-getting-started.html#interoperating-with-rdds
     - text: Scalar Functions
       url: sql-getting-started.html#scalar-functions
-    - text: Aggregations
-      url: sql-getting-started.html#aggregations
+    - text: Aggregate Functions
+      url: sql-getting-started.html#aggregate-functions
 - text: Data Sources
   url: sql-data-sources.html
   subitems:

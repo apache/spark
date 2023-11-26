@@ -32,10 +32,21 @@ This subsection presents the usages and descriptions of these functions.
  * [Map Functions](sql-ref-functions-builtin.html#map-functions)
  * [Date and Timestamp Functions](sql-ref-functions-builtin.html#date-and-timestamp-functions)
  * [JSON Functions](sql-ref-functions-builtin.html#json-functions)
+ * [Mathematical Functions](sql-ref-functions-builtin.html#mathematical-functions)
+ * [String Functions](sql-ref-functions-builtin.html#string-functions)
+ * [Bitwise Functions](sql-ref-functions-builtin.html#bitwise-functions)
+ * [Conversion Functions](sql-ref-functions-builtin.html#conversion-functions)
+ * [Conditional Functions](sql-ref-functions-builtin.html#conditional-functions)
+ * [Predicate Functions](sql-ref-functions-builtin.html#predicate-functions)
+ * [Csv Functions](sql-ref-functions-builtin.html#csv-functions)
+ * [Misc Functions](sql-ref-functions-builtin.html#misc-functions)
 
 #### Aggregate-like Functions
  * [Aggregate Functions](sql-ref-functions-builtin.html#aggregate-functions)
  * [Window Functions](sql-ref-functions-builtin.html#window-functions)
+
+#### Generator Functions
+* [Generator Functions](sql-ref-functions-builtin.html#generator-functions)
 
 ### UDFs (User-Defined Functions)
 

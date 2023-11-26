@@ -309,4 +309,42 @@ class PropagateEmptyRelationSuite extends PlanTest {
     val optimized2 = Optimize.execute(plan2)
     comparePlans(optimized2, expected)
   }
+
+  test("Propagate empty relation with repartition") {
+    val emptyRelation = LocalRelation($"a".int, $"b".int)
+    comparePlans(Optimize.execute(
+      emptyRelation.repartition(1).sortBy($"a".asc).analyze
+    ), emptyRelation.analyze)
+
+    comparePlans(Optimize.execute(
+      emptyRelation.distribute($"a")(1).sortBy($"a".asc).analyze
+    ), emptyRelation.analyze)
+
+    comparePlans(Optimize.execute(
+      emptyRelation.repartition().analyze
+    ), emptyRelation.analyze)
+
+    comparePlans(Optimize.execute(
+      emptyRelation.repartition(1).sortBy($"a".asc).repartition().analyze
+    ), emptyRelation.analyze)
+  }
+
+  test("SPARK-39915: Dataset.repartition(N) may not create N partitions") {
+    val emptyRelation = LocalRelation($"a".int, $"b".int)
+    val p1 = emptyRelation.repartition(1).analyze
+    comparePlans(Optimize.execute(p1), p1)
+
+    val p2 = emptyRelation.repartition(1).select($"a").analyze
+    comparePlans(Optimize.execute(p2), p2)
+
+    val p3 = emptyRelation.repartition(1).where($"a" > rand(1)).analyze
+    comparePlans(Optimize.execute(p3), p3)
+
+    val p4 = emptyRelation.repartition(1).where($"a" > rand(1)).select($"a").analyze
+    comparePlans(Optimize.execute(p4), p4)
+
+    val p5 = emptyRelation.sortBy("$a".asc).repartition().limit(1).repartition(1).analyze
+    val expected5 = emptyRelation.repartition(1).analyze
+    comparePlans(Optimize.execute(p5), expected5)
+  }
 }

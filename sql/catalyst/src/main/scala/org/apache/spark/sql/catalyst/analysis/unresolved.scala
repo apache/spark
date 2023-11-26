@@ -363,7 +363,13 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Inevalu
     if (target.isEmpty) return input.output
 
     // If there is a table specified, use hidden input attributes as well
-    val hiddenOutput = input.metadataOutput.filter(_.supportsQualifiedStar)
+    val hiddenOutput = input.metadataOutput.filter(_.qualifiedAccessOnly)
+      // Remove the qualified-access-only restriction immediately. The expanded attributes will be
+      // put in a logical plan node and becomes normal attributes. They can still keep the special
+      // attribute metadata to indicate that they are from metadata columns, but they should not
+      // keep any restrictions that may break column resolution for normal attributes.
+      // See SPARK-42084 for more details.
+      .map(_.markAsAllowAnyAccess())
     val expandedAttributes = (hiddenOutput ++ input.output).filter(
       matchedQualifier(_, target.get, resolver))
 
@@ -641,7 +647,7 @@ case object UnresolvedSeed extends LeafExpression with Inevaluable {
  */
 case class TempResolvedColumn(child: Expression, nameParts: Seq[String]) extends UnaryExpression
   with Inevaluable {
-  override lazy val preCanonicalized = child.preCanonicalized
+  override lazy val canonicalized = child.canonicalized
   override def dataType: DataType = child.dataType
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)

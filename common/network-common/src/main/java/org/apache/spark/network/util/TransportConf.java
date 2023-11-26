@@ -103,7 +103,7 @@ public class TransportConf {
       conf.get("spark.network.timeout", "120s"));
     long defaultTimeoutMs = JavaUtils.timeStringAsSec(
       conf.get(SPARK_NETWORK_IO_CONNECTIONTIMEOUT_KEY, defaultNetworkTimeoutS + "s")) * 1000;
-    return (int) defaultTimeoutMs;
+    return defaultTimeoutMs < 0 ? 0 : (int) defaultTimeoutMs;
   }
 
   /** Connect creation timeout in milliseconds. Default 30 secs. */
@@ -111,7 +111,7 @@ public class TransportConf {
     long connectionTimeoutS = TimeUnit.MILLISECONDS.toSeconds(connectionTimeoutMs());
     long defaultTimeoutMs = JavaUtils.timeStringAsSec(
       conf.get(SPARK_NETWORK_IO_CONNECTIONCREATIONTIMEOUT_KEY,  connectionTimeoutS + "s")) * 1000;
-    return (int) defaultTimeoutMs;
+    return defaultTimeoutMs < 0 ? 0 : (int) defaultTimeoutMs;
   }
 
   /** Number of concurrent connections between two nodes for fetching data. */
@@ -372,6 +372,13 @@ public class TransportConf {
    */
   public boolean useOldFetchProtocol() {
     return conf.getBoolean("spark.shuffle.useOldFetchProtocol", false);
+  }
+
+  /** Whether to enable sasl retries or not. The number of retries is dictated by the config
+   * `spark.shuffle.io.maxRetries`.
+   */
+  public boolean enableSaslRetries() {
+    return conf.getBoolean("spark.shuffle.sasl.enableRetries", false);
   }
 
   /**

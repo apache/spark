@@ -63,7 +63,7 @@ class RocksDB(
   private val readOptions = new ReadOptions()  // used for gets
   private val writeOptions = new WriteOptions().setSync(true)  // wait for batched write to complete
   private val flushOptions = new FlushOptions().setWaitForFlush(true)  // wait for flush to complete
-  private val writeBatch = new WriteBatchWithIndex(true)  // overwrite multiple updates to a key
+  private var writeBatch = new WriteBatchWithIndex(true)  // overwrite multiple updates to a key
 
   private val bloomFilter = new BloomFilter()
   private val tableFormatConfig = new BlockBasedTableConfig()
@@ -132,9 +132,10 @@ class RocksDB(
       if (conf.resetStatsOnLoad) {
         nativeStats.reset
       }
-      // reset resources to prevent side-effects from previous loaded version
+      // reset resources to prevent side-effects from previous loaded version if it was not cleaned
+      // up correctly
       closePrefixScanIterators()
-      writeBatch.clear()
+      resetWriteBatch()
       logInfo(s"Loaded $version")
     } catch {
       case t: Throwable =>
@@ -318,6 +319,10 @@ class RocksDB(
     } finally {
       db.continueBackgroundWork()
       silentDeleteRecursively(checkpointDir, s"committing $newVersion")
+      // reset resources as either 1) we already pushed the changes and it has been committed or
+      // 2) commit has failed and the current version is "invalidated".
+      closePrefixScanIterators()
+      resetWriteBatch()
       release()
     }
   }
@@ -327,7 +332,7 @@ class RocksDB(
    */
   def rollback(): Unit = {
     closePrefixScanIterators()
-    writeBatch.clear()
+    resetWriteBatch()
     numKeysOnWritingVersion = numKeysOnLoadedVersion
     release()
     logInfo(s"Rolled back to $loadedVersion")
@@ -452,6 +457,13 @@ class RocksDB(
   private def closePrefixScanIterators(): Unit = {
     prefixScanReuseIter.entrySet().asScala.foreach(_.getValue.close())
     prefixScanReuseIter.clear()
+  }
+
+  /** Create a new WriteBatch, clear doesn't deallocate the native memory */
+  private def resetWriteBatch(): Unit = {
+    writeBatch.clear()
+    writeBatch.close()
+    writeBatch = new WriteBatchWithIndex(true)
   }
 
   private def getDBProperty(property: String): Long = {

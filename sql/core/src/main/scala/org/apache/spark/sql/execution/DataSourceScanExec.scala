@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
@@ -210,7 +211,12 @@ case class FileSourceScanExec(
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
   override lazy val supportsColumnar: Boolean = {
-    relation.fileFormat.supportBatch(relation.sparkSession, schema)
+    val conf = relation.sparkSession.sessionState.conf
+    // Only output columnar if there is WSCG to read it.
+    val requiredWholeStageCodegenSettings =
+      conf.wholeStageEnabled && !WholeStageCodegenExec.isTooManyFields(conf, schema)
+    requiredWholeStageCodegenSettings &&
+      relation.fileFormat.supportBatch(relation.sparkSession, schema)
   }
 
   private lazy val needsUnsafeRowConversion: Boolean = {
@@ -446,6 +452,8 @@ case class FileSourceScanExec(
   }
 
   lazy val inputRDD: RDD[InternalRow] = {
+    val options = relation.options +
+      (FileFormat.OPTION_RETURNING_BATCH -> supportsColumnar.toString)
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
       relation.fileFormat.buildReaderWithPartitionValues(
         sparkSession = relation.sparkSession,
@@ -453,7 +461,7 @@ case class FileSourceScanExec(
         partitionSchema = relation.partitionSchema,
         requiredSchema = requiredSchema,
         filters = pushedDownFilters,
-        options = relation.options,
+        options = options,
         hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
 
     val readRDD = if (bucketedScan) {
@@ -592,8 +600,7 @@ case class FileSourceScanExec(
       }.groupBy { f =>
         BucketingUtils
           .getBucketId(new Path(f.filePath).getName)
-          // TODO(SPARK-39163): Throw an exception w/ error class for an invalid bucket file
-          .getOrElse(throw new IllegalStateException(s"Invalid bucket file ${f.filePath}"))
+          .getOrElse(throw QueryExecutionErrors.invalidBucketFile(f.filePath))
       }
 
     val prunedFilesGroupedToBuckets = if (optionalBucketSet.isDefined) {
@@ -621,7 +628,7 @@ case class FileSourceScanExec(
     }
 
     new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions,
-      requiredSchema, metadataColumns)
+      new StructType(requiredSchema.fields ++ fsRelation.partitionSchema.fields), metadataColumns)
   }
 
   /**
@@ -678,7 +685,7 @@ case class FileSourceScanExec(
       FilePartition.getFilePartitions(relation.sparkSession, splitFiles, maxSplitBytes)
 
     new FileScanRDD(fsRelation.sparkSession, readFile, partitions,
-      requiredSchema, metadataColumns)
+      new StructType(requiredSchema.fields ++ fsRelation.partitionSchema.fields), metadataColumns)
   }
 
   // Filters unused DynamicPruningExpression expressions - one which has been replaced

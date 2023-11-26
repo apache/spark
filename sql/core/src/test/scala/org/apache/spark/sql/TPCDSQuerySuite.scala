@@ -29,7 +29,8 @@ import org.apache.spark.tags.ExtendedSQLTest
 @ExtendedSQLTest
 class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSBase {
 
-  tpcdsQueries.foreach { name =>
+  // q72 is skipped due to GitHub Actions' memory limit.
+  tpcdsQueries.filterNot(sys.env.contains("GITHUB_ACTIONS") && _ == "q72").foreach { name =>
     val queryString = resourceToString(s"tpcds/$name.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
     test(name) {
@@ -39,7 +40,8 @@ class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSBase {
     }
   }
 
-  tpcdsQueriesV2_7_0.foreach { name =>
+  // q72 is skipped due to GitHub Actions' memory limit.
+  tpcdsQueriesV2_7_0.filterNot(sys.env.contains("GITHUB_ACTIONS") && _ == "q72").foreach { name =>
     val queryString = resourceToString(s"tpcds-v2.7.0/$name.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
     test(s"$name-v2.7") {

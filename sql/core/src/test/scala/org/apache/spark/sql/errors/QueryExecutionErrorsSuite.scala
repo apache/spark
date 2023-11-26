@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
-import org.apache.spark.sql.{DataFrame, QueryTest}
+import java.io.File
+import java.net.URI
+
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions.{lit, lower, struct, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 class QueryExecutionErrorsSuite extends QueryTest
   with ParquetTest with OrcTest with SharedSparkSession {
@@ -264,5 +268,54 @@ class QueryExecutionErrorsSuite extends QueryTest
     assert(e.getSqlState === "22008")
     assert(e.getMessage ===
       "Datetime operation overflow: add 1000000 YEAR to TIMESTAMP '2022-03-09 01:02:03'.")
+  }
+
+  test("UNSUPPORTED_SAVE_MODE: unsupported null saveMode whether the path exists or not") {
+    withTempPath { path =>
+      val e1 = intercept[SparkIllegalArgumentException] {
+        val saveMode: SaveMode = null
+        Seq(1, 2).toDS().write.mode(saveMode).parquet(path.getAbsolutePath)
+      }
+      assert(e1.getErrorClass === "UNSUPPORTED_SAVE_MODE")
+      assert(e1.getMessage === "The save mode NULL is not supported for: a non-existent path.")
+
+      Utils.createDirectory(path)
+
+      val e2 = intercept[SparkIllegalArgumentException] {
+        val saveMode: SaveMode = null
+        Seq(1, 2).toDS().write.mode(saveMode).parquet(path.getAbsolutePath)
+      }
+      assert(e2.getErrorClass === "UNSUPPORTED_SAVE_MODE")
+      assert(e2.getMessage === "The save mode NULL is not supported for: an existent path.")
+    }
+  }
+
+  test("INVALID_BUCKET_FILE: error if there exists any malformed bucket files") {
+    val df1 = (0 until 50).map(i => (i % 5, i % 13, i.toString)).
+      toDF("i", "j", "k").as("df1")
+
+    withTable("bucketed_table") {
+      df1.write.format("parquet").bucketBy(8, "i").
+        saveAsTable("bucketed_table")
+      val warehouseFilePath = new URI(spark.sessionState.conf.warehousePath).getPath
+      val tableDir = new File(warehouseFilePath, "bucketed_table")
+      Utils.deleteRecursively(tableDir)
+      df1.write.parquet(tableDir.getAbsolutePath)
+
+      val aggregated = spark.table("bucketed_table").groupBy("i").count()
+
+      val e = intercept[SparkException] {
+        aggregated.count()
+      }
+      assert(e.getErrorClass === "INVALID_BUCKET_FILE")
+      assert(e.getMessage.matches("Invalid bucket file: .+"))
+    }
+  }
+
+  test("SPARK-43589: Use bytesToString instead of shift operation") {
+    val m = QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(
+      maxBroadcastTableBytes = 1024 * 1024 * 1024,
+      dataSize = 2 * 1024 * 1024 * 1024 - 1).getMessage
+    assert(m === "Cannot broadcast the table that is larger than 1024.0 MiB: 2048.0 MiB")
   }
 }

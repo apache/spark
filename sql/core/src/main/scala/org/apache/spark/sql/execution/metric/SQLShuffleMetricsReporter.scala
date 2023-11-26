@@ -117,7 +117,7 @@ class SQLShuffleWriteMetricsReporter(
     _bytesWritten.add(v)
   }
   override def decRecordsWritten(v: Long): Unit = {
-    metricsReporter.decBytesWritten(v)
+    metricsReporter.decRecordsWritten(v)
     _recordsWritten.set(_recordsWritten.value - v)
   }
   override def incRecordsWritten(v: Long): Unit = {

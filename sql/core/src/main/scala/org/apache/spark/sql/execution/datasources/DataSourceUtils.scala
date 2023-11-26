@@ -274,7 +274,7 @@ object DataSourceUtils extends PredicateHelper {
     }
     val partitionSet = AttributeSet(partitionColumns)
     val (partitionFilters, dataFilters) = normalizedFilters.partition(f =>
-      f.references.subsetOf(partitionSet)
+      f.references.nonEmpty && f.references.subsetOf(partitionSet)
     )
     val extraPartitionFilter =
       dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))

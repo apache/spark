@@ -32,7 +32,7 @@ else
   SPECIFIER="<="
 fi
 
-pip install plotly "pyspark[sql,ml,mllib,pandas_on_spark]$SPECIFIER$VERSION"
+pip install plotly "pandas<2.0.0" "pyspark[sql,ml,mllib,pandas_on_spark]$SPECIFIER$VERSION"
 
 # Set 'PYARROW_IGNORE_TIMEZONE' to surpress warnings from PyArrow.
 echo "export PYARROW_IGNORE_TIMEZONE=1" >> ~/.profile

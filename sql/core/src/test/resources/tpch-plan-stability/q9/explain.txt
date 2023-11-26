@@ -74,7 +74,7 @@ Condition : ((isnotnull(l_partkey#4) AND isnotnull(l_suppkey#5)) AND isnotnull(l
 
 (8) BroadcastExchange
 Input [6]: [l_orderkey#3, l_partkey#4, l_suppkey#5, l_quantity#6, l_extendedprice#7, l_discount#8]
-Arguments: HashedRelationBroadcastMode(List(input[1, bigint, false]),false), [id=#9]
+Arguments: HashedRelationBroadcastMode(List(input[1, bigint, false]),false), [plan_id=1]
 
 (9) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [p_partkey#1]
@@ -86,136 +86,136 @@ Output [6]: [l_orderkey#3, l_partkey#4, l_suppkey#5, l_quantity#6, l_extendedpri
 Input [7]: [p_partkey#1, l_orderkey#3, l_partkey#4, l_suppkey#5, l_quantity#6, l_extendedprice#7, l_discount#8]
 
 (11) Scan parquet default.supplier
-Output [2]: [s_suppkey#10, s_nationkey#11]
+Output [2]: [s_suppkey#9, s_nationkey#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/supplier]
 PushedFilters: [IsNotNull(s_suppkey), IsNotNull(s_nationkey)]
 ReadSchema: struct<s_suppkey:bigint,s_nationkey:bigint>
 
 (12) ColumnarToRow [codegen id : 2]
-Input [2]: [s_suppkey#10, s_nationkey#11]
+Input [2]: [s_suppkey#9, s_nationkey#10]
 
 (13) Filter [codegen id : 2]
-Input [2]: [s_suppkey#10, s_nationkey#11]
-Condition : (isnotnull(s_suppkey#10) AND isnotnull(s_nationkey#11))
+Input [2]: [s_suppkey#9, s_nationkey#10]
+Condition : (isnotnull(s_suppkey#9) AND isnotnull(s_nationkey#10))
 
 (14) BroadcastExchange
-Input [2]: [s_suppkey#10, s_nationkey#11]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#12]
+Input [2]: [s_suppkey#9, s_nationkey#10]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=2]
 
 (15) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [l_suppkey#5]
-Right keys [1]: [s_suppkey#10]
+Right keys [1]: [s_suppkey#9]
 Join condition: None
 
 (16) Project [codegen id : 6]
-Output [7]: [l_orderkey#3, l_partkey#4, l_suppkey#5, l_quantity#6, l_extendedprice#7, l_discount#8, s_nationkey#11]
-Input [8]: [l_orderkey#3, l_partkey#4, l_suppkey#5, l_quantity#6, l_extendedprice#7, l_discount#8, s_suppkey#10, s_nationkey#11]
+Output [7]: [l_orderkey#3, l_partkey#4, l_suppkey#5, l_quantity#6, l_extendedprice#7, l_discount#8, s_nationkey#10]
+Input [8]: [l_orderkey#3, l_partkey#4, l_suppkey#5, l_quantity#6, l_extendedprice#7, l_discount#8, s_suppkey#9, s_nationkey#10]
 
 (17) Scan parquet default.partsupp
-Output [3]: [ps_partkey#13, ps_suppkey#14, ps_supplycost#15]
+Output [3]: [ps_partkey#11, ps_suppkey#12, ps_supplycost#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/partsupp]
 PushedFilters: [IsNotNull(ps_suppkey), IsNotNull(ps_partkey)]
 ReadSchema: struct<ps_partkey:bigint,ps_suppkey:bigint,ps_supplycost:decimal(10,0)>
 
 (18) ColumnarToRow [codegen id : 3]
-Input [3]: [ps_partkey#13, ps_suppkey#14, ps_supplycost#15]
+Input [3]: [ps_partkey#11, ps_suppkey#12, ps_supplycost#13]
 
 (19) Filter [codegen id : 3]
-Input [3]: [ps_partkey#13, ps_suppkey#14, ps_supplycost#15]
-Condition : (isnotnull(ps_suppkey#14) AND isnotnull(ps_partkey#13))
+Input [3]: [ps_partkey#11, ps_suppkey#12, ps_supplycost#13]
+Condition : (isnotnull(ps_suppkey#12) AND isnotnull(ps_partkey#11))
 
 (20) BroadcastExchange
-Input [3]: [ps_partkey#13, ps_suppkey#14, ps_supplycost#15]
-Arguments: HashedRelationBroadcastMode(List(input[1, bigint, false], input[0, bigint, false]),false), [id=#16]
+Input [3]: [ps_partkey#11, ps_suppkey#12, ps_supplycost#13]
+Arguments: HashedRelationBroadcastMode(List(input[1, bigint, false], input[0, bigint, false]),false), [plan_id=3]
 
 (21) BroadcastHashJoin [codegen id : 6]
 Left keys [2]: [l_suppkey#5, l_partkey#4]
-Right keys [2]: [ps_suppkey#14, ps_partkey#13]
+Right keys [2]: [ps_suppkey#12, ps_partkey#11]
 Join condition: None
 
 (22) Project [codegen id : 6]
-Output [6]: [l_orderkey#3, l_quantity#6, l_extendedprice#7, l_discount#8, s_nationkey#11, ps_supplycost#15]
-Input [10]: [l_orderkey#3, l_partkey#4, l_suppkey#5, l_quantity#6, l_extendedprice#7, l_discount#8, s_nationkey#11, ps_partkey#13, ps_suppkey#14, ps_supplycost#15]
+Output [6]: [l_orderkey#3, l_quantity#6, l_extendedprice#7, l_discount#8, s_nationkey#10, ps_supplycost#13]
+Input [10]: [l_orderkey#3, l_partkey#4, l_suppkey#5, l_quantity#6, l_extendedprice#7, l_discount#8, s_nationkey#10, ps_partkey#11, ps_suppkey#12, ps_supplycost#13]
 
 (23) Scan parquet default.orders
-Output [2]: [o_orderkey#17, o_orderdate#18]
+Output [2]: [o_orderkey#14, o_orderdate#15]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/orders]
 PushedFilters: [IsNotNull(o_orderkey)]
 ReadSchema: struct<o_orderkey:bigint,o_orderdate:date>
 
 (24) ColumnarToRow [codegen id : 4]
-Input [2]: [o_orderkey#17, o_orderdate#18]
+Input [2]: [o_orderkey#14, o_orderdate#15]
 
 (25) Filter [codegen id : 4]
-Input [2]: [o_orderkey#17, o_orderdate#18]
-Condition : isnotnull(o_orderkey#17)
+Input [2]: [o_orderkey#14, o_orderdate#15]
+Condition : isnotnull(o_orderkey#14)
 
 (26) BroadcastExchange
-Input [2]: [o_orderkey#17, o_orderdate#18]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#19]
+Input [2]: [o_orderkey#14, o_orderdate#15]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=4]
 
 (27) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [l_orderkey#3]
-Right keys [1]: [o_orderkey#17]
+Right keys [1]: [o_orderkey#14]
 Join condition: None
 
 (28) Project [codegen id : 6]
-Output [6]: [l_quantity#6, l_extendedprice#7, l_discount#8, s_nationkey#11, ps_supplycost#15, o_orderdate#18]
-Input [8]: [l_orderkey#3, l_quantity#6, l_extendedprice#7, l_discount#8, s_nationkey#11, ps_supplycost#15, o_orderkey#17, o_orderdate#18]
+Output [6]: [l_quantity#6, l_extendedprice#7, l_discount#8, s_nationkey#10, ps_supplycost#13, o_orderdate#15]
+Input [8]: [l_orderkey#3, l_quantity#6, l_extendedprice#7, l_discount#8, s_nationkey#10, ps_supplycost#13, o_orderkey#14, o_orderdate#15]
 
 (29) Scan parquet default.nation
-Output [2]: [n_nationkey#20, n_name#21]
+Output [2]: [n_nationkey#16, n_name#17]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/nation]
 PushedFilters: [IsNotNull(n_nationkey)]
 ReadSchema: struct<n_nationkey:bigint,n_name:string>
 
 (30) ColumnarToRow [codegen id : 5]
-Input [2]: [n_nationkey#20, n_name#21]
+Input [2]: [n_nationkey#16, n_name#17]
 
 (31) Filter [codegen id : 5]
-Input [2]: [n_nationkey#20, n_name#21]
-Condition : isnotnull(n_nationkey#20)
+Input [2]: [n_nationkey#16, n_name#17]
+Condition : isnotnull(n_nationkey#16)
 
 (32) BroadcastExchange
-Input [2]: [n_nationkey#20, n_name#21]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#22]
+Input [2]: [n_nationkey#16, n_name#17]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=5]
 
 (33) BroadcastHashJoin [codegen id : 6]
-Left keys [1]: [s_nationkey#11]
-Right keys [1]: [n_nationkey#20]
+Left keys [1]: [s_nationkey#10]
+Right keys [1]: [n_nationkey#16]
 Join condition: None
 
 (34) Project [codegen id : 6]
-Output [3]: [n_name#21 AS nation#23, year(o_orderdate#18) AS o_year#24, CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(l_extendedprice#7 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#8 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)) as decimal(23,0))) - promote_precision(cast(CheckOverflow((promote_precision(ps_supplycost#15) * promote_precision(l_quantity#6)), DecimalType(21,0)) as decimal(23,0)))), DecimalType(23,0)) AS amount#25]
-Input [8]: [l_quantity#6, l_extendedprice#7, l_discount#8, s_nationkey#11, ps_supplycost#15, o_orderdate#18, n_nationkey#20, n_name#21]
+Output [3]: [n_name#17 AS nation#18, year(o_orderdate#15) AS o_year#19, CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(l_extendedprice#7 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#8 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)) as decimal(23,0))) - promote_precision(cast(CheckOverflow((promote_precision(ps_supplycost#13) * promote_precision(l_quantity#6)), DecimalType(21,0)) as decimal(23,0)))), DecimalType(23,0)) AS amount#20]
+Input [8]: [l_quantity#6, l_extendedprice#7, l_discount#8, s_nationkey#10, ps_supplycost#13, o_orderdate#15, n_nationkey#16, n_name#17]
 
 (35) HashAggregate [codegen id : 6]
-Input [3]: [nation#23, o_year#24, amount#25]
-Keys [2]: [nation#23, o_year#24]
-Functions [1]: [partial_sum(amount#25)]
-Aggregate Attributes [2]: [sum#26, isEmpty#27]
-Results [4]: [nation#23, o_year#24, sum#28, isEmpty#29]
+Input [3]: [nation#18, o_year#19, amount#20]
+Keys [2]: [nation#18, o_year#19]
+Functions [1]: [partial_sum(amount#20)]
+Aggregate Attributes [2]: [sum#21, isEmpty#22]
+Results [4]: [nation#18, o_year#19, sum#23, isEmpty#24]
 
 (36) Exchange
-Input [4]: [nation#23, o_year#24, sum#28, isEmpty#29]
-Arguments: hashpartitioning(nation#23, o_year#24, 5), ENSURE_REQUIREMENTS, [id=#30]
+Input [4]: [nation#18, o_year#19, sum#23, isEmpty#24]
+Arguments: hashpartitioning(nation#18, o_year#19, 5), ENSURE_REQUIREMENTS, [plan_id=6]
 
 (37) HashAggregate [codegen id : 7]
-Input [4]: [nation#23, o_year#24, sum#28, isEmpty#29]
-Keys [2]: [nation#23, o_year#24]
-Functions [1]: [sum(amount#25)]
-Aggregate Attributes [1]: [sum(amount#25)#31]
-Results [3]: [nation#23, o_year#24, sum(amount#25)#31 AS sum_profit#32]
+Input [4]: [nation#18, o_year#19, sum#23, isEmpty#24]
+Keys [2]: [nation#18, o_year#19]
+Functions [1]: [sum(amount#20)]
+Aggregate Attributes [1]: [sum(amount#20)#25]
+Results [3]: [nation#18, o_year#19, sum(amount#20)#25 AS sum_profit#26]
 
 (38) Exchange
-Input [3]: [nation#23, o_year#24, sum_profit#32]
-Arguments: rangepartitioning(nation#23 ASC NULLS FIRST, o_year#24 DESC NULLS LAST, 5), ENSURE_REQUIREMENTS, [id=#33]
+Input [3]: [nation#18, o_year#19, sum_profit#26]
+Arguments: rangepartitioning(nation#18 ASC NULLS FIRST, o_year#19 DESC NULLS LAST, 5), ENSURE_REQUIREMENTS, [plan_id=7]
 
 (39) Sort [codegen id : 8]
-Input [3]: [nation#23, o_year#24, sum_profit#32]
-Arguments: [nation#23 ASC NULLS FIRST, o_year#24 DESC NULLS LAST], true, 0
+Input [3]: [nation#18, o_year#19, sum_profit#26]
+Arguments: [nation#18 ASC NULLS FIRST, o_year#19 DESC NULLS LAST], true, 0
 

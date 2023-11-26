@@ -66,7 +66,7 @@ Condition : ((((isnotnull(l_shipdate#7) AND (l_shipdate#7 >= 1995-01-01)) AND (l
 
 (7) BroadcastExchange
 Input [5]: [l_orderkey#3, l_suppkey#4, l_extendedprice#5, l_discount#6, l_shipdate#7]
-Arguments: HashedRelationBroadcastMode(List(input[1, bigint, false]),false), [id=#8]
+Arguments: HashedRelationBroadcastMode(List(input[1, bigint, false]),false), [plan_id=1]
 
 (8) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [s_suppkey#1]
@@ -78,121 +78,121 @@ Output [5]: [s_nationkey#2, l_orderkey#3, l_extendedprice#5, l_discount#6, l_shi
 Input [7]: [s_suppkey#1, s_nationkey#2, l_orderkey#3, l_suppkey#4, l_extendedprice#5, l_discount#6, l_shipdate#7]
 
 (10) Scan parquet default.orders
-Output [2]: [o_orderkey#9, o_custkey#10]
+Output [2]: [o_orderkey#8, o_custkey#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/orders]
 PushedFilters: [IsNotNull(o_orderkey), IsNotNull(o_custkey)]
 ReadSchema: struct<o_orderkey:bigint,o_custkey:bigint>
 
 (11) ColumnarToRow [codegen id : 2]
-Input [2]: [o_orderkey#9, o_custkey#10]
+Input [2]: [o_orderkey#8, o_custkey#9]
 
 (12) Filter [codegen id : 2]
-Input [2]: [o_orderkey#9, o_custkey#10]
-Condition : (isnotnull(o_orderkey#9) AND isnotnull(o_custkey#10))
+Input [2]: [o_orderkey#8, o_custkey#9]
+Condition : (isnotnull(o_orderkey#8) AND isnotnull(o_custkey#9))
 
 (13) BroadcastExchange
-Input [2]: [o_orderkey#9, o_custkey#10]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#11]
+Input [2]: [o_orderkey#8, o_custkey#9]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=2]
 
 (14) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [l_orderkey#3]
-Right keys [1]: [o_orderkey#9]
+Right keys [1]: [o_orderkey#8]
 Join condition: None
 
 (15) Project [codegen id : 6]
-Output [5]: [s_nationkey#2, l_extendedprice#5, l_discount#6, l_shipdate#7, o_custkey#10]
-Input [7]: [s_nationkey#2, l_orderkey#3, l_extendedprice#5, l_discount#6, l_shipdate#7, o_orderkey#9, o_custkey#10]
+Output [5]: [s_nationkey#2, l_extendedprice#5, l_discount#6, l_shipdate#7, o_custkey#9]
+Input [7]: [s_nationkey#2, l_orderkey#3, l_extendedprice#5, l_discount#6, l_shipdate#7, o_orderkey#8, o_custkey#9]
 
 (16) Scan parquet default.customer
-Output [2]: [c_custkey#12, c_nationkey#13]
+Output [2]: [c_custkey#10, c_nationkey#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
 PushedFilters: [IsNotNull(c_custkey), IsNotNull(c_nationkey)]
 ReadSchema: struct<c_custkey:bigint,c_nationkey:bigint>
 
 (17) ColumnarToRow [codegen id : 3]
-Input [2]: [c_custkey#12, c_nationkey#13]
+Input [2]: [c_custkey#10, c_nationkey#11]
 
 (18) Filter [codegen id : 3]
-Input [2]: [c_custkey#12, c_nationkey#13]
-Condition : (isnotnull(c_custkey#12) AND isnotnull(c_nationkey#13))
+Input [2]: [c_custkey#10, c_nationkey#11]
+Condition : (isnotnull(c_custkey#10) AND isnotnull(c_nationkey#11))
 
 (19) BroadcastExchange
-Input [2]: [c_custkey#12, c_nationkey#13]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#14]
+Input [2]: [c_custkey#10, c_nationkey#11]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=3]
 
 (20) BroadcastHashJoin [codegen id : 6]
-Left keys [1]: [o_custkey#10]
-Right keys [1]: [c_custkey#12]
+Left keys [1]: [o_custkey#9]
+Right keys [1]: [c_custkey#10]
 Join condition: None
 
 (21) Project [codegen id : 6]
-Output [5]: [s_nationkey#2, l_extendedprice#5, l_discount#6, l_shipdate#7, c_nationkey#13]
-Input [7]: [s_nationkey#2, l_extendedprice#5, l_discount#6, l_shipdate#7, o_custkey#10, c_custkey#12, c_nationkey#13]
+Output [5]: [s_nationkey#2, l_extendedprice#5, l_discount#6, l_shipdate#7, c_nationkey#11]
+Input [7]: [s_nationkey#2, l_extendedprice#5, l_discount#6, l_shipdate#7, o_custkey#9, c_custkey#10, c_nationkey#11]
 
 (22) Scan parquet default.nation
-Output [2]: [n_nationkey#15, n_name#16]
+Output [2]: [n_nationkey#12, n_name#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/nation]
 PushedFilters: [IsNotNull(n_nationkey), Or(EqualTo(n_name,FRANCE),EqualTo(n_name,GERMANY))]
 ReadSchema: struct<n_nationkey:bigint,n_name:string>
 
 (23) ColumnarToRow [codegen id : 4]
-Input [2]: [n_nationkey#15, n_name#16]
+Input [2]: [n_nationkey#12, n_name#13]
 
 (24) Filter [codegen id : 4]
-Input [2]: [n_nationkey#15, n_name#16]
-Condition : (isnotnull(n_nationkey#15) AND ((n_name#16 = FRANCE) OR (n_name#16 = GERMANY)))
+Input [2]: [n_nationkey#12, n_name#13]
+Condition : (isnotnull(n_nationkey#12) AND ((n_name#13 = FRANCE) OR (n_name#13 = GERMANY)))
 
 (25) BroadcastExchange
-Input [2]: [n_nationkey#15, n_name#16]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#17]
+Input [2]: [n_nationkey#12, n_name#13]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=4]
 
 (26) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [s_nationkey#2]
-Right keys [1]: [n_nationkey#15]
+Right keys [1]: [n_nationkey#12]
 Join condition: None
 
 (27) Project [codegen id : 6]
-Output [5]: [l_extendedprice#5, l_discount#6, l_shipdate#7, c_nationkey#13, n_name#16]
-Input [7]: [s_nationkey#2, l_extendedprice#5, l_discount#6, l_shipdate#7, c_nationkey#13, n_nationkey#15, n_name#16]
+Output [5]: [l_extendedprice#5, l_discount#6, l_shipdate#7, c_nationkey#11, n_name#13]
+Input [7]: [s_nationkey#2, l_extendedprice#5, l_discount#6, l_shipdate#7, c_nationkey#11, n_nationkey#12, n_name#13]
 
 (28) ReusedExchange [Reuses operator id: 25]
-Output [2]: [n_nationkey#18, n_name#19]
+Output [2]: [n_nationkey#14, n_name#15]
 
 (29) BroadcastHashJoin [codegen id : 6]
-Left keys [1]: [c_nationkey#13]
-Right keys [1]: [n_nationkey#18]
-Join condition: (((n_name#16 = FRANCE) AND (n_name#19 = GERMANY)) OR ((n_name#16 = GERMANY) AND (n_name#19 = FRANCE)))
+Left keys [1]: [c_nationkey#11]
+Right keys [1]: [n_nationkey#14]
+Join condition: (((n_name#13 = FRANCE) AND (n_name#15 = GERMANY)) OR ((n_name#13 = GERMANY) AND (n_name#15 = FRANCE)))
 
 (30) Project [codegen id : 6]
-Output [4]: [n_name#16 AS supp_nation#20, n_name#19 AS cust_nation#21, year(l_shipdate#7) AS l_year#22, CheckOverflow((promote_precision(cast(l_extendedprice#5 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#6 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)) AS volume#23]
-Input [7]: [l_extendedprice#5, l_discount#6, l_shipdate#7, c_nationkey#13, n_name#16, n_nationkey#18, n_name#19]
+Output [4]: [n_name#13 AS supp_nation#16, n_name#15 AS cust_nation#17, year(l_shipdate#7) AS l_year#18, CheckOverflow((promote_precision(cast(l_extendedprice#5 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#6 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)) AS volume#19]
+Input [7]: [l_extendedprice#5, l_discount#6, l_shipdate#7, c_nationkey#11, n_name#13, n_nationkey#14, n_name#15]
 
 (31) HashAggregate [codegen id : 6]
-Input [4]: [supp_nation#20, cust_nation#21, l_year#22, volume#23]
-Keys [3]: [supp_nation#20, cust_nation#21, l_year#22]
-Functions [1]: [partial_sum(volume#23)]
-Aggregate Attributes [2]: [sum#24, isEmpty#25]
-Results [5]: [supp_nation#20, cust_nation#21, l_year#22, sum#26, isEmpty#27]
+Input [4]: [supp_nation#16, cust_nation#17, l_year#18, volume#19]
+Keys [3]: [supp_nation#16, cust_nation#17, l_year#18]
+Functions [1]: [partial_sum(volume#19)]
+Aggregate Attributes [2]: [sum#20, isEmpty#21]
+Results [5]: [supp_nation#16, cust_nation#17, l_year#18, sum#22, isEmpty#23]
 
 (32) Exchange
-Input [5]: [supp_nation#20, cust_nation#21, l_year#22, sum#26, isEmpty#27]
-Arguments: hashpartitioning(supp_nation#20, cust_nation#21, l_year#22, 5), ENSURE_REQUIREMENTS, [id=#28]
+Input [5]: [supp_nation#16, cust_nation#17, l_year#18, sum#22, isEmpty#23]
+Arguments: hashpartitioning(supp_nation#16, cust_nation#17, l_year#18, 5), ENSURE_REQUIREMENTS, [plan_id=5]
 
 (33) HashAggregate [codegen id : 7]
-Input [5]: [supp_nation#20, cust_nation#21, l_year#22, sum#26, isEmpty#27]
-Keys [3]: [supp_nation#20, cust_nation#21, l_year#22]
-Functions [1]: [sum(volume#23)]
-Aggregate Attributes [1]: [sum(volume#23)#29]
-Results [4]: [supp_nation#20, cust_nation#21, l_year#22, sum(volume#23)#29 AS revenue#30]
+Input [5]: [supp_nation#16, cust_nation#17, l_year#18, sum#22, isEmpty#23]
+Keys [3]: [supp_nation#16, cust_nation#17, l_year#18]
+Functions [1]: [sum(volume#19)]
+Aggregate Attributes [1]: [sum(volume#19)#24]
+Results [4]: [supp_nation#16, cust_nation#17, l_year#18, sum(volume#19)#24 AS revenue#25]
 
 (34) Exchange
-Input [4]: [supp_nation#20, cust_nation#21, l_year#22, revenue#30]
-Arguments: rangepartitioning(supp_nation#20 ASC NULLS FIRST, cust_nation#21 ASC NULLS FIRST, l_year#22 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#31]
+Input [4]: [supp_nation#16, cust_nation#17, l_year#18, revenue#25]
+Arguments: rangepartitioning(supp_nation#16 ASC NULLS FIRST, cust_nation#17 ASC NULLS FIRST, l_year#18 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=6]
 
 (35) Sort [codegen id : 8]
-Input [4]: [supp_nation#20, cust_nation#21, l_year#22, revenue#30]
-Arguments: [supp_nation#20 ASC NULLS FIRST, cust_nation#21 ASC NULLS FIRST, l_year#22 ASC NULLS FIRST], true, 0
+Input [4]: [supp_nation#16, cust_nation#17, l_year#18, revenue#25]
+Arguments: [supp_nation#16 ASC NULLS FIRST, cust_nation#17 ASC NULLS FIRST, l_year#18 ASC NULLS FIRST], true, 0
 

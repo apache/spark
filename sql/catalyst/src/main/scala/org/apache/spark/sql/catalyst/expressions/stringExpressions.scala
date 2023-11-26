@@ -2335,9 +2335,10 @@ case class Ascii(child: Expression)
   override def inputTypes: Seq[DataType] = Seq(StringType)
 
   protected override def nullSafeEval(string: Any): Any = {
-    val bytes = string.asInstanceOf[UTF8String].getBytes
-    if (bytes.length > 0) {
-      bytes(0).asInstanceOf[Int]
+    // only pick the first character to reduce the `toString` cost
+    val firstCharStr = string.asInstanceOf[UTF8String].substring(0, 1)
+    if (firstCharStr.numChars > 0) {
+      firstCharStr.toString.codePointAt(0)
     } else {
       0
     }
@@ -2345,11 +2346,11 @@ case class Ascii(child: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (child) => {
-      val bytes = ctx.freshName("bytes")
+      val firstCharStr = ctx.freshName("firstCharStr")
       s"""
-        byte[] $bytes = $child.getBytes();
-        if ($bytes.length > 0) {
-          ${ev.value} = (int) $bytes[0];
+        UTF8String $firstCharStr = $child.substring(0, 1);
+        if ($firstCharStr.numChars() > 0) {
+          ${ev.value} = $firstCharStr.toString().codePointAt(0);
         } else {
           ${ev.value} = 0;
         }
@@ -2488,7 +2489,7 @@ object Decode {
         while (itr.hasNext) {
           val search = itr.next
           if (itr.hasNext) {
-            val condition = EqualTo(input, search)
+            val condition = EqualNullSafe(input, search)
             branches += ((condition, itr.next))
           } else {
             default = search
@@ -2519,6 +2520,8 @@ object Decode {
        Non domestic
       > SELECT _FUNC_(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
        NULL
+      > SELECT _FUNC_(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks');
+       SQL
   """,
   since = "3.2.0",
   group = "string_funcs")

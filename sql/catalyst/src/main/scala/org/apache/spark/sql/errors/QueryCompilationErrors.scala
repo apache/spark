@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeRef
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode, PermissiveMode}
+import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
@@ -113,21 +113,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def nestedGeneratorError(trimmedNestedGenerator: Expression): Throwable = {
-    new AnalysisException(
-      "Generators are not supported when it's nested in " +
-        "expressions, but got: " + toPrettySQL(trimmedNestedGenerator))
+    new AnalysisException(errorClass = "UNSUPPORTED_GENERATOR",
+      messageParameters = Array("NESTED_IN_EXPRESSIONS", toSQLExpr(trimmedNestedGenerator)))
   }
 
   def moreThanOneGeneratorError(generators: Seq[Expression], clause: String): Throwable = {
-    new AnalysisException(
-      s"Only one generator allowed per $clause clause but found " +
-        generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
+    new AnalysisException(errorClass = "UNSUPPORTED_GENERATOR",
+      messageParameters = Array("MULTI_GENERATOR",
+        clause, generators.size.toString, generators.map(toSQLExpr).mkString(", ")))
   }
 
   def generatorOutsideSelectError(plan: LogicalPlan): Throwable = {
-    new AnalysisException(
-      "Generators are not supported outside the SELECT clause, but " +
-        "got: " + plan.simpleString(SQLConf.get.maxToStringFields))
+    new AnalysisException(errorClass = "UNSUPPORTED_GENERATOR",
+      messageParameters = Array("OUTSIDE_SELECT", plan.simpleString(SQLConf.get.maxToStringFields)))
   }
 
   def legacyStoreAssignmentPolicyError(): Throwable = {
@@ -146,16 +144,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def dataTypeMismatchForDeserializerError(
       dataType: DataType, desiredType: String): Throwable = {
-    val quantifier = if (desiredType.equals("array")) "an" else "a"
     new AnalysisException(
-      s"need $quantifier $desiredType field but got " + dataType.catalogString)
+      errorClass = "UNSUPPORTED_DESERIALIZER",
+      messageParameters =
+        Array("DATA_TYPE_MISMATCH", toSQLType(desiredType), toSQLType(dataType)))
   }
 
   def fieldNumberMismatchForDeserializerError(
       schema: StructType, maxOrdinal: Int): Throwable = {
     new AnalysisException(
-      s"Try to map ${schema.catalogString} to Tuple${maxOrdinal + 1}, " +
-        "but failed as the number of fields does not line up.")
+      errorClass = "UNSUPPORTED_DESERIALIZER",
+      messageParameters =
+        Array("FIELD_NUMBER_MISMATCH", toSQLType(schema), (maxOrdinal + 1).toString))
   }
 
   def upCastFailureError(
@@ -322,8 +322,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def generatorNotExpectedError(name: FunctionIdentifier, classCanonicalName: String): Throwable = {
-    new AnalysisException(s"$name is expected to be a generator. However, " +
-      s"its class is $classCanonicalName, which is not a generator.")
+    new AnalysisException(errorClass = "UNSUPPORTED_GENERATOR",
+      messageParameters = Array("NOT_GENERATOR", toSQLId(name.toString), classCanonicalName))
   }
 
   def functionWithUnsupportedSyntaxError(prettyName: String, syntax: String): Throwable = {
@@ -1989,7 +1989,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException("Failed to execute SHOW CREATE TABLE against table " +
         s"${table.identifier}, which is created by Hive and uses the " +
         "following unsupported serde configuration\n" +
-        builder.toString()
+        builder.toString() + "\n" +
+        s"Please use `SHOW CREATE TABLE ${table.identifier} AS SERDE` to show Hive DDL instead."
     )
   }
 

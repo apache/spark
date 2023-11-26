@@ -563,7 +563,7 @@ private[ml] object DefaultParamsReader {
               val param = instance.getParam(paramName)
               val value = param.jsonDecode(compact(render(jsonValue)))
               if (isDefault) {
-                Params.setDefault(instance, param, value)
+                instance.setDefault(param, value)
               } else {
                 instance.set(param, value)
               }

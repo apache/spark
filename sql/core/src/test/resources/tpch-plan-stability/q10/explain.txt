@@ -62,7 +62,7 @@ Input [3]: [o_orderkey#8, o_custkey#9, o_orderdate#10]
 
 (8) BroadcastExchange
 Input [2]: [o_orderkey#8, o_custkey#9]
-Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true]),false), [id=#11]
+Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true]),false), [plan_id=1]
 
 (9) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [c_custkey#1]
@@ -74,82 +74,82 @@ Output [8]: [c_custkey#1, c_name#2, c_address#3, c_nationkey#4, c_phone#5, c_acc
 Input [9]: [c_custkey#1, c_name#2, c_address#3, c_nationkey#4, c_phone#5, c_acctbal#6, c_comment#7, o_orderkey#8, o_custkey#9]
 
 (11) Scan parquet default.lineitem
-Output [4]: [l_orderkey#12, l_extendedprice#13, l_discount#14, l_returnflag#15]
+Output [4]: [l_orderkey#11, l_extendedprice#12, l_discount#13, l_returnflag#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]
 PushedFilters: [IsNotNull(l_returnflag), EqualTo(l_returnflag,R), IsNotNull(l_orderkey)]
 ReadSchema: struct<l_orderkey:bigint,l_extendedprice:decimal(10,0),l_discount:decimal(10,0),l_returnflag:string>
 
 (12) ColumnarToRow [codegen id : 2]
-Input [4]: [l_orderkey#12, l_extendedprice#13, l_discount#14, l_returnflag#15]
+Input [4]: [l_orderkey#11, l_extendedprice#12, l_discount#13, l_returnflag#14]
 
 (13) Filter [codegen id : 2]
-Input [4]: [l_orderkey#12, l_extendedprice#13, l_discount#14, l_returnflag#15]
-Condition : ((isnotnull(l_returnflag#15) AND (l_returnflag#15 = R)) AND isnotnull(l_orderkey#12))
+Input [4]: [l_orderkey#11, l_extendedprice#12, l_discount#13, l_returnflag#14]
+Condition : ((isnotnull(l_returnflag#14) AND (l_returnflag#14 = R)) AND isnotnull(l_orderkey#11))
 
 (14) Project [codegen id : 2]
-Output [3]: [l_orderkey#12, l_extendedprice#13, l_discount#14]
-Input [4]: [l_orderkey#12, l_extendedprice#13, l_discount#14, l_returnflag#15]
+Output [3]: [l_orderkey#11, l_extendedprice#12, l_discount#13]
+Input [4]: [l_orderkey#11, l_extendedprice#12, l_discount#13, l_returnflag#14]
 
 (15) BroadcastExchange
-Input [3]: [l_orderkey#12, l_extendedprice#13, l_discount#14]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#16]
+Input [3]: [l_orderkey#11, l_extendedprice#12, l_discount#13]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=2]
 
 (16) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [o_orderkey#8]
-Right keys [1]: [l_orderkey#12]
+Right keys [1]: [l_orderkey#11]
 Join condition: None
 
 (17) Project [codegen id : 4]
-Output [9]: [c_custkey#1, c_name#2, c_address#3, c_nationkey#4, c_phone#5, c_acctbal#6, c_comment#7, l_extendedprice#13, l_discount#14]
-Input [11]: [c_custkey#1, c_name#2, c_address#3, c_nationkey#4, c_phone#5, c_acctbal#6, c_comment#7, o_orderkey#8, l_orderkey#12, l_extendedprice#13, l_discount#14]
+Output [9]: [c_custkey#1, c_name#2, c_address#3, c_nationkey#4, c_phone#5, c_acctbal#6, c_comment#7, l_extendedprice#12, l_discount#13]
+Input [11]: [c_custkey#1, c_name#2, c_address#3, c_nationkey#4, c_phone#5, c_acctbal#6, c_comment#7, o_orderkey#8, l_orderkey#11, l_extendedprice#12, l_discount#13]
 
 (18) Scan parquet default.nation
-Output [2]: [n_nationkey#17, n_name#18]
+Output [2]: [n_nationkey#15, n_name#16]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/nation]
 PushedFilters: [IsNotNull(n_nationkey)]
 ReadSchema: struct<n_nationkey:bigint,n_name:string>
 
 (19) ColumnarToRow [codegen id : 3]
-Input [2]: [n_nationkey#17, n_name#18]
+Input [2]: [n_nationkey#15, n_name#16]
 
 (20) Filter [codegen id : 3]
-Input [2]: [n_nationkey#17, n_name#18]
-Condition : isnotnull(n_nationkey#17)
+Input [2]: [n_nationkey#15, n_name#16]
+Condition : isnotnull(n_nationkey#15)
 
 (21) BroadcastExchange
-Input [2]: [n_nationkey#17, n_name#18]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#19]
+Input [2]: [n_nationkey#15, n_name#16]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=3]
 
 (22) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [c_nationkey#4]
-Right keys [1]: [n_nationkey#17]
+Right keys [1]: [n_nationkey#15]
 Join condition: None
 
 (23) Project [codegen id : 4]
-Output [9]: [c_custkey#1, c_name#2, c_address#3, c_phone#5, c_acctbal#6, c_comment#7, l_extendedprice#13, l_discount#14, n_name#18]
-Input [11]: [c_custkey#1, c_name#2, c_address#3, c_nationkey#4, c_phone#5, c_acctbal#6, c_comment#7, l_extendedprice#13, l_discount#14, n_nationkey#17, n_name#18]
+Output [9]: [c_custkey#1, c_name#2, c_address#3, c_phone#5, c_acctbal#6, c_comment#7, l_extendedprice#12, l_discount#13, n_name#16]
+Input [11]: [c_custkey#1, c_name#2, c_address#3, c_nationkey#4, c_phone#5, c_acctbal#6, c_comment#7, l_extendedprice#12, l_discount#13, n_nationkey#15, n_name#16]
 
 (24) HashAggregate [codegen id : 4]
-Input [9]: [c_custkey#1, c_name#2, c_address#3, c_phone#5, c_acctbal#6, c_comment#7, l_extendedprice#13, l_discount#14, n_name#18]
-Keys [7]: [c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#18, c_address#3, c_comment#7]
-Functions [1]: [partial_sum(CheckOverflow((promote_precision(cast(l_extendedprice#13 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#14 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
-Aggregate Attributes [2]: [sum#20, isEmpty#21]
-Results [9]: [c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#18, c_address#3, c_comment#7, sum#22, isEmpty#23]
+Input [9]: [c_custkey#1, c_name#2, c_address#3, c_phone#5, c_acctbal#6, c_comment#7, l_extendedprice#12, l_discount#13, n_name#16]
+Keys [7]: [c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#16, c_address#3, c_comment#7]
+Functions [1]: [partial_sum(CheckOverflow((promote_precision(cast(l_extendedprice#12 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#13 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
+Aggregate Attributes [2]: [sum#17, isEmpty#18]
+Results [9]: [c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#16, c_address#3, c_comment#7, sum#19, isEmpty#20]
 
 (25) Exchange
-Input [9]: [c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#18, c_address#3, c_comment#7, sum#22, isEmpty#23]
-Arguments: hashpartitioning(c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#18, c_address#3, c_comment#7, 5), ENSURE_REQUIREMENTS, [id=#24]
+Input [9]: [c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#16, c_address#3, c_comment#7, sum#19, isEmpty#20]
+Arguments: hashpartitioning(c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#16, c_address#3, c_comment#7, 5), ENSURE_REQUIREMENTS, [plan_id=4]
 
 (26) HashAggregate [codegen id : 5]
-Input [9]: [c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#18, c_address#3, c_comment#7, sum#22, isEmpty#23]
-Keys [7]: [c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#18, c_address#3, c_comment#7]
-Functions [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#13 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#14 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
-Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#13 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#14 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#25]
-Results [8]: [c_custkey#1, c_name#2, sum(CheckOverflow((promote_precision(cast(l_extendedprice#13 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#14 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#25 AS revenue#26, c_acctbal#6, n_name#18, c_address#3, c_phone#5, c_comment#7]
+Input [9]: [c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#16, c_address#3, c_comment#7, sum#19, isEmpty#20]
+Keys [7]: [c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#16, c_address#3, c_comment#7]
+Functions [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#12 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#13 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
+Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#12 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#13 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#21]
+Results [8]: [c_custkey#1, c_name#2, sum(CheckOverflow((promote_precision(cast(l_extendedprice#12 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#13 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#21 AS revenue#22, c_acctbal#6, n_name#16, c_address#3, c_phone#5, c_comment#7]
 
 (27) TakeOrderedAndProject
-Input [8]: [c_custkey#1, c_name#2, revenue#26, c_acctbal#6, n_name#18, c_address#3, c_phone#5, c_comment#7]
-Arguments: 20, [revenue#26 DESC NULLS LAST], [c_custkey#1, c_name#2, revenue#26, c_acctbal#6, n_name#18, c_address#3, c_phone#5, c_comment#7]
+Input [8]: [c_custkey#1, c_name#2, revenue#22, c_acctbal#6, n_name#16, c_address#3, c_phone#5, c_comment#7]
+Arguments: 20, [revenue#22 DESC NULLS LAST], [c_custkey#1, c_name#2, revenue#22, c_acctbal#6, n_name#16, c_address#3, c_phone#5, c_comment#7]
 

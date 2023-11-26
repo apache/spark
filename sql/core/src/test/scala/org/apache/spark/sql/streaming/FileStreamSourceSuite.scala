@@ -42,7 +42,8 @@ import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StructType, _}
+import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
 abstract class FileStreamSourceTest
@@ -224,6 +225,7 @@ abstract class FileStreamSourceTest
   val valueSchema = new StructType().add("value", StringType)
 }
 
+@SlowSQLTest
 class FileStreamSourceSuite extends FileStreamSourceTest {
 
   import testImplicits._
@@ -2343,6 +2345,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 }
 
+@SlowSQLTest
 class FileStreamSourceStressTestSuite extends FileStreamSourceTest {
 
   import testImplicits._

@@ -68,7 +68,13 @@ object MimaExcludes {
 
     // [SPARK-38908][SQL] Provide query context in runtime error of Casting from String to
     // Number/Date/Timestamp/Boolean
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI"),
+
+    // [SPARK-41360][CORE] Avoid BlockManager re-registration if the executor has been lost
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.BlockManagerMessages#RegisterBlockManager.copy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.BlockManagerMessages#RegisterBlockManager.this"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.storage.BlockManagerMessages$RegisterBlockManager$"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.BlockManagerMessages#RegisterBlockManager.apply")
   )
 
   // Exclude rules for 3.2.x from 3.1.1

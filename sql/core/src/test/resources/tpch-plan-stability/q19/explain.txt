@@ -48,7 +48,7 @@ Condition : (((isnotnull(p_size#9) AND (p_size#9 >= 1)) AND isnotnull(p_partkey#
 
 (8) BroadcastExchange
 Input [4]: [p_partkey#7, p_brand#8, p_size#9, p_container#10]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#14]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=1]
 
 (9) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [l_partkey#1]
@@ -63,17 +63,17 @@ Input [8]: [l_partkey#1, l_quantity#2, l_extendedprice#3, l_discount#4, p_partke
 Input [2]: [l_extendedprice#3, l_discount#4]
 Keys: []
 Functions [1]: [partial_sum(CheckOverflow((promote_precision(cast(l_extendedprice#3 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#4 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
-Aggregate Attributes [2]: [sum#15, isEmpty#16]
-Results [2]: [sum#17, isEmpty#18]
+Aggregate Attributes [2]: [sum#14, isEmpty#15]
+Results [2]: [sum#16, isEmpty#17]
 
 (12) Exchange
-Input [2]: [sum#17, isEmpty#18]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#19]
+Input [2]: [sum#16, isEmpty#17]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=2]
 
 (13) HashAggregate [codegen id : 3]
-Input [2]: [sum#17, isEmpty#18]
+Input [2]: [sum#16, isEmpty#17]
 Keys: []
 Functions [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#3 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#4 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
-Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#3 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#4 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#20]
-Results [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#3 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#4 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#20 AS revenue#21]
+Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#3 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#4 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#18]
+Results [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#3 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#4 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#18 AS revenue#19]
 

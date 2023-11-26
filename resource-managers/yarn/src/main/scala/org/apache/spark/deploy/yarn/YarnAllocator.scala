@@ -278,7 +278,7 @@ private[yarn] class YarnAllocator(
 
   // if a ResourceProfile hasn't been seen yet, create the corresponding YARN Resource for it
   private def createYarnResourceForResourceProfile(rp: ResourceProfile): Unit = synchronized {
-    if (!rpIdToYarnResource.contains(rp.id)) {
+    if (!rpIdToYarnResource.containsKey(rp.id)) {
       // track the resource profile if not already there
       getOrUpdateRunningExecutorForRPId(rp.id)
       logInfo(s"Resource profile ${rp.id} doesn't exist, adding it")
@@ -354,19 +354,25 @@ private[yarn] class YarnAllocator(
     this.numLocalityAwareTasksPerResourceProfileId = numLocalityAwareTasksPerResourceProfileId
     this.hostToLocalTaskCountPerResourceProfileId = hostToLocalTaskCountPerResourceProfileId
 
-    val res = resourceProfileToTotalExecs.map { case (rp, numExecs) =>
-      createYarnResourceForResourceProfile(rp)
-      if (numExecs != getOrUpdateTargetNumExecutorsForRPId(rp.id)) {
-        logInfo(s"Driver requested a total number of $numExecs executor(s) " +
-          s"for resource profile id: ${rp.id}.")
-        targetNumExecutorsPerResourceProfileId(rp.id) = numExecs
-        allocatorNodeHealthTracker.setSchedulerExcludedNodes(excludedNodes)
-        true
-      } else {
-        false
+    if (resourceProfileToTotalExecs.isEmpty) {
+      targetNumExecutorsPerResourceProfileId.clear()
+      allocatorNodeHealthTracker.setSchedulerExcludedNodes(excludedNodes)
+      true
+    } else {
+      val res = resourceProfileToTotalExecs.map { case (rp, numExecs) =>
+        createYarnResourceForResourceProfile(rp)
+        if (numExecs != getOrUpdateTargetNumExecutorsForRPId(rp.id)) {
+          logInfo(s"Driver requested a total number of $numExecs executor(s) " +
+            s"for resource profile id: ${rp.id}.")
+          targetNumExecutorsPerResourceProfileId(rp.id) = numExecs
+          allocatorNodeHealthTracker.setSchedulerExcludedNodes(excludedNodes)
+          true
+        } else {
+          false
+        }
       }
+      res.exists(_ == true)
     }
-    res.exists(_ == true)
   }
 
   /**

@@ -23,7 +23,9 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowSQLTest
 
+@SlowSQLTest
 class DataFrameAsOfJoinSuite extends QueryTest
   with SharedSparkSession
   with AdaptiveSparkPlanHelper {

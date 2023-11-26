@@ -2750,6 +2750,24 @@ class HiveDDLSuite
     }
   }
 
+  test("Create Table LIKE VIEW STORED AS Hive Format") {
+    val catalog = spark.sessionState.catalog
+    withView("v") {
+      sql("CREATE TEMPORARY VIEW v AS SELECT 1 AS A, 1 AS B;")
+      hiveFormats.foreach { tableType =>
+        val expectedSerde = HiveSerDe.sourceToSerDe(tableType)
+        withTable("t") {
+          sql(s"CREATE TABLE t LIKE v STORED AS $tableType")
+          val table = catalog.getTableMetadata(TableIdentifier("t"))
+          assert(table.provider == Some("hive"))
+          assert(table.storage.serde == expectedSerde.get.serde)
+          assert(table.storage.inputFormat == expectedSerde.get.inputFormat)
+          assert(table.storage.outputFormat == expectedSerde.get.outputFormat)
+        }
+      }
+    }
+  }
+
   test("Create Table LIKE with specified TBLPROPERTIES") {
     val catalog = spark.sessionState.catalog
     withTable("s", "t") {

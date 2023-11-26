@@ -307,6 +307,17 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       SubstringIndex(Literal("www||apache||org"), Literal( "||"), Literal(2)), "www||apache")
   }
 
+  test("SPARK-40213: ascii for Latin-1 Supplement characters") {
+    // scalastyle:off
+    checkEvaluation(Ascii(Literal("¥")), 165, create_row("¥"))
+    checkEvaluation(Ascii(Literal("®")), 174, create_row("®"))
+    checkEvaluation(Ascii(Literal("©")), 169, create_row("©"))
+    // scalastyle:on
+    (128 until 256).foreach { c =>
+      checkEvaluation(Ascii(Chr(Literal(c.toLong))), c, create_row(c.toLong))
+    }
+  }
+
   test("ascii for string") {
     val a = 'a.string.at(0)
     checkEvaluation(Ascii(Literal("efg")), 101, create_row("abdef"))
@@ -969,7 +980,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("+$89,1,2,3,45.123", "S$999,0,0,0,999.00000") -> Decimal(8912345.123),
       ("-454", "S999") -> Decimal(-454),
       ("+454", "S999") -> Decimal(454),
-      ("<454>", "999PR") -> Decimal(-454),
+      ("454", "999PR") -> Decimal(454),
+      (" 454 ", "999PR") -> Decimal(454),
       ("454-", "999MI") -> Decimal(-454),
       ("-$54", "MI$99") -> Decimal(-54),
       // The input string contains more digits than fit in a long integer.
@@ -1089,6 +1101,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       // The trailing PR required exactly one leading < and trailing >.
       ("<454", "999PR"),
       ("454>", "999PR"),
+      ("<454 ", "999PR"),
+      (" 454>", "999PR"),
       ("<<454>>", "999PR"),
       // At least three digits were required.
       ("45", "S$999,099.99"),
@@ -1106,6 +1120,17 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(tryToNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(tryToNumberExpr, null)
     }
+  }
+
+  test("SPARK-41118: ToNumber: null format string") {
+    // if null format, to_number should return null
+    val toNumberExpr = ToNumber(Literal("454"), Literal(null, StringType))
+    assert(toNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+    checkEvaluation(toNumberExpr, null)
+
+    val tryToNumberExpr = TryToNumber(Literal("454"), Literal(null, StringType))
+    assert(tryToNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+    checkEvaluation(tryToNumberExpr, null)
   }
 
   test("find in set") {

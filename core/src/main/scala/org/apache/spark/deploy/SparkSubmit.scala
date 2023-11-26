@@ -157,24 +157,35 @@ private[spark] class SparkSubmit extends Logging {
 
     def doRunMain(): Unit = {
       if (args.proxyUser != null) {
-        val proxyUser = UserGroupInformation.createProxyUser(args.proxyUser,
-          UserGroupInformation.getCurrentUser())
-        try {
-          proxyUser.doAs(new PrivilegedExceptionAction[Unit]() {
-            override def run(): Unit = {
-              runMain(args, uninitLog)
-            }
-          })
-        } catch {
-          case e: Exception =>
-            // Hadoop's AuthorizationException suppresses the exception's stack trace, which
-            // makes the message printed to the output by the JVM not very helpful. Instead,
-            // detect exceptions with empty stack traces here, and treat them differently.
-            if (e.getStackTrace().length == 0) {
-              error(s"ERROR: ${e.getClass().getName()}: ${e.getMessage()}")
-            } else {
-              throw e
-            }
+        // Here we are checking for client mode because when job is sumbitted in cluster
+        // deploy mode with k8s resource manager, the spark submit in the driver container
+        // is done in client mode.
+        val isKubernetesClusterModeDriver = args.master.startsWith("k8s") &&
+          "client".equals(args.deployMode) &&
+          args.toSparkConf().getBoolean("spark.kubernetes.submitInDriver", false)
+        if (isKubernetesClusterModeDriver) {
+          logInfo("Running driver with proxy user. Cluster manager: Kubernetes")
+          SparkHadoopUtil.get.runAsSparkUser(() => runMain(args, uninitLog))
+        } else {
+          val proxyUser = UserGroupInformation.createProxyUser(args.proxyUser,
+            UserGroupInformation.getCurrentUser())
+          try {
+            proxyUser.doAs(new PrivilegedExceptionAction[Unit]() {
+              override def run(): Unit = {
+                runMain(args, uninitLog)
+              }
+            })
+          } catch {
+            case e: Exception =>
+              // Hadoop's AuthorizationException suppresses the exception's stack trace, which
+              // makes the message printed to the output by the JVM not very helpful. Instead,
+              // detect exceptions with empty stack traces here, and treat them differently.
+              if (e.getStackTrace().length == 0) {
+                error(s"ERROR: ${e.getClass().getName()}: ${e.getMessage()}")
+              } else {
+                throw e
+              }
+          }
         }
       } else {
         runMain(args, uninitLog)
@@ -299,6 +310,10 @@ private[spark] class SparkSubmit extends Logging {
     val isKubernetesClient = clusterManager == KUBERNETES && deployMode == CLIENT
     val isKubernetesClusterModeDriver = isKubernetesClient &&
       sparkConf.getBoolean("spark.kubernetes.submitInDriver", false)
+    val isCustomClasspathInClusterModeDisallowed =
+      !sparkConf.get(ALLOW_CUSTOM_CLASSPATH_BY_PROXY_USER_IN_CLUSTER_MODE) &&
+      args.proxyUser != null &&
+      (isYarnCluster || isMesosCluster || isStandAloneCluster || isKubernetesCluster)
 
     if (!isMesosCluster && !isStandAloneCluster) {
       // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
@@ -632,7 +647,7 @@ private[spark] class SparkSubmit extends Logging {
         confKey = EXECUTOR_CORES.key),
       OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = EXECUTOR_MEMORY.key),
-      OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
+      OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS, ALL_DEPLOY_MODES,
         confKey = CORES_MAX.key),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = FILES.key),
@@ -859,6 +874,13 @@ private[spark] class SparkSubmit extends Logging {
 
     sparkConf.set("spark.app.submitTime", System.currentTimeMillis().toString)
 
+    if (childClasspath.nonEmpty && isCustomClasspathInClusterModeDisallowed) {
+      childClasspath.clear()
+      logWarning(s"Ignore classpath ${childClasspath.mkString(", ")} with proxy user specified " +
+        s"in Cluster mode when ${ALLOW_CUSTOM_CLASSPATH_BY_PROXY_USER_IN_CLUSTER_MODE.key} is " +
+        s"disabled")
+    }
+
     (childArgs.toSeq, childClasspath.toSeq, sparkConf, childMainClass)
   }
 
@@ -912,6 +934,10 @@ private[spark] class SparkSubmit extends Logging {
       logInfo(s"Classpath elements:\n${childClasspath.mkString("\n")}")
       logInfo("\n")
     }
+    assert(!(args.deployMode == "cluster" && args.proxyUser != null && childClasspath.nonEmpty) ||
+      sparkConf.get(ALLOW_CUSTOM_CLASSPATH_BY_PROXY_USER_IN_CLUSTER_MODE),
+      s"Classpath of spark-submit should not change in cluster mode if proxy user is specified " +
+        s"when ${ALLOW_CUSTOM_CLASSPATH_BY_PROXY_USER_IN_CLUSTER_MODE.key} is disabled")
     val loader = getSubmitClassLoader(sparkConf)
     for (jar <- childClasspath) {
       addJarToClasspath(jar, loader)

@@ -102,7 +102,7 @@ Refer to the [Python API docs](api/python/reference/api/pyspark.ml.fpm.FPGrowth.
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.fpGrowth.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.fpGrowth.html) for more details.
 
 {% include_example r/ml/fpm.R %}
 </div>
@@ -155,7 +155,7 @@ Refer to the [Python API docs](api/python/reference/api/pyspark.ml.fpm.PrefixSpa
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.prefixSpan.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.prefixSpan.html) for more details.
 
 {% include_example r/ml/prefixSpan.R %}
 </div>

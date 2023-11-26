@@ -30,13 +30,13 @@ class ExecutorMetricsPollerSuite extends SparkFunSuite {
     // stage (0, 0) has an active task, so it remains on stageTCMP after heartbeat.
     assert(poller.getExecutorUpdates.size === 1)
     assert(poller.stageTCMP.size === 1)
-    assert(poller.stageTCMP.get((0, 0)).count.get === 1)
+    assert(poller.stageTCMP.get((0, 0)).count === 1)
 
     poller.onTaskCompletion(0L, 0, 0)
     // stage (0, 0) doesn't have active tasks, but its entry will be kept until next
     // heartbeat.
     assert(poller.stageTCMP.size === 1)
-    assert(poller.stageTCMP.get((0, 0)).count.get === 0)
+    assert(poller.stageTCMP.get((0, 0)).count === 0)
 
     // the next heartbeat will report the peak metrics of stage (0, 0) during the
     // previous heartbeat interval, then remove it from stageTCMP.

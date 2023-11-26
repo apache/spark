@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Complete
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{InvalidUnsafeRowException, StateSchemaNotCompatible}
 import org.apache.spark.sql.functions._
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
 /**
@@ -39,6 +40,7 @@ import org.apache.spark.util.Utils
  * a new test for the issue, just like the test suite "SPARK-28067 changed the sum decimal unsafe
  * row format".
  */
+@SlowSQLTest
 class StreamingStateStoreFormatCompatibilitySuite extends StreamTest {
   import testImplicits._
 

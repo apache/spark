@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
@@ -331,7 +332,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       val msg1 = intercept[AnalysisException] {
         sql("select 1 + explode(array(min(c2), max(c2))) from t1 group by c1")
       }.getMessage
-      assert(msg1.contains("Generators are not supported when it's nested in expressions"))
+      assert(msg1.contains("The generator is not supported: nested in expressions"))
 
       val msg2 = intercept[AnalysisException] {
         sql(
@@ -341,7 +342,8 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
             |from t1 group by c1
           """.stripMargin)
       }.getMessage
-      assert(msg2.contains("Only one generator allowed per aggregate clause"))
+      assert(msg2.contains("The generator is not supported: " +
+        "only one generator allowed per aggregate clause"))
     }
   }
 
@@ -349,8 +351,8 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     val errMsg = intercept[AnalysisException] {
       sql("SELECT array(array(1, 2), array(3)) v").select(explode(explode($"v"))).collect
     }.getMessage
-    assert(errMsg.contains("Generators are not supported when it's nested in expressions, " +
-      "but got: explode(explode(v))"))
+    assert(errMsg.contains("The generator is not supported: " +
+      "nested in expressions \"explode(explode(v))\""))
   }
 
   test("SPARK-30997: generators in aggregate expressions for dataframe") {
@@ -387,6 +389,60 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
         sql("select f1, f2 from t1 lateral view inline_outer(arr) as f1, f2"),
         Row(0, 1) :: Row(3, 4) :: Row(6, 7) :: Row(null, null) :: Row(null, null) :: Nil)
     }
+  }
+
+  def testNullStruct(): Unit = {
+    val df = sql(
+      """select * from values
+        |(
+        |  1,
+        |  array(
+        |    named_struct('c1', 0, 'c2', 1),
+        |    null,
+        |    named_struct('c1', 2, 'c2', 3),
+        |    null
+        |  )
+        |)
+        |as tbl(a, b)
+         """.stripMargin)
+    df.createOrReplaceTempView("t1")
+
+    checkAnswer(
+      sql("select inline(b) from t1"),
+      Row(0, 1) :: Row(null, null) :: Row(2, 3) :: Row(null, null) :: Nil)
+
+    checkAnswer(
+      sql("select a, inline(b) from t1"),
+      Row(1, 0, 1) :: Row(1, null, null) :: Row(1, 2, 3) :: Row(1, null, null) :: Nil)
+  }
+
+  test("SPARK-39061: inline should handle null struct") {
+    testNullStruct
+  }
+
+  test("SPARK-39496: inline eval path should handle null struct") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      testNullStruct
+    }
+  }
+
+  test("SPARK-40963: generator output has correct nullability") {
+    // This test does not check nullability directly. Before SPARK-40963,
+    // the below query got wrong results due to incorrect nullability.
+    val df = sql(
+      """select c1, explode(c4) as c5 from (
+        |  select c1, array(c3) as c4 from (
+        |    select c1, explode_outer(c2) as c3
+        |    from values
+        |    (1, array(1, 2)),
+        |    (2, array(2, 3)),
+        |    (3, null)
+        |    as data(c1, c2)
+        |  )
+        |)
+        |""".stripMargin)
+    checkAnswer(df,
+      Row(1, 1) :: Row(1, 2) :: Row(2, 2) :: Row(2, 3) :: Row(3, null) :: Nil)
   }
 }
 

@@ -73,9 +73,13 @@ case class EnsureRequirements(
       case _ => false
     }.map(_._2)
 
+    // Special case: if all sides of the join are single partition
+    val allSinglePartition =
+      childrenIndexes.forall(children(_).outputPartitioning == SinglePartition)
+
     // If there are more than one children, we'll need to check partitioning & distribution of them
     // and see if extra shuffles are necessary.
-    if (childrenIndexes.length > 1) {
+    if (childrenIndexes.length > 1 && !allSinglePartition) {
       val specs = childrenIndexes.map(i => {
         val requiredDist = requiredChildDistributions(i)
         assert(requiredDist.isInstanceOf[ClusteredDistribution],

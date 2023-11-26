@@ -26,7 +26,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.SparkArithmeticException
 import org.apache.spark.sql.{Encoder, Encoders}
-import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData}
+import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
@@ -476,6 +476,9 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(Option.empty[Int], "empty option of int")
   encodeDecodeTest(Option("abc"), "option of string")
   encodeDecodeTest(Option.empty[String], "empty option of string")
+
+  encodeDecodeTest(ScroogeLikeExample(1),
+    "SPARK-40385 class with only a companion object constructor")
 
   productTest(("UDT", new ExamplePoint(0.1, 0.2)))
 

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.{Dataset, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -41,8 +43,16 @@ case class SaveIntoDataSourceCommand(
   override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    dataSource.createRelation(
+    val relation = dataSource.createRelation(
       sparkSession.sqlContext, mode, options, Dataset.ofRows(sparkSession, query))
+
+    try {
+      val logicalRelation = LogicalRelation(relation, relation.schema.toAttributes, None, false)
+      sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, logicalRelation)
+    } catch {
+      case NonFatal(_) =>
+        // some data source can not support return a valid relation, e.g. `KafkaSourceProvider`
+    }
 
     Seq.empty[Row]
   }

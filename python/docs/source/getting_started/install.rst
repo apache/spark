@@ -155,12 +155,11 @@ Dependencies
 Package       Minimum supported version Note
 ============= ========================= ======================================
 `pandas`      1.0.5                     Optional for Spark SQL
-`NumPy`       1.7                       Required for MLlib DataFrame-based API
 `pyarrow`     1.0.0                     Optional for Spark SQL
-`Py4J`        0.10.9.5                  Required
+`py4j`        0.10.9.5                  Required
 `pandas`      1.0.5                     Required for pandas API on Spark
 `pyarrow`     1.0.0                     Required for pandas API on Spark
-`Numpy`       1.14                      Required for pandas API on Spark
+`numpy`       1.15                      Required for pandas API on Spark and MLLib DataFrame-based API
 ============= ========================= ======================================
 
 Note that PySpark requires Java 8 or later with ``JAVA_HOME`` properly set.  

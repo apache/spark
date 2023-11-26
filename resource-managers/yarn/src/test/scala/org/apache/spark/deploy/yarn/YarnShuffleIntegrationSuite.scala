@@ -33,11 +33,12 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.network.shuffle.ShuffleTestAccessor
 import org.apache.spark.network.yarn.{YarnShuffleService, YarnTestAccessor}
-import org.apache.spark.tags.ExtendedYarnTest
+import org.apache.spark.tags.{ExtendedLevelDBTest, ExtendedYarnTest}
 
 /**
  * Integration test for the external shuffle service with a yarn mini-cluster
  */
+@ExtendedLevelDBTest
 @ExtendedYarnTest
 class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
 
@@ -47,6 +48,7 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format("spark_shuffle"),
       classOf[YarnShuffleService].getCanonicalName)
     yarnConfig.set(SHUFFLE_SERVICE_PORT.key, "0")
+    yarnConfig.set(YarnTestAccessor.shuffleServiceIntegrationTestingKey, "true")
     yarnConfig
   }
 
@@ -67,29 +69,25 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
     val shuffleService = YarnTestAccessor.getShuffleServiceInstance
 
     val registeredExecFile = YarnTestAccessor.getRegisteredExecutorFile(shuffleService)
+    assert(registeredExecFile != null)
 
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(
       false,
       mainClassName(YarnExternalShuffleDriver.getClass),
-      appArgs = if (registeredExecFile != null) {
-        Seq(result.getAbsolutePath, registeredExecFile.getAbsolutePath)
-      } else {
-        Seq(result.getAbsolutePath)
-      },
+      appArgs = Seq(result.getAbsolutePath, registeredExecFile.getAbsolutePath),
       extraConf = extraSparkConf()
     )
     checkResult(finalState, result)
 
-    if (registeredExecFile != null) {
-      assert(YarnTestAccessor.getRegisteredExecutorFile(shuffleService).exists())
-    }
+    assert(YarnTestAccessor.getRegisteredExecutorFile(shuffleService).exists())
   }
 }
 
 /**
  * Integration test for the external shuffle service with auth on.
  */
+@ExtendedLevelDBTest
 @ExtendedYarnTest
 class YarnShuffleAuthSuite extends YarnShuffleIntegrationSuite {
 

@@ -158,8 +158,14 @@ case class WindowExec(
         // Iteration
         var rowIndex = 0
 
-        override final def hasNext: Boolean =
-          (bufferIterator != null && bufferIterator.hasNext) || nextRowAvailable
+        override final def hasNext: Boolean = {
+          val found = (bufferIterator != null && bufferIterator.hasNext) || nextRowAvailable
+          if (!found) {
+            // clear final partition
+            buffer.clear()
+          }
+          found
+        }
 
         val join = new JoinedRow
         override final def next(): InternalRow = {

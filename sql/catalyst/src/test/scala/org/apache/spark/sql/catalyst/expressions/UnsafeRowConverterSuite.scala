@@ -277,6 +277,48 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     // assert(setToNullAfterCreation.get(11) === rowWithNoNullColumns.get(11))
   }
 
+  testBothCodegenAndInterpreted("SPARK-41535: intervals initialized as null") {
+    val factory = UnsafeProjection
+    val fieldTypes: Array[DataType] = Array(CalendarIntervalType, CalendarIntervalType)
+    val converter = factory.create(fieldTypes)
+
+    val row = new SpecificInternalRow(fieldTypes)
+    for (i <- 0 until row.numFields) {
+      row.setInterval(i, null)
+    }
+
+    val nullAtCreation = converter.apply(row)
+
+    for (i <- 0 until row.numFields) {
+      assert(nullAtCreation.isNullAt(i))
+    }
+
+    val intervals = Array(
+      new CalendarInterval(0, 7, 0L),
+      new CalendarInterval(12*17, 2, 0L)
+    )
+    // set interval values into previously null columns
+    for (i <- intervals.indices) {
+      nullAtCreation.setInterval(i, intervals(i))
+    }
+
+    for (i <- intervals.indices) {
+      assert(nullAtCreation.getInterval(i) == intervals(i))
+    }
+  }
+
+  testBothCodegenAndInterpreted("SPARK-41535: interval array containing nulls") {
+    val factory = UnsafeProjection
+    val fieldTypes: Array[DataType] = Array(ArrayType(CalendarIntervalType))
+    val converter = factory.create(fieldTypes)
+
+    val row = new SpecificInternalRow(fieldTypes)
+    val values = Array(new CalendarInterval(0, 7, 0L), null)
+    row.update(0, createArray(values: _*))
+    val unsafeRow: UnsafeRow = converter.apply(row)
+    testArrayInterval(unsafeRow.getArray(0), values)
+  }
+
   testBothCodegenAndInterpreted("basic conversion with struct type") {
     val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(
@@ -327,6 +369,13 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
       8 + scala.math.ceil(values.length / 64.toDouble) * 8 + roundedSize(4 * values.length))
     values.zipWithIndex.foreach {
       case (value, index) => assert(array.getInt(index) == value)
+    }
+  }
+
+  private def testArrayInterval(array: UnsafeArrayData, values: Seq[CalendarInterval]): Unit = {
+    assert(array.numElements == values.length)
+    values.zipWithIndex.foreach {
+      case (value, index) => assert(array.getInterval(index) == value)
     }
   }
 

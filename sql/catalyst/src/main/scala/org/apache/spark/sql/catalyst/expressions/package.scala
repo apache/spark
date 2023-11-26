@@ -23,6 +23,7 @@ import com.google.common.collect.Maps
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{Resolver, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
@@ -82,6 +83,15 @@ package object expressions  {
    */
   object IdentityProjection extends Projection {
     override def apply(row: InternalRow): InternalRow = row
+  }
+
+  object AttributeSeq {
+    def fromNormalOutput(attr: Seq[Attribute]): AttributeSeq = {
+      // Normal output attributes should never have the special flag that allows only qualified
+      // access. In case something goes wrong, like a scan relation from a custom data source,
+      // we explicitly remove that special flag to be safe.
+      new AttributeSeq(attr.map(_.markAsAllowAnyAccess()))
+    }
   }
 
   /**
@@ -265,7 +275,7 @@ package object expressions  {
         case (Seq(), _) =>
           val name = nameParts.head
           val attributes = collectMatches(name, direct.get(name.toLowerCase(Locale.ROOT)))
-          (attributes, nameParts.tail)
+          (attributes.filterNot(_.qualifiedAccessOnly), nameParts.tail)
         case _ => matches
       }
     }
@@ -314,10 +324,12 @@ package object expressions  {
       var i = nameParts.length - 1
       while (i >= 0 && candidates.isEmpty) {
         val name = nameParts(i)
-        candidates = collectMatches(
-          name,
-          nameParts.take(i),
-          direct.get(name.toLowerCase(Locale.ROOT)))
+        val attrsToLookup = if (i == 0) {
+          direct.get(name.toLowerCase(Locale.ROOT)).map(_.filterNot(_.qualifiedAccessOnly))
+        } else {
+          direct.get(name.toLowerCase(Locale.ROOT))
+        }
+        candidates = collectMatches(name, nameParts.take(i), attrsToLookup)
         if (candidates.nonEmpty) {
           nestedFields = nameParts.takeRight(nameParts.length - i - 1)
         }
@@ -342,7 +354,12 @@ package object expressions  {
       }
 
       def name = UnresolvedAttribute(nameParts).name
-      prunedCandidates match {
+      // We may have resolved the attributes from metadata columns. The resolved attributes will be
+      // put in a logical plan node and becomes normal attributes. They can still keep the special
+      // attribute metadata to indicate that they are from metadata columns, but they should not
+      // keep any restrictions that may break column resolution for normal attributes.
+      // See SPARK-42084 for more details.
+      prunedCandidates.map(_.markAsAllowAnyAccess()) match {
         case Seq(a) if nestedFields.nonEmpty =>
           // One match, but we also need to extract the requested nested field.
           // The foldLeft adds ExtractValues for every remaining parts of the identifier,

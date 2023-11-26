@@ -112,9 +112,9 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog {
  * @param nestedViewDepth The nested depth in the view resolution, this enables us to limit the
  *                        depth of nested views.
  * @param maxNestedViewDepth The maximum allowed depth of nested view resolution.
- * @param relationCache A mapping from qualified table names to resolved relations. This can ensure
- *                      that the table is resolved only once if a table is used multiple times
- *                      in a query.
+ * @param relationCache A mapping from qualified table names and time travel spec to resolved
+ *                      relations. This can ensure that the table is resolved only once if a table
+ *                      is used multiple times in a query.
  * @param referredTempViewNames All the temp view names referred by the current view we are
  *                              resolving. It's used to make sure the relation resolution is
  *                              consistent between view creation and view resolution. For example,
@@ -128,7 +128,8 @@ case class AnalysisContext(
     catalogAndNamespace: Seq[String] = Nil,
     nestedViewDepth: Int = 0,
     maxNestedViewDepth: Int = -1,
-    relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty,
+    relationCache: mutable.Map[(Seq[String], Option[TimeTravelSpec]), LogicalPlan] =
+      mutable.Map.empty,
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
     // 1. If we are resolving a view, this field will be restored from the view metadata,
     //    by calling `AnalysisContext.withAnalysisContext(viewDesc)`.
@@ -192,7 +193,10 @@ class Analyzer(override val catalogManager: CatalogManager)
   override protected def isPlanIntegral(
       previousPlan: LogicalPlan,
       currentPlan: LogicalPlan): Boolean = {
-    !Utils.isTesting || LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(currentPlan)
+    import org.apache.spark.sql.catalyst.util._
+    !Utils.isTesting || (LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(currentPlan) &&
+      (!LogicalPlanIntegrity.canGetOutputAttrs(currentPlan) ||
+        !currentPlan.output.exists(_.qualifiedAccessOnly)))
   }
 
   override def isView(nameParts: Seq[String]): Boolean = v1SessionCatalog.isView(nameParts)
@@ -450,7 +454,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    * Substitute child plan with WindowSpecDefinitions.
    */
   object WindowsSubstitution extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(WITH_WINDOW_DEFINITION, UNRESOLVED_WINDOW_EXPRESSION), ruleId) {
       // Lookup WindowSpecDefinitions. This rule works with unresolved children.
       case WithWindowDefinition(windowDefinitions, child) => child.resolveExpressions {
@@ -459,14 +463,6 @@ class Analyzer(override val catalogManager: CatalogManager)
             throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName))
           WindowExpression(c, windowSpecDefinition)
       }
-
-      case p @ Project(projectList, _) =>
-        projectList.foreach(_.transformDownWithPruning(
-          _.containsPattern(UNRESOLVED_WINDOW_EXPRESSION), ruleId) {
-          case UnresolvedWindowExpression(_, windowSpec) =>
-            throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowSpec.name)
-        })
-        p
     }
   }
 
@@ -609,31 +605,22 @@ class Analyzer(override val catalogManager: CatalogManager)
         aggregations: Seq[NamedExpression],
         groupByAliases: Seq[Alias],
         groupingAttrs: Seq[Expression],
-        gid: Attribute): Seq[NamedExpression] = aggregations.map { agg =>
-      // collect all the found AggregateExpression, so we can check an expression is part of
-      // any AggregateExpression or not.
-      val aggsBuffer = ArrayBuffer[Expression]()
-      // Returns whether the expression belongs to any expressions in `aggsBuffer` or not.
-      def isPartOfAggregation(e: Expression): Boolean = {
-        aggsBuffer.exists(a => a.exists(_ eq e))
-      }
-      replaceGroupingFunc(agg, groupByExprs, gid).transformDown {
-        // AggregateExpression should be computed on the unmodified value of its argument
-        // expressions, so we should not replace any references to grouping expression
-        // inside it.
-        case e: AggregateExpression =>
-          aggsBuffer += e
-          e
-        case e if isPartOfAggregation(e) => e
+        gid: Attribute): Seq[NamedExpression] = {
+      def replaceExprs(e: Expression): Expression = e match {
+        case e if AggregateExpression.isAggregate(e) => e
         case e =>
           // Replace expression by expand output attribute.
           val index = groupByAliases.indexWhere(_.child.semanticEquals(e))
           if (index == -1) {
-            e
+            e.mapChildren(replaceExprs)
           } else {
             groupingAttrs(index)
           }
-      }.asInstanceOf[NamedExpression]
+      }
+      aggregations
+        .map(replaceGroupingFunc(_, groupByExprs, gid))
+        .map(replaceExprs)
+        .map(_.asInstanceOf[NamedExpression])
     }
 
     /*
@@ -747,7 +734,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
   }
 
-  object ResolvePivot extends Rule[LogicalPlan] {
+  object ResolvePivot extends Rule[LogicalPlan] with AliasHelper {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(PIVOT), ruleId) {
       case p: Pivot if !p.childrenResolved || !p.aggregates.forall(_.resolved)
@@ -761,10 +748,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         aggregates.foreach(checkValidAggregateExpression)
         // Check all pivot values are literal and match pivot column data type.
         val evalPivotValues = pivotValues.map { value =>
-          val foldable = value match {
-            case Alias(v, _) => v.foldable
-            case _ => value.foldable
-          }
+          val foldable = trimAliases(value).foldable
           if (!foldable) {
             throw QueryCompilationErrors.nonLiteralPivotValError(value)
           }
@@ -929,11 +913,11 @@ class Analyzer(override val catalogManager: CatalogManager)
    * projecting away metadata columns prematurely.
    */
   object AddMetadataColumns extends Rule[LogicalPlan] {
-
     import org.apache.spark.sql.catalyst.util._
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
       AlwaysProcess.fn, ruleId) {
+      case hint: UnresolvedHint => hint
       // Add metadata output to all node types
       case node if node.children.nonEmpty && node.resolved && hasMetadataCol(node) =>
         val inputAttrs = AttributeSet(node.children.flatMap(_.output))
@@ -941,7 +925,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         if (metaCols.isEmpty) {
           node
         } else {
-          val newNode = addMetadataCol(node)
+          val newNode = node.mapChildren(addMetadataCol(_, metaCols.map(_.exprId).toSet))
           // We should not change the output schema of the plan. We should project away the extra
           // metadata columns if necessary.
           if (newNode.sameOutput(node)) {
@@ -975,13 +959,20 @@ class Analyzer(override val catalogManager: CatalogManager)
       })
     }
 
-    private def addMetadataCol(plan: LogicalPlan): LogicalPlan = plan match {
-      case s: ExposesMetadataColumns => s.withMetadataColumns()
-      case p: Project =>
-        p.copy(
-          projectList = p.metadataOutput ++ p.projectList,
-          child = addMetadataCol(p.child))
-      case _ => plan.withNewChildren(plan.children.map(addMetadataCol))
+    private def addMetadataCol(
+        plan: LogicalPlan,
+        requiredAttrIds: Set[ExprId]): LogicalPlan = plan match {
+      case s: ExposesMetadataColumns if s.metadataOutput.exists(a =>
+        requiredAttrIds.contains(a.exprId)) =>
+        s.withMetadataColumns()
+      case p: Project if p.metadataOutput.exists(a => requiredAttrIds.contains(a.exprId)) =>
+        val newProj = p.copy(
+          // Do not leak the qualified-access-only restriction to normal plan outputs.
+          projectList = p.projectList ++ p.metadataOutput.map(_.markAsAllowAnyAccess()),
+          child = addMetadataCol(p.child, requiredAttrIds))
+        newProj.copyTagsFrom(p)
+        newProj
+      case _ => plan.withNewChildren(plan.children.map(addMetadataCol(_, requiredAttrIds)))
     }
   }
 
@@ -1196,7 +1187,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       lookupTempView(u.multipartIdentifier, u.isStreaming, timeTravelSpec.isDefined).orElse {
         expandIdentifier(u.multipartIdentifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
-            val key = catalog.name +: ident.namespace :+ ident.name
+            val key = ((catalog.name +: ident.namespace :+ ident.name).toSeq, timeTravelSpec)
             AnalysisContext.get.relationCache.get(key).map(_.transform {
               case multi: MultiInstanceRelation =>
                 val newRelation = multi.newInstance()
@@ -1874,7 +1865,19 @@ class Analyzer(override val catalogManager: CatalogManager)
               throw QueryCompilationErrors.groupByPositionRefersToAggregateFunctionError(
                 index, ordinalExpr)
             } else {
-              ordinalExpr
+              trimAliases(ordinalExpr) match {
+                // HACK ALERT: If the ordinal expression is also an integer literal, don't use it
+                //             but still keep the ordinal literal. The reason is we may repeatedly
+                //             analyze the plan. Using a different integer literal may lead to
+                //             a repeat GROUP BY ordinal resolution which is wrong. GROUP BY
+                //             constant is meaningless so whatever value does not matter here.
+                // TODO: (SPARK-45932) GROUP BY ordinal should pull out grouping expressions to
+                //       a Project, then the resolved ordinal expression is always
+                //       `AttributeReference`.
+                case Literal(_: Int, IntegerType) =>
+                  Literal(index)
+                case _ => ordinalExpr
+              }
             }
           } else {
             throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size)
@@ -1984,7 +1987,9 @@ class Analyzer(override val catalogManager: CatalogManager)
             // If some attributes used by expressions are resolvable only on the rewritten child
             // plan, we need to add them into original projection.
             val missingAttrs = (AttributeSet(newExprs) -- p.outputSet).intersect(newChild.outputSet)
-            (newExprs, Project(p.projectList ++ missingAttrs, newChild))
+            val newProject = Project(p.projectList ++ missingAttrs, newChild)
+            newProject.copyTagsFrom(p)
+            (newExprs, newProject)
 
           case a @ Aggregate(groupExprs, aggExprs, child) =>
             val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, a))
@@ -2835,7 +2840,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                   generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
                   child)
 
-                (Some(g), res._2 ++ g.generatorOutput)
+                (Some(g), res._2 ++ g.nullableOutput)
               case other =>
                 (res._1, res._2 :+ other)
             }
@@ -3464,18 +3469,27 @@ class Analyzer(override val catalogManager: CatalogManager)
     // the output list looks like: join keys, columns from left, columns from right
     val (projectList, hiddenList) = joinType match {
       case LeftOuter =>
-        (leftKeys ++ lUniqueOutput ++ rUniqueOutput.map(_.withNullability(true)), rightKeys)
+        (leftKeys ++ lUniqueOutput ++ rUniqueOutput.map(_.withNullability(true)),
+          rightKeys.map(_.withNullability(true)))
       case LeftExistence(_) =>
         (leftKeys ++ lUniqueOutput, Seq.empty)
       case RightOuter =>
-        (rightKeys ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput, leftKeys)
+        (rightKeys ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput,
+          leftKeys.map(_.withNullability(true)))
       case FullOuter =>
-        // in full outer join, joinCols should be non-null if there is.
-        val joinedCols = joinPairs.map { case (l, r) => Alias(Coalesce(Seq(l, r)), l.name)() }
+        // In full outer join, we should return non-null values for the join columns
+        // if either side has non-null values for those columns. Therefore, for each
+        // join column pair, add a coalesce to return the non-null value, if it exists.
+        val joinedCols = joinPairs.map { case (l, r) =>
+          // Since this is a full outer join, either side could be null, so we explicitly
+          // set the nullability to true for both sides.
+          Alias(Coalesce(Seq(l.withNullability(true), r.withNullability(true))), l.name)()
+        }
         (joinedCols ++
           lUniqueOutput.map(_.withNullability(true)) ++
           rUniqueOutput.map(_.withNullability(true)),
-          leftKeys ++ rightKeys)
+          leftKeys.map(_.withNullability(true)) ++
+          rightKeys.map(_.withNullability(true)))
       case _ : InnerLike =>
         (leftKeys ++ lUniqueOutput ++ rUniqueOutput, rightKeys)
       case _ =>
@@ -3486,8 +3500,8 @@ class Analyzer(override val catalogManager: CatalogManager)
     val project = Project(projectList, Join(left, right, joinType, newCondition, hint))
     project.setTagValue(
       Project.hiddenOutputTag,
-      hiddenList.map(_.markAsSupportsQualifiedStar()) ++
-        project.child.metadataOutput.filter(_.supportsQualifiedStar))
+      hiddenList.map(_.markAsQualifiedAccessOnly()) ++
+        project.child.metadataOutput.filter(_.qualifiedAccessOnly))
     project
   }
 
@@ -4024,7 +4038,8 @@ object SessionWindowing extends Rule[LogicalPlan] {
    * This also adds a marker to the session column so that downstream can easily find the column
    * on session window.
    */
-  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+    _.containsPattern(SESSION_WINDOW), ruleId) {
     case p: LogicalPlan if p.children.size == 1 =>
       val child = p.children.head
       val sessionExpressions =

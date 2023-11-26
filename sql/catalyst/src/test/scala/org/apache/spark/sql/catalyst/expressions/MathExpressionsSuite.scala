@@ -590,6 +590,8 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Unhex(Literal("F")), Array[Byte](15))
     checkEvaluation(Unhex(Literal("ff")), Array[Byte](-1))
     checkEvaluation(Unhex(Literal("GG")), null)
+    checkEvaluation(Unhex(Literal("123")), Array[Byte](1, 35))
+    checkEvaluation(Unhex(Literal("12345")), Array[Byte](1, 35, 69))
     // scalastyle:off
     // Turn off scala style for non-ascii chars
     checkEvaluation(Unhex(Literal("E4B889E9878DE79A84")), "三重的".getBytes(StandardCharsets.UTF_8))

@@ -55,7 +55,7 @@ Input [3]: [l_orderkey#4, l_commitdate#5, l_receiptdate#6]
 
 (9) BroadcastExchange
 Input [1]: [l_orderkey#4]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#7]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=1]
 
 (10) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [o_orderkey#1]
@@ -70,25 +70,25 @@ Input [2]: [o_orderkey#1, o_orderpriority#3]
 Input [1]: [o_orderpriority#3]
 Keys [1]: [o_orderpriority#3]
 Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#8]
-Results [2]: [o_orderpriority#3, count#9]
+Aggregate Attributes [1]: [count#7]
+Results [2]: [o_orderpriority#3, count#8]
 
 (13) Exchange
-Input [2]: [o_orderpriority#3, count#9]
-Arguments: hashpartitioning(o_orderpriority#3, 5), ENSURE_REQUIREMENTS, [id=#10]
+Input [2]: [o_orderpriority#3, count#8]
+Arguments: hashpartitioning(o_orderpriority#3, 5), ENSURE_REQUIREMENTS, [plan_id=2]
 
 (14) HashAggregate [codegen id : 3]
-Input [2]: [o_orderpriority#3, count#9]
+Input [2]: [o_orderpriority#3, count#8]
 Keys [1]: [o_orderpriority#3]
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#11]
-Results [2]: [o_orderpriority#3, count(1)#11 AS order_count#12]
+Aggregate Attributes [1]: [count(1)#9]
+Results [2]: [o_orderpriority#3, count(1)#9 AS order_count#10]
 
 (15) Exchange
-Input [2]: [o_orderpriority#3, order_count#12]
-Arguments: rangepartitioning(o_orderpriority#3 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#13]
+Input [2]: [o_orderpriority#3, order_count#10]
+Arguments: rangepartitioning(o_orderpriority#3 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=3]
 
 (16) Sort [codegen id : 4]
-Input [2]: [o_orderpriority#3, order_count#12]
+Input [2]: [o_orderpriority#3, order_count#10]
 Arguments: [o_orderpriority#3 ASC NULLS FIRST], true, 0
 

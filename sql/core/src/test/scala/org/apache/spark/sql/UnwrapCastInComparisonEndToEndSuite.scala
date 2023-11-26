@@ -209,5 +209,36 @@ class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSess
     }
   }
 
+  test("SPARK-39476: Should not unwrap cast from Long to Double/Float") {
+    withTable(t) {
+      Seq((6470759586864300301L))
+        .toDF("c1").write.saveAsTable(t)
+      val df = spark.table(t)
+
+      checkAnswer(
+        df.where("cast(c1 as double) == cast(6470759586864300301L as double)")
+          .select("c1"),
+        Row(6470759586864300301L))
+
+      checkAnswer(
+        df.where("cast(c1 as float) == cast(6470759586864300301L as float)")
+          .select("c1"),
+        Row(6470759586864300301L))
+    }
+  }
+
+  test("SPARK-39476: Should not unwrap cast from Integer to Float") {
+    withTable(t) {
+      Seq((33554435))
+        .toDF("c1").write.saveAsTable(t)
+      val df = spark.table(t)
+
+      checkAnswer(
+        df.where("cast(c1 as float) == cast(33554435 as float)")
+          .select("c1"),
+        Row(33554435))
+    }
+  }
+
   private def decimal(v: BigDecimal): Decimal = Decimal(v, 5, 2)
 }

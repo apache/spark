@@ -57,7 +57,7 @@ Condition : isnotnull(ss_item_sk#4)
 
 (8) BroadcastExchange
 Input [3]: [ss_item_sk#4, ss_ext_sales_price#5, ss_sold_date_sk#6]
-Arguments: HashedRelationBroadcastMode(List(cast(input[2, int, true] as bigint)),false), [id=#7]
+Arguments: HashedRelationBroadcastMode(List(cast(input[2, int, true] as bigint)),false), [plan_id=1]
 
 (9) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [d_date_sk#1]
@@ -69,55 +69,55 @@ Output [3]: [d_year#2, ss_item_sk#4, ss_ext_sales_price#5]
 Input [5]: [d_date_sk#1, d_year#2, ss_item_sk#4, ss_ext_sales_price#5, ss_sold_date_sk#6]
 
 (11) Scan parquet default.item
-Output [4]: [i_item_sk#8, i_brand_id#9, i_brand#10, i_manufact_id#11]
+Output [4]: [i_item_sk#7, i_brand_id#8, i_brand#9, i_manufact_id#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_manufact_id), EqualTo(i_manufact_id,128), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_brand_id:int,i_brand:string,i_manufact_id:int>
 
 (12) ColumnarToRow [codegen id : 2]
-Input [4]: [i_item_sk#8, i_brand_id#9, i_brand#10, i_manufact_id#11]
+Input [4]: [i_item_sk#7, i_brand_id#8, i_brand#9, i_manufact_id#10]
 
 (13) Filter [codegen id : 2]
-Input [4]: [i_item_sk#8, i_brand_id#9, i_brand#10, i_manufact_id#11]
-Condition : ((isnotnull(i_manufact_id#11) AND (i_manufact_id#11 = 128)) AND isnotnull(i_item_sk#8))
+Input [4]: [i_item_sk#7, i_brand_id#8, i_brand#9, i_manufact_id#10]
+Condition : ((isnotnull(i_manufact_id#10) AND (i_manufact_id#10 = 128)) AND isnotnull(i_item_sk#7))
 
 (14) Project [codegen id : 2]
-Output [3]: [i_item_sk#8, i_brand_id#9, i_brand#10]
-Input [4]: [i_item_sk#8, i_brand_id#9, i_brand#10, i_manufact_id#11]
+Output [3]: [i_item_sk#7, i_brand_id#8, i_brand#9]
+Input [4]: [i_item_sk#7, i_brand_id#8, i_brand#9, i_manufact_id#10]
 
 (15) BroadcastExchange
-Input [3]: [i_item_sk#8, i_brand_id#9, i_brand#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#12]
+Input [3]: [i_item_sk#7, i_brand_id#8, i_brand#9]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
 
 (16) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_item_sk#4]
-Right keys [1]: [i_item_sk#8]
+Right keys [1]: [i_item_sk#7]
 Join condition: None
 
 (17) Project [codegen id : 3]
-Output [4]: [d_year#2, ss_ext_sales_price#5, i_brand_id#9, i_brand#10]
-Input [6]: [d_year#2, ss_item_sk#4, ss_ext_sales_price#5, i_item_sk#8, i_brand_id#9, i_brand#10]
+Output [4]: [d_year#2, ss_ext_sales_price#5, i_brand_id#8, i_brand#9]
+Input [6]: [d_year#2, ss_item_sk#4, ss_ext_sales_price#5, i_item_sk#7, i_brand_id#8, i_brand#9]
 
 (18) HashAggregate [codegen id : 3]
-Input [4]: [d_year#2, ss_ext_sales_price#5, i_brand_id#9, i_brand#10]
-Keys [3]: [d_year#2, i_brand#10, i_brand_id#9]
+Input [4]: [d_year#2, ss_ext_sales_price#5, i_brand_id#8, i_brand#9]
+Keys [3]: [d_year#2, i_brand#9, i_brand_id#8]
 Functions [1]: [partial_sum(UnscaledValue(ss_ext_sales_price#5))]
-Aggregate Attributes [1]: [sum#13]
-Results [4]: [d_year#2, i_brand#10, i_brand_id#9, sum#14]
+Aggregate Attributes [1]: [sum#11]
+Results [4]: [d_year#2, i_brand#9, i_brand_id#8, sum#12]
 
 (19) Exchange
-Input [4]: [d_year#2, i_brand#10, i_brand_id#9, sum#14]
-Arguments: hashpartitioning(d_year#2, i_brand#10, i_brand_id#9, 5), ENSURE_REQUIREMENTS, [id=#15]
+Input [4]: [d_year#2, i_brand#9, i_brand_id#8, sum#12]
+Arguments: hashpartitioning(d_year#2, i_brand#9, i_brand_id#8, 5), ENSURE_REQUIREMENTS, [plan_id=3]
 
 (20) HashAggregate [codegen id : 4]
-Input [4]: [d_year#2, i_brand#10, i_brand_id#9, sum#14]
-Keys [3]: [d_year#2, i_brand#10, i_brand_id#9]
+Input [4]: [d_year#2, i_brand#9, i_brand_id#8, sum#12]
+Keys [3]: [d_year#2, i_brand#9, i_brand_id#8]
 Functions [1]: [sum(UnscaledValue(ss_ext_sales_price#5))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#5))#16]
-Results [4]: [d_year#2, i_brand_id#9 AS brand_id#17, i_brand#10 AS brand#18, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#5))#16,17,2) AS sum_agg#19]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#5))#13]
+Results [4]: [d_year#2, i_brand_id#8 AS brand_id#14, i_brand#9 AS brand#15, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#5))#13,17,2) AS sum_agg#16]
 
 (21) TakeOrderedAndProject
-Input [4]: [d_year#2, brand_id#17, brand#18, sum_agg#19]
-Arguments: 100, [d_year#2 ASC NULLS FIRST, sum_agg#19 DESC NULLS LAST, brand_id#17 ASC NULLS FIRST], [d_year#2, brand_id#17, brand#18, sum_agg#19]
+Input [4]: [d_year#2, brand_id#14, brand#15, sum_agg#16]
+Arguments: 100, [d_year#2 ASC NULLS FIRST, sum_agg#16 DESC NULLS LAST, brand_id#14 ASC NULLS FIRST], [d_year#2, brand_id#14, brand#15, sum_agg#16]
 

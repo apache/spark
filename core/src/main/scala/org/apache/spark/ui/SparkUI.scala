@@ -167,7 +167,7 @@ private[spark] class SparkUI private (
         attemptId = None,
         startTime = new Date(startTime),
         endTime = new Date(-1),
-        duration = 0,
+        duration = System.currentTimeMillis() - startTime,
         lastUpdated = new Date(startTime),
         sparkUser = getSparkUser,
         completed = false,

@@ -3450,6 +3450,22 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+   val LEGACY_GROUPING_ID_WITH_APPENDED_USER_GROUPBY =
+    buildConf("spark.sql.legacy.groupingIdWithAppendedUserGroupBy")
+      .internal()
+      .doc("When true, grouping_id() returns values based on grouping set columns plus " +
+        "user-given group-by expressions order like Spark 3.2.0, 3.2.1, 3.2.2, and 3.3.0.")
+      .version("3.2.3")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_PARQUET_NANOS_AS_LONG = buildConf("spark.sql.legacy.parquet.nanosAsLong")
+    .internal()
+    .doc("When true, the Parquet's nanos precision timestamps are converted to SQL long values.")
+    .version("3.2.4")
+    .booleanConf
+    .createWithDefault(false)
+
   val PARQUET_INT96_REBASE_MODE_IN_WRITE =
     buildConf("spark.sql.parquet.int96RebaseModeInWrite")
       .internal()
@@ -3747,6 +3763,26 @@ object SQLConf {
       .version("3.3.0")
       .booleanConf
       .createWithDefault(false)
+
+  val LEGACY_ALLOW_NULL_COMPARISON_RESULT_IN_ARRAY_SORT =
+    buildConf("spark.sql.legacy.allowNullComparisonResultInArraySort")
+      .internal()
+      .doc("When set to false, `array_sort` function throws an error " +
+        "if the comparator function returns null. " +
+        "If set to true, it restores the legacy behavior that handles null as zero (equal).")
+      .version("3.2.2")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_PERCENTILE_DISC_CALCULATION = buildConf("spark.sql.legacy.percentileDiscCalculation")
+    .internal()
+    .doc("If true, the old bogus percentile_disc calculation is used. The old calculation " +
+      "incorrectly mapped the requested percentile to the sorted range of values in some cases " +
+      "and so returned incorrect results. Also, the new implementation is faster as it doesn't " +
+      "contain the interpolation logic that the old percentile_cont based one did.")
+    .version("3.3.4")
+    .booleanConf
+    .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -4470,6 +4506,9 @@ class SQLConf extends Serializable with Logging {
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
 
+  def groupingIdWithAppendedUserGroupByEnabled: Boolean =
+    getConf(SQLConf.LEGACY_GROUPING_ID_WITH_APPENDED_USER_GROUPBY)
+
   def metadataCacheTTL: Long = getConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS)
 
   def coalesceBucketsInJoinEnabled: Boolean = getConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED)
@@ -4502,6 +4541,8 @@ class SQLConf extends Serializable with Logging {
   def parquetFieldIdWriteEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED)
 
   def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
+
+  def legacyParquetNanosAsLong: Boolean = getConf(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG)
 
   def useV1Command: Boolean = getConf(SQLConf.LEGACY_USE_V1_COMMAND)
 

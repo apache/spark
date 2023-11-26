@@ -21,6 +21,7 @@ import java.time.{ZoneId, ZoneOffset}
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
+import org.apache.spark.SparkArithmeticException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.Cast.resolvableNullability
@@ -321,8 +322,8 @@ abstract class CastBase extends UnaryExpression
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && (!needsTimeZone || timeZoneId.isDefined)
 
-  override lazy val preCanonicalized: Expression = {
-    val basic = withNewChildren(Seq(child.preCanonicalized)).asInstanceOf[CastBase]
+  override lazy val canonicalized: Expression = {
+    val basic = withNewChildren(Seq(child.canonicalized)).asInstanceOf[CastBase]
     if (timeZoneId.isDefined && !needsTimeZone) {
       basic.withTimeZone(null)
     } else {
@@ -514,7 +515,7 @@ abstract class CastBase extends UnaryExpression
         }
       })
     case BooleanType =>
-      buildCast[Boolean](_, b => if (b) 1L else 0)
+      buildCast[Boolean](_, b => if (b) 1L else 0L)
     case LongType =>
       buildCast[Long](_, l => longToTimestamp(l))
     case IntegerType =>
@@ -2350,4 +2351,69 @@ case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: S
   }
 
   override protected def withNewChildInternal(newChild: Expression): UpCast = copy(child = newChild)
+}
+
+/**
+ * Casting a numeric value as another numeric type in store assignment. It can capture the
+ * arithmetic errors and show proper error messages to users.
+ */
+case class CheckOverflowInTableInsert(child: Expression, columnName: String)
+    extends UnaryExpression {
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(child = newChild)
+  }
+
+  private def getCast: Option[AnsiCast] = child match {
+    case c: AnsiCast =>
+      Some(c)
+    case ExpressionProxy(c: AnsiCast, _, _) =>
+      Some(c)
+    case _ => None
+  }
+
+  override def eval(input: InternalRow): Any = try {
+    child.eval(input)
+  } catch {
+    case e: SparkArithmeticException =>
+      getCast match {
+        case Some(cast) =>
+          throw QueryExecutionErrors.castingCauseOverflowErrorInTableInsert(
+            cast.child.dataType,
+            cast.dataType,
+            columnName)
+        case None => throw e
+      }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    getCast match {
+      case Some(child) => doGenCodeWithBetterErrorMsg(ctx, ev, child)
+      case None => child.genCode(ctx)
+    }
+  }
+
+  def doGenCodeWithBetterErrorMsg(ctx: CodegenContext, ev: ExprCode, child: AnsiCast): ExprCode = {
+    val childGen = child.genCode(ctx)
+    val exceptionClass = classOf[SparkArithmeticException].getCanonicalName
+    val fromDt =
+      ctx.addReferenceObj("from", child.child.dataType, child.child.dataType.getClass.getName)
+    val toDt = ctx.addReferenceObj("to", child.dataType, child.dataType.getClass.getName)
+    val col = ctx.addReferenceObj("colName", columnName, "java.lang.String")
+    // scalastyle:off line.size.limit
+    ev.copy(code = code"""
+      boolean ${ev.isNull} = true;
+      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+      try {
+        ${childGen.code}
+        ${ev.isNull} = ${childGen.isNull};
+        ${ev.value} = ${childGen.value};
+      } catch ($exceptionClass e) {
+        throw QueryExecutionErrors.castingCauseOverflowErrorInTableInsert($fromDt, $toDt, $col);
+      }"""
+    )
+    // scalastyle:on line.size.limit
+  }
+
+  override def dataType: DataType = child.dataType
 }

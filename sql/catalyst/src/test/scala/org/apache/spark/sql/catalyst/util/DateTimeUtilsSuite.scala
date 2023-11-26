@@ -127,6 +127,10 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     stringToDate(UTF8String.fromString(s))
   }
 
+  test("SPARK-32559: string to date trim Control Characters") {
+    assert(toDate("MIDDLE\u0003") === None)
+  }
+
   test("string to date") {
     assert(toDate("2015-01-28").get === days(2015, 1, 28))
     assert(toDate("2015").get === days(2015, 1, 1))
@@ -937,16 +941,16 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       ("1970-01-01T00:00:00", "UTC") -> ("1969-12-31T16:00:00", "America/Los_Angeles"),
       ("2021-12-05T22:00:00", "Europe/Moscow") -> ("2021-12-06T00:00:00", "Asia/Yekaterinburg"),
       ("2021-12-06T00:01:02.123456", "Asia/Yekaterinburg") ->
-        ("2021-12-05T20:01:02.123456", "Europe/Amsterdam"),
+        ("2021-12-05T20:01:02.123456", "Europe/Brussels"),
       // 7 Nov 2021 is the DST day in the America/Los_Angeles time zone
       // Sunday, 7 November 2021, 02:00:00 clocks were turned backward 1 hour to
       // Sunday, 7 November 2021, 01:00:00 local standard time instead.
-      ("2021-11-07T09:00:00", "Europe/Amsterdam") -> ("2021-11-07T01:00:00", "America/Los_Angeles"),
-      ("2021-11-07T10:00:00", "Europe/Amsterdam") -> ("2021-11-07T01:00:00", "America/Los_Angeles"),
-      ("2021-11-07T11:00:00", "Europe/Amsterdam") -> ("2021-11-07T02:00:00", "America/Los_Angeles"),
-      ("2021-11-07T00:30:00", "America/Los_Angeles") -> ("2021-11-07T08:30:00", "Europe/Amsterdam"),
-      ("2021-11-07T01:30:00", "America/Los_Angeles") -> ("2021-11-07T09:30:00", "Europe/Amsterdam"),
-      ("2021-11-07T02:30:00", "America/Los_Angeles") -> ("2021-11-07T11:30:00", "Europe/Amsterdam")
+      ("2021-11-07T09:00:00", "Europe/Brussels") -> ("2021-11-07T01:00:00", "America/Los_Angeles"),
+      ("2021-11-07T10:00:00", "Europe/Brussels") -> ("2021-11-07T01:00:00", "America/Los_Angeles"),
+      ("2021-11-07T11:00:00", "Europe/Brussels") -> ("2021-11-07T02:00:00", "America/Los_Angeles"),
+      ("2021-11-07T00:30:00", "America/Los_Angeles") -> ("2021-11-07T08:30:00", "Europe/Brussels"),
+      ("2021-11-07T01:30:00", "America/Los_Angeles") -> ("2021-11-07T09:30:00", "Europe/Brussels"),
+      ("2021-11-07T02:30:00", "America/Los_Angeles") -> ("2021-11-07T11:30:00", "Europe/Brussels")
     ).foreach { case ((inputTs, sourceTz), (expectedTs, targetTz)) =>
       val micros = DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse(inputTs))
       val result = DateTimeUtils.convertTimestampNtzToAnotherTz(sourceTz, targetTz, micros)

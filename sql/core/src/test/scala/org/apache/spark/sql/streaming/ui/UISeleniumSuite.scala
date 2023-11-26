@@ -35,8 +35,10 @@ import org.apache.spark.sql.functions.{window => windowFn, _}
 import org.apache.spark.sql.internal.SQLConf.SHUFFLE_PARTITIONS
 import org.apache.spark.sql.internal.StaticSQLConf.ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST
 import org.apache.spark.sql.streaming.{StreamingQueryException, Trigger}
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.ui.SparkUICssErrorHandler
 
+@SlowSQLTest
 class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with BeforeAndAfterAll {
 
   implicit var webDriver: WebDriver = _

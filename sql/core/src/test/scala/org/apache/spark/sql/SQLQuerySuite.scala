@@ -4085,6 +4085,31 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("SPARK-40247: Fix BitSet equals") {
+    withTable("td") {
+      testData
+        .withColumn("bucket", $"key" % 3)
+        .write
+        .mode(SaveMode.Overwrite)
+        .bucketBy(2, "bucket")
+        .format("parquet")
+        .saveAsTable("td")
+      val df = sql(
+        """
+          |SELECT t1.key, t2.key, t3.key
+          |FROM td AS t1
+          |JOIN td AS t2 ON t2.key = t1.key
+          |JOIN td AS t3 ON t3.key = t2.key
+          |WHERE t1.bucket = 1 AND t2.bucket = 1 AND t3.bucket = 1
+          |""".stripMargin)
+      df.collect()
+      val reusedExchanges = collect(df.queryExecution.executedPlan) {
+        case r: ReusedExchangeExec => r
+      }
+      assert(reusedExchanges.size == 1)
+    }
+  }
+
   test("SPARK-35331: Fix resolving original expression in RepartitionByExpression after aliased") {
     Seq("CLUSTER", "DISTRIBUTE").foreach { keyword =>
       Seq("a", "substr(a, 0, 3)").foreach { expr =>
@@ -4502,6 +4527,89 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           |SELECT 1 AS a
         """.stripMargin),
       Seq(Row(2), Row(1)))
+  }
+
+  test("SPARK-39548: CreateView will make queries go into inline CTE code path thus" +
+    "trigger a mis-clarified `window definition not found` issue") {
+    sql(
+      """
+        |create or replace temporary view test_temp_view as
+        |with step_1 as (
+        |select * , min(a) over w2 as min_a_over_w2 from
+        |(select 1 as a, 2 as b, 3 as c) window w2 as (partition by b order by c)) , step_2 as
+        |(
+        |select *, max(e) over w1 as max_a_over_w1
+        |from (select 1 as e, 2 as f, 3 as g)
+        |join step_1 on true
+        |window w1 as (partition by f order by g)
+        |)
+        |select *
+        |from step_2
+        |""".stripMargin)
+
+    checkAnswer(
+      sql("select * from test_temp_view"),
+      Row(1, 2, 3, 1, 2, 3, 1, 1))
+  }
+
+  test("SPARK-40389: Don't eliminate a cast which can cause overflow") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("dt") {
+        sql("create table dt using parquet as select 9000000000BD as d")
+        val msg = intercept[SparkException] {
+          sql("select cast(cast(d as int) as long) from dt").collect()
+        }.getCause.getMessage
+        assert(msg.contains("The value 9000000000BD of the type \"DECIMAL(10,0)\" " +
+          "cannot be cast to \"INT\" due to an overflow"))
+      }
+    }
+  }
+
+  test("SPARK-41144: Unresolved hint should not cause query failure") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1(c1 bigint) USING PARQUET")
+      sql("CREATE TABLE t2(c2 bigint) USING PARQUET")
+      sql("SELECT /*+ hash(t2) */ * FROM t1 join t2 on c1 = c2")
+    }
+  }
+
+  test("SPARK-41538: Metadata column should be appended at the end of project") {
+    val tableName = "table_1"
+    val viewName = "view_1"
+    withTable(tableName) {
+      withView(viewName) {
+        sql(s"CREATE TABLE $tableName (a ARRAY<STRING>, s STRUCT<id: STRING>) USING parquet")
+        val id = "id1"
+        sql(s"INSERT INTO $tableName values(ARRAY('a'), named_struct('id', '$id'))")
+        sql(
+          s"""
+             |CREATE VIEW $viewName (id)
+             |AS WITH source AS (
+             |    SELECT * FROM $tableName
+             |),
+             |renamed AS (
+             |    SELECT s.id FROM source
+             |)
+             |SELECT id FROM renamed
+             |""".stripMargin)
+        val query =
+          s"""
+             |with foo AS (
+             |  SELECT '$id' as id
+             |),
+             |bar AS (
+             |  SELECT '$id' as id
+             |)
+             |SELECT
+             |  1
+             |FROM foo
+             |FULL OUTER JOIN bar USING(id)
+             |FULL OUTER JOIN $viewName USING(id)
+             |WHERE foo.id IS NOT NULL
+             |""".stripMargin
+        checkAnswer(sql(query), Row(1))
+      }
+    }
   }
 }
 

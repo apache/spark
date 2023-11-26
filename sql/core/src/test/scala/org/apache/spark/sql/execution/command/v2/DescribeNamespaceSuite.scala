@@ -41,7 +41,7 @@ class DescribeNamespaceSuite extends command.DescribeNamespaceSuiteBase with Com
         ))
       val description = descriptionDf.collect()
       assert(description === Seq(
-        Row("Namespace Name", "ns2"),
+        Row("Namespace Name", "ns1.ns2"),
         Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
         Row(SupportsNamespaces.PROP_LOCATION.capitalize, "file:/tmp/ns_test"),
         Row(SupportsNamespaces.PROP_OWNER.capitalize, Utils.getCurrentUserName()))

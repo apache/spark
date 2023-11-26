@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingZoneIds,
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
 class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -711,10 +711,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     // test sequence boundaries checking
 
     checkExceptionInExpression[IllegalArgumentException](
-      new Sequence(Literal(Int.MinValue), Literal(Int.MaxValue), Literal(1)),
-      EmptyRow, s"Too long sequence: 4294967296. Should be <= $MAX_ROUNDED_ARRAY_LENGTH")
-
-    checkExceptionInExpression[IllegalArgumentException](
       new Sequence(Literal(1), Literal(2), Literal(0)), EmptyRow, "boundaries: 1 to 2 by 0")
     checkExceptionInExpression[IllegalArgumentException](
       new Sequence(Literal(2), Literal(1), Literal(0)), EmptyRow, "boundaries: 2 to 1 by 0")
@@ -722,6 +718,59 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       new Sequence(Literal(2), Literal(1), Literal(1)), EmptyRow, "boundaries: 2 to 1 by 1")
     checkExceptionInExpression[IllegalArgumentException](
       new Sequence(Literal(1), Literal(2), Literal(-1)), EmptyRow, "boundaries: 1 to 2 by -1")
+
+    // SPARK-43393: test Sequence overflow checking
+    checkExceptionInExpression[RuntimeException](
+      new Sequence(Literal(Int.MinValue), Literal(Int.MaxValue), Literal(1)),
+      EmptyRow,
+      s"""
+         |Unsuccessful try to create array with
+         |${BigInt(Int.MaxValue) - BigInt { Int.MinValue } + 1}
+         |elements due to exceeding the array size limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
+       """.stripMargin.replaceAll("\n", " "))
+    checkExceptionInExpression[RuntimeException](
+      new Sequence(Literal(0L), Literal(Long.MaxValue), Literal(1L)),
+      EmptyRow,
+      s"""
+         |Unsuccessful try to create array with ${BigInt(Long.MaxValue) + 1}
+         |elements due to exceeding the array size limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
+       """.stripMargin.replaceAll("\n", " "))
+    checkExceptionInExpression[RuntimeException](
+      new Sequence(Literal(0L), Literal(Long.MinValue), Literal(-1L)),
+      EmptyRow,
+      s"""
+         |Unsuccessful try to create array with ${(0 - BigInt(Long.MinValue)) + 1}
+         |elements due to exceeding the array size limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
+       """.stripMargin.replaceAll("\n", " "))
+    checkExceptionInExpression[RuntimeException](
+      new Sequence(Literal(Long.MinValue), Literal(Long.MaxValue), Literal(1L)),
+      EmptyRow,
+      s"""
+         |Unsuccessful try to create array with
+         |${BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1}
+         |elements due to exceeding the array size limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
+       """.stripMargin.replaceAll("\n", " "))
+    checkExceptionInExpression[RuntimeException](
+      new Sequence(Literal(Long.MaxValue), Literal(Long.MinValue), Literal(-1L)),
+      EmptyRow,
+      s"""
+         |Unsuccessful try to create array with
+         |${BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1}
+         |elements due to exceeding the array size limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
+       """.stripMargin.replaceAll("\n", " "))
+    checkExceptionInExpression[RuntimeException](
+      new Sequence(Literal(Long.MaxValue), Literal(-1L), Literal(-1L)),
+      EmptyRow,
+      s"""
+         |Unsuccessful try to create array with ${BigInt(Long.MaxValue) - BigInt { -1L } + 1}
+         |elements due to exceeding the array size limit
+         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
+       """.stripMargin.replaceAll("\n", " "))
 
     // test sequence with one element (zero step or equal start and stop)
 
@@ -1483,7 +1532,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       checkEvaluation(ElementAt(a0, Literal(0)), null)
     }.getMessage.contains("SQL array indices start at 1")
     intercept[Exception] { checkEvaluation(ElementAt(a0, Literal(1.1)), null) }
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
       checkEvaluation(ElementAt(a0, Literal(4)), null)
       checkEvaluation(ElementAt(a0, Literal(-4)), null)
     }
@@ -1512,7 +1561,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     assert(ElementAt(m0, Literal(1.0)).checkInputDataTypes().isFailure)
 
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
       checkEvaluation(ElementAt(m0, Literal("d")), null)
       checkEvaluation(ElementAt(m1, Literal("a")), null)
     }
@@ -1529,12 +1578,32 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       MapType(BinaryType, StringType))
     val mb1 = Literal.create(Map[Array[Byte], String](), MapType(BinaryType, StringType))
 
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
       checkEvaluation(ElementAt(mb0, Literal(Array[Byte](1, 2, 3))), null)
       checkEvaluation(ElementAt(mb1, Literal(Array[Byte](1, 2))), null)
     }
     checkEvaluation(ElementAt(mb0, Literal(Array[Byte](2, 1), BinaryType)), "2")
     checkEvaluation(ElementAt(mb0, Literal(Array[Byte](3, 4))), null)
+
+    // test defaultValueOutOfBound
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+      val delimiter = Literal.create(".", StringType)
+      val str = StringSplitSQL(Literal.create("11.12.13", StringType), delimiter)
+      val outOfBoundValue = Some(Literal.create("", StringType))
+
+      checkEvaluation(ElementAt(str, Literal(3), outOfBoundValue), UTF8String.fromString("13"))
+      checkEvaluation(ElementAt(str, Literal(1), outOfBoundValue), UTF8String.fromString("11"))
+      checkEvaluation(ElementAt(str, Literal(10), outOfBoundValue), UTF8String.fromString(""))
+      checkEvaluation(ElementAt(str, Literal(-10), outOfBoundValue), UTF8String.fromString(""))
+
+      checkEvaluation(ElementAt(StringSplitSQL(Literal.create(null, StringType), delimiter),
+        Literal(1), outOfBoundValue), null)
+      checkEvaluation(ElementAt(StringSplitSQL(Literal.create("11.12.13", StringType),
+        Literal.create(null, StringType)), Literal(1), outOfBoundValue), null)
+
+      checkExceptionInExpression[Exception](
+        ElementAt(str, Literal(0), outOfBoundValue), "SQL array indices start at 1")
+    }
   }
 
   test("correctly handles ElementAt nullability for arrays") {
@@ -2163,6 +2232,23 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayExcept(empty, oneNull), Seq.empty)
     checkEvaluation(ArrayExcept(oneNull, empty), Seq(null))
     checkEvaluation(ArrayExcept(twoNulls, empty), Seq(null))
+
+    checkEvaluation(ArrayExcept(
+      Literal.create(Seq(1d, 2d, null), ArrayType(DoubleType)),
+      Literal.create(Seq(1d), ArrayType(DoubleType))),
+      Seq(2d, null))
+    checkEvaluation(ArrayExcept(
+      Literal.create(Seq(1d, 2d, null), ArrayType(DoubleType)),
+      Literal.create(Seq(1d), ArrayType(DoubleType, false))),
+      Seq(2d, null))
+    checkEvaluation(ArrayExcept(
+      Literal.create(Seq(1d, 2d), ArrayType(DoubleType)),
+      Literal.create(Seq(1d, null), ArrayType(DoubleType))),
+      Seq(2d))
+    checkEvaluation(ArrayExcept(
+      Literal.create(Seq(1d, 2d), ArrayType(DoubleType, false)),
+      Literal.create(Seq(1d, null), ArrayType(DoubleType))),
+      Seq(2d))
   }
 
   test("Array Intersect") {
@@ -2288,6 +2374,23 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayIntersect(oneNull, twoNulls), Seq(null))
     checkEvaluation(ArrayIntersect(empty, oneNull), Seq.empty)
     checkEvaluation(ArrayIntersect(oneNull, empty), Seq.empty)
+
+    checkEvaluation(ArrayIntersect(
+      Literal.create(Seq(1d, 2d, null), ArrayType(DoubleType)),
+      Literal.create(Seq(1d), ArrayType(DoubleType))),
+      Seq(1d))
+    checkEvaluation(ArrayIntersect(
+      Literal.create(Seq(1d, 2d, null), ArrayType(DoubleType)),
+      Literal.create(Seq(1d), ArrayType(DoubleType, false))),
+      Seq(1d))
+    checkEvaluation(ArrayIntersect(
+      Literal.create(Seq(1d, 2d), ArrayType(DoubleType)),
+      Literal.create(Seq(1d, null), ArrayType(DoubleType))),
+      Seq(1d))
+    checkEvaluation(ArrayIntersect(
+      Literal.create(Seq(1d, 2d), ArrayType(DoubleType, false)),
+      Literal.create(Seq(1d, null), ArrayType(DoubleType))),
+      Seq(1d))
   }
 
   test("SPARK-31980: Start and end equal in month range") {
@@ -2457,5 +2560,45 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new SortArray(
       Literal.create(Seq(Double.NaN, 1d, 2d, null), ArrayType(DoubleType))),
       Seq(null, 1d, 2d, Double.NaN))
+  }
+
+  test("SPARK-39184: Avoid ArrayIndexOutOfBoundsException when crossing DST boundary") {
+    DateTimeTestUtils.withDefaultTimeZone(LA) {
+      checkEvaluation(new Sequence(
+        Literal(Timestamp.valueOf("2016-03-13 00:00:00")),
+        Literal(Timestamp.valueOf("2016-03-14 00:00:00")),
+        Literal(stringToInterval("interval 1 day"))),
+        Seq(
+          Timestamp.valueOf("2016-03-13 00:00:00"),
+          Timestamp.valueOf("2016-03-14 00:00:00")))
+
+      checkEvaluation(new Sequence(
+        Literal(Timestamp.valueOf("2016-03-14 00:00:00")),
+        Literal(Timestamp.valueOf("2016-03-13 00:00:00")),
+        Literal(stringToInterval("interval -1 days"))),
+        Seq(
+          Timestamp.valueOf("2016-03-14 00:00:00"),
+          Timestamp.valueOf("2016-03-13 00:00:00")))
+
+      checkEvaluation(new Sequence(
+        Literal(Date.valueOf("2016-03-13")),
+        Literal(Date.valueOf("2016-03-16")),
+        Literal(stringToInterval("interval 1 day 12 hour"))),
+        Seq(
+          Date.valueOf("2016-03-13"),
+          Date.valueOf("2016-03-14"),
+          Date.valueOf("2016-03-16")))
+
+      checkEvaluation(new Sequence(
+        Literal(Date.valueOf("2017-04-06")),
+        Literal(Date.valueOf("2017-02-12")),
+        Literal(stringToInterval("interval -13 days -6 hours"))),
+        Seq(
+          Date.valueOf("2017-04-06"),
+          Date.valueOf("2017-03-23"),
+          Date.valueOf("2017-03-10"),
+          Date.valueOf("2017-02-25"),
+          Date.valueOf("2017-02-12")))
+    }
   }
 }

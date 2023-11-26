@@ -67,10 +67,10 @@ Aggregate [sum(distinct val#x) AS sum(DISTINCT val)#xL]
 == Physical Plan ==
 AdaptiveSparkPlan isFinalPlan=false
 +- HashAggregate(keys=[], functions=[sum(distinct val#x)], output=[sum(DISTINCT val)#xL])
-   +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [id=#x]
+   +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
       +- HashAggregate(keys=[], functions=[partial_sum(distinct val#x)], output=[sum#xL])
          +- HashAggregate(keys=[val#x], functions=[], output=[val#x])
-            +- Exchange hashpartitioning(val#x, 4), ENSURE_REQUIREMENTS, [id=#x]
+            +- Exchange hashpartitioning(val#x, 4), ENSURE_REQUIREMENTS, [plan_id=x]
                +- HashAggregate(keys=[val#x], functions=[], output=[val#x])
                   +- FileScan parquet default.explain_temp1[val#x] Batched: true, DataFilters: [], Format: Parquet, Location [not included in comparison]/{warehouse_dir}/explain_temp1], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<val:int>
 
@@ -116,7 +116,7 @@ Results [2]: [key#x, max#x]
 
 (4) Exchange
 Input [2]: [key#x, max#x]
-Arguments: hashpartitioning(key#x, 4), ENSURE_REQUIREMENTS, [id=#x]
+Arguments: hashpartitioning(key#x, 4), ENSURE_REQUIREMENTS, [plan_id=x]
 
 (5) HashAggregate
 Input [2]: [key#x, max#x]
@@ -127,7 +127,7 @@ Results [2]: [key#x, max(val#x)#x AS max(val)#x]
 
 (6) Exchange
 Input [2]: [key#x, max(val)#x]
-Arguments: rangepartitioning(key#x ASC NULLS FIRST, 4), ENSURE_REQUIREMENTS, [id=#x]
+Arguments: rangepartitioning(key#x ASC NULLS FIRST, 4), ENSURE_REQUIREMENTS, [plan_id=x]
 
 (7) Sort
 Input [2]: [key#x, max(val)#x]
@@ -178,7 +178,7 @@ Results [2]: [key#x, max#x]
 
 (4) Exchange
 Input [2]: [key#x, max#x]
-Arguments: hashpartitioning(key#x, 4), ENSURE_REQUIREMENTS, [id=#x]
+Arguments: hashpartitioning(key#x, 4), ENSURE_REQUIREMENTS, [plan_id=x]
 
 (5) HashAggregate
 Input [2]: [key#x, max#x]
@@ -249,7 +249,7 @@ Results [2]: [key#x, val#x]
 
 (7) Exchange
 Input [2]: [key#x, val#x]
-Arguments: hashpartitioning(key#x, val#x, 4), ENSURE_REQUIREMENTS, [id=#x]
+Arguments: hashpartitioning(key#x, val#x, 4), ENSURE_REQUIREMENTS, [plan_id=x]
 
 (8) HashAggregate
 Input [2]: [key#x, val#x]
@@ -306,7 +306,7 @@ Condition : isnotnull(key#x)
 
 (5) BroadcastExchange
 Input [2]: [key#x, val#x]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#x]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=x]
 
 (6) BroadcastHashJoin
 Left keys [1]: [key#x]
@@ -355,7 +355,7 @@ Condition : isnotnull(key#x)
 
 (4) BroadcastExchange
 Input [2]: [key#x, val#x]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#x]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=x]
 
 (5) BroadcastHashJoin
 Left keys [1]: [key#x]
@@ -438,7 +438,7 @@ Results [1]: [max#x]
 
 (8) Exchange
 Input [1]: [max#x]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#x]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
 
 (9) HashAggregate
 Input [1]: [max#x]
@@ -485,7 +485,7 @@ Results [1]: [max#x]
 
 (15) Exchange
 Input [1]: [max#x]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#x]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
 
 (16) HashAggregate
 Input [1]: [max#x]
@@ -569,7 +569,7 @@ Results [1]: [max#x]
 
 (8) Exchange
 Input [1]: [max#x]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#x]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
 
 (9) HashAggregate
 Input [1]: [max#x]
@@ -616,7 +616,7 @@ Results [2]: [sum#x, count#xL]
 
 (15) Exchange
 Input [2]: [sum#x, count#xL]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#x]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
 
 (16) HashAggregate
 Input [2]: [sum#x, count#xL]
@@ -682,7 +682,7 @@ Results [2]: [sum#x, count#xL]
 
 (6) Exchange
 Input [2]: [sum#x, count#xL]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#x]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
 
 (7) HashAggregate
 Input [2]: [sum#x, count#xL]
@@ -718,7 +718,7 @@ Results [2]: [sum#x, count#xL]
 
 (11) Exchange
 Input [2]: [sum#x, count#xL]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#x]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
 
 (12) HashAggregate
 Input [2]: [sum#x, count#xL]
@@ -777,7 +777,7 @@ Condition : (isnotnull(key#x) AND (key#x > 10))
 
 (5) BroadcastExchange
 Input [2]: [key#x, val#x]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#x]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=x]
 
 (6) BroadcastHashJoin
 Left keys [1]: [key#x]
@@ -837,7 +837,7 @@ Results [2]: [key#x, max#x]
 
 (4) Exchange
 Input [2]: [key#x, max#x]
-Arguments: hashpartitioning(key#x, 4), ENSURE_REQUIREMENTS, [id=#x]
+Arguments: hashpartitioning(key#x, 4), ENSURE_REQUIREMENTS, [plan_id=x]
 
 (5) HashAggregate
 Input [2]: [key#x, max#x]
@@ -866,7 +866,7 @@ Results [2]: [key#x, max#x]
 
 (9) Exchange
 Input [2]: [key#x, max#x]
-Arguments: hashpartitioning(key#x, 4), ENSURE_REQUIREMENTS, [id=#x]
+Arguments: hashpartitioning(key#x, 4), ENSURE_REQUIREMENTS, [plan_id=x]
 
 (10) HashAggregate
 Input [2]: [key#x, max#x]
@@ -877,7 +877,7 @@ Results [2]: [key#x, max(val#x)#x AS max(val)#x]
 
 (11) BroadcastExchange
 Input [2]: [key#x, max(val)#x]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#x]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=x]
 
 (12) BroadcastHashJoin
 Left keys [1]: [key#x]
@@ -964,7 +964,7 @@ Results [3]: [count#xL, sum#xL, count#xL]
 
 (3) Exchange
 Input [3]: [count#xL, sum#xL, count#xL]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#x]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
 
 (4) HashAggregate
 Input [3]: [count#xL, sum#xL, count#xL]
@@ -1009,7 +1009,7 @@ Results [2]: [key#x, buf#x]
 
 (3) Exchange
 Input [2]: [key#x, buf#x]
-Arguments: hashpartitioning(key#x, 4), ENSURE_REQUIREMENTS, [id=#x]
+Arguments: hashpartitioning(key#x, 4), ENSURE_REQUIREMENTS, [plan_id=x]
 
 (4) ObjectHashAggregate
 Input [2]: [key#x, buf#x]
@@ -1060,7 +1060,7 @@ Results [2]: [key#x, min#x]
 
 (4) Exchange
 Input [2]: [key#x, min#x]
-Arguments: hashpartitioning(key#x, 4), ENSURE_REQUIREMENTS, [id=#x]
+Arguments: hashpartitioning(key#x, 4), ENSURE_REQUIREMENTS, [plan_id=x]
 
 (5) Sort
 Input [2]: [key#x, min#x]

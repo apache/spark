@@ -184,7 +184,7 @@ private[storage] class BlockManagerDecommissioner(
 
   // Set if we encounter an error attempting to migrate and stop.
   @volatile private var stopped = false
-  @volatile private var stoppedRDD =
+  @volatile private[storage] var stoppedRDD =
     !conf.get(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED)
   @volatile private var stoppedShuffle =
     !conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)
@@ -204,7 +204,7 @@ private[storage] class BlockManagerDecommissioner(
       logInfo("Attempting to migrate all RDD blocks")
       while (!stopped && !stoppedRDD) {
         // Validate if we have peers to migrate to. Otherwise, give up migration.
-        if (bm.getPeers(false).isEmpty) {
+        if (!bm.getPeers(false).exists(_ != FallbackStorage.FALLBACK_BLOCK_MANAGER_ID)) {
           logWarning("No available peers to receive RDD blocks, stop migration.")
           stoppedRDD = true
         } else {
@@ -280,8 +280,9 @@ private[storage] class BlockManagerDecommissioner(
       .sortBy(b => (b.shuffleId, b.mapId))
     shufflesToMigrate.addAll(newShufflesToMigrate.map(x => (x, 0)).asJava)
     migratingShuffles ++= newShufflesToMigrate
+    val remainedShuffles = migratingShuffles.size - numMigratedShuffles.get()
     logInfo(s"${newShufflesToMigrate.size} of ${localShuffles.size} local shuffles " +
-      s"are added. In total, ${migratingShuffles.size} shuffles are remained.")
+      s"are added. In total, $remainedShuffles shuffles are remained.")
 
     // Update the threads doing migrations
     val livePeerSet = bm.getPeers(false).toSet

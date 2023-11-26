@@ -17,16 +17,21 @@
 
 package org.apache.spark.sql.execution.exchange
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.execution.{DummySparkPlan, SortExec}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
+import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
+import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class EnsureRequirementsSuite extends SharedSparkSession {
   private val exprA = Literal(1)
@@ -433,8 +438,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         exprA :: exprB :: Nil, exprC :: exprD :: Nil, Inner, None, plan1, plan2)
       EnsureRequirements.apply(smjExec) match {
         case SortMergeJoinExec(_, _, _, _,
-        SortExec(_, _, DummySparkPlan(_, _, SinglePartition, _, _), _),
-        SortExec(_, _, ShuffleExchangeExec(SinglePartition, _, _), _), _) =>
+        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _), _), _) =>
+          assert(left.numPartitions == 5)
+          assert(right.numPartitions == 5)
         case other => fail(other.toString)
       }
 
@@ -690,6 +697,45 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-40703: shuffle for SinglePartitionShuffleSpec") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> 20.toString) {
+      // We should re-shuffle the side with single partition when the other side is
+      // `HashPartitioning` with shuffle node, and respect the minimum parallelism.
+      var plan1: SparkPlan = ShuffleExchangeExec(
+        outputPartitioning = HashPartitioning(exprA :: Nil, 10),
+        DummySparkPlan())
+      var plan2 = DummySparkPlan(outputPartitioning = SinglePartition)
+      var smjExec = SortMergeJoinExec(exprA :: Nil, exprC :: Nil, Inner, None, plan1, plan2)
+      EnsureRequirements.apply(smjExec) match {
+        case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _), _), _) =>
+          assert(leftKeys === Seq(exprA))
+          assert(rightKeys === Seq(exprC))
+          assert(left.numPartitions == 20)
+          assert(right.numPartitions == 20)
+        case other => fail(other.toString)
+      }
+
+      // We should also re-shuffle the side with only a single partition even the other side does
+      // not have `ShuffleExchange`, but just `HashPartitioning`. However in this case the minimum
+      // shuffle parallelism will be ignored since we don't want to introduce extra shuffle.
+      plan1 = DummySparkPlan(
+        outputPartitioning = HashPartitioning(exprA :: Nil, 10))
+      plan2 = DummySparkPlan(outputPartitioning = SinglePartition)
+      smjExec = SortMergeJoinExec(exprA :: Nil, exprC :: Nil, Inner, None, plan1, plan2)
+      EnsureRequirements.apply(smjExec) match {
+        case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+        SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _), _), _) =>
+          assert(leftKeys === Seq(exprA))
+          assert(rightKeys === Seq(exprC))
+          assert(right.numPartitions == 10)
+        case other => fail(other.toString)
+      }
+    }
+  }
+
   test("Check with KeyGroupedPartitioning") {
     // simplest case: identity transforms
     var plan1 = DummySparkPlan(
@@ -934,6 +980,57 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _), _), _) =>
         assert(left.expressions === Seq(exprA, exprB, exprB))
         assert(right.expressions === Seq(exprA, exprC, exprC))
+      case other => fail(other.toString)
+    }
+  }
+
+  test("SPARK-42168: FlatMapCoGroupInPandas and Window function with differing key order") {
+    val lKey = AttributeReference("key", IntegerType)()
+    val lKey2 = AttributeReference("key2", IntegerType)()
+
+    val rKey = AttributeReference("key", IntegerType)()
+    val rKey2 = AttributeReference("key2", IntegerType)()
+    val rValue = AttributeReference("value", IntegerType)()
+
+    val left = DummySparkPlan()
+    val right = WindowExec(
+      Alias(
+        WindowExpression(
+          Sum(rValue).toAggregateExpression(),
+          WindowSpecDefinition(
+            Seq(rKey2, rKey),
+            Nil,
+            SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)
+          )
+        ), "sum")() :: Nil,
+      Seq(rKey2, rKey),
+      Nil,
+      DummySparkPlan()
+    )
+
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+
+    val flapMapCoGroup = FlatMapCoGroupsInPandasExec(
+      Seq(lKey, lKey2),
+      Seq(rKey, rKey2),
+      pythonUdf,
+      AttributeReference("value", IntegerType)() :: Nil,
+      left,
+      right
+    )
+
+    val result = EnsureRequirements.apply(flapMapCoGroup)
+    result match {
+      case FlatMapCoGroupsInPandasExec(leftKeys, rightKeys, _, _,
+        SortExec(leftOrder, false, _, _), SortExec(rightOrder, false, _, _)) =>
+        assert(leftKeys === Seq(lKey, lKey2))
+        assert(rightKeys === Seq(rKey, rKey2))
+        assert(leftKeys.map(k => SortOrder(k, Ascending)) === leftOrder)
+        assert(rightKeys.map(k => SortOrder(k, Ascending)) === rightOrder)
       case other => fail(other.toString)
     }
   }

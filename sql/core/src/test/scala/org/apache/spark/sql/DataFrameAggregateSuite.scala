@@ -1449,6 +1449,16 @@ class DataFrameAggregateSuite extends QueryTest
     val df = Seq(1).toDF("id").groupBy(Stream($"id" + 1, $"id" + 2): _*).sum("id")
     checkAnswer(df, Row(2, 3, 1))
   }
+
+  test("SPARK-41035: Reuse of literal in distinct aggregations should work") {
+    val res = sql(
+      """select a, count(distinct 100), count(distinct b, 100)
+        |from values (1, 2), (4, 5), (4, 6) as data(a, b)
+        |group by a;
+        |""".stripMargin
+    )
+    checkAnswer(res, Row(1, 1, 1) :: Row(4, 1, 2) :: Nil)
+  }
 }
 
 case class B(c: Option[Double])

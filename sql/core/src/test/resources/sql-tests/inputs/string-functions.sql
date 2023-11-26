@@ -38,6 +38,7 @@ SELECT split_part('11.12.13', '.', 4);
 SELECT split_part('11.12.13', '.', 5);
 SELECT split_part('11.12.13', '.', -5);
 SELECT split_part(null, '.', 1);
+SELECT split_part(str, delimiter, partNum) FROM VALUES ('11.12.13', '.', 3) AS v1(str, delimiter, partNum);
 
 -- substring function
 SELECT substr('Spark SQL', 5);
@@ -78,6 +79,8 @@ SELECT rpad('hi', 'invalid_length');
 SELECT hex(lpad(unhex(''), 5));
 SELECT hex(lpad(unhex('aabb'), 5));
 SELECT hex(lpad(unhex('aabbcc'), 2));
+SELECT hex(lpad(unhex('123'), 2));
+SELECT hex(lpad(unhex('12345'), 2));
 SELECT hex(lpad(unhex(''), 5, unhex('1f')));
 SELECT hex(lpad(unhex('aa'), 5, unhex('1f')));
 SELECT hex(lpad(unhex('aa'), 6, unhex('1f')));
@@ -92,6 +95,8 @@ SELECT hex(lpad(unhex('aabbcc'), 2, unhex('ff')));
 SELECT hex(rpad(unhex(''), 5));
 SELECT hex(rpad(unhex('aabb'), 5));
 SELECT hex(rpad(unhex('aabbcc'), 2));
+SELECT hex(rpad(unhex('123'), 2));
+SELECT hex(rpad(unhex('12345'), 2));
 SELECT hex(rpad(unhex(''), 5, unhex('1f')));
 SELECT hex(rpad(unhex('aa'), 5, unhex('1f')));
 SELECT hex(rpad(unhex('aa'), 6, unhex('1f')));
@@ -117,6 +122,8 @@ select decode(2, 1, 'Southlake');
 select decode(2, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
+select decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks');
+select decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks', NULL, '.');
 
 -- contains
 SELECT CONTAINS(null, 'Spark');
@@ -173,6 +180,8 @@ select to_binary('abc');
 select to_binary('abc', 'utf-8');
 select to_binary('abc', 'base64');
 select to_binary('abc', 'hex');
+select to_binary('123', 'hex');
+select to_binary('12345', 'hex');
 -- 'format' parameter can be any foldable string value, not just literal.
 select to_binary('abc', concat('utf', '-8'));
 -- 'format' parameter is case insensitive.

@@ -1465,6 +1465,7 @@ class DataFrameWriterV2:
         Overwrite rows matching the given filter condition with the contents of the data frame in
         the output table.
         """
+        condition = _to_java_column(condition)
         self._jwriter.overwrite(condition)
 
     @since(3.1)

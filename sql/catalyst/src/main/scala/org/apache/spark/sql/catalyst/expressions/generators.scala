@@ -444,20 +444,25 @@ case class Inline(child: Expression) extends UnaryExpression with CollectionGene
   }
 
   override def elementSchema: StructType = child.dataType match {
-    case ArrayType(st: StructType, _) => st
+    case ArrayType(st: StructType, false) => st
+    case ArrayType(st: StructType, true) => st.asNullable
   }
 
   override def collectionType: DataType = child.dataType
 
   private lazy val numFields = elementSchema.fields.length
 
+  private lazy val generatorNullRow = new GenericInternalRow(elementSchema.length)
+
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
     val inputArray = child.eval(input).asInstanceOf[ArrayData]
     if (inputArray == null) {
       Nil
     } else {
-      for (i <- 0 until inputArray.numElements())
-        yield inputArray.getStruct(i, numFields)
+      for (i <- 0 until inputArray.numElements()) yield {
+        val s = inputArray.getStruct(i, numFields)
+        if (s == null) generatorNullRow else s
+      }
     }
   }
 

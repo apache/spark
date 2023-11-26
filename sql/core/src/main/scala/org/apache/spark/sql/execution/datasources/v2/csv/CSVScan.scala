@@ -44,8 +44,7 @@ case class CSVScan(
     dataFilters: Seq[Expression] = Seq.empty)
   extends TextBasedFileScan(sparkSession, options) {
 
-  val columnPruning = sparkSession.sessionState.conf.csvColumnPruning &&
-    !readDataSchema.exists(_.name == sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+  val columnPruning = sparkSession.sessionState.conf.csvColumnPruning
   private lazy val parsedOptions: CSVOptions = new CSVOptions(
     options.asScala.toMap,
     columnPruning = columnPruning,

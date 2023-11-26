@@ -444,6 +444,19 @@ class AFTSurvivalRegressionSuite extends MLTest with DefaultReadWriteTest {
       }
     }
   }
+
+  test("test internal quantiles") {
+    val quantileProbabilities = Array(0.1, 0.5, 0.9)
+    val aft = new AFTSurvivalRegression().setQuantilesCol("quantiles")
+    val model = aft.fit(datasetUnivariate)
+    val vec = Vectors.dense(6.559282795753792)
+
+    val p1 = model.setQuantileProbabilities(quantileProbabilities).predictQuantiles(vec)
+    model.setQuantileProbabilities(Array(0.2, 0.3, 0.9))
+    val p2 = model.set(model.quantileProbabilities, quantileProbabilities).predictQuantiles(vec)
+
+    assert(p1 === p2)
+  }
 }
 
 object AFTSurvivalRegressionSuite {

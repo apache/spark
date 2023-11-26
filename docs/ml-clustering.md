@@ -104,7 +104,7 @@ Refer to the [Python API docs](api/python/reference/api/pyspark.ml.clustering.KM
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.kmeans.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.kmeans.html) for more details.
 
 {% include_example r/ml/kmeans.R %}
 </div>
@@ -144,7 +144,7 @@ Refer to the [Python API docs](api/python/reference/api/pyspark.ml.clustering.LD
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.lda.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.lda.html) for more details.
 
 {% include_example r/ml/lda.R %}
 </div>
@@ -185,7 +185,7 @@ Refer to the [Python API docs](api/python/reference/api/pyspark.ml.clustering.Bi
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.bisectingKmeans.html) for more details. 
+Refer to the [R API docs](api/R/reference/spark.bisectingKmeans.html) for more details. 
 
 {% include_example r/ml/bisectingKmeans.R %}
 </div>
@@ -274,7 +274,7 @@ Refer to the [Python API docs](api/python/reference/api/pyspark.ml.clustering.Ga
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.gaussianMixture.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.gaussianMixture.html) for more details.
 
 {% include_example r/ml/gaussianMixture.R %}
 </div>
@@ -321,7 +321,7 @@ Refer to the [Python API docs](api/python/reference/api/pyspark.ml.clustering.Po
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.powerIterationClustering.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.powerIterationClustering.html) for more details.
 
 {% include_example r/ml/powerIterationClustering.R %}
 </div>

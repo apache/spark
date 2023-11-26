@@ -3,6 +3,8 @@ select try_to_binary('abc');
 select try_to_binary('abc', 'utf-8');
 select try_to_binary('abc', 'base64');
 select try_to_binary('abc', 'hex');
+select try_to_binary('123');
+select try_to_binary('12345');
 -- 'format' parameter can be any foldable string value, not just literal.
 select try_to_binary('abc', concat('utf', '-8'));
 -- 'format' parameter is case insensitive.

@@ -85,8 +85,6 @@ private[kafka010] class KafkaMicroBatchStream(
 
   private val includeHeaders = options.getBoolean(INCLUDE_HEADERS, false)
 
-  private var endPartitionOffsets: KafkaSourceOffset = _
-
   private var latestPartitionOffsets: PartitionOffsetMap = _
 
   private var allDataForTriggerAvailableNow: PartitionOffsetMap = _
@@ -114,7 +112,7 @@ private[kafka010] class KafkaMicroBatchStream(
   }
 
   override def reportLatestOffset(): Offset = {
-    KafkaSourceOffset(latestPartitionOffsets)
+    Option(KafkaSourceOffset(latestPartitionOffsets)).filterNot(_.partitionToOffsets.isEmpty).orNull
   }
 
   override def latestOffset(): Offset = {
@@ -163,8 +161,7 @@ private[kafka010] class KafkaMicroBatchStream(
       }.getOrElse(latestPartitionOffsets)
     }
 
-    endPartitionOffsets = KafkaSourceOffset(offsets)
-    endPartitionOffsets
+    Option(KafkaSourceOffset(offsets)).filterNot(_.partitionToOffsets.isEmpty).orNull
   }
 
   /** Checks if we need to skip this trigger based on minOffsetsPerTrigger & maxTriggerDelay */

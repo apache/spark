@@ -413,7 +413,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
 
   test("getPartitionsByFilter") {
     // Only one partition [1, 1] for key2 == 1
-    val result = client.getPartitionsByFilter(client.getTable("default", "src_part"),
+    val result = client.getPartitionsByFilter(client.getRawHiveTable("default", "src_part"),
       Seq(EqualTo(AttributeReference("key2", IntegerType)(), Literal(1))))
 
     // Hive 0.12 doesn't support getPartitionsByFilter, it ignores the filter condition.
@@ -437,7 +437,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
 
   test("getPartitionOption(table: CatalogTable, spec: TablePartitionSpec)") {
     val partition = client.getPartitionOption(
-      client.getTable("default", "src_part"), Map("key1" -> "1", "key2" -> "2"))
+      client.getRawHiveTable("default", "src_part"), Map("key1" -> "1", "key2" -> "2"))
     assert(partition.isDefined)
   }
 

@@ -177,7 +177,7 @@ private[kafka010] class KafkaSource(
       kafkaReader.fetchLatestOffsets(currentOffsets)
     }
 
-    latestPartitionOffsets = Some(latest)
+    latestPartitionOffsets = if (latest.isEmpty) None else Some(latest)
 
     val limits: Seq[ReadLimit] = limit match {
       case rows: CompositeReadLimit => rows.getReadLimits
@@ -213,7 +213,7 @@ private[kafka010] class KafkaSource(
     }
     currentPartitionOffsets = Some(offsets)
     logDebug(s"GetOffset: ${offsets.toSeq.map(_.toString).sorted}")
-    KafkaSourceOffset(offsets)
+    Option(KafkaSourceOffset(offsets)).filterNot(_.partitionToOffsets.isEmpty).orNull
   }
 
   /** Checks if we need to skip this trigger based on minOffsetsPerTrigger & maxTriggerDelay */

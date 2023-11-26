@@ -119,7 +119,9 @@ object EventLogFileReader extends Logging {
     if (isSingleEventLog(status)) {
       Some(new SingleFileEventLogFileReader(fs, status.getPath, Option(status)))
     } else if (isRollingEventLogs(status)) {
-      if (fs.listStatus(status.getPath).exists(RollingEventLogFilesWriter.isEventLogFile)) {
+      val files = fs.listStatus(status.getPath)
+      if (files.exists(RollingEventLogFilesWriter.isEventLogFile) &&
+          files.exists(RollingEventLogFilesWriter.isAppStatusFile)) {
         Some(new RollingEventLogFilesFileReader(fs, status.getPath))
       } else {
         logDebug(s"Rolling event log directory have no event log file at ${status.getPath}")

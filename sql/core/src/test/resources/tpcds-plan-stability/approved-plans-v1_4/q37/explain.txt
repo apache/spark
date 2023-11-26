@@ -65,7 +65,7 @@ Input [3]: [inv_item_sk#6, inv_quantity_on_hand#7, inv_date_sk#8]
 
 (9) BroadcastExchange
 Input [2]: [inv_item_sk#6, inv_date_sk#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
 
 (10) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [i_item_sk#1]
@@ -77,47 +77,47 @@ Output [5]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4, inv_dat
 Input [6]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4, inv_item_sk#6, inv_date_sk#8]
 
 (12) ReusedExchange [Reuses operator id: 30]
-Output [1]: [d_date_sk#11]
+Output [1]: [d_date_sk#10]
 
 (13) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [inv_date_sk#8]
-Right keys [1]: [d_date_sk#11]
+Right keys [1]: [d_date_sk#10]
 Join condition: None
 
 (14) Project [codegen id : 3]
 Output [4]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4]
-Input [6]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4, inv_date_sk#8, d_date_sk#11]
+Input [6]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4, inv_date_sk#8, d_date_sk#10]
 
 (15) BroadcastExchange
 Input [4]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#12]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
 
 (16) Scan parquet default.catalog_sales
-Output [2]: [cs_item_sk#13, cs_sold_date_sk#14]
+Output [2]: [cs_item_sk#11, cs_sold_date_sk#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/catalog_sales]
 PushedFilters: [IsNotNull(cs_item_sk)]
 ReadSchema: struct<cs_item_sk:int>
 
 (17) ColumnarToRow
-Input [2]: [cs_item_sk#13, cs_sold_date_sk#14]
+Input [2]: [cs_item_sk#11, cs_sold_date_sk#12]
 
 (18) Filter
-Input [2]: [cs_item_sk#13, cs_sold_date_sk#14]
-Condition : isnotnull(cs_item_sk#13)
+Input [2]: [cs_item_sk#11, cs_sold_date_sk#12]
+Condition : isnotnull(cs_item_sk#11)
 
 (19) Project
-Output [1]: [cs_item_sk#13]
-Input [2]: [cs_item_sk#13, cs_sold_date_sk#14]
+Output [1]: [cs_item_sk#11]
+Input [2]: [cs_item_sk#11, cs_sold_date_sk#12]
 
 (20) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [i_item_sk#1]
-Right keys [1]: [cs_item_sk#13]
+Right keys [1]: [cs_item_sk#11]
 Join condition: None
 
 (21) Project [codegen id : 4]
 Output [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
-Input [5]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4, cs_item_sk#13]
+Input [5]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4, cs_item_sk#11]
 
 (22) HashAggregate [codegen id : 4]
 Input [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
@@ -128,7 +128,7 @@ Results [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
 
 (23) Exchange
 Input [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
-Arguments: hashpartitioning(i_item_id#2, i_item_desc#3, i_current_price#4, 5), ENSURE_REQUIREMENTS, [id=#15]
+Arguments: hashpartitioning(i_item_id#2, i_item_desc#3, i_current_price#4, 5), ENSURE_REQUIREMENTS, [plan_id=3]
 
 (24) HashAggregate [codegen id : 5]
 Input [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
@@ -152,25 +152,25 @@ BroadcastExchange (30)
 
 
 (26) Scan parquet default.date_dim
-Output [2]: [d_date_sk#11, d_date#16]
+Output [2]: [d_date_sk#10, d_date#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2000-02-01), LessThanOrEqual(d_date,2000-04-01), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (27) ColumnarToRow [codegen id : 1]
-Input [2]: [d_date_sk#11, d_date#16]
+Input [2]: [d_date_sk#10, d_date#13]
 
 (28) Filter [codegen id : 1]
-Input [2]: [d_date_sk#11, d_date#16]
-Condition : (((isnotnull(d_date#16) AND (d_date#16 >= 2000-02-01)) AND (d_date#16 <= 2000-04-01)) AND isnotnull(d_date_sk#11))
+Input [2]: [d_date_sk#10, d_date#13]
+Condition : (((isnotnull(d_date#13) AND (d_date#13 >= 2000-02-01)) AND (d_date#13 <= 2000-04-01)) AND isnotnull(d_date_sk#10))
 
 (29) Project [codegen id : 1]
-Output [1]: [d_date_sk#11]
-Input [2]: [d_date_sk#11, d_date#16]
+Output [1]: [d_date_sk#10]
+Input [2]: [d_date_sk#10, d_date#13]
 
 (30) BroadcastExchange
-Input [1]: [d_date_sk#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#17]
+Input [1]: [d_date_sk#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=4]
 
 

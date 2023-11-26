@@ -270,8 +270,9 @@ public class RemoteBlockPushResolverSuite {
     stream.onData(stream.getID(), ByteBuffer.wrap(new byte[4]));
     stream.onFailure(stream.getID(), new RuntimeException("Forced Failure"));
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
-    MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
-    assertEquals("num-chunks", 0, blockMeta.getNumChunks());
+    RuntimeException e = assertThrows(RuntimeException.class,
+        () -> pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0));
+    assertTrue(e.getMessage().contains("is empty"));
   }
 
   @Test
@@ -284,8 +285,9 @@ public class RemoteBlockPushResolverSuite {
     stream.onData(stream.getID(), ByteBuffer.wrap(new byte[4]));
     stream.onFailure(stream.getID(), new RuntimeException("Forced Failure"));
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
-    MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
-    assertEquals("num-chunks", 0, blockMeta.getNumChunks());
+    RuntimeException e = assertThrows(RuntimeException.class,
+        () -> pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0));
+    assertTrue(e.getMessage().contains("is empty"));
   }
 
   @Test

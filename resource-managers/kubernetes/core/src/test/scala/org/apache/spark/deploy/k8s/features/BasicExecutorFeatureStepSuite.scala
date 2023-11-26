@@ -199,18 +199,18 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
         defaultProfile)
       assert(step.configurePod(SparkPod.initialPod()).pod.getSpec.getHostname.length ===
-        KUBERNETES_DNSNAME_MAX_LENGTH)
+        KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH)
     }
   }
 
   test("SPARK-35460: invalid PodNamePrefixes") {
     withPodNamePrefix {
-      Seq("_123", "spark_exec", "spark@", "a" * 48).foreach { invalid =>
+      Seq("_123", "spark_exec", "spark@", "a" * 238).foreach { invalid =>
         baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, invalid)
         val e = intercept[IllegalArgumentException](newExecutorConf())
         assert(e.getMessage === s"'$invalid' in spark.kubernetes.executor.podNamePrefix is" +
           s" invalid. must conform https://kubernetes.io/docs/concepts/overview/" +
-          "working-with-objects/names/#dns-label-names and the value length <= 47")
+          "working-with-objects/names/#dns-subdomain-names and the value length <= 237")
       }
     }
   }
@@ -224,7 +224,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
         defaultProfile)
       val hostname = step.configurePod(SparkPod.initialPod()).pod.getSpec().getHostname()
-      assert(hostname.length <= KUBERNETES_DNSNAME_MAX_LENGTH)
+      assert(hostname.length <= KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH)
       assert(InternetDomainName.isValid(hostname))
     }
   }
@@ -366,6 +366,27 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     val baseDriverPod = SparkPod.initialPod()
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
       defaultProfile)
+    val podConfigured = step.configurePod(baseDriverPod)
+    assert(!SecretVolumeUtils.containerHasVolume(podConfigured.container,
+      SPARK_CONF_VOLUME_EXEC, SPARK_CONF_DIR_INTERNAL))
+    assert(!SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC))
+  }
+
+  test("SPARK-40065 Mount configmap on executors with non-default profile as well") {
+    val baseDriverPod = SparkPod.initialPod()
+    val rp = new ResourceProfileBuilder().build()
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf), rp)
+    val podConfigured = step.configurePod(baseDriverPod)
+    assert(SecretVolumeUtils.containerHasVolume(podConfigured.container,
+      SPARK_CONF_VOLUME_EXEC, SPARK_CONF_DIR_INTERNAL))
+    assert(SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC))
+  }
+
+  test("SPARK-40065 Disable configmap volume on executor pod's container (non-default profile)") {
+    baseConf.set(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP, true)
+    val baseDriverPod = SparkPod.initialPod()
+    val rp = new ResourceProfileBuilder().build()
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf), rp)
     val podConfigured = step.configurePod(baseDriverPod)
     assert(!SecretVolumeUtils.containerHasVolume(podConfigured.container,
       SPARK_CONF_VOLUME_EXEC, SPARK_CONF_DIR_INTERNAL))

@@ -117,13 +117,13 @@ case class AggregateExpression(
     // This is a bit of a hack.  Really we should not be constructing this container and reasoning
     // about datatypes / aggregation mode until after we have finished analysis and made it to
     // planning.
-    UnresolvedAttribute(aggregateFunction.toString)
+    UnresolvedAttribute.quoted(aggregateFunction.toString)
   }
 
   def filterAttributes: AttributeSet = filter.map(_.references).getOrElse(AttributeSet.empty)
 
   // We compute the same thing regardless of our final result.
-  override lazy val preCanonicalized: Expression = {
+  override lazy val canonicalized: Expression = {
     val normalizedAggFunc = mode match {
       // For PartialMerge or Final mode, the input to the `aggregateFunction` is aggregate buffers,
       // and the actual children of `aggregateFunction` is not used, here we normalize the expr id.
@@ -134,10 +134,10 @@ case class AggregateExpression(
     }
 
     AggregateExpression(
-      normalizedAggFunc.preCanonicalized.asInstanceOf[AggregateFunction],
+      normalizedAggFunc.canonicalized.asInstanceOf[AggregateFunction],
       mode,
       isDistinct,
-      filter.map(_.preCanonicalized),
+      filter.map(_.canonicalized),
       ExprId(0))
   }
 

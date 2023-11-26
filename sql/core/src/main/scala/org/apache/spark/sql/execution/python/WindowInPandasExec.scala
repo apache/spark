@@ -332,8 +332,14 @@ case class WindowInPandasExec(
         // Iteration
         var rowIndex = 0
 
-        override final def hasNext: Boolean =
-          (bufferIterator != null && bufferIterator.hasNext) || nextRowAvailable
+        override final def hasNext: Boolean = {
+          val found = (bufferIterator != null && bufferIterator.hasNext) || nextRowAvailable
+          if (!found) {
+            // clear final partition
+            buffer.clear()
+          }
+          found
+        }
 
         override final def next(): Iterator[UnsafeRow] = {
           // Load the next partition if we need to.
