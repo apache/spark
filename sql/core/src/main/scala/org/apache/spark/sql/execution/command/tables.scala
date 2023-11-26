@@ -1172,7 +1172,12 @@ case class ShowCreateTableCommand(
 
         builder.toString()
       } else {
-        builder ++= s"CREATE TABLE ${table.quoted} "
+
+        if (tableMetadata.tableType == EXTERNAL) {
+          builder ++= s"CREATE EXTERNAL TABLE ${table.quoted} "
+        } else {
+          builder ++= s"CREATE TABLE ${table.quoted} "
+        }
 
         showCreateDataSourceTable(metadata, builder)
         builder.toString()
