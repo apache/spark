@@ -5474,6 +5474,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyRaiseErrorWithoutErrorClass: Boolean =
     getConf(SQLConf.LEGACY_RAISE_ERROR_WITHOUT_ERROR_CLASS)
 
+  def legacyJavaCharsets: Boolean = getConf(SQLConf.LEGACY_JAVA_CHARSETS)
+
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */

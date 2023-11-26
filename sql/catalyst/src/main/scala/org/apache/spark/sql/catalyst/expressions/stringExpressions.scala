@@ -2685,8 +2685,11 @@ case class StringDecode(bin: Expression, charset: Expression)
   since = "1.5.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class Encode(value: Expression, charset: Expression)
+case class Encode(value: Expression, charset: Expression, legacyCharsets: Boolean)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  def this(value: Expression, charset: Expression) =
+    this(value, charset, SQLConf.get.legacyJavaCharsets)
 
   override def left: Expression = value
   override def right: Expression = charset
@@ -2718,6 +2721,10 @@ case class Encode(value: Expression, charset: Expression)
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Encode = copy(value = newLeft, charset = newRight)
+}
+
+object Encode {
+  def apply(value: Expression, charset: Expression): Encode = new Encode(value, charset)
 }
 
 /**
