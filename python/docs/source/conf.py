@@ -194,7 +194,11 @@ html_context = {
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
-    "navbar_end": ["version-switcher"]
+    "navbar_end": ["version-switcher", "theme-switcher"],
+    "logo": {
+        "image_light": "_static/spark-logo-light.png",
+        "image_dark": "_static/spark-logo-dark.png",
+    }
 }
 
 # Add any paths that contain custom themes here, relative to this directory.
