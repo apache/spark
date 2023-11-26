@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.types._
 
 class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
-  extends Serializable
+    extends Serializable
     with Logging {
 
   private val timestampFormatter = TimestampFormatter(
@@ -54,8 +54,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     isParsing = true)
 
   /**
-   * Copied from internal Spark api
-   * [[org.apache.spark.sql.catalyst.analysis.TypeCoercion]]
+   * Copied from internal Spark api [[org.apache.spark.sql.catalyst.analysis.TypeCoercion]]
    */
   private val numericPrecedence: IndexedSeq[DataType] =
     IndexedSeq[DataType](
@@ -81,9 +80,8 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
 
   /**
    * Infer the type of a collection of XML records in three stages:
-   *   1. Infer the type of each record
-   *      2. Merge types by choosing the lowest type necessary to cover equal keys
-   *      3. Replace any remaining null fields with string, the top type
+   *   1. Infer the type of each record 2. Merge types by choosing the lowest type necessary to
+   *      cover equal keys 3. Replace any remaining null fields with string, the top type
    */
   def infer(xml: RDD[String]): StructType = {
     val schemaData = if (options.samplingRatio < 1.0) {
@@ -92,13 +90,15 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       xml
     }
     // perform schema inference on each row and merge afterwards
-    val rootType = schemaData.mapPartitions { iter =>
-      val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
+    val rootType = schemaData
+      .mapPartitions { iter =>
+        val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
 
-      iter.flatMap { xml =>
-        infer(xml, xsdSchema)
+        iter.flatMap { xml =>
+          infer(xml, xsdSchema)
+        }
       }
-    }.fold(StructType(Seq()))(compatibleType)
+      .fold(StructType(Seq()))(compatibleType)
 
     canonicalizeType(rootType) match {
       case Some(st: StructType) => st
@@ -110,7 +110,8 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
 
   def infer(xml: String, xsdSchema: Option[Schema] = None): Option[DataType] = {
     try {
-      val xsd = xsdSchema.orElse(Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema))
+      val xsd =
+        xsdSchema.orElse(Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema))
       xsd.foreach { schema =>
         schema.newValidator().validate(new StreamSource(new StringReader(xml)))
       }
@@ -189,26 +190,25 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
    * Infer the type of a xml document from the parser's token stream
    */
   private def inferObject(
-                           parser: XMLEventReader,
-                           rootAttributes: Array[Attribute] = Array.empty): DataType = {
+      parser: XMLEventReader,
+      rootAttributes: Array[Attribute] = Array.empty): DataType = {
+
     /**
-     * Retrieves the field name with respect to the case sensitivity setting.
-     * We pick the first name we encountered.
+     * Retrieves the field name with respect to the case sensitivity setting. We pick the first
+     * name we encountered.
      *
-     * If case sensitivity is enabled, the original field name is returned.
-     * If not, the field name is managed in a case-insensitive map.
+     * If case sensitivity is enabled, the original field name is returned. If not, the field name
+     * is managed in a case-insensitive map.
      *
-     * For instance, if we encounter the following field names:
-     * foo, Foo, FOO
+     * For instance, if we encounter the following field names: foo, Foo, FOO
      *
-     * In case-sensitive mode: we will infer three fields: foo, Foo, FOO
-     * In case-insensitive mode, we will infer an array named by foo
-     * (as it's the first one we encounter)
+     * In case-sensitive mode: we will infer three fields: foo, Foo, FOO In case-insensitive mode,
+     * we will infer an array named by foo (as it's the first one we encounter)
      */
-    val caseSensitivityOrdering: Ordering[String] = if (caseSensitive) {
-      (x: String, y: String) => x.compareTo(y)
-    } else {
-      (x: String, y: String) => x.compareToIgnoreCase(y)
+    val caseSensitivityOrdering: Ordering[String] = if (caseSensitive) { (x: String, y: String) =>
+      x.compareTo(y)
+    } else { (x: String, y: String) =>
+      x.compareToIgnoreCase(y)
     }
 
     val nameToDataType =
@@ -231,9 +231,8 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     // If there are attributes, then we should process them first.
     val rootValuesMap =
       StaxXmlParserUtils.convertAttributesToValuesMap(rootAttributes, options)
-    rootValuesMap.foreach {
-      case (f, v) =>
-        addOrUpdateType(f, inferFrom(v))
+    rootValuesMap.foreach { case (f, v) =>
+      addOrUpdateType(f, inferFrom(v))
     }
     var shouldStop = false
     if (options.keepInnerXmlAsRaw) {
@@ -277,15 +276,14 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
               innerRootTag = ""
               shouldStop = StaxXmlParserUtils.moveToNeighbourOrEndDocument(parser)
             } else {
-              shouldStop = StaxXmlParserUtils.
-                checkEndElementForKeepInnerXmlAsRawOperations(parser)
+              shouldStop =
+                StaxXmlParserUtils.checkEndElementForKeepInnerXmlAsRawOperations(parser)
             }
 
           case _ => // do nothing
         }
       }
-    }
-    else {
+    } else {
       while (!shouldStop) {
         parser.nextEvent match {
           case e: StartElement =>
@@ -296,9 +294,8 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
                 // Merge attributes to the field
                 val nestedBuilder = ArrayBuffer[StructField]()
                 nestedBuilder ++= st.fields
-                valuesMap.foreach {
-                  case (f, v) =>
-                    nestedBuilder += StructField(f, inferFrom(v), nullable = true)
+                valuesMap.foreach { case (f, v) =>
+                  nestedBuilder += StructField(f, inferFrom(v), nullable = true)
                 }
                 StructType(nestedBuilder.sortBy(_.name).toArray)
 
@@ -306,9 +303,8 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
                 // We need to manually add the field for value.
                 val nestedBuilder = ArrayBuffer[StructField]()
                 nestedBuilder += StructField(options.valueTag, dt, nullable = true)
-                valuesMap.foreach {
-                  case (f, v) =>
-                    nestedBuilder += StructField(f, inferFrom(v), nullable = true)
+                valuesMap.foreach { case (f, v) =>
+                  nestedBuilder += StructField(f, inferFrom(v), nullable = true)
                 }
                 StructType(nestedBuilder.sortBy(_.name).toArray)
 
@@ -333,18 +329,21 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     // A structure object is an attribute-only element
     // if it only consists of attributes and valueTags.
     // If not, we will remove the valueTag field from the schema
-    val attributesOnly = nameToDataType.forall {
-      case (fieldName, _) =>
-        fieldName == options.valueTag || fieldName.startsWith(options.attributePrefix)
+    val attributesOnly = nameToDataType.forall { case (fieldName, _) =>
+      fieldName == options.valueTag || fieldName.startsWith(options.attributePrefix)
     }
     if (!attributesOnly) {
       nameToDataType -= options.valueTag
     }
 
     // Note: other code relies on this sorting for correctness, so don't remove it!
-    StructType(nameToDataType.map {
-      case (name, dataType) => StructField(name, dataType)
-    }.toList.sortBy(_.name))
+    StructType(
+      nameToDataType
+        .map { case (name, dataType) =>
+          StructField(name, dataType)
+        }
+        .toList
+        .sortBy(_.name))
   }
 
   /**
@@ -371,9 +370,9 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
     // Rule out strings ending in D or F, as they will parse as double but should be disallowed
     if (value.nonEmpty && (value.last match {
-      case 'd' | 'D' | 'f' | 'F' => true
-      case _ => false
-    })) {
+        case 'd' | 'D' | 'f' | 'F' => true
+        case _ => false
+      })) {
       return false
     }
     (allCatch opt signSafeValue.toDouble).isDefined
@@ -424,7 +423,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
    * Convert NullType to StringType and remove StructTypes with no fields
    */
   def canonicalizeType(dt: DataType): Option[DataType] = dt match {
-    case at@ArrayType(elementType, _) =>
+    case at @ ArrayType(elementType, _) =>
       for {
         canonicalType <- canonicalizeType(elementType)
       } yield {
@@ -493,8 +492,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           StructType(newFields.toArray.sortBy(_.name))
 
         case (ArrayType(elementType1, containsNull1), ArrayType(elementType2, containsNull2)) =>
-          ArrayType(
-            compatibleType(elementType1, elementType2), containsNull1 || containsNull2)
+          ArrayType(compatibleType(elementType1, elementType2), containsNull1 || containsNull2)
 
         // In XML datasource, since StructType can be compared with ArrayType.
         // In this case, ArrayType wraps the StructType.

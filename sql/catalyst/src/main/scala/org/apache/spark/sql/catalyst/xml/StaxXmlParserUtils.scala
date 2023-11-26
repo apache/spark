@@ -38,7 +38,7 @@ object StaxXmlParserUtils {
   def filteredReader(xml: String): XMLEventReader = {
     val filter = new EventFilter {
       override def accept(event: XMLEvent): Boolean =
-      // Ignore comments and processing instructions
+        // Ignore comments and processing instructions
         event.getEventType match {
           case XMLStreamConstants.COMMENT | XMLStreamConstants.PROCESSING_INSTRUCTION => false
           case _ => true
@@ -85,9 +85,9 @@ object StaxXmlParserUtils {
   }
 
   /**
-   * In keepInnerXmlAsRaw ops, EndElement may be followed by another EndElement.
-   * Therefore if any EndElement encountered, the method should return false.
-   * Same thing goes for character type as well.
+   * In keepInnerXmlAsRaw ops, EndElement may be followed by another EndElement. Therefore if any
+   * EndElement encountered, the method should return false. Same thing goes for character type as
+   * well.
    */
   @tailrec
   def checkEndElementForKeepInnerXmlAsRawOperations(parser: XMLEventReader): Boolean = {
@@ -106,12 +106,10 @@ object StaxXmlParserUtils {
   }
 
   /**
-   * Useful in Array cases.
-   * The difference with the checkEndElementForKeepInnerXmlAsRawOperations method
-   * is skipping unnecessary or additional case checks.
-   * If you use checkEndElementForKeepInnerXmlAsRawOperations instead of this method,
-   * the result is gonna be compatible with the array type
-   * but there will be additional (unnecessary) case matches.
+   * Useful in Array cases. The difference with the checkEndElementForKeepInnerXmlAsRawOperations
+   * method is skipping unnecessary or additional case checks. If you use
+   * checkEndElementForKeepInnerXmlAsRawOperations instead of this method, the result is gonna be
+   * compatible with the array type but there will be additional (unnecessary) case matches.
    */
   @tailrec
   def moveToNeighbourOrEndDocument(parser: XMLEventReader): Boolean = {
@@ -131,8 +129,8 @@ object StaxXmlParserUtils {
    * Produces values map from given attributes.
    */
   def convertAttributesToValuesMap(
-                                    attributes: Array[Attribute],
-                                    options: XmlOptions): Map[String, String] = {
+      attributes: Array[Attribute],
+      options: XmlOptions): Map[String, String] = {
     if (options.excludeAttributeFlag) {
       Map.empty[String, String]
     } else {
