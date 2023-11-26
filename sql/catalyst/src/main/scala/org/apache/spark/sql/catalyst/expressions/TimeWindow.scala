@@ -70,7 +70,7 @@ case class TimeWindow(
     slideDuration: Long,
     startTime: Long) extends UnaryExpression
   with ImplicitCastInputTypes
-  with Unevaluable
+  with Inevaluable
   with NonSQLExpression {
 
   //////////////////////////

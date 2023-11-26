@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.{DataType, IntegerType}
  *
  * Subclasses represent abstract transform functions with concrete implementations that are
  * determined by data source implementations. Because the concrete implementation is not known,
- * these expressions are [[Unevaluable]].
+ * these expressions are [[Inevaluable]].
  *
  * These expressions are used to pass transformations from the DataFrame API:
  *
@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.{DataType, IntegerType}
  *   df.writeTo("catalog.db.table").partitionedBy($"category", days($"timestamp")).create()
  * }}}
  */
-abstract class PartitionTransformExpression extends Expression with Unevaluable
+abstract class PartitionTransformExpression extends Expression with Inevaluable
   with UnaryLike[Expression] {
   override def nullable: Boolean = true
 }

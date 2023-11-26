@@ -48,7 +48,7 @@ case class DynamicPruningSubquery(
     exprId: ExprId = NamedExpression.newExprId)
   extends SubqueryExpression(buildQuery, Seq(pruningKey), exprId)
   with DynamicPruning
-  with Unevaluable
+  with Inevaluable
   with UnaryLike[Expression] {
 
   override def child: Expression = pruningKey

@@ -220,7 +220,7 @@ trait PredicateHelper extends AliasHelper with Logging {
     // For PythonUDFs that can't be evaluated in join condition, `ExtractPythonUDFFromJoinCondition`
     // will pull them out later.
     case _: PythonUDF => true
-    case e: Unevaluable => false
+    case e: Inevaluable => false
     case e => e.children.forall(canEvaluateWithinJoin)
   }
 
@@ -360,7 +360,7 @@ case class Not(child: Expression)
  * Evaluates to `true` if `values` are returned in `query`'s result set.
  */
 case class InSubquery(values: Seq[Expression], query: ListQuery)
-  extends Predicate with Unevaluable {
+  extends Predicate with Inevaluable {
 
   @transient private lazy val value: Expression = if (values.length > 1) {
     CreateNamedStruct(values.zipWithIndex.flatMap {

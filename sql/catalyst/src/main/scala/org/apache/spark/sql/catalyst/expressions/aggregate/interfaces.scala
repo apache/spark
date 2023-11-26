@@ -63,7 +63,7 @@ case object Complete extends AggregateMode
  * A place holder expressions used in code-gen, it does not change the corresponding value
  * in the row.
  */
-case object NoOp extends LeafExpression with Unevaluable {
+case object NoOp extends LeafExpression with Inevaluable {
   override def nullable: Boolean = true
   override def dataType: DataType = NullType
 }
@@ -103,7 +103,7 @@ case class AggregateExpression(
     filter: Option[Expression],
     resultId: ExprId)
   extends Expression
-  with Unevaluable {
+  with Inevaluable {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(AGGREGATE_EXPRESSION)
 

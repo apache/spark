@@ -328,11 +328,11 @@ case class MapFromArrays(left: Expression, right: Expression)
 }
 
 /**
- * An expression representing a not yet available attribute name. This expression is unevaluable
+ * An expression representing a not yet available attribute name. This expression is inevaluable
  * and as its name suggests it is a temporary place holder until we're able to determine the
  * actual attribute name.
  */
-case object NamePlaceholder extends LeafExpression with Unevaluable {
+case object NamePlaceholder extends LeafExpression with Inevaluable {
   override lazy val resolved: Boolean = false
   override def nullable: Boolean = false
   override def dataType: DataType = StringType
@@ -620,11 +620,11 @@ trait StructFieldsOperation {
 /**
  * Add or replace a field by name.
  *
- * We extend [[Unevaluable]] here to ensure that [[UpdateFields]] can include it as part of its
+ * We extend [[Inevaluable]] here to ensure that [[UpdateFields]] can include it as part of its
  * children, and thereby enable the analyzer to resolve and transform valExpr as necessary.
  */
 case class WithField(name: String, valExpr: Expression)
-  extends Unevaluable with StructFieldsOperation with UnaryLike[Expression] {
+  extends Inevaluable with StructFieldsOperation with UnaryLike[Expression] {
 
   override def apply(values: Seq[(StructField, Expression)]): Seq[(StructField, Expression)] = {
     val newFieldExpr = (StructField(name, valExpr.dataType, valExpr.nullable), valExpr)
@@ -668,7 +668,7 @@ case class DropField(name: String) extends StructFieldsOperation {
  * Updates fields in a struct.
  */
 case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperation])
-  extends Unevaluable {
+  extends Inevaluable {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UPDATE_FIELDS)
 

@@ -380,7 +380,7 @@ case class ScalarSubqueryReference(
     subqueryIndex: Int,
     headerIndex: Int,
     dataType: DataType,
-    exprId: ExprId) extends LeafExpression with Unevaluable {
+    exprId: ExprId) extends LeafExpression with Inevaluable {
   override def nullable: Boolean = true
 
   final override val nodePatterns: Seq[TreePattern] = Seq(SCALAR_SUBQUERY_REFERENCE)

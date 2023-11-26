@@ -255,7 +255,7 @@ case class ScalarSubquery(
     outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty)
-  extends SubqueryExpression(plan, outerAttrs, exprId, joinCond) with Unevaluable {
+  extends SubqueryExpression(plan, outerAttrs, exprId, joinCond) with Inevaluable {
   override def dataType: DataType = {
     assert(plan.schema.fields.nonEmpty, "Scalar subquery should have only one column")
     plan.schema.fields.head.dataType
@@ -300,7 +300,7 @@ case class LateralSubquery(
     outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty)
-  extends SubqueryExpression(plan, outerAttrs, exprId, joinCond) with Unevaluable {
+  extends SubqueryExpression(plan, outerAttrs, exprId, joinCond) with Inevaluable {
   override def dataType: DataType = plan.output.toStructType
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): LateralSubquery = copy(plan = plan)
@@ -340,7 +340,7 @@ case class ListQuery(
     exprId: ExprId = NamedExpression.newExprId,
     childOutputs: Seq[Attribute] = Seq.empty,
     joinCond: Seq[Expression] = Seq.empty)
-  extends SubqueryExpression(plan, outerAttrs, exprId, joinCond) with Unevaluable {
+  extends SubqueryExpression(plan, outerAttrs, exprId, joinCond) with Inevaluable {
   override def dataType: DataType = if (childOutputs.length > 1) {
     childOutputs.toStructType
   } else {
@@ -398,7 +398,7 @@ case class Exists(
     outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty)
-  extends SubqueryExpression(plan, outerAttrs, exprId, joinCond) with Predicate with Unevaluable {
+  extends SubqueryExpression(plan, outerAttrs, exprId, joinCond) with Predicate with Inevaluable {
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): Exists = copy(plan = plan)
   override def toString: String = s"exists#${exprId.id} $conditionString"

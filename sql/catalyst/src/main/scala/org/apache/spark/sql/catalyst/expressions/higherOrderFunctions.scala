@@ -37,7 +37,7 @@ import org.apache.spark.unsafe.array.ByteArrayMethods
  * A placeholder of lambda variables to prevent unexpected resolution of [[LambdaFunction]].
  */
 case class UnresolvedNamedLambdaVariable(nameParts: Seq[String])
-  extends LeafExpression with NamedExpression with Unevaluable {
+  extends LeafExpression with NamedExpression with Inevaluable {
 
   override def name: String =
     nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")

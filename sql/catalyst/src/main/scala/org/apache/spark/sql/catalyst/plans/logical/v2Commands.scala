@@ -21,7 +21,7 @@ import org.apache.spark.sql.{sources, AnalysisException}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedDBObjectName, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.FunctionResource
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, MetadataAttribute, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Inevaluable, MetadataAttribute}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -585,7 +585,7 @@ case class MergeIntoTable(
     copy(targetTable = newLeft, sourceTable = newRight)
 }
 
-sealed abstract class MergeAction extends Expression with Unevaluable {
+sealed abstract class MergeAction extends Expression with Inevaluable {
   def condition: Option[Expression]
   override def nullable: Boolean = false
   override def dataType: DataType = throw new UnresolvedException("nullable")
@@ -638,7 +638,7 @@ case class InsertStarAction(condition: Option[Expression]) extends MergeAction {
 }
 
 case class Assignment(key: Expression, value: Expression) extends Expression
-  with Unevaluable with BinaryLike[Expression] {
+  with Inevaluable with BinaryLike[Expression] {
   override def nullable: Boolean = false
   override def dataType: DataType = throw new UnresolvedException("nullable")
   override def left: Expression = key

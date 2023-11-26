@@ -1731,7 +1731,7 @@ object TypeCoercionSuite {
     atomicTypes ++ complexTypes ++ Seq(NullType, CalendarIntervalType)
 
   case class AnyTypeUnaryExpression(child: Expression)
-    extends UnaryExpression with ExpectsInputTypes with Unevaluable {
+    extends UnaryExpression with ExpectsInputTypes with Inevaluable {
     override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
     override def dataType: DataType = NullType
     override protected def withNewChildInternal(newChild: Expression): AnyTypeUnaryExpression =
@@ -1739,7 +1739,7 @@ object TypeCoercionSuite {
   }
 
   case class NumericTypeUnaryExpression(child: Expression)
-    extends UnaryExpression with ExpectsInputTypes with Unevaluable {
+    extends UnaryExpression with ExpectsInputTypes with Inevaluable {
     override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
     override def dataType: DataType = NullType
     override protected def withNewChildInternal(newChild: Expression): NumericTypeUnaryExpression =
@@ -1747,7 +1747,7 @@ object TypeCoercionSuite {
   }
 
   case class AnyTypeBinaryOperator(left: Expression, right: Expression)
-    extends BinaryOperator with Unevaluable {
+    extends BinaryOperator with Inevaluable {
     override def dataType: DataType = NullType
     override def inputType: AbstractDataType = AnyDataType
     override def symbol: String = "anytype"
@@ -1757,7 +1757,7 @@ object TypeCoercionSuite {
   }
 
   case class NumericTypeBinaryOperator(left: Expression, right: Expression)
-    extends BinaryOperator with Unevaluable {
+    extends BinaryOperator with Inevaluable {
     override def dataType: DataType = NullType
     override def inputType: AbstractDataType = NumericType
     override def symbol: String = "numerictype"

@@ -128,7 +128,7 @@ object UnresolvedTableValuedFunction {
 /**
  * Holds the name of an attribute that has yet to be resolved.
  */
-case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Unevaluable {
+case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Inevaluable {
 
   def name: String =
     nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
@@ -256,7 +256,7 @@ case class UnresolvedFunction(
     isDistinct: Boolean,
     filter: Option[Expression] = None,
     ignoreNulls: Boolean = false)
-  extends Expression with Unevaluable {
+  extends Expression with Inevaluable {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override def children: Seq[Expression] = arguments ++ filter.toSeq
@@ -327,7 +327,7 @@ abstract class Star extends LeafExpression with NamedExpression {
  *              targets' columns are produced. This can either be a table name or struct name. This
  *              is a list of identifiers that is the path of the expansion.
  */
-case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevaluable {
+case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Inevaluable {
 
   /**
    * Returns true if the nameParts is a subset of the last elements of qualifier of the attribute.
@@ -403,7 +403,7 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
  *              tables' columns are produced.
  */
 case class UnresolvedRegex(regexPattern: String, table: Option[String], caseSensitive: Boolean)
-  extends Star with Unevaluable {
+  extends Star with Inevaluable {
   override def expand(input: LogicalPlan, resolver: Resolver): Seq[NamedExpression] = {
     val pattern = if (caseSensitive) regexPattern else s"(?i)$regexPattern"
     table match {
@@ -429,7 +429,7 @@ case class UnresolvedRegex(regexPattern: String, table: Option[String], caseSens
  * @param names the names to be associated with each output of computing [[child]].
  */
 case class MultiAlias(child: Expression, names: Seq[String])
-  extends UnaryExpression with NamedExpression with Unevaluable {
+  extends UnaryExpression with NamedExpression with Inevaluable {
 
   override def name: String = throw new UnresolvedException("name")
 
@@ -461,7 +461,7 @@ case class MultiAlias(child: Expression, names: Seq[String])
  *
  * @param expressions Expressions to expand.
  */
-case class ResolvedStar(expressions: Seq[NamedExpression]) extends Star with Unevaluable {
+case class ResolvedStar(expressions: Seq[NamedExpression]) extends Star with Inevaluable {
   override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
   override def expand(input: LogicalPlan, resolver: Resolver): Seq[NamedExpression] = expressions
   override def toString: String = expressions.mkString("ResolvedStar(", ", ", ")")
@@ -476,7 +476,7 @@ case class ResolvedStar(expressions: Seq[NamedExpression]) extends Star with Une
  *                   can be key of Map, index of Array, field name of Struct.
  */
 case class UnresolvedExtractValue(child: Expression, extraction: Expression)
-  extends BinaryExpression with Unevaluable {
+  extends BinaryExpression with Inevaluable {
 
   override def left: Expression = child
   override def right: Expression = extraction
@@ -505,7 +505,7 @@ case class UnresolvedExtractValue(child: Expression, extraction: Expression)
 case class UnresolvedAlias(
     child: Expression,
     aliasFunc: Option[Expression => String] = None)
-  extends UnaryExpression with NamedExpression with Unevaluable {
+  extends UnaryExpression with NamedExpression with Inevaluable {
 
   override def toAttribute: Attribute = throw new UnresolvedException("toAttribute")
   override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
@@ -559,7 +559,7 @@ case class UnresolvedSubqueryColumnAliases(
  *                        if we want to resolve deserializer by children output.
  */
 case class UnresolvedDeserializer(deserializer: Expression, inputAttributes: Seq[Attribute] = Nil)
-  extends UnaryExpression with Unevaluable with NonSQLExpression {
+  extends UnaryExpression with Inevaluable with NonSQLExpression {
   // The input attributes used to resolve deserializer expression must be all resolved.
   require(inputAttributes.forall(_.resolved), "Input attributes must all be resolved.")
 
@@ -574,7 +574,7 @@ case class UnresolvedDeserializer(deserializer: Expression, inputAttributes: Seq
 }
 
 case class GetColumnByOrdinal(ordinal: Int, dataType: DataType) extends LeafExpression
-  with Unevaluable with NonSQLExpression {
+  with Inevaluable with NonSQLExpression {
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
 }
@@ -587,7 +587,7 @@ case class GetViewColumnByNameAndOrdinal(
     // viewDDL is used to help user fix incompatible schema issue for permanent views
     // it will be None for temp views.
     viewDDL: Option[String])
-  extends LeafExpression with Unevaluable with NonSQLExpression {
+  extends LeafExpression with Inevaluable with NonSQLExpression {
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
@@ -605,7 +605,7 @@ case class GetViewColumnByNameAndOrdinal(
  * @param ordinal ordinal starts from 1, instead of 0
  */
 case class UnresolvedOrdinal(ordinal: Int)
-    extends LeafExpression with Unevaluable with NonSQLExpression {
+    extends LeafExpression with Inevaluable with NonSQLExpression {
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
@@ -629,7 +629,7 @@ case class UnresolvedHaving(
 /**
  * A place holder expression used in random functions, will be replaced after analyze.
  */
-case object UnresolvedSeed extends LeafExpression with Unevaluable {
+case object UnresolvedSeed extends LeafExpression with Inevaluable {
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override lazy val resolved = false
@@ -640,7 +640,7 @@ case object UnresolvedSeed extends LeafExpression with Unevaluable {
  * column resolution and use this expression to keep the original column name.
  */
 case class TempResolvedColumn(child: Expression, nameParts: Seq[String]) extends UnaryExpression
-  with Unevaluable {
+  with Inevaluable {
   override lazy val preCanonicalized = child.preCanonicalized
   override def dataType: DataType = child.dataType
   override protected def withNewChildInternal(newChild: Expression): Expression =

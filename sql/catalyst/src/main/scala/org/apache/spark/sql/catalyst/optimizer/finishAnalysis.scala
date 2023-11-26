@@ -33,7 +33,7 @@ import org.apache.spark.util.Utils
 
 
 /**
- * Finds all the [[RuntimeReplaceable]] expressions that are unevaluable and replace them
+ * Finds all the [[RuntimeReplaceable]] expressions that are inevaluable and replace them
  * with semantically equivalent expressions that can be evaluated.
  *
  * This is mainly used to provide compatibility with other databases.

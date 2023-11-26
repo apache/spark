@@ -401,7 +401,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * Statically evaluate an expression containing one or more aggregates on an empty input.
    */
   private def evalAggExprOnZeroTups(expr: Expression) : Expression = {
-    // AggregateExpressions are Unevaluable, so we need to replace all aggregates
+    // AggregateExpressions are Inevaluable, so we need to replace all aggregates
     // in the expression with the value they would return for zero input tuples.
     // Also replace attribute refs (for example, for grouping columns) with NULL.
     val rewrittenExpr = expr transform {

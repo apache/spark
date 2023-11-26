@@ -1955,7 +1955,7 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(LOCAL_RELATION), ruleId) {
     case Project(projectList, LocalRelation(output, data, isStreaming))
-        if !projectList.exists(hasUnevaluableExpr) =>
+        if !projectList.exists(hasInevaluableExpr) =>
       val projection = new InterpretedMutableProjection(projectList, output)
       projection.initialize(0)
       LocalRelation(projectList.map(_.toAttribute), data.map(projection(_).copy()), isStreaming)
@@ -1964,14 +1964,14 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
       LocalRelation(output, data.take(limit), isStreaming)
 
     case Filter(condition, LocalRelation(output, data, isStreaming))
-        if !hasUnevaluableExpr(condition) =>
+        if !hasInevaluableExpr(condition) =>
       val predicate = Predicate.create(condition, output)
       predicate.initialize(0)
       LocalRelation(output, data.filter(row => predicate.eval(row)), isStreaming)
   }
 
-  private def hasUnevaluableExpr(expr: Expression): Boolean = {
-    expr.exists(e => e.isInstanceOf[Unevaluable] && !e.isInstanceOf[AttributeReference])
+  private def hasInevaluableExpr(expr: Expression): Boolean = {
+    expr.exists(e => e.isInstanceOf[Inevaluable] && !e.isInstanceOf[AttributeReference])
   }
 }
 

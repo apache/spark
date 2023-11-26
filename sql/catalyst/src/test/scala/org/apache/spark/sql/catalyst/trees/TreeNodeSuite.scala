@@ -56,7 +56,7 @@ case class ComplexPlan(exprs: Seq[Seq[Expression]])
   override def output: Seq[Attribute] = Nil
 }
 
-case class ExpressionInMap(map: Map[String, Expression]) extends Unevaluable {
+case class ExpressionInMap(map: Map[String, Expression]) extends Inevaluable {
   override def children: Seq[Expression] = map.values.toSeq
   override def nullable: Boolean = true
   override def dataType: NullType = NullType
@@ -66,7 +66,7 @@ case class ExpressionInMap(map: Map[String, Expression]) extends Unevaluable {
 }
 
 case class SeqTupleExpression(sons: Seq[(Expression, Expression)],
-    nonSons: Seq[(Expression, Expression)]) extends Unevaluable {
+    nonSons: Seq[(Expression, Expression)]) extends Inevaluable {
   override def children: Seq[Expression] = sons.flatMap(t => Iterator(t._1, t._2))
   override def nullable: Boolean = true
   override def dataType: NullType = NullType

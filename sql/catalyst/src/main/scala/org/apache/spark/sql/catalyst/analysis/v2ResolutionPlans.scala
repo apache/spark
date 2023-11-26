@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, LeafExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Inevaluable, LeafExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_FUNC}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -78,7 +78,7 @@ case class UnresolvedTableOrView(
   override def output: Seq[Attribute] = Nil
 }
 
-sealed trait PartitionSpec extends LeafExpression with Unevaluable {
+sealed trait PartitionSpec extends LeafExpression with Inevaluable {
   override def dataType: DataType = throw new IllegalStateException(
     "PartitionSpec.dataType should not be called.")
   override def nullable: Boolean = throw new IllegalStateException(
@@ -91,7 +91,7 @@ case class UnresolvedPartitionSpec(
   override lazy val resolved = false
 }
 
-sealed trait FieldName extends LeafExpression with Unevaluable {
+sealed trait FieldName extends LeafExpression with Inevaluable {
   def name: Seq[String]
   override def dataType: DataType = throw new IllegalStateException(
     "FieldName.dataType should not be called.")
@@ -103,7 +103,7 @@ case class UnresolvedFieldName(name: Seq[String]) extends FieldName {
   override lazy val resolved = false
 }
 
-sealed trait FieldPosition extends LeafExpression with Unevaluable {
+sealed trait FieldPosition extends LeafExpression with Inevaluable {
   def position: ColumnPosition
   override def dataType: DataType = throw new IllegalStateException(
     "FieldPosition.dataType should not be called.")

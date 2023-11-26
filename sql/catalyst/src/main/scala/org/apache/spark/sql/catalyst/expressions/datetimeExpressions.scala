@@ -102,7 +102,7 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
   """,
   group = "datetime_funcs",
   since = "3.1.0")
-case class CurrentTimeZone() extends LeafExpression with Unevaluable {
+case class CurrentTimeZone() extends LeafExpression with Inevaluable {
   override def nullable: Boolean = false
   override def dataType: DataType = StringType
   override def prettyName: String = "current_timezone"

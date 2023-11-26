@@ -267,7 +267,7 @@ case object SinglePartition extends Partitioning {
  * across Spark versions. Violation of this requirement may bring silent correctness issue.
  */
 case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
-  extends Expression with Partitioning with Unevaluable {
+  extends Expression with Partitioning with Inevaluable {
 
   override def children: Seq[Expression] = expressions
   override def nullable: Boolean = false
@@ -376,7 +376,7 @@ object KeyGroupedPartitioning {
  * into its child.
  */
 case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
-  extends Expression with Partitioning with Unevaluable {
+  extends Expression with Partitioning with Inevaluable {
 
   override def children: Seq[SortOrder] = ordering
   override def nullable: Boolean = false
@@ -440,7 +440,7 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
  * Outer Join operators.
  */
 case class PartitioningCollection(partitionings: Seq[Partitioning])
-  extends Expression with Partitioning with Unevaluable {
+  extends Expression with Partitioning with Inevaluable {
 
   require(
     partitionings.map(_.numPartitions).distinct.length == 1,

@@ -44,7 +44,7 @@ sealed trait WindowSpec
 case class WindowSpecDefinition(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    frameSpecification: WindowFrame) extends Expression with WindowSpec with Unevaluable {
+    frameSpecification: WindowFrame) extends Expression with WindowSpec with Inevaluable {
 
   override def children: Seq[Expression] = partitionSpec ++ orderSpec :+ frameSpecification
 
@@ -153,7 +153,7 @@ case object RangeFrame extends FrameType {
 /**
  * The trait used to represent special boundaries used in a window frame.
  */
-sealed trait SpecialFrameBoundary extends LeafExpression with Unevaluable {
+sealed trait SpecialFrameBoundary extends LeafExpression with Inevaluable {
   override def dataType: DataType = NullType
   override def nullable: Boolean = false
 }
@@ -175,7 +175,7 @@ case object CurrentRow extends SpecialFrameBoundary {
 /**
  * Represents a window frame.
  */
-sealed trait WindowFrame extends Expression with Unevaluable {
+sealed trait WindowFrame extends Expression with Inevaluable {
   override def dataType: DataType = throw QueryExecutionErrors.dataTypeOperationUnsupportedError
   override def nullable: Boolean = false
 }
@@ -285,7 +285,7 @@ case class SpecifiedWindowFrame(
 
 case class UnresolvedWindowExpression(
     child: Expression,
-    windowSpec: WindowSpecReference) extends UnaryExpression with Unevaluable {
+    windowSpec: WindowSpecReference) extends UnaryExpression with Inevaluable {
 
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
@@ -299,7 +299,7 @@ case class UnresolvedWindowExpression(
 
 case class WindowExpression(
     windowFunction: Expression,
-    windowSpec: WindowSpecDefinition) extends Expression with Unevaluable
+    windowSpec: WindowSpecDefinition) extends Expression with Inevaluable
   with BinaryLike[Expression] {
 
   override def left: Expression = windowFunction
@@ -399,7 +399,7 @@ trait OffsetWindowFunction extends WindowFunction {
  * will get the value of x 2 rows back from the current row in the partition.
  */
 sealed abstract class FrameLessOffsetWindowFunction
-  extends OffsetWindowFunction with Unevaluable with ImplicitCastInputTypes {
+  extends OffsetWindowFunction with Inevaluable with ImplicitCastInputTypes {
 
   /*
    * The result of an OffsetWindowFunction is dependent on the frame in which the
@@ -407,7 +407,7 @@ sealed abstract class FrameLessOffsetWindowFunction
    * both the input and the default expression are foldable, the result is still not foldable due to
    * the frame.
    *
-   * Note, the value of foldable is set to false in the trait Unevaluable
+   * Note, the value of foldable is set to false in the trait Inevaluable
    *
    * override def foldable: Boolean = false
    */

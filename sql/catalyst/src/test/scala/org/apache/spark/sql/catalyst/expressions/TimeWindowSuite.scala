@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampN
 
 class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with PrivateMethodTester {
 
-  test("time window is unevaluable") {
+  test("time window is inevaluable") {
     intercept[UnsupportedOperationException] {
       evaluateWithoutCodegen(TimeWindow(Literal(10L), "1 second", "1 second", "0 second"))
     }

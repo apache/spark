@@ -161,7 +161,7 @@ object AssertTrue {
   """,
   since = "1.6.0",
   group = "misc_funcs")
-case class CurrentDatabase() extends LeafExpression with Unevaluable {
+case class CurrentDatabase() extends LeafExpression with Inevaluable {
   override def dataType: DataType = StringType
   override def nullable: Boolean = false
   override def prettyName: String = "current_database"
@@ -180,7 +180,7 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
   """,
   since = "3.1.0",
   group = "misc_funcs")
-case class CurrentCatalog() extends LeafExpression with Unevaluable {
+case class CurrentCatalog() extends LeafExpression with Inevaluable {
   override def dataType: DataType = StringType
   override def nullable: Boolean = false
   override def prettyName: String = "current_catalog"
@@ -295,7 +295,7 @@ case class TypeOf(child: Expression) extends UnaryExpression {
   since = "3.2.0",
   group = "misc_funcs")
 // scalastyle:on line.size.limit
-case class CurrentUser() extends LeafExpression with Unevaluable {
+case class CurrentUser() extends LeafExpression with Inevaluable {
   override def nullable: Boolean = false
   override def dataType: DataType = StringType
   override def prettyName: String = "current_user"

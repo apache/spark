@@ -2339,7 +2339,7 @@ object AnsiCast {
  * we accept `DecimalType` with any valid precision/scale.
  */
 case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: Seq[String] = Nil)
-  extends UnaryExpression with Unevaluable {
+  extends UnaryExpression with Inevaluable {
   override lazy val resolved = false
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UP_CAST)

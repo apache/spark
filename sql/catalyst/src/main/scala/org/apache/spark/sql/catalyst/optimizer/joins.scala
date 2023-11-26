@@ -144,7 +144,7 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     val attributes = e.references.toSeq
     val emptyRow = new GenericInternalRow(attributes.length)
     val boundE = BindReferences.bindReference(e, attributes)
-    if (boundE.exists(_.isInstanceOf[Unevaluable])) return false
+    if (boundE.exists(_.isInstanceOf[Inevaluable])) return false
 
     // some expressions, like map(), may throw an exception when dealing with null values.
     // therefore, we need to handle exceptions.
@@ -204,7 +204,7 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
  */
 object ExtractPythonUDFFromJoinCondition extends Rule[LogicalPlan] with PredicateHelper {
 
-  private def hasUnevaluablePythonUDF(expr: Expression, j: Join): Boolean = {
+  private def hasInevaluablePythonUDF(expr: Expression, j: Join): Boolean = {
     expr.exists { e =>
       PythonUDF.isScalarPythonUDF(e) && !canEvaluate(e, j.left) && !canEvaluate(e, j.right)
     }
@@ -212,7 +212,7 @@ object ExtractPythonUDFFromJoinCondition extends Rule[LogicalPlan] with Predicat
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsAllPatterns(PYTHON_UDF, JOIN)) {
-    case j @ Join(_, _, joinType, Some(cond), _) if hasUnevaluablePythonUDF(cond, j) =>
+    case j @ Join(_, _, joinType, Some(cond), _) if hasInevaluablePythonUDF(cond, j) =>
       if (!joinType.isInstanceOf[InnerLike]) {
         // The current strategy supports only InnerLike join because for other types,
         // it breaks SQL semantic if we run the join condition as a filter after join. If we pass
@@ -223,7 +223,7 @@ object ExtractPythonUDFFromJoinCondition extends Rule[LogicalPlan] with Predicat
       }
       // If condition expression contains python udf, it will be moved out from
       // the new join conditions.
-      val (udf, rest) = splitConjunctivePredicates(cond).partition(hasUnevaluablePythonUDF(_, j))
+      val (udf, rest) = splitConjunctivePredicates(cond).partition(hasInevaluablePythonUDF(_, j))
       val newCondition = if (rest.isEmpty) {
         logWarning(s"The join condition:$cond of the join plan contains PythonUDF only," +
           s" it will be moved out and the join plan will be turned to cross join.")

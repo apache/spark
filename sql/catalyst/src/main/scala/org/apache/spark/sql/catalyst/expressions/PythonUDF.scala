@@ -58,7 +58,7 @@ case class PythonUDF(
     evalType: Int,
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId)
-  extends Expression with Unevaluable with NonSQLExpression with UserDefinedExpression {
+  extends Expression with Inevaluable with NonSQLExpression with UserDefinedExpression {
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
@@ -89,7 +89,7 @@ case class PrettyPythonUDF(
     name: String,
     dataType: DataType,
     children: Seq[Expression])
-  extends Expression with Unevaluable with NonSQLExpression {
+  extends Expression with Inevaluable with NonSQLExpression {
 
   override def toString: String = s"$name(${children.mkString(", ")})"
 

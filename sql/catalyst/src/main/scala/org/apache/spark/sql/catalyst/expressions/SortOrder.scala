@@ -64,7 +64,7 @@ case class SortOrder(
     direction: SortDirection,
     nullOrdering: NullOrdering,
     sameOrderExpressions: Seq[Expression])
-  extends Expression with Unevaluable {
+  extends Expression with Inevaluable {
 
   override def children: Seq[Expression] = child +: sameOrderExpressions
 

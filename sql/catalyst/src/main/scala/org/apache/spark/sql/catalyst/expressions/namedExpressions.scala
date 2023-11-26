@@ -264,7 +264,7 @@ case class AttributeReference(
     override val metadata: Metadata = Metadata.empty)(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifier: Seq[String] = Seq.empty[String])
-  extends Attribute with Unevaluable {
+  extends Attribute with Inevaluable {
 
   override lazy val treePatternBits: BitSet = AttributeReferenceTreeBits.bits
 
@@ -382,7 +382,7 @@ case class AttributeReference(
 case class PrettyAttribute(
     name: String,
     dataType: DataType = NullType)
-  extends Attribute with Unevaluable {
+  extends Attribute with Inevaluable {
 
   def this(attribute: Attribute) = this(attribute.name, attribute match {
     case a: AttributeReference => a.dataType
@@ -415,7 +415,7 @@ case class PrettyAttribute(
  * plan. This is used for correlated subqueries.
  */
 case class OuterReference(e: NamedExpression)
-  extends LeafExpression with NamedExpression with Unevaluable {
+  extends LeafExpression with NamedExpression with Inevaluable {
   override def dataType: DataType = e.dataType
   override def nullable: Boolean = e.nullable
   override def prettyName: String = "outer"

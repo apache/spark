@@ -65,7 +65,7 @@ import org.apache.spark.unsafe.types.UTF8String
 // scalastyle:on line.size.limit line.contains.tab
 case class SessionWindow(timeColumn: Expression, gapDuration: Expression) extends Expression
   with ImplicitCastInputTypes
-  with Unevaluable
+  with Inevaluable
   with NonSQLExpression {
 
   override def children: Seq[Expression] = Seq(timeColumn, gapDuration)

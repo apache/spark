@@ -47,7 +47,7 @@ import org.apache.spark.sql.types._
  * - [[Nondeterministic]]: an expression that is not deterministic.
  * - [[Stateful]]: an expression that contains mutable state. For example, MonotonicallyIncreasingID
  *                 and Rand. A stateful expression is always non-deterministic.
- * - [[Unevaluable]]: an expression that is not supposed to be evaluated.
+ * - [[Inevaluable]]: an expression that is not supposed to be evaluated.
  * - [[CodegenFallback]]: an expression that does not have code gen implemented and falls back to
  *                        interpreted mode.
  * - [[NullIntolerant]]: an expression that is null intolerant (i.e. any null input will result in
@@ -335,9 +335,9 @@ abstract class Expression extends TreeNode[Expression] {
  * optimization time (e.g. Star) and should not be evaluated during query planning and
  * execution.
  */
-trait Unevaluable extends Expression {
+trait Inevaluable extends Expression {
 
-  /** Unevaluable is not foldable because we don't have an eval for it. */
+  /** Inevaluable is not foldable because we don't have an eval for it. */
   final override def foldable: Boolean = false
 
   final override def eval(input: InternalRow = null): Any =

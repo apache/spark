@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.DataType
 case class TransformExpression(
     function: BoundFunction,
     children: Seq[Expression],
-    numBucketsOpt: Option[Int] = None) extends Expression with Unevaluable {
+    numBucketsOpt: Option[Int] = None) extends Expression with Inevaluable {
 
   override def nullable: Boolean = true
 

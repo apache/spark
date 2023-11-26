@@ -748,7 +748,7 @@ case class LambdaVariable(
 case class UnresolvedMapObjects(
     @transient function: Expression => Expression,
     child: Expression,
-    customCollectionCls: Option[Class[_]] = None) extends UnaryExpression with Unevaluable {
+    customCollectionCls: Option[Class[_]] = None) extends UnaryExpression with Inevaluable {
   override lazy val resolved = false
 
   override def dataType: DataType = customCollectionCls.map(ObjectType.apply).getOrElse {
@@ -1146,7 +1146,7 @@ case class UnresolvedCatalystToExternalMap(
     child: Expression,
     @transient keyFunction: Expression => Expression,
     @transient valueFunction: Expression => Expression,
-    collClass: Class[_]) extends UnaryExpression with Unevaluable {
+    collClass: Class[_]) extends UnaryExpression with Inevaluable {
 
   override lazy val resolved = false
 
