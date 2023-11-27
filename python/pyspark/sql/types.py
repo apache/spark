@@ -50,7 +50,12 @@ from py4j.java_gateway import GatewayClient, JavaClass, JavaGateway, JavaObject,
 
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.utils import has_numpy, get_active_spark_context
-from pyspark.errors import PySparkNotImplementedError, PySparkTypeError, PySparkValueError
+from pyspark.errors import (
+    PySparkNotImplementedError,
+    PySparkTypeError,
+    PySparkValueError,
+    PySparkIndexError,
+)
 
 if has_numpy:
     import numpy as np
@@ -1042,7 +1047,10 @@ class StructType(DataType):
             try:
                 return self.fields[key]
             except IndexError:
-                raise IndexError("StructType index out of range")
+                raise PySparkIndexError(
+                    error_class="INDEX_OUT_OF_RANGE",
+                    message_parameters={"arg_name": "StructType", "index": str(key)},
+                )
         elif isinstance(key, slice):
             return StructType(self.fields[key])
         else:
