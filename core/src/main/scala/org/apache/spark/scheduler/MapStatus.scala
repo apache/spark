@@ -95,7 +95,7 @@ private[spark] object MapStatus {
     } else if (size <= 1L) {
       1
     } else {
-      math.min(255, math.ceil(math.log(size) / math.log(LOG_BASE)).toInt).toByte
+      math.min(255, math.ceil(math.log(size.toDouble) / math.log(LOG_BASE)).toInt).toByte
     }
   }
 
@@ -276,12 +276,12 @@ private[spark] object HighlyCompressedMapStatus {
         val skewSizeThreshold =
           Math.max(
             medianSize * accurateBlockSkewedFactor,
-            sortedSizes(totalNumBlocks - maxAccurateSkewedBlockNumber)
+            sortedSizes(totalNumBlocks - maxAccurateSkewedBlockNumber).toDouble
           )
-        Math.min(shuffleAccurateBlockThreshold, skewSizeThreshold)
+        Math.min(shuffleAccurateBlockThreshold.toDouble, skewSizeThreshold)
       } else {
         // Disable skew detection if accurateBlockSkewedFactor <= 0
-        shuffleAccurateBlockThreshold
+        shuffleAccurateBlockThreshold.toDouble
       }
 
     val hugeBlockSizes = mutable.Map.empty[Int, Byte]

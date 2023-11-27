@@ -87,7 +87,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
   test("backward compatibility with old path") {
     val ds = DataSource.lookupDataSource(
       "org.apache.spark.sql.execution.streaming.TextSocketSourceProvider",
-      spark.sqlContext.conf).getConstructor().newInstance()
+      spark.sessionState.conf).getConstructor().newInstance()
     assert(ds.isInstanceOf[TextSocketSourceProvider], "Could not find socket source")
   }
 

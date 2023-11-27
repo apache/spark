@@ -704,11 +704,14 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.assertRaises(ParseException):
             self.connect.createDataFrame(data, "col1 magic_type, col2 int, col3 int, col4 int")
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "Length mismatch: Expected axis has 3 elements, new values have 4 elements",
-        ):
+        with self.assertRaises(PySparkValueError) as pe:
             self.connect.createDataFrame(data, "col1 int, col2 int, col3 int")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="AXIS_LENGTH_MISMATCH",
+            message_parameters={"expected_length": "3", "actual_length": "4"},
+        )
 
     def test_with_local_rows(self):
         # SPARK-41789, SPARK-41810: Test creating a dataframe with list of rows and dictionaries
@@ -3708,9 +3711,7 @@ class ChannelBuilderTests(unittest.TestCase):
         with self.assertRaises(ValueError) as ve:
             chan = ChannelBuilder("sc://host/;session_id=abcd")
             SparkConnectClient(chan)
-        self.assertIn(
-            "Parameter value 'session_id' must be a valid UUID format.", str(ve.exception)
-        )
+        self.assertIn("Parameter value session_id must be a valid UUID format", str(ve.exception))
 
         chan = ChannelBuilder("sc://host/")
         self.assertIsNone(chan.session_id)

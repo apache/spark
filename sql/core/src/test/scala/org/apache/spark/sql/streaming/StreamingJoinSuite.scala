@@ -618,7 +618,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
           }
         }
 
-        val numPartitions = spark.sqlContext.conf.getConf(SQLConf.SHUFFLE_PARTITIONS)
+        val numPartitions = spark.sessionState.conf.getConf(SQLConf.SHUFFLE_PARTITIONS)
 
         assert(query.lastExecution.executedPlan.collect {
           case j @ StreamingSymmetricHashJoinExec(_, _, _, _, _, _, _, _, _,

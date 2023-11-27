@@ -31,12 +31,12 @@ pandas-stubs<1.2.0.54
 mkdocs
 
 # Documentation (Python)
-pydata_sphinx_theme
+pydata_sphinx_theme>=0.13
 ipython
 nbsphinx
 numpydoc
-jinja2<3.0.0
-sphinx<3.1.0
+jinja2
+sphinx==4.2.0
 sphinx-plotly-directive
 sphinx-copybutton
 docutils<0.18.0

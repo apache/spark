@@ -299,7 +299,7 @@ class QuantileSummaries(
           result(pos) = sampled.last.value
         } else {
           val (newIndex, newMinRank, approxQuantile) =
-            findApproxQuantile(index, minRank, targetError, percentile)
+            findApproxQuantile(index, minRank, targetError.toDouble, percentile)
           index = newIndex
           minRank = newMinRank
           result(pos) = approxQuantile
