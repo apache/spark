@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils._
+import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -422,7 +423,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
       f7 === floorDate && f7 === ceilDate || f7 === floorDateNTZ && f7 === ceilDateNTZ)
     assertEquivalent(
       castTimestamp(f7) <=> tsLit || castTimestampNTZ(f7) <=> tsNTZLit,
-      f7 <=> floorDate && f7 <=> ceilDate || f7 <=> floorDateNTZ && f7 <=> ceilDateNTZ)
+      FalseLiteral || FalseLiteral)
     assertEquivalent(
       castTimestamp(f7) < tsLit || castTimestampNTZ(f7) < tsNTZLit,
       f7 < ceilDate || f7 < ceilDateNTZ)
