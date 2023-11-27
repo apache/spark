@@ -12454,7 +12454,7 @@ def concat(*cols: "ColumnOrName") -> Column:
 @_try_remote_functions
 def array_position(col: "ColumnOrName", value: Any) -> Column:
     """
-    Collection function: Locates the position of the first occurrence of the given value
+    Array function: Locates the position of the first occurrence of the given value
     in the given array. Returns null if either of the arguments are null.
 
     .. versionadded:: 2.4.0
@@ -12481,9 +12481,62 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(["c", "b", "a"],), ([],)], ['data'])
-    >>> df.select(array_position(df.data, "a")).collect()
-    [Row(array_position(data, a)=3), Row(array_position(data, a)=0)]
+    Example 1: Finding the position of a string in an array of strings
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["c", "b", "a"],)], ['data'])
+    >>> df.select(sf.array_position(df.data, "a")).show()
+    +-----------------------+
+    |array_position(data, a)|
+    +-----------------------+
+    |                      3|
+    +-----------------------+
+
+    Example 2: Finding the position of a string in an empty array
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, StringType, StructField, StructType
+    >>> schema = StructType([StructField("data", ArrayType(StringType()), True)])
+    >>> df = spark.createDataFrame([([],)], schema=schema)
+    >>> df.select(sf.array_position(df.data, "a")).show()
+    +-----------------------+
+    |array_position(data, a)|
+    +-----------------------+
+    |                      0|
+    +-----------------------+
+
+    Example 3: Finding the position of an integer in an array of integers
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3],)], ['data'])
+    >>> df.select(sf.array_position(df.data, 2)).show()
+    +-----------------------+
+    |array_position(data, 2)|
+    +-----------------------+
+    |                      2|
+    +-----------------------+
+
+    Example 4: Finding the position of a non-existing value in an array
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["c", "b", "a"],)], ['data'])
+    >>> df.select(sf.array_position(df.data, "d")).show()
+    +-----------------------+
+    |array_position(data, d)|
+    +-----------------------+
+    |                      0|
+    +-----------------------+
+
+    Example 5: Finding the position of a value in an array with nulls
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([None, "b", "a"],)], ['data'])
+    >>> df.select(sf.array_position(df.data, "a")).show()
+    +-----------------------+
+    |array_position(data, a)|
+    +-----------------------+
+    |                      3|
+    +-----------------------+
     """
     return _invoke_function("array_position", _to_java_column(col), value)
 
