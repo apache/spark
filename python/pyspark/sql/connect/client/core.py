@@ -595,23 +595,8 @@ class SparkConnectClient(object):
         self._user_id = None
         self._retry_policies: List[RetryPolicy] = []
 
-        default_policy_args = {
-            # Please synchronize changes here with Scala side
-            # GrpcRetryHandler.scala
-            #
-            # Note: the number of retries is selected so that the maximum tolerated wait
-            # is guaranteed to be at least 10 minutes
-            "max_retries": 15,
-            "backoff_multiplier": 4.0,
-            "initial_backoff": 50,
-            "max_backoff": 60000,
-            "jitter": 500,
-            "min_jitter_threshold": 2000,
-        }
-        if retry_policy:
-            default_policy_args.update(retry_policy)
-
-        default_policy = DefaultPolicy(**default_policy_args)
+        retry_policy_args = retry_policy or dict()
+        default_policy = DefaultPolicy(**retry_policy_args)
         self.set_retry_policies([default_policy])
 
         if self._builder.session_id is None:
@@ -1525,9 +1510,15 @@ class SparkConnectClient(object):
         from pyspark.sql.connect.conf import RuntimeConf
 
         conf = RuntimeConf(self)
-        if conf.get("spark.sql.connect.serverStacktrace.enabled") == "true":
+        try:
+            if conf.get("spark.sql.connect.serverStacktrace.enabled") == "true":
+                return True
+            return conf.get("spark.sql.pyspark.jvmStacktrace.enabled") == "true"
+        except Exception as e:  # noqa: F841
+            # Falls back to true if an exception occurs during reading the config.
+            # Otherwise, it will recursively try to get the conf when it consistently
+            # fails, ending up with `RecursionError`.
             return True
-        return conf.get("spark.sql.pyspark.jvmStacktrace.enabled") == "true"
 
     def _handle_rpc_error(self, rpc_error: grpc.RpcError) -> NoReturn:
         """
@@ -1614,7 +1605,10 @@ class SparkConnectClient(object):
                 f"{response.session_id} != {self._session_id}"
             )
         if self._server_session_id is not None:
-            if response.server_side_session_id != self._server_session_id:
+            if (
+                response.server_side_session_id
+                and response.server_side_session_id != self._server_session_id
+            ):
                 raise PySparkAssertionError(
                     "Received incorrect server side session identifier for request. "
                     "Please create a new Spark Session to reconnect. ("

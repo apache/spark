@@ -245,7 +245,7 @@ private[spark] object HadoopFSUtils extends Logging {
     val allLeafStatuses = {
       val (dirs, topLevelFiles) = filteredStatuses.partition(_.isDirectory)
       val filteredNestedFiles: Seq[FileStatus] = contextOpt match {
-        case Some(context) if dirs.size > parallelismThreshold =>
+        case Some(context) if dirs.length > parallelismThreshold =>
           parallelListLeafFilesInternal(
             context,
             dirs.map(_.getPath).toImmutableArraySeq,
