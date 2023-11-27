@@ -592,7 +592,7 @@ abstract class LDAModel private[ml] (
   def describeTopics(maxTermsPerTopic: Int): DataFrame = {
     val topics = getModel.describeTopics(maxTermsPerTopic).zipWithIndex.map {
       case ((termIndices, termWeights), topic) =>
-        (topic, termIndices.toSeq, termWeights.toSeq)
+        (topic, termIndices.toImmutableArraySeq, termWeights.toImmutableArraySeq)
     }
     sparkSession.createDataFrame(topics.toImmutableArraySeq)
       .toDF("topic", "termIndices", "termWeights")

@@ -903,13 +903,13 @@ case class MapObjects private(
     case ObjectType(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
       _.asInstanceOf[scala.collection.Seq[_]].toSeq
     case ObjectType(cls) if cls.isArray =>
-      _.asInstanceOf[Array[_]].toSeq
+      _.asInstanceOf[Array[_]].toImmutableArraySeq
     case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
       _.asInstanceOf[java.util.List[_]].asScala.toSeq
     case ObjectType(cls) if cls == classOf[Object] =>
       (inputCollection) => {
         if (inputCollection.getClass.isArray) {
-          inputCollection.asInstanceOf[Array[_]].toSeq
+          inputCollection.asInstanceOf[Array[_]].toImmutableArraySeq
         } else {
           inputCollection.asInstanceOf[scala.collection.Seq[_]]
         }

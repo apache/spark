@@ -74,7 +74,7 @@ object HiveResult {
         executedPlan.executeCollect().map(_.getString(1)).toImmutableArraySeq
       case other =>
         val timeFormatters = getTimeFormatters
-        val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
+        val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toImmutableArraySeq
         // We need the types so we can output struct field names
         val types = executedPlan.output.map(_.dataType)
         // Reformat to match hive tab delimited output.

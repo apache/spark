@@ -20,6 +20,8 @@ import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 
+import org.apache.spark.util.ArrayImplicits._
+
 private[ml] object JsonMatrixConverter {
 
   /** Unique class name for identifying JSON object encoded by this class. */
@@ -61,9 +63,9 @@ private[ml] object JsonMatrixConverter {
           ("type" -> 0) ~
           ("numRows" -> numRows) ~
           ("numCols" -> numCols) ~
-          ("colPtrs" -> colPtrs.toSeq) ~
-          ("rowIndices" -> rowIndices.toSeq) ~
-          ("values" -> values.toSeq) ~
+          ("colPtrs" -> colPtrs.toImmutableArraySeq) ~
+          ("rowIndices" -> rowIndices.toImmutableArraySeq) ~
+          ("values" -> values.toImmutableArraySeq) ~
           ("isTransposed" -> isTransposed)
         compact(render(jValue))
       case DenseMatrix(numRows, numCols, values, isTransposed) =>
@@ -71,7 +73,7 @@ private[ml] object JsonMatrixConverter {
           ("type" -> 1) ~
           ("numRows" -> numRows) ~
           ("numCols" -> numCols) ~
-          ("values" -> values.toSeq) ~
+          ("values" -> values.toImmutableArraySeq) ~
           ("isTransposed" -> isTransposed)
         compact(render(jValue))
       case _ =>

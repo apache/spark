@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Window}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * We need to take care of special floating numbers (NaN and -0.0) in several places:
@@ -133,7 +134,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
       val fields = expr.dataType.asInstanceOf[StructType].fieldNames.zipWithIndex.map {
         case (name, i) => Seq(Literal(name), normalize(GetStructField(expr, i)))
       }
-      val struct = CreateNamedStruct(fields.flatten.toSeq)
+      val struct = CreateNamedStruct(fields.flatten.toImmutableArraySeq)
       KnownFloatingPointNormalized(If(IsNull(expr), Literal(null, struct.dataType), struct))
 
     case _ if expr.dataType.isInstanceOf[ArrayType] =>

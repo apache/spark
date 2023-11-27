@@ -18,6 +18,8 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
+import scala.collection.immutable
+
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 // $example on$
@@ -36,7 +38,7 @@ object TFIDFExample {
     // $example on$
     // Load documents (one per line).
     val documents: RDD[Seq[String]] = sc.textFile("data/mllib/kmeans_data.txt")
-      .map(_.split(" ").toSeq)
+      .map(l => immutable.ArraySeq.unsafeWrapArray(l.split(" ")))
 
     val hashingTF = new HashingTF()
     val tf: RDD[Vector] = hashingTF.transform(documents)
