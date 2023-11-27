@@ -2563,6 +2563,8 @@ class SparkConnectPlanner(
     // To avoid explicit handling of the result on the client, we build the expected input
     // of the relation on the server. The client has to simply forward the result.
     val result = SqlCommandResult.newBuilder()
+    // Only filled when isCommand
+    val metrics = ExecutePlanResponse.Metrics.newBuilder()
     if (isCommand) {
       // Convert the results to Arrow.
       val schema = df.schema
@@ -2596,10 +2598,10 @@ class SparkConnectPlanner(
             proto.LocalRelation
               .newBuilder()
               .setData(ByteString.copyFrom(bytes))))
+      metrics.addAllMetrics(MetricGenerator.transformPlan(df).asJava)
     } else {
-      // Trigger assertExecutedPlanPrepared to ensure post ReadyForExecution before finished
-      // executedPlan is currently called by createMetricsResponse below
-      df.queryExecution.assertExecutedPlanPrepared()
+      // No execution triggered for relations. Manually set ready
+      tracker.setReadyForExecution()
       result.setRelation(
         proto.Relation
           .newBuilder()
@@ -2622,8 +2624,17 @@ class SparkConnectPlanner(
         .setSqlCommandResult(result)
         .build())
 
-    // Send Metrics
-    responseObserver.onNext(MetricGenerator.createMetricsResponse(sessionHolder, df))
+    // Send Metrics when isCommand (i.e. show tables) which is eagerly executed & has metrics
+    // Skip metrics when !isCommand (i.e. select 1) which is not executed & doesn't have metrics
+    if (isCommand) {
+      responseObserver.onNext(
+        ExecutePlanResponse
+          .newBuilder()
+          .setSessionId(sessionHolder.sessionId)
+          .setServerSideSessionId(sessionHolder.serverSessionId)
+          .setMetrics(metrics.build)
+          .build)
+    }
   }
 
   private def handleRegisterUserDefinedFunction(
