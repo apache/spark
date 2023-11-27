@@ -180,10 +180,10 @@ abstract class OffsetWindowFunctionFrameBase(
   }
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    resetStates(rows)
     if (absOffset > rows.length) {
-      fillDefaultValue(EmptyRow)
+      prepareForDefaultValue(rows)
     } else {
+      resetStates(rows)
       if (ignoreNulls) {
         prepareForIgnoreNulls()
       } else {
@@ -191,6 +191,9 @@ abstract class OffsetWindowFunctionFrameBase(
       }
     }
   }
+
+  protected def prepareForDefaultValue(rows: ExternalAppendOnlyUnsafeRowArray): Unit =
+    fillDefaultValue(EmptyRow)
 
   protected def prepareForIgnoreNulls(): Unit = findNextRowWithNonNullInput()
 
@@ -218,6 +221,11 @@ class FrameLessOffsetWindowFunctionFrame(
     ignoreNulls: Boolean = false)
   extends OffsetWindowFunctionFrameBase(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset, ignoreNulls) {
+
+  override def prepareForDefaultValue(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    resetStates(rows)
+    fillDefaultValue(EmptyRow)
+  }
 
   override def prepareForRespectNulls(): Unit = {
     // drain the first few rows if offset is larger than zero
@@ -390,9 +398,7 @@ class UnboundedPrecedingOffsetWindowFunctionFrame(
   }
 
   override def write(index: Int, current: InternalRow): Unit = {
-    if (absOffset > input.length) {
-      // Already use default values in prepare.
-    } else if (index >= inputIndex - 1 && nextSelectedRow != null) {
+    if (index >= inputIndex - 1 && nextSelectedRow != null) {
       projection(nextSelectedRow)
     } else {
       fillDefaultValue(EmptyRow)
