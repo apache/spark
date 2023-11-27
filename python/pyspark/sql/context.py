@@ -312,24 +312,6 @@ class SQLContext:
         )
         return self.sparkSession.udf.registerJavaFunction(name, javaClassName, returnType)
 
-    # TODO(andrew): delete this once we refactor things to take in SparkSession
-    def _inferSchema(self, rdd: RDD, samplingRatio: Optional[float] = None) -> StructType:
-        """
-        Infer schema from an RDD of Row or tuple.
-
-        Parameters
-        ----------
-        rdd : :class:`RDD`
-            an RDD of Row or tuple
-        samplingRatio : float, optional
-            sampling ratio, or no sampling (default)
-
-        Returns
-        -------
-        :class:`pyspark.sql.types.StructType`
-        """
-        return self.sparkSession._inferSchema(rdd, samplingRatio)
-
     @overload
     def createDataFrame(
         self,
