@@ -22,9 +22,6 @@ import java.util.Map.Entry
 
 import scala.collection.mutable
 
-import org.json4s.{Formats, NoTypeHints}
-import org.json4s.jackson.Serialization
-
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.FileStreamSource.FileEntry
 import org.apache.spark.sql.internal.SQLConf
@@ -36,8 +33,8 @@ class FileStreamSourceLog(
     path: String)
   extends CompactibleFileStreamLog[FileEntry](metadataLogVersion, sparkSession, path) {
 
-  import CompactibleFileStreamLog._
-  import FileStreamSourceLog._
+  import org.apache.spark.sql.execution.streaming.CompactibleFileStreamLog._
+  import org.apache.spark.sql.execution.streaming.FileStreamSourceLog._
 
   // Configurations about metadata compaction
   protected override val defaultCompactInterval: Int =
@@ -51,8 +48,6 @@ class FileStreamSourceLog(
     sparkSession.sessionState.conf.fileSourceLogCleanupDelay
 
   protected override val isDeletingExpiredLog = sparkSession.sessionState.conf.fileSourceLogDeletion
-
-  private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
   // A fixed size log entry cache to cache the file entries belong to the compaction batch. It is
   // used to avoid scanning the compacted log file to retrieve it's own batch data.
