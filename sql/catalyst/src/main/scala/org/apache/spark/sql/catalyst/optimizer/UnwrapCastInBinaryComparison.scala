@@ -366,9 +366,15 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       case _: GreaterThanOrEqual =>
         GreaterThanOrEqual(fromExp, ceilDate)
       case _: EqualTo =>
-        And(EqualTo(fromExp, floorDate), EqualTo(fromExp, ceilDate))
+        if (isStartOfDay) {
+          EqualTo(fromExp, floorDate)
+        } else if (!fromExp.nullable) {
+          FalseLiteral
+        } else {
+          And(EqualTo(fromExp, floorDate), EqualTo(fromExp, ceilDate))
+        }
       case EqualNullSafe(_, _) =>
-        And(EqualNullSafe(fromExp, floorDate), EqualNullSafe(fromExp, ceilDate))
+        if (isStartOfDay) EqualNullSafe(fromExp, floorDate) else FalseLiteral
       case _: LessThan =>
         LessThan(fromExp, ceilDate)
       case _: LessThanOrEqual =>
