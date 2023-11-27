@@ -104,18 +104,6 @@ RUN python3.9 -m pip install torcheval
 # Add Deepspeed as a testing dependency for DeepspeedTorchDistributor
 RUN python3.9 -m pip install deepspeed
 
-# Additional Python deps for linter and documentation, delete this section if another Python version is used
-# TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
-#   See also https://github.com/sphinx-doc/sphinx/issues/7551.
-# Jinja2 3.0.0+ causes error when building with Sphinx.
-#   See also https://issues.apache.org/jira/browse/SPARK-35375.
-RUN python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.982' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==23.9.1'
-RUN python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.59.3' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
-RUN python3.9 -m pip install 'sphinx<3.1.0' mkdocs pydata_sphinx_theme sphinx-copybutton nbsphinx numpydoc 'jinja2<3.0.0' 'markupsafe==2.0.1' 'pyzmq<24.0.0'
-RUN python3.9 -m pip install ipython_genutils
-RUN python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8'
-RUN python3.9 -m pip install 'docutils<0.18.0'
-
 # Install Python 3.10 at the last stage to avoid breaking Python 3.9
 RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y \
@@ -151,3 +139,55 @@ RUN python3.12 -m pip install 'grpcio==1.59.3' 'grpcio-status==1.59.3' 'protobuf
 # TODO(SPARK-46078) Use official one instead of nightly build when it's ready
 RUN python3.12 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
 RUN python3.12 -m pip install torcheval
+
+
+RUN curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh && \
+    bash miniconda.sh -b -p /opt/miniconda3 && \
+    rm miniconda.sh && \
+    ln -sf /opt/miniconda3/bin/conda /usr/local/bin/conda
+
+# Additional Python deps for linter and documentation, delete this section if another Python version is used
+# Since there maybe conflicts between envs, here uses conda to manage it.
+# TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
+#   See also https://github.com/sphinx-doc/sphinx/issues/7551.
+# Jinja2 3.0.0+ causes error when building with Sphinx.
+#   See also https://issues.apache.org/jira/browse/SPARK-35375.
+RUN conda create -n doc python=3.9
+
+RUN conda run -n doc pip install \
+    'black==23.9.1' \
+    'docutils<0.18.0' \
+    'flake8==3.9.0' \
+    'googleapis-common-protos-stubs==2.2.0' \
+    'grpc-stubs==1.24.11' \
+    'grpcio==1.59.3' \
+    'ipython' \
+    'ipython_genutils' \
+    'jinja2<3.0.0' \
+    'markupsafe==2.0.1' \
+    'matplotlib' \
+    'mkdocs' \
+    'mypy-protobuf==3.3.0' \
+    'mypy==0.982' \
+    'nbsphinx' \
+    'numpy>=1.20.0' \
+    'numpydoc' \
+    'pandas' \
+    'pandas-stubs==1.2.0.53' \
+    'plotly>=4.8' \
+    'protobuf==4.25.1' \
+    'pyarrow' \
+    'pydata_sphinx_theme' \
+    'pytest-mypy-plugins==1.9.3' \
+    'pytest==7.1.3' \
+    'pyzmq<24.0.0' \
+    'sphinx-copybutton' \
+    'sphinx<3.1.0' \
+    'sphinx_plotly_directive'
+RUN conda run -n doc pip install \
+    'torch<=2.0.1' \
+    'torchvision' --index-url https://download.pytorch.org/whl/cpu
+RUN conda run -n doc pip install \
+    'torcheval'
+
+RUN conda clean --all

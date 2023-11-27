@@ -689,8 +689,13 @@ jobs:
         # Should delete this section after SPARK 3.5 EOL.
         python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.982' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==22.6.0'
         python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.59.3' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
-    - name: Python linter
+        python3.9 -m pip install 'protobuf==4.25.1' 'mypy-protobuf==3.3.0'
+    - name: Python linter for branch-3.3, branch-3.4, branch-3.5
+      if: inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4' || inputs.branch == 'branch-3.5'
       run: PYTHON_EXECUTABLE=python3.9 ./dev/lint-python
+    - name: Python linter
+      if: inputs.branch != 'branch-3.3' && inputs.branch != 'branch-3.4' && inputs.branch != 'branch-3.5'
+      run: conda run -n doc ./dev/lint-python
     - name: Install dependencies for Python code generation check
       if: inputs.branch != 'branch-3.3' && inputs.branch != 'branch-3.4'
       run: |
@@ -699,11 +704,13 @@ jobs:
         mkdir -p $HOME/buf
         tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
         rm buf-Linux-x86_64.tar.gz
-        python3.9 -m pip install 'protobuf==4.25.1' 'mypy-protobuf==3.3.0'
+    - name: Python code generation check for branch-3.5
+      if: inputs.branch == 'branch-3.5'
+      run: PATH=$PATH:$HOME/buf/bin PYTHON_EXECUTABLE=python3.9 ./dev/connect-check-protos.py
     - name: Python code generation check
-      if: inputs.branch != 'branch-3.3' && inputs.branch != 'branch-3.4'
-      run: if test -f ./dev/connect-check-protos.py; then PATH=$PATH:$HOME/buf/bin PYTHON_EXECUTABLE=python3.9 ./dev/connect-check-protos.py; fi
-    # Should delete this section after SPARK 3.5 EOL.
+      if: inputs.branch != 'branch-3.3' && inputs.branch != 'branch-3.4' && inputs.branch != 'branch-3.5'
+      run: PATH=$PATH:$HOME/buf/bin conda run -n doc ./dev/connect-check-protos.py
+      # Should delete this section after SPARK 3.5 EOL.
     - name: Install JavaScript linter dependencies for branch-3.3, branch-3.4, branch-3.5
       if: inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4' || inputs.branch == 'branch-3.5'
       run: |
@@ -751,8 +758,23 @@ jobs:
         bundle install
     - name: R linter
       run: ./dev/lint-r
-    - name: Run documentation build
+    - name: Run documentation build for branch-3.3, branch-3.4, branch-3.5
+      if: inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4' || inputs.branch == 'branch-3.5'
       run: |
+        if [ -f "./dev/is-changed.py" ]; then
+          # Skip PySpark and SparkR docs while keeping Scala/Java/SQL docs
+          pyspark_modules=`cd dev && python3.9 -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
+          if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
+          if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
+        fi
+        cd docs
+        bundle exec jekyll build
+    - name: Run documentation build
+      if: inputs.branch != 'branch-3.3' && inputs.branch != 'branch-3.4' && inputs.branch != 'branch-3.5'
+      shell: 'script -q -e -c "bash {0}"'
+      run: |
+        # See also https://github.com/conda/conda/issues/7980
+        source $(conda info --base)/etc/profile.d/conda.sh && conda activate doc
         if [ -f "./dev/is-changed.py" ]; then
           # Skip PySpark and SparkR docs while keeping Scala/Java/SQL docs
           pyspark_modules=`cd dev && python3.9 -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
