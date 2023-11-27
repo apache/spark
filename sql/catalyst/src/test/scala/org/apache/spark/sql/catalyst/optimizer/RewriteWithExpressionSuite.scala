@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Coalesce, CommonExpressionDef, CommonExpressionRef, With}
@@ -57,7 +58,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     )
   }
 
-  test("nested WITH expression") {
+  test("nested WITH expression in the definition expression") {
     val a = testRelation.output.head
     val commonExprDef = CommonExpressionDef(a + a)
     val ref = new CommonExpressionRef(commonExprDef)
@@ -83,6 +84,57 @@ class RewriteWithExpressionSuite extends PlanTest {
         .select((outerExprAttr * outerExprAttr).as("col"))
         .analyze
     )
+  }
+
+  test("nested WITH expression in the main expression") {
+    val a = testRelation.output.head
+    val commonExprDef = CommonExpressionDef(a + a)
+    val ref = new CommonExpressionRef(commonExprDef)
+    val innerExpr = With(ref + ref, Seq(commonExprDef))
+    val innerCommonExprName = "_common_expr_0"
+
+    val b = testRelation.output.last
+    val outerCommonExprDef = CommonExpressionDef(b + b)
+    val outerRef = new CommonExpressionRef(outerCommonExprDef)
+    val outerExpr = With(outerRef * outerRef + innerExpr, Seq(outerCommonExprDef))
+    val outerCommonExprName = "_common_expr_0"
+
+    val plan = testRelation.select(outerExpr.as("col"))
+    val rewrittenInnerExpr = (a + a).as(innerCommonExprName)
+    val rewrittenOuterExpr = (b + b).as(outerCommonExprName)
+    val finalExpr = rewrittenOuterExpr.toAttribute * rewrittenOuterExpr.toAttribute +
+      (rewrittenInnerExpr.toAttribute + rewrittenInnerExpr.toAttribute)
+    comparePlans(
+      Optimizer.execute(plan),
+      testRelation
+        .select((testRelation.output :+ rewrittenInnerExpr): _*)
+        .select((testRelation.output :+ rewrittenInnerExpr.toAttribute :+ rewrittenOuterExpr): _*)
+        .select(finalExpr.as("col"))
+        .analyze
+    )
+  }
+
+  test("correlated nested WITH expression is not supported") {
+    val b = testRelation.output.last
+    val outerCommonExprDef = CommonExpressionDef(b + b)
+    val outerRef = new CommonExpressionRef(outerCommonExprDef)
+
+    val a = testRelation.output.head
+    // The inner expression definition references the outer expression
+    val commonExprDef1 = CommonExpressionDef(a + a + outerRef)
+    val ref1 = new CommonExpressionRef(commonExprDef1)
+    val innerExpr1 = With(ref1 + ref1, Seq(commonExprDef1))
+
+    val outerExpr1 = With(outerRef + innerExpr1, Seq(outerCommonExprDef))
+    intercept[SparkException](Optimizer.execute(testRelation.select(outerExpr1.as("col"))))
+
+    val commonExprDef2 = CommonExpressionDef(a + a)
+    val ref2 = new CommonExpressionRef(commonExprDef2)
+    // The inner main expression references the outer expression
+    val innerExpr2 = With(ref2 + outerRef, Seq(commonExprDef1))
+
+    val outerExpr2 = With(outerRef + innerExpr2, Seq(outerCommonExprDef))
+    intercept[SparkException](Optimizer.execute(testRelation.select(outerExpr2.as("col"))))
   }
 
   test("WITH expression in filter") {

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -54,12 +55,18 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
     if (!e.containsPattern(WITH_EXPRESSION)) return e
     e match {
       case w: With =>
-        // Rewrite nested With expression in CommonExpressionDef first.
+        // Rewrite nested With expressions first
+        val child = rewriteWithExprAndInputPlans(w.child, inputPlans)
         val defs = w.defs.map(rewriteWithExprAndInputPlans(_, inputPlans))
         val refToExpr = mutable.HashMap.empty[Long, Expression]
         val childProjections = Array.fill(inputPlans.length)(mutable.ArrayBuffer.empty[Alias])
 
         defs.zipWithIndex.foreach { case (CommonExpressionDef(child, id), index) =>
+          if (child.containsPattern(COMMON_EXPR_REF)) {
+            throw SparkException.internalError(
+              "Common expression definition cannot reference other Common expression definitions")
+          }
+
           if (CollapseProject.isCheap(child)) {
             refToExpr(id) = child
           } else {
@@ -91,8 +98,12 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
           }
         }
 
-        w.child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
-          case ref: CommonExpressionRef => refToExpr(ref.id)
+        child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
+          case ref: CommonExpressionRef =>
+            if (!refToExpr.contains(ref.id)) {
+              throw SparkException.internalError("Undefined common expression id " + ref.id)
+            }
+            refToExpr(ref.id)
         }
 
       case c: ConditionalExpression =>
