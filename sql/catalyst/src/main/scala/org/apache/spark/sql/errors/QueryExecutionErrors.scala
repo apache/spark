@@ -190,7 +190,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
         "signature" -> inputTypes,
-        "result" -> outputType),
+        "result" -> outputType,
+        "reason" -> e.toString),
       cause = e)
   }
 

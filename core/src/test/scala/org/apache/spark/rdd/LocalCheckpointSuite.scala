@@ -159,7 +159,7 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
 
   test("missing checkpoint block fails with informative message") {
     val rdd = newRdd.localCheckpoint()
-    val numPartitions = rdd.partitions.size
+    val numPartitions = rdd.partitions.length
     val partitionIndices = rdd.partitions.map(_.index)
     val bmm = sc.env.blockManager.master
 
