@@ -315,7 +315,9 @@ class CrossValidator(
         parallelism: int = 1,
         foldCol: str = "",
     ) -> None:
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(CrossValidator, self).__init__()
         self._setDefault(parallelism=1)
         self.__class__._set(**kwargs)
@@ -335,7 +337,9 @@ class CrossValidator(
         """
         Sets params for cross validator.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("3.5.0")

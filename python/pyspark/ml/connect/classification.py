@@ -207,7 +207,9 @@ class LogisticRegression(
             seed: int = 0,
         )
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(LogisticRegression, self).__init__()
         self.__class__._set(**kwargs)
 

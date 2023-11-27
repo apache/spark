@@ -227,7 +227,9 @@ class BinaryClassificationEvaluator(
         weightCol: Optional[str] = None,
         numBins: int = 1000,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(BinaryClassificationEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.BinaryClassificationEvaluator", self.uid
@@ -297,7 +299,9 @@ class BinaryClassificationEvaluator(
         """
         Sets params for binary classification evaluator.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
 
@@ -375,7 +379,9 @@ class RegressionEvaluator(
         weightCol: Optional[str] = None,
         throughOrigin: bool = False,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(RegressionEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.RegressionEvaluator", self.uid
@@ -443,7 +449,9 @@ class RegressionEvaluator(
         """
         Sets params for regression evaluator.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
 
@@ -561,7 +569,9 @@ class MulticlassClassificationEvaluator(
             "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator", self.uid
         )
         self._setDefault(metricName="f1", metricLabel=0.0, beta=1.0, eps=1e-15)
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         self.__class__._set(**kwargs)
 
     @since("1.5.0")
@@ -664,7 +674,9 @@ class MulticlassClassificationEvaluator(
         """
         Sets params for multiclass classification evaluator.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
 
@@ -733,7 +745,9 @@ class MultilabelClassificationEvaluator(
         metricName: "MultilabelClassificationEvaluatorMetricType" = "f1Measure",
         metricLabel: float = 0.0,
     ) -> None:
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(MultilabelClassificationEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.MultilabelClassificationEvaluator", self.uid
@@ -797,7 +811,9 @@ class MultilabelClassificationEvaluator(
         """
         Sets params for multilabel classification evaluator.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
 
@@ -876,7 +892,9 @@ class ClusteringEvaluator(
         distanceMeasure: str = "squaredEuclidean",
         weightCol: Optional[str] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(ClusteringEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.ClusteringEvaluator", self.uid
@@ -897,7 +915,9 @@ class ClusteringEvaluator(
         """
         Sets params for clustering evaluator.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("2.3.0")
@@ -1010,7 +1030,9 @@ class RankingEvaluator(
         metricName: "RankingEvaluatorMetricType" = "meanAveragePrecision",
         k: int = 10,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(RankingEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.RankingEvaluator", self.uid
@@ -1072,7 +1094,9 @@ class RankingEvaluator(
         """
         Sets params for ranking evaluator.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
 

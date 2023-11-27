@@ -225,7 +225,9 @@ class Binarizer(
         inputCols: Optional[List[str]] = None,
         outputCols: Optional[List[str]] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(Binarizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Binarizer", self.uid)
         self._setDefault(threshold=0.0)
@@ -265,7 +267,9 @@ class Binarizer(
         """
         Sets params for this Binarizer.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("1.4.0")
@@ -568,7 +572,9 @@ class BucketedRandomProjectionLSH(
         numHashTables: int = 1,
         bucketLength: Optional[float] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(BucketedRandomProjectionLSH, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.BucketedRandomProjectionLSH", self.uid
@@ -588,7 +594,9 @@ class BucketedRandomProjectionLSH(
         """
         Sets params for this BucketedRandomProjectionLSH.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("2.2.0")
@@ -775,7 +783,9 @@ class Bucketizer(
         inputCols: Optional[List[str]] = None,
         outputCols: Optional[List[str]] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(Bucketizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Bucketizer", self.uid)
         self._setDefault(handleInvalid="error")
@@ -818,7 +828,9 @@ class Bucketizer(
         """
         Sets params for this Bucketizer.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("1.4.0")
@@ -1050,7 +1062,9 @@ class CountVectorizer(
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(CountVectorizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.CountVectorizer", self.uid)
         self.__class__.setParams(**kwargs)
@@ -1070,7 +1084,9 @@ class CountVectorizer(
         """
         Set the params for the CountVectorizer
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("1.6.0")
@@ -1258,7 +1274,9 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["DCT"], Jav
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(DCT, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.DCT", self.uid)
         self._setDefault(inverse=False)
@@ -1275,7 +1293,9 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["DCT"], Jav
         """
         Sets params for this DCT.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("1.6.0")
@@ -1358,7 +1378,9 @@ class ElementwiseProduct(
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(ElementwiseProduct, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.ElementwiseProduct", self.uid
@@ -1376,7 +1398,9 @@ class ElementwiseProduct(
         """
         Sets params for this ElementwiseProduct.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("2.0.0")
@@ -1487,7 +1511,9 @@ class FeatureHasher(
         outputCol: Optional[str] = None,
         categoricalCols: Optional[List[str]] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(FeatureHasher, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.FeatureHasher", self.uid)
         self._setDefault(numFeatures=1 << 18)
@@ -1505,7 +1531,9 @@ class FeatureHasher(
         """
         Sets params for this FeatureHasher.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("2.3.0")
@@ -1601,7 +1629,9 @@ class HashingTF(
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(HashingTF, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.HashingTF", self.uid)
         self._setDefault(numFeatures=1 << 18, binary=False)
@@ -1619,7 +1649,9 @@ class HashingTF(
         """
         Sets params for this HashingTF.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("2.0.0")
@@ -1744,7 +1776,9 @@ class IDF(JavaEstimator["IDFModel"], _IDFParams, JavaMLReadable["IDF"], JavaMLWr
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(IDF, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IDF", self.uid)
         self.__class__.setParams(**kwargs)
@@ -1760,7 +1794,9 @@ class IDF(JavaEstimator["IDFModel"], _IDFParams, JavaMLReadable["IDF"], JavaMLWr
         """
         Sets params for this IDF.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("1.4.0")
@@ -2028,7 +2064,9 @@ class Imputer(
         outputCol: Optional[str] = None,
         relativeError: float = 0.001,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(Imputer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Imputer", self.uid)
         self.__class__.setParams(**kwargs)
@@ -2072,7 +2110,9 @@ class Imputer(
         """
         Sets params for this Imputer.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("2.2.0")
@@ -2217,7 +2257,9 @@ class Interaction(
     """
 
     def __init__(self, *, inputCols: Optional[List[str]] = None, outputCol: Optional[str] = None):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(Interaction, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Interaction", self.uid)
         self._setDefault()
@@ -2230,7 +2272,9 @@ class Interaction(
         """
         Sets params for this Interaction.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("3.0.0")
@@ -2307,7 +2351,9 @@ class MaxAbsScaler(
     """
 
     def __init__(self, *, inputCol: Optional[str] = None, outputCol: Optional[str] = None):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(MaxAbsScaler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MaxAbsScaler", self.uid)
         self._setDefault()
@@ -2320,7 +2366,9 @@ class MaxAbsScaler(
         """
         Sets params for this MaxAbsScaler.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def setInputCol(self, value: str) -> "MaxAbsScaler":
@@ -2452,7 +2500,9 @@ class MinHashLSH(
         seed: Optional[int] = None,
         numHashTables: int = 1,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(MinHashLSH, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinHashLSH", self.uid)
         self.__class__.setParams(**kwargs)
@@ -2469,7 +2519,9 @@ class MinHashLSH(
         """
         Sets params for this MinHashLSH.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def setSeed(self, value: int) -> "MinHashLSH":
@@ -2609,7 +2661,9 @@ class MinMaxScaler(
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(MinMaxScaler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinMaxScaler", self.uid)
         self.__class__.setParams(**kwargs)
@@ -2626,7 +2680,9 @@ class MinMaxScaler(
         """
         Sets params for this MinMaxScaler.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("1.6.0")
@@ -2768,7 +2824,9 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["NGram"],
     def __init__(
         self, *, n: int = 2, inputCol: Optional[str] = None, outputCol: Optional[str] = None
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(NGram, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.NGram", self.uid)
         self._setDefault(n=2)
@@ -2781,7 +2839,9 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["NGram"],
         """
         Sets params for this NGram.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("1.5.0")
@@ -2855,7 +2915,9 @@ class Normalizer(
     def __init__(
         self, *, p: float = 2.0, inputCol: Optional[str] = None, outputCol: Optional[str] = None
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(Normalizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Normalizer", self.uid)
         self._setDefault(p=2.0)
@@ -2868,7 +2930,9 @@ class Normalizer(
         """
         Sets params for this Normalizer.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("1.4.0")
@@ -3038,7 +3102,9 @@ class OneHotEncoder(
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(OneHotEncoder, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.OneHotEncoder", self.uid)
         self.__class__.setParams(**kwargs)
@@ -3079,7 +3145,9 @@ class OneHotEncoder(
         """
         Sets params for this OneHotEncoder.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("2.3.0")
@@ -3238,7 +3306,9 @@ class PolynomialExpansion(
     def __init__(
         self, *, degree: int = 2, inputCol: Optional[str] = None, outputCol: Optional[str] = None
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(PolynomialExpansion, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.PolynomialExpansion", self.uid
@@ -3253,7 +3323,9 @@ class PolynomialExpansion(
         """
         Sets params for this PolynomialExpansion.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("1.4.0")
@@ -3457,7 +3529,9 @@ class QuantileDiscretizer(
         inputCols: Optional[List[str]] = None,
         outputCols: Optional[List[str]] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(QuantileDiscretizer, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.QuantileDiscretizer", self.uid
@@ -3505,7 +3579,9 @@ class QuantileDiscretizer(
         """
         Set the params for the QuantileDiscretizer
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("2.0.0")
@@ -3730,7 +3806,9 @@ class RobustScaler(
         outputCol: Optional[str] = None,
         relativeError: float = 0.001,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(RobustScaler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RobustScaler", self.uid)
         self.__class__.setParams(**kwargs)
@@ -3750,7 +3828,9 @@ class RobustScaler(
         """
         Sets params for this RobustScaler.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("3.0.0")
@@ -3932,7 +4012,9 @@ class RegexTokenizer(
         outputCol: Optional[str] = None,
         toLowercase: bool = True,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(RegexTokenizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RegexTokenizer", self.uid)
         self._setDefault(minTokenLength=1, gaps=True, pattern="\\s+", toLowercase=True)
@@ -3952,7 +4034,9 @@ class RegexTokenizer(
         """
         Sets params for this RegexTokenizer.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("1.4.0")
@@ -4054,7 +4138,9 @@ class SQLTransformer(JavaTransformer, JavaMLReadable["SQLTransformer"], JavaMLWr
     )
 
     def __init__(self, *, statement: Optional[str] = None):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(SQLTransformer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.SQLTransformer", self.uid)
         self.__class__.setParams(**kwargs)
@@ -4064,7 +4150,9 @@ class SQLTransformer(JavaTransformer, JavaMLReadable["SQLTransformer"], JavaMLWr
         """
         Sets params for this SQLTransformer.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("1.6.0")
@@ -4181,7 +4269,9 @@ class StandardScaler(
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(StandardScaler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StandardScaler", self.uid)
         self.__class__.setParams(**kwargs)
@@ -4198,7 +4288,9 @@ class StandardScaler(
         """
         Sets params for this StandardScaler.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("1.4.0")
@@ -4435,7 +4527,9 @@ class StringIndexer(
         handleInvalid: str = "error",
         stringOrderType: str = "frequencyDesc",
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(StringIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StringIndexer", self.uid)
         self.__class__.setParams(**kwargs)
@@ -4476,7 +4570,9 @@ class StringIndexer(
         """
         Sets params for this StringIndexer.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "StringIndexerModel":
@@ -4675,7 +4771,9 @@ class IndexToString(
         outputCol: Optional[str] = None,
         labels: Optional[List[str]] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(IndexToString, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IndexToString", self.uid)
         self.__class__.setParams(**kwargs)
@@ -4691,7 +4789,9 @@ class IndexToString(
         """
         Sets params for this IndexToString.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("1.6.0")
@@ -4828,7 +4928,9 @@ class StopWordsRemover(
         inputCols: Optional[List[str]] = None,
         outputCols: Optional[List[str]] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(StopWordsRemover, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.StopWordsRemover", self.uid
@@ -4879,7 +4981,9 @@ class StopWordsRemover(
         """
         Sets params for this StopWordRemover.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("1.6.0")
@@ -5005,7 +5109,9 @@ class Tokenizer(
     """
 
     def __init__(self, *, inputCol: Optional[str] = None, outputCol: Optional[str] = None):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(Tokenizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Tokenizer", self.uid)
         self.__class__.setParams(**kwargs)
@@ -5017,7 +5123,9 @@ class Tokenizer(
         """
         Sets params for this Tokenizer.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def setInputCol(self, value: str) -> "Tokenizer":
@@ -5108,7 +5216,9 @@ class VectorAssembler(
         outputCol: Optional[str] = None,
         handleInvalid: str = "error",
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(VectorAssembler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorAssembler", self.uid)
         self._setDefault(handleInvalid="error")
@@ -5125,7 +5235,9 @@ class VectorAssembler(
         """
         Sets params for this VectorAssembler.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def setInputCols(self, value: List[str]) -> "VectorAssembler":
@@ -5289,7 +5401,9 @@ class VectorIndexer(
         outputCol: Optional[str] = None,
         handleInvalid: str = "error",
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(VectorIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorIndexer", self.uid)
         self.__class__.setParams(**kwargs)
@@ -5306,7 +5420,9 @@ class VectorIndexer(
         """
         Sets params for this VectorIndexer.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("1.4.0")
@@ -5459,7 +5575,9 @@ class VectorSlicer(
         indices: Optional[List[int]] = None,
         names: Optional[List[str]] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(VectorSlicer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorSlicer", self.uid)
         self._setDefault(indices=[], names=[])
@@ -5477,7 +5595,9 @@ class VectorSlicer(
         """
         Sets params for this VectorSlicer.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("1.6.0")
@@ -5694,7 +5814,9 @@ class Word2Vec(
         windowSize: int = 5,
         maxSentenceLength: int = 1000,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(Word2Vec, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Word2Vec", self.uid)
         self.__class__.setParams(**kwargs)
@@ -5717,7 +5839,9 @@ class Word2Vec(
         """
         Sets params for this Word2Vec.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("1.4.0")
@@ -5916,7 +6040,9 @@ class PCA(JavaEstimator["PCAModel"], _PCAParams, JavaMLReadable["PCA"], JavaMLWr
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(PCA, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.PCA", self.uid)
         self.__class__.setParams(**kwargs)
@@ -5932,7 +6058,9 @@ class PCA(JavaEstimator["PCAModel"], _PCAParams, JavaMLReadable["PCA"], JavaMLWr
         """
         Set params for this PCA.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("1.5.0")
@@ -6155,7 +6283,9 @@ class RFormula(
         stringIndexerOrderType: str = "frequencyDesc",
         handleInvalid: str = "error",
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(RFormula, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RFormula", self.uid)
         self.__class__.setParams(**kwargs)
@@ -6174,7 +6304,9 @@ class RFormula(
         """
         Sets params for RFormula.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("1.5.0")
@@ -6522,7 +6654,9 @@ class ChiSqSelector(
         fdr: float = 0.05,
         fwe: float = 0.05,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(ChiSqSelector, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ChiSqSelector", self.uid)
         self.__class__.setParams(**kwargs)
@@ -6544,7 +6678,9 @@ class ChiSqSelector(
         """
         Sets params for this ChiSqSelector.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "ChiSqSelectorModel":
@@ -6623,7 +6759,9 @@ class VectorSizeHint(
         size: Optional[int] = None,
         handleInvalid: str = "error",
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(VectorSizeHint, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorSizeHint", self.uid)
         self._setDefault(handleInvalid="error")
@@ -6640,7 +6778,9 @@ class VectorSizeHint(
         """
         Sets params for this VectorSizeHint.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("2.3.0")
@@ -6748,7 +6888,9 @@ class VarianceThresholdSelector(
         outputCol: Optional[str] = None,
         varianceThreshold: float = 0.0,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(VarianceThresholdSelector, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.VarianceThresholdSelector", self.uid
@@ -6767,7 +6909,9 @@ class VarianceThresholdSelector(
         """
         Sets params for this VarianceThresholdSelector.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("3.1.0")
@@ -6988,7 +7132,9 @@ class UnivariateFeatureSelector(
         labelCol: str = "label",
         selectionMode: str = "numTopFeatures",
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(UnivariateFeatureSelector, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.UnivariateFeatureSelector", self.uid
@@ -7007,7 +7153,9 @@ class UnivariateFeatureSelector(
         """
         Sets params for this UnivariateFeatureSelector.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("3.1.1")

@@ -414,7 +414,9 @@ class GaussianMixture(
         aggregationDepth: int = 2,
         weightCol: Optional[str] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(GaussianMixture, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.clustering.GaussianMixture", self.uid
@@ -441,7 +443,9 @@ class GaussianMixture(
         """
         Sets params for GaussianMixture.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("2.0.0")
@@ -778,7 +782,9 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
         solver: str = "auto",
         maxBlockSizeInMB: float = 0.0,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(KMeans, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.KMeans", self.uid)
         self.__class__.setParams(**kwargs)
@@ -806,7 +812,9 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
         """
         Sets params for KMeans.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("1.5.0")
@@ -1111,7 +1119,9 @@ class BisectingKMeans(
         distanceMeasure: str = "euclidean",
         weightCol: Optional[str] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(BisectingKMeans, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.clustering.BisectingKMeans", self.uid
@@ -1134,7 +1144,9 @@ class BisectingKMeans(
         """
         Sets params for BisectingKMeans.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("2.0.0")
@@ -1657,7 +1669,9 @@ class LDA(JavaEstimator[LDAModel], _LDAParams, JavaMLReadable["LDA"], JavaMLWrit
         topicDistributionCol: str = "topicDistribution",
         keepLastCheckpoint: bool = True,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(LDA, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.LDA", self.uid)
         self.__class__.setParams(**kwargs)
@@ -1690,7 +1704,9 @@ class LDA(JavaEstimator[LDAModel], _LDAParams, JavaMLReadable["LDA"], JavaMLWrit
         """
         Sets params for LDA.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("2.0.0")
@@ -1987,7 +2003,9 @@ class PowerIterationClustering(
         dstCol: str = "dst",
         weightCol: Optional[str] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(PowerIterationClustering, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.clustering.PowerIterationClustering", self.uid
@@ -2008,7 +2026,9 @@ class PowerIterationClustering(
         """
         Sets params for PowerIterationClustering.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("2.4.0")

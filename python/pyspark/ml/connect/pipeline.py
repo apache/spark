@@ -136,7 +136,9 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
     )  # type: ignore[assignment]
 
     def __init__(self, *, stages: Optional[List[Params]] = None):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(Pipeline, self).__init__()
         self.__class__.setParams(**kwargs)
 
@@ -171,7 +173,9 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
         """
         Sets params for Pipeline.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def _fit(self, dataset: Union[DataFrame, pd.DataFrame]) -> "PipelineModel":

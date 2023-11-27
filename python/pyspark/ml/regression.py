@@ -313,7 +313,9 @@ class LinearRegression(
         epsilon: float = 1.35,
         maxBlockSizeInMB: float = 0.0,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(LinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.LinearRegression", self.uid
@@ -343,7 +345,9 @@ class LinearRegression(
         """
         Sets params for linear regression.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "LinearRegressionModel":
@@ -852,7 +856,9 @@ class IsotonicRegression(
         isotonic: bool = True,
         featureIndex: int = 0,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(IsotonicRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.IsotonicRegression", self.uid
@@ -872,7 +878,9 @@ class IsotonicRegression(
         """
         Set the params for IsotonicRegression.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "IsotonicRegressionModel":
@@ -1102,7 +1110,9 @@ class DecisionTreeRegressor(
         leafCol: str = "",
         minWeightFractionPerNode: float = 0.0,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(DecisionTreeRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.DecisionTreeRegressor", self.uid
@@ -1133,7 +1143,9 @@ class DecisionTreeRegressor(
         """
         Sets params for the DecisionTreeRegressor.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "DecisionTreeRegressionModel":
@@ -1389,7 +1401,9 @@ class RandomForestRegressor(
         weightCol: Optional[str] = None,
         bootstrap: Optional[bool] = True,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(RandomForestRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.RandomForestRegressor", self.uid
@@ -1423,7 +1437,9 @@ class RandomForestRegressor(
         """
         Sets params for linear regression.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "RandomForestRegressionModel":
@@ -1717,7 +1733,9 @@ class GBTRegressor(
         minWeightFractionPerNode: float = 0.0,
         weightCol: Optional[str] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(GBTRegressor, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
         self.__class__.setParams(**kwargs)
@@ -1752,7 +1770,9 @@ class GBTRegressor(
         """
         Sets params for Gradient Boosted Tree Regression.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "GBTRegressionModel":
@@ -2090,7 +2110,9 @@ class AFTSurvivalRegression(
         aggregationDepth: int = 2,
         maxBlockSizeInMB: float = 0.0,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(AFTSurvivalRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.AFTSurvivalRegression", self.uid
@@ -2123,7 +2145,9 @@ class AFTSurvivalRegression(
         aggregationDepth: int = 2,
         maxBlockSizeInMB: float = 0.0,
     ) -> "AFTSurvivalRegression":
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "AFTSurvivalRegressionModel":
@@ -2474,7 +2498,9 @@ class GeneralizedLinearRegression(
         offsetCol: Optional[str] = None,
         aggregationDepth: int = 2,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(GeneralizedLinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.GeneralizedLinearRegression", self.uid
@@ -2506,7 +2532,9 @@ class GeneralizedLinearRegression(
         """
         Sets params for generalized linear regression.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "GeneralizedLinearRegressionModel":
@@ -3033,7 +3061,9 @@ class FMRegressor(
         solver: str = "adamW",
         seed: Optional[int] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(FMRegressor, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.FMRegressor", self.uid)
         self.__class__.setParams(**kwargs)
@@ -3060,7 +3090,9 @@ class FMRegressor(
         """
         Sets Params for FMRegressor.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "FMRegressionModel":

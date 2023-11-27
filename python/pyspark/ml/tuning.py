@@ -726,7 +726,9 @@ class CrossValidator(
         collectSubModels: bool = False,
         foldCol: str = "",
     ) -> None:
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(CrossValidator, self).__init__()
         self._setDefault(parallelism=1)
         self.__class__._set(**kwargs)
@@ -747,7 +749,9 @@ class CrossValidator(
         """
         Sets params for cross validator.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("2.0.0")
@@ -1346,7 +1350,9 @@ class TrainValidationSplit(
         collectSubModels: bool = False,
         seed: Optional[int] = None,
     ) -> None:
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(TrainValidationSplit, self).__init__()
         self._setDefault(parallelism=1)
         self.__class__._set(**kwargs)
@@ -1366,7 +1372,9 @@ class TrainValidationSplit(
         """
         Sets params for the train validation split.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("2.0.0")

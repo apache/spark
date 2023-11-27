@@ -245,7 +245,9 @@ class FPGrowth(
         predictionCol: str = "prediction",
         numPartitions: Optional[int] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(FPGrowth, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.fpm.FPGrowth", self.uid)
         self.__class__.setParams(**kwargs)
@@ -260,7 +262,9 @@ class FPGrowth(
         predictionCol: str = "prediction",
         numPartitions: Optional[int] = None,
     ) -> "FPGrowth":
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def setItemsCol(self, value: str) -> "FPGrowth":
@@ -386,7 +390,9 @@ class PrefixSpan(JavaParams):
         maxLocalProjDBSize: int = 32000000,
         sequenceCol: str = "sequence",
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(PrefixSpan, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.fpm.PrefixSpan", self.uid)
         self._setDefault(
@@ -403,7 +409,9 @@ class PrefixSpan(JavaParams):
         maxLocalProjDBSize: int = 32000000,
         sequenceCol: str = "sequence",
     ) -> "PrefixSpan":
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("3.0.0")

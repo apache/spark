@@ -723,7 +723,9 @@ class LinearSVC(
         aggregationDepth: int = 2,
         maxBlockSizeInMB: float = 0.0,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(LinearSVC, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.LinearSVC", self.uid
@@ -751,7 +753,9 @@ class LinearSVC(
         """
         Sets params for Linear SVM Classifier.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "LinearSVCModel":
@@ -1287,7 +1291,9 @@ class LogisticRegression(
         """
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(LogisticRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.LogisticRegression", self.uid
@@ -1379,7 +1385,9 @@ class LogisticRegression(
         Sets params for logistic regression.
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         self.__class__._set(**kwargs)
         self._checkThresholdConsistency()
         return self
@@ -1757,7 +1765,9 @@ class DecisionTreeClassifier(
         leafCol: str = "",
         minWeightFractionPerNode: float = 0.0,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(DecisionTreeClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.DecisionTreeClassifier", self.uid
@@ -1789,7 +1799,9 @@ class DecisionTreeClassifier(
         """
         Sets params for the DecisionTreeClassifier.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__.setParams(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "DecisionTreeClassificationModel":
@@ -2037,7 +2049,9 @@ class RandomForestClassifier(
         weightCol: Optional[str] = None,
         bootstrap: Optional[bool] = True,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(RandomForestClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.RandomForestClassifier", self.uid
@@ -2073,7 +2087,9 @@ class RandomForestClassifier(
         """
         Sets params for linear classification.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "RandomForestClassificationModel":
@@ -2489,7 +2505,9 @@ class GBTClassifier(
         minWeightFractionPerNode: float = 0.0,
         weightCol: Optional[str] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(GBTClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.GBTClassifier", self.uid
@@ -2526,7 +2544,9 @@ class GBTClassifier(
         """
         Sets params for Gradient Boosted Tree Classification.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "GBTClassificationModel":
@@ -2853,7 +2873,9 @@ class NaiveBayes(
         thresholds: Optional[List[float]] = None,
         weightCol: Optional[str] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(NaiveBayes, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.NaiveBayes", self.uid
@@ -2877,7 +2899,9 @@ class NaiveBayes(
         """
         Sets params for Naive Bayes.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "NaiveBayesModel":
@@ -3095,7 +3119,9 @@ class MultilayerPerceptronClassifier(
         probabilityCol: str = "probability",
         rawPredictionCol: str = "rawPrediction",
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(MultilayerPerceptronClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.MultilayerPerceptronClassifier", self.uid
@@ -3123,7 +3149,9 @@ class MultilayerPerceptronClassifier(
         """
         Sets params for MultilayerPerceptronClassifier.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "MultilayerPerceptronClassificationModel":
@@ -3343,7 +3371,9 @@ class OneVsRest(
         weightCol: Optional[str] = None,
         parallelism: int = 1,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(OneVsRest, self).__init__()
         self._setDefault(parallelism=1)
         self.__class__._set(**kwargs)
@@ -3363,7 +3393,9 @@ class OneVsRest(
         """
         Sets params for OneVsRest.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     @since("2.0.0")
@@ -3956,7 +3988,9 @@ class FMClassifier(
         thresholds: Optional[List[float]] = None,
         seed: Optional[int] = None,
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(FMClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.FMClassifier", self.uid
@@ -3988,7 +4022,9 @@ class FMClassifier(
         """
         Sets Params for FMClassifier.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "FMClassificationModel":

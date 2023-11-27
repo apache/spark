@@ -191,7 +191,9 @@ class DummyLogisticRegression(
         regParam=0.0,
         rawPredictionCol="rawPrediction",
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(DummyLogisticRegression, self).__init__()
         self.__class__.setParams(**kwargs)
 
@@ -205,7 +207,9 @@ class DummyLogisticRegression(
         regParam=0.0,
         rawPredictionCol="rawPrediction",
     ):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         self.__class__._set(**kwargs)
         return self
 

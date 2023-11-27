@@ -69,7 +69,9 @@ class Pipeline(Estimator["PipelineModel"], MLReadable["Pipeline"], MLWritable):
     )
 
     def __init__(self, *, stages: Optional[List["PipelineStage"]] = None):
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super(Pipeline, self).__init__()
         self.__class__.setParams(**kwargs)
 
@@ -104,7 +106,9 @@ class Pipeline(Estimator["PipelineModel"], MLReadable["Pipeline"], MLWritable):
         """
         Sets params for Pipeline.
         """
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         return self.__class__._set(**kwargs)
 
     def _fit(self, dataset: DataFrame) -> "PipelineModel":

@@ -67,7 +67,9 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
     """
 
     def __init__(self, *, inputCol: Optional[str] = None, outputCol: Optional[str] = None) -> None:
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super().__init__()
         MaxAbsScaler._set(**kwargs)
 
@@ -173,7 +175,9 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
     """
 
     def __init__(self, inputCol: Optional[str] = None, outputCol: Optional[str] = None) -> None:
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super().__init__()
         StandardScaler._set(**kwargs)
 
@@ -320,7 +324,9 @@ class ArrayAssembler(
         featureSizes: Optional[List[int]] = None,
         handleInvalid: Optional[str] = "error",
     ) -> None:
-        kwargs = locals()
+        kwargs = dict(
+            (k, v) for k, v in locals().items() if not k.startswith("_") and v is not None
+        )
         super().__init__()
         ArrayAssembler._set(**kwargs)
         self._setDefault(handleInvalid="error")
