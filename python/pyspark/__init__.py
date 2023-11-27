@@ -76,7 +76,9 @@ def since(version: Union[str, float]) -> Callable[[_F], _F]:
     indent_p = re.compile(r"\n( +)")
 
     def deco(f: _F) -> _F:
-        assert f.__doc__ is not None
+        if f.__doc__ is None:
+            # Should still at least add a versionadded.
+            f.__doc__ = ""
 
         indents = indent_p.findall(f.__doc__)
         indent = " " * (min(len(m) for m in indents) if indents else 0)
