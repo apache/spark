@@ -2246,7 +2246,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       throw QueryCompilationErrors.functionAndOrderExpressionMismatchError("LISTAGG", column,
         sortOrder.child)
     }
-    val delimiter = if (ctx.delimiter != null) Literal(ctx.delimiter.getText) else Literal(",")
+    val delimiter = if (ctx.delimiter != null) Literal(string(visitStringLit(ctx.delimiter)))
+      else Literal(",")
     val reverse = sortOrder.direction == Descending
     val listAgg = ListAgg(column, sortOrder.child, delimiter, reverse)
     val aggregateExpression = listAgg.toAggregateExpression(isDistinct)
