@@ -12368,7 +12368,7 @@ def array_join(
 @_try_remote_functions
 def concat(*cols: "ColumnOrName") -> Column:
     """
-    Concatenates multiple input columns together into a single column.
+    Collection function: Concatenates multiple input columns together into a single column.
     The function works with strings, numeric, binary and compatible array columns.
 
     .. versionadded:: 1.5.0
@@ -12392,19 +12392,61 @@ def concat(*cols: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('abcd','123')], ['s', 'd'])
-    >>> df = df.select(concat(df.s, df.d).alias('s'))
-    >>> df.collect()
-    [Row(s='abcd123')]
-    >>> df
-    DataFrame[s: string]
+    Example 1: Concatenating string columns
 
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('abcd','123')], ['s', 'd'])
+    >>> df.select(sf.concat(df.s, df.d)).show()
+    +------------+
+    |concat(s, d)|
+    +------------+
+    |     abcd123|
+    +------------+
+
+    Example 2: Concatenating array columns
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([([1, 2], [3, 4], [5]), ([1, 2], None, [3])], ['a', 'b', 'c'])
-    >>> df = df.select(concat(df.a, df.b, df.c).alias("arr"))
-    >>> df.collect()
-    [Row(arr=[1, 2, 3, 4, 5]), Row(arr=None)]
-    >>> df
-    DataFrame[arr: array<bigint>]
+    >>> df.select(sf.concat(df.a, df.b, df.c)).show()
+    +---------------+
+    |concat(a, b, c)|
+    +---------------+
+    |[1, 2, 3, 4, 5]|
+    |           NULL|
+    +---------------+
+
+    Example 3: Concatenating numeric columns
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 2, 3)], ['a', 'b', 'c'])
+    >>> df.select(sf.concat(df.a, df.b, df.c)).show()
+    +---------------+
+    |concat(a, b, c)|
+    +---------------+
+    |            123|
+    +---------------+
+
+    Example 4: Concatenating binary columns
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytearray(b'abc'), bytearray(b'def'))], ['a', 'b'])
+    >>> df.select(sf.concat(df.a, df.b)).show()
+    +-------------------+
+    |       concat(a, b)|
+    +-------------------+
+    |[61 62 63 64 65 66]|
+    +-------------------+
+
+    Example 5: Concatenating mixed types of columns
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1,"abc",3,"def")], ['a','b','c','d'])
+    >>> df.select(sf.concat(df.a, df.b, df.c, df.d)).show()
+    +------------------+
+    |concat(a, b, c, d)|
+    +------------------+
+    |          1abc3def|
+    +------------------+
     """
     return _invoke_function_over_seq_of_columns("concat", cols)
 
