@@ -18,6 +18,7 @@ import sys
 from typing import List, Union, TYPE_CHECKING, cast
 import warnings
 
+from pyspark.errors import PySparkValueError
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
@@ -97,8 +98,11 @@ class PandasGroupedOpsMixin:
                 != PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
             )
         ):
-            raise ValueError(
-                "Invalid udf: the udf argument must be a pandas_udf of type " "GROUPED_MAP."
+            raise PySparkValueError(
+                error_class="INVALID_PANDAS_UDF",
+                message_parameters={
+                    "detail": "the udf argument must be a pandas_udf of type GROUPED_MAP."
+                },
             )
 
         warnings.warn(
