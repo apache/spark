@@ -59,7 +59,6 @@ if TYPE_CHECKING:
 __all__ = ["SQLContext", "HiveContext"]
 
 
-# TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
 class SQLContext:
     """The entry point for working with structured data (rows and columns) in Spark, in Spark 1.x.
 
@@ -700,7 +699,6 @@ class SQLContext:
         return StreamingQueryManager(self._ssql_ctx.streams())
 
 
-# TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
 class HiveContext(SQLContext):
     """A variant of Spark SQL that integrates with data stored in Hive.
 
