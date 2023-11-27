@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
-import java.lang.{Long => JLong}
+import java.lang.{Double => JDouble, Float => JFloat, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
@@ -919,7 +919,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
 
     for {
       column <- Seq("cbyte", "cshort", "cint")
-      value <- Seq(JLong.MAX_VALUE, JLong.MIN_VALUE): Seq[JLong]
+      value <- Seq(JLong.MAX_VALUE, JLong.MIN_VALUE).map(JLong.valueOf)
     } {
       val filters = Seq(
         sources.LessThan(column, value),
@@ -958,18 +958,18 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     val parquetFilters = createParquetFilters(parquetSchema)
 
     val filters = Seq(
-      sources.LessThan("cbyte", "1"),
-      sources.LessThan("cshort", "1"),
-      sources.LessThan("cint", "1"),
-      sources.LessThan("clong", "1"),
-      sources.LessThan("cfloat", 1.0D),
-      sources.LessThan("cdouble", 1.0F),
-      sources.LessThan("cboolean", "true"),
-      sources.LessThan("cstring", 1),
+      sources.LessThan("cbyte", String.valueOf("1")),
+      sources.LessThan("cshort", JBigDecimal.valueOf(1)),
+      sources.LessThan("cint", JFloat.valueOf(JFloat.NaN)),
+      sources.LessThan("clong", String.valueOf("1")),
+      sources.LessThan("cfloat", JDouble.valueOf(1.0D)),
+      sources.LessThan("cdouble", JFloat.valueOf(1.0F)),
+      sources.LessThan("cboolean", String.valueOf("true")),
+      sources.LessThan("cstring", Integer.valueOf(1)),
       sources.LessThan("cdate", Timestamp.valueOf("2018-01-01 00:00:00")),
       sources.LessThan("ctimestamp", Date.valueOf("2018-01-01")),
-      sources.LessThan("cbinary", 1),
-      sources.LessThan("cdecimal", 1234)
+      sources.LessThan("cbinary", Integer.valueOf(1)),
+      sources.LessThan("cdecimal", Integer.valueOf(1234))
     )
     for (filter <- filters) {
       assert(parquetFilters.createFilter(filter).isEmpty,
