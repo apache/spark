@@ -56,7 +56,8 @@ private[sql] object EasilyFlattenable {
           } || ne.collectFirst{
             case ex if !ex.deterministic => ex
             case ex if ex.isInstanceOf[UserDefinedExpression] => ex
-            case u: UnresolvedAttribute if u.nameParts.size != 1 => u
+            case u: UnresolvedAttribute if u.nameParts.size != 1 ||
+              u.getTagValue(LogicalPlan.PLAN_ID_TAG).isDefined => u
             case u: UnresolvedAlias => u
             case u : UnresolvedFunction if u.nameParts.size == 1 & u.nameParts.head == "struct" => u
           }.nonEmpty)) {
