@@ -206,8 +206,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
         recordRateForAllStreams.data,
         minBatchTime,
         maxBatchTime,
-        minRecordRate,
-        maxRecordRate,
+        minRecordRate.toDouble,
+        maxRecordRate.toDouble,
         "records/sec")
     graphUIDataForRecordRateOfAllStreams.generateDataJs(jsCollector)
 
@@ -218,7 +218,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         schedulingDelay.timelineData(normalizedUnit),
         minBatchTime,
         maxBatchTime,
-        minTime,
+        minTime.toDouble,
         maxTime,
         formattedUnit)
     graphUIDataForSchedulingDelay.generateDataJs(jsCollector)
@@ -230,7 +230,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         processingTime.timelineData(normalizedUnit),
         minBatchTime,
         maxBatchTime,
-        minTime,
+        minTime.toDouble,
         maxTime,
         formattedUnit, Some(batchInterval))
     graphUIDataForProcessingTime.generateDataJs(jsCollector)
@@ -242,7 +242,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         totalDelay.timelineData(normalizedUnit),
         minBatchTime,
         maxBatchTime,
-        minTime,
+        minTime.toDouble,
         maxTime,
         formattedUnit)
     graphUIDataForTotalDelay.generateDataJs(jsCollector)
@@ -294,7 +294,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       {if (hasStream) {
         <tr id="inputs-table" style="display: none;" >
           <td colspan="3">
-            {generateInputDStreamsTable(jsCollector, minBatchTime, maxBatchTime, minRecordRate)}
+            {generateInputDStreamsTable(jsCollector, minBatchTime, maxBatchTime, minRecordRate.toDouble)}
           </td>
         </tr>
       }}
@@ -350,7 +350,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val content: Seq[Node] = listener.receivedRecordRateWithBatchTime.toList.sortBy(_._1).flatMap {
       case (streamId, recordRates) =>
         generateInputDStreamRow(
-          jsCollector, streamId, recordRates, minX, maxX, minY, maxYCalculated)
+          jsCollector, streamId, recordRates, minX, maxX, minY, maxYCalculated.toDouble)
     }
 
     // scalastyle:off
