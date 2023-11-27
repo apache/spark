@@ -353,7 +353,7 @@ class LimitPushdownSuite extends PlanTest {
     }
   }
 
-  test("SPARK-46097: Push down limit 1 though Union and Aggregate") {
+  test("SPARK-46097: Push down limit 1 through Union and Aggregate") {
     val unionQuery = Union(
       Union(
         testRelation.groupBy($"a", $"b")($"a", $"b"),
