@@ -101,7 +101,7 @@ class PandasGroupedOpsMixin:
             raise PySparkValueError(
                 error_class="INVALID_PANDAS_UDF",
                 message_parameters={
-                    "details": "the udf argument must be a pandas_udf of type GROUPED_MAP."
+                    "detail": "the udf argument must be a pandas_udf of type GROUPED_MAP."
                 },
             )
 
