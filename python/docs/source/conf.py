@@ -178,6 +178,7 @@ pygments_style = 'sphinx'
 # Look at the first line of the docstring for function and method signatures.
 autodoc_docstring_signature = True
 autosummary_generate = True
+autodoc_typehints = "none"
 
 # -- Options for HTML output ----------------------------------------------
 
