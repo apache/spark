@@ -959,9 +959,8 @@ class SparkConnectPlanner(
 
   private def transformWithColumnsRenamed(rel: proto.WithColumnsRenamed): LogicalPlan = {
     val ds = Dataset.ofRows(session, transformRelation(rel.getInput))
-    ds.logicalPlan.setTagValue[Boolean](LogicalPlan.SKIP_FLATTENING, true)
-    ds.withColumnsRenamed(rel.getRenameColumnsMapMap)
-      .logicalPlan
+    ds.logicalPlan.setTagValue(LogicalPlan.SKIP_FLATTENING, true)
+    ds.withColumnsRenamed(rel.getRenameColumnsMapMap).logicalPlan
   }
 
   private def transformWithColumns(rel: proto.WithColumns): LogicalPlan = {
@@ -981,11 +980,9 @@ class SparkConnectPlanner(
         (alias.getName(0), Column(transformExpression(alias.getExpr)), metadata)
       }.unzip3
 
-    val ds = Dataset
-      .ofRows(session, transformRelation(rel.getInput))
-    ds.logicalPlan.setTagValue[Boolean](LogicalPlan.SKIP_FLATTENING, true)
-    ds.withColumns(colNames, cols, metadata)
-      .logicalPlan
+    val ds = Dataset.ofRows(session, transformRelation(rel.getInput))
+    ds.logicalPlan.setTagValue(LogicalPlan.SKIP_FLATTENING, true)
+    ds.withColumns(colNames, cols, metadata).logicalPlan
   }
 
   private def transformWithWatermark(rel: proto.WithWatermark): LogicalPlan = {
