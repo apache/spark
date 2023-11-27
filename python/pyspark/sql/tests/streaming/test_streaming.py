@@ -36,7 +36,7 @@ class StreamingTestsMixin:
             .start()
         )
         try:
-            self.assertEquals(query.name, "test_streaming_query_functions_basic")
+            self.assertEqual(query.name, "test_streaming_query_functions_basic")
             self.assertTrue(isinstance(query.id, str))
             self.assertTrue(isinstance(query.runId, str))
             self.assertTrue(query.isActive)

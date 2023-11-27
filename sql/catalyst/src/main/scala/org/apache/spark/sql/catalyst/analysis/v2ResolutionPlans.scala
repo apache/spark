@@ -40,6 +40,12 @@ import org.apache.spark.util.ArrayImplicits._
 case class UnresolvedNamespace(multipartIdentifier: Seq[String]) extends UnresolvedLeafNode
 
 /**
+ * A variant of [[UnresolvedNamespace]] that should be resolved to [[ResolvedNamespace]]
+ * representing the current namespace of the current catalog.
+ */
+case object CurrentNamespace extends UnresolvedLeafNode
+
+/**
  * Holds the name of a table that has yet to be looked up in a catalog. It will be resolved to
  * [[ResolvedTable]] during analysis.
  */

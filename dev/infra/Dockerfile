@@ -92,8 +92,8 @@ RUN Rscript -e "devtools::install_version('preferably', version='0.4', repos='ht
 # See more in SPARK-39735
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
 
-RUN pypy3 -m pip install numpy 'pandas<=2.1.3' scipy coverage matplotlib
-RUN python3.9 -m pip install numpy 'pyarrow>=14.0.0' 'pandas<=2.1.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.8.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn>=1.3.2'
+RUN pypy3 -m pip install numpy 'six==1.16.0' 'pandas<=2.1.3' scipy coverage matplotlib
+RUN python3.9 -m pip install numpy 'pyarrow>=14.0.0' 'six==1.16.0' 'pandas<=2.1.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.8.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn>=1.3.2'
 
 # Add Python deps for Spark Connect.
 RUN python3.9 -m pip install 'grpcio==1.59.3' 'grpcio-status==1.59.3' 'protobuf==4.25.1' 'googleapis-common-protos==1.56.4'
@@ -110,7 +110,7 @@ RUN apt-get update && apt-get install -y \
     python3.10 python3.10-distutils \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
-RUN python3.10 -m pip install numpy 'pyarrow>=14.0.0' 'pandas<=2.1.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.8.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn>=1.3.2'
+RUN python3.10 -m pip install numpy 'pyarrow>=14.0.0' 'six==1.16.0' 'pandas<=2.1.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.8.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn>=1.3.2'
 RUN python3.10 -m pip install 'grpcio==1.59.3' 'grpcio-status==1.59.3' 'protobuf==4.25.1' 'googleapis-common-protos==1.56.4'
 RUN python3.10 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu
 RUN python3.10 -m pip install torcheval
@@ -122,7 +122,7 @@ RUN apt-get update && apt-get install -y \
     python3.11 python3.11-distutils \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
-RUN python3.11 -m pip install numpy 'pyarrow>=14.0.0' 'pandas<=2.1.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.8.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn>=1.3.2'
+RUN python3.11 -m pip install numpy 'pyarrow>=14.0.0' 'six==1.16.0' 'pandas<=2.1.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.8.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn>=1.3.2'
 RUN python3.11 -m pip install 'grpcio==1.59.3' 'grpcio-status==1.59.3' 'protobuf==4.25.1' 'googleapis-common-protos==1.56.4'
 RUN python3.11 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu
 RUN python3.11 -m pip install torcheval
@@ -134,5 +134,8 @@ RUN apt-get update && apt-get install -y \
     python3.12 python3.12-distutils \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
-RUN python3.12 -m pip install numpy 'pyarrow>=14.0.0' 'pandas<=2.1.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.8.1' coverage matplotlib openpyxl 'scikit-learn>=1.3.2'
+RUN python3.12 -m pip install numpy 'pyarrow>=14.0.0' 'six==1.16.0' 'pandas<=2.1.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.8.1' coverage matplotlib openpyxl 'scikit-learn>=1.3.2'
 RUN python3.12 -m pip install 'grpcio==1.59.3' 'grpcio-status==1.59.3' 'protobuf==4.25.1' 'googleapis-common-protos==1.56.4'
+# TODO(SPARK-46078) Use official one instead of nightly build when it's ready
+RUN python3.12 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
+RUN python3.12 -m pip install torcheval

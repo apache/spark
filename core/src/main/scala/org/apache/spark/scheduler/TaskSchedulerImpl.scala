@@ -721,7 +721,7 @@ private[spark] class TaskSchedulerImpl(
               .mkString(",")
             addressesWithDescs.foreach(_._2.properties.setProperty("addresses", addressesStr))
 
-            logInfo(s"Successfully scheduled all the ${addressesWithDescs.size} tasks for " +
+            logInfo(s"Successfully scheduled all the ${addressesWithDescs.length} tasks for " +
               s"barrier stage ${taskSet.stageId}.")
           }
           taskSet.barrierPendingLaunchTasks.clear()

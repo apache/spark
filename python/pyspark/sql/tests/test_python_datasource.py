@@ -49,6 +49,36 @@ class BasePythonDataSourceTestsMixin:
         self.assertEqual(list(reader.partitions()), [None])
         self.assertEqual(list(reader.read(None)), [(None,)])
 
+    def test_data_source_register(self):
+        class TestReader(DataSourceReader):
+            def read(self, partition):
+                yield (0, 1)
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "a INT, b INT"
+
+            def reader(self, schema):
+                return TestReader()
+
+        self.spark.dataSource.register(TestDataSource)
+        df = self.spark.read.format("TestDataSource").load()
+        assertDataFrameEqual(df, [Row(a=0, b=1)])
+
+        class MyDataSource(TestDataSource):
+            @classmethod
+            def name(cls):
+                return "TestDataSource"
+
+            def schema(self):
+                return "c INT, d INT"
+
+        # Should be able to register the data source with the same name.
+        self.spark.dataSource.register(MyDataSource)
+
+        df = self.spark.read.format("TestDataSource").load()
+        assertDataFrameEqual(df, [Row(c=0, d=1)])
+
     def test_in_memory_data_source(self):
         class InMemDataSourceReader(DataSourceReader):
             DEFAULT_NUM_PARTITIONS: int = 3

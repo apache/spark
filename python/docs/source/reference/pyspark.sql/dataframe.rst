@@ -63,6 +63,7 @@ DataFrame
     DataFrame.foreachPartition
     DataFrame.freqItems
     DataFrame.groupBy
+    DataFrame.groupingSets
     DataFrame.head
     DataFrame.hint
     DataFrame.inputFiles
