@@ -34,7 +34,7 @@ from typing import (
 
 from py4j.java_gateway import JavaObject
 
-from pyspark import since, _NoValue
+from pyspark import _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
@@ -59,7 +59,6 @@ if TYPE_CHECKING:
 __all__ = ["SQLContext", "HiveContext"]
 
 
-# TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
 class SQLContext:
     """The entry point for working with structured data (rows and columns) in Spark, in Spark 1.x.
 
@@ -633,19 +632,28 @@ class SQLContext:
         else:
             return [name for name in self._ssql_ctx.tableNames(dbName)]
 
-    @since(1.0)
     def cacheTable(self, tableName: str) -> None:
-        """Caches the specified table in-memory."""
+        """
+        Caches the specified table in-memory.
+
+        .. versionadded:: 1.0.0
+        """
         self._ssql_ctx.cacheTable(tableName)
 
-    @since(1.0)
     def uncacheTable(self, tableName: str) -> None:
-        """Removes the specified table from the in-memory cache."""
+        """
+        Removes the specified table from the in-memory cache.
+
+        .. versionadded:: 1.0.0
+        """
         self._ssql_ctx.uncacheTable(tableName)
 
-    @since(1.3)
     def clearCache(self) -> None:
-        """Removes all cached tables from the in-memory cache."""
+        """
+        Removes all cached tables from the in-memory cache.
+
+        .. versionadded:: 1.3.0
+        """
         self._ssql_ctx.clearCache()
 
     @property
@@ -700,7 +708,6 @@ class SQLContext:
         return StreamingQueryManager(self._ssql_ctx.streams())
 
 
-# TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
 class HiveContext(SQLContext):
     """A variant of Spark SQL that integrates with data stored in Hive.
 

@@ -17,7 +17,6 @@
 from abc import ABC, abstractmethod
 from typing import final, Any, Dict, Iterator, List, Tuple, Type, Union, TYPE_CHECKING
 
-from pyspark import since
 from pyspark.sql import Row
 from pyspark.sql.types import StructType
 
@@ -29,7 +28,6 @@ if TYPE_CHECKING:
 __all__ = ["DataSource", "DataSourceReader", "DataSourceWriter", "DataSourceRegistration"]
 
 
-@since(4.0)
 class DataSource(ABC):
     """
     A base class for data sources.
@@ -42,6 +40,8 @@ class DataSource(ABC):
 
     After implementing this interface, you can start to load your data source using
     ``spark.read.format(...).load()`` and save data using ``df.write.format(...).save()``.
+
+    .. versionadded: 4.0.0
     """
 
     @final
@@ -145,11 +145,12 @@ class DataSource(ABC):
         raise NotImplementedError
 
 
-@since(4.0)
 class DataSourceReader(ABC):
     """
     A base class for data source readers. Data source readers are responsible for
     outputting data from a data source.
+
+    .. versionadded: 4.0.0
     """
 
     def partitions(self) -> Iterator[Any]:
@@ -241,11 +242,12 @@ class DataSourceReader(ABC):
         ...
 
 
-@since(4.0)
 class DataSourceWriter(ABC):
     """
     A base class for data source writers. Data source writers are responsible for saving
     the data to the data source.
+
+    .. versionadded: 4.0.0
     """
 
     @abstractmethod
@@ -305,21 +307,23 @@ class DataSourceWriter(ABC):
         ...
 
 
-@since(4.0)
 class WriterCommitMessage:
     """
     A commit message returned by the ``write`` method of ``DataSourceWriter`` and will be
     sent back to the driver side as input parameter of ``commit`` or ``abort`` method.
+
+    .. versionadded: 4.0.0
     """
 
     ...
 
 
-@since(4.0)
 class DataSourceRegistration:
     """
     Wrapper for data source registration. This instance can be accessed by
     :attr:`spark.dataSource`.
+
+    .. versionadded: 4.0.0
     """
 
     def __init__(self, sparkSession: "SparkSession"):

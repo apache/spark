@@ -242,6 +242,16 @@ ERROR_CLASSES_JSON = """
       " must be set to `true` to enable Python profile."
     ]
   },
+  "INDEX_NOT_POSITIVE" : {
+    "message" : [
+      "Index must be positive, got '<index>'."
+    ]
+  },
+  "INDEX_OUT_OF_RANGE" : {
+    "message" : [
+      "<arg_name> index out of range, got '<index>'."
+    ]
+  },
   "INVALID_ARROW_UDTF_RETURN_TYPE" : {
     "message" : [
       "The return type of the arrow-optimized Python UDTF should be of type 'pandas.DataFrame', but the '<func>' method returned a value of type <type_name> with value: <value>."
