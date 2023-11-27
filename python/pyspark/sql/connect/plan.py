@@ -1699,8 +1699,9 @@ class WriteOperation(LogicalPlan):
                         proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_INSERT_INTO
                     )
                 else:
-                    raise ValueError(
-                        f"Unknown TestSaveMethod value for DataFrame: {self.table_save_method}"
+                    raise PySparkNotImplementedError(
+                        error_class="UNSUPPORTED_OPERATION",
+                        message_parameters={"operation": tsm},
                     )
         elif self.path is not None:
             plan.write_operation.path = self.path
@@ -1716,7 +1717,10 @@ class WriteOperation(LogicalPlan):
             elif wm == "ignore":
                 plan.write_operation.mode = proto.WriteOperation.SaveMode.SAVE_MODE_IGNORE
             else:
-                raise ValueError(f"Unknown SaveMode value for DataFrame: {self.mode}")
+                raise PySparkNotImplementedError(
+                    error_class="UNSUPPORTED_OPERATION",
+                    message_parameters={"operation": self.mode},
+                )
         return plan
 
     def print(self, indent: int = 0) -> str:
@@ -1812,7 +1816,10 @@ class WriteOperationV2(LogicalPlan):
             elif wm == "create_or_replace":
                 plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE
             else:
-                raise ValueError(f"Unknown Mode value for DataFrame: {self.mode}")
+                raise PySparkNotImplementedError(
+                    error_class="UNSUPPORTED_OPERATION",
+                    message_parameters={"operation": self.mode},
+                )
         return plan
 
 

@@ -194,16 +194,10 @@ class SparkSession:
             has_channel_builder = self._channel_builder is not None
             has_spark_remote = "spark.remote" in self._options
 
-            if has_channel_builder and has_spark_remote:
-                raise ValueError(
-                    "Only one of connection string or channelBuilder "
-                    "can be used to create a new SparkSession."
-                )
-
-            if not has_channel_builder and not has_spark_remote:
-                raise ValueError(
-                    "Needs either connection string or channelBuilder to create a new SparkSession."
-                )
+            if (has_channel_builder and has_spark_remote) or (
+                not has_channel_builder and not has_spark_remote
+            ):
+                raise PySparkValueError(error_class="SESSION_NEED_CONN_STR_OR_BUILDER")
 
             if has_channel_builder:
                 assert self._channel_builder is not None
@@ -514,10 +508,7 @@ class SparkSession:
                 if _has_nulltype(_schema):
                     # For cases like createDataFrame([("Alice", None, 80.1)], schema)
                     # we can not infer the schema from the data itself.
-                    raise ValueError(
-                        "Some of types cannot be determined after inferring, "
-                        "a StructType Schema is required in this case"
-                    )
+                    raise PySparkValueError(error_class="CANNOT_DETERMINE_TYPE")
 
             from pyspark.sql.connect.conversion import LocalDataToArrowConversion
 
@@ -738,7 +729,13 @@ class SparkSession:
         self, *path: str, pyfile: bool = False, archive: bool = False, file: bool = False
     ) -> None:
         if sum([file, pyfile, archive]) > 1:
-            raise ValueError("'pyfile', 'archive' and/or 'file' cannot be True together.")
+            raise PySparkValueError(
+                error_class="INVALID_MULTIPLE_ARGUMENT_CONDITIONS",
+                message_parameters={
+                    "arg_names": "'pyfile', 'archive' and/or 'file'",
+                    "condition": "cannot be True together",
+                },
+            )
         self._client.add_artifacts(*path, pyfile=pyfile, archive=archive, file=file)
 
     addArtifacts.__doc__ = PySparkSession.addArtifacts.__doc__
@@ -754,10 +751,9 @@ class SparkSession:
 
     def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
         if urllib.parse.urlparse(dest_path).scheme:
-            raise ValueError(
-                "`spark_session.copyFromLocalToFs` API only allows `dest_path` to be a path "
-                "without scheme, and spark driver uses the default scheme to "
-                "determine the destination file system."
+            raise PySparkValueError(
+                error_class="NO_SCHEMA_AND_DRIVER_DEFAULT_SCHEME",
+                message_parameters={"arg_name": "dest_path"},
             )
         self._client.copy_from_local_to_fs(local_path, dest_path)
 
