@@ -321,7 +321,7 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
         val rank = if (vid < source) {
           0.0
         } else {
-          a * Math.pow(1 - resetProb, vid - source)
+          a * Math.pow(1 - resetProb, vid.toDouble - source)
         }
         vid -> rank
       }
