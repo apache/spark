@@ -40,18 +40,22 @@ private[sql] object EasilyFlattenable {
 
         if (passThruAttribs.size == currentOutputAttribs.size && passThruAttribs.forall(
           currentOutputAttribs.contains) && tinkeredOrNewNamedExprs.nonEmpty) {
-
-          val attribsReassignedInProj = AttributeSet(projList.filter(ne => ne match {
+          val x = AttributeSet(projList.filter(ne => ne match {
             case _: AttributeReference => false
             case _ => true
-          }).map(_.toAttribute)).intersect(AttributeSet(child.output))
+          }).map(_.toAttribute))
+
+          val attribsReassignedInProj = projList.filter(ne => ne match {
+            case _: AttributeReference => false
+            case _ => true
+          }).map(_.name).toSet.intersect(child.output.map(_.name).toSet)
 
           if (tinkeredOrNewNamedExprs.exists(ne => ne.references.exists {
-              case attr: AttributeReference => attribsReassignedInProj.contains(attr)
+              case attr: AttributeReference => attribsReassignedInProj.contains(attr.name)
               case u: UnresolvedAttribute => if (u.nameParts.size > 1) {
                    true
                  } else {
-                   attribsReassignedInProj.exists(attr => attr.name.equalsIgnoreCase(u.name))
+                   attribsReassignedInProj.contains(u.name)
                  }
           } || ne.collectFirst{
             case ex if !ex.deterministic => ex
