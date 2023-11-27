@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, LogicalPlan, OptionList, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, UnresolvedTableSpec, View}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, SupportsNamespaces, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, MultipartIdentifierHelper, NamespaceHelper, TransformHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.ShowTablesCommand
@@ -408,27 +408,6 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     }
   }
 
-  private def getNamespace(
-    catalog: CatalogPlugin,
-    ns: Seq[String],
-    metadata: Map[String, String]): Database = catalog match {
-    case catalog: SupportsNamespaces =>
-      new Database(
-        name = ns.quoted,
-        catalog = catalog.name,
-        description = metadata.get(SupportsNamespaces.PROP_COMMENT).orNull,
-        locationUri = metadata.get(SupportsNamespaces.PROP_LOCATION).orNull)
-    // If the catalog doesn't support namespaces, we assume it's an implicit namespace, which always
-    // exists but has no metadata.
-    case catalog: CatalogPlugin =>
-      new Database(
-        name = ns.quoted,
-        catalog = catalog.name,
-        description = null,
-        locationUri = null)
-    case _ => new Database(name = ns.quoted, description = null, locationUri = null)
-  }
-
   /**
    * Gets the database with the specified name. This throws an `AnalysisException` when no
    * `Database` can be found.
@@ -445,7 +424,12 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     val plan = UnresolvedNamespace(idents, true)
     sparkSession.sessionState.executePlan(plan).analyzed match {
       case ResolvedNamespace(catalog, namespace, metadata) =>
-        getNamespace(catalog, namespace, metadata)
+        new Database(
+          name = namespace.quoted,
+          catalog = catalog.name,
+          description = metadata.get(SupportsNamespaces.PROP_COMMENT).orNull,
+          locationUri = metadata.get(SupportsNamespaces.PROP_LOCATION).orNull
+        )
       case _ => new Database(name = dbName, description = null, locationUri = null)
     }
   }
