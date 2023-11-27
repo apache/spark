@@ -315,12 +315,6 @@ class LinearRegression(
         epsilon: float = 1.35,
         maxBlockSizeInMB: float = 0.0,
     ):
-        """
-        __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                 standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
-                 loss="squaredError", epsilon=1.35, maxBlockSizeInMB=0.0)
-        """
         super(LinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.LinearRegression", self.uid
@@ -349,10 +343,6 @@ class LinearRegression(
         maxBlockSizeInMB: float = 0.0,
     ) -> "LinearRegression":
         """
-        setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
-                  loss="squaredError", epsilon=1.35, maxBlockSizeInMB=0.0)
         Sets params for linear regression.
         """
         kwargs = self._input_kwargs
@@ -866,10 +856,6 @@ class IsotonicRegression(
         isotonic: bool = True,
         featureIndex: int = 0,
     ):
-        """
-        __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 weightCol=None, isotonic=True, featureIndex=0):
-        """
         super(IsotonicRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.IsotonicRegression", self.uid
@@ -888,8 +874,6 @@ class IsotonicRegression(
         featureIndex: int = 0,
     ) -> "IsotonicRegression":
         """
-        setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 weightCol=None, isotonic=True, featureIndex=0):
         Set the params for IsotonicRegression.
         """
         kwargs = self._input_kwargs
@@ -1124,13 +1108,6 @@ class DecisionTreeRegressor(
         leafCol: str = "",
         minWeightFractionPerNode: float = 0.0,
     ):
-        """
-        __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                 impurity="variance", seed=None, varianceCol=None, weightCol=None, \
-                 leafCol="", minWeightFractionPerNode=0.0)
-        """
         super(DecisionTreeRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.DecisionTreeRegressor", self.uid
@@ -1160,11 +1137,6 @@ class DecisionTreeRegressor(
         minWeightFractionPerNode: float = 0.0,
     ) -> "DecisionTreeRegressor":
         """
-        setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                  impurity="variance", seed=None, varianceCol=None, weightCol=None, \
-                  leafCol="", minWeightFractionPerNode=0.0)
         Sets params for the DecisionTreeRegressor.
         """
         kwargs = self._input_kwargs
@@ -1425,14 +1397,6 @@ class RandomForestRegressor(
         weightCol: Optional[str] = None,
         bootstrap: Optional[bool] = True,
     ):
-        """
-        __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                 impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20, \
-                 featureSubsetStrategy="auto", leafCol=", minWeightFractionPerNode=0.0", \
-                 weightCol=None, bootstrap=True)
-        """
         super(RandomForestRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.RandomForestRegressor", self.uid
@@ -1465,12 +1429,6 @@ class RandomForestRegressor(
         bootstrap: Optional[bool] = True,
     ) -> "RandomForestRegressor":
         """
-        setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                  impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20, \
-                  featureSubsetStrategy="auto", leafCol="", minWeightFractionPerNode=0.0, \
-                  weightCol=None, bootstrap=True)
         Sets params for linear regression.
         """
         kwargs = self._input_kwargs
@@ -1769,15 +1727,6 @@ class GBTRegressor(
         minWeightFractionPerNode: float = 0.0,
         weightCol: Optional[str] = None,
     ):
-        """
-        __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
-                 maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
-                 checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
-                 impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
-                 validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0,
-                 weightCol=None)
-        """
         super(GBTRegressor, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
         kwargs = self._input_kwargs
@@ -1811,13 +1760,6 @@ class GBTRegressor(
         weightCol: Optional[str] = None,
     ) -> "GBTRegressor":
         """
-        setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
-                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
-                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
-                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
-                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0, \
-                  weightCol=None)
         Sets params for Gradient Boosted Tree Regression.
         """
         kwargs = self._input_kwargs
@@ -2160,12 +2102,6 @@ class AFTSurvivalRegression(
         aggregationDepth: int = 2,
         maxBlockSizeInMB: float = 0.0,
     ):
-        """
-        __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
-                 quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
-                 quantilesCol=None, aggregationDepth=2, maxBlockSizeInMB=0.0)
-        """
         super(AFTSurvivalRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.AFTSurvivalRegression", self.uid
@@ -2199,12 +2135,6 @@ class AFTSurvivalRegression(
         aggregationDepth: int = 2,
         maxBlockSizeInMB: float = 0.0,
     ) -> "AFTSurvivalRegression":
-        """
-        setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
-                  quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
-                  quantilesCol=None, aggregationDepth=2, maxBlockSizeInMB=0.0):
-        """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
@@ -2558,12 +2488,6 @@ class GeneralizedLinearRegression(
         offsetCol: Optional[str] = None,
         aggregationDepth: int = 2,
     ):
-        """
-        __init__(self, \\*, labelCol="label", featuresCol="features", predictionCol="prediction", \
-                 family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6, \
-                 regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None, \
-                 variancePower=0.0, linkPower=None, offsetCol=None, aggregationDepth=2)
-        """
         super(GeneralizedLinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.GeneralizedLinearRegression", self.uid
@@ -2594,10 +2518,6 @@ class GeneralizedLinearRegression(
         aggregationDepth: int = 2,
     ) -> "GeneralizedLinearRegression":
         """
-        setParams(self, \\*, labelCol="label", featuresCol="features", predictionCol="prediction", \
-                  family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6, \
-                  regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None, \
-                  variancePower=0.0, linkPower=None, offsetCol=None, aggregationDepth=2)
         Sets params for generalized linear regression.
         """
         kwargs = self._input_kwargs
@@ -3129,12 +3049,6 @@ class FMRegressor(
         solver: str = "adamW",
         seed: Optional[int] = None,
     ):
-        """
-        __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0, \
-                 miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
-                 tol=1e-6, solver="adamW", seed=None)
-        """
         super(FMRegressor, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.FMRegressor", self.uid)
         kwargs = self._input_kwargs
@@ -3160,10 +3074,6 @@ class FMRegressor(
         seed: Optional[int] = None,
     ) -> "FMRegressor":
         """
-        setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0, \
-                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
-                  tol=1e-6, solver="adamW", seed=None)
         Sets Params for FMRegressor.
         """
         kwargs = self._input_kwargs

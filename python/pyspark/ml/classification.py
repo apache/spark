@@ -725,12 +725,6 @@ class LinearSVC(
         aggregationDepth: int = 2,
         maxBlockSizeInMB: float = 0.0,
     ):
-        """
-        __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
-                 fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
-                 aggregationDepth=2, maxBlockSizeInMB=0.0):
-        """
         super(LinearSVC, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.LinearSVC", self.uid
@@ -757,10 +751,6 @@ class LinearSVC(
         maxBlockSizeInMB: float = 0.0,
     ) -> "LinearSVC":
         """
-        setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
-                  fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
-                  aggregationDepth=2, maxBlockSizeInMB=0.0):
         Sets params for Linear SVM Classifier.
         """
         kwargs = self._input_kwargs
@@ -1299,14 +1289,6 @@ class LogisticRegression(
         maxBlockSizeInMB: float = 0.0,
     ):
         """
-        __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                 threshold=0.5, thresholds=None, probabilityCol="probability", \
-                 rawPredictionCol="rawPrediction", standardization=True, weightCol=None, \
-                 aggregationDepth=2, family="auto", \
-                 lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
-                 lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None, \
-                 maxBlockSizeInMB=0.0):
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
         super(LogisticRegression, self).__init__()
@@ -1398,14 +1380,6 @@ class LogisticRegression(
         maxBlockSizeInMB: float = 0.0,
     ) -> "LogisticRegression":
         """
-        setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                  threshold=0.5, thresholds=None, probabilityCol="probability", \
-                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None, \
-                  aggregationDepth=2, family="auto", \
-                  lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
-                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None, \
-                  maxBlockSizeInMB=0.0):
         Sets params for logistic regression.
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
@@ -1789,13 +1763,6 @@ class DecisionTreeClassifier(
         leafCol: str = "",
         minWeightFractionPerNode: float = 0.0,
     ):
-        """
-        __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 probabilityCol="probability", rawPredictionCol="rawPrediction", \
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
-                 seed=None, weightCol=None, leafCol="", minWeightFractionPerNode=0.0)
-        """
         super(DecisionTreeClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.DecisionTreeClassifier", self.uid
@@ -1826,11 +1793,6 @@ class DecisionTreeClassifier(
         minWeightFractionPerNode: float = 0.0,
     ) -> "DecisionTreeClassifier":
         """
-        setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
-                  seed=None, weightCol=None, leafCol="", minWeightFractionPerNode=0.0)
         Sets params for the DecisionTreeClassifier.
         """
         kwargs = self._input_kwargs
@@ -2083,14 +2045,6 @@ class RandomForestClassifier(
         weightCol: Optional[str] = None,
         bootstrap: Optional[bool] = True,
     ):
-        """
-        __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 probabilityCol="probability", rawPredictionCol="rawPrediction", \
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
-                 numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0, \
-                 leafCol="", minWeightFractionPerNode=0.0, weightCol=None, bootstrap=True)
-        """
         super(RandomForestClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.RandomForestClassifier", self.uid
@@ -2551,15 +2505,6 @@ class GBTClassifier(
         minWeightFractionPerNode: float = 0.0,
         weightCol: Optional[str] = None,
     ):
-        """
-        __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                 lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, \
-                 impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
-                 validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0, \
-                 weightCol=None)
-        """
         super(GBTClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.GBTClassifier", self.uid
@@ -2595,13 +2540,6 @@ class GBTClassifier(
         weightCol: Optional[str] = None,
     ) -> "GBTClassifier":
         """
-        setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                  lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, \
-                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
-                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0, \
-                  weightCol=None)
         Sets params for Gradient Boosted Tree Classification.
         """
         kwargs = self._input_kwargs
@@ -2933,11 +2871,6 @@ class NaiveBayes(
         thresholds: Optional[List[float]] = None,
         weightCol: Optional[str] = None,
     ):
-        """
-        __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 probabilityCol="probability", rawPredictionCol="rawPrediction", smoothing=1.0, \
-                 modelType="multinomial", thresholds=None, weightCol=None)
-        """
         super(NaiveBayes, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.NaiveBayes", self.uid
@@ -2960,9 +2893,6 @@ class NaiveBayes(
         weightCol: Optional[str] = None,
     ) -> "NaiveBayes":
         """
-        setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  probabilityCol="probability", rawPredictionCol="rawPrediction", smoothing=1.0, \
-                  modelType="multinomial", thresholds=None, weightCol=None)
         Sets params for Naive Bayes.
         """
         kwargs = self._input_kwargs
@@ -3185,12 +3115,6 @@ class MultilayerPerceptronClassifier(
         probabilityCol: str = "probability",
         rawPredictionCol: str = "rawPrediction",
     ):
-        """
-        __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03, \
-                 solver="l-bfgs", initialWeights=None, probabilityCol="probability", \
-                 rawPredictionCol="rawPrediction")
-        """
         super(MultilayerPerceptronClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.MultilayerPerceptronClassifier", self.uid
@@ -3217,10 +3141,6 @@ class MultilayerPerceptronClassifier(
         rawPredictionCol: str = "rawPrediction",
     ) -> "MultilayerPerceptronClassifier":
         """
-        setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03, \
-                  solver="l-bfgs", initialWeights=None, probabilityCol="probability", \
-                  rawPredictionCol="rawPrediction"):
         Sets params for MultilayerPerceptronClassifier.
         """
         kwargs = self._input_kwargs
@@ -3445,10 +3365,6 @@ class OneVsRest(
         weightCol: Optional[str] = None,
         parallelism: int = 1,
     ):
-        """
-        __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 rawPredictionCol="rawPrediction", classifier=None, weightCol=None, parallelism=1):
-        """
         super(OneVsRest, self).__init__()
         self._setDefault(parallelism=1)
         kwargs = self._input_kwargs
@@ -3467,8 +3383,6 @@ class OneVsRest(
         parallelism: int = 1,
     ) -> "OneVsRest":
         """
-        setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  rawPredictionCol="rawPrediction", classifier=None, weightCol=None, parallelism=1):
         Sets params for OneVsRest.
         """
         kwargs = self._input_kwargs
@@ -4066,13 +3980,6 @@ class FMClassifier(
         thresholds: Optional[List[float]] = None,
         seed: Optional[int] = None,
     ):
-        """
-        __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 probabilityCol="probability", rawPredictionCol="rawPrediction", \
-                 factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0, \
-                 miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
-                 tol=1e-6, solver="adamW", thresholds=None, seed=None)
-        """
         super(FMClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.FMClassifier", self.uid
@@ -4103,11 +4010,6 @@ class FMClassifier(
         seed: Optional[int] = None,
     ) -> "FMClassifier":
         """
-        setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
-                  factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0, \
-                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
-                  tol=1e-6, solver="adamW", thresholds=None, seed=None)
         Sets Params for FMClassifier.
         """
         kwargs = self._input_kwargs

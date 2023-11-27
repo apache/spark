@@ -229,10 +229,6 @@ class BinaryClassificationEvaluator(
         weightCol: Optional[str] = None,
         numBins: int = 1000,
     ):
-        """
-        __init__(self, \\*, rawPredictionCol="rawPrediction", labelCol="label", \
-                 metricName="areaUnderROC", weightCol=None, numBins=1000)
-        """
         super(BinaryClassificationEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.BinaryClassificationEvaluator", self.uid
@@ -301,8 +297,6 @@ class BinaryClassificationEvaluator(
         numBins: int = 1000,
     ) -> "BinaryClassificationEvaluator":
         """
-        setParams(self, \\*, rawPredictionCol="rawPrediction", labelCol="label", \
-                  metricName="areaUnderROC", weightCol=None, numBins=1000)
         Sets params for binary classification evaluator.
         """
         kwargs = self._input_kwargs
@@ -385,10 +379,6 @@ class RegressionEvaluator(
         weightCol: Optional[str] = None,
         throughOrigin: bool = False,
     ):
-        """
-        __init__(self, \\*, predictionCol="prediction", labelCol="label", \
-                 metricName="rmse", weightCol=None, throughOrigin=False)
-        """
         super(RegressionEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.RegressionEvaluator", self.uid
@@ -455,8 +445,6 @@ class RegressionEvaluator(
         throughOrigin: bool = False,
     ) -> "RegressionEvaluator":
         """
-        setParams(self, \\*, predictionCol="prediction", labelCol="label", \
-                  metricName="rmse", weightCol=None, throughOrigin=False)
         Sets params for regression evaluator.
         """
         kwargs = self._input_kwargs
@@ -574,11 +562,6 @@ class MulticlassClassificationEvaluator(
         probabilityCol: str = "probability",
         eps: float = 1e-15,
     ):
-        """
-        __init__(self, \\*, predictionCol="prediction", labelCol="label", \
-                 metricName="f1", weightCol=None, metricLabel=0.0, beta=1.0, \
-                 probabilityCol="probability", eps=1e-15)
-        """
         super(MulticlassClassificationEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator", self.uid
@@ -685,9 +668,6 @@ class MulticlassClassificationEvaluator(
         eps: float = 1e-15,
     ) -> "MulticlassClassificationEvaluator":
         """
-        setParams(self, \\*, predictionCol="prediction", labelCol="label", \
-                  metricName="f1", weightCol=None, metricLabel=0.0, beta=1.0, \
-                  probabilityCol="probability", eps=1e-15)
         Sets params for multiclass classification evaluator.
         """
         kwargs = self._input_kwargs
@@ -761,10 +741,6 @@ class MultilabelClassificationEvaluator(
         metricName: "MultilabelClassificationEvaluatorMetricType" = "f1Measure",
         metricLabel: float = 0.0,
     ) -> None:
-        """
-        __init__(self, \\*, predictionCol="prediction", labelCol="label", \
-                 metricName="f1Measure", metricLabel=0.0)
-        """
         super(MultilabelClassificationEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.MultilabelClassificationEvaluator", self.uid
@@ -827,8 +803,6 @@ class MultilabelClassificationEvaluator(
         metricLabel: float = 0.0,
     ) -> "MultilabelClassificationEvaluator":
         """
-        setParams(self, \\*, predictionCol="prediction", labelCol="label", \
-                  metricName="f1Measure", metricLabel=0.0)
         Sets params for multilabel classification evaluator.
         """
         kwargs = self._input_kwargs
@@ -912,10 +886,6 @@ class ClusteringEvaluator(
         distanceMeasure: str = "squaredEuclidean",
         weightCol: Optional[str] = None,
     ):
-        """
-        __init__(self, \\*, predictionCol="prediction", featuresCol="features", \
-                 metricName="silhouette", distanceMeasure="squaredEuclidean", weightCol=None)
-        """
         super(ClusteringEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.ClusteringEvaluator", self.uid
@@ -935,8 +905,6 @@ class ClusteringEvaluator(
         weightCol: Optional[str] = None,
     ) -> "ClusteringEvaluator":
         """
-        setParams(self, \\*, predictionCol="prediction", featuresCol="features", \
-                  metricName="silhouette", distanceMeasure="squaredEuclidean", weightCol=None)
         Sets params for clustering evaluator.
         """
         kwargs = self._input_kwargs
@@ -1054,10 +1022,6 @@ class RankingEvaluator(
         metricName: "RankingEvaluatorMetricType" = "meanAveragePrecision",
         k: int = 10,
     ):
-        """
-        __init__(self, \\*, predictionCol="prediction", labelCol="label", \
-                 metricName="meanAveragePrecision", k=10)
-        """
         super(RankingEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.RankingEvaluator", self.uid
@@ -1118,8 +1082,6 @@ class RankingEvaluator(
         k: int = 10,
     ) -> "RankingEvaluator":
         """
-        setParams(self, \\*, predictionCol="prediction", labelCol="label", \
-                  metricName="meanAveragePrecision", k=10)
         Sets params for ranking evaluator.
         """
         kwargs = self._input_kwargs

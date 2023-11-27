@@ -728,10 +728,6 @@ class CrossValidator(
         collectSubModels: bool = False,
         foldCol: str = "",
     ) -> None:
-        """
-        __init__(self, \\*, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
-                 seed=None, parallelism=1, collectSubModels=False, foldCol="")
-        """
         super(CrossValidator, self).__init__()
         self._setDefault(parallelism=1)
         kwargs = self._input_kwargs
@@ -751,8 +747,6 @@ class CrossValidator(
         foldCol: str = "",
     ) -> "CrossValidator":
         """
-        setParams(self, \\*, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
-                  seed=None, parallelism=1, collectSubModels=False, foldCol=""):
         Sets params for cross validator.
         """
         kwargs = self._input_kwargs
@@ -1356,10 +1350,6 @@ class TrainValidationSplit(
         collectSubModels: bool = False,
         seed: Optional[int] = None,
     ) -> None:
-        """
-        __init__(self, \\*, estimator=None, estimatorParamMaps=None, evaluator=None, \
-                 trainRatio=0.75, parallelism=1, collectSubModels=False, seed=None)
-        """
         super(TrainValidationSplit, self).__init__()
         self._setDefault(parallelism=1)
         kwargs = self._input_kwargs
@@ -1378,8 +1368,6 @@ class TrainValidationSplit(
         seed: Optional[int] = None,
     ) -> "TrainValidationSplit":
         """
-        setParams(self, \\*, estimator=None, estimatorParamMaps=None, evaluator=None, \
-                  trainRatio=0.75, parallelism=1, collectSubModels=False, seed=None):
         Sets params for the train validation split.
         """
         kwargs = self._input_kwargs

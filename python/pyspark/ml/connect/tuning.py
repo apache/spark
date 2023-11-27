@@ -317,10 +317,6 @@ class CrossValidator(
         parallelism: int = 1,
         foldCol: str = "",
     ) -> None:
-        """
-        __init__(self, \\*, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
-                 seed=None, parallelism=1, foldCol="")
-        """
         super(CrossValidator, self).__init__()
         self._setDefault(parallelism=1)
         kwargs = self._input_kwargs
@@ -339,8 +335,6 @@ class CrossValidator(
         foldCol: str = "",
     ) -> "CrossValidator":
         """
-        setParams(self, \\*, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
-                  seed=None, parallelism=1, collectSubModels=False, foldCol=""):
         Sets params for cross validator.
         """
         kwargs = self._input_kwargs

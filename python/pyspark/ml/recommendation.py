@@ -387,13 +387,6 @@ class ALS(JavaEstimator["ALSModel"], _ALSParams, JavaMLWritable, JavaMLReadable[
         coldStartStrategy: str = "nan",
         blockSize: int = 4096,
     ):
-        """
-        __init__(self, \\*, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10,
-                 numItemBlocks=10, implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", \
-                 seed=None, ratingCol="rating", nonnegative=False, checkpointInterval=10, \
-                 intermediateStorageLevel="MEMORY_AND_DISK", \
-                 finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", blockSize=4096)
-        """
         super(ALS, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.recommendation.ALS", self.uid)
         kwargs = self._input_kwargs
@@ -422,11 +415,6 @@ class ALS(JavaEstimator["ALSModel"], _ALSParams, JavaMLWritable, JavaMLReadable[
         blockSize: int = 4096,
     ) -> "ALS":
         """
-        setParams(self, \\*, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, \
-                 numItemBlocks=10, implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", \
-                 seed=None, ratingCol="rating", nonnegative=False, checkpointInterval=10, \
-                 intermediateStorageLevel="MEMORY_AND_DISK", \
-                 finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", blockSize=4096)
         Sets params for ALS.
         """
         kwargs = self._input_kwargs

@@ -246,10 +246,6 @@ class FPGrowth(
         predictionCol: str = "prediction",
         numPartitions: Optional[int] = None,
     ):
-        """
-        __init__(self, \\*, minSupport=0.3, minConfidence=0.8, itemsCol="items", \
-                 predictionCol="prediction", numPartitions=None)
-        """
         super(FPGrowth, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.fpm.FPGrowth", self.uid)
         kwargs = self._input_kwargs
@@ -265,10 +261,6 @@ class FPGrowth(
         predictionCol: str = "prediction",
         numPartitions: Optional[int] = None,
     ) -> "FPGrowth":
-        """
-        setParams(self, \\*, minSupport=0.3, minConfidence=0.8, itemsCol="items", \
-                  predictionCol="prediction", numPartitions=None)
-        """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
@@ -397,10 +389,6 @@ class PrefixSpan(JavaParams):
         maxLocalProjDBSize: int = 32000000,
         sequenceCol: str = "sequence",
     ):
-        """
-        __init__(self, \\*, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, \
-                 sequenceCol="sequence")
-        """
         super(PrefixSpan, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.fpm.PrefixSpan", self.uid)
         self._setDefault(
@@ -418,10 +406,6 @@ class PrefixSpan(JavaParams):
         maxLocalProjDBSize: int = 32000000,
         sequenceCol: str = "sequence",
     ) -> "PrefixSpan":
-        """
-        setParams(self, \\*, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, \
-                  sequenceCol="sequence")
-        """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 

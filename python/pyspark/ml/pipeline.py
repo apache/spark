@@ -71,9 +71,6 @@ class Pipeline(Estimator["PipelineModel"], MLReadable["Pipeline"], MLWritable):
     _input_kwargs: Dict[str, Any]
 
     def __init__(self, *, stages: Optional[List["PipelineStage"]] = None):
-        """
-        __init__(self, \\*, stages=None)
-        """
         super(Pipeline, self).__init__()
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -107,7 +104,6 @@ class Pipeline(Estimator["PipelineModel"], MLReadable["Pipeline"], MLWritable):
     @since("1.3.0")
     def setParams(self, *, stages: Optional[List["PipelineStage"]] = None) -> "Pipeline":
         """
-        setParams(self, \\*, stages=None)
         Sets params for Pipeline.
         """
         kwargs = self._input_kwargs

@@ -69,9 +69,6 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
     _input_kwargs: Dict[str, Any]
 
     def __init__(self, *, inputCol: Optional[str] = None, outputCol: Optional[str] = None) -> None:
-        """
-        __init__(self, \\*, inputCol=None, outputCol=None)
-        """
         super().__init__()
         kwargs = self._input_kwargs
         self._set(**kwargs)
@@ -180,9 +177,6 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
     _input_kwargs: Dict[str, Any]
 
     def __init__(self, inputCol: Optional[str] = None, outputCol: Optional[str] = None) -> None:
-        """
-        __init__(self, \\*, inputCol=None, outputCol=None)
-        """
         super().__init__()
         kwargs = self._input_kwargs
         self._set(**kwargs)
@@ -332,11 +326,6 @@ class ArrayAssembler(
         featureSizes: Optional[List[int]] = None,
         handleInvalid: Optional[str] = "error",
     ) -> None:
-        """
-        __init__(
-            self, \\*, inputCols=None, outputCol=None, featureSizes=None, handleInvalid="error"
-        )
-        """
         super().__init__()
         kwargs = self._input_kwargs
         self._set(**kwargs)

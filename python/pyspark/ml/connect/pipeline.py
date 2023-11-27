@@ -138,9 +138,6 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
     _input_kwargs: Dict[str, Any]
 
     def __init__(self, *, stages: Optional[List[Params]] = None):
-        """
-        __init__(self, \\*, stages=None)
-        """
         super(Pipeline, self).__init__()
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -174,7 +171,6 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
     @since("3.5.0")
     def setParams(self, *, stages: Optional[List[Params]] = None) -> "Pipeline":
         """
-        setParams(self, \\*, stages=None)
         Sets params for Pipeline.
         """
         kwargs = self._input_kwargs
