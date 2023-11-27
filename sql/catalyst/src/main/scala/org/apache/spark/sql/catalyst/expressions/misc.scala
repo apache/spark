@@ -144,7 +144,6 @@ object RaiseError {
 // scalastyle:on line.size.limit
 object RaiseErrorExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
-    // for some reason pattern matching doesn't work here...
     if (expressions.length != 1) {
       throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1), expressions.length)
     } else {

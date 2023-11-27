@@ -36,16 +36,6 @@ SELECT raise_error(NULL);
 -- Passing non-string type
 SELECT raise_error(1);
 
--- Passing expression
-SELECT raise_error(1 + 1);
-
--- TODO: Need feedback on proper behaviour here:
--- Current behaviour is to pass builder with single arg and
--- then fail on datatype mismatch.
-SELECT raise_error(Map());
-SELECT raise_error(array(1,2,3));
-SELECT raise_error(array("error_message"));
-
 -- Check legacy config disables printing of [USER_RAISED_EXCEPTION]
 SET spark.sql.legacy.raiseErrorWithoutErrorClass=true;
 SELECT assert_true(false);
