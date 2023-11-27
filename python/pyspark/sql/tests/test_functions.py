@@ -903,7 +903,7 @@ class FunctionsTestsMixin:
             (3, "c"),
         ]
 
-        self.assertEquals(actual, expected)
+        self.assertEqual(actual, expected)
 
     def test_window_functions(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])

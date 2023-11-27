@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CurrentNamespace, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.{ShowTablePartition, ShowTables, ShowTablesExtended}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -28,13 +28,13 @@ class ShowTablesParserSuite extends AnalysisTest with SharedSparkSession {
   test("show tables") {
     comparePlans(
       parsePlan("SHOW TABLES"),
-      ShowTables(UnresolvedNamespace(Seq.empty[String]), None))
+      ShowTables(CurrentNamespace, None))
     comparePlans(
       parsePlan("SHOW TABLES '*test*'"),
-      ShowTables(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
+      ShowTables(CurrentNamespace, Some("*test*")))
     comparePlans(
       parsePlan("SHOW TABLES LIKE '*test*'"),
-      ShowTables(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
+      ShowTables(CurrentNamespace, Some("*test*")))
     comparePlans(
       parsePlan(s"SHOW TABLES FROM $catalog.ns1.ns2.tbl"),
       ShowTables(UnresolvedNamespace(Seq(catalog, "ns1", "ns2", "tbl")), None))
@@ -52,7 +52,7 @@ class ShowTablesParserSuite extends AnalysisTest with SharedSparkSession {
   test("show table extended") {
     comparePlans(
       parsePlan("SHOW TABLE EXTENDED LIKE '*test*'"),
-      ShowTablesExtended(UnresolvedNamespace(Seq.empty[String]), "*test*"))
+      ShowTablesExtended(CurrentNamespace, "*test*"))
     comparePlans(
       parsePlan(s"SHOW TABLE EXTENDED FROM $catalog.ns1.ns2 LIKE '*test*'"),
       ShowTablesExtended(UnresolvedNamespace(Seq(catalog, "ns1", "ns2")), "*test*"))

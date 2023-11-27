@@ -44,7 +44,7 @@ private[streaming] object UIUtils {
    */
   def normalizeDuration(milliseconds: Long): (Double, TimeUnit) = {
     if (milliseconds < 1000) {
-      return (milliseconds, TimeUnit.MILLISECONDS)
+      return (milliseconds.toDouble, TimeUnit.MILLISECONDS)
     }
     val seconds = milliseconds.toDouble / 1000
     if (seconds < 60) {
@@ -67,9 +67,9 @@ private[streaming] object UIUtils {
    * will discard the fractional part.
    */
   def convertToTimeUnit(milliseconds: Long, unit: TimeUnit): Double = unit match {
-    case TimeUnit.NANOSECONDS => milliseconds * 1000 * 1000
-    case TimeUnit.MICROSECONDS => milliseconds * 1000
-    case TimeUnit.MILLISECONDS => milliseconds
+    case TimeUnit.NANOSECONDS => milliseconds.toDouble * 1000 * 1000
+    case TimeUnit.MICROSECONDS => milliseconds.toDouble * 1000
+    case TimeUnit.MILLISECONDS => milliseconds.toDouble
     case TimeUnit.SECONDS => milliseconds / 1000.0
     case TimeUnit.MINUTES => milliseconds / 1000.0 / 60.0
     case TimeUnit.HOURS => milliseconds / 1000.0 / 60.0 / 60.0

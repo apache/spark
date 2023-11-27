@@ -55,7 +55,7 @@ object RetryPolicy {
   def defaultPolicy(): RetryPolicy = RetryPolicy(
     name = "DefaultPolicy",
     // Please synchronize changes here with Python side:
-    // pyspark/sql/connect/client/core.py
+    // pyspark/sql/connect/client/retries.py
     //
     // Note: these constants are selected so that the maximum tolerated wait is guaranteed
     // to be at least 10 minutes

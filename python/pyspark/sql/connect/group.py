@@ -134,7 +134,7 @@ class GroupedData:
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
             aggregate_cols = cast(List[Column], list(exprs))
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.Aggregate(
                 child=self._df._plan,
                 group_type=self._group_type,
@@ -176,7 +176,7 @@ class GroupedData:
             # if no column is provided, then all numerical columns are selected
             agg_cols = numerical_cols
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.Aggregate(
                 child=self._df._plan,
                 group_type=self._group_type,
@@ -296,7 +296,7 @@ class GroupedData:
             evalType=PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         )
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.GroupMap(
                 child=self._df._plan,
                 grouping_cols=self._grouping_cols,
@@ -335,7 +335,7 @@ class GroupedData:
             stateStructType.json() if isinstance(stateStructType, StructType) else stateStructType
         )
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.ApplyInPandasWithState(
                 child=self._df._plan,
                 grouping_cols=self._grouping_cols,
@@ -378,15 +378,13 @@ class PandasCogroupedOps:
             evalType=PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         )
 
-        all_cols = self._extract_cols(self._gd1) + self._extract_cols(self._gd2)
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.CoGroupMap(
                 input=self._gd1._df._plan,
                 input_grouping_cols=self._gd1._grouping_cols,
                 other=self._gd2._df._plan,
                 other_grouping_cols=self._gd2._grouping_cols,
                 function=udf_obj,
-                cols=all_cols,
             ),
             session=self._gd1._df._session,
         )

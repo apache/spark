@@ -106,7 +106,7 @@ class StreamingKMeansModel @Since("1.2.0") (
         val numNewPoints = pointStats.iterator.map { case (_, (_, n)) =>
           n
         }.sum
-        math.pow(decayFactor, numNewPoints)
+        math.pow(decayFactor, numNewPoints.toDouble)
     }
 
     // apply discount to weights

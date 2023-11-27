@@ -431,7 +431,8 @@ class QueryExecutionErrorsSuite
       parameters = Map(
         "functionName" -> functionNameRegex,
         "signature" -> "string, int",
-        "result" -> "string"),
+        "result" -> "string",
+        "reason" -> "java.lang.StringIndexOutOfBoundsException: begin 5, end 6, length 5"),
       matchPVals = true)
   }
 
@@ -455,7 +456,8 @@ class QueryExecutionErrorsSuite
       errorClass = "FAILED_EXECUTE_UDF",
       parameters = Map("functionName" -> functionNameRegex,
         "signature" -> "string, int",
-        "result" -> "string"),
+        "result" -> "string",
+        "reason" -> "java.lang.StringIndexOutOfBoundsException: begin 5, end 6, length 5"),
       matchPVals = true)
   }
 
