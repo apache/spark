@@ -273,7 +273,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
           val resourcesInfo = resources.map { case (rName, info) =>
-            (info.name, new ExecutorResourceInfo(info.name, info.addresses))
+            (info.name, new ExecutorResourceInfo(info.name, info.addresses.toIndexedSeq))
           }
           // If we've requested the executor figure out when we did.
           val reqTs: Option[Long] = CoarseGrainedSchedulerBackend.this.synchronized {
