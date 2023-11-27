@@ -199,7 +199,7 @@ class RocksDB(
     if (enableChangelogCheckpointing && !readOnly) {
       // Make sure we don't leak resource.
       changelogWriter.foreach(_.abort())
-      changelogWriter = Some(fileManager.getChangeLogWriter(version + 1))
+      changelogWriter = Some(fileManager.getChangeLogWriter(version + 1, useColumnFamilies))
     }
     this
   }
@@ -212,11 +212,13 @@ class RocksDB(
       var changelogReader: StateStoreChangelogReader = null
       try {
         changelogReader = fileManager.getChangelogReader(v)
-        changelogReader.foreach { case (key, value) =>
-          if (value != null) {
-            put(key, value)
-          } else {
-            remove(key)
+        changelogReader.foreach { case (recordType, key, value, colFamilyName) =>
+          recordType match {
+            case RecordType.PUT_RECORD =>
+              put(key, value, colFamilyName)
+
+            case RecordType.DELETE_RECORD =>
+              remove(key, colFamilyName)
           }
         }
       } finally {
@@ -283,6 +285,7 @@ class RocksDB(
         }
       }
       db.put(colFamilyNameToHandleMap(colFamilyName), writeOptions, key, value)
+      changelogWriter.foreach(_.put(key, value, colFamilyName))
     } else {
       if (conf.trackTotalNumberOfRows) {
         val oldValue = db.get(readOptions, key)
@@ -313,6 +316,7 @@ class RocksDB(
         }
       }
       db.delete(colFamilyNameToHandleMap(colFamilyName), writeOptions, key)
+      changelogWriter.foreach(_.delete(key, colFamilyName))
     } else {
       if (conf.trackTotalNumberOfRows) {
         val value = db.get(readOptions, key)
