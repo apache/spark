@@ -6607,12 +6607,12 @@
   },
   "STDS_REQUIRED_OPTION_UNSPECIFIED" : {
     "message" : [
-      "<optionName> must be specified."
+      "'<optionName>' must be specified."
     ]
   },
   "STDS_INVALID_OPTION_VALUE" : {
     "message" : [
-      "Invalid value for source option <optionName>: <message>"
+      "Invalid value for source option '<optionName>': <message>"
     ]
   },
   "STDS_CONFLICT_OPTIONS" : {

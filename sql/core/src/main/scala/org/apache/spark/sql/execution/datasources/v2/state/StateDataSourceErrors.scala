@@ -125,7 +125,7 @@ class StateDataSourceReadStateSchemaFailure(
 class StateDataSourceConflictOptions(options: Seq[String])
   extends StateDataSourceException(
     "STDS_CONFLICT_OPTIONS",
-    Map("options" -> options.mkString("[", ", ", "]")),
+    Map("options" -> options.map(x => s"'$x'").mkString("[", ", ", "]")),
     cause = null)
 
 class StataDataSourceCommittedBatchUnavailable(checkpointLocation: String)

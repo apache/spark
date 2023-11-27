@@ -117,6 +117,11 @@ case class StateSourceOptions(
     storeName: String,
     joinSide: JoinSideValues) {
   def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
+
+  override def toString: String = {
+    s"StateSourceOptions(checkpointLocation=$resolvedCpLocation, batchId=$batchId, " +
+      s"operatorId=$operatorId, storeName=$storeName, joinSide=$joinSide)"
+  }
 }
 
 object StateSourceOptions extends DataSourceOptions {

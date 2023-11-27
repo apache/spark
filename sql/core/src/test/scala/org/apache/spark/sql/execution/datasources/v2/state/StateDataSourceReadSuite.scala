@@ -49,7 +49,7 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
         CheckLastBatch((6, 0), (7, 1), (8, 0))
       )
 
-      intercept[IllegalArgumentException] {
+      intercept[StateDataSourceReadStateSchemaFailure] {
         spark.read.format("statestore").load(tempDir.getAbsolutePath)
       }
     }
@@ -67,7 +67,7 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
       offsetLog.purgeAfter(0)
       commitLog.purgeAfter(-1)
 
-      intercept[IllegalStateException] {
+      intercept[StataDataSourceCommittedBatchUnavailable] {
         spark.read.format("statestore").load(tempDir.getAbsolutePath)
       }
     }
@@ -98,67 +98,76 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
 
       rewriteStateSchemaFileToDummy()
 
-      intercept[IllegalArgumentException] {
+      intercept[StateDataSourceReadStateSchemaFailure] {
         spark.read.format("statestore").load(tempDir.getAbsolutePath)
       }
     }
   }
 
   test("ERROR: path is not specified") {
-    intercept[IllegalArgumentException] {
+    val exc = intercept[StateDataSourceUnspecifiedRequiredOption] {
       spark.read.format("statestore").load()
     }
+    assert(exc.getMessage.contains(StateSourceOptions.PATH))
   }
 
   test("ERROR: operator ID specified to negative") {
     withTempDir { tempDir =>
-      intercept[IllegalArgumentException] {
+      val exc = intercept[StateDataSourceInvalidOptionValue] {
         spark.read.format("statestore")
           .option(StateSourceOptions.OPERATOR_ID, -1)
           // trick to bypass getting the last committed batch before validating operator ID
           .option(StateSourceOptions.BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
+      assert(exc.getMessage.contains(StateSourceOptions.OPERATOR_ID))
+      assert(exc.getMessage.contains("cannot be negative"))
     }
   }
 
   test("ERROR: batch ID specified to negative") {
     withTempDir { tempDir =>
-      intercept[IllegalArgumentException] {
+      val exc = intercept[StateDataSourceInvalidOptionValue] {
         spark.read.format("statestore")
           .option(StateSourceOptions.BATCH_ID, -1)
           .load(tempDir.getAbsolutePath)
       }
+      assert(exc.getMessage.contains(StateSourceOptions.BATCH_ID))
+      assert(exc.getMessage.contains("cannot be negative"))
     }
   }
 
   test("ERROR: store name is empty") {
     withTempDir { tempDir =>
-      intercept[IllegalArgumentException] {
+      val exc = intercept[StateDataSourceInvalidOptionValue] {
         spark.read.format("statestore")
           .option(StateSourceOptions.STORE_NAME, "")
           // trick to bypass getting the last committed batch before validating operator ID
           .option(StateSourceOptions.BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
+      assert(exc.getMessage.contains(StateSourceOptions.STORE_NAME))
+      assert(exc.getMessage.contains("cannot be an empty string"))
     }
   }
 
   test("ERROR: invalid value for joinSide option") {
     withTempDir { tempDir =>
-      intercept[IllegalArgumentException] {
+      val exc = intercept[StateDataSourceInvalidOptionValue] {
         spark.read.format("statestore")
           .option(StateSourceOptions.JOIN_SIDE, "both")
           // trick to bypass getting the last committed batch before validating operator ID
           .option(StateSourceOptions.BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
+      assert(exc.getMessage.contains(StateSourceOptions.JOIN_SIDE))
+      assert(exc.getMessage.contains("Valid values are left,right,none"))
     }
   }
 
   test("ERROR: both options `joinSide` and `storeName` are specified") {
     withTempDir { tempDir =>
-      intercept[IllegalArgumentException] {
+      val exc = intercept[StateDataSourceConflictOptions] {
         spark.read.format("statestore")
           .option(StateSourceOptions.JOIN_SIDE, "right")
           .option(StateSourceOptions.STORE_NAME, "right-keyToNumValues")
@@ -166,6 +175,8 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
           .option(StateSourceOptions.BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
+      assert(exc.getMessage.contains(StateSourceOptions.JOIN_SIDE))
+      assert(exc.getMessage.contains(StateSourceOptions.STORE_NAME))
     }
   }
 
