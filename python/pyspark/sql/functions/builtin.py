@@ -12544,10 +12544,14 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
 @_try_remote_functions
 def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     """
-    Collection function: Returns element of array at given index in `extraction` if col is array.
-    Returns value for the given key in `extraction` if col is map. If position is negative
-    then location of the element will start from end, if number is outside the
-    array boundaries then None will be returned.
+    Collection function:
+    (array, index) - Returns element of array at given (1-based) index. If Index is 0, Spark will
+    throw an error. If index < 0, accesses elements from the last to the first.
+    If 'spark.sql.ansi.enabled' is set to true, an exception will be thrown if the index is out
+    of array boundaries instead of returning NULL.
+
+    (map, key) - Returns value for given key in `extraction` if col is map. The function always
+    returns NULL if the key is not contained in the map.
 
     .. versionadded:: 2.4.0
 
@@ -12626,6 +12630,7 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
 @_try_remote_functions
 def try_element_at(col: "ColumnOrName", extraction: "ColumnOrName") -> Column:
     """
+    Collection function:
     (array, index) - Returns element of array at given (1-based) index. If Index is 0, Spark will
     throw an error. If index < 0, accesses elements from the last to the first. The function
     always returns NULL if the index exceeds the length of the array.
@@ -12644,15 +12649,60 @@ def try_element_at(col: "ColumnOrName", extraction: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
-    >>> df.select(try_element_at(df.data, lit(1)).alias('r')).collect()
-    [Row(r='a')]
-    >>> df.select(try_element_at(df.data, lit(-1)).alias('r')).collect()
-    [Row(r='c')]
+    Example 1: Getting the first element of an array
 
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
+    >>> df.select(sf.try_element_at(df.data, sf.lit(1))).show()
+    +-----------------------+
+    |try_element_at(data, 1)|
+    +-----------------------+
+    |                      a|
+    +-----------------------+
+
+    Example 2: Getting the last element of an array using negative index
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
+    >>> df.select(sf.try_element_at(df.data, sf.lit(-1))).show()
+    +------------------------+
+    |try_element_at(data, -1)|
+    +------------------------+
+    |                       c|
+    +------------------------+
+
+    Example 3: Getting a value from a map using a key
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0},)], ['data'])
-    >>> df.select(try_element_at(df.data, lit("a")).alias('r')).collect()
-    [Row(r=1.0)]
+    >>> df.select(sf.try_element_at(df.data, sf.lit("a"))).show()
+    +-----------------------+
+    |try_element_at(data, a)|
+    +-----------------------+
+    |                    1.0|
+    +-----------------------+
+
+    Example 4: Getting a non-existing element from an array
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
+    >>> df.select(sf.try_element_at(df.data, sf.lit(4))).show()
+    +-----------------------+
+    |try_element_at(data, 4)|
+    +-----------------------+
+    |                   NULL|
+    +-----------------------+
+
+    Example 5: Getting a non-existing value from a map using a key
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0},)], ['data'])
+    >>> df.select(sf.try_element_at(df.data, sf.lit("c"))).show()
+    +-----------------------+
+    |try_element_at(data, c)|
+    +-----------------------+
+    |                   NULL|
+    +-----------------------+
     """
     return _invoke_function_over_columns("try_element_at", col, extraction)
 
