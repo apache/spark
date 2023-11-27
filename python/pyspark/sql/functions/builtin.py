@@ -18075,7 +18075,7 @@ def _invoke_higher_order_function(
     return Column(cast(JVMView, sc._jvm).Column(expr(*jcols + jfuns)))
 
 
-@try_remote_functions
+@_try_remote_functions
 def filter_value(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
     """
     Returns the column if the predicate holds true, otherwise null.
