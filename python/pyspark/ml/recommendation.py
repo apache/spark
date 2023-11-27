@@ -364,8 +364,6 @@ class ALS(JavaEstimator["ALSModel"], _ALSParams, JavaMLWritable, JavaMLReadable[
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -387,10 +385,10 @@ class ALS(JavaEstimator["ALSModel"], _ALSParams, JavaMLWritable, JavaMLReadable[
         coldStartStrategy: str = "nan",
         blockSize: int = 4096,
     ):
+        kwargs = locals()
         super(ALS, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.recommendation.ALS", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.4.0")
     def setParams(
@@ -417,8 +415,8 @@ class ALS(JavaEstimator["ALSModel"], _ALSParams, JavaMLWritable, JavaMLReadable[
         """
         Sets params for ALS.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "ALSModel":
         return ALSModel(java_model)

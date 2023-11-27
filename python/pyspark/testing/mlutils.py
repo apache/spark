@@ -191,9 +191,9 @@ class DummyLogisticRegression(
         regParam=0.0,
         rawPredictionCol="rawPrediction",
     ):
+        kwargs = locals()
         super(DummyLogisticRegression, self).__init__()
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     def setParams(
         self,
@@ -205,8 +205,8 @@ class DummyLogisticRegression(
         regParam=0.0,
         rawPredictionCol="rawPrediction",
     ):
-        kwargs = self._input_kwargs
-        self._set(**kwargs)
+        kwargs = locals()
+        self.__class__._set(**kwargs)
         return self
 
     def _fit(self, dataset):

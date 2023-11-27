@@ -714,8 +714,6 @@ class CrossValidator(
     0.8333...
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -728,10 +726,10 @@ class CrossValidator(
         collectSubModels: bool = False,
         foldCol: str = "",
     ) -> None:
+        kwargs = locals()
         super(CrossValidator, self).__init__()
         self._setDefault(parallelism=1)
-        kwargs = self._input_kwargs
-        self._set(**kwargs)
+        self.__class__._set(**kwargs)
 
     @since("1.4.0")
     def setParams(
@@ -749,8 +747,8 @@ class CrossValidator(
         """
         Sets params for cross validator.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("2.0.0")
     def setEstimator(self, value: Estimator) -> "CrossValidator":
@@ -1337,8 +1335,6 @@ class TrainValidationSplit(
     0.833...
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -1350,10 +1346,10 @@ class TrainValidationSplit(
         collectSubModels: bool = False,
         seed: Optional[int] = None,
     ) -> None:
+        kwargs = locals()
         super(TrainValidationSplit, self).__init__()
         self._setDefault(parallelism=1)
-        kwargs = self._input_kwargs
-        self._set(**kwargs)
+        self.__class__._set(**kwargs)
 
     @since("2.0.0")
     def setParams(
@@ -1370,8 +1366,8 @@ class TrainValidationSplit(
         """
         Sets params for the train validation split.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("2.0.0")
     def setEstimator(self, value: Estimator) -> "TrainValidationSplit":

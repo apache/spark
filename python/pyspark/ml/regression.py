@@ -294,8 +294,6 @@ class LinearRegression(
     >>> model.write().format("pmml").save(model_path + "_2")
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -315,12 +313,12 @@ class LinearRegression(
         epsilon: float = 1.35,
         maxBlockSizeInMB: float = 0.0,
     ):
+        kwargs = locals()
         super(LinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.LinearRegression", self.uid
         )
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.4.0")
     def setParams(
@@ -345,8 +343,8 @@ class LinearRegression(
         """
         Sets params for linear regression.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "LinearRegressionModel":
         return LinearRegressionModel(java_model)
@@ -844,8 +842,6 @@ class IsotonicRegression(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -856,12 +852,12 @@ class IsotonicRegression(
         isotonic: bool = True,
         featureIndex: int = 0,
     ):
+        kwargs = locals()
         super(IsotonicRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.IsotonicRegression", self.uid
         )
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     def setParams(
         self,
@@ -876,8 +872,8 @@ class IsotonicRegression(
         """
         Set the params for IsotonicRegression.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "IsotonicRegressionModel":
         return IsotonicRegressionModel(java_model)
@@ -1086,8 +1082,6 @@ class DecisionTreeRegressor(
     DecisionTreeRegressionModel...depth=1, numNodes=3...
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -1108,12 +1102,12 @@ class DecisionTreeRegressor(
         leafCol: str = "",
         minWeightFractionPerNode: float = 0.0,
     ):
+        kwargs = locals()
         super(DecisionTreeRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.DecisionTreeRegressor", self.uid
         )
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.4.0")
     def setParams(
@@ -1139,8 +1133,8 @@ class DecisionTreeRegressor(
         """
         Sets params for the DecisionTreeRegressor.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "DecisionTreeRegressionModel":
         return DecisionTreeRegressionModel(java_model)
@@ -1372,8 +1366,6 @@ class RandomForestRegressor(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -1397,12 +1389,12 @@ class RandomForestRegressor(
         weightCol: Optional[str] = None,
         bootstrap: Optional[bool] = True,
     ):
+        kwargs = locals()
         super(RandomForestRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.RandomForestRegressor", self.uid
         )
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.4.0")
     def setParams(
@@ -1431,8 +1423,8 @@ class RandomForestRegressor(
         """
         Sets params for linear regression.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "RandomForestRegressionModel":
         return RandomForestRegressionModel(java_model)
@@ -1699,8 +1691,6 @@ class GBTRegressor(
     0.01
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -1727,10 +1717,10 @@ class GBTRegressor(
         minWeightFractionPerNode: float = 0.0,
         weightCol: Optional[str] = None,
     ):
+        kwargs = locals()
         super(GBTRegressor, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.4.0")
     def setParams(
@@ -1762,8 +1752,8 @@ class GBTRegressor(
         """
         Sets params for Gradient Boosted Tree Regression.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "GBTRegressionModel":
         return GBTRegressionModel(java_model)
@@ -2075,8 +2065,6 @@ class AFTSurvivalRegression(
     .. versionadded:: 1.6.0
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -2102,12 +2090,12 @@ class AFTSurvivalRegression(
         aggregationDepth: int = 2,
         maxBlockSizeInMB: float = 0.0,
     ):
+        kwargs = locals()
         super(AFTSurvivalRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.AFTSurvivalRegression", self.uid
         )
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.6.0")
     def setParams(
@@ -2135,8 +2123,8 @@ class AFTSurvivalRegression(
         aggregationDepth: int = 2,
         maxBlockSizeInMB: float = 0.0,
     ) -> "AFTSurvivalRegression":
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "AFTSurvivalRegressionModel":
         return AFTSurvivalRegressionModel(java_model)
@@ -2466,8 +2454,6 @@ class GeneralizedLinearRegression(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -2488,13 +2474,13 @@ class GeneralizedLinearRegression(
         offsetCol: Optional[str] = None,
         aggregationDepth: int = 2,
     ):
+        kwargs = locals()
         super(GeneralizedLinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.GeneralizedLinearRegression", self.uid
         )
-        kwargs = self._input_kwargs
 
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("2.0.0")
     def setParams(
@@ -2520,8 +2506,8 @@ class GeneralizedLinearRegression(
         """
         Sets params for generalized linear regression.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "GeneralizedLinearRegressionModel":
         return GeneralizedLinearRegressionModel(java_model)
@@ -3029,8 +3015,6 @@ class FMRegressor(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -3049,10 +3033,10 @@ class FMRegressor(
         solver: str = "adamW",
         seed: Optional[int] = None,
     ):
+        kwargs = locals()
         super(FMRegressor, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.FMRegressor", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("3.0.0")
     def setParams(
@@ -3076,8 +3060,8 @@ class FMRegressor(
         """
         Sets Params for FMRegressor.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "FMRegressionModel":
         return FMRegressionModel(java_model)

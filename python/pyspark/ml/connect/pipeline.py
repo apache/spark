@@ -135,12 +135,10 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
         Params._dummy(), "stages", "a list of pipeline stages"
     )  # type: ignore[assignment]
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(self, *, stages: Optional[List[Params]] = None):
+        kwargs = locals()
         super(Pipeline, self).__init__()
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     def setStages(self, value: List[Params]) -> "Pipeline":
         """
@@ -173,8 +171,8 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
         """
         Sets params for Pipeline.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def _fit(self, dataset: Union[DataFrame, pd.DataFrame]) -> "PipelineModel":
         stages = self.getStages()

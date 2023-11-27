@@ -304,8 +304,6 @@ class CrossValidator(
     [0.04902833489813031, 0.05247132866444953]
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -317,10 +315,10 @@ class CrossValidator(
         parallelism: int = 1,
         foldCol: str = "",
     ) -> None:
+        kwargs = locals()
         super(CrossValidator, self).__init__()
-        self._setDefault(parallelism=1)
-        kwargs = self._input_kwargs
-        self._set(**kwargs)
+        CrossValidator._setDefault(parallelism=1)
+        self.__class__._set(**kwargs)
 
     @since("3.5.0")
     def setParams(
@@ -337,8 +335,8 @@ class CrossValidator(
         """
         Sets params for cross validator.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("3.5.0")
     def setEstimator(self, value: Estimator) -> "CrossValidator":

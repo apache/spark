@@ -218,8 +218,6 @@ class BinaryClassificationEvaluator(
         typeConverter=TypeConverters.toInt,
     )
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -229,13 +227,13 @@ class BinaryClassificationEvaluator(
         weightCol: Optional[str] = None,
         numBins: int = 1000,
     ):
+        kwargs = locals()
         super(BinaryClassificationEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.BinaryClassificationEvaluator", self.uid
         )
         self._setDefault(metricName="areaUnderROC", numBins=1000)
-        kwargs = self._input_kwargs
-        self._set(**kwargs)
+        self.__class__._set(**kwargs)
 
     @since("1.4.0")
     def setMetricName(
@@ -299,8 +297,8 @@ class BinaryClassificationEvaluator(
         """
         Sets params for binary classification evaluator.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
 
 @inherit_doc
@@ -368,8 +366,6 @@ class RegressionEvaluator(
         typeConverter=TypeConverters.toBoolean,
     )
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -379,13 +375,13 @@ class RegressionEvaluator(
         weightCol: Optional[str] = None,
         throughOrigin: bool = False,
     ):
+        kwargs = locals()
         super(RegressionEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.RegressionEvaluator", self.uid
         )
         self._setDefault(metricName="rmse", throughOrigin=False)
-        kwargs = self._input_kwargs
-        self._set(**kwargs)
+        self.__class__._set(**kwargs)
 
     @since("1.4.0")
     def setMetricName(self, value: "RegressionEvaluatorMetricType") -> "RegressionEvaluator":
@@ -447,8 +443,8 @@ class RegressionEvaluator(
         """
         Sets params for regression evaluator.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
 
 @inherit_doc
@@ -548,8 +544,6 @@ class MulticlassClassificationEvaluator(
         typeConverter=TypeConverters.toFloat,
     )
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -567,8 +561,8 @@ class MulticlassClassificationEvaluator(
             "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator", self.uid
         )
         self._setDefault(metricName="f1", metricLabel=0.0, beta=1.0, eps=1e-15)
-        kwargs = self._input_kwargs
-        self._set(**kwargs)
+        kwargs = locals()
+        self.__class__._set(**kwargs)
 
     @since("1.5.0")
     def setMetricName(
@@ -670,8 +664,8 @@ class MulticlassClassificationEvaluator(
         """
         Sets params for multiclass classification evaluator.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
 
 @inherit_doc
@@ -731,8 +725,6 @@ class MultilabelClassificationEvaluator(
         typeConverter=TypeConverters.toFloat,
     )
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -741,13 +733,13 @@ class MultilabelClassificationEvaluator(
         metricName: "MultilabelClassificationEvaluatorMetricType" = "f1Measure",
         metricLabel: float = 0.0,
     ) -> None:
+        kwargs = locals()
         super(MultilabelClassificationEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.MultilabelClassificationEvaluator", self.uid
         )
         self._setDefault(metricName="f1Measure", metricLabel=0.0)
-        kwargs = self._input_kwargs
-        self._set(**kwargs)
+        self.__class__._set(**kwargs)
 
     @since("3.0.0")
     def setMetricName(
@@ -805,8 +797,8 @@ class MultilabelClassificationEvaluator(
         """
         Sets params for multilabel classification evaluator.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
 
 @inherit_doc
@@ -875,8 +867,6 @@ class ClusteringEvaluator(
         typeConverter=TypeConverters.toString,  # type: ignore[arg-type]
     )
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -886,13 +876,13 @@ class ClusteringEvaluator(
         distanceMeasure: str = "squaredEuclidean",
         weightCol: Optional[str] = None,
     ):
+        kwargs = locals()
         super(ClusteringEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.ClusteringEvaluator", self.uid
         )
         self._setDefault(metricName="silhouette", distanceMeasure="squaredEuclidean")
-        kwargs = self._input_kwargs
-        self._set(**kwargs)
+        self.__class__._set(**kwargs)
 
     @since("2.3.0")
     def setParams(
@@ -907,8 +897,8 @@ class ClusteringEvaluator(
         """
         Sets params for clustering evaluator.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("2.3.0")
     def setMetricName(self, value: "ClusteringEvaluatorMetricType") -> "ClusteringEvaluator":
@@ -1012,8 +1002,6 @@ class RankingEvaluator(
         typeConverter=TypeConverters.toInt,
     )
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -1022,13 +1010,13 @@ class RankingEvaluator(
         metricName: "RankingEvaluatorMetricType" = "meanAveragePrecision",
         k: int = 10,
     ):
+        kwargs = locals()
         super(RankingEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.RankingEvaluator", self.uid
         )
         self._setDefault(metricName="meanAveragePrecision", k=10)
-        kwargs = self._input_kwargs
-        self._set(**kwargs)
+        self.__class__._set(**kwargs)
 
     @since("3.0.0")
     def setMetricName(self, value: "RankingEvaluatorMetricType") -> "RankingEvaluator":
@@ -1084,8 +1072,8 @@ class RankingEvaluator(
         """
         Sets params for ranking evaluator.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
 
 if __name__ == "__main__":

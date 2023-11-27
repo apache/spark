@@ -175,8 +175,6 @@ class LogisticRegression(
     LogisticRegression_...
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -209,9 +207,9 @@ class LogisticRegression(
             seed: int = 0,
         )
         """
+        kwargs = locals()
         super(LogisticRegression, self).__init__()
-        kwargs = self._input_kwargs
-        self._set(**kwargs)
+        self.__class__._set(**kwargs)
 
     def _fit(self, dataset: Union[DataFrame, pd.DataFrame]) -> "LogisticRegressionModel":
         if isinstance(dataset, pd.DataFrame):

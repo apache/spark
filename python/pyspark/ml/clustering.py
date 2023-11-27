@@ -401,8 +401,6 @@ class GaussianMixture(
     GaussianMixture...
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -416,12 +414,12 @@ class GaussianMixture(
         aggregationDepth: int = 2,
         weightCol: Optional[str] = None,
     ):
+        kwargs = locals()
         super(GaussianMixture, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.clustering.GaussianMixture", self.uid
         )
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "GaussianMixtureModel":
         return GaussianMixtureModel(java_model)
@@ -443,8 +441,8 @@ class GaussianMixture(
         """
         Sets params for GaussianMixture.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("2.0.0")
     def setK(self, value: int) -> "GaussianMixture":
@@ -764,8 +762,6 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -782,10 +778,10 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
         solver: str = "auto",
         maxBlockSizeInMB: float = 0.0,
     ):
+        kwargs = locals()
         super(KMeans, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.KMeans", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> KMeansModel:
         return KMeansModel(java_model)
@@ -810,8 +806,8 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
         """
         Sets params for KMeans.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("1.5.0")
     def setK(self, value: int) -> "KMeans":
@@ -1103,8 +1099,6 @@ class BisectingKMeans(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -1117,12 +1111,12 @@ class BisectingKMeans(
         distanceMeasure: str = "euclidean",
         weightCol: Optional[str] = None,
     ):
+        kwargs = locals()
         super(BisectingKMeans, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.clustering.BisectingKMeans", self.uid
         )
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("2.0.0")
     def setParams(
@@ -1140,8 +1134,8 @@ class BisectingKMeans(
         """
         Sets params for BisectingKMeans.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("2.0.0")
     def setK(self, value: int) -> "BisectingKMeans":
@@ -1645,8 +1639,6 @@ class LDA(JavaEstimator[LDAModel], _LDAParams, JavaMLReadable["LDA"], JavaMLWrit
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -1665,10 +1657,10 @@ class LDA(JavaEstimator[LDAModel], _LDAParams, JavaMLReadable["LDA"], JavaMLWrit
         topicDistributionCol: str = "topicDistribution",
         keepLastCheckpoint: bool = True,
     ):
+        kwargs = locals()
         super(LDA, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.LDA", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> LDAModel:
         if self.getOptimizer() == "em":
@@ -1698,8 +1690,8 @@ class LDA(JavaEstimator[LDAModel], _LDAParams, JavaMLReadable["LDA"], JavaMLWrit
         """
         Sets params for LDA.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("2.0.0")
     def setCheckpointInterval(self, value: int) -> "LDA":
@@ -1985,8 +1977,6 @@ class PowerIterationClustering(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -1997,12 +1987,12 @@ class PowerIterationClustering(
         dstCol: str = "dst",
         weightCol: Optional[str] = None,
     ):
+        kwargs = locals()
         super(PowerIterationClustering, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.clustering.PowerIterationClustering", self.uid
         )
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("2.4.0")
     def setParams(
@@ -2018,8 +2008,8 @@ class PowerIterationClustering(
         """
         Sets params for PowerIterationClustering.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("2.4.0")
     def setK(self, value: int) -> "PowerIterationClustering":

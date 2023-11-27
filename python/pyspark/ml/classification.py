@@ -706,8 +706,6 @@ class LinearSVC(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -725,12 +723,12 @@ class LinearSVC(
         aggregationDepth: int = 2,
         maxBlockSizeInMB: float = 0.0,
     ):
+        kwargs = locals()
         super(LinearSVC, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.LinearSVC", self.uid
         )
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("2.2.0")
     def setParams(
@@ -753,8 +751,8 @@ class LinearSVC(
         """
         Sets params for Linear SVM Classifier.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "LinearSVCModel":
         return LinearSVCModel(java_model)
@@ -1207,8 +1205,6 @@ class LogisticRegression(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     @overload
     def __init__(
         self,
@@ -1291,12 +1287,12 @@ class LogisticRegression(
         """
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
+        kwargs = locals()
         super(LogisticRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.LogisticRegression", self.uid
         )
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
         self._checkThresholdConsistency()
 
     @overload
@@ -1383,8 +1379,8 @@ class LogisticRegression(
         Sets params for logistic regression.
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
-        kwargs = self._input_kwargs
-        self._set(**kwargs)
+        kwargs = locals()
+        self.__class__._set(**kwargs)
         self._checkThresholdConsistency()
         return self
 
@@ -1740,8 +1736,6 @@ class DecisionTreeClassifier(
     DecisionTreeClassificationModel...depth=1, numNodes=3...
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -1763,12 +1757,12 @@ class DecisionTreeClassifier(
         leafCol: str = "",
         minWeightFractionPerNode: float = 0.0,
     ):
+        kwargs = locals()
         super(DecisionTreeClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.DecisionTreeClassifier", self.uid
         )
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.4.0")
     def setParams(
@@ -1795,8 +1789,8 @@ class DecisionTreeClassifier(
         """
         Sets params for the DecisionTreeClassifier.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__.setParams(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "DecisionTreeClassificationModel":
         return DecisionTreeClassificationModel(java_model)
@@ -2018,8 +2012,6 @@ class RandomForestClassifier(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -2045,12 +2037,12 @@ class RandomForestClassifier(
         weightCol: Optional[str] = None,
         bootstrap: Optional[bool] = True,
     ):
+        kwargs = locals()
         super(RandomForestClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.RandomForestClassifier", self.uid
         )
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.4.0")
     def setParams(
@@ -2079,16 +2071,10 @@ class RandomForestClassifier(
         bootstrap: Optional[bool] = True,
     ) -> "RandomForestClassifier":
         """
-        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 probabilityCol="probability", rawPredictionCol="rawPrediction", \
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None, \
-                  impurity="gini", numTrees=20, featureSubsetStrategy="auto", subsamplingRate=1.0, \
-                  leafCol="", minWeightFractionPerNode=0.0, weightCol=None, bootstrap=True)
         Sets params for linear classification.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "RandomForestClassificationModel":
         return RandomForestClassificationModel(java_model)
@@ -2477,8 +2463,6 @@ class GBTClassifier(
     0.01
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -2505,12 +2489,12 @@ class GBTClassifier(
         minWeightFractionPerNode: float = 0.0,
         weightCol: Optional[str] = None,
     ):
+        kwargs = locals()
         super(GBTClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.GBTClassifier", self.uid
         )
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.4.0")
     def setParams(
@@ -2542,8 +2526,8 @@ class GBTClassifier(
         """
         Sets params for Gradient Boosted Tree Classification.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "GBTClassificationModel":
         return GBTClassificationModel(java_model)
@@ -2856,8 +2840,6 @@ class NaiveBayes(
     DenseMatrix(0, 0, [...], ...)
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -2871,12 +2853,12 @@ class NaiveBayes(
         thresholds: Optional[List[float]] = None,
         weightCol: Optional[str] = None,
     ):
+        kwargs = locals()
         super(NaiveBayes, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.NaiveBayes", self.uid
         )
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.5.0")
     def setParams(
@@ -2895,8 +2877,8 @@ class NaiveBayes(
         """
         Sets params for Naive Bayes.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "NaiveBayesModel":
         return NaiveBayesModel(java_model)
@@ -3096,8 +3078,6 @@ class MultilayerPerceptronClassifier(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -3115,12 +3095,12 @@ class MultilayerPerceptronClassifier(
         probabilityCol: str = "probability",
         rawPredictionCol: str = "rawPrediction",
     ):
+        kwargs = locals()
         super(MultilayerPerceptronClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.MultilayerPerceptronClassifier", self.uid
         )
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.6.0")
     def setParams(
@@ -3143,8 +3123,8 @@ class MultilayerPerceptronClassifier(
         """
         Sets params for MultilayerPerceptronClassifier.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "MultilayerPerceptronClassificationModel":
         return MultilayerPerceptronClassificationModel(java_model)
@@ -3352,8 +3332,6 @@ class OneVsRest(
     ['features', 'rawPrediction', 'newPrediction']
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -3365,10 +3343,10 @@ class OneVsRest(
         weightCol: Optional[str] = None,
         parallelism: int = 1,
     ):
+        kwargs = locals()
         super(OneVsRest, self).__init__()
         self._setDefault(parallelism=1)
-        kwargs = self._input_kwargs
-        self._set(**kwargs)
+        self.__class__._set(**kwargs)
 
     @since("2.0.0")
     def setParams(
@@ -3385,8 +3363,8 @@ class OneVsRest(
         """
         Sets params for OneVsRest.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("2.0.0")
     def setClassifier(self, value: Classifier[CM]) -> "OneVsRest":
@@ -3957,8 +3935,6 @@ class FMClassifier(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -3980,12 +3956,12 @@ class FMClassifier(
         thresholds: Optional[List[float]] = None,
         seed: Optional[int] = None,
     ):
+        kwargs = locals()
         super(FMClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.FMClassifier", self.uid
         )
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("3.0.0")
     def setParams(
@@ -4012,8 +3988,8 @@ class FMClassifier(
         """
         Sets Params for FMClassifier.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "FMClassificationModel":
         return FMClassificationModel(java_model)

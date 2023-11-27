@@ -66,12 +66,10 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
     +------------+--------------------------+
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(self, *, inputCol: Optional[str] = None, outputCol: Optional[str] = None) -> None:
+        kwargs = locals()
         super().__init__()
-        kwargs = self._input_kwargs
-        self._set(**kwargs)
+        MaxAbsScaler._set(**kwargs)
 
     def _fit(self, dataset: Union["pd.DataFrame", "DataFrame"]) -> "MaxAbsScalerModel":
         input_col = self.getInputCol()
@@ -174,12 +172,10 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
     +------------+------------------------------------------+
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(self, inputCol: Optional[str] = None, outputCol: Optional[str] = None) -> None:
+        kwargs = locals()
         super().__init__()
-        kwargs = self._input_kwargs
-        self._set(**kwargs)
+        StandardScaler._set(**kwargs)
 
     def _fit(self, dataset: Union[DataFrame, pd.DataFrame]) -> "StandardScalerModel":
         input_col = self.getInputCol()
@@ -306,8 +302,6 @@ class ArrayAssembler(
     >>> assembler.transform(spark_df).select("out").show(truncate=False)
     """
 
-    _input_kwargs: Dict[str, Any]
-
     # Override doc of handleInvalid param.
     handleInvalid: Param[str] = Param(
         Params._dummy(),
@@ -326,9 +320,9 @@ class ArrayAssembler(
         featureSizes: Optional[List[int]] = None,
         handleInvalid: Optional[str] = "error",
     ) -> None:
+        kwargs = locals()
         super().__init__()
-        kwargs = self._input_kwargs
-        self._set(**kwargs)
+        ArrayAssembler._set(**kwargs)
         self._setDefault(handleInvalid="error")
 
     def _input_columns(self) -> List[str]:

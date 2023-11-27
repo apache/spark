@@ -177,8 +177,6 @@ class Binarizer(
     ...
     """
 
-    _input_kwargs: Dict[str, Any]
-
     threshold: Param[float] = Param(
         Params._dummy(),
         "threshold",
@@ -227,11 +225,11 @@ class Binarizer(
         inputCols: Optional[List[str]] = None,
         outputCols: Optional[List[str]] = None,
     ):
+        kwargs = locals()
         super(Binarizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Binarizer", self.uid)
         self._setDefault(threshold=0.0)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @overload
     def setParams(
@@ -267,8 +265,8 @@ class Binarizer(
         """
         Sets params for this Binarizer.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("1.4.0")
     def setThreshold(self, value: float) -> "Binarizer":
@@ -561,8 +559,6 @@ class BucketedRandomProjectionLSH(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -572,12 +568,12 @@ class BucketedRandomProjectionLSH(
         numHashTables: int = 1,
         bucketLength: Optional[float] = None,
     ):
+        kwargs = locals()
         super(BucketedRandomProjectionLSH, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.BucketedRandomProjectionLSH", self.uid
         )
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("2.2.0")
     def setParams(
@@ -592,8 +588,8 @@ class BucketedRandomProjectionLSH(
         """
         Sets params for this BucketedRandomProjectionLSH.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("2.2.0")
     def setBucketLength(self, value: float) -> "BucketedRandomProjectionLSH":
@@ -705,8 +701,6 @@ class Bucketizer(
     ...
     """
 
-    _input_kwargs: Dict[str, Any]
-
     splits: Param[List[float]] = Param(
         Params._dummy(),
         "splits",
@@ -781,11 +775,11 @@ class Bucketizer(
         inputCols: Optional[List[str]] = None,
         outputCols: Optional[List[str]] = None,
     ):
+        kwargs = locals()
         super(Bucketizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Bucketizer", self.uid)
         self._setDefault(handleInvalid="error")
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @overload
     def setParams(
@@ -824,8 +818,8 @@ class Bucketizer(
         """
         Sets params for this Bucketizer.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("1.4.0")
     def setSplits(self, value: List[float]) -> "Bucketizer":
@@ -1045,8 +1039,6 @@ class CountVectorizer(
     ...
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -1058,10 +1050,10 @@ class CountVectorizer(
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
     ):
+        kwargs = locals()
         super(CountVectorizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.CountVectorizer", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.6.0")
     def setParams(
@@ -1078,8 +1070,8 @@ class CountVectorizer(
         """
         Set the params for the CountVectorizer
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("1.6.0")
     def setMinTF(self, value: float) -> "CountVectorizer":
@@ -1252,8 +1244,6 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["DCT"], Jav
     False
     """
 
-    _input_kwargs: Dict[str, Any]
-
     inverse: Param[bool] = Param(
         Params._dummy(),
         "inverse",
@@ -1268,11 +1258,11 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["DCT"], Jav
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
     ):
+        kwargs = locals()
         super(DCT, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.DCT", self.uid)
         self._setDefault(inverse=False)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.6.0")
     def setParams(
@@ -1285,8 +1275,8 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["DCT"], Jav
         """
         Sets params for this DCT.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("1.6.0")
     def setInverse(self, value: bool) -> "DCT":
@@ -1354,8 +1344,6 @@ class ElementwiseProduct(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     scalingVec: Param[Vector] = Param(
         Params._dummy(),
         "scalingVec",
@@ -1370,12 +1358,12 @@ class ElementwiseProduct(
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
     ):
+        kwargs = locals()
         super(ElementwiseProduct, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.ElementwiseProduct", self.uid
         )
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.5.0")
     def setParams(
@@ -1388,8 +1376,8 @@ class ElementwiseProduct(
         """
         Sets params for this ElementwiseProduct.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("2.0.0")
     def setScalingVec(self, value: Vector) -> "ElementwiseProduct":
@@ -1484,8 +1472,6 @@ class FeatureHasher(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     categoricalCols: Param[List[str]] = Param(
         Params._dummy(),
         "categoricalCols",
@@ -1501,11 +1487,11 @@ class FeatureHasher(
         outputCol: Optional[str] = None,
         categoricalCols: Optional[List[str]] = None,
     ):
+        kwargs = locals()
         super(FeatureHasher, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.FeatureHasher", self.uid)
         self._setDefault(numFeatures=1 << 18)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("2.3.0")
     def setParams(
@@ -1519,8 +1505,8 @@ class FeatureHasher(
         """
         Sets params for this FeatureHasher.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("2.3.0")
     def setCategoricalCols(self, value: List[str]) -> "FeatureHasher":
@@ -1598,8 +1584,6 @@ class HashingTF(
     5
     """
 
-    _input_kwargs: Dict[str, Any]
-
     binary: Param[bool] = Param(
         Params._dummy(),
         "binary",
@@ -1617,11 +1601,11 @@ class HashingTF(
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
     ):
+        kwargs = locals()
         super(HashingTF, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.HashingTF", self.uid)
         self._setDefault(numFeatures=1 << 18, binary=False)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.3.0")
     def setParams(
@@ -1635,8 +1619,8 @@ class HashingTF(
         """
         Sets params for this HashingTF.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("2.0.0")
     def setBinary(self, value: bool) -> "HashingTF":
@@ -1753,8 +1737,6 @@ class IDF(JavaEstimator["IDFModel"], _IDFParams, JavaMLReadable["IDF"], JavaMLWr
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -1762,10 +1744,10 @@ class IDF(JavaEstimator["IDFModel"], _IDFParams, JavaMLReadable["IDF"], JavaMLWr
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
     ):
+        kwargs = locals()
         super(IDF, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IDF", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.4.0")
     def setParams(
@@ -1778,8 +1760,8 @@ class IDF(JavaEstimator["IDFModel"], _IDFParams, JavaMLReadable["IDF"], JavaMLWr
         """
         Sets params for this IDF.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("1.4.0")
     def setMinDocFreq(self, value: int) -> "IDF":
@@ -2011,8 +1993,6 @@ class Imputer(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     @overload
     def __init__(
         self,
@@ -2048,10 +2028,10 @@ class Imputer(
         outputCol: Optional[str] = None,
         relativeError: float = 0.001,
     ):
+        kwargs = locals()
         super(Imputer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Imputer", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @overload
     def setParams(
@@ -2092,8 +2072,8 @@ class Imputer(
         """
         Sets params for this Imputer.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("2.2.0")
     def setStrategy(self, value: str) -> "Imputer":
@@ -2236,14 +2216,12 @@ class Interaction(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(self, *, inputCols: Optional[List[str]] = None, outputCol: Optional[str] = None):
+        kwargs = locals()
         super(Interaction, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Interaction", self.uid)
         self._setDefault()
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("3.0.0")
     def setParams(
@@ -2252,8 +2230,8 @@ class Interaction(
         """
         Sets params for this Interaction.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("3.0.0")
     def setInputCols(self, value: List[str]) -> "Interaction":
@@ -2328,14 +2306,12 @@ class MaxAbsScaler(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(self, *, inputCol: Optional[str] = None, outputCol: Optional[str] = None):
+        kwargs = locals()
         super(MaxAbsScaler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MaxAbsScaler", self.uid)
         self._setDefault()
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("2.0.0")
     def setParams(
@@ -2344,8 +2320,8 @@ class MaxAbsScaler(
         """
         Sets params for this MaxAbsScaler.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def setInputCol(self, value: str) -> "MaxAbsScaler":
         """
@@ -2468,8 +2444,6 @@ class MinHashLSH(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -2478,10 +2452,10 @@ class MinHashLSH(
         seed: Optional[int] = None,
         numHashTables: int = 1,
     ):
+        kwargs = locals()
         super(MinHashLSH, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinHashLSH", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("2.2.0")
     def setParams(
@@ -2495,8 +2469,8 @@ class MinHashLSH(
         """
         Sets params for this MinHashLSH.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def setSeed(self, value: int) -> "MinHashLSH":
         """
@@ -2627,8 +2601,6 @@ class MinMaxScaler(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -2637,10 +2609,10 @@ class MinMaxScaler(
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
     ):
+        kwargs = locals()
         super(MinMaxScaler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinMaxScaler", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.6.0")
     def setParams(
@@ -2654,8 +2626,8 @@ class MinMaxScaler(
         """
         Sets params for this MinMaxScaler.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("1.6.0")
     def setMin(self, value: float) -> "MinMaxScaler":
@@ -2786,8 +2758,6 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["NGram"],
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     n: Param[int] = Param(
         Params._dummy(),
         "n",
@@ -2798,11 +2768,11 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["NGram"],
     def __init__(
         self, *, n: int = 2, inputCol: Optional[str] = None, outputCol: Optional[str] = None
     ):
+        kwargs = locals()
         super(NGram, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.NGram", self.uid)
         self._setDefault(n=2)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.5.0")
     def setParams(
@@ -2811,8 +2781,8 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["NGram"],
         """
         Sets params for this NGram.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("1.5.0")
     def setN(self, value: int) -> "NGram":
@@ -2880,18 +2850,16 @@ class Normalizer(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     p = Param(Params._dummy(), "p", "the p norm value.", typeConverter=TypeConverters.toFloat)
 
     def __init__(
         self, *, p: float = 2.0, inputCol: Optional[str] = None, outputCol: Optional[str] = None
     ):
+        kwargs = locals()
         super(Normalizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Normalizer", self.uid)
         self._setDefault(p=2.0)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.4.0")
     def setParams(
@@ -2900,8 +2868,8 @@ class Normalizer(
         """
         Sets params for this Normalizer.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("1.4.0")
     def setP(self, value: float) -> "Normalizer":
@@ -3038,8 +3006,6 @@ class OneHotEncoder(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     @overload
     def __init__(
         self,
@@ -3072,10 +3038,10 @@ class OneHotEncoder(
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
     ):
+        kwargs = locals()
         super(OneHotEncoder, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.OneHotEncoder", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @overload
     def setParams(
@@ -3113,8 +3079,8 @@ class OneHotEncoder(
         """
         Sets params for this OneHotEncoder.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("2.3.0")
     def setDropLast(self, value: bool) -> "OneHotEncoder":
@@ -3262,8 +3228,6 @@ class PolynomialExpansion(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     degree: Param[int] = Param(
         Params._dummy(),
         "degree",
@@ -3274,13 +3238,13 @@ class PolynomialExpansion(
     def __init__(
         self, *, degree: int = 2, inputCol: Optional[str] = None, outputCol: Optional[str] = None
     ):
+        kwargs = locals()
         super(PolynomialExpansion, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.PolynomialExpansion", self.uid
         )
         self._setDefault(degree=2)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.4.0")
     def setParams(
@@ -3289,8 +3253,8 @@ class PolynomialExpansion(
         """
         Sets params for this PolynomialExpansion.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("1.4.0")
     def setDegree(self, value: int) -> "PolynomialExpansion":
@@ -3424,8 +3388,6 @@ class QuantileDiscretizer(
     ...
     """
 
-    _input_kwargs: Dict[str, Any]
-
     numBuckets: Param[int] = Param(
         Params._dummy(),
         "numBuckets",
@@ -3495,13 +3457,13 @@ class QuantileDiscretizer(
         inputCols: Optional[List[str]] = None,
         outputCols: Optional[List[str]] = None,
     ):
+        kwargs = locals()
         super(QuantileDiscretizer, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.QuantileDiscretizer", self.uid
         )
         self._setDefault(numBuckets=2, relativeError=0.001, handleInvalid="error")
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @overload
     def setParams(
@@ -3543,8 +3505,8 @@ class QuantileDiscretizer(
         """
         Set the params for the QuantileDiscretizer
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("2.0.0")
     def setNumBuckets(self, value: int) -> "QuantileDiscretizer":
@@ -3757,8 +3719,6 @@ class RobustScaler(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -3770,10 +3730,10 @@ class RobustScaler(
         outputCol: Optional[str] = None,
         relativeError: float = 0.001,
     ):
+        kwargs = locals()
         super(RobustScaler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RobustScaler", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("3.0.0")
     def setParams(
@@ -3790,8 +3750,8 @@ class RobustScaler(
         """
         Sets params for this RobustScaler.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("3.0.0")
     def setLower(self, value: float) -> "RobustScaler":
@@ -3938,8 +3898,6 @@ class RegexTokenizer(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     minTokenLength: Param[int] = Param(
         Params._dummy(),
         "minTokenLength",
@@ -3974,11 +3932,11 @@ class RegexTokenizer(
         outputCol: Optional[str] = None,
         toLowercase: bool = True,
     ):
+        kwargs = locals()
         super(RegexTokenizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RegexTokenizer", self.uid)
         self._setDefault(minTokenLength=1, gaps=True, pattern="\\s+", toLowercase=True)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.4.0")
     def setParams(
@@ -3994,8 +3952,8 @@ class RegexTokenizer(
         """
         Sets params for this RegexTokenizer.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("1.4.0")
     def setMinTokenLength(self, value: int) -> "RegexTokenizer":
@@ -4091,25 +4049,23 @@ class SQLTransformer(JavaTransformer, JavaMLReadable["SQLTransformer"], JavaMLWr
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     statement = Param(
         Params._dummy(), "statement", "SQL statement", typeConverter=TypeConverters.toString
     )
 
     def __init__(self, *, statement: Optional[str] = None):
+        kwargs = locals()
         super(SQLTransformer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.SQLTransformer", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.6.0")
     def setParams(self, *, statement: Optional[str] = None) -> "SQLTransformer":
         """
         Sets params for this SQLTransformer.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("1.6.0")
     def setStatement(self, value: str) -> "SQLTransformer":
@@ -4217,8 +4173,6 @@ class StandardScaler(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -4227,10 +4181,10 @@ class StandardScaler(
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
     ):
+        kwargs = locals()
         super(StandardScaler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StandardScaler", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.4.0")
     def setParams(
@@ -4244,8 +4198,8 @@ class StandardScaler(
         """
         Sets params for this StandardScaler.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("1.4.0")
     def setWithMean(self, value: bool) -> "StandardScaler":
@@ -4449,8 +4403,6 @@ class StringIndexer(
     [(0, 0.0, 0.0), (1, 1.0, 1.0), (2, 2.0, 0.0), (3, 0.0, 1.0), (4, 0.0, 1.0), (5, 2.0, 1.0)]
     """
 
-    _input_kwargs: Dict[str, Any]
-
     @overload
     def __init__(
         self,
@@ -4483,10 +4435,10 @@ class StringIndexer(
         handleInvalid: str = "error",
         stringOrderType: str = "frequencyDesc",
     ):
+        kwargs = locals()
         super(StringIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StringIndexer", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @overload
     def setParams(
@@ -4524,8 +4476,8 @@ class StringIndexer(
         """
         Sets params for this StringIndexer.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "StringIndexerModel":
         return StringIndexerModel(java_model)
@@ -4708,8 +4660,6 @@ class IndexToString(
     StringIndexer : for converting categorical values into category indices
     """
 
-    _input_kwargs: Dict[str, Any]
-
     labels: Param[List[str]] = Param(
         Params._dummy(),
         "labels",
@@ -4725,10 +4675,10 @@ class IndexToString(
         outputCol: Optional[str] = None,
         labels: Optional[List[str]] = None,
     ):
+        kwargs = locals()
         super(IndexToString, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IndexToString", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.6.0")
     def setParams(
@@ -4741,8 +4691,8 @@ class IndexToString(
         """
         Sets params for this IndexToString.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("1.6.0")
     def setLabels(self, value: List[str]) -> "IndexToString":
@@ -4824,8 +4774,6 @@ class StopWordsRemover(
     ...
     """
 
-    _input_kwargs: Dict[str, Any]
-
     stopWords: Param[List[str]] = Param(
         Params._dummy(),
         "stopWords",
@@ -4880,6 +4828,7 @@ class StopWordsRemover(
         inputCols: Optional[List[str]] = None,
         outputCols: Optional[List[str]] = None,
     ):
+        kwargs = locals()
         super(StopWordsRemover, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.StopWordsRemover", self.uid
@@ -4889,8 +4838,7 @@ class StopWordsRemover(
             caseSensitive=False,
             locale=self._java_obj.getLocale(),
         )
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @overload
     def setParams(
@@ -4931,8 +4879,8 @@ class StopWordsRemover(
         """
         Sets params for this StopWordRemover.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("1.6.0")
     def setStopWords(self, value: List[str]) -> "StopWordsRemover":
@@ -5056,13 +5004,11 @@ class Tokenizer(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(self, *, inputCol: Optional[str] = None, outputCol: Optional[str] = None):
+        kwargs = locals()
         super(Tokenizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Tokenizer", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.3.0")
     def setParams(
@@ -5071,8 +5017,8 @@ class Tokenizer(
         """
         Sets params for this Tokenizer.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def setInputCol(self, value: str) -> "Tokenizer":
         """
@@ -5141,8 +5087,6 @@ class VectorAssembler(
     ...
     """
 
-    _input_kwargs: Dict[str, Any]
-
     handleInvalid: Param[str] = Param(
         Params._dummy(),
         "handleInvalid",
@@ -5164,11 +5108,11 @@ class VectorAssembler(
         outputCol: Optional[str] = None,
         handleInvalid: str = "error",
     ):
+        kwargs = locals()
         super(VectorAssembler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorAssembler", self.uid)
         self._setDefault(handleInvalid="error")
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.4.0")
     def setParams(
@@ -5181,8 +5125,8 @@ class VectorAssembler(
         """
         Sets params for this VectorAssembler.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def setInputCols(self, value: List[str]) -> "VectorAssembler":
         """
@@ -5337,8 +5281,6 @@ class VectorIndexer(
     DenseVector([2.0, 1.0])
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -5347,10 +5289,10 @@ class VectorIndexer(
         outputCol: Optional[str] = None,
         handleInvalid: str = "error",
     ):
+        kwargs = locals()
         super(VectorIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorIndexer", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.4.0")
     def setParams(
@@ -5364,8 +5306,8 @@ class VectorIndexer(
         """
         Sets params for this VectorIndexer.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("1.4.0")
     def setMaxCategories(self, value: int) -> "VectorIndexer":
@@ -5492,8 +5434,6 @@ class VectorSlicer(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     indices: Param[List[int]] = Param(
         Params._dummy(),
         "indices",
@@ -5519,11 +5459,11 @@ class VectorSlicer(
         indices: Optional[List[int]] = None,
         names: Optional[List[str]] = None,
     ):
+        kwargs = locals()
         super(VectorSlicer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorSlicer", self.uid)
         self._setDefault(indices=[], names=[])
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.6.0")
     def setParams(
@@ -5537,8 +5477,8 @@ class VectorSlicer(
         """
         Sets params for this VectorSlicer.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("1.6.0")
     def setIndices(self, value: List[int]) -> "VectorSlicer":
@@ -5740,8 +5680,6 @@ class Word2Vec(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -5756,10 +5694,10 @@ class Word2Vec(
         windowSize: int = 5,
         maxSentenceLength: int = 1000,
     ):
+        kwargs = locals()
         super(Word2Vec, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Word2Vec", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.4.0")
     def setParams(
@@ -5779,8 +5717,8 @@ class Word2Vec(
         """
         Sets params for this Word2Vec.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("1.4.0")
     def setVectorSize(self, value: int) -> "Word2Vec":
@@ -5971,8 +5909,6 @@ class PCA(JavaEstimator["PCAModel"], _PCAParams, JavaMLReadable["PCA"], JavaMLWr
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -5980,10 +5916,10 @@ class PCA(JavaEstimator["PCAModel"], _PCAParams, JavaMLReadable["PCA"], JavaMLWr
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
     ):
+        kwargs = locals()
         super(PCA, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.PCA", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.5.0")
     def setParams(
@@ -5996,8 +5932,8 @@ class PCA(JavaEstimator["PCAModel"], _PCAParams, JavaMLReadable["PCA"], JavaMLWr
         """
         Set params for this PCA.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("1.5.0")
     def setK(self, value: int) -> "PCA":
@@ -6209,8 +6145,6 @@ class RFormula(
     'RFormulaModel(ResolvedRFormula(label=y, terms=[x,s], hasIntercept=true)) (uid=...)'
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -6221,10 +6155,10 @@ class RFormula(
         stringIndexerOrderType: str = "frequencyDesc",
         handleInvalid: str = "error",
     ):
+        kwargs = locals()
         super(RFormula, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RFormula", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("1.5.0")
     def setParams(
@@ -6240,8 +6174,8 @@ class RFormula(
         """
         Sets params for RFormula.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("1.5.0")
     def setFormula(self, value: str) -> "RFormula":
@@ -6575,8 +6509,6 @@ class ChiSqSelector(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -6590,10 +6522,10 @@ class ChiSqSelector(
         fdr: float = 0.05,
         fwe: float = 0.05,
     ):
+        kwargs = locals()
         super(ChiSqSelector, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ChiSqSelector", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("2.0.0")
     def setParams(
@@ -6612,8 +6544,8 @@ class ChiSqSelector(
         """
         Sets params for this ChiSqSelector.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def _create_model(self, java_model: "JavaObject") -> "ChiSqSelectorModel":
         return ChiSqSelectorModel(java_model)
@@ -6669,8 +6601,6 @@ class VectorSizeHint(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     size: Param[int] = Param(
         Params._dummy(), "size", "Size of vectors in column.", typeConverter=TypeConverters.toInt
     )
@@ -6693,10 +6623,11 @@ class VectorSizeHint(
         size: Optional[int] = None,
         handleInvalid: str = "error",
     ):
+        kwargs = locals()
         super(VectorSizeHint, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorSizeHint", self.uid)
         self._setDefault(handleInvalid="error")
-        self.setParams(**self._input_kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("2.3.0")
     def setParams(
@@ -6709,8 +6640,8 @@ class VectorSizeHint(
         """
         Sets params for this VectorSizeHint.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("2.3.0")
     def getSize(self) -> int:
@@ -6810,8 +6741,6 @@ class VarianceThresholdSelector(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -6819,13 +6748,13 @@ class VarianceThresholdSelector(
         outputCol: Optional[str] = None,
         varianceThreshold: float = 0.0,
     ):
+        kwargs = locals()
         super(VarianceThresholdSelector, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.VarianceThresholdSelector", self.uid
         )
         self._setDefault(varianceThreshold=0.0)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("3.1.0")
     def setParams(
@@ -6838,8 +6767,8 @@ class VarianceThresholdSelector(
         """
         Sets params for this VarianceThresholdSelector.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("3.1.0")
     def setVarianceThreshold(self, value: float) -> "VarianceThresholdSelector":
@@ -7051,8 +6980,6 @@ class UnivariateFeatureSelector(
     True
     """
 
-    _input_kwargs: Dict[str, Any]
-
     def __init__(
         self,
         *,
@@ -7061,12 +6988,12 @@ class UnivariateFeatureSelector(
         labelCol: str = "label",
         selectionMode: str = "numTopFeatures",
     ):
+        kwargs = locals()
         super(UnivariateFeatureSelector, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.UnivariateFeatureSelector", self.uid
         )
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("3.1.1")
     def setParams(
@@ -7080,8 +7007,8 @@ class UnivariateFeatureSelector(
         """
         Sets params for this UnivariateFeatureSelector.
         """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("3.1.1")
     def setFeatureType(self, value: str) -> "UnivariateFeatureSelector":

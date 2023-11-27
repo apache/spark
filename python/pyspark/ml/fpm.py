@@ -235,7 +235,6 @@ class FPGrowth(
     >>> fpm.transform(data).take(1) == model2.transform(data).take(1)
     True
     """
-    _input_kwargs: Dict[str, Any]
 
     def __init__(
         self,
@@ -246,10 +245,10 @@ class FPGrowth(
         predictionCol: str = "prediction",
         numPartitions: Optional[int] = None,
     ):
+        kwargs = locals()
         super(FPGrowth, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.fpm.FPGrowth", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("2.2.0")
     def setParams(
@@ -261,8 +260,8 @@ class FPGrowth(
         predictionCol: str = "prediction",
         numPartitions: Optional[int] = None,
     ) -> "FPGrowth":
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     def setItemsCol(self, value: str) -> "FPGrowth":
         """
@@ -344,8 +343,6 @@ class PrefixSpan(JavaParams):
     ...
     """
 
-    _input_kwargs: Dict[str, Any]
-
     minSupport: Param[float] = Param(
         Params._dummy(),
         "minSupport",
@@ -389,13 +386,13 @@ class PrefixSpan(JavaParams):
         maxLocalProjDBSize: int = 32000000,
         sequenceCol: str = "sequence",
     ):
+        kwargs = locals()
         super(PrefixSpan, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.fpm.PrefixSpan", self.uid)
         self._setDefault(
             minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, sequenceCol="sequence"
         )
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self.__class__.setParams(**kwargs)
 
     @since("2.4.0")
     def setParams(
@@ -406,8 +403,8 @@ class PrefixSpan(JavaParams):
         maxLocalProjDBSize: int = 32000000,
         sequenceCol: str = "sequence",
     ) -> "PrefixSpan":
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+        kwargs = locals()
+        return self.__class__._set(**kwargs)
 
     @since("3.0.0")
     def setMinSupport(self, value: float) -> "PrefixSpan":
