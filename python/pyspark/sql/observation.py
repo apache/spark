@@ -87,7 +87,8 @@ class Observation:
         if name is not None:
             if not isinstance(name, str):
                 raise PySparkTypeError(
-                    error_class="NOT_STR", message_parameters={"arg_name": "name"}
+                    error_class="NOT_STR",
+                    message_parameters={"arg_name": "name", "arg_type": type(name).__name__},
                 )
             if name == "":
                 raise PySparkValueError(
