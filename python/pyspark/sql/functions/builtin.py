@@ -12576,15 +12576,49 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
-    >>> df.select(element_at(df.data, 1)).collect()
-    [Row(element_at(data, 1)='a')]
-    >>> df.select(element_at(df.data, -1)).collect()
-    [Row(element_at(data, -1)='c')]
+    Example 1: Getting the first element of an array
 
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
+    >>> df.select(sf.element_at(df.data, 1)).show()
+    +-------------------+
+    |element_at(data, 1)|
+    +-------------------+
+    |                  a|
+    +-------------------+
+
+    Example 2: Getting the last element of an array using negative index
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
+    >>> df.select(sf.element_at(df.data, -1)).show()
+    +--------------------+
+    |element_at(data, -1)|
+    +--------------------+
+    |                   c|
+    +--------------------+
+
+    Example 3: Getting a value from a map using a key
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0},)], ['data'])
-    >>> df.select(element_at(df.data, lit("a"))).collect()
-    [Row(element_at(data, a)=1.0)]
+    >>> df.select(sf.element_at(df.data, sf.lit("a"))).show()
+    +-------------------+
+    |element_at(data, a)|
+    +-------------------+
+    |                1.0|
+    +-------------------+
+
+    Example 4: Getting a non-existing value from a map using a key
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0},)], ['data'])
+    >>> df.select(sf.element_at(df.data, sf.lit("c"))).show()
+    +-------------------+
+    |element_at(data, c)|
+    +-------------------+
+    |               NULL|
+    +-------------------+
     """
     return _invoke_function_over_columns("element_at", col, lit(extraction))
 
