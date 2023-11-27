@@ -197,7 +197,9 @@ class SparkSession:
             if (has_channel_builder and has_spark_remote) or (
                 not has_channel_builder and not has_spark_remote
             ):
-                raise PySparkValueError(error_class="SESSION_NEED_CONN_STR_OR_BUILDER")
+                raise PySparkValueError(
+                    error_class="SESSION_NEED_CONN_STR_OR_BUILDER", message_parameters={}
+                )
 
             if has_channel_builder:
                 assert self._channel_builder is not None
@@ -508,7 +510,9 @@ class SparkSession:
                 if _has_nulltype(_schema):
                     # For cases like createDataFrame([("Alice", None, 80.1)], schema)
                     # we can not infer the schema from the data itself.
-                    raise PySparkValueError(error_class="CANNOT_DETERMINE_TYPE")
+                    raise PySparkValueError(
+                        error_class="CANNOT_DETERMINE_TYPE", message_parameters={}
+                    )
 
             from pyspark.sql.connect.conversion import LocalDataToArrowConversion
 
