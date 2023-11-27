@@ -49,7 +49,7 @@ class Observation:
             raise IllegalArgumentException("Observation does not support streaming Datasets")
 
         self._result = {}
-        return DataFrame.withPlan(plan.CollectMetrics(df._plan, self, list(exprs)), df._session)
+        return DataFrame(plan.CollectMetrics(df._plan, self, list(exprs)), df._session)
 
     _on.__doc__ = PySparkObservation._on.__doc__
 
