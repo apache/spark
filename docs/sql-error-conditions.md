@@ -1916,55 +1916,59 @@ Static partition column `<staticName>` is also specified in the column list.
 
 ### STDS_COMMITTED_BATCH_UNAVAILABLE
 
-SQLSTATE: KD000
+SQLSTATE: KD006
 
-No committed batch found, checkpoint location: `<checkpointLocation>`
+No committed batch found, checkpoint location: `<checkpointLocation>`. Ensure that the query has run and committed any microbatch before stopping.
 
 ### STDS_CONFLICT_OPTIONS
 
-SQLSTATE: KD000
+[SQLSTATE: 42613](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The options `<options>` cannot be specified together. Please specify the one.
 
 ### STDS_FAILED_TO_READ_STATE_SCHEMA
 
-SQLSTATE: KD000
+[SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Failed to read the state schema. Either the file does not exist, or the file is corrupted. options: `<sourceOptions>`
+Failed to read the state schema. Either the file does not exist, or the file is corrupted. options: `<sourceOptions>`.
+Rerun the streaming query to construct the state schema, and report to the corresponding communities or vendors if the error persists.
 
 ### STDS_INTERNAL_ERROR
 
-SQLSTATE: KD000
+[SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 Internal error: `<message>`
+Please, report this bug to the corresponding communities or vendors, and provide the full stack trace.
 
 ### STDS_INVALID_OPTION_VALUE
 
-SQLSTATE: KD000
+[SQLSTATE: 42616](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Invalid value for source option '`<optionName>`': `<message>`
 
 ### STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE
 
-SQLSTATE: KD000
+SQLSTATE: KD006
 
 The state does not have any partition. Please double check that the query points to the valid state. options: `<sourceOptions>`
 
 ### STDS_OFFSET_LOG_UNAVAILABLE
 
-SQLSTATE: KD000
+SQLSTATE: KD006
 
-The offset log for `<batchId>` does not exist, checkpoint location: `<checkpointLocation>`
+The offset log for `<batchId>` does not exist, checkpoint location: `<checkpointLocation>`.
+Please specify the batch ID which is available for querying - you can query the available batch IDs via using state metadata data source.
 
 ### STDS_OFFSET_METADATA_LOG_UNAVAILABLE
 
-SQLSTATE: KD000
+SQLSTATE: KD006
 
-Metadata is not available for offset log for `<batchId>`, checkpoint location: `<checkpointLocation>`
+Metadata is not available for offset log for `<batchId>`, checkpoint location: `<checkpointLocation>`.
+The checkpoint seems to be only run with older Spark version(s). Run the streaming query with recent Spark version, so that Spark constructs the state metadata.
 
 ### STDS_REQUIRED_OPTION_UNSPECIFIED
 
-SQLSTATE: KD000
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 '`<optionName>`' must be specified.
 
