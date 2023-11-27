@@ -20,7 +20,7 @@ import uuid
 from pyspark.errors import (
     PySparkTypeError,
     PySparkValueError,
-    PySparkNotImplementedError,
+    IllegalArgumentException,
 )
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.dataframe import DataFrame
@@ -56,7 +56,7 @@ class Observation:
             self._name = str(uuid.uuid4())
 
         if df.isStreaming:
-            raise PySparkNotImplementedError(
+            raise IllegalArgumentException(
                 error_class="UNSUPPORTED_OPERATION",
                 message_parameters={"operation": "Streaming DataFrame with Observation"},
             )

@@ -738,7 +738,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
 
         # Unsupported save mode
         wo.mode = "unknown"
-        with self.assertRaises(NotImplementedError):
+        with self.assertRaises(ValueError):
             wo.command(None)
 
     def test_column_regexp(self):

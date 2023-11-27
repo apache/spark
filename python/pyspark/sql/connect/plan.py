@@ -43,7 +43,7 @@ from pyspark.sql.connect.expressions import (
 from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedDataType
 from pyspark.errors import (
     PySparkTypeError,
-    PySparkNotImplementedError,
+    PySparkValueError,
     PySparkPicklingError,
     IllegalArgumentException,
 )
@@ -1060,9 +1060,9 @@ class SetOperation(LogicalPlan):
         elif self.set_op == "except":
             plan.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_EXCEPT
         else:
-            raise PySparkNotImplementedError(
+            raise PySparkValueError(
                 error_class="UNSUPPORTED_OPERATION",
-                message_parameters={"feature": self.set_op},
+                message_parameters={"operation": self.set_op},
             )
 
         plan.set_op.is_all = self.is_all
@@ -1699,7 +1699,7 @@ class WriteOperation(LogicalPlan):
                         proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_INSERT_INTO
                     )
                 else:
-                    raise PySparkNotImplementedError(
+                    raise PySparkValueError(
                         error_class="UNSUPPORTED_OPERATION",
                         message_parameters={"operation": tsm},
                     )
@@ -1717,7 +1717,7 @@ class WriteOperation(LogicalPlan):
             elif wm == "ignore":
                 plan.write_operation.mode = proto.WriteOperation.SaveMode.SAVE_MODE_IGNORE
             else:
-                raise PySparkNotImplementedError(
+                raise PySparkValueError(
                     error_class="UNSUPPORTED_OPERATION",
                     message_parameters={"operation": self.mode},
                 )
@@ -1816,7 +1816,7 @@ class WriteOperationV2(LogicalPlan):
             elif wm == "create_or_replace":
                 plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE
             else:
-                raise PySparkNotImplementedError(
+                raise PySparkValueError(
                     error_class="UNSUPPORTED_OPERATION",
                     message_parameters={"operation": self.mode},
                 )

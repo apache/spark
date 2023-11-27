@@ -76,7 +76,7 @@ ERROR_CLASSES_JSON = """
   },
   "CANNOT_BE_NONE": {
     "message": [
-      "Argument `<arg_name>` can not be None."
+      "Argument `<arg_name>` cannot be None."
     ]
   },
   "CANNOT_CONVERT_COLUMN_INTO_BOOL": {

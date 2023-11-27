@@ -737,7 +737,7 @@ class SparkSession:
                 error_class="INVALID_MULTIPLE_ARGUMENT_CONDITIONS",
                 message_parameters={
                     "arg_names": "'pyfile', 'archive' and/or 'file'",
-                    "condition": "cannot be True together",
+                    "condition": "True together",
                 },
             )
         self._client.add_artifacts(*path, pyfile=pyfile, archive=archive, file=file)
