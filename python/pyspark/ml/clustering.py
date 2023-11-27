@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 import numpy as np
 
-from pyspark import since, keyword_only
+from pyspark import since
 from pyspark.ml.param.shared import (
     HasMaxIter,
     HasFeaturesCol,
@@ -403,7 +403,6 @@ class GaussianMixture(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -432,7 +431,6 @@ class GaussianMixture(
     def _create_model(self, java_model: "JavaObject") -> "GaussianMixtureModel":
         return GaussianMixtureModel(java_model)
 
-    @keyword_only
     @since("2.0.0")
     def setParams(
         self,
@@ -777,7 +775,6 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -808,7 +805,6 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
     def _create_model(self, java_model: "JavaObject") -> KMeansModel:
         return KMeansModel(java_model)
 
-    @keyword_only
     @since("1.5.0")
     def setParams(
         self,
@@ -1129,7 +1125,6 @@ class BisectingKMeans(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -1154,7 +1149,6 @@ class BisectingKMeans(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("2.0.0")
     def setParams(
         self,
@@ -1681,7 +1675,6 @@ class LDA(JavaEstimator[LDAModel], _LDAParams, JavaMLReadable["LDA"], JavaMLWrit
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -1718,7 +1711,6 @@ class LDA(JavaEstimator[LDAModel], _LDAParams, JavaMLReadable["LDA"], JavaMLWrit
         else:
             return LocalLDAModel(java_model)
 
-    @keyword_only
     @since("2.0.0")
     def setParams(
         self,
@@ -2036,7 +2028,6 @@ class PowerIterationClustering(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -2058,7 +2049,6 @@ class PowerIterationClustering(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("2.4.0")
     def setParams(
         self,

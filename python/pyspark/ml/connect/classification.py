@@ -22,7 +22,6 @@ import torch.nn as torch_nn
 import numpy as np
 import pandas as pd
 
-from pyspark import keyword_only
 from pyspark.ml.connect.base import _PredictorParams
 from pyspark.ml.param.shared import HasProbabilityCol
 from pyspark.sql import DataFrame
@@ -178,7 +177,6 @@ class LogisticRegression(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,

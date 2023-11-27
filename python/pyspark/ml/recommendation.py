@@ -18,7 +18,7 @@
 import sys
 from typing import Any, Dict, Optional, TYPE_CHECKING
 
-from pyspark import since, keyword_only
+from pyspark import since
 from pyspark.ml.param.shared import (
     HasPredictionCol,
     HasBlockSize,
@@ -366,7 +366,6 @@ class ALS(JavaEstimator["ALSModel"], _ALSParams, JavaMLWritable, JavaMLReadable[
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -400,7 +399,6 @@ class ALS(JavaEstimator["ALSModel"], _ALSParams, JavaMLWritable, JavaMLReadable[
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self,

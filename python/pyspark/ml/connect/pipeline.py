@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Union, cast, TYPE_CHECKING
 
 import pandas as pd
 
-from pyspark import keyword_only, since
+from pyspark import since
 from pyspark.ml.connect.base import Estimator, Model, Transformer
 from pyspark.ml.connect.io_utils import (
     ParamsReadWrite,
@@ -137,7 +137,6 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(self, *, stages: Optional[List[Params]] = None):
         """
         __init__(self, \\*, stages=None)
@@ -172,7 +171,6 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
         """
         return self.getOrDefault(self.stages)
 
-    @keyword_only
     @since("3.5.0")
     def setParams(self, *, stages: Optional[List[Params]] = None) -> "Pipeline":
         """

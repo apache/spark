@@ -28,7 +28,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from pyspark import keyword_only, since, SparkContext
+from pyspark import since, SparkContext
 from pyspark.ml.linalg import _convert_to_vector, DenseMatrix, DenseVector, Vector
 from pyspark.sql.dataframe import DataFrame
 from pyspark.ml.param.shared import (
@@ -217,7 +217,6 @@ class Binarizer(
     ):
         ...
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -258,7 +257,6 @@ class Binarizer(
     ) -> "Binarizer":
         ...
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self,
@@ -571,7 +569,6 @@ class BucketedRandomProjectionLSH(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -592,7 +589,6 @@ class BucketedRandomProjectionLSH(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("2.2.0")
     def setParams(
         self,
@@ -786,7 +782,6 @@ class Bucketizer(
     ):
         ...
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -830,7 +825,6 @@ class Bucketizer(
     ) -> "Bucketizer":
         ...
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self,
@@ -1071,7 +1065,6 @@ class CountVectorizer(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -1092,7 +1085,6 @@ class CountVectorizer(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.6.0")
     def setParams(
         self,
@@ -1293,7 +1285,6 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["DCT"], Jav
         typeConverter=TypeConverters.toBoolean,
     )
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -1310,7 +1301,6 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["DCT"], Jav
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.6.0")
     def setParams(
         self,
@@ -1401,7 +1391,6 @@ class ElementwiseProduct(
         typeConverter=TypeConverters.toVector,
     )
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -1419,7 +1408,6 @@ class ElementwiseProduct(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.5.0")
     def setParams(
         self,
@@ -1537,7 +1525,6 @@ class FeatureHasher(
         typeConverter=TypeConverters.toListString,
     )
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -1556,7 +1543,6 @@ class FeatureHasher(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("2.3.0")
     def setParams(
         self,
@@ -1661,7 +1647,6 @@ class HashingTF(
         typeConverter=TypeConverters.toBoolean,
     )
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -1679,7 +1664,6 @@ class HashingTF(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.3.0")
     def setParams(
         self,
@@ -1813,7 +1797,6 @@ class IDF(JavaEstimator["IDFModel"], _IDFParams, JavaMLReadable["IDF"], JavaMLWr
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -1829,7 +1812,6 @@ class IDF(JavaEstimator["IDFModel"], _IDFParams, JavaMLReadable["IDF"], JavaMLWr
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self,
@@ -2101,7 +2083,6 @@ class Imputer(
     ):
         ...
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -2146,7 +2127,6 @@ class Imputer(
     ) -> "Imputer":
         ...
 
-    @keyword_only
     @since("2.2.0")
     def setParams(
         self,
@@ -2310,7 +2290,6 @@ class Interaction(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(self, *, inputCols: Optional[List[str]] = None, outputCol: Optional[str] = None):
         """
         __init__(self, \\*, inputCols=None, outputCol=None):
@@ -2321,7 +2300,6 @@ class Interaction(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("3.0.0")
     def setParams(
         self, *, inputCols: Optional[List[str]] = None, outputCol: Optional[str] = None
@@ -2408,7 +2386,6 @@ class MaxAbsScaler(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(self, *, inputCol: Optional[str] = None, outputCol: Optional[str] = None):
         """
         __init__(self, \\*, inputCol=None, outputCol=None)
@@ -2419,7 +2396,6 @@ class MaxAbsScaler(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("2.0.0")
     def setParams(
         self, *, inputCol: Optional[str] = None, outputCol: Optional[str] = None
@@ -2554,7 +2530,6 @@ class MinHashLSH(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -2571,7 +2546,6 @@ class MinHashLSH(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("2.2.0")
     def setParams(
         self,
@@ -2719,7 +2693,6 @@ class MinMaxScaler(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -2736,7 +2709,6 @@ class MinMaxScaler(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.6.0")
     def setParams(
         self,
@@ -2891,7 +2863,6 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["NGram"],
         typeConverter=TypeConverters.toInt,
     )
 
-    @keyword_only
     def __init__(
         self, *, n: int = 2, inputCol: Optional[str] = None, outputCol: Optional[str] = None
     ):
@@ -2904,7 +2875,6 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["NGram"],
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.5.0")
     def setParams(
         self, *, n: int = 2, inputCol: Optional[str] = None, outputCol: Optional[str] = None
@@ -2986,7 +2956,6 @@ class Normalizer(
 
     p = Param(Params._dummy(), "p", "the p norm value.", typeConverter=TypeConverters.toFloat)
 
-    @keyword_only
     def __init__(
         self, *, p: float = 2.0, inputCol: Optional[str] = None, outputCol: Optional[str] = None
     ):
@@ -2999,7 +2968,6 @@ class Normalizer(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self, *, p: float = 2.0, inputCol: Optional[str] = None, outputCol: Optional[str] = None
@@ -3170,7 +3138,6 @@ class OneHotEncoder(
     ):
         ...
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -3212,7 +3179,6 @@ class OneHotEncoder(
     ) -> "OneHotEncoder":
         ...
 
-    @keyword_only
     @since("2.3.0")
     def setParams(
         self,
@@ -3387,7 +3353,6 @@ class PolynomialExpansion(
         typeConverter=TypeConverters.toInt,
     )
 
-    @keyword_only
     def __init__(
         self, *, degree: int = 2, inputCol: Optional[str] = None, outputCol: Optional[str] = None
     ):
@@ -3402,7 +3367,6 @@ class PolynomialExpansion(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self, *, degree: int = 2, inputCol: Optional[str] = None, outputCol: Optional[str] = None
@@ -3605,7 +3569,6 @@ class QuantileDiscretizer(
     ):
         ...
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -3654,7 +3617,6 @@ class QuantileDiscretizer(
     ) -> "QuantileDiscretizer":
         ...
 
-    @keyword_only
     @since("2.0.0")
     def setParams(
         self,
@@ -3889,7 +3851,6 @@ class RobustScaler(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -3910,7 +3871,6 @@ class RobustScaler(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("3.0.0")
     def setParams(
         self,
@@ -4102,7 +4062,6 @@ class RegexTokenizer(
         typeConverter=TypeConverters.toBoolean,
     )
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -4123,7 +4082,6 @@ class RegexTokenizer(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self,
@@ -4243,7 +4201,6 @@ class SQLTransformer(JavaTransformer, JavaMLReadable["SQLTransformer"], JavaMLWr
         Params._dummy(), "statement", "SQL statement", typeConverter=TypeConverters.toString
     )
 
-    @keyword_only
     def __init__(self, *, statement: Optional[str] = None):
         """
         __init__(self, \\*, statement=None)
@@ -4253,7 +4210,6 @@ class SQLTransformer(JavaTransformer, JavaMLReadable["SQLTransformer"], JavaMLWr
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.6.0")
     def setParams(self, *, statement: Optional[str] = None) -> "SQLTransformer":
         """
@@ -4371,7 +4327,6 @@ class StandardScaler(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -4388,7 +4343,6 @@ class StandardScaler(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self,
@@ -4631,7 +4585,6 @@ class StringIndexer(
     ):
         ...
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -4673,7 +4626,6 @@ class StringIndexer(
     ) -> "StringIndexer":
         ...
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self,
@@ -4884,7 +4836,6 @@ class IndexToString(
         typeConverter=TypeConverters.toListString,
     )
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -4900,7 +4851,6 @@ class IndexToString(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.6.0")
     def setParams(
         self,
@@ -5041,7 +4991,6 @@ class StopWordsRemover(
     ):
         ...
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -5093,7 +5042,6 @@ class StopWordsRemover(
     ) -> "StopWordsRemover":
         ...
 
-    @keyword_only
     @since("1.6.0")
     def setParams(
         self,
@@ -5238,7 +5186,6 @@ class Tokenizer(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(self, *, inputCol: Optional[str] = None, outputCol: Optional[str] = None):
         """
         __init__(self, \\*, inputCol=None, outputCol=None)
@@ -5248,7 +5195,6 @@ class Tokenizer(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.3.0")
     def setParams(
         self, *, inputCol: Optional[str] = None, outputCol: Optional[str] = None
@@ -5343,7 +5289,6 @@ class VectorAssembler(
         typeConverter=TypeConverters.toString,
     )
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -5360,7 +5305,6 @@ class VectorAssembler(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self,
@@ -5531,7 +5475,6 @@ class VectorIndexer(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -5548,7 +5491,6 @@ class VectorIndexer(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self,
@@ -5709,7 +5651,6 @@ class VectorSlicer(
         typeConverter=TypeConverters.toListString,
     )
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -5727,7 +5668,6 @@ class VectorSlicer(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.6.0")
     def setParams(
         self,
@@ -5946,7 +5886,6 @@ class Word2Vec(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -5971,7 +5910,6 @@ class Word2Vec(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self,
@@ -6187,7 +6125,6 @@ class PCA(JavaEstimator["PCAModel"], _PCAParams, JavaMLReadable["PCA"], JavaMLWr
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -6203,7 +6140,6 @@ class PCA(JavaEstimator["PCAModel"], _PCAParams, JavaMLReadable["PCA"], JavaMLWr
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.5.0")
     def setParams(
         self,
@@ -6431,7 +6367,6 @@ class RFormula(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -6452,7 +6387,6 @@ class RFormula(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.5.0")
     def setParams(
         self,
@@ -6807,7 +6741,6 @@ class ChiSqSelector(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -6831,7 +6764,6 @@ class ChiSqSelector(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("2.0.0")
     def setParams(
         self,
@@ -6926,7 +6858,6 @@ class VectorSizeHint(
         TypeConverters.toString,
     )
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -6942,7 +6873,6 @@ class VectorSizeHint(
         self._setDefault(handleInvalid="error")
         self.setParams(**self._input_kwargs)
 
-    @keyword_only
     @since("2.3.0")
     def setParams(
         self,
@@ -7058,7 +6988,6 @@ class VarianceThresholdSelector(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -7077,7 +7006,6 @@ class VarianceThresholdSelector(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("3.1.0")
     def setParams(
         self,
@@ -7305,7 +7233,6 @@ class UnivariateFeatureSelector(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -7325,7 +7252,6 @@ class UnivariateFeatureSelector(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("3.1.1")
     def setParams(
         self,

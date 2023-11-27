@@ -19,7 +19,6 @@ from typing import Any, Union, List, Tuple
 import numpy as np
 import pandas as pd
 
-from pyspark import keyword_only
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasProbabilityCol
 from pyspark.ml.connect.base import Evaluator
@@ -107,7 +106,6 @@ class RegressionEvaluator(_TorchMetricEvaluator, HasLabelCol, HasPredictionCol, 
     False
     """
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -175,7 +173,6 @@ class BinaryClassificationEvaluator(
     True
     """
 
-    @keyword_only
     def __init__(
         self,
         *,

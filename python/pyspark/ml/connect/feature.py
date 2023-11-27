@@ -21,7 +21,6 @@ from typing import Any, Union, List, Tuple, Callable, Dict, Optional
 import numpy as np
 import pandas as pd
 
-from pyspark import keyword_only
 from pyspark.sql import DataFrame
 from pyspark.ml.param.shared import (
     HasInputCol,
@@ -69,7 +68,6 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(self, *, inputCol: Optional[str] = None, outputCol: Optional[str] = None) -> None:
         """
         __init__(self, \\*, inputCol=None, outputCol=None)
@@ -181,7 +179,6 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(self, inputCol: Optional[str] = None, outputCol: Optional[str] = None) -> None:
         """
         __init__(self, \\*, inputCol=None, outputCol=None)
@@ -327,7 +324,6 @@ class ArrayAssembler(
         typeConverter=TypeConverters.toString,
     )
 
-    @keyword_only
     def __init__(
         self,
         *,

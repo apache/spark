@@ -19,7 +19,7 @@ import sys
 from abc import abstractmethod, ABCMeta
 from typing import Any, Dict, Optional, TYPE_CHECKING
 
-from pyspark import since, keyword_only
+from pyspark import since
 from pyspark.ml.wrapper import JavaParams
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import (
@@ -220,7 +220,6 @@ class BinaryClassificationEvaluator(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -291,7 +290,6 @@ class BinaryClassificationEvaluator(
         """
         return self._set(weightCol=value)
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self,
@@ -378,7 +376,6 @@ class RegressionEvaluator(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -447,7 +444,6 @@ class RegressionEvaluator(
         """
         return self._set(weightCol=value)
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self,
@@ -566,7 +562,6 @@ class MulticlassClassificationEvaluator(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -676,7 +671,6 @@ class MulticlassClassificationEvaluator(
         """
         return self._set(weightCol=value)
 
-    @keyword_only
     @since("1.5.0")
     def setParams(
         self,
@@ -759,7 +753,6 @@ class MultilabelClassificationEvaluator(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -824,7 +817,6 @@ class MultilabelClassificationEvaluator(
         """
         return self._set(predictionCol=value)
 
-    @keyword_only
     @since("3.0.0")
     def setParams(
         self,
@@ -911,7 +903,6 @@ class ClusteringEvaluator(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -933,7 +924,6 @@ class ClusteringEvaluator(
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
-    @keyword_only
     @since("2.3.0")
     def setParams(
         self,
@@ -1056,7 +1046,6 @@ class RankingEvaluator(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -1119,7 +1108,6 @@ class RankingEvaluator(
         """
         return self._set(predictionCol=value)
 
-    @keyword_only
     @since("3.0.0")
     def setParams(
         self,

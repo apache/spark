@@ -19,7 +19,7 @@ import sys
 from typing import Any, Dict, Generic, List, Optional, TypeVar, TYPE_CHECKING
 from abc import ABCMeta
 
-from pyspark import keyword_only, since
+from pyspark import since
 from pyspark.ml import Predictor, PredictionModel
 from pyspark.ml.base import _PredictorParams
 from pyspark.ml.param.shared import (
@@ -296,7 +296,6 @@ class LinearRegression(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -329,7 +328,6 @@ class LinearRegression(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self,
@@ -858,7 +856,6 @@ class IsotonicRegression(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -880,7 +877,6 @@ class IsotonicRegression(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     def setParams(
         self,
         *,
@@ -1108,7 +1104,6 @@ class DecisionTreeRegressor(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -1143,7 +1138,6 @@ class DecisionTreeRegressor(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self,
@@ -1408,7 +1402,6 @@ class RandomForestRegressor(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -1447,7 +1440,6 @@ class RandomForestRegressor(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self,
@@ -1751,7 +1743,6 @@ class GBTRegressor(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -1792,7 +1783,6 @@ class GBTRegressor(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self,
@@ -2145,7 +2135,6 @@ class AFTSurvivalRegression(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -2184,7 +2173,6 @@ class AFTSurvivalRegression(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.6.0")
     def setParams(
         self,
@@ -2550,7 +2538,6 @@ class GeneralizedLinearRegression(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -2585,7 +2572,6 @@ class GeneralizedLinearRegression(
 
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("2.0.0")
     def setParams(
         self,
@@ -3125,7 +3111,6 @@ class FMRegressor(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -3155,7 +3140,6 @@ class FMRegressor(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("3.0.0")
     def setParams(
         self,

@@ -45,7 +45,7 @@ Public classes:
   - :class:`InheritableThread`:
       A inheritable thread to use in Spark when the pinned thread mode is on.
 """
-
+import warnings
 from functools import wraps
 import types
 from typing import cast, Any, Callable, Optional, TypeVar, Union
@@ -121,10 +121,19 @@ def keyword_only(func: _F) -> _F:
     A decorator that forces keyword arguments in the wrapped method
     and saves actual input keyword arguments in `_input_kwargs`.
 
+    .. deprecated:: 4.0.0
+        `keyword_only` method is deprecated. Use the standard
+         keyword-only syntax in Python instead.
+
     Notes
     -----
     Should only be used to wrap a method where first arg is `self`
     """
+    warnings.warn(
+        "keyword_only method is deprecated. Use the standard keyword-only"
+        "syntax in Python instead.",
+        FutureWarning,
+    )
 
     @wraps(func)
     def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:

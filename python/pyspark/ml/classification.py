@@ -37,7 +37,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from pyspark import keyword_only, since, SparkContext, inheritable_thread_target
+from pyspark import since, SparkContext, inheritable_thread_target
 from pyspark.ml import Estimator, Predictor, PredictionModel, Model
 from pyspark.ml.param.shared import (
     HasRawPredictionCol,
@@ -708,7 +708,6 @@ class LinearSVC(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -739,7 +738,6 @@ class LinearSVC(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("2.2.0")
     def setParams(
         self,
@@ -1275,7 +1273,6 @@ class LogisticRegression(
     ):
         ...
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -1374,7 +1371,6 @@ class LogisticRegression(
     ) -> "LogisticRegression":
         ...
 
-    @keyword_only
     @since("1.3.0")
     def setParams(
         self,
@@ -1772,7 +1768,6 @@ class DecisionTreeClassifier(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -1808,7 +1803,6 @@ class DecisionTreeClassifier(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self,
@@ -2064,7 +2058,6 @@ class RandomForestClassifier(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -2105,7 +2098,6 @@ class RandomForestClassifier(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self,
@@ -2533,7 +2525,6 @@ class GBTClassifier(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -2576,7 +2567,6 @@ class GBTClassifier(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self,
@@ -2930,7 +2920,6 @@ class NaiveBayes(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -2956,7 +2945,6 @@ class NaiveBayes(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.5.0")
     def setParams(
         self,
@@ -3180,7 +3168,6 @@ class MultilayerPerceptronClassifier(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -3211,7 +3198,6 @@ class MultilayerPerceptronClassifier(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("1.6.0")
     def setParams(
         self,
@@ -3448,7 +3434,6 @@ class OneVsRest(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -3469,7 +3454,6 @@ class OneVsRest(
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
-    @keyword_only
     @since("2.0.0")
     def setParams(
         self,
@@ -4061,7 +4045,6 @@ class FMClassifier(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -4097,7 +4080,6 @@ class FMClassifier(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("3.0.0")
     def setParams(
         self,

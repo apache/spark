@@ -17,4 +17,4 @@
 
 - case: coreImports
   main: |
-    from pyspark import keyword_only, Row, SQLContext
+    from pyspark import Row, SQLContext

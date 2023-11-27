@@ -37,7 +37,7 @@ from typing import (
 
 import numpy as np
 
-from pyspark import keyword_only, since, SparkContext, inheritable_thread_target
+from pyspark import since, SparkContext, inheritable_thread_target
 from pyspark.ml import Estimator, Transformer, Model
 from pyspark.ml.common import inherit_doc, _py2java, _java2py
 from pyspark.ml.evaluation import Evaluator, JavaEvaluator
@@ -716,7 +716,6 @@ class CrossValidator(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -738,7 +737,6 @@ class CrossValidator(
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
-    @keyword_only
     @since("1.4.0")
     def setParams(
         self,
@@ -1347,7 +1345,6 @@ class TrainValidationSplit(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -1369,7 +1366,6 @@ class TrainValidationSplit(
         self._set(**kwargs)
 
     @since("2.0.0")
-    @keyword_only
     def setParams(
         self,
         *,

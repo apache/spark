@@ -17,7 +17,6 @@
 
 import numpy as np
 
-from pyspark import keyword_only
 from pyspark.ml import Estimator, Model, Transformer, UnaryTransformer
 from pyspark.ml.evaluation import Evaluator
 from pyspark.ml.param import Param, Params, TypeConverters
@@ -182,7 +181,6 @@ class _DummyLogisticRegressionParams(HasMaxIter, HasRegParam):
 class DummyLogisticRegression(
     Classifier, _DummyLogisticRegressionParams, DefaultParamsReadable, DefaultParamsWritable
 ):
-    @keyword_only
     def __init__(
         self,
         *,
@@ -197,7 +195,6 @@ class DummyLogisticRegression(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     def setParams(
         self,
         *,

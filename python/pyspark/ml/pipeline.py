@@ -18,7 +18,7 @@ import os
 
 from typing import Any, Dict, List, Optional, Tuple, Type, Union, cast, TYPE_CHECKING
 
-from pyspark import keyword_only, since, SparkContext
+from pyspark import since, SparkContext
 from pyspark.ml.base import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import (
@@ -70,7 +70,6 @@ class Pipeline(Estimator["PipelineModel"], MLReadable["Pipeline"], MLWritable):
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(self, *, stages: Optional[List["PipelineStage"]] = None):
         """
         __init__(self, \\*, stages=None)
@@ -105,7 +104,6 @@ class Pipeline(Estimator["PipelineModel"], MLReadable["Pipeline"], MLWritable):
         """
         return self.getOrDefault(self.stages)
 
-    @keyword_only
     @since("1.3.0")
     def setParams(self, *, stages: Optional[List["PipelineStage"]] = None) -> "Pipeline":
         """

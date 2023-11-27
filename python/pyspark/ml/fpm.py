@@ -18,7 +18,7 @@
 import sys
 from typing import Any, Dict, Optional, TYPE_CHECKING
 
-from pyspark import keyword_only, since
+from pyspark import since
 from pyspark.sql import DataFrame
 from pyspark.ml.util import JavaMLWritable, JavaMLReadable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
@@ -237,7 +237,6 @@ class FPGrowth(
     """
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -256,7 +255,6 @@ class FPGrowth(
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("2.2.0")
     def setParams(
         self,
@@ -391,7 +389,6 @@ class PrefixSpan(JavaParams):
         typeConverter=TypeConverters.toString,
     )
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -412,7 +409,6 @@ class PrefixSpan(JavaParams):
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only
     @since("2.4.0")
     def setParams(
         self,

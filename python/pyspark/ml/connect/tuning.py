@@ -32,7 +32,7 @@ from typing import (
 import numpy as np
 import pandas as pd
 
-from pyspark import keyword_only, since, inheritable_thread_target
+from pyspark import since, inheritable_thread_target
 from pyspark.ml.connect import Estimator, Model
 from pyspark.ml.connect.base import Evaluator
 from pyspark.ml.connect.io_utils import (
@@ -306,7 +306,6 @@ class CrossValidator(
 
     _input_kwargs: Dict[str, Any]
 
-    @keyword_only
     def __init__(
         self,
         *,
@@ -327,7 +326,6 @@ class CrossValidator(
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
-    @keyword_only
     @since("3.5.0")
     def setParams(
         self,
