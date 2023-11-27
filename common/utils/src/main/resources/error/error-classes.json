@@ -3030,6 +3030,60 @@
     ],
     "sqlState" : "42713"
   },
+  "STDS_COMMITTED_BATCH_UNAVAILABLE" : {
+    "message" : [
+      "No committed batch found, checkpoint location: <checkpointLocation>"
+    ],
+    "sqlState" : "KD000"
+  },
+  "STDS_CONFLICT_OPTIONS" : {
+    "message" : [
+      "The options <options> cannot be specified together. Please specify the one."
+    ],
+    "sqlState" : "KD000"
+  },
+  "STDS_FAILED_TO_READ_STATE_SCHEMA" : {
+    "message" : [
+      "Failed to read the state schema. Either the file does not exist, or the file is corrupted. options: <sourceOptions>"
+    ],
+    "sqlState" : "KD000"
+  },
+  "STDS_INTERNAL_ERROR" : {
+    "message" : [
+      "Internal error: <message>"
+    ],
+    "sqlState" : "KD000"
+  },
+  "STDS_INVALID_OPTION_VALUE" : {
+    "message" : [
+      "Invalid value for source option '<optionName>': <message>"
+    ],
+    "sqlState" : "KD000"
+  },
+  "STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE" : {
+    "message" : [
+      "The state does not have any partition. Please double check that the query points to the valid state. options: <sourceOptions>"
+    ],
+    "sqlState" : "KD000"
+  },
+  "STDS_OFFSET_LOG_UNAVAILABLE" : {
+    "message" : [
+      "The offset log for <batchId> does not exist, checkpoint location: <checkpointLocation>"
+    ],
+    "sqlState" : "KD000"
+  },
+  "STDS_OFFSET_METADATA_LOG_UNAVAILABLE" : {
+    "message" : [
+      "Metadata is not available for offset log for <batchId>, checkpoint location: <checkpointLocation>"
+    ],
+    "sqlState" : "KD000"
+  },
+  "STDS_REQUIRED_OPTION_UNSPECIFIED" : {
+    "message" : [
+      "'<optionName>' must be specified."
+    ],
+    "sqlState" : "KD000"
+  },
   "STREAM_FAILED" : {
     "message" : [
       "Query [id = <id>, runId = <runId>] terminated with exception: <message>"
@@ -6582,53 +6636,5 @@
       "<errorMessage>"
     ],
     "sqlState" : "P0001"
-  },
-  "STDS_INTERNAL_ERROR" : {
-    "message": [
-      "Internal error: <message>"
-    ]
-  },
-  "STDS_FAILED_TO_READ_STATE_SCHEMA" : {
-    "message" : [
-      "Failed to read the state schema. Either the file does not exist, ",
-      "or the file is corrupted. options: <sourceOptions>"
-    ]
-  },
-  "STDS_OFFSET_METADATA_LOG_UNAVAILABLE" : {
-    "message" : [
-      "Metadata is not available for offset log for <batchId>, checkpoint location: ",
-      "<checkpointLocation>"
-    ]
-  },
-  "STDS_OFFSET_LOG_UNAVAILABLE" : {
-    "message" : [
-      "The offset log for <batchId> does not exist, checkpoint location: <checkpointLocation>"
-    ]
-  },
-  "STDS_REQUIRED_OPTION_UNSPECIFIED" : {
-    "message" : [
-      "'<optionName>' must be specified."
-    ]
-  },
-  "STDS_INVALID_OPTION_VALUE" : {
-    "message" : [
-      "Invalid value for source option '<optionName>': <message>"
-    ]
-  },
-  "STDS_CONFLICT_OPTIONS" : {
-    "message" : [
-      "The options <options> cannot be specified together. Please specify the one."
-    ]
-  },
-  "STDS_COMMITTED_BATCH_UNAVAILABLE" : {
-    "message" : [
-      "No committed batch found, checkpoint location: <checkpointLocation>"
-    ]
-  },
-  "STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE" : {
-    "message" : [
-      "The state does not have any partition. Please double check that the query points ",
-      "to the valid state. options: <sourceOptions>"
-    ]
   }
 }

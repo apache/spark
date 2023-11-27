@@ -1914,6 +1914,60 @@ Star (*) is not allowed in a select list when GROUP BY an ordinal position is us
 
 Static partition column `<staticName>` is also specified in the column list.
 
+### STDS_COMMITTED_BATCH_UNAVAILABLE
+
+SQLSTATE: KD000
+
+No committed batch found, checkpoint location: `<checkpointLocation>`
+
+### STDS_CONFLICT_OPTIONS
+
+SQLSTATE: KD000
+
+The options `<options>` cannot be specified together. Please specify the one.
+
+### STDS_FAILED_TO_READ_STATE_SCHEMA
+
+SQLSTATE: KD000
+
+Failed to read the state schema. Either the file does not exist, or the file is corrupted. options: `<sourceOptions>`
+
+### STDS_INTERNAL_ERROR
+
+SQLSTATE: KD000
+
+Internal error: `<message>`
+
+### STDS_INVALID_OPTION_VALUE
+
+SQLSTATE: KD000
+
+Invalid value for source option '`<optionName>`': `<message>`
+
+### STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE
+
+SQLSTATE: KD000
+
+The state does not have any partition. Please double check that the query points to the valid state. options: `<sourceOptions>`
+
+### STDS_OFFSET_LOG_UNAVAILABLE
+
+SQLSTATE: KD000
+
+The offset log for `<batchId>` does not exist, checkpoint location: `<checkpointLocation>`
+
+### STDS_OFFSET_METADATA_LOG_UNAVAILABLE
+
+SQLSTATE: KD000
+
+Metadata is not available for offset log for `<batchId>`, checkpoint location: `<checkpointLocation>`
+
+### STDS_REQUIRED_OPTION_UNSPECIFIED
+
+SQLSTATE: KD000
+
+'`<optionName>`' must be specified.
+
 ### STREAM_FAILED
 
 [SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
