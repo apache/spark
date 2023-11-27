@@ -2696,14 +2696,13 @@ case class Encode(value: Expression, charset: Expression, legacyCharsets: Boolea
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
+  private val supportedCharsets = Set(
+    "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-16")
+
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val toCharset = input2.asInstanceOf[UTF8String].toString
     try {
-      if (legacyCharsets ||
-        toCharset.equalsIgnoreCase("UTF-8") || toCharset.equalsIgnoreCase("US-ASCII") ||
-        toCharset.equalsIgnoreCase("ISO-8859-1") ||
-        toCharset.equalsIgnoreCase("UTF-16") || toCharset.equalsIgnoreCase("UTF-16LE") ||
-        toCharset.equalsIgnoreCase("UTF-16BE")) {
+      if (legacyCharsets || supportedCharsets.contains(toCharset.toUpperCase(Locale.ROOT))) {
         input1.asInstanceOf[UTF8String].toString.getBytes(toCharset)
       } else throw new UnsupportedEncodingException
     } catch {
@@ -2715,14 +2714,13 @@ case class Encode(value: Expression, charset: Expression, legacyCharsets: Boolea
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (string, charset) => {
       val toCharset = ctx.freshName("toCharset")
+      val sc = JavaCode.global(
+        ctx.addReferenceObj("supportedCharsets", supportedCharsets),
+        supportedCharsets.getClass)
       s"""
         String $toCharset = $charset.toString();
         try {
-          if ($legacyCharsets ||
-            $toCharset.equalsIgnoreCase("UTF-8") || $toCharset.equalsIgnoreCase("US-ASCII") ||
-            $toCharset.equalsIgnoreCase("ISO-8859-1") ||
-            $toCharset.equalsIgnoreCase("UTF-16") || $toCharset.equalsIgnoreCase("UTF-16LE") ||
-            $toCharset.equalsIgnoreCase("UTF-16BE")) {
+          if ($legacyCharsets || $sc.contains($toCharset.toUpperCase(java.util.Locale.ROOT))) {
             ${ev.value} = $string.toString().getBytes($toCharset);
           } else {
             throw new java.io.UnsupportedEncodingException();
