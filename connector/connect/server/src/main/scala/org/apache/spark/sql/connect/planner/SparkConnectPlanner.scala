@@ -197,8 +197,7 @@ class SparkConnectPlanner(
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
     }
 
-    if (rel.hasCommon && rel.getCommon.hasPlanId &&
-      plan.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty) {
+    if (rel.hasCommon && rel.getCommon.hasPlanId) {
       plan.setTagValue(LogicalPlan.PLAN_ID_TAG, rel.getCommon.getPlanId)
     }
     plan
