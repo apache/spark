@@ -141,10 +141,15 @@ RUN python3.12 -m pip install --pre torch --index-url https://download.pytorch.o
 RUN python3.12 -m pip install torcheval
 
 
-RUN curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh && \
+# Refer to https://github.com/ContinuumIO/docker-images/blob/main/miniconda3/debian/Dockerfile
+RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh -q && \
     bash miniconda.sh -b -p /opt/miniconda3 && \
     rm miniconda.sh && \
-    ln -sf /opt/miniconda3/bin/conda /usr/local/bin/conda
+    ln -s /opt/miniconda3/etc/profile.d/conda.sh /etc/profile.d/conda.sh && \
+    ln -s /opt/miniconda3/bin/conda /usr/local/bin/conda && \
+    find /opt/miniconda3/ -follow -type f -name '*.a' -delete && \
+    find /opt/miniconda3/ -follow -type f -name '*.js.map' -delete && \
+    conda clean -afy
 
 # Additional Python deps for linter and documentation, delete this section if another Python version is used
 # Since there maybe conflicts between envs, here uses conda to manage it.
@@ -177,12 +182,12 @@ RUN conda run -n doc pip install \
     'plotly>=4.8' \
     'protobuf==4.25.1' \
     'pyarrow' \
-    'pydata_sphinx_theme' \
+    'pydata_sphinx_theme>=0.13' \
     'pytest-mypy-plugins==1.9.3' \
     'pytest==7.1.3' \
     'pyzmq<24.0.0' \
     'sphinx-copybutton' \
-    'sphinx<3.1.0' \
+    'sphinx==4.2.0' \
     'sphinx_plotly_directive'
 RUN conda run -n doc pip install \
     'torch<=2.0.1' \
@@ -190,4 +195,4 @@ RUN conda run -n doc pip install \
 RUN conda run -n doc pip install \
     'torcheval'
 
-RUN conda clean --all
+RUN conda clean -afy
