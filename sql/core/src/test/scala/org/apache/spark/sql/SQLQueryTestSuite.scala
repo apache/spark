@@ -653,6 +653,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           TestPythonUDTFPartitionByOrderBy,
           TestPythonUDTFPartitionByOrderByComplexExpr,
           InvalidTestPythonUDTFPartitionByOrderByParseError,
+          InvalidTestPythonUDTFOrderByAscKeyword,
           InvalidPartitionByAndWithSinglePartition,
           InvalidOrderByWithoutPartitionBy,
           InvalidEvalReturnsNoneToNonNullableColumnScalarType,

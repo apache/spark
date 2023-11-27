@@ -76,6 +76,7 @@ SELECT * FROM
     JOIN LATERAL
     UDTFPartitionByOrderBy(TABLE(t2) PARTITION BY partition_col);
 SELECT * FROM UDTFPartitionByComplexExpr(TABLE(t2));
+SELECT * FROM InvalidTestPythonUDTFOrderByAscKeyword(TABLE(t2));
 -- As a reminder, UDTFInvalidPartitionByAndWithSinglePartition returns this analyze result:
 --     AnalyzeResult(
 --         schema=StructType()

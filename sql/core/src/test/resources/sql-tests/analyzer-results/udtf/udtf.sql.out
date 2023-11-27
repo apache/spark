@@ -285,6 +285,26 @@ SELECT * FROM UDTFPartitionByComplexExpr(TABLE(t2))
 
 
 -- !query
+SELECT * FROM InvalidTestPythonUDTFOrderByAscKeyword(TABLE(t2))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UDTF_INVALID_ALIAS_IN_REQUESTED_ORDERING_STRING_FROM_ANALYZE_METHOD",
+  "sqlState" : "42802",
+  "messageParameters" : {
+    "aliasName" : "ASC"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 63,
+    "fragment" : "InvalidTestPythonUDTFOrderByAscKeyword(TABLE(t2))"
+  } ]
+}
+
+
+-- !query
 SELECT * FROM UDTFInvalidPartitionByAndWithSinglePartition(TABLE(t2))
 -- !query analysis
 org.apache.spark.sql.AnalysisException

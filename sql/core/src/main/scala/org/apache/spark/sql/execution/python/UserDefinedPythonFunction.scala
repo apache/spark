@@ -25,7 +25,7 @@ import net.razorvine.pickle.Pickler
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, SortOrder, UnresolvedPolymorphicPythonUDTF}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, SortOrder, UnresolvedPolymorphicPythonUDTF}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -254,6 +254,15 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
     for (_ <- 0 until numOrderByItems) {
       val expressionSql: String = PythonWorkerUtils.readUTF(dataIn)
       val parsed: Expression = parser.parseExpression(expressionSql)
+      // Perform a basic check that the requested ordering column string does not include an alias,
+      // since it is possible to accidentally try to specify a sort order like ASC or DESC or NULLS
+      // FIRST/LAST in this manner leading to confusing results.
+      parsed match {
+        case a: Alias =>
+          throw QueryCompilationErrors
+            .invalidSortOrderInUDTFOrderingColumnFromAnalyzeMethodHasAlias(aliasName = a.name)
+        case _ =>
+      }
       val direction = if (dataIn.readInt() == 1) Ascending else Descending
       val overrideNullsFirst = dataIn.readInt()
       overrideNullsFirst match {
