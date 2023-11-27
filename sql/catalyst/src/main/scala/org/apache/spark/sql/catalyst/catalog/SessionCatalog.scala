@@ -968,7 +968,7 @@ class SessionCatalog(
       } else {
         _.toLowerCase(Locale.ROOT)
       }
-      val nameToCounts = viewColumnNames.groupBy(normalizeColName).mapValues(_.length)
+      val nameToCounts = viewColumnNames.groupBy(normalizeColName).view.mapValues(_.length)
       val nameToCurrentOrdinal = scala.collection.mutable.HashMap.empty[String, Int]
       val viewDDL = buildViewDDL(metadata, isTempView)
 
@@ -1088,6 +1088,25 @@ class SessionCatalog(
     }
 
     dbViews ++ listLocalTempViews(pattern)
+  }
+
+  /**
+   * List all matching temp views in the specified database, including global/local temporary views.
+   */
+  def listTempViews(db: String, pattern: String): Seq[CatalogTable] = {
+    val globalTempViews = if (format(db) == globalTempViewManager.database) {
+      globalTempViewManager.listViewNames(pattern).flatMap { viewName =>
+        globalTempViewManager.get(viewName).map(_.tableMeta)
+      }
+    } else {
+      Seq.empty
+    }
+
+    val localTempViews = listLocalTempViews(pattern).flatMap { viewIndent =>
+      tempViews.get(viewIndent.table).map(_.tableMeta)
+    }
+
+    globalTempViews ++ localTempViews
   }
 
   /**

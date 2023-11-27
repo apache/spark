@@ -298,6 +298,10 @@ replaceTableHeader
     : (CREATE OR)? REPLACE TABLE identifierReference
     ;
 
+clusterBySpec
+    : CLUSTER BY LEFT_PAREN multipartIdentifierList RIGHT_PAREN
+    ;
+
 bucketSpec
     : CLUSTERED BY identifierList
       (SORTED BY orderedIdentifierList)?
@@ -383,6 +387,7 @@ createTableClauses
     :((OPTIONS options=expressionPropertyList) |
      (PARTITIONED BY partitioning=partitionFieldList) |
      skewSpec |
+     clusterBySpec |
      bucketSpec |
      rowFormat |
      createFileFormat |
@@ -580,6 +585,10 @@ notMatchedAction
 notMatchedBySourceAction
     : DELETE
     | UPDATE SET assignmentList
+    ;
+
+exceptClause
+    : EXCEPT LEFT_PAREN exceptCols=multipartIdentifierList RIGHT_PAREN
     ;
 
 assignmentList
@@ -964,8 +973,8 @@ primaryExpression
     | LAST LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                                   #last
     | POSITION LEFT_PAREN substr=valueExpression IN str=valueExpression RIGHT_PAREN            #position
     | constant                                                                                 #constantDefault
-    | ASTERISK                                                                                 #star
-    | qualifiedName DOT ASTERISK                                                               #star
+    | ASTERISK exceptClause?                                                                   #star
+    | qualifiedName DOT ASTERISK exceptClause?                                                 #star
     | LEFT_PAREN namedExpression (COMMA namedExpression)+ RIGHT_PAREN                          #rowConstructor
     | LEFT_PAREN query RIGHT_PAREN                                                             #subqueryExpression
     | functionName LEFT_PAREN (setQuantifier? argument+=functionArgument
@@ -1083,6 +1092,7 @@ type
     | DECIMAL | DEC | NUMERIC
     | VOID
     | INTERVAL
+    | VARIANT
     | ARRAY | STRUCT | MAP
     | unsupportedType=identifier
     ;
@@ -1543,6 +1553,7 @@ ansiNonReserved
     | VARCHAR
     | VAR
     | VARIABLE
+    | VARIANT
     | VERSION
     | VIEW
     | VIEWS
@@ -1892,6 +1903,7 @@ nonReserved
     | VARCHAR
     | VAR
     | VARIABLE
+    | VARIANT
     | VERSION
     | VIEW
     | VIEWS

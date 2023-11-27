@@ -46,6 +46,7 @@ import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 abstract class FileStreamSourceTest
@@ -1411,7 +1412,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     withTempDirs { case (src, tmp) =>
       src.mkdirs()
 
-      val df = spark.readStream.format("text").load(src.getCanonicalPath).map(_ + "-x")
+      val df = spark.readStream.format("text").load(src.getCanonicalPath).map(_.toString + "-x")
       // Test `explain` not throwing errors
       df.explain()
 
@@ -1699,7 +1700,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   private def readLogFromResource(dir: String): Seq[FileEntry] = {
     val input = getClass.getResource(s"/structured-streaming/$dir")
     val log = new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark, input.toString)
-    log.allFiles()
+    log.allFiles().toImmutableArraySeq
   }
 
   private def readOffsetFromResource(file: String): SerializedOffset = {
@@ -2390,8 +2391,6 @@ class FileStreamSourceStressTestSuite extends FileStreamSourceTest {
  */
 class ExistsThrowsExceptionFileSystem extends RawLocalFileSystem {
   import ExistsThrowsExceptionFileSystem._
-
-  override def getScheme(): String = "existsthrowsexception"
 
   override def getUri: URI = {
     URI.create(s"$scheme:///")

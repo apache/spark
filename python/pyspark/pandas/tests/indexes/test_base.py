@@ -62,11 +62,11 @@ class IndexesTestsMixin:
             self.assert_eq(psdf.index.dtype, pdf.index.dtype)
 
         self.assert_eq(ps.Index([])._summary(), "Index: 0 entries")
-        with self.assertRaisesRegexp(ValueError, "The truth value of a Index is ambiguous."):
+        with self.assertRaisesRegex(ValueError, "The truth value of a Index is ambiguous."):
             bool(ps.Index([1]))
-        with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
+        with self.assertRaisesRegex(TypeError, "Index.name must be a hashable type"):
             ps.Index([1, 2, 3], name=[(1, 2, 3)])
-        with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
+        with self.assertRaisesRegex(TypeError, "Index.name must be a hashable type"):
             ps.Index([1.0, 2.0, 3.0], name=[(1, 2, 3)])
 
     def test_index_from_series(self):

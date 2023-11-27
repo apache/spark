@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{CodegenSupport, ExplainUtils, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.{BitSet, CompactBuffer}
 
 case class BroadcastNestedLoopJoinExec(
@@ -220,7 +221,7 @@ case class BroadcastNestedLoopJoinExec(
         // Only need to know whether streamed side is empty or not.
         val streamExists = !streamed.executeTake(1).isEmpty
         if (streamExists == exists) {
-          sparkContext.makeRDD(relation.value)
+          sparkContext.makeRDD(relation.value.toImmutableArraySeq)
         } else {
           sparkContext.emptyRDD
         }

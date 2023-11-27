@@ -55,6 +55,15 @@ See '`<docroot>`/sql-migration-guide.html#query-engine'.
 
 Column or field `<name>` is ambiguous and has `<n>` matches.
 
+### AMBIGUOUS_COLUMN_REFERENCE
+
+[SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Column `<name>` is ambiguous. It's because you joined several DataFrame together, and some of these DataFrames are the same.
+This column points to one of the DataFrame but Spark is unable to figure out which one.
+Please alias the DataFrames with different names via `DataFrame.alias` before joining them,
+and specify the column using qualified name, e.g. `df.alias("a").join(df.alias("b"), col("a.id") > col("b.id"))`.
+
 ### AMBIGUOUS_LATERAL_COLUMN_ALIAS
 
 [SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -271,6 +280,12 @@ SQLSTATE: 58030
 
 Failed to set permissions on created path `<path>` back to `<permission>`.
 
+### CANNOT_SAVE_VARIANT
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Cannot save variant data type into external storage.
+
 ### [CANNOT_UPDATE_FIELD](sql-error-conditions-cannot-update-field-error-class.html)
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
@@ -337,6 +352,14 @@ The codec `<codecName>` is not available. Consider to set the config `<configKey
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot find a short name for the codec `<codecName>`.
+
+### [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
+
+[SQLSTATE: 54000](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
+
+Can't create array with `<numberOfElements>` elements which exceeding the array size limit `<maxRoundedArrayLength>`,
+
+For more details see [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
 
 ### COLUMN_ALIASES_IS_NOT_ALLOWED
 
@@ -430,6 +453,18 @@ For more details see [DATATYPE_MISMATCH](sql-error-conditions-datatype-mismatch-
 [SQLSTATE: 42K01](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 DataType `<type>` requires a length parameter, for example `<type>`(10). Please specify the length.
+
+### DATA_SOURCE_ALREADY_EXISTS
+
+[SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Data source '`<provider>`' already exists in the registry. Please use a different name for the new data source.
+
+### DATA_SOURCE_NOT_EXIST
+
+[SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Data source '`<provider>`' not found. Please make sure the data source is registered.
 
 ### DATA_SOURCE_NOT_FOUND
 
@@ -552,6 +587,18 @@ The event time `<eventName>` has the invalid type `<eventType>`, but expected "T
 
 Exceeds char/varchar type length limitation: `<limit>`.
 
+### EXCEPT_NESTED_COLUMN_INVALID_TYPE
+
+[SQLSTATE: 428H2](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+EXCEPT column `<columnName>` was resolved and expected to be StructType, but found type `<dataType>`.
+
+### EXCEPT_OVERLAPPING_COLUMNS
+
+[SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Columns in an EXCEPT list must be distinct and non-overlapping, but got (`<columns>`).
+
 ### EXPECT_PERMANENT_VIEW_NOT_TEMP
 
 [SQLSTATE: 42809](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -596,7 +643,7 @@ Column expression `<expr>` cannot be sorted because its type `<exprType>` is not
 
 [SQLSTATE: 39000](sql-error-conditions-sqlstates.html#class-39-external-routine-invocation-exception)
 
-Failed to execute user defined function (`<functionName>`: (`<signature>`) => `<result>`).
+User defined function (`<functionName>`: (`<signature>`) => `<result>`) failed due to: `<reason>`.
 
 ### FAILED_FUNCTION_CALL
 
@@ -645,6 +692,12 @@ No such struct field `<fieldName>` in `<fields>`.
 [SQLSTATE: 42809](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The operation `<statement>` is not allowed on the `<objectType>`: `<objectName>`.
+
+### FOUND_MULTIPLE_DATA_SOURCES
+
+[SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Detected multiple data sources with the name '`<provider>`'. Please check the data source isn't simultaneously registered and located in the classpath.
 
 ### FUNCTION_AND_ORDER_EXPRESSION_MISMATCH
 
@@ -1228,6 +1281,12 @@ For more details see [INVALID_SUBQUERY_EXPRESSION](sql-error-conditions-invalid-
 
 Cannot create the persistent object `<objName>` of the type `<obj>` because it references to the temporary object `<tempObjName>` of the type `<tempObj>`. Please make the temporary object `<tempObjName>` persistent, or make the persistent object `<objName>` temporary.
 
+### INVALID_TIME_TRAVEL_SPEC
+
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot specify both version and timestamp when time travelling the table.
+
 ### [INVALID_TIME_TRAVEL_TIMESTAMP_EXPR](sql-error-conditions-invalid-time-travel-timestamp-expr-error-class.html)
 
 [SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1365,6 +1424,12 @@ For more details see [MISSING_ATTRIBUTES](sql-error-conditions-missing-attribute
 [SQLSTATE: 42803](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses.
+
+### MULTIPLE_TIME_TRAVEL_SPEC
+
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot specify time travel in both the time travel clause and options.
 
 ### MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION
 
@@ -1675,6 +1740,12 @@ Unable to locate Message `<messageName>` in Descriptor.
 
 Protobuf type not yet supported: `<protobufType>`.
 
+### PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON
+
+[SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
+
+Failed to `<action>` Python data source `<type>` in Python: `<msg>`
+
 ### RECURSIVE_PROTOBUF_SCHEMA
 
 [SQLSTATE: 42K0G](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1797,6 +1868,12 @@ The seed expression `<seedExpr>` of the expression `<exprWithSeed>` must be fold
 
 sortBy must be used together with bucketBy.
 
+### SPARK_JOB_CANCELLED
+
+[SQLSTATE: XXKDA](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+Job `<jobId>` cancelled `<reason>`
+
 ### SPECIFY_BUCKETING_IS_NOT_ALLOWED
 
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1804,6 +1881,18 @@ sortBy must be used together with bucketBy.
 A CREATE TABLE without explicit column list cannot specify bucketing information.
 Please use the form with explicit column list and specify bucketing information.
 Alternatively, allow bucketing information to be inferred by omitting the clause.
+
+### SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED
+
+[SQLSTATE: 42908](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot specify both CLUSTER BY and CLUSTERED BY INTO BUCKETS.
+
+### SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED
+
+[SQLSTATE: 42908](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot specify both CLUSTER BY and PARTITIONED BY.
 
 ### SPECIFY_PARTITION_IS_NOT_ALLOWED
 
@@ -1902,12 +1991,6 @@ Choose a different name, drop or replace the existing view,  or add the IF NOT E
 [SQLSTATE: 428EK](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: `<actualName>`.
-
-### TOO_MANY_ARRAY_ELEMENTS
-
-[SQLSTATE: 54000](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
-
-Cannot initialize array with `<numElements>` elements of size `<size>`.
 
 ### UDTF_ALIAS_NUMBER_MISMATCH
 
@@ -2316,3 +2399,9 @@ The operation `<operation>` requires a `<requiredType>`. But `<objectName>` is a
 The `<functionName>` requires `<expectedNum>` parameters but the actual number is `<actualNum>`.
 
 For more details see [WRONG_NUM_ARGS](sql-error-conditions-wrong-num-args-error-class.html)
+
+### XML_ROW_TAG_MISSING
+
+[SQLSTATE: 42KDF](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+`<rowTag>` option is required for reading files in XML format.

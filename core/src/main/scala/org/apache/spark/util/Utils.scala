@@ -24,7 +24,7 @@ import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
 import java.net._
 import java.nio.ByteBuffer
-import java.nio.channels.{Channels, FileChannel, WritableByteChannel}
+import java.nio.channels.Channels
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.security.SecureRandom
@@ -77,6 +77,7 @@ import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, Serializer, SerializerInstance}
 import org.apache.spark.status.api.v1.{StackTrace, ThreadStackTrace}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.{Utils => CUtils}
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
@@ -95,9 +96,11 @@ private[spark] object CallSite {
 private[spark] object Utils
   extends Logging
   with SparkClassUtils
+  with SparkEnvUtils
   with SparkErrorUtils
   with SparkFileUtils
-  with SparkSerDeUtils {
+  with SparkSerDeUtils
+  with SparkStreamUtils {
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
   @volatile private var cachedLocalDir: String = ""
@@ -245,49 +248,6 @@ private[spark] object Utils
   }
 
   /**
-   * Copy all data from an InputStream to an OutputStream. NIO way of file stream to file stream
-   * copying is disabled by default unless explicitly set transferToEnabled as true,
-   * the parameter transferToEnabled should be configured by spark.file.transferTo = [true|false].
-   */
-  def copyStream(
-      in: InputStream,
-      out: OutputStream,
-      closeStreams: Boolean = false,
-      transferToEnabled: Boolean = false): Long = {
-    tryWithSafeFinally {
-      (in, out) match {
-        case (input: FileInputStream, output: FileOutputStream) if transferToEnabled =>
-          // When both streams are File stream, use transferTo to improve copy performance.
-          val inChannel = input.getChannel
-          val outChannel = output.getChannel
-          val size = inChannel.size()
-          copyFileStreamNIO(inChannel, outChannel, 0, size)
-          size
-        case (input, output) =>
-          var count = 0L
-          val buf = new Array[Byte](8192)
-          var n = 0
-          while (n != -1) {
-            n = input.read(buf)
-            if (n != -1) {
-              output.write(buf, 0, n)
-              count += n
-            }
-          }
-          count
-      }
-    } {
-      if (closeStreams) {
-        try {
-          in.close()
-        } finally {
-          out.close()
-        }
-      }
-    }
-  }
-
-  /**
    * Copy the first `maxSize` bytes of data from the InputStream to an in-memory
    * buffer, primarily to check for corruption.
    *
@@ -328,43 +288,6 @@ private[spark] object Utils
       out.toChunkedByteBuffer.toInputStream(dispose = true)
     } else {
       new SequenceInputStream( out.toChunkedByteBuffer.toInputStream(dispose = true), in)
-    }
-  }
-
-  def copyFileStreamNIO(
-      input: FileChannel,
-      output: WritableByteChannel,
-      startPosition: Long,
-      bytesToCopy: Long): Unit = {
-    val outputInitialState = output match {
-      case outputFileChannel: FileChannel =>
-        Some((outputFileChannel.position(), outputFileChannel))
-      case _ => None
-    }
-    var count = 0L
-    // In case transferTo method transferred less data than we have required.
-    while (count < bytesToCopy) {
-      count += input.transferTo(count + startPosition, bytesToCopy - count, output)
-    }
-    assert(count == bytesToCopy,
-      s"request to copy $bytesToCopy bytes, but actually copied $count bytes.")
-
-    // Check the position after transferTo loop to see if it is in the right position and
-    // give user information if not.
-    // Position will not be increased to the expected length after calling transferTo in
-    // kernel version 2.6.32, this issue can be seen in
-    // https://bugs.openjdk.java.net/browse/JDK-7052359
-    // This will lead to stream corruption issue when using sort-based shuffle (SPARK-3948).
-    outputInitialState.foreach { case (initialPos, outputFileChannel) =>
-      val finalPos = outputFileChannel.position()
-      val expectedPos = initialPos + bytesToCopy
-      assert(finalPos == expectedPos,
-        s"""
-           |Current position $finalPos do not equal to expected position $expectedPos
-           |after transferTo, please check your kernel version to see if it is 2.6.32,
-           |this is a kernel bug which will lead to unexpected behavior when using transferTo.
-           |You can set spark.file.transferTo = false to disable this NIO feature.
-         """.stripMargin)
     }
   }
 
@@ -917,7 +840,7 @@ private[spark] object Utils
    * uses a local random number generator, avoiding inter-thread contention.
    */
   def randomize[T: ClassTag](seq: IterableOnce[T]): Seq[T] = {
-    randomizeInPlace(seq.toArray)
+    randomizeInPlace(seq.iterator.toArray).toImmutableArraySeq
   }
 
   /**
@@ -1870,15 +1793,6 @@ private[spark] object Utils
   val windowsDrive = "([a-zA-Z])".r
 
   /**
-   * Indicates whether Spark is currently running unit tests.
-   */
-  def isTesting: Boolean = {
-    // Scala's `sys.env` creates a ton of garbage by constructing Scala immutable maps, so
-    // we directly use the Java APIs instead.
-    System.getenv("SPARK_TESTING") != null || System.getProperty(IS_TESTING.key) != null
-  }
-
-  /**
    * Terminates a process waiting for at most the specified duration.
    *
    * @return the process exit value if it was successfully terminated, else None
@@ -2179,7 +2093,7 @@ private[spark] object Utils
       } else ""
       val locking = monitors.get(idx).map(mi => s"\t-  locked $mi\n").getOrElse("")
       s"${frame.toString}\n$locked$locking"
-    })
+    }.toImmutableArraySeq)
 
     val synchronizers = threadInfo.getLockedSynchronizers.map(_.toString)
     val monitorStrs = monitors.values.toSeq
@@ -2190,8 +2104,8 @@ private[spark] object Utils
       stackTrace,
       if (threadInfo.getLockOwnerId < 0) None else Some(threadInfo.getLockOwnerId),
       Option(threadInfo.getLockInfo).map(_.lockString).getOrElse(""),
-      synchronizers ++ monitorStrs,
-      synchronizers,
+      (synchronizers ++ monitorStrs).toImmutableArraySeq,
+      synchronizers.toImmutableArraySeq,
       monitorStrs,
       Option(threadInfo.getLockName),
       Option(threadInfo.getLockOwnerName),
@@ -2208,6 +2122,7 @@ private[spark] object Utils
     conf.getAll
       .filter { case (k, _) => filterKey(k) }
       .map { case (k, v) => s"-D$k=$v" }
+      .toImmutableArraySeq
   }
 
   /**
@@ -2778,7 +2693,7 @@ private[spark] object Utils
   }
 
   def stringToSeq(str: String): Seq[String] = {
-    str.split(",").map(_.trim()).filter(_.nonEmpty)
+    str.split(",").map(_.trim()).filter(_.nonEmpty).toImmutableArraySeq
   }
 
   /**

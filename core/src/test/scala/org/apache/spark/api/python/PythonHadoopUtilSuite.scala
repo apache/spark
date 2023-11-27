@@ -43,9 +43,9 @@ class PythonHadoopUtilSuite extends SparkFunSuite {
   }
 
   test("Testing roundtrip conversion of various types") {
-    checkConversion(new IntWritable(5), 5.asInstanceOf[Int])
-    checkConversion(new DoubleWritable(5.2), 5.2.asInstanceOf[Double])
-    checkConversion(new LongWritable(Long.MaxValue), Long.MaxValue.asInstanceOf[Long])
+    checkConversion(new IntWritable(5), 5)
+    checkConversion(new DoubleWritable(5.2), 5.2)
+    checkConversion(new LongWritable(Long.MaxValue), Long.MaxValue)
     checkConversion(new ShortWritable(5), 5.asInstanceOf[Short])
     checkConversion(new FloatWritable(5.2f), 5.2.asInstanceOf[Float])
     checkConversion(new Text("This is some text"), "This is some text")

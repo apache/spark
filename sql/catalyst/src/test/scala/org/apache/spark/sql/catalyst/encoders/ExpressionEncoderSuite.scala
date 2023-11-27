@@ -38,7 +38,7 @@ import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-import org.apache.spark.util.{ClosureCleaner, Utils}
+import org.apache.spark.util.{SparkClosureCleaner, Utils}
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
@@ -479,6 +479,18 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(Option.empty[Int], "empty option of int")
   encodeDecodeTest(Option("abc"), "option of string")
   encodeDecodeTest(Option.empty[String], "empty option of string")
+  encodeDecodeTest(Seq(Some(Seq(0))), "SPARK-45896: seq of option of seq")
+  encodeDecodeTest(Map(0 -> Some(Seq(0))), "SPARK-45896: map of option of seq")
+  encodeDecodeTest(Seq(Some(Timestamp.valueOf("2023-01-01 00:00:00"))),
+    "SPARK-45896: seq of option of timestamp")
+  encodeDecodeTest(Map(0 -> Some(Timestamp.valueOf("2023-01-01 00:00:00"))),
+    "SPARK-45896: map of option of timestamp")
+  encodeDecodeTest(Seq(Some(Date.valueOf("2023-01-01"))),
+    "SPARK-45896: seq of option of date")
+  encodeDecodeTest(Map(0 -> Some(Date.valueOf("2023-01-01"))),
+    "SPARK-45896: map of option of date")
+  encodeDecodeTest(Seq(Some(BigDecimal(200))), "SPARK-45896: seq of option of bigdecimal")
+  encodeDecodeTest(Map(0 -> Some(BigDecimal(200))), "SPARK-45896: map of option of bigdecimal")
 
   encodeDecodeTest(ScroogeLikeExample(1),
     "SPARK-40385 class with only a companion object constructor")
@@ -689,7 +701,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       val encoder = implicitly[ExpressionEncoder[T]]
 
       // Make sure encoder is serializable.
-      ClosureCleaner.clean((s: String) => encoder.getClass.getName)
+      SparkClosureCleaner.clean((s: String) => encoder.getClass.getName)
 
       val row = encoder.createSerializer().apply(input)
       val schema = toAttributes(encoder.schema)

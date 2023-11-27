@@ -41,6 +41,7 @@ import org.apache.spark.internal.io._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.{SerializableConfiguration, SerializableJobConf, Utils}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.CompactBuffer
 import org.apache.spark.util.random.StratifiedSamplingUtils
 
@@ -761,7 +762,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val cleanF = self.context.clean(f)
     new MapPartitionsRDD[(K, U), (K, V)](self,
       (context, pid, iter) => iter.flatMap { case (k, v) =>
-        cleanF(v).map(x => (k, x))
+        cleanF(v).iterator.map(x => (k, x))
       },
       preservesPartitioning = true)
   }
@@ -937,10 +938,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
           }
           buf.toSeq
         } : Seq[V]
-        val res = self.context.runJob(self, process, Array(index))
+        val res = self.context.runJob(self, process, Array(index).toImmutableArraySeq)
         res(0)
       case None =>
-        self.filter(_._1 == key).map(_._2).collect()
+        self.filter(_._1 == key).map(_._2).collect().toImmutableArraySeq
     }
   }
 

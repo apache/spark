@@ -21,6 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Helper methods for working with the logical expressions API.
@@ -44,13 +45,17 @@ private[sql] object LogicalExpressions {
   def apply(name: String, arguments: Expression*): Transform = ApplyTransform(name, arguments)
 
   def bucket(numBuckets: Int, references: Array[NamedReference]): BucketTransform =
-    BucketTransform(literal(numBuckets, IntegerType), references)
+    BucketTransform(literal(numBuckets, IntegerType), references.toImmutableArraySeq)
 
   def bucket(
       numBuckets: Int,
       references: Array[NamedReference],
       sortedCols: Array[NamedReference]): SortedBucketTransform =
-    SortedBucketTransform(literal(numBuckets, IntegerType), references, sortedCols)
+    SortedBucketTransform(literal(numBuckets, IntegerType),
+      references.toImmutableArraySeq, sortedCols.toImmutableArraySeq)
+
+  def clusterBy(references: Array[NamedReference]): ClusterByTransform =
+    ClusterByTransform(references.toImmutableArraySeq)
 
   def identity(reference: NamedReference): IdentityTransform = IdentityTransform(reference)
 
@@ -150,6 +155,39 @@ private[sql] object BucketTransform {
   }
 }
 
+/**
+ * This class represents a transform for `ClusterBySpec`. This is used to bundle
+ * ClusterBySpec in CreateTable's partitioning transforms to pass it down to analyzer.
+ */
+final case class ClusterByTransform(
+    columnNames: Seq[NamedReference]) extends RewritableTransform {
+
+  override val name: String = "cluster_by"
+
+  override def references: Array[NamedReference] = columnNames.toArray
+
+  override def arguments: Array[Expression] = columnNames.toArray
+
+  override def toString: String = s"$name(${arguments.map(_.describe).mkString(", ")})"
+
+  override def withReferences(newReferences: Seq[NamedReference]): Transform = {
+    this.copy(columnNames = newReferences)
+  }
+}
+
+/**
+ * Convenience extractor for ClusterByTransform.
+ */
+object ClusterByTransform {
+  def unapply(transform: Transform): Option[Seq[NamedReference]] =
+    transform match {
+      case NamedTransform("cluster_by", arguments) =>
+        Some(arguments.map(_.asInstanceOf[NamedReference]))
+      case _ =>
+        None
+    }
+}
+
 private[sql] final case class SortedBucketTransform(
     numBuckets: Literal[Int],
     columns: Seq[NamedReference],
@@ -198,7 +236,7 @@ private object Lit {
  */
 private object Ref {
   def unapply(named: NamedReference): Some[Seq[String]] = {
-    Some(named.fieldNames)
+    Some(named.fieldNames.toImmutableArraySeq)
   }
 }
 
@@ -207,7 +245,7 @@ private object Ref {
  */
 private[sql] object NamedTransform {
   def unapply(transform: Transform): Some[(String, Seq[Expression])] = {
-    Some((transform.name, transform.arguments))
+    Some((transform.name, transform.arguments.toImmutableArraySeq))
   }
 }
 

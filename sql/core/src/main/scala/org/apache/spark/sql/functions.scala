@@ -93,11 +93,13 @@ import org.apache.spark.util.Utils
 object functions {
 // scalastyle:on
 
-  private def withExpr(expr: Expression): Column = Column(expr)
+  private def withExpr(expr: => Expression): Column = withOrigin {
+    Column(expr)
+  }
 
   private def withAggregateFunction(
-    func: AggregateFunction,
-    isDistinct: Boolean = false): Column = {
+    func: => AggregateFunction,
+    isDistinct: Boolean = false): Column = withOrigin {
     Column(func.toAggregateExpression(isDistinct))
   }
 
@@ -127,16 +129,18 @@ object functions {
    * @group normal_funcs
    * @since 1.3.0
    */
-  def lit(literal: Any): Column = literal match {
-    case c: Column => c
-    case s: Symbol => new ColumnName(s.name)
-    case _ =>
-      // This is different from `typedlit`. `typedlit` calls `Literal.create` to use
-      // `ScalaReflection` to get the type of `literal`. However, since we use `Any` in this method,
-      // `typedLit[Any](literal)` will always fail and fallback to `Literal.apply`. Hence, we can
-      // just manually call `Literal.apply` to skip the expensive `ScalaReflection` code. This is
-      // significantly better when there are many threads calling `lit` concurrently.
+  def lit(literal: Any): Column = withOrigin {
+    literal match {
+      case c: Column => c
+      case s: Symbol => new ColumnName(s.name)
+      case _ =>
+        // This is different from `typedlit`. `typedlit` calls `Literal.create` to use
+        // `ScalaReflection` to get the type of `literal`. However, since we use `Any` in this
+        // method, `typedLit[Any](literal)` will always fail and fallback to `Literal.apply`. Hence,
+        // we can just manually call `Literal.apply` to skip the expensive `ScalaReflection` code.
+        // This is significantly better when there are many threads calling `lit` concurrently.
       Column(Literal(literal))
+    }
   }
 
   /**
@@ -147,7 +151,9 @@ object functions {
    * @group normal_funcs
    * @since 2.2.0
    */
-  def typedLit[T : TypeTag](literal: T): Column = typedlit(literal)
+  def typedLit[T : TypeTag](literal: T): Column = withOrigin {
+    typedlit(literal)
+  }
 
   /**
    * Creates a [[Column]] of literal value.
@@ -164,10 +170,12 @@ object functions {
    * @group normal_funcs
    * @since 3.2.0
    */
-  def typedlit[T : TypeTag](literal: T): Column = literal match {
-    case c: Column => c
-    case s: Symbol => new ColumnName(s.name)
-    case _ => Column(Literal.create(literal))
+  def typedlit[T : TypeTag](literal: T): Column = withOrigin {
+    literal match {
+      case c: Column => c
+      case s: Symbol => new ColumnName(s.name)
+      case _ => Column(Literal.create(literal))
+    }
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -6003,25 +6011,31 @@ object functions {
   def array_except(col1: Column, col2: Column): Column =
     Column.fn("array_except", col1, col2)
 
-  private def createLambda(f: Column => Column) = Column {
-    val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
-    val function = f(Column(x)).expr
-    LambdaFunction(function, Seq(x))
+  private def createLambda(f: Column => Column) = withOrigin {
+    Column {
+      val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
+      val function = f(Column(x)).expr
+      LambdaFunction(function, Seq(x))
+    }
   }
 
-  private def createLambda(f: (Column, Column) => Column) = Column {
-    val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
-    val y = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("y")))
-    val function = f(Column(x), Column(y)).expr
-    LambdaFunction(function, Seq(x, y))
+  private def createLambda(f: (Column, Column) => Column) = withOrigin {
+    Column {
+      val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
+      val y = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("y")))
+      val function = f(Column(x), Column(y)).expr
+      LambdaFunction(function, Seq(x, y))
+    }
   }
 
-  private def createLambda(f: (Column, Column, Column) => Column) = Column {
-    val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
-    val y = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("y")))
-    val z = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("z")))
-    val function = f(Column(x), Column(y), Column(z)).expr
-    LambdaFunction(function, Seq(x, y, z))
+  private def createLambda(f: (Column, Column, Column) => Column) = withOrigin {
+    Column {
+      val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
+      val y = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("y")))
+      val z = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("z")))
+      val function = f(Column(x), Column(y), Column(z)).expr
+      LambdaFunction(function, Seq(x, y, z))
+    }
   }
 
   /**
@@ -7256,29 +7270,59 @@ object functions {
     withExpr(SchemaOfXml(xml.expr, options.asScala.toMap))
   }
 
-  /**
-   * A transform for timestamps and dates to partition data into years.
-   *
-   * @group partition_transforms
-   * @since 3.0.0
-   */
-  def years(e: Column): Column = withExpr { Years(e.expr) }
+  // scalastyle:off line.size.limit
 
   /**
-   * A transform for timestamps and dates to partition data into months.
+   * (Java-specific) Converts a column containing a `StructType` into a XML string with
+   * the specified schema. Throws an exception, in the case of an unsupported type.
    *
-   * @group partition_transforms
-   * @since 3.0.0
+   * @param e       a column containing a struct.
+   * @param options options to control how the struct column is converted into a XML string.
+   *                It accepts the same options as the XML data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group xml_funcs
+   * @since 4.0.0
    */
-  def months(e: Column): Column = withExpr { Months(e.expr) }
+  // scalastyle:on line.size.limit
+  def to_xml(e: Column, options: java.util.Map[String, String]): Column =
+    fnWithOptions("to_xml", options.asScala.iterator, e)
 
   /**
-   * A transform for timestamps and dates to partition data into days.
+   * Converts a column containing a `StructType` into a XML string with the specified schema.
+   * Throws an exception, in the case of an unsupported type.
+   *
+   * @param e a column containing a struct.
+   * @group xml_funcs
+   * @since 4.0.0
+   */
+  def to_xml(e: Column): Column = to_xml(e, Map.empty[String, String].asJava)
+
+  /**
+   * (Java-specific) A transform for timestamps and dates to partition data into years.
    *
    * @group partition_transforms
    * @since 3.0.0
    */
-  def days(e: Column): Column = withExpr { Days(e.expr) }
+  def years(e: Column): Column = partitioning.years(e)
+
+  /**
+   * (Java-specific) A transform for timestamps and dates to partition data into months.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def months(e: Column): Column = partitioning.months(e)
+
+  /**
+   * (Java-specific) A transform for timestamps and dates to partition data into days.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def days(e: Column): Column = partitioning.days(e)
 
   /**
    * Returns a string array of values within the nodes of xml that match the XPath expression.
@@ -7368,12 +7412,12 @@ object functions {
     Column.fn("xpath_string", xml, path)
 
   /**
-   * A transform for timestamps to partition data into hours.
+   * (Java-specific) A transform for timestamps to partition data into hours.
    *
    * @group partition_transforms
    * @since 3.0.0
    */
-  def hours(e: Column): Column = withExpr { Hours(e.expr) }
+  def hours(e: Column): Column = partitioning.hours(e)
 
   /**
    * Converts the timestamp without time zone `sourceTs`
@@ -7651,29 +7695,20 @@ object functions {
   def make_ym_interval(): Column = Column.fn("make_ym_interval")
 
   /**
-   * A transform for any type that partitions by a hash of the input column.
+   * (Java-specific) A transform for any type that partitions by a hash of the input column.
    *
    * @group partition_transforms
    * @since 3.0.0
    */
-  def bucket(numBuckets: Column, e: Column): Column = withExpr {
-    numBuckets.expr match {
-      case lit @ Literal(_, IntegerType) =>
-        Bucket(lit, e.expr)
-      case _ =>
-        throw QueryCompilationErrors.invalidBucketsNumberError(numBuckets.toString, e.toString)
-    }
-  }
+  def bucket(numBuckets: Column, e: Column): Column = partitioning.bucket(numBuckets, e)
 
   /**
-   * A transform for any type that partitions by a hash of the input column.
+   * (Java-specific) A transform for any type that partitions by a hash of the input column.
    *
    * @group partition_transforms
    * @since 3.0.0
    */
-  def bucket(numBuckets: Int, e: Column): Column = withExpr {
-    Bucket(Literal(numBuckets), e.expr)
-  }
+  def bucket(numBuckets: Int, e: Column): Column = partitioning.bucket(numBuckets, e)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Predicates functions
@@ -8282,5 +8317,69 @@ object functions {
    */
   def unwrap_udt(column: Column): Column = withExpr {
     UnwrapUDT(column.expr)
+  }
+
+  // scalastyle:off
+  // TODO(SPARK-45970): Use @static annotation so Java can access to those
+  //   API in the same way. Once we land this fix, should deprecate
+  //   functions.hours, days, months, years and bucket.
+  object partitioning {
+  // scalastyle:on
+    /**
+     * (Scala-specific) A transform for timestamps and dates to partition data into years.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def years(e: Column): Column = withExpr { Years(e.expr) }
+
+    /**
+     * (Scala-specific) A transform for timestamps and dates to partition data into months.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def months(e: Column): Column = withExpr { Months(e.expr) }
+
+    /**
+     * (Scala-specific) A transform for timestamps and dates to partition data into days.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def days(e: Column): Column = withExpr { Days(e.expr) }
+
+    /**
+     * (Scala-specific) A transform for timestamps to partition data into hours.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def hours(e: Column): Column = withExpr { Hours(e.expr) }
+
+    /**
+     * (Scala-specific) A transform for any type that partitions by a hash of the input column.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def bucket(numBuckets: Column, e: Column): Column = withExpr {
+      numBuckets.expr match {
+        case lit @ Literal(_, IntegerType) =>
+          Bucket(lit, e.expr)
+        case _ =>
+          throw QueryCompilationErrors.invalidBucketsNumberError(numBuckets.toString, e.toString)
+      }
+    }
+
+    /**
+     * (Scala-specific) A transform for any type that partitions by a hash of the input column.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def bucket(numBuckets: Int, e: Column): Column = withExpr {
+      Bucket(Literal(numBuckets), e.expr)
+    }
   }
 }

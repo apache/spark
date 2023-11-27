@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.xml
 
 import java.io.StringReader
+import java.util.Locale
 import javax.xml.stream.XMLEventReader
 import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
@@ -25,14 +26,31 @@ import javax.xml.validation.Schema
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+import scala.util.control.Exception._
 import scala.util.control.NonFatal
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.util.PermissiveMode
-import org.apache.spark.sql.catalyst.xml.TypeCast._
+import org.apache.spark.sql.catalyst.util.{DateFormatter, PermissiveMode, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.types._
 
-private[sql] object XmlInferSchema {
+class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
+    extends Serializable
+    with Logging {
+
+  private val timestampFormatter = TimestampFormatter(
+    options.timestampFormatInRead,
+    options.zoneId,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
+
+  private lazy val dateFormatter = DateFormatter(
+    options.dateFormatInRead,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
 
   /**
    * Copied from internal Spark api
@@ -66,7 +84,7 @@ private[sql] object XmlInferSchema {
    *   2. Merge types by choosing the lowest type necessary to cover equal keys
    *   3. Replace any remaining null fields with string, the top type
    */
-  def infer(xml: RDD[String], options: XmlOptions): StructType = {
+  def infer(xml: RDD[String]): StructType = {
     val schemaData = if (options.samplingRatio < 1.0) {
       xml.sample(withReplacement = false, options.samplingRatio, 1)
     } else {
@@ -77,9 +95,9 @@ private[sql] object XmlInferSchema {
       val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
 
       iter.flatMap { xml =>
-        infer(xml, options, xsdSchema)
+        infer(xml, xsdSchema)
       }
-    }.fold(StructType(Seq()))(compatibleType(options))
+    }.fold(StructType(Seq()))(compatibleType)
 
     canonicalizeType(rootType) match {
       case Some(st: StructType) => st
@@ -89,9 +107,7 @@ private[sql] object XmlInferSchema {
     }
   }
 
-  def infer(xml: String,
-      options: XmlOptions,
-      xsdSchema: Option[Schema] = None): Option[DataType] = {
+  def infer(xml: String, xsdSchema: Option[Schema] = None): Option[DataType] = {
     try {
       val xsd = xsdSchema.orElse(Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema))
       xsd.foreach { schema =>
@@ -99,7 +115,7 @@ private[sql] object XmlInferSchema {
       }
       val parser = StaxXmlParserUtils.filteredReader(xml)
       val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
-      Some(inferObject(parser, options, rootAttributes))
+      Some(inferObject(parser, rootAttributes))
     } catch {
       case NonFatal(_) if options.parseMode == PermissiveMode =>
         Some(StructType(Seq(StructField(options.columnNameOfCorruptRecord, StringType))))
@@ -108,7 +124,7 @@ private[sql] object XmlInferSchema {
     }
   }
 
-  private def inferFrom(datum: String, options: XmlOptions): DataType = {
+  private def inferFrom(datum: String): DataType = {
     val value = if (datum != null && options.ignoreSurroundingSpaces) {
       datum.trim()
     } else {
@@ -123,8 +139,8 @@ private[sql] object XmlInferSchema {
         case v if isInteger(v) => IntegerType
         case v if isDouble(v) => DoubleType
         case v if isBoolean(v) => BooleanType
-        case v if isDate(v, options) => DateType
-        case v if isTimestamp(v, options) => TimestampType
+        case v if isDate(v) => DateType
+        case v if isTimestamp(v) => TimestampType
         case _ => StringType
       }
     } else {
@@ -133,32 +149,32 @@ private[sql] object XmlInferSchema {
   }
 
   @tailrec
-  private def inferField(parser: XMLEventReader, options: XmlOptions): DataType = {
+  private def inferField(parser: XMLEventReader): DataType = {
     parser.peek match {
       case _: EndElement => NullType
-      case _: StartElement => inferObject(parser, options)
+      case _: StartElement => inferObject(parser)
       case c: Characters if c.isWhiteSpace =>
         // When `Characters` is found, we need to look further to decide
         // if this is really data or space between other elements.
         val data = c.getData
         parser.nextEvent()
         parser.peek match {
-          case _: StartElement => inferObject(parser, options)
+          case _: StartElement => inferObject(parser)
           case _: EndElement if data.isEmpty => NullType
-          case _: EndElement if options.treatEmptyValuesAsNulls => NullType
+          case _: EndElement if options.nullValue == "" => NullType
           case _: EndElement => StringType
-          case _ => inferField(parser, options)
+          case _ => inferField(parser)
         }
       case c: Characters if !c.isWhiteSpace =>
         // This could be the characters of a character-only element, or could have mixed
         // characters and other complex structure
-        val characterType = inferFrom(c.getData, options)
+        val characterType = inferFrom(c.getData)
         parser.nextEvent()
         parser.peek match {
           case _: StartElement =>
             // Some more elements follow; so ignore the characters.
             // Use the schema of the rest
-            inferObject(parser, options).asInstanceOf[StructType]
+            inferObject(parser).asInstanceOf[StructType]
           case _ =>
             // That's all, just the character-only body; use that as the type
             characterType
@@ -173,31 +189,65 @@ private[sql] object XmlInferSchema {
    */
   private def inferObject(
       parser: XMLEventReader,
-      options: XmlOptions,
       rootAttributes: Array[Attribute] = Array.empty): DataType = {
-    val builder = ArrayBuffer[StructField]()
-    val nameToDataType = collection.mutable.Map.empty[String, ArrayBuffer[DataType]]
+    /**
+     * Retrieves the field name with respect to the case sensitivity setting.
+     * We pick the first name we encountered.
+     *
+     * If case sensitivity is enabled, the original field name is returned.
+     * If not, the field name is managed in a case-insensitive map.
+     *
+     * For instance, if we encounter the following field names:
+     * foo, Foo, FOO
+     *
+     * In case-sensitive mode: we will infer three fields: foo, Foo, FOO
+     * In case-insensitive mode, we will infer an array named by foo
+     * (as it's the first one we encounter)
+     */
+    val caseSensitivityOrdering: Ordering[String] = if (caseSensitive) {
+      (x: String, y: String) => x.compareTo(y)
+    } else {
+      (x: String, y: String) => x.compareToIgnoreCase(y)
+    }
+
+    val nameToDataType =
+      collection.mutable.TreeMap.empty[String, DataType](caseSensitivityOrdering)
+
+    def addOrUpdateType(fieldName: String, newType: DataType): Unit = {
+      val oldTypeOpt = nameToDataType.get(fieldName)
+      oldTypeOpt match {
+        // If the field name exists in the map,
+        // merge the type and infer the combined field as an array type if necessary
+        case Some(oldType) if !oldType.isInstanceOf[ArrayType] =>
+          nameToDataType.update(fieldName, ArrayType(compatibleType(oldType, newType)))
+        case Some(oldType) =>
+          nameToDataType.update(fieldName, compatibleType(oldType, newType))
+        case None =>
+          nameToDataType.put(fieldName, newType)
+      }
+    }
+
     // If there are attributes, then we should process them first.
     val rootValuesMap =
       StaxXmlParserUtils.convertAttributesToValuesMap(rootAttributes, options)
     rootValuesMap.foreach {
       case (f, v) =>
-        nameToDataType += (f -> ArrayBuffer(inferFrom(v, options)))
+        addOrUpdateType(f, inferFrom(v))
     }
     var shouldStop = false
     while (!shouldStop) {
       parser.nextEvent match {
         case e: StartElement =>
-          val attributes = e.getAttributes.asScala.map(_.asInstanceOf[Attribute]).toArray
+          val attributes = e.getAttributes.asScala.toArray
           val valuesMap = StaxXmlParserUtils.convertAttributesToValuesMap(attributes, options)
-          val inferredType = inferField(parser, options) match {
+          val inferredType = inferField(parser) match {
             case st: StructType if valuesMap.nonEmpty =>
               // Merge attributes to the field
               val nestedBuilder = ArrayBuffer[StructField]()
               nestedBuilder ++= st.fields
               valuesMap.foreach {
                 case (f, v) =>
-                  nestedBuilder += StructField(f, inferFrom(v, options), nullable = true)
+                  nestedBuilder += StructField(f, inferFrom(v), nullable = true)
               }
               StructType(nestedBuilder.sortBy(_.name).toArray)
 
@@ -207,7 +257,7 @@ private[sql] object XmlInferSchema {
               nestedBuilder += StructField(options.valueTag, dt, nullable = true)
               valuesMap.foreach {
                 case (f, v) =>
-                  nestedBuilder += StructField(f, inferFrom(v, options), nullable = true)
+                  nestedBuilder += StructField(f, inferFrom(v), nullable = true)
               }
               StructType(nestedBuilder.sortBy(_.name).toArray)
 
@@ -215,14 +265,12 @@ private[sql] object XmlInferSchema {
           }
           // Add the field and datatypes so that we can check if this is ArrayType.
           val field = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
-          val dataTypes = nameToDataType.getOrElse(field, ArrayBuffer.empty[DataType])
-          dataTypes += inferredType
-          nameToDataType += (field -> dataTypes)
+          addOrUpdateType(field, inferredType)
 
         case c: Characters if !c.isWhiteSpace =>
           // This can be an attribute-only object
-          val valueTagType = inferFrom(c.getData, options)
-          nameToDataType += options.valueTag -> ArrayBuffer(valueTagType)
+          val valueTagType = inferFrom(c.getData)
+          addOrUpdateType(options.valueTag, valueTagType)
 
         case _: EndElement =>
           shouldStop = StaxXmlParserUtils.checkEndElement(parser)
@@ -234,25 +282,89 @@ private[sql] object XmlInferSchema {
     // if it only consists of attributes and valueTags.
     // If not, we will remove the valueTag field from the schema
     val attributesOnly = nameToDataType.forall {
-      case (fieldName, dataTypes) =>
-        dataTypes.length == 1 &&
-        (fieldName == options.valueTag || fieldName.startsWith(options.attributePrefix))
+      case (fieldName, _) =>
+        fieldName == options.valueTag || fieldName.startsWith(options.attributePrefix)
     }
     if (!attributesOnly) {
       nameToDataType -= options.valueTag
     }
-    // We need to manually merges the fields having the sames so that
-    // This can be inferred as ArrayType.
-    nameToDataType.foreach {
-      case (field, dataTypes) if dataTypes.length > 1 =>
-        val elementType = dataTypes.reduceLeft(XmlInferSchema.compatibleType(options))
-        builder += StructField(field, ArrayType(elementType), nullable = true)
-      case (field, dataTypes) =>
-        builder += StructField(field, dataTypes.head, nullable = true)
-    }
 
     // Note: other code relies on this sorting for correctness, so don't remove it!
-    StructType(builder.sortBy(_.name).toArray)
+    StructType(nameToDataType.map{
+      case (name, dataType) => StructField(name, dataType)
+    }.toList.sortBy(_.name))
+  }
+
+  /**
+   * Helper method that checks and cast string representation of a numeric types.
+   */
+  private def isBoolean(value: String): Boolean = {
+    value.toLowerCase(Locale.ROOT) match {
+      case "true" | "false" => true
+      case _ => false
+    }
+  }
+
+  private def isDouble(value: String): Boolean = {
+    val signSafeValue = if (value.startsWith("+") || value.startsWith("-")) {
+      value.substring(1)
+    } else {
+      value
+    }
+    // A little shortcut to avoid trying many formatters in the common case that
+    // the input isn't a double. All built-in formats will start with a digit or period.
+    if (signSafeValue.isEmpty ||
+      !(Character.isDigit(signSafeValue.head) || signSafeValue.head == '.')) {
+      return false
+    }
+    // Rule out strings ending in D or F, as they will parse as double but should be disallowed
+    if (value.nonEmpty && (value.last match {
+      case 'd' | 'D' | 'f' | 'F' => true
+      case _ => false
+    })) {
+      return false
+    }
+    (allCatch opt signSafeValue.toDouble).isDefined
+  }
+
+  private def isInteger(value: String): Boolean = {
+    val signSafeValue = if (value.startsWith("+") || value.startsWith("-")) {
+      value.substring(1)
+    } else {
+      value
+    }
+    // A little shortcut to avoid trying many formatters in the common case that
+    // the input isn't a number. All built-in formats will start with a digit.
+    if (signSafeValue.isEmpty || !Character.isDigit(signSafeValue.head)) {
+      return false
+    }
+    (allCatch opt signSafeValue.toInt).isDefined
+  }
+
+  private def isLong(value: String): Boolean = {
+    val signSafeValue = if (value.startsWith("+") || value.startsWith("-")) {
+      value.substring(1)
+    } else {
+      value
+    }
+    // A little shortcut to avoid trying many formatters in the common case that
+    // the input isn't a number. All built-in formats will start with a digit.
+    if (signSafeValue.isEmpty || !Character.isDigit(signSafeValue.head)) {
+      return false
+    }
+    (allCatch opt signSafeValue.toLong).isDefined
+  }
+
+  private def isTimestamp(value: String): Boolean = {
+    try {
+      timestampFormatter.parseOptional(value).isDefined
+    } catch {
+      case _: IllegalArgumentException => false
+    }
+  }
+
+  private def isDate(value: String): Boolean = {
+    (allCatch opt dateFormatter.parse(value)).isDefined
   }
 
   /**
@@ -288,7 +400,12 @@ private[sql] object XmlInferSchema {
   /**
    * Returns the most general data type for two given data types.
    */
-  private[xml] def compatibleType(options: XmlOptions)(t1: DataType, t2: DataType): DataType = {
+  private[xml] def compatibleType(t1: DataType, t2: DataType): DataType = {
+
+    def normalize(name: String): String = {
+      if (caseSensitive) name else name.toLowerCase(Locale.ROOT)
+    }
+
     // TODO: Optimise this logic.
     findTightestCommonTypeOfTwo(t1, t2).getOrElse {
       // t1 or t2 is a StructType, ArrayType, or an unexpected type.
@@ -310,24 +427,29 @@ private[sql] object XmlInferSchema {
           }
 
         case (StructType(fields1), StructType(fields2)) =>
-          val newFields = (fields1 ++ fields2).groupBy(_.name).map {
-            case (name, fieldTypes) =>
-              val dataType = fieldTypes.map(_.dataType).reduce(compatibleType(options))
-              StructField(name, dataType, nullable = true)
+          val newFields = (fields1 ++ fields2)
+            // normalize field name and pair it with original field
+            .map(field => (normalize(field.name), field))
+            .groupBy(_._1) // group by normalized field name
+            .map { case (_: String, fields: Array[(String, StructField)]) =>
+              val fieldTypes = fields.map(_._2)
+              val dataType = fieldTypes.map(_.dataType).reduce(compatibleType)
+              // we pick up the first field name that we've encountered for the field
+              StructField(fields.head._2.name, dataType)
           }
           StructType(newFields.toArray.sortBy(_.name))
 
         case (ArrayType(elementType1, containsNull1), ArrayType(elementType2, containsNull2)) =>
           ArrayType(
-            compatibleType(options)(elementType1, elementType2), containsNull1 || containsNull2)
+            compatibleType(elementType1, elementType2), containsNull1 || containsNull2)
 
         // In XML datasource, since StructType can be compared with ArrayType.
         // In this case, ArrayType wraps the StructType.
         case (ArrayType(ty1, _), ty2) =>
-          ArrayType(compatibleType(options)(ty1, ty2))
+          ArrayType(compatibleType(ty1, ty2))
 
         case (ty1, ArrayType(ty2, _)) =>
-          ArrayType(compatibleType(options)(ty1, ty2))
+          ArrayType(compatibleType(ty1, ty2))
 
         // As this library can infer an element with attributes as StructType whereas
         // some can be inferred as other non-structural data types, this case should be
@@ -335,14 +457,14 @@ private[sql] object XmlInferSchema {
         case (st: StructType, dt: DataType) if st.fieldNames.contains(options.valueTag) =>
           val valueIndex = st.fieldNames.indexOf(options.valueTag)
           val valueField = st.fields(valueIndex)
-          val valueDataType = compatibleType(options)(valueField.dataType, dt)
+          val valueDataType = compatibleType(valueField.dataType, dt)
           st.fields(valueIndex) = StructField(options.valueTag, valueDataType, nullable = true)
           st
 
         case (dt: DataType, st: StructType) if st.fieldNames.contains(options.valueTag) =>
           val valueIndex = st.fieldNames.indexOf(options.valueTag)
           val valueField = st.fields(valueIndex)
-          val valueDataType = compatibleType(options)(dt, valueField.dataType)
+          val valueDataType = compatibleType(dt, valueField.dataType)
           st.fields(valueIndex) = StructField(options.valueTag, valueDataType, nullable = true)
           st
 

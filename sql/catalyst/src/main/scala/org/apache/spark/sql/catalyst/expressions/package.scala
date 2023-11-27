@@ -126,7 +126,7 @@ package object expressions  {
     }
 
     private def unique[T](m: Map[T, Seq[Attribute]]): Map[T, Seq[Attribute]] = {
-      m.mapValues(_.distinct).toMap
+      m.view.mapValues(_.distinct).toMap
     }
 
     /** Map to use for direct case insensitive attribute lookups. */

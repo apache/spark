@@ -42,6 +42,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 abstract class FileStreamSinkSuite extends StreamTest {
@@ -751,7 +752,7 @@ class FileStreamSinkV2Suite extends FileStreamSinkSuite {
       }.headOption.getOrElse {
         fail(s"No FileScan in query\n${df.queryExecution}")
       }
-      func(fileScan.planInputPartitions().map(_.asInstanceOf[FilePartition]))
+      func(fileScan.planInputPartitions().map(_.asInstanceOf[FilePartition]).toImmutableArraySeq)
     }
 
     // Read without pruning
@@ -768,7 +769,6 @@ class FileStreamSinkV2Suite extends FileStreamSinkSuite {
  * access.
  */
 class FailFormatCheckFileSystem extends RawLocalFileSystem {
-  override def getScheme(): String = "failformatcheck"
   override def getFileStatus(f: Path): FileStatus = {
     if (f.getName == FileStreamSink.metadataDir) {
       throw new IOException("cannot access metadata log")

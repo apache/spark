@@ -24,7 +24,7 @@ import java.util.concurrent.{ScheduledFuture, TimeUnit}
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Random
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState.DriverState
@@ -41,6 +41,7 @@ import org.apache.spark.resource.{ResourceProfile, ResourceRequirement, Resource
 import org.apache.spark.rpc._
 import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.util.{SparkUncaughtExceptionHandler, ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 private[deploy] class Master(
     override val rpcEnv: RpcEnv,
@@ -52,6 +53,9 @@ private[deploy] class Master(
 
   private val forwardMessageThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("master-forward-message-thread")
+
+  private val driverIdPattern = conf.get(DRIVER_ID_PATTERN)
+  private val appIdPattern = conf.get(APP_ID_PATTERN)
 
   // For application IDs
   private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
@@ -76,6 +80,7 @@ private[deploy] class Master(
   private val addressToApp = new HashMap[RpcAddress, ApplicationInfo]
   private val completedApps = new ArrayBuffer[ApplicationInfo]
   private var nextAppNumber = 0
+  private val moduloAppNumber = conf.get(APP_NUMBER_MODULO).getOrElse(0)
 
   private val drivers = new HashSet[DriverInfo]
   private val completedDrivers = new ArrayBuffer[DriverInfo]
@@ -115,9 +120,8 @@ private[deploy] class Master(
   // Default maxCores for applications that don't specify it (i.e. pass Int.MaxValue)
   private val defaultCores = conf.get(DEFAULT_CORES)
   val reverseProxy = conf.get(UI_REVERSE_PROXY)
-  if (defaultCores < 1) {
-    throw new SparkException(s"${DEFAULT_CORES.key} must be positive")
-  }
+  val historyServerUrl = conf.get(MASTER_UI_HISTORY_SERVER_URL)
+  val useAppNameAsAppId = conf.get(MASTER_USE_APP_NAME_AS_APP_ID)
 
   // Alternative application submission gateway that is stable across Spark versions
   private val restServerEnabled = conf.get(MASTER_REST_SERVER_ENABLED)
@@ -274,7 +278,8 @@ private[deploy] class Master(
       } else if (idToWorker.contains(id)) {
         workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress, true))
       } else {
-        val workerResources = resources.map(r => r._1 -> WorkerResourceInfo(r._1, r._2.addresses))
+        val workerResources =
+          resources.map(r => r._1 -> WorkerResourceInfo(r._1, r._2.addresses.toImmutableArraySeq))
         val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
           workerRef, workerWebUiUrl, workerResources)
         if (registerWorker(worker)) {
@@ -457,6 +462,39 @@ private[deploy] class Master(
             context.reply(KillDriverResponse(self, driverId, success = false, msg))
         }
       }
+
+    case RequestKillAllDrivers =>
+      if (state != RecoveryState.ALIVE) {
+        val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
+          s"Can only kill drivers in ALIVE state."
+        context.reply(KillAllDriversResponse(self, success = false, msg))
+      } else {
+        logInfo("Asked to kill all drivers")
+        drivers.foreach { d =>
+          val driverId = d.id
+          if (waitingDrivers.contains(d)) {
+            waitingDrivers -= d
+            self.send(DriverStateChanged(driverId, DriverState.KILLED, None))
+          } else {
+            // We just notify the worker to kill the driver here. The final bookkeeping occurs
+            // on the return path when the worker submits a state change back to the master
+            // to notify it that the driver was successfully killed.
+            d.worker.foreach { w =>
+              w.endpoint.send(KillDriver(driverId))
+            }
+          }
+          logInfo(s"Kill request for $driverId submitted")
+        }
+        context.reply(KillAllDriversResponse(self, true, "Kill request for all drivers submitted"))
+      }
+
+    case RequestClearCompletedDriversAndApps =>
+      val numDrivers = completedDrivers.length
+      val numApps = completedApps.length
+      logInfo(s"Asked to clear $numDrivers completed drivers and $numApps completed apps.")
+      completedDrivers.clear()
+      completedApps.clear()
+      context.reply(true)
 
     case RequestDriverStatus(driverId) =>
       if (state != RecoveryState.ALIVE) {
@@ -1006,7 +1044,11 @@ private[deploy] class Master(
       ApplicationInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
-    val appId = newApplicationId(date)
+    val appId = if (useAppNameAsAppId) {
+      desc.name.toLowerCase().replaceAll("\\s+", "")
+    } else {
+      newApplicationId(date)
+    }
     new ApplicationInfo(now, appId, desc, date, driver, defaultCores)
   }
 
@@ -1042,7 +1084,7 @@ private[deploy] class Master(
         completedApps.take(toRemove).foreach { a =>
           applicationMetricsSystem.removeSource(a.appSource)
         }
-        completedApps.trimStart(toRemove)
+        completedApps.dropInPlace(toRemove)
       }
       completedApps += app // Remember it in our history
       waitingApps -= app
@@ -1150,8 +1192,11 @@ private[deploy] class Master(
 
   /** Generate a new app ID given an app's submission date */
   private def newApplicationId(submitDate: Date): String = {
-    val appId = "app-%s-%04d".format(createDateFormat.format(submitDate), nextAppNumber)
+    val appId = appIdPattern.format(createDateFormat.format(submitDate), nextAppNumber)
     nextAppNumber += 1
+    if (moduloAppNumber > 0) {
+      nextAppNumber %= moduloAppNumber
+    }
     appId
   }
 
@@ -1175,7 +1220,7 @@ private[deploy] class Master(
   }
 
   private def newDriverId(submitDate: Date): String = {
-    val appId = "driver-%s-%04d".format(createDateFormat.format(submitDate), nextDriverNumber)
+    val appId = driverIdPattern.format(createDateFormat.format(submitDate), nextDriverNumber)
     nextDriverNumber += 1
     appId
   }
@@ -1204,7 +1249,7 @@ private[deploy] class Master(
         drivers -= driver
         if (completedDrivers.size >= retainedDrivers) {
           val toRemove = math.max(retainedDrivers / 10, 1)
-          completedDrivers.trimStart(toRemove)
+          completedDrivers.dropInPlace(toRemove)
         }
         completedDrivers += driver
         persistenceEngine.removeDriver(driver)

@@ -56,10 +56,10 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
 
     conn.prepareStatement("CREATE TABLE numbers (onebit BIT(1), tenbits BIT(10), "
       + "small SMALLINT, med MEDIUMINT, nor INT, big BIGINT, deci DECIMAL(40,20), flt FLOAT, "
-      + "dbl DOUBLE)").executeUpdate()
+      + "dbl DOUBLE, tiny TINYINT)").executeUpdate()
     conn.prepareStatement("INSERT INTO numbers VALUES (b'0', b'1000100101', "
       + "17, 77777, 123456789, 123456789012345, 123456789012345.123456789012345, "
-      + "42.75, 1.0000000000000002)").executeUpdate()
+      + "42.75, 1.0000000000000002, -128)").executeUpdate()
 
     conn.prepareStatement("CREATE TABLE dates (d DATE, t TIME, dt DATETIME, ts TIMESTAMP, "
       + "yr YEAR)").executeUpdate()
@@ -89,7 +89,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
-    assert(types.length == 9)
+    assert(types.length == 10)
     assert(types(0).equals("class java.lang.Boolean"))
     assert(types(1).equals("class java.lang.Long"))
     assert(types(2).equals("class java.lang.Integer"))
@@ -99,6 +99,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(6).equals("class java.math.BigDecimal"))
     assert(types(7).equals("class java.lang.Double"))
     assert(types(8).equals("class java.lang.Double"))
+    assert(types(9).equals("class java.lang.Byte"))
     assert(rows(0).getBoolean(0) == false)
     assert(rows(0).getLong(1) == 0x225)
     assert(rows(0).getInt(2) == 17)
@@ -109,6 +110,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getAs[BigDecimal](6).equals(bd))
     assert(rows(0).getDouble(7) == 42.75)
     assert(rows(0).getDouble(8) == 1.0000000000000002)
+    assert(rows(0).getByte(9) == 0x80.toByte)
   }
 
   test("Date types") {

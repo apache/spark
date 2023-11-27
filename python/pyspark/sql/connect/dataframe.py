@@ -68,7 +68,7 @@ from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import UnresolvedRegex
-from pyspark.sql.connect.functions import (
+from pyspark.sql.connect.functions.builtin import (
     _to_col_with_plan_id,
     _to_col,
     _invoke_function,
@@ -495,7 +495,7 @@ class DataFrame:
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",
-                    message_parameters={"arg_name": "groupBy", "arg_type": type(c).__name__},
+                    message_parameters={"arg_name": "cols", "arg_type": type(c).__name__},
                 )
 
         return GroupedData(df=self, group_type="groupby", grouping_cols=_cols)
@@ -520,7 +520,7 @@ class DataFrame:
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",
-                    message_parameters={"arg_name": "rollup", "arg_type": type(c).__name__},
+                    message_parameters={"arg_name": "cols", "arg_type": type(c).__name__},
                 )
 
         return GroupedData(df=self, group_type="rollup", grouping_cols=_cols)
@@ -543,12 +543,51 @@ class DataFrame:
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",
-                    message_parameters={"arg_name": "cube", "arg_type": type(c).__name__},
+                    message_parameters={"arg_name": "cols", "arg_type": type(c).__name__},
                 )
 
         return GroupedData(df=self, group_type="cube", grouping_cols=_cols)
 
     cube.__doc__ = PySparkDataFrame.cube.__doc__
+
+    def groupingSets(
+        self, groupingSets: Sequence[Sequence["ColumnOrName"]], *cols: "ColumnOrName"
+    ) -> "GroupedData":
+        gsets: List[List[Column]] = []
+        for grouping_set in groupingSets:
+            gset: List[Column] = []
+            for c in grouping_set:
+                if isinstance(c, Column):
+                    gset.append(c)
+                elif isinstance(c, str):
+                    gset.append(self[c])
+                else:
+                    raise PySparkTypeError(
+                        error_class="NOT_COLUMN_OR_STR",
+                        message_parameters={
+                            "arg_name": "groupingSets",
+                            "arg_type": type(c).__name__,
+                        },
+                    )
+            gsets.append(gset)
+
+        gcols: List[Column] = []
+        for c in cols:
+            if isinstance(c, Column):
+                gcols.append(c)
+            elif isinstance(c, str):
+                gcols.append(self[c])
+            else:
+                raise PySparkTypeError(
+                    error_class="NOT_COLUMN_OR_STR",
+                    message_parameters={"arg_name": "cols", "arg_type": type(c).__name__},
+                )
+
+        return GroupedData(
+            df=self, group_type="grouping_sets", grouping_cols=gcols, grouping_sets=gsets
+        )
+
+    groupingSets.__doc__ = PySparkDataFrame.groupingSets.__doc__
 
     @overload
     def head(self) -> Optional[Row]:
@@ -1639,13 +1678,11 @@ class DataFrame:
     sampleBy.__doc__ = PySparkDataFrame.sampleBy.__doc__
 
     def __getattr__(self, name: str) -> "Column":
-        if name in ["_jseq", "_jdf", "_jmap", "_jcols"]:
+        if name in ["_jseq", "_jdf", "_jmap", "_jcols", "rdd", "toJSON"]:
             raise PySparkAttributeError(
                 error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
             )
         elif name in [
-            "rdd",
-            "toJSON",
             "checkpoint",
             "localCheckpoint",
         ]:
@@ -1949,15 +1986,6 @@ class DataFrame:
                 yield from ArrowTableToRowsConversion.convert(table, schema)
 
     toLocalIterator.__doc__ = PySparkDataFrame.toLocalIterator.__doc__
-
-    def to_pandas_on_spark(
-        self, index_col: Optional[Union[str, List[str]]] = None
-    ) -> "PandasOnSparkDataFrame":
-        warnings.warn(
-            "DataFrame.to_pandas_on_spark is deprecated. Use DataFrame.pandas_api instead.",
-            FutureWarning,
-        )
-        return self.pandas_api(index_col)
 
     def pandas_api(
         self, index_col: Optional[Union[str, List[str]]] = None

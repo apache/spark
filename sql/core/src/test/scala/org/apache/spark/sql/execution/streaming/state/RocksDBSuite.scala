@@ -24,6 +24,7 @@ import scala.language.implicitConversions
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
+import org.rocksdb.CompressionType
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
@@ -34,6 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 trait RocksDBStateStoreChangelogCheckpointingTestUtil {
   val rocksdbChangelogCheckpointingConfKey: String = RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX +
@@ -47,6 +49,7 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
       .map(_.getName.stripSuffix(".zip"))
       .map(_.toLong)
       .sorted
+      .toImmutableArraySeq
   }
 
   def changelogVersionsPresent(dir: File): Seq[Long] = {
@@ -54,6 +57,7 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
       .map(_.getName.stripSuffix(".changelog"))
       .map(_.toLong)
       .sorted
+      .toImmutableArraySeq
   }
 }
 
@@ -370,6 +374,21 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.load(version, readOnly = true)
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
       }
+    }
+  }
+
+  test("RocksDB: compression conf") {
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete()  // to make sure that the directory gets created
+
+    val conf = RocksDBConf().copy(compression = "zstd")
+    withDB(remoteDir, conf = conf) { db =>
+      assert(db.columnFamilyOptions.compressionType() == CompressionType.ZSTD_COMPRESSION)
+    }
+
+    // Test the default is LZ4
+    withDB(remoteDir, conf = RocksDBConf().copy()) { db =>
+      assert(db.columnFamilyOptions.compressionType() == CompressionType.LZ4_COMPRESSION)
     }
   }
 
@@ -832,7 +851,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     withTempDir { dir =>
       val file2 = new File(dir, "json")
       val json2 = """{"sstFiles":[],"numKeys":0}"""
-      FileUtils.write(file2, s"v2\n$json2")
+      FileUtils.write(file2, s"v2\n$json2", Charset.defaultCharset)
       val e = intercept[SparkException] {
         RocksDBCheckpointMetadata.readFromFile(file2)
       }
@@ -1250,7 +1269,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   def generateFiles(dir: String, fileToLengths: Seq[(String, Int)]): Unit = {
     fileToLengths.foreach { case (fileName, length) =>
       val file = new File(dir, fileName)
-      FileUtils.write(file, "a" * length)
+      FileUtils.write(file, "a" * length, Charset.defaultCharset)
     }
   }
 
@@ -1291,6 +1310,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   def listFiles(file: File): Seq[File] = {
     if (!file.exists()) return Seq.empty
     file.listFiles.filter(file => !file.getName.endsWith("crc") && !file.isDirectory)
+      .toImmutableArraySeq
   }
 
   def listFiles(file: String): Seq[File] = listFiles(new File(file))

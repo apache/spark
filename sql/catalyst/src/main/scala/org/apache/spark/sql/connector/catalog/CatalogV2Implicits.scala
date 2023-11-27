@@ -19,15 +19,17 @@ package org.apache.spark.sql.connector.catalog
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, ClusterBySpec}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, QuotingUtils}
-import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, LogicalExpressions, Transform}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, ClusterByTransform, FieldReference, IdentityTransform, LogicalExpressions, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Conversion helpers for working with v2 [[CatalogPlugin]].
@@ -53,10 +55,15 @@ private[sql] object CatalogV2Implicits {
     }
   }
 
+  implicit class ClusterByHelper(spec: ClusterBySpec) {
+    def asTransform: Transform = clusterBy(spec.columnNames.toArray)
+  }
+
   implicit class TransformHelper(transforms: Seq[Transform]) {
-    def convertTransforms: (Seq[String], Option[BucketSpec]) = {
+    def convertTransforms: (Seq[String], Option[BucketSpec], Option[ClusterBySpec]) = {
       val identityCols = new mutable.ArrayBuffer[String]
       var bucketSpec = Option.empty[BucketSpec]
+      var clusterBySpec = Option.empty[ClusterBySpec]
 
       transforms.map {
         case IdentityTransform(FieldReference(Seq(col))) =>
@@ -73,11 +80,23 @@ private[sql] object CatalogV2Implicits {
               sortCol.map(_.fieldNames.mkString("."))))
           }
 
+        case ClusterByTransform(columnNames) =>
+          if (clusterBySpec.nonEmpty) {
+            // AstBuilder guarantees that it only passes down one ClusterByTransform.
+            throw SparkException.internalError("Cannot have multiple cluster by transforms.")
+          }
+          clusterBySpec = Some(ClusterBySpec(columnNames))
+
         case transform =>
           throw QueryExecutionErrors.unsupportedPartitionTransformError(transform)
       }
 
-      (identityCols.toSeq, bucketSpec)
+      // Parser guarantees that partition and clustering cannot co-exist.
+      assert(!(identityCols.toSeq.nonEmpty && clusterBySpec.nonEmpty))
+      // Parser guarantees that bucketing and clustering cannot co-exist.
+      assert(!(bucketSpec.nonEmpty && clusterBySpec.nonEmpty))
+
+      (identityCols.toSeq, bucketSpec, clusterBySpec)
     }
   }
 
@@ -131,7 +150,7 @@ private[sql] object CatalogV2Implicits {
 
     def original: String = ident.namespace() :+ ident.name() mkString "."
 
-    def asMultipartIdentifier: Seq[String] = ident.namespace :+ ident.name
+    def asMultipartIdentifier: Seq[String] = (ident.namespace :+ ident.name).toImmutableArraySeq
 
     def asTableIdentifier: TableIdentifier = ident.namespace match {
       case ns if ns.isEmpty => TableIdentifier(ident.name)

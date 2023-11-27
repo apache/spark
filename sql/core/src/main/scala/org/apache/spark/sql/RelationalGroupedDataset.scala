@@ -59,8 +59,8 @@ class RelationalGroupedDataset protected[sql](
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
     val aggregates = if (df.sparkSession.sessionState.conf.dataFrameRetainGroupColumns) {
       groupingExprs match {
-        // call `toList` because `Stream` can't serialize in scala 2.13
-        case s: Stream[Expression] => s.toList ++ aggExprs
+        // call `toList` because `LazyList` can't serialize in scala 2.13
+        case s: LazyList[Expression] => s.toList ++ aggExprs
         case other => other ++ aggExprs
       }
     } else {
@@ -79,6 +79,11 @@ class RelationalGroupedDataset protected[sql](
       case RelationalGroupedDataset.CubeType =>
         Dataset.ofRows(
           df.sparkSession, Aggregate(Seq(Cube(groupingExprs.map(Seq(_)))),
+            aliasedAgg, df.logicalPlan))
+      case RelationalGroupedDataset.GroupingSetsType(groupingSets) =>
+        Dataset.ofRows(
+          df.sparkSession,
+          Aggregate(Seq(GroupingSets(groupingSets, groupingExprs)),
             aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.PivotType(pivotCol, values) =>
         val aliasedGrps = groupingExprs.map(alias)
@@ -731,6 +736,11 @@ private[sql] object RelationalGroupedDataset {
    * To indicate it's the ROLLUP
    */
   private[sql] object RollupType extends GroupType
+
+  /**
+   * To indicate it's the GroupingSets
+   */
+  private[sql] case class GroupingSetsType(groupingSets: Seq[Seq[Expression]]) extends GroupType
 
   /**
    * To indicate it's the PIVOT

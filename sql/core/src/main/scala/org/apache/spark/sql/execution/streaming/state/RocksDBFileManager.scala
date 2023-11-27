@@ -42,6 +42,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -126,7 +127,7 @@ class RocksDBFileManager(
     dfsRootDir: String,
     localTempDir: File,
     hadoopConf: Configuration,
-    codecName: String = "zstd",
+    codecName: String = CompressionCodec.ZSTD,
     loggingId: String = "")
   extends Logging {
 
@@ -657,7 +658,8 @@ class RocksDBFileManager(
         // To ignore .log.crc files
         .filter(file => isLogFile(file.getName))
     val (topLevelSstFiles, topLevelOtherFiles) = topLevelFiles.partition(f => isSstFile(f.getName))
-    (topLevelSstFiles ++ archivedLogFiles, topLevelOtherFiles)
+    ((topLevelSstFiles ++ archivedLogFiles).toImmutableArraySeq,
+      topLevelOtherFiles.toImmutableArraySeq)
   }
 }
 

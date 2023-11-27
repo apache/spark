@@ -29,6 +29,7 @@ import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.util.ArrayImplicits._
 
 class VectorsSuite extends SparkFunSuite {
 
@@ -72,7 +73,8 @@ class VectorsSuite extends SparkFunSuite {
   }
 
   test("sparse vector construction with unordered elements") {
-    val vec = Vectors.sparse(n, indices.zip(values).reverse).asInstanceOf[SparseVector]
+    val vec = Vectors.sparse(n, indices.zip(values).reverse.toImmutableArraySeq)
+      .asInstanceOf[SparseVector]
     assert(vec.size === n)
     assert(vec.indices === indices)
     assert(vec.values === values)
@@ -516,7 +518,7 @@ class VectorsSuite extends SparkFunSuite {
 
   test("sparse vector only support non-negative length") {
     val v1 = Vectors.sparse(0, Array.emptyIntArray, Array.emptyDoubleArray)
-    val v2 = Vectors.sparse(0, Array.empty[(Int, Double)])
+    val v2 = Vectors.sparse(0, Array.empty[(Int, Double)].toImmutableArraySeq)
     assert(v1.size === 0)
     assert(v2.size === 0)
 
@@ -524,7 +526,7 @@ class VectorsSuite extends SparkFunSuite {
       Vectors.sparse(-1, Array(1), Array(2.0))
     }
     intercept[IllegalArgumentException] {
-      Vectors.sparse(-1, Array((1, 2.0)))
+      Vectors.sparse(-1, Array((1, 2.0)).toImmutableArraySeq)
     }
   }
 

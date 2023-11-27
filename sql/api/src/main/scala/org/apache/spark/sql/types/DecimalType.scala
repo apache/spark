@@ -146,6 +146,18 @@ object DecimalType extends AbstractDataType {
     DecimalType(min(precision, MAX_PRECISION), min(scale, MAX_SCALE))
   }
 
+  private[sql] def boundedPreferIntegralDigits(precision: Int, scale: Int): DecimalType = {
+    if (precision <= MAX_PRECISION) {
+      DecimalType(precision, scale)
+    } else {
+      // If we have to reduce the precision, we should retain the digits in the integral part first,
+      // as they are more significant to the value. Here we reduce the scale as well to drop the
+      // digits in the fractional part.
+      val diff = precision - MAX_PRECISION
+      DecimalType(MAX_PRECISION, math.max(0, scale - diff))
+    }
+  }
+
   private[sql] def checkNegativeScale(scale: Int): Unit = {
     if (scale < 0 && !SqlApiConf.get.allowNegativeScaleOfDecimalEnabled) {
       throw DataTypeErrors.negativeScaleNotAllowedError(scale)

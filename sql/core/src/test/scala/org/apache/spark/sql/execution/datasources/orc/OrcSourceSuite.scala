@@ -36,6 +36,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException}
 import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
+import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtilsBase}
 import org.apache.spark.sql.types._
@@ -324,29 +325,31 @@ abstract class OrcSuite
 
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
     val conf = spark.sessionState.conf
-    val option = new OrcOptions(Map(COMPRESS.getAttribute.toUpperCase(Locale.ROOT) -> "NONE"), conf)
-    assert(option.compressionCodec == "NONE")
+    val option =
+      new OrcOptions(Map(COMPRESS.getAttribute.toUpperCase(Locale.ROOT) -> NONE.name()), conf)
+    assert(option.compressionCodec == OrcCompressionCodec.NONE.name())
   }
 
   test("SPARK-21839: Add SQL config for ORC compression") {
     val conf = spark.sessionState.conf
     // Test if the default of spark.sql.orc.compression.codec is snappy
-    assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == "SNAPPY")
+    assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == SNAPPY.name())
 
     // OrcOptions's parameters have a higher priority than SQL configuration.
     // `compression` -> `orc.compression` -> `spark.sql.orc.compression.codec`
-    withSQLConf(SQLConf.ORC_COMPRESSION.key -> "uncompressed") {
-      assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == "NONE")
-      val map1 = Map(COMPRESS.getAttribute -> "zlib")
-      val map2 = Map(COMPRESS.getAttribute -> "zlib", "compression" -> "lzo")
-      assert(new OrcOptions(map1, conf).compressionCodec == "ZLIB")
-      assert(new OrcOptions(map2, conf).compressionCodec == "LZO")
+    withSQLConf(SQLConf.ORC_COMPRESSION.key -> UNCOMPRESSED.lowerCaseName()) {
+      assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == NONE.name())
+      val zlibCodec = ZLIB.lowerCaseName()
+      val map1 = Map(COMPRESS.getAttribute -> zlibCodec)
+      val map2 = Map(COMPRESS.getAttribute -> zlibCodec, "compression" -> LZO.lowerCaseName())
+      assert(new OrcOptions(map1, conf).compressionCodec == ZLIB.name())
+      assert(new OrcOptions(map2, conf).compressionCodec == LZO.name())
     }
 
     // Test all the valid options of spark.sql.orc.compression.codec
-    Seq("NONE", "UNCOMPRESSED", "SNAPPY", "ZLIB", "LZO", "ZSTD", "LZ4").foreach { c =>
+    OrcCompressionCodec.values().map(_.name()).foreach { c =>
       withSQLConf(SQLConf.ORC_COMPRESSION.key -> c) {
-        val expected = if (c == "UNCOMPRESSED") "NONE" else c
+        val expected = OrcCompressionCodec.valueOf(c).getCompressionKind.name()
         assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == expected)
       }
     }
@@ -547,20 +550,20 @@ abstract class OrcSuite
   test("SPARK-35612: Support LZ4 compression in ORC data source") {
     withTempPath { dir =>
       val path = dir.getAbsolutePath
-      spark.range(3).write.option("compression", "lz4").orc(path)
+      spark.range(3).write.option("compression", LZ4.lowerCaseName()).orc(path)
       checkAnswer(spark.read.orc(path), Seq(Row(0), Row(1), Row(2)))
       val files = OrcUtils.listOrcFiles(path, spark.sessionState.newHadoopConf())
-      assert(files.nonEmpty && files.forall(_.getName.contains("lz4")))
+      assert(files.nonEmpty && files.forall(_.getName.contains(LZ4.lowerCaseName())))
     }
   }
 
   test("SPARK-33978: Write and read a file with ZSTD compression") {
     withTempPath { dir =>
       val path = dir.getAbsolutePath
-      spark.range(3).write.option("compression", "zstd").orc(path)
+      spark.range(3).write.option("compression", ZSTD.lowerCaseName()).orc(path)
       checkAnswer(spark.read.orc(path), Seq(Row(0), Row(1), Row(2)))
       val files = OrcUtils.listOrcFiles(path, spark.sessionState.newHadoopConf())
-      assert(files.nonEmpty && files.forall(_.getName.contains("zstd")))
+      assert(files.nonEmpty && files.forall(_.getName.contains(ZSTD.lowerCaseName())))
     }
   }
 

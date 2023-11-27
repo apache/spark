@@ -43,8 +43,11 @@ private[sql] class SparkConnectClient(
 
   private val userContext: UserContext = configuration.userContext
 
-  private[this] val bstub = new CustomSparkConnectBlockingStub(channel, configuration.retryPolicy)
-  private[this] val stub = new CustomSparkConnectStub(channel, configuration.retryPolicy)
+  private[this] val stubState = new SparkConnectStubState(channel, configuration.retryPolicies)
+  private[this] val bstub =
+    new CustomSparkConnectBlockingStub(channel, stubState)
+  private[this] val stub =
+    new CustomSparkConnectStub(channel, stubState)
 
   private[client] def userAgent: String = configuration.userAgent
 
@@ -243,6 +246,16 @@ private[sql] class SparkConnectClient(
     bstub.interrupt(request)
   }
 
+  private[sql] def releaseSession(): proto.ReleaseSessionResponse = {
+    val builder = proto.ReleaseSessionRequest.newBuilder()
+    val request = builder
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .setClientType(userAgent)
+      .build()
+    bstub.releaseSession(request)
+  }
+
   private[this] val tags = new InheritableThreadLocal[mutable.Set[String]] {
     override def childValue(parent: mutable.Set[String]): mutable.Set[String] = {
       // Note: make a clone such that changes in the parent tags aren't reflected in
@@ -430,9 +443,13 @@ object SparkConnectClient {
 
     def sslEnabled: Boolean = _configuration.isSslEnabled.contains(true)
 
-    def retryPolicy(policy: GrpcRetryHandler.RetryPolicy): Builder = {
-      _configuration = _configuration.copy(retryPolicy = policy)
+    def retryPolicy(policies: Seq[RetryPolicy]): Builder = {
+      _configuration = _configuration.copy(retryPolicies = policies)
       this
+    }
+
+    def retryPolicy(policy: RetryPolicy): Builder = {
+      retryPolicy(List(policy))
     }
 
     private object URIParams {
@@ -621,7 +638,7 @@ object SparkConnectClient {
       metadata: Map[String, String] = Map.empty,
       userAgent: String = genUserAgent(
         sys.env.getOrElse("SPARK_CONNECT_USER_AGENT", DEFAULT_USER_AGENT)),
-      retryPolicy: GrpcRetryHandler.RetryPolicy = GrpcRetryHandler.RetryPolicy(),
+      retryPolicies: Seq[RetryPolicy] = RetryPolicy.defaultPolicies(),
       useReattachableExecute: Boolean = true,
       interceptors: List[ClientInterceptor] = List.empty,
       sessionId: Option[String] = None) {

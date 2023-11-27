@@ -20,12 +20,13 @@ import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZonedDateTime, ZoneId, ZoneOffset}
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit.{MICROSECONDS, NANOSECONDS}
+import java.util.regex.Pattern
 
 import scala.util.control.NonFatal
 
 import sun.util.calendar.ZoneInfo
 
-import org.apache.spark.sql.catalyst.trees.SQLQueryContext
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, rebaseJulianToGregorianDays, rebaseJulianToGregorianMicros}
 import org.apache.spark.sql.errors.ExecutionErrors
@@ -36,12 +37,14 @@ trait SparkDateTimeUtils {
 
   final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
 
+  final val singleHourTz = Pattern.compile("(\\+|\\-)(\\d):")
+  final val singleMinuteTz = Pattern.compile("(\\+|\\-)(\\d\\d):(\\d)$")
+
   def getZoneId(timeZoneId: String): ZoneId = {
-    val formattedZoneId = timeZoneId
-      // To support the (+|-)h:mm format because it was supported before Spark 3.0.
-      .replaceFirst("(\\+|\\-)(\\d):", "$10$2:")
-      // To support the (+|-)hh:m format because it was supported before Spark 3.0.
-      .replaceFirst("(\\+|\\-)(\\d\\d):(\\d)$", "$1$2:0$3")
+    // To support the (+|-)h:mm format because it was supported before Spark 3.0.
+    var formattedZoneId = singleHourTz.matcher(timeZoneId).replaceFirst("$10$2:")
+    // To support the (+|-)hh:m format because it was supported before Spark 3.0.
+    formattedZoneId = singleMinuteTz.matcher(formattedZoneId).replaceFirst("$1$2:0$3")
 
     ZoneId.of(formattedZoneId, ZoneId.SHORT_IDS)
   }
@@ -355,7 +358,7 @@ trait SparkDateTimeUtils {
 
   def stringToDateAnsi(
       s: UTF8String,
-      context: SQLQueryContext = null): Int = {
+      context: QueryContext = null): Int = {
     stringToDate(s).getOrElse {
       throw ExecutionErrors.invalidInputInCastToDatetimeError(s, DateType, context)
     }
@@ -567,7 +570,7 @@ trait SparkDateTimeUtils {
   def stringToTimestampAnsi(
       s: UTF8String,
       timeZoneId: ZoneId,
-      context: SQLQueryContext = null): Long = {
+      context: QueryContext = null): Long = {
     stringToTimestamp(s, timeZoneId).getOrElse {
       throw ExecutionErrors.invalidInputInCastToDatetimeError(s, TimestampType, context)
     }

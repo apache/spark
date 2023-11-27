@@ -133,7 +133,8 @@ private[sql] object DataSourceV2Utils extends Logging {
         } else {
           None
         }
-        val timeTravel = TimeTravelSpec.create(timeTravelTimestamp, timeTravelVersion, conf)
+        val timeTravel = TimeTravelSpec.create(
+          timeTravelTimestamp, timeTravelVersion, conf.sessionLocalTimeZone)
         (CatalogV2Util.getTable(catalog, ident, timeTravel), Some(catalog), Some(ident))
       case _ =>
         // TODO: Non-catalog paths for DSV2 are currently not well defined.
@@ -151,7 +152,7 @@ private[sql] object DataSourceV2Utils extends Logging {
   }
 
   private lazy val objectMapper = new ObjectMapper()
-  private def getOptionsWithPaths(
+  def getOptionsWithPaths(
       extraOptions: CaseInsensitiveMap[String],
       paths: String*): CaseInsensitiveMap[String] = {
     if (paths.isEmpty) {

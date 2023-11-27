@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.IncrementalExecution
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
@@ -167,7 +168,8 @@ case class ExplainCommand(
       .explainString(mode)
     Seq(Row(outputString))
   } catch { case NonFatal(cause) =>
-    ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
+    ("Error occurred during query planning: \n" + cause.getMessage).split("\n")
+      .map(Row(_)).toImmutableArraySeq
   }
 }
 
@@ -189,7 +191,8 @@ case class StreamingExplainCommand(
       }
     Seq(Row(outputString))
   } catch { case NonFatal(cause) =>
-    ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
+    ("Error occurred during query planning: \n" + cause.getMessage).split("\n")
+      .map(Row(_)).toImmutableArraySeq
   }
 }
 
@@ -207,6 +210,6 @@ case class ExternalCommandExecutor(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val output = runner.executeCommand(command, new CaseInsensitiveStringMap(options.asJava))
-    output.map(Row(_))
+    output.map(Row(_)).toImmutableArraySeq
   }
 }

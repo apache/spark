@@ -97,9 +97,9 @@ case class CollectFrequentItems(
         if (remainder >= 0) {
           map += key -> count // something will get kicked out, so we can add this
           map.filterInPlace((k, v) => v > minCount)
-          map.transform((k, v) => v - minCount)
+          map.mapValuesInPlace((k, v) => v - minCount)
         } else {
-          map.transform((k, v) => v - count)
+          map.mapValuesInPlace((k, v) => v - count)
         }
       }
     }

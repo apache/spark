@@ -30,8 +30,6 @@ import java.util.Locale
 class CaseInsensitiveMap[T] private (val originalMap: Map[String, T]) extends Map[String, T]
   with Serializable {
 
-  //  Note: this class supports Scala 2.13. A parallel source tree has a 2.12 implementation.
-
   val keyLowerCasedMap = originalMap.map(kv => kv.copy(_1 = kv._1.toLowerCase(Locale.ROOT)))
 
   override def get(k: String): Option[T] = keyLowerCasedMap.get(k.toLowerCase(Locale.ROOT))

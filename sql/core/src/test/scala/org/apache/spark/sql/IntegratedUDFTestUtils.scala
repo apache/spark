@@ -30,9 +30,10 @@ import org.apache.spark.api.python.{PythonBroadcast, PythonEvalType, PythonFunct
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExprId, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
+import org.apache.spark.sql.execution.python.{UserDefinedPythonDataSource, UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * This object targets to integrate various UDF test cases so that Scalar UDF, Python UDF,
@@ -217,6 +218,32 @@ object IntegratedUDFTestUtils extends SQLHelper {
     binaryPythonUDTF
   }
 
+  private def createPythonDataSource(dataSourceName: String, pythonScript: String): Array[Byte] = {
+    if (!shouldTestPythonUDFs) {
+      throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
+    }
+    var binaryPythonDataSource: Array[Byte] = null
+    withTempPath { codePath =>
+      Files.write(codePath.toPath, pythonScript.getBytes(StandardCharsets.UTF_8))
+      withTempPath { path =>
+        Process(
+          Seq(
+            pythonExec,
+            "-c",
+            "from pyspark.serializers import CloudPickleSerializer; " +
+              s"f = open('$path', 'wb');" +
+              s"exec(open('$codePath', 'r').read());" +
+              s"dataSourceCls = $dataSourceName;" +
+              "f.write(CloudPickleSerializer().dumps(dataSourceCls))"),
+          None,
+          "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
+        binaryPythonDataSource = Files.readAllBytes(path.toPath)
+      }
+    }
+    assert(binaryPythonDataSource != null)
+    binaryPythonDataSource
+  }
+
   private lazy val pandasFunc: Array[Byte] = if (shouldTestPandasUDFs) {
     var binaryPandasFunc: Array[Byte] = null
     withTempPath { path =>
@@ -367,7 +394,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
-        command = pythonFunc,
+        command = pythonFunc.toImmutableArraySeq,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
         pythonExec = pythonExec,
@@ -397,6 +424,20 @@ object IntegratedUDFTestUtils extends SQLHelper {
     val prettyName: String = "Regular Python UDF"
   }
 
+  def createUserDefinedPythonDataSource(
+      name: String,
+      pythonScript: String): UserDefinedPythonDataSource = {
+    UserDefinedPythonDataSource(
+      dataSourceCls = SimplePythonFunction(
+        command = createPythonDataSource(name, pythonScript).toImmutableArraySeq,
+        envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
+        pythonIncludes = List.empty[String].asJava,
+        pythonExec = pythonExec,
+        pythonVer = pythonVer,
+        broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
+        accumulator = null))
+  }
+
   def createUserDefinedPythonTableFunction(
       name: String,
       pythonScript: String,
@@ -406,7 +447,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     UserDefinedPythonTableFunction(
       name = name,
       func = SimplePythonFunction(
-        command = createPythonUDTF(name, pythonScript),
+        command = createPythonUDTF(name, pythonScript).toImmutableArraySeq,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
         pythonExec = pythonExec,
@@ -1125,7 +1166,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
-        command = pandasFunc,
+        command = pandasFunc.toImmutableArraySeq,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
         pythonExec = pythonExec,
@@ -1179,7 +1220,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
-        command = pandasGroupedAggFunc,
+        command = pandasGroupedAggFunc.toImmutableArraySeq,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
         pythonExec = pythonExec,
@@ -1214,7 +1255,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
-        command = createPandasGroupedMapFuncWithState(pythonScript),
+        command = createPandasGroupedMapFuncWithState(pythonScript).toImmutableArraySeq,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
         pythonExec = pythonExec,
