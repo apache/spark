@@ -87,7 +87,11 @@ private[sql] object EasilyFlattenable {
               }
             }
             remappedNewProjListResult match {
-              case Success(remappedNewProjList) => Option(p.copy(projectList = remappedNewProjList))
+              case Success(remappedNewProjList) => val pidOpt = p.getTagValue(
+                LogicalPlan.PLAN_ID_TAG)
+                val newProj = p.copy(projectList = remappedNewProjList)
+                pidOpt.foreach(id => newProj.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, id))
+                Option(newProj)
               case Failure(_) => None
             }
           }
