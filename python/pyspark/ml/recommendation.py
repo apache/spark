@@ -16,7 +16,7 @@
 #
 
 import sys
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 from pyspark import since
 from pyspark.ml.param.shared import (

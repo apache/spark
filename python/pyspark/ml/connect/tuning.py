@@ -317,7 +317,7 @@ class CrossValidator(
     ) -> None:
         kwargs = locals()
         super(CrossValidator, self).__init__()
-        CrossValidator._setDefault(parallelism=1)
+        self._setDefault(parallelism=1)
         self.__class__._set(**kwargs)
 
     @since("3.5.0")
