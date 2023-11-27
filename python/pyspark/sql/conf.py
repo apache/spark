@@ -20,7 +20,7 @@ from typing import Any, Optional, Union
 
 from py4j.java_gateway import JavaObject
 
-from pyspark import since, _NoValue
+from pyspark import _NoValue
 from pyspark._globals import _NoValueType
 
 
@@ -123,10 +123,11 @@ class RuntimeConfig:
                 "expected %s '%s' to be a string (was '%s')" % (identifier, obj, type(obj).__name__)
             )
 
-    @since(2.4)
     def isModifiable(self, key: str) -> bool:
         """Indicates whether the configuration property with the given key
         is modifiable in the current session.
+
+        .. versionadded:: 2.4.0
         """
         return self._jconf.isModifiable(key)
 

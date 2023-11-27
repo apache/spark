@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.errors.exceptions.base import SessionNotSameException
+from pyspark.errors.exceptions.base import SessionNotSameException, PySparkIndexError
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -487,15 +487,16 @@ class DataFrame:
             elif isinstance(c, str):
                 _cols.append(self[c])
             elif isinstance(c, int) and not isinstance(c, bool):
-                # TODO: should introduce dedicated error class
                 if c < 1:
-                    raise IndexError(f"Column ordinal must be positive but got {c}")
+                    raise PySparkIndexError(
+                        error_class="INDEX_NOT_POSITIVE", message_parameters={"index": str(c)}
+                    )
                 # ordinal is 1-based
                 _cols.append(self[c - 1])
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",
-                    message_parameters={"arg_name": "groupBy", "arg_type": type(c).__name__},
+                    message_parameters={"arg_name": "cols", "arg_type": type(c).__name__},
                 )
 
         return GroupedData(df=self, group_type="groupby", grouping_cols=_cols)
@@ -512,15 +513,16 @@ class DataFrame:
             elif isinstance(c, str):
                 _cols.append(self[c])
             elif isinstance(c, int) and not isinstance(c, bool):
-                # TODO: should introduce dedicated error class
                 if c < 1:
-                    raise IndexError(f"Column ordinal must be positive but got {c}")
+                    raise PySparkIndexError(
+                        error_class="INDEX_NOT_POSITIVE", message_parameters={"index": str(c)}
+                    )
                 # ordinal is 1-based
                 _cols.append(self[c - 1])
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",
-                    message_parameters={"arg_name": "rollup", "arg_type": type(c).__name__},
+                    message_parameters={"arg_name": "cols", "arg_type": type(c).__name__},
                 )
 
         return GroupedData(df=self, group_type="rollup", grouping_cols=_cols)
@@ -535,20 +537,60 @@ class DataFrame:
             elif isinstance(c, str):
                 _cols.append(self[c])
             elif isinstance(c, int) and not isinstance(c, bool):
-                # TODO: should introduce dedicated error class
                 if c < 1:
-                    raise IndexError(f"Column ordinal must be positive but got {c}")
+                    raise PySparkIndexError(
+                        error_class="INDEX_NOT_POSITIVE", message_parameters={"index": str(c)}
+                    )
                 # ordinal is 1-based
                 _cols.append(self[c - 1])
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",
-                    message_parameters={"arg_name": "cube", "arg_type": type(c).__name__},
+                    message_parameters={"arg_name": "cols", "arg_type": type(c).__name__},
                 )
 
         return GroupedData(df=self, group_type="cube", grouping_cols=_cols)
 
     cube.__doc__ = PySparkDataFrame.cube.__doc__
+
+    def groupingSets(
+        self, groupingSets: Sequence[Sequence["ColumnOrName"]], *cols: "ColumnOrName"
+    ) -> "GroupedData":
+        gsets: List[List[Column]] = []
+        for grouping_set in groupingSets:
+            gset: List[Column] = []
+            for c in grouping_set:
+                if isinstance(c, Column):
+                    gset.append(c)
+                elif isinstance(c, str):
+                    gset.append(self[c])
+                else:
+                    raise PySparkTypeError(
+                        error_class="NOT_COLUMN_OR_STR",
+                        message_parameters={
+                            "arg_name": "groupingSets",
+                            "arg_type": type(c).__name__,
+                        },
+                    )
+            gsets.append(gset)
+
+        gcols: List[Column] = []
+        for c in cols:
+            if isinstance(c, Column):
+                gcols.append(c)
+            elif isinstance(c, str):
+                gcols.append(self[c])
+            else:
+                raise PySparkTypeError(
+                    error_class="NOT_COLUMN_OR_STR",
+                    message_parameters={"arg_name": "cols", "arg_type": type(c).__name__},
+                )
+
+        return GroupedData(
+            df=self, group_type="grouping_sets", grouping_cols=gcols, grouping_sets=gsets
+        )
+
+    groupingSets.__doc__ = PySparkDataFrame.groupingSets.__doc__
 
     @overload
     def head(self) -> Optional[Row]:
@@ -654,7 +696,6 @@ class DataFrame:
         _cols: List[Column] = []
         for c in cols:
             if isinstance(c, int) and not isinstance(c, bool):
-                # TODO: should introduce dedicated error class
                 # ordinal is 1-based
                 if c > 0:
                     _c = self[c - 1]
@@ -662,7 +703,9 @@ class DataFrame:
                 elif c < 0:
                     _c = self[-c - 1].desc()
                 else:
-                    raise IndexError("Column ordinal must not be zero!")
+                    raise PySparkIndexError(
+                        error_class="INDEX_NOT_POSITIVE", message_parameters={"index": str(c)}
+                    )
             else:
                 _c = c  # type: ignore[assignment]
             _cols.append(_to_col(cast("ColumnOrName", _c)))

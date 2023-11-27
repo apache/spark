@@ -437,7 +437,7 @@ private[spark] class TaskSchedulerImpl(
                 // addresses are the same as that we allocated in taskResourceAssignments since it's
                 // synchronized. We don't remove the exact addresses allocated because the current
                 // approach produces the identical result with less time complexity.
-                availableResources(i)(rName).remove(0, rInfo.addresses.size)
+                availableResources(i)(rName).remove(0, rInfo.addresses.length)
               }
             }
           } catch {
@@ -755,7 +755,7 @@ private[spark] class TaskSchedulerImpl(
               .mkString(",")
             addressesWithDescs.foreach(_._2.properties.setProperty("addresses", addressesStr))
 
-            logInfo(s"Successfully scheduled all the ${addressesWithDescs.size} tasks for " +
+            logInfo(s"Successfully scheduled all the ${addressesWithDescs.length} tasks for " +
               s"barrier stage ${taskSet.stageId}.")
           }
           taskSet.barrierPendingLaunchTasks.clear()

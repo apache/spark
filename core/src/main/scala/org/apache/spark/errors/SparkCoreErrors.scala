@@ -221,6 +221,18 @@ private[spark] object SparkCoreErrors {
     new NoSuchElementException(id)
   }
 
+  def sparkJobCancelled(jobId: Int, reason: String, e: Exception): SparkException = {
+    new SparkException(
+      errorClass = "SPARK_JOB_CANCELLED",
+      messageParameters = Map("jobId" -> jobId.toString, "reason" -> reason),
+      cause = e
+    )
+  }
+
+  def sparkJobCancelledAsPartOfJobGroupError(jobId: Int, jobGroupId: String): SparkException = {
+    sparkJobCancelled(jobId, s"part of cancelled job group $jobGroupId", null)
+  }
+
   def barrierStageWithRDDChainPatternError(): Throwable = {
     new BarrierJobUnsupportedRDDChainException
   }

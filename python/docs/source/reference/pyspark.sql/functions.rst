@@ -140,8 +140,6 @@ Mathematical Functions
     sqrt
     tan
     tanh
-    toDegrees
-    toRadians
     try_add
     try_divide
     try_multiply
@@ -225,14 +223,10 @@ Bitwise Functions
 
     bit_count
     bit_get
-    bitwiseNOT
     bitwise_not
     getbit
-    shiftLeft
     shiftleft
-    shiftRight
     shiftright
-    shiftRightUnsigned
     shiftrightunsigned
 
 
@@ -407,7 +401,6 @@ Aggregate Functions
     :toctree: api/
 
     any_value
-    approxCountDistinct
     approx_count_distinct
     approx_percentile
     array_agg
@@ -465,7 +458,6 @@ Aggregate Functions
     stddev_pop
     stddev_samp
     sum
-    sumDistinct
     sum_distinct
     try_avg
     try_sum

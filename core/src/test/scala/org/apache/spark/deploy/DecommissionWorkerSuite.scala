@@ -439,7 +439,7 @@ class DecommissionWorkerSuite
     val appId = sc.applicationId
     eventually(timeout(1.minute), interval(1.seconds)) {
       val apps = getApplications()
-      assert(apps.size === 1)
+      assert(apps.length === 1)
       assert(apps.head.id === appId)
       assert(apps.head.getExecutorLimit === Int.MaxValue)
     }

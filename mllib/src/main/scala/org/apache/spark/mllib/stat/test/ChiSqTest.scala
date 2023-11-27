@@ -201,7 +201,7 @@ private[spark] object ChiSqTest extends Logging {
     counts.foreach { case ((label, value), c) =>
       val i = value2Index(value)
       val j = label2Index(label)
-      contingency.update(i, j, c)
+      contingency.update(i, j, c.toDouble)
     }
 
     ChiSqTest.chiSquaredMatrix(contingency, methodName)
