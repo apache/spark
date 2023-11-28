@@ -384,7 +384,10 @@ private[yarn] class YarnAllocator(
     this.hostToLocalTaskCountPerResourceProfileId = hostToLocalTaskCountPerResourceProfileId
 
     if (resourceProfileToTotalExecs.isEmpty) {
-      targetNumExecutorsPerResourceProfileId.clear()
+      // Set target executor number to 0 to cancel pending allocate request.
+      targetNumExecutorsPerResourceProfileId.keys.foreach { rp =>
+        targetNumExecutorsPerResourceProfileId(rp) = 0
+      }
       allocatorNodeHealthTracker.setSchedulerExcludedNodes(excludedNodes)
       true
     } else {
