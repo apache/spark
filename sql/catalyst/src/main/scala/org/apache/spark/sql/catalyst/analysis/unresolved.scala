@@ -713,7 +713,7 @@ case class UnresolvedAlias(
 
   override lazy val resolved = false
 
-  override def toString: String = prettyName + s"${child.toString}"
+  override def toString: String = s"$prettyName(${child.toString})"
 
   override protected def withNewChildInternal(newChild: Expression): UnresolvedAlias =
     copy(child = newChild)
