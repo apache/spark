@@ -196,12 +196,13 @@ html_context = {
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
+    "navbar_end": ["version-switcher", "theme-switcher", "navbar-icon-links"],
     "footer_start": ["spark_footer", "sphinx-version"],
-    "navbar_end": ["version-switcher", "theme-switcher"],
     "logo": {
         "image_light": "_static/spark-logo-light.png",
         "image_dark": "_static/spark-logo-dark.png",
-    }
+    },
+    "github_url": "https://github.com/apache/spark",
 }
 
 # Add any paths that contain custom themes here, relative to this directory.
