@@ -229,7 +229,7 @@ public class SSLFactory {
     /**
      * Sets the private key password
      *
-     * @param keyPassword The password for the private key
+     * @param privateKeyPassword The password for the private key
      * @return The builder object
      */
     public Builder privateKeyPassword(String privateKeyPassword) {
