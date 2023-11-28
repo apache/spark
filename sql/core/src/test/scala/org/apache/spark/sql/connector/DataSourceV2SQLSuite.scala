@@ -3226,7 +3226,7 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("Disallow subquery in overwrite expression") {
+  test("SPARK-46144: Fail overwrite statement if the condition contains subquery") {
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
     val t = "testcat.tbl"
