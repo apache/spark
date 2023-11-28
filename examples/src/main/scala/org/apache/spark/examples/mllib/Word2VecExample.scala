@@ -18,8 +18,6 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
-import scala.collection.immutable
-
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 // $example on$
@@ -34,8 +32,7 @@ object Word2VecExample {
     val sc = new SparkContext(conf)
 
     // $example on$
-    val input = sc.textFile("data/mllib/sample_lda_data.txt")
-      .map(line => immutable.ArraySeq.unsafeWrapArray(line.split(" ")))
+    val input = sc.textFile("data/mllib/sample_lda_data.txt").map(line => line.split(" ").toSeq)
 
     val word2vec = new Word2Vec()
 

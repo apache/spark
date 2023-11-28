@@ -19,7 +19,6 @@ package org.apache.spark.examples.pythonconverters
 
 import java.util.{Collection => JCollection, Map => JMap}
 
-import scala.collection.immutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.avro.Schema
@@ -97,9 +96,9 @@ object AvroConversionUtil extends Serializable {
     case c: JCollection[_] =>
       c.asScala.map(fromAvro(_, schema.getElementType)).toSeq.asJava
     case arr: Array[_] if arr.getClass.getComponentType.isPrimitive =>
-      immutable.ArraySeq.unsafeWrapArray(arr).asJava.asInstanceOf[JCollection[Any]]
+      arr.toSeq.asJava.asInstanceOf[JCollection[Any]]
     case arr: Array[_] =>
-      immutable.ArraySeq.unsafeWrapArray(arr.map(fromAvro(_, schema.getElementType))).asJava
+      arr.map(fromAvro(_, schema.getElementType)).toSeq.asJava
     case other => throw new SparkException(
       s"Unknown ARRAY type ${other.getClass.getName}")
   }
