@@ -1329,7 +1329,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     val df = spark.createDataset(Seq("a", "b", "c")).toDF("order")
     val schema = JdbcUtils.schemaString(
       df.schema,
-      df.sqlContext.conf.caseSensitiveAnalysis,
+      df.sparkSession.sessionState.conf.caseSensitiveAnalysis,
       "jdbc:mysql://localhost:3306/temp")
     assert(schema.contains("`order` LONGTEXT"))
   }

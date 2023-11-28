@@ -31,7 +31,7 @@ pandas-stubs<1.2.0.54
 mkdocs
 
 # Documentation (Python)
-pydata_sphinx_theme==0.13
+pydata_sphinx_theme>=0.13
 ipython
 nbsphinx
 numpydoc

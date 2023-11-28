@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.errors import PySparkValueError
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -127,9 +128,12 @@ class LocalDataToArrowConversion:
                             _dict[dedup_field_names[i]] = field_convs[i](value.get(field))
                     else:
                         if len(value) != len(field_names):
-                            raise ValueError(
-                                f"Length mismatch: Expected axis has {len(field_names)} elements, "
-                                f"new values have {len(value)} elements"
+                            raise PySparkValueError(
+                                error_class="AXIS_LENGTH_MISMATCH",
+                                message_parameters={
+                                    "expected_length": str(len(field_names)),
+                                    "actual_length": str(len(value)),
+                                },
                             )
                         for i in range(len(field_names)):
                             _dict[dedup_field_names[i]] = field_convs[i](value[i])
@@ -285,10 +289,14 @@ class LocalDataToArrowConversion:
                     pylist[i].append(column_convs[i](item.get(col)))
             else:
                 if len(item) != len(column_names):
-                    raise ValueError(
-                        f"Length mismatch: Expected axis has {len(column_names)} elements, "
-                        f"new values have {len(item)} elements"
+                    raise PySparkValueError(
+                        error_class="AXIS_LENGTH_MISMATCH",
+                        message_parameters={
+                            "expected_length": str(len(column_names)),
+                            "actual_length": str(len(item)),
+                        },
                     )
+
                 for i in range(len(column_names)):
                     pylist[i].append(column_convs[i](item[i]))
 
