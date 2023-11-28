@@ -60,7 +60,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       import RocksDBStateStoreProvider._
 
       // TODO: remove check when we add support for col families with changelog checkpointing
-      if (!isChangelogCheckpointingEnabled) {
+//      if (!isChangelogCheckpointingEnabled) {
         tryWithProviderResource(newStoreProvider(useColumnFamilies)) { provider =>
           val store = provider.getStore(0)
           val keyRow = dataToKeyRow("a", 0)
@@ -75,7 +75,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           assert(Platform.getByte(kv.value, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
         }
       }
-    }
+  //  }
   }
 
   test("RocksDB confs are passed correctly from SparkSession to db instance") {
@@ -139,7 +139,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       }
 
       // TODO: remove check when we add support for col families with changelog checkpointing
-      if (!isChangelogCheckpointingEnabled) {
+//      if (!isChangelogCheckpointingEnabled) {
         withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
           tryWithProviderResource(newStoreProvider(useColumnFamilies)) { provider =>
             val store = provider.getStore(0)
@@ -158,7 +158,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           }
         }
       }
-    }
+  //   }
   }
 
   override def newStoreProvider(): RocksDBStateStoreProvider = {
@@ -169,9 +169,14 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     newStoreProvider(storeId, numColsPrefixKey = 0)
   }
 
+  override def newStoreProvider(storeId: StateStoreId, useColumnFamilies: Boolean):
+    RocksDBStateStoreProvider = {
+    newStoreProvider(storeId, numColsPrefixKey = 0, useColumnFamilies = useColumnFamilies)
+  }
+
   override def newStoreProvider(useColumnFamilies: Boolean): RocksDBStateStoreProvider = {
     newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0), numColsPrefixKey = 0,
-      useColumnFamilies = useColumnFamilies && !isChangelogCheckpointingEnabled)
+      useColumnFamilies = useColumnFamilies)
   }
 
   def newStoreProvider(storeId: StateStoreId, conf: Configuration): RocksDBStateStoreProvider = {
@@ -197,14 +202,17 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
   }
 
   override def getLatestData(
-      storeProvider: RocksDBStateStoreProvider): Set[((String, Int), Int)] = {
-    getData(storeProvider, version = -1)
+      storeProvider: RocksDBStateStoreProvider,
+      useColumnFamilies: Boolean = false): Set[((String, Int), Int)] = {
+    getData(storeProvider, version = -1, useColumnFamilies)
   }
 
   override def getData(
       provider: RocksDBStateStoreProvider,
-      version: Int = -1): Set[((String, Int), Int)] = {
-    tryWithProviderResource(newStoreProvider(provider.stateStoreId)) { reloadedProvider =>
+      version: Int = -1,
+      useColumnFamilies: Boolean = false): Set[((String, Int), Int)] = {
+    tryWithProviderResource(newStoreProvider(provider.stateStoreId,
+      useColumnFamilies)) { reloadedProvider =>
       val versionToRead = if (version < 0) reloadedProvider.latestVersion else version
       reloadedProvider.getStore(versionToRead).iterator().map(rowPairToDataPair).toSet
     }

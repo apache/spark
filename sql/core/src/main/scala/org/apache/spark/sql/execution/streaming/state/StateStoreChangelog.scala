@@ -139,6 +139,16 @@ class StateStoreChangelogWriterV1(
   }
 }
 
+/**
+ * Write changes to the key value state store instance to a changelog file.
+ * There are 2 types of records, put and delete.
+ * A put record is written as: | record type | key length
+ *    | key content | value length | value content | col family name length | col family name | -1 |
+ * A delete record is written as: | record type | key length | key content | -1
+ *    | col family name length | col family name | -1 |
+ * Write an Int -1 to signal the end of file.
+ * The overall changelog format is: | put record | delete record | ... | put record | -1 |
+ */
 class StateStoreChangelogWriterV2(
     fm: CheckpointFileManager,
     file: Path,
@@ -201,9 +211,10 @@ class StateStoreChangelogReader(
 
 /**
  * Read an iterator of change record from the changelog file.
- * A record is represented by ByteArrayPair(key: Array[Byte], value: Array[Byte])
- * A put record is returned as a ByteArrayPair(key, value)
- * A delete record is return as a ByteArrayPair(key, null)
+ * A record is represented by ByteArrayPair(recordType: RecordType.Value,
+ *  key: Array[Byte], value: Array[Byte], colFamilyName: String)
+ * A put record is returned as a ByteArrayPair(recordType, key, value, colFamilyName)
+ * A delete record is return as a ByteArrayPair(recordType, key, null, colFamilyName)
  */
 class StateStoreChangelogReaderV1(
     fm: CheckpointFileManager,
@@ -238,6 +249,13 @@ class StateStoreChangelogReaderV1(
   }
 }
 
+/**
+ * Read an iterator of change record from the changelog file.
+ * A record is represented by ByteArrayPair(recordType: RecordType.Value,
+ *  key: Array[Byte], value: Array[Byte], colFamilyName: String)
+ * A put record is returned as a ByteArrayPair(recordType, key, value, colFamilyName)
+ * A delete record is return as a ByteArrayPair(recordType, key, null, colFamilyName)
+ */
 class StateStoreChangelogReaderV2(
     fm: CheckpointFileManager,
     fileToRead: Path,
@@ -258,7 +276,8 @@ class StateStoreChangelogReaderV2(
       // TODO: reuse the key buffer and value buffer across records.
       val recordTypeBuffer = new Array[Byte](recordTypeSize)
       ByteStreams.readFully(input, recordTypeBuffer, 0, recordTypeSize)
-      val recordType = RecordType.withName(recordTypeBuffer.toString)
+      val recordTypeStr = recordTypeBuffer.map(_.toChar).mkString
+      val recordType = RecordType.withName(recordTypeStr)
       recordType match {
         case RecordType.PUT_RECORD =>
           val keySize = input.readInt()
@@ -272,7 +291,8 @@ class StateStoreChangelogReaderV2(
           val colFamilyNameSize = input.readInt()
           val colFamilyNameBuffer = new Array[Byte](colFamilyNameSize)
           ByteStreams.readFully(input, colFamilyNameBuffer, 0, colFamilyNameSize)
-          (RecordType.PUT_RECORD, keyBuffer, valueBuffer, colFamilyNameBuffer.toString)
+          (RecordType.PUT_RECORD, keyBuffer, valueBuffer,
+            colFamilyNameBuffer.map(_.toChar).mkString)
 
         case RecordType.DELETE_RECORD =>
           val keySize = input.readInt()
@@ -285,7 +305,8 @@ class StateStoreChangelogReaderV2(
           val colFamilyNameSize = input.readInt()
           val colFamilyNameBuffer = new Array[Byte](colFamilyNameSize)
           ByteStreams.readFully(input, colFamilyNameBuffer, 0, colFamilyNameSize)
-          (RecordType.DELETE_RECORD, keyBuffer, null, colFamilyNameBuffer.toString)
+          (RecordType.DELETE_RECORD, keyBuffer, null,
+            colFamilyNameBuffer.map(_.toChar).mkString)
 
         case _ =>
           throw new IOException("Failed to process unknown record type")

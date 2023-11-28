@@ -109,14 +109,14 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
       // commit the ver 1 : cache will have one element
       currentVersion = incrementVersion(provider, currentVersion)
-      assert(getLatestData(provider) === Set(("a", 0) -> 1))
+      assert(getLatestData(provider, false) === Set(("a", 0) -> 1))
       var loadedMaps = provider.getLoadedMaps()
       checkLoadedVersions(loadedMaps, count = 1, earliestKey = 1, latestKey = 1)
       checkVersion(loadedMaps, 1, Map(("a", 0) -> 1))
 
       // commit the ver 2 : cache will have two elements
       currentVersion = incrementVersion(provider, currentVersion)
-      assert(getLatestData(provider) === Set(("a", 0) -> 2))
+      assert(getLatestData(provider, false) === Set(("a", 0) -> 2))
       loadedMaps = provider.getLoadedMaps()
       checkLoadedVersions(loadedMaps, count = 2, earliestKey = 2, latestKey = 1)
       checkVersion(loadedMaps, 2, Map(("a", 0) -> 2))
@@ -125,7 +125,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       // commit the ver 3 : cache has already two elements and adding ver 3 incurs exceeding cache,
       // and ver 3 will be added but ver 1 will be evicted
       currentVersion = incrementVersion(provider, currentVersion)
-      assert(getLatestData(provider) === Set(("a", 0) -> 3))
+      assert(getLatestData(provider, false) === Set(("a", 0) -> 3))
       loadedMaps = provider.getLoadedMaps()
       checkLoadedVersions(loadedMaps, count = 2, earliestKey = 3, latestKey = 2)
       checkVersion(loadedMaps, 3, Map(("a", 0) -> 3))
@@ -141,7 +141,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
       // commit the ver 1 : cache will have one element
       currentVersion = incrementVersion(provider, currentVersion)
-      assert(getLatestData(provider) === Set(("a", 0) -> 1))
+      assert(getLatestData(provider, false) === Set(("a", 0) -> 1))
       var loadedMaps = provider.getLoadedMaps()
       checkLoadedVersions(loadedMaps, count = 1, earliestKey = 1, latestKey = 1)
       checkVersion(loadedMaps, 1, Map(("a", 0) -> 1))
@@ -151,7 +151,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       // this fact ensures cache miss will occur when this partition succeeds commit
       // but there's a failure afterwards so have to reprocess previous batch
       currentVersion = incrementVersion(provider, currentVersion)
-      assert(getLatestData(provider) === Set(("a", 0) -> 2))
+      assert(getLatestData(provider, false) === Set(("a", 0) -> 2))
       loadedMaps = provider.getLoadedMaps()
       checkLoadedVersions(loadedMaps, count = 1, earliestKey = 2, latestKey = 2)
       checkVersion(loadedMaps, 2, Map(("a", 0) -> 2))
@@ -167,7 +167,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       currentVersion += 1
 
       // make sure newly committed version is reflected to the cache (overwritten)
-      assert(getLatestData(provider) === Set(("a", 0) -> -2))
+      assert(getLatestData(provider, false) === Set(("a", 0) -> -2))
       loadedMaps = provider.getLoadedMaps()
       checkLoadedVersions(loadedMaps, count = 1, earliestKey = 2, latestKey = 2)
       checkVersion(loadedMaps, 2, Map(("a", 0) -> -2))
@@ -182,13 +182,13 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
       // commit the ver 1 : never cached
       currentVersion = incrementVersion(provider, currentVersion)
-      assert(getLatestData(provider) === Set(("a", 0) -> 1))
+      assert(getLatestData(provider, false) === Set(("a", 0) -> 1))
       var loadedMaps = provider.getLoadedMaps()
       assert(loadedMaps.size() === 0)
 
       // commit the ver 2 : never cached
       currentVersion = incrementVersion(provider, currentVersion)
-      assert(getLatestData(provider) === Set(("a", 0) -> 2))
+      assert(getLatestData(provider, false) === Set(("a", 0) -> 2))
       loadedMaps = provider.getLoadedMaps()
       assert(loadedMaps.size() === 0)
     }
@@ -211,8 +211,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       assert(!fileExists(provider, version = 1, isSnapshot = false)) // first file should be deleted
 
       // last couple of versions should be retrievable
-      assert(getData(provider, 20) === Set(("a", 0) -> 20))
-      assert(getData(provider, 19) === Set(("a", 0) -> 19))
+      assert(getData(provider, 20, false) === Set(("a", 0) -> 20))
+      assert(getData(provider, 19, false) === Set(("a", 0) -> 19))
     }
   }
 
@@ -248,10 +248,10 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         fileExists(provider, version, isSnapshot = true)).getOrElse(fail("snapshot file not found"))
 
       // Corrupt snapshot file and verify that it throws error
-      assert(getData(provider, snapshotVersion) === Set(("a", 0) -> snapshotVersion))
+      assert(getData(provider, snapshotVersion, false) === Set(("a", 0) -> snapshotVersion))
       corruptFile(provider, snapshotVersion, isSnapshot = true)
       var e = intercept[SparkException] {
-        getData(provider, snapshotVersion)
+        getData(provider, snapshotVersion, false)
       }
       checkError(
         e,
@@ -494,9 +494,9 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       var currentVersion = 0
 
       currentVersion = updateVersionTo(provider, currentVersion, 2)
-      require(getLatestData(provider) === Set(("a", 0) -> 2))
+      require(getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> 2))
       provider.doMaintenance()               // should not generate snapshot files
-      assert(getLatestData(provider) === Set(("a", 0) -> 2))
+      assert(getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> 2))
 
       for (i <- 1 to currentVersion) {
         assert(fileExists(provider, i, isSnapshot = false))  // all delta files present
@@ -505,7 +505,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
       // After version 6, snapshotting should generate one snapshot file
       currentVersion = updateVersionTo(provider, currentVersion, 6)
-      require(getLatestData(provider) === Set(("a", 0) -> 6), "store not updated correctly")
+      require(getLatestData(provider, useColumnFamilies = false)
+        === Set(("a", 0) -> 6), "store not updated correctly")
       provider.doMaintenance()       // should generate snapshot files
 
       val snapshotVersion = (0 to 6).find { version =>
@@ -514,15 +515,17 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       assert(snapshotVersion.nonEmpty, "snapshot file not generated")
       deleteFilesEarlierThanVersion(provider, snapshotVersion.get)
       assert(
-        getData(provider, snapshotVersion.get) === Set(("a", 0) -> snapshotVersion.get),
+        getData(provider, snapshotVersion.get, useColumnFamilies = false)
+          === Set(("a", 0) -> snapshotVersion.get),
         "snapshotting messed up the data of the snapshotted version")
       assert(
-        getLatestData(provider) === Set(("a", 0) -> 6),
+        getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> 6),
         "snapshotting messed up the data of the final version")
 
       // After version 20, snapshotting should generate newer snapshot files
       currentVersion = updateVersionTo(provider, currentVersion, 20)
-      require(getLatestData(provider) === Set(("a", 0) -> 20), "store not updated correctly")
+      require(getLatestData(provider, useColumnFamilies = false)
+        === Set(("a", 0) -> 20), "store not updated correctly")
       provider.doMaintenance()       // do snapshot
 
       val latestSnapshotVersion = (0 to 20).filter(version =>
@@ -531,7 +534,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       assert(latestSnapshotVersion.get > snapshotVersion.get, "newer snapshot not generated")
 
       deleteFilesEarlierThanVersion(provider, latestSnapshotVersion.get)
-      assert(getLatestData(provider) === Set(("a", 0) -> 20), "snapshotting messed up the data")
+      assert(getLatestData(provider, useColumnFamilies = false)
+        === Set(("a", 0) -> 20), "snapshotting messed up the data")
     }
   }
 
@@ -717,7 +721,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     var loadedMapSizeForVersion1: Long = -1L
     tryWithProviderResource(newStoreProvider()) { provider =>
       // Verify state before starting a new set of updates
-      assert(getLatestData(provider).isEmpty)
+      assert(getLatestData(provider, useColumnFamilies = false).isEmpty)
 
       store = provider.getStore(0)
       assert(!store.hasCommitted)
@@ -786,6 +790,11 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     newStoreProvider(storeId.operatorId, storeId.partitionId, dir = storeId.checkpointRootLocation)
   }
 
+  override def newStoreProvider(storeId: StateStoreId,
+    useColumnFamilies: Boolean): HDFSBackedStateStoreProvider = {
+    newStoreProvider(storeId.operatorId, storeId.partitionId, dir = storeId.checkpointRootLocation)
+  }
+
   def newStoreProvider(storeId: StateStoreId, conf: Configuration): HDFSBackedStateStoreProvider = {
     newStoreProvider(
       storeId.operatorId,
@@ -803,14 +812,17 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   }
 
   override def getLatestData(
-      storeProvider: HDFSBackedStateStoreProvider): Set[((String, Int), Int)] = {
-    getData(storeProvider, -1)
+      storeProvider: HDFSBackedStateStoreProvider,
+      useColumnFamilies: Boolean = false): Set[((String, Int), Int)] = {
+    getData(storeProvider, -1, useColumnFamilies)
   }
 
   override def getData(
       provider: HDFSBackedStateStoreProvider,
-      version: Int): Set[((String, Int), Int)] = {
-    tryWithProviderResource(newStoreProvider(provider.stateStoreId)) { reloadedProvider =>
+      version: Int,
+      useColumnFamilies: Boolean = false): Set[((String, Int), Int)] = {
+    tryWithProviderResource(newStoreProvider(provider.stateStoreId,
+      useColumnFamilies)) { reloadedProvider =>
       if (version < 0) {
         reloadedProvider.latestIterator().map(rowPairToDataPair).toSet
       } else {
@@ -910,7 +922,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       s"with useColumnFamilies=$useColumnFamilies") {
       tryWithProviderResource(newStoreProvider(useColumnFamilies)) { provider =>
         // Verify state before starting a new set of updates
-        assert(getLatestData(provider).isEmpty)
+        assert(getLatestData(provider, useColumnFamilies = useColumnFamilies).isEmpty)
 
         val store = provider.getStore(0)
         assert(!store.hasCommitted)
@@ -923,7 +935,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
         assert(get(store, "a", 0) === Some(1))
 
         assert(store.iterator().nonEmpty)
-        assert(getLatestData(provider).isEmpty)
+        assert(getLatestData(provider, useColumnFamilies = useColumnFamilies).isEmpty)
 
         // Make updates, commit and then verify state
         put(store, "b", 0, 2)
@@ -933,7 +945,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
         assert(store.hasCommitted)
         assert(rowPairsToDataSet(store.iterator()) === Set(("b", 0) -> 2))
-        assert(getLatestData(provider) === Set(("b", 0) -> 2))
+        assert(getLatestData(provider,
+          useColumnFamilies = useColumnFamilies) === Set(("b", 0) -> 2))
 
         // Trying to get newer versions should fail
         var e = intercept[SparkException] {
@@ -943,19 +956,21 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
         assert(e.getCause.getMessage.contains("does not exist"))
 
         e = intercept[SparkException] {
-          getData(provider, 2)
+          getData(provider, 2, useColumnFamilies = useColumnFamilies)
         }
         assert(e.getCause.isInstanceOf[SparkException])
         assert(e.getCause.getMessage.contains("does not exist"))
 
         // New updates to the reloaded store with new version, and does not change old version
-        tryWithProviderResource(newStoreProvider(store.id)) { reloadedProvider =>
+        tryWithProviderResource(newStoreProvider(store.id, useColumnFamilies)) { reloadedProvider =>
           val reloadedStore = reloadedProvider.getStore(1)
           put(reloadedStore, "c", 0, 4)
           assert(reloadedStore.commit() === 2)
           assert(rowPairsToDataSet(reloadedStore.iterator()) === Set(("b", 0) -> 2, ("c", 0) -> 4))
-          assert(getLatestData(provider) === Set(("b", 0) -> 2, ("c", 0) -> 4))
-          assert(getData(provider, version = 1) === Set(("b", 0) -> 2))
+          assert(getLatestData(provider, useColumnFamilies = useColumnFamilies)
+            === Set(("b", 0) -> 2, ("c", 0) -> 4))
+          assert(getData(provider, version = 1, useColumnFamilies = useColumnFamilies)
+            === Set(("b", 0) -> 2))
         }
       }
     }
@@ -964,7 +979,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   testWithAllCodec("prefix scan") {
     tryWithProviderResource(newStoreProvider(numPrefixCols = 1)) { provider =>
       // Verify state before starting a new set of updates
-      assert(getLatestData(provider).isEmpty)
+      assert(getLatestData(provider, useColumnFamilies = false).isEmpty)
 
       var store = provider.getStore(0)
 
@@ -1024,7 +1039,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     testWithAllCodec(s"numKeys metrics with useColumnFamilies=$useColumnFamilies") {
       tryWithProviderResource(newStoreProvider(useColumnFamilies)) { provider =>
         // Verify state before starting a new set of updates
-        assert(getLatestData(provider).isEmpty)
+        assert(getLatestData(provider, useColumnFamilies = useColumnFamilies).isEmpty)
 
         val store = provider.getStore(0)
         put(store, "a", 0, 1)
@@ -1037,7 +1052,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
         assert(rowPairsToDataSet(store.iterator()) ===
           Set(("a", 0) -> 1, ("b", 0) -> 2, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
 
-        val reloadedProvider = newStoreProvider(store.id)
+        val reloadedProvider = newStoreProvider(store.id, useColumnFamilies)
         val reloadedStore = reloadedProvider.getStore(1)
         remove(reloadedStore, _._1 == "b")
         assert(reloadedStore.commit() === 2)
@@ -1052,7 +1067,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     testWithAllCodec(s"removing while iterating with useColumnFamilies=$useColumnFamilies") {
       tryWithProviderResource(newStoreProvider(useColumnFamilies)) { provider =>
         // Verify state before starting a new set of updates
-        assert(getLatestData(provider).isEmpty)
+        assert(getLatestData(provider, useColumnFamilies = useColumnFamilies).isEmpty)
         val store = provider.getStore(0)
         put(store, "a", 0, 1)
         put(store, "b", 0, 2)
@@ -1382,7 +1397,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   test("SPARK-35659: StateStore.put cannot put null value") {
     tryWithProviderResource(newStoreProvider()) { provider =>
       // Verify state before starting a new set of updates
-      assert(getLatestData(provider).isEmpty)
+      assert(getLatestData(provider, useColumnFamilies = false).isEmpty)
 
       val store = provider.getStore(0)
       val err = intercept[IllegalArgumentException] {
@@ -1477,6 +1492,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   /** Return a new provider with the given id */
   def newStoreProvider(storeId: StateStoreId): ProviderClass
 
+  /** Return a new provider with the given id and multiple column families */
+  def newStoreProvider(storeId: StateStoreId, useColumnFamilies: Boolean): ProviderClass
+
   /** Return a new provider with the given id and configuration */
   def newStoreProvider(storeId: StateStoreId, conf: Configuration): ProviderClass
 
@@ -1490,13 +1508,15 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   def newStoreProvider(useColumnFamilies: Boolean): ProviderClass
 
   /** Get the latest data referred to by the given provider but not using this provider */
-  def getLatestData(storeProvider: ProviderClass): Set[((String, Int), Int)]
+  def getLatestData(storeProvider: ProviderClass,
+    useColumnFamilies: Boolean): Set[((String, Int), Int)]
 
   /**
    * Get a specific version of data referred to by the given provider but not using
    * this provider
    */
-  def getData(storeProvider: ProviderClass, version: Int): Set[((String, Int), Int)]
+  def getData(storeProvider: ProviderClass, version: Int,
+    useColumnFamilies: Boolean): Set[((String, Int), Int)]
 
   protected def testQuietly(name: String)(f: => Unit): Unit = {
     test(name) {

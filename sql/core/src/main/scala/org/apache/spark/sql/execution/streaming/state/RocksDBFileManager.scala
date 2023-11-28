@@ -166,9 +166,14 @@ class RocksDBFileManager(
   }
 
   // Get the changelog file at version
-  def getChangelogReader(version: Long): StateStoreChangelogReader = {
+  def getChangelogReader(version: Long,
+    useColumnFamilies: Boolean = false): StateStoreChangelogReader = {
     val changelogFile = dfsChangelogFile(version)
-    new StateStoreChangelogReaderV1(fm, changelogFile, codec)
+    if (useColumnFamilies) {
+      new StateStoreChangelogReaderV2(fm, changelogFile, codec)
+    } else {
+      new StateStoreChangelogReaderV1(fm, changelogFile, codec)
+    }
   }
 
   /**

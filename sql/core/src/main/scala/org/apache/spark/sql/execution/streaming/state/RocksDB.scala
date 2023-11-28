@@ -144,12 +144,6 @@ class RocksDB(
   @volatile private var numKeysOnWritingVersion = 0L
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
 
-  // TODO: support changelog checkpointing with column families
-  if (useColumnFamilies && enableChangelogCheckpointing) {
-    throw new RuntimeException("Changelog checkpointing is not supported with multiple " +
-      "column families")
-  }
-
   @GuardedBy("acquireLock")
   @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
 
@@ -211,7 +205,7 @@ class RocksDB(
     for (v <- loadedVersion + 1 to endVersion) {
       var changelogReader: StateStoreChangelogReader = null
       try {
-        changelogReader = fileManager.getChangelogReader(v)
+        changelogReader = fileManager.getChangelogReader(v, useColumnFamilies)
         changelogReader.foreach { case (recordType, key, value, colFamilyName) =>
           recordType match {
             case RecordType.PUT_RECORD =>
