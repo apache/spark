@@ -28,7 +28,7 @@ import org.apache.hive.service.cli.operation.GetColumnsOperation
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.types._
@@ -36,7 +36,7 @@ import org.apache.spark.sql.types._
 /**
  * Spark's own SparkGetColumnsOperation
  *
- * @param sqlContext SQLContext to use
+ * @param sparkSession SparkSession to use
  * @param parentSession a HiveSession from SessionManager
  * @param catalogName catalog name. NULL if not applicable.
  * @param schemaName database name, NULL or a concrete database name
@@ -44,7 +44,7 @@ import org.apache.spark.sql.types._
  * @param columnName column name
  */
 private[hive] class SparkGetColumnsOperation(
-    val sqlContext: SQLContext,
+    val sparkSession: SparkSession,
     parentSession: HiveSession,
     catalogName: String,
     schemaName: String,
@@ -54,7 +54,7 @@ private[hive] class SparkGetColumnsOperation(
   with SparkOperation
   with Logging {
 
-  val catalog: SessionCatalog = sqlContext.sessionState.catalog
+  val catalog: SessionCatalog = sparkSession.sessionState.catalog
 
   override def runInternal(): Unit = {
     // Do not change cmdStr. It's used for Hive auditing and authorization.
@@ -64,7 +64,7 @@ private[hive] class SparkGetColumnsOperation(
 
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
-    val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
+    val executionHiveClassLoader = sparkSession.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
     HiveThriftServer2.eventManager.onStatementStart(

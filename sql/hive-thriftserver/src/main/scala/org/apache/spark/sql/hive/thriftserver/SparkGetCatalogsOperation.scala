@@ -23,16 +23,16 @@ import org.apache.hive.service.cli.operation.GetCatalogsOperation
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 /**
  * Spark's own GetCatalogsOperation
  *
- * @param sqlContext SQLContext to use
+ * @param sparkSession SparkSession to use
  * @param parentSession a HiveSession from SessionManager
  */
 private[hive] class SparkGetCatalogsOperation(
-    val sqlContext: SQLContext,
+    val sparkSession: SparkSession,
     parentSession: HiveSession)
   extends GetCatalogsOperation(parentSession)
   with SparkOperation
@@ -43,7 +43,7 @@ private[hive] class SparkGetCatalogsOperation(
     logInfo(s"$logMsg with $statementId")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
-    val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
+    val executionHiveClassLoader = sparkSession.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
     HiveThriftServer2.eventManager.onStatementStart(

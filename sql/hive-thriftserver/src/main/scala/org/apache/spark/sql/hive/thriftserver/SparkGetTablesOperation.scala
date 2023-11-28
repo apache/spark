@@ -28,13 +28,13 @@ import org.apache.hive.service.cli.operation.GetTablesOperation
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 
 /**
  * Spark's own GetTablesOperation
  *
- * @param sqlContext SQLContext to use
+ * @param sparkSession SparkSession to use
  * @param parentSession a HiveSession from SessionManager
  * @param catalogName catalog name. null if not applicable
  * @param schemaName database name, null or a concrete database name
@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
  * @param tableTypes list of allowed table types, e.g. "TABLE", "VIEW"
  */
 private[hive] class SparkGetTablesOperation(
-    val sqlContext: SQLContext,
+    val sparkSession: SparkSession,
     parentSession: HiveSession,
     catalogName: String,
     schemaName: String,
@@ -60,10 +60,10 @@ private[hive] class SparkGetTablesOperation(
     logInfo(s"$logMsg with $statementId")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
-    val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
+    val executionHiveClassLoader = sparkSession.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = sparkSession.sessionState.catalog
     val schemaPattern = convertSchemaPattern(schemaName)
     val tablePattern = convertIdentifierPattern(tableName, true)
     val matchingDbs = catalog.listDatabases(schemaPattern)

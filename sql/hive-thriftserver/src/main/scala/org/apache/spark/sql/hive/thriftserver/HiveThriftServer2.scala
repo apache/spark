@@ -30,7 +30,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI.UI_ENABLED
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.ui._
@@ -51,19 +51,19 @@ object HiveThriftServer2 extends Logging {
    * Starts a new thrift server with the given context.
    */
   @DeveloperApi
-  def startWithContext(sqlContext: SQLContext): HiveThriftServer2 = {
+  def startWithSparkSession(sparkSession: SparkSession): HiveThriftServer2 = {
     val executionHive = HiveUtils.newClientForExecution(
-      sqlContext.sparkContext.conf,
-      sqlContext.sessionState.newHadoopConf())
+      sparkSession.sparkContext.conf,
+      sparkSession.sessionState.newHadoopConf())
 
     // Cleanup the scratch dir before starting
     ServerUtils.cleanUpScratchDir(executionHive.conf)
-    val server = new HiveThriftServer2(sqlContext)
+    val server = new HiveThriftServer2(sparkSession)
 
     server.init(executionHive.conf)
     server.start()
     logInfo("HiveThriftServer2 started")
-    createListenerAndUI(server, sqlContext.sparkContext)
+    createListenerAndUI(server, sparkSession.sparkContext)
     server
   }
 
@@ -101,7 +101,7 @@ object HiveThriftServer2 extends Logging {
     }
 
     try {
-      startWithContext(SparkSQLEnv.sqlContext)
+      startWithSparkSession(SparkSQLEnv.sparkSession)
       // If application was killed before HiveThriftServer2 start successfully then SparkSubmit
       // process can not exit, so check whether if SparkContext was stopped.
       if (SparkSQLEnv.sparkContext.stopped.get()) {
@@ -121,7 +121,7 @@ object HiveThriftServer2 extends Logging {
   }
 }
 
-private[hive] class HiveThriftServer2(sqlContext: SQLContext)
+private[hive] class HiveThriftServer2(sparkSession: SparkSession)
   extends HiveServer2
   with ReflectedCompositeService {
   // state is tracked internally so that the server only attempts to shut down if it successfully
@@ -129,7 +129,7 @@ private[hive] class HiveThriftServer2(sqlContext: SQLContext)
   private val started = new AtomicBoolean(false)
 
   override def init(hiveConf: HiveConf): Unit = {
-    val sparkSqlCliService = new SparkSQLCLIService(this, sqlContext)
+    val sparkSqlCliService = new SparkSQLCLIService(this, sparkSession)
     setSuperField(this, "cliService", sparkSqlCliService)
     addService(sparkSqlCliService)
 

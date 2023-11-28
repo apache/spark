@@ -26,18 +26,18 @@ import org.apache.hive.service.cli.operation.MetadataOperation.DEFAULT_HIVE_CATA
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 /**
  * Spark's own GetSchemasOperation
  *
- * @param sqlContext SQLContext to use
+ * @param sparkSession SparkSession to use
  * @param parentSession a HiveSession from SessionManager
  * @param catalogName catalog name. null if not applicable.
  * @param schemaName database name, null or a concrete database name
  */
 private[hive] class SparkGetSchemasOperation(
-    val sqlContext: SQLContext,
+    val sparkSession: SparkSession,
     parentSession: HiveSession,
     catalogName: String,
     schemaName: String)
@@ -52,7 +52,7 @@ private[hive] class SparkGetSchemasOperation(
     logInfo(s"$logMsg with $statementId")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
-    val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
+    val executionHiveClassLoader = sparkSession.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
     if (isAuthV2Enabled) {
@@ -68,11 +68,11 @@ private[hive] class SparkGetSchemasOperation(
 
     try {
       val schemaPattern = convertSchemaPattern(schemaName)
-      sqlContext.sessionState.catalog.listDatabases(schemaPattern).foreach { dbName =>
+      sparkSession.sessionState.catalog.listDatabases(schemaPattern).foreach { dbName =>
         rowSet.addRow(Array[AnyRef](dbName, DEFAULT_HIVE_CATALOG))
       }
 
-      val globalTempViewDb = sqlContext.sessionState.catalog.globalTempViewManager.database
+      val globalTempViewDb = sparkSession.sessionState.catalog.globalTempViewManager.database
       val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
       if (schemaName == null || schemaName.isEmpty ||
           databasePattern.matcher(globalTempViewDb).matches()) {

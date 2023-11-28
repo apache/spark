@@ -28,19 +28,19 @@ import org.apache.hive.service.cli.operation.MetadataOperation.DEFAULT_HIVE_CATA
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 /**
  * Spark's own GetFunctionsOperation
  *
- * @param sqlContext SQLContext to use
+ * @param sparkSession SparkSession to use
  * @param parentSession a HiveSession from SessionManager
  * @param catalogName catalog name. null if not applicable
  * @param schemaName database name, null or a concrete database name
  * @param functionName function name pattern
  */
 private[hive] class SparkGetFunctionsOperation(
-    val sqlContext: SQLContext,
+    val sparkSession: SparkSession,
     parentSession: HiveSession,
     catalogName: String,
     schemaName: String,
@@ -56,10 +56,10 @@ private[hive] class SparkGetFunctionsOperation(
     logInfo(s"$logMsg with $statementId")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
-    val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
+    val executionHiveClassLoader = sparkSession.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = sparkSession.sessionState.catalog
     // get databases for schema pattern
     val schemaPattern = convertSchemaPattern(schemaName)
     val matchingDbs = catalog.listDatabases(schemaPattern)

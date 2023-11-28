@@ -22,7 +22,7 @@ import org.apache.hive.service.cli.operation.Operation
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType.{EXTERNAL, MANAGED, VIEW}
@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
  */
 private[hive] trait SparkOperation extends Operation with Logging {
 
-  protected def sqlContext: SQLContext
+  protected def sparkSession: SparkSession
 
   protected var statementId = getHandle().getHandleIdentifier().getPublicId().toString()
 
@@ -61,17 +61,17 @@ private[hive] trait SparkOperation extends Operation with Logging {
   // - set appropriate SparkSession
   // - set scheduler pool for the operation
   def withLocalProperties[T](f: => T): T = {
-    val originalProps = Utils.cloneProperties(sqlContext.sparkContext.getLocalProperties)
+    val originalProps = Utils.cloneProperties(sparkSession.sparkContext.getLocalProperties)
     val originalSession = SparkSession.getActiveSession
 
     try {
       // Set active SparkSession
-      SparkSession.setActiveSession(sqlContext.sparkSession)
+      SparkSession.setActiveSession(sparkSession)
 
       // Set scheduler pool
-      sqlContext.sparkSession.conf.getOption(SQLConf.THRIFTSERVER_POOL.key) match {
+      sparkSession.conf.getOption(SQLConf.THRIFTSERVER_POOL.key) match {
         case Some(pool) =>
-          sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, pool)
+          sparkSession.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, pool)
         case None =>
       }
       CURRENT_USER.set(getParentSession.getUserName)
@@ -80,7 +80,7 @@ private[hive] trait SparkOperation extends Operation with Logging {
     } finally {
       CURRENT_USER.remove()
       // reset local properties, will also reset SPARK_SCHEDULER_POOL
-      sqlContext.sparkContext.setLocalProperties(originalProps)
+      sparkSession.sparkContext.setLocalProperties(originalProps)
 
       originalSession match {
         case Some(session) => SparkSession.setActiveSession(session)
