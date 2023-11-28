@@ -31,7 +31,6 @@ if should_test_connect:
     from pyspark.sql.connect.client.retries import (
         Retrying,
         DefaultPolicy,
-        RetryException,
         RetriesExceeded,
     )
     from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
@@ -111,7 +110,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         try:
             for attempt in Retrying(client._retry_policies, sleep=sleep):
                 with attempt:
-                    raise RetryException()
+                    raise TestException("Retryable error", grpc.StatusCode.UNAVAILABLE)
         except RetriesExceeded:
             pass
 

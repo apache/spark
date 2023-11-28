@@ -20,8 +20,9 @@ from typing import Any, Optional, Union
 
 from py4j.java_gateway import JavaObject
 
-from pyspark import since, _NoValue
+from pyspark import _NoValue
 from pyspark._globals import _NoValueType
+from pyspark.errors import PySparkTypeError
 
 
 class RuntimeConfig:
@@ -84,12 +85,12 @@ class RuntimeConfig:
         >>> spark.conf.get("my_key")
         'my_value'
         """
-        self._checkType(key, "key")
+        self._check_type(key, "key")
         if default is _NoValue:
             return self._jconf.get(key)
         else:
             if default is not None:
-                self._checkType(default, "default")
+                self._check_type(default, "default")
             return self._jconf.get(key, default)
 
     def unset(self, key: str) -> None:
@@ -116,17 +117,22 @@ class RuntimeConfig:
         """
         self._jconf.unset(key)
 
-    def _checkType(self, obj: Any, identifier: str) -> None:
+    def _check_type(self, obj: Any, identifier: str) -> None:
         """Assert that an object is of type str."""
         if not isinstance(obj, str):
-            raise TypeError(
-                "expected %s '%s' to be a string (was '%s')" % (identifier, obj, type(obj).__name__)
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={
+                    "arg_name": identifier,
+                    "arg_type": type(obj).__name__,
+                },
             )
 
-    @since(2.4)
     def isModifiable(self, key: str) -> bool:
         """Indicates whether the configuration property with the given key
         is modifiable in the current session.
+
+        .. versionadded:: 2.4.0
         """
         return self._jconf.isModifiable(key)
 

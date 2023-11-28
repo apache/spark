@@ -804,6 +804,72 @@ Wabca
 
 
 -- !query
+set spark.sql.legacy.javaCharsets=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.javaCharsets	true
+
+
+-- !query
+select encode('hello', 'WINDOWS-1252')
+-- !query schema
+struct<encode(hello, WINDOWS-1252):binary>
+-- !query output
+hello
+
+
+-- !query
+select encode(scol, ecol) from values('hello', 'WINDOWS-1252') as t(scol, ecol)
+-- !query schema
+struct<encode(scol, ecol):binary>
+-- !query output
+hello
+
+
+-- !query
+set spark.sql.legacy.javaCharsets=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.javaCharsets	false
+
+
+-- !query
+select encode('hello', 'WINDOWS-1252')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "WINDOWS-1252",
+    "functionName" : "`encode`",
+    "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
+select encode(scol, ecol) from values('hello', 'WINDOWS-1252') as t(scol, ecol)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "WINDOWS-1252",
+    "functionName" : "`encode`",
+    "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
 select encode('hello', 'Windows-xxx')
 -- !query schema
 struct<>

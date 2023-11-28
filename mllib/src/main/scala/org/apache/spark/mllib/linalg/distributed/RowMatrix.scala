@@ -633,7 +633,7 @@ class RowMatrix @Since("1.0.0") (
     val gamma = if (threshold < 1e-6) {
       Double.PositiveInfinity
     } else {
-      10 * math.log(numCols()) / threshold
+      10 * math.log(numCols().toDouble) / threshold
     }
 
     val summary = Statistics.colStats(rows.map((_, 1.0)), Seq("normL2"))
@@ -823,7 +823,8 @@ class RowMatrix @Since("1.0.0") (
         + s"as it's bigger than maxResultSize ($maxDriverResultSizeInBytes Bytes)")
 
     val numerator = math.log(rows.getNumPartitions)
-    val denominator = math.log(maxDriverResultSizeInBytes) - math.log(aggregatedObjectSizeInBytes)
+    val denominator = math.log(maxDriverResultSizeInBytes.toDouble) -
+      math.log(aggregatedObjectSizeInBytes.toDouble)
     val desiredTreeDepth = math.ceil(numerator / denominator)
 
     if (desiredTreeDepth > 4) {
