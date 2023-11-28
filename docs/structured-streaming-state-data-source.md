@@ -112,7 +112,7 @@ The following options must be set for the source.
 <tr>
   <td>path</td>
   <td>string</td>
-  <td>Specify the root directory of the checkpoint location.</td>
+  <td>Specify the root directory of the checkpoint location. You can either specify the path via option("path", `path`) or load(`path`).</td>
 </tr>
 </table>
 
