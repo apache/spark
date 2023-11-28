@@ -23,6 +23,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.{Catalog, CatalogMetadata, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.DefinedByConstructorParams
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -146,6 +147,36 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     makeTablesDataset(plan)
   }
 
+  private[sql] def resolveTable(row: InternalRow, catalog: CatalogPlugin): Option[Table] = {
+    val tableName = row.getString(1)
+    val namespaceName = row.getString(0)
+    val isTemp = row.getBoolean(2)
+    try {
+      if (isTemp) {
+        // Temp views do not belong to any catalog. We shouldn't prepend the catalog name here.
+        val ns = if (namespaceName.isEmpty) Nil else Seq(namespaceName)
+        Some(makeTable(ns :+ tableName))
+      } else {
+        val ns = parseIdent(namespaceName)
+        try {
+          Some(makeTable(catalog.name() +: ns :+ tableName))
+        } catch {
+          case e: AnalysisException if e.getErrorClass == "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE" =>
+            Some(new Table(
+              name = tableName,
+              catalog = catalog.name(),
+              namespace = ns.toArray,
+              description = null,
+              tableType = null,
+              isTemporary = false
+            ))
+        }
+      }
+    } catch {
+      case e: AnalysisException if e.getErrorClass == "TABLE_OR_VIEW_NOT_FOUND" => None
+    }
+  }
+
   private def makeTablesDataset(plan: ShowTables): Dataset[Table] = {
     val qe = sparkSession.sessionState.executePlan(plan)
     val catalog = qe.analyzed.collectFirst {
@@ -153,31 +184,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       case _: ShowTablesCommand =>
         sparkSession.sessionState.catalogManager.v2SessionCatalog
     }.get
-    val tables = qe.toRdd.collect().map { row =>
-      val tableName = row.getString(1)
-      val namespaceName = row.getString(0)
-      val isTemp = row.getBoolean(2)
-      if (isTemp) {
-        // Temp views do not belong to any catalog. We shouldn't prepend the catalog name here.
-        val ns = if (namespaceName.isEmpty) Nil else Seq(namespaceName)
-        makeTable(ns :+ tableName)
-      } else {
-        val ns = parseIdent(namespaceName)
-        try {
-          makeTable(catalog.name() +: ns :+ tableName)
-        } catch {
-          case e: AnalysisException if e.getErrorClass == "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE" =>
-            new Table(
-              name = tableName,
-              catalog = catalog.name(),
-              namespace = ns.toArray,
-              description = null,
-              tableType = null,
-              isTemporary = false
-            )
-        }
-      }
-    }
+    val tables = qe.toRdd.collect().flatMap { row => resolveTable(row, catalog) }
     CatalogImpl.makeDataset(tables.toImmutableArraySeq, sparkSession)
   }
 
