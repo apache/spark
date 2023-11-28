@@ -22,9 +22,10 @@ import java.util.Arrays
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.{Cast, ExpressionEvalHelper, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, CodegenObjectFactoryMode, ExpressionEvalHelper, Literal}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -282,4 +283,15 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
     java.util.Arrays.equals(unwrappedFeaturesArrays(0), Array(0.1, 1.0))
     java.util.Arrays.equals(unwrappedFeaturesArrays(1), Array(0.2, 2.0))
   }
+
+   test("UDT ordering") {
+     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+         SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
+       withTempView("v1") {
+         pointsRDD.createOrReplaceTempView("v1")
+         val df = sql("select label from v1 order by features")
+         checkAnswer(df, Row(1.0) :: Row(0.0) :: Nil)
+       }
+     }
+   }
 }
