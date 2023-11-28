@@ -248,6 +248,8 @@ object CheckConnectJvmClientCompatibility {
 
       // RuntimeConfig
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RuntimeConfig$"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.RuntimeConfig.sqlConf"),
 
       // DataStreamWriter
       ProblemFilters.exclude[MissingClassProblem](
@@ -286,7 +288,17 @@ object CheckConnectJvmClientCompatibility {
 
       // SQLImplicits
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.rddToDatasetHolder"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits._sqlContext"))
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits._sqlContext"),
+
+      // Artifact Manager
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.artifact.ArtifactManager"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.artifact.ArtifactManager$"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.artifact.util.ArtifactUtils"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.artifact.util.ArtifactUtils$"))
     checkMiMaCompatibility(clientJar, sqlJar, includedRules, excludeRules)
   }
 

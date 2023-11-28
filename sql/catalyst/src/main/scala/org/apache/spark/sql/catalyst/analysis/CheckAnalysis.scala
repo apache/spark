@@ -271,10 +271,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case _ =>
         }
 
-      // `ShowTableExtended` should have been converted to the v1 command if the table is v1.
-      case _: ShowTableExtended =>
-        throw QueryCompilationErrors.commandUnsupportedInV2TableError("SHOW TABLE EXTENDED")
-
       case o: OverwriteByExpression =>
         o.deleteExpr.foreach {
           case s: SubqueryExpression =>
@@ -754,6 +750,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             !o.isInstanceOf[Expand] &&
             !o.isInstanceOf[Generate] &&
             !o.isInstanceOf[CreateVariable] &&
+            !o.isInstanceOf[MapInPandas] &&
+            !o.isInstanceOf[PythonMapInArrow] &&
             // Lateral join is checked in checkSubqueryExpression.
             !o.isInstanceOf[LateralJoin] =>
             // The rule above is used to check Aggregate operator.

@@ -886,24 +886,35 @@ object ShowTables {
 }
 
 /**
- * The logical plan of the SHOW TABLE EXTENDED command.
+ * The logical plan of the SHOW TABLE EXTENDED (without PARTITION) command.
  */
-case class ShowTableExtended(
+case class ShowTablesExtended(
     namespace: LogicalPlan,
     pattern: String,
-    partitionSpec: Option[PartitionSpec],
-    override val output: Seq[Attribute] = ShowTableExtended.getOutputAttrs) extends UnaryCommand {
+    override val output: Seq[Attribute] = ShowTablesUtils.getOutputAttrs) extends UnaryCommand {
   override def child: LogicalPlan = namespace
-  override protected def withNewChildInternal(newChild: LogicalPlan): ShowTableExtended =
+  override protected def withNewChildInternal(newChild: LogicalPlan): ShowTablesExtended =
     copy(namespace = newChild)
 }
 
-object ShowTableExtended {
+object ShowTablesUtils {
   def getOutputAttrs: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)(),
     AttributeReference("isTemporary", BooleanType, nullable = false)(),
     AttributeReference("information", StringType, nullable = false)())
+}
+
+/**
+ * The logical plan of the SHOW TABLE EXTENDED ... PARTITION ... command.
+ */
+case class ShowTablePartition(
+    table: LogicalPlan,
+    partitionSpec: PartitionSpec,
+    override val output: Seq[Attribute] = ShowTablesUtils.getOutputAttrs)
+  extends V2PartitionCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): ShowTablePartition =
+    copy(table = newChild)
 }
 
 /**

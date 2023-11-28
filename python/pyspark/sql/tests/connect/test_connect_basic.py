@@ -704,11 +704,14 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.assertRaises(ParseException):
             self.connect.createDataFrame(data, "col1 magic_type, col2 int, col3 int, col4 int")
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "Length mismatch: Expected axis has 3 elements, new values have 4 elements",
-        ):
+        with self.assertRaises(PySparkValueError) as pe:
             self.connect.createDataFrame(data, "col1 int, col2 int, col3 int")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="AXIS_LENGTH_MISMATCH",
+            message_parameters={"expected_length": "3", "actual_length": "4"},
+        )
 
     def test_with_local_rows(self):
         # SPARK-41789, SPARK-41810: Test creating a dataframe with list of rows and dictionaries
@@ -1824,7 +1827,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.assert_eq(cdf, df)
 
-        self.assert_eq(cobservation.get, observation.get)
+        self.assertEqual(cobservation.get, observation.get)
 
         observed_metrics = cdf.attrs["observed_metrics"]
         self.assert_eq(len(observed_metrics), 1)
@@ -3368,8 +3371,8 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
             name = "test" * 10000
             with self.assertRaises(AnalysisException) as e:
                 self.spark.sql("select " + name).collect()
-            self.assertTrue(name in e.exception.message)
-            self.assertFalse("JVM stacktrace" in e.exception.message)
+            self.assertTrue(name in e.exception._message)
+            self.assertFalse("JVM stacktrace" in e.exception._message)
 
     def test_error_enrichment_jvm_stacktrace(self):
         with self.sql_conf(
@@ -3384,7 +3387,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
                         """select from_json(
                             '{"d": "02-29"}', 'd date', map('dateFormat', 'MM-dd'))"""
                     ).collect()
-                self.assertFalse("JVM stacktrace" in e.exception.message)
+                self.assertFalse("JVM stacktrace" in e.exception._message)
 
             with self.sql_conf({"spark.sql.connect.serverStacktrace.enabled": True}):
                 with self.assertRaises(SparkUpgradeException) as e:
@@ -3449,11 +3452,11 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         self.assertIsNotNone(self.spark._client)
         # Creates a new remote session.
         other = PySparkSession.builder.remote("sc://other.remote:114/").create()
-        self.assertNotEquals(self.spark, other)
+        self.assertNotEqual(self.spark, other)
 
         # Gets currently active session.
         same = PySparkSession.builder.remote("sc://other.remote.host:114/").getOrCreate()
-        self.assertEquals(other, same)
+        self.assertEqual(other, same)
         same.release_session_on_close = False  # avoid sending release to dummy connection
         same.stop()
 
@@ -3655,7 +3658,7 @@ class ChannelBuilderTests(unittest.TestCase):
         chan = ChannelBuilder(f"sc://host/;user_agent={user_agent}")
         with self.assertRaises(SparkConnectException) as err:
             chan.userAgent
-        self.assertRegex(err.exception.message, "'user_agent' parameter should not exceed")
+        self.assertRegex(err.exception._message, "'user_agent' parameter should not exceed")
 
         user_agent = "%C3%A4" * 341  # "%C3%A4" -> "ä"; (341 * 6 = 2046) < 2048
         expected = "ä" * 341
@@ -3708,9 +3711,7 @@ class ChannelBuilderTests(unittest.TestCase):
         with self.assertRaises(ValueError) as ve:
             chan = ChannelBuilder("sc://host/;session_id=abcd")
             SparkConnectClient(chan)
-        self.assertIn(
-            "Parameter value 'session_id' must be a valid UUID format.", str(ve.exception)
-        )
+        self.assertIn("Parameter value session_id must be a valid UUID format", str(ve.exception))
 
         chan = ChannelBuilder("sc://host/")
         self.assertIsNone(chan.session_id)

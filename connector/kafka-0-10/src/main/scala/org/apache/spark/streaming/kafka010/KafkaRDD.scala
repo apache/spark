@@ -98,7 +98,7 @@ private[spark] class KafkaRDD[K, V](
     if (compacted) {
       super.countApprox(timeout, confidence)
     } else {
-      val c = count()
+      val c = count().toDouble
       new PartialResult(new BoundedDouble(c, 1.0, c, c), true)
     }
 

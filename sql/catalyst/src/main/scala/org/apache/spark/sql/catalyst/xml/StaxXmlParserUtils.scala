@@ -24,7 +24,7 @@ import javax.xml.stream.events._
 import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
 
-private[sql] object StaxXmlParserUtils {
+object StaxXmlParserUtils {
 
   private[sql] val factory: XMLInputFactory = {
     val factory = XMLInputFactory.newInstance()
@@ -53,7 +53,7 @@ private[sql] object StaxXmlParserUtils {
   def gatherRootAttributes(parser: XMLEventReader): Array[Attribute] = {
     val rootEvent =
       StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.START_ELEMENT)
-    rootEvent.asStartElement.getAttributes.asScala.map(_.asInstanceOf[Attribute]).toArray
+    rootEvent.asStartElement.getAttributes.asScala.toArray
   }
 
   /**
@@ -96,7 +96,7 @@ private[sql] object StaxXmlParserUtils {
       attributes.map { attr =>
         val key = options.attributePrefix + getName(attr.getName, options)
         val value = attr.getValue match {
-          case v if options.treatEmptyValuesAsNulls && v.trim.isEmpty => null
+          case v if (options.nullValue == "") && v.trim.isEmpty => null
           case v => v
         }
         key -> value
@@ -127,8 +127,7 @@ private[sql] object StaxXmlParserUtils {
       parser.nextEvent match {
         case e: StartElement =>
           xmlString.append('<').append(e.getName)
-          e.getAttributes.asScala.foreach { a =>
-            val att = a.asInstanceOf[Attribute]
+          e.getAttributes.asScala.foreach { att =>
             xmlString
               .append(' ')
               .append(att.getName)

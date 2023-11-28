@@ -19,11 +19,15 @@ package org.apache.spark.sql
 
 import java.io.File
 
+import scala.collection.mutable
 import scala.util.Random
 
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.VariantVal
+import org.apache.spark.util.ArrayImplicits._
 
 class VariantSuite extends QueryTest with SharedSparkSession {
   test("basic tests") {
@@ -72,6 +76,66 @@ class VariantSuite extends QueryTest with SharedSparkSession {
     def prepareAnswer(values: Seq[VariantVal]): Seq[String] = {
       values.map(v => if (v == null) "null" else v.debugString()).sorted
     }
-    assert(prepareAnswer(input) == prepareAnswer(result))
+    assert(prepareAnswer(input) == prepareAnswer(result.toImmutableArraySeq))
+
+    withTempDir { dir =>
+      val tempDir = new File(dir, "files").getCanonicalPath
+      df.write.parquet(tempDir)
+      val readResult = spark.read.parquet(tempDir).collect().map(_.get(0).asInstanceOf[VariantVal])
+      assert(prepareAnswer(input) == prepareAnswer(readResult.toImmutableArraySeq))
+    }
+  }
+
+  test("array of variant") {
+    val rand = new Random(42)
+    val input = Seq.fill(3) {
+      if (rand.nextInt(10) == 0) {
+        null
+      } else {
+        val value = new Array[Byte](rand.nextInt(50))
+        rand.nextBytes(value)
+        val metadata = new Array[Byte](rand.nextInt(50))
+        rand.nextBytes(metadata)
+        val numElements = 3 // rand.nextInt(10)
+        Seq.fill(numElements)(new VariantVal(value, metadata))
+      }
+    }
+
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(input.map { v =>
+        Row.fromSeq(Seq(v))
+      }),
+      StructType.fromDDL("v array<variant>")
+    )
+
+    def prepareAnswer(values: Seq[Row]): Seq[String] = {
+      values.map(_.get(0)).map { v =>
+        if (v == null) {
+          "null"
+        } else {
+          v.asInstanceOf[mutable.ArraySeq[Any]]
+           .map(_.asInstanceOf[VariantVal].debugString()).mkString(",")
+        }
+      }.sorted
+    }
+
+    // Test conversion to UnsafeRow in both codegen and interpreted code paths.
+    val codegenModes = Seq(CodegenObjectFactoryMode.NO_CODEGEN.toString,
+                           CodegenObjectFactoryMode.FALLBACK.toString)
+    codegenModes.foreach { codegen =>
+      withTempDir { dir =>
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegen) {
+          val tempDir = new File(dir, "files").getCanonicalPath
+          df.write.parquet(tempDir)
+          Seq(false, true).foreach { vectorizedReader =>
+            withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key ->
+                vectorizedReader.toString) {
+              val readResult = spark.read.parquet(tempDir).collect().toSeq
+              assert(prepareAnswer(df.collect().toSeq) == prepareAnswer(readResult))
+            }
+          }
+        }
+      }
+    }
   }
 }

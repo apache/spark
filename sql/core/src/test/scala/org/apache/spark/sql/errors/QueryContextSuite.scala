@@ -25,14 +25,17 @@ import org.apache.spark.sql.test.SharedSparkSession
 class QueryContextSuite extends QueryTest with SharedSparkSession {
 
   test("summary of DataFrame context") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.STACK_TRACES_IN_DATAFRAME_CONTEXT.key -> "2") {
       val e = intercept[SparkArithmeticException] {
         spark.range(1).select(lit(1) / lit(0)).collect()
       }
       assert(e.getQueryContext.head.summary() ==
         """== DataFrame ==
           |"div" was called from
-          |org.apache.spark.sql.errors.QueryContextSuite.$anonfun$new$3(QueryContextSuite.scala:30)
+          |org.apache.spark.sql.errors.QueryContextSuite.$anonfun$new$3(QueryContextSuite.scala:32)
+          |org.scalatest.Assertions.intercept(Assertions.scala:749)
           |""".stripMargin)
     }
   }

@@ -68,7 +68,7 @@ private[r] object IsotonicRegressionWrapper
     val featureAttrs = AttributeGroup.fromStructField(schema(rFormulaModel.getFeaturesCol))
       .attributes.get
     val features = featureAttrs.map(_.name.get)
-    require(features.size == 1)
+    require(features.length == 1)
 
     // assemble and fit the pipeline
     val isotonicRegression = new IsotonicRegression()

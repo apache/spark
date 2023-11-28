@@ -41,12 +41,12 @@ object FileStatusCache {
    *         shared across all clients.
    */
   def getOrCreate(session: SparkSession): FileStatusCache = synchronized {
-    if (session.sqlContext.conf.manageFilesourcePartitions &&
-      session.sqlContext.conf.filesourcePartitionFileCacheSize > 0) {
+    if (session.sessionState.conf.manageFilesourcePartitions &&
+      session.sessionState.conf.filesourcePartitionFileCacheSize > 0) {
       if (sharedCache == null) {
         sharedCache = new SharedInMemoryCache(
-          session.sqlContext.conf.filesourcePartitionFileCacheSize,
-          session.sqlContext.conf.metadataCacheTTL
+          session.sessionState.conf.filesourcePartitionFileCacheSize,
+          session.sessionState.conf.metadataCacheTTL
         )
       }
       sharedCache.createForNewClient()

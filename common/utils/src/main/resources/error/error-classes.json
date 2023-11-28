@@ -993,6 +993,18 @@
     ],
     "sqlState" : "54006"
   },
+  "EXCEPT_NESTED_COLUMN_INVALID_TYPE" : {
+    "message" : [
+      "EXCEPT column <columnName> was resolved and expected to be StructType, but found type <dataType>."
+    ],
+    "sqlState" : "428H2"
+  },
+  "EXCEPT_OVERLAPPING_COLUMNS" : {
+    "message" : [
+      "Columns in an EXCEPT list must be distinct and non-overlapping, but got (<columns>)."
+    ],
+    "sqlState" : "42702"
+  },
   "EXPECT_PERMANENT_VIEW_NOT_TEMP" : {
     "message" : [
       "'<operation>' expects a permanent view but <viewName> is a temp view."
@@ -1055,7 +1067,7 @@
   },
   "FAILED_EXECUTE_UDF" : {
     "message" : [
-      "Failed to execute user defined function (<functionName>: (<signature>) => <result>)."
+      "User defined function (<functionName>: (<signature>) => <result>) failed due to: <reason>."
     ],
     "sqlState" : "39000"
   },
@@ -2030,6 +2042,11 @@
           "expects an integer value in [0, <upper>), but got <invalidValue>."
         ]
       },
+      "CHARSET" : {
+        "message" : [
+          "expects one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', but got <charset>."
+        ]
+      },
       "DATETIME_UNIT" : {
         "message" : [
           "expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal <invalidValue>."
@@ -2961,6 +2978,12 @@
     ],
     "sqlState" : "42601"
   },
+  "SPARK_JOB_CANCELLED" : {
+    "message" : [
+      "Job <jobId> cancelled <reason>"
+    ],
+    "sqlState" : "XXKDA"
+  },
   "SPECIFY_BUCKETING_IS_NOT_ALLOWED" : {
     "message" : [
       "A CREATE TABLE without explicit column list cannot specify bucketing information.",
@@ -3548,7 +3571,7 @@
       },
       "PYTHON_UDF_IN_ON_CLAUSE" : {
         "message" : [
-          "Python UDF in the ON clause of a <joinType> JOIN. In case of an INNNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
+          "Python UDF in the ON clause of a <joinType> JOIN. In case of an INNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
         ]
       },
       "REMOVE_NAMESPACE_COMMENT" : {
@@ -3926,7 +3949,7 @@
     "message" : [
       "<rowTag> option is required for reading files in XML format."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42KDF"
   },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
@@ -4779,11 +4802,6 @@
   "_LEGACY_ERROR_TEMP_1199" : {
     "message" : [
       "Invalid bound function '<bound>: there are <argsLen> arguments but <inputTypesLen> parameters returned from 'inputTypes()'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1200" : {
-    "message" : [
-      "<name> is not supported for v2 tables."
     ]
   },
   "_LEGACY_ERROR_TEMP_1201" : {
@@ -5983,7 +6001,7 @@
       "Please move the data from the incorrect directory to the correct one, delete the",
       "incorrect directory, and then restart this query. If you believe you are receiving",
       "this message in error, you can disable it with the SQL conf",
-      "<StreamingCheckpointEscaptedPathCheckEnabled>."
+      "<StreamingCheckpointEscapedPathCheckEnabled>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2201" : {
@@ -6213,7 +6231,7 @@
   },
   "_LEGACY_ERROR_TEMP_2250" : {
     "message" : [
-      "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastjoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg>"
+      "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastJoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2251" : {

@@ -145,7 +145,7 @@ trait ProgressReporter extends Logging {
   private def addNewProgress(newProgress: StreamingQueryProgress): Unit = {
     progressBuffer.synchronized {
       progressBuffer += newProgress
-      while (progressBuffer.length >= sparkSession.sqlContext.conf.streamingProgressRetention) {
+      while (progressBuffer.length >= sparkSession.sessionState.conf.streamingProgressRetention) {
         progressBuffer.dequeue()
       }
     }

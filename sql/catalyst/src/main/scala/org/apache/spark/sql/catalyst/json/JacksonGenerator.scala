@@ -37,7 +37,7 @@ import org.apache.spark.util.ArrayImplicits._
  * of map. An exception will be thrown if trying to write out a struct if it is initialized with
  * a `MapType`, and vice verse.
  */
-private[sql] class JacksonGenerator(
+class JacksonGenerator(
     dataType: DataType,
     writer: Writer,
     options: JSONOptions) {
@@ -75,7 +75,8 @@ private[sql] class JacksonGenerator(
   private val gen = {
     val generator = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
     if (options.pretty) {
-      generator.setPrettyPrinter(new DefaultPrettyPrinter(""))
+      generator.setPrettyPrinter(
+        new DefaultPrettyPrinter(PrettyPrinter.DEFAULT_SEPARATORS.withRootSeparator("")))
     }
     if (options.writeNonAsciiCharacterAsCodePoint) {
       generator.setHighestNonEscapedChar(0x7F)

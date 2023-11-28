@@ -577,6 +577,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // Initialize any plugins before the task scheduler is initialized.
     _plugins = PluginContainer(this, _resources.asJava)
+    _env.initializeShuffleManager()
 
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master)
@@ -2605,6 +2606,17 @@ class SparkContext(config: SparkConf) extends Logging {
   def cancelJobGroup(groupId: String): Unit = {
     assertNotStopped()
     dagScheduler.cancelJobGroup(groupId)
+  }
+
+  /**
+   * Cancel active jobs for the specified group, as well as the future jobs in this job group.
+   * Note: the maximum number of job groups that can be tracked is set by
+   * 'spark.scheduler.numCancelledJobGroupsToTrack'. Once the limit is reached and a new job group
+   * is to be added, the oldest job group tracked will be discarded.
+   */
+  def cancelJobGroupAndFutureJobs(groupId: String): Unit = {
+    assertNotStopped()
+    dagScheduler.cancelJobGroup(groupId, cancelFutureJobs = true)
   }
 
   /**

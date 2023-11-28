@@ -995,9 +995,9 @@ class DataFrameTestsMixin:
         self.assertEqual(unnamed_observation.get, dict(rows=3))
 
         # observation requires name (if given) to be non empty string
-        with self.assertRaisesRegex(TypeError, "name should be a string"):
+        with self.assertRaisesRegex(TypeError, "`name` should be a str, got int"):
             Observation(123)
-        with self.assertRaisesRegex(ValueError, "name should not be empty"):
+        with self.assertRaisesRegex(ValueError, "`name` must be a non empty string, got ''."):
             Observation("")
 
         # dataframe.observe requires at least one expr
@@ -1077,6 +1077,27 @@ class DataFrameTestsMixin:
 
         self.assertEqual(observation1.get, dict(cnt=50))
         self.assertEqual(observation2.get, dict(cnt=100))
+
+    def test_observe_on_commands(self):
+        from pyspark.sql import Observation
+
+        df = self.spark.range(50)
+
+        test_table = "test_table"
+
+        # DataFrameWriter
+        with self.table(test_table):
+            for command, action in [
+                ("collect", lambda df: df.collect()),
+                ("show", lambda df: df.show(50)),
+                ("save", lambda df: df.write.format("noop").mode("overwrite").save()),
+                ("create", lambda df: df.writeTo(test_table).using("parquet").create()),
+            ]:
+                with self.subTest(command=command):
+                    observation = Observation()
+                    observed_df = df.observe(observation, count(lit(1)).alias("cnt"))
+                    action(observed_df)
+                    self.assertEqual(observation.get, dict(cnt=50))
 
     def test_sample(self):
         with self.assertRaises(PySparkTypeError) as pe:
