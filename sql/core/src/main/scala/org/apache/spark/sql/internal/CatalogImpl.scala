@@ -502,11 +502,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Checks if the database with the specified name exists.
    */
   override def databaseExists(dbName: String): Boolean = {
-    val plan = UnresolvedNamespace(resolveNamespace(dbName), true)
     try {
-      sparkSession.sessionState.executePlan(plan).analyzed match {
-        case _ => true
-      }
+      getDatabase(dbName)
+      true
     } catch {
       case _: NoSuchNamespaceException => false
     }
