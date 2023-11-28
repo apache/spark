@@ -71,5 +71,19 @@ class AddColumnsFlattenSuite extends QueryTest
     }
     assert(newNodes.size === initNodes.size + 1)
   }
+
+  test("withColumns: remap of column should result in project addition") {
+    val testDf = spark.range(1).select($"id" as "a", $"id" as "b")
+    val initNodes = testDf.queryExecution.logical.collect {
+      case l => l
+    }
+
+    val newDf = testDf.withColumnRenamed("a", "c")
+
+    val newNodes = newDf.queryExecution.logical.collect {
+      case l => l
+    }
+    assert(newNodes.size === initNodes.size)
+  }
 }
 

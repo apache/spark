@@ -37,14 +37,11 @@ private[sql] object EasilyFlattenable {
           case _ => false
         }
         val currentOutputAttribs = AttributeSet(p.output)
-
-        if (passThruAttribs.size == currentOutputAttribs.size && passThruAttribs.forall(
-          currentOutputAttribs.contains) && tinkeredOrNewNamedExprs.nonEmpty) {
-          val x = AttributeSet(projList.filter(ne => ne match {
-            case _: AttributeReference => false
-            case _ => true
-          }).map(_.toAttribute))
-
+        val passThruAttribsContainedInCurrentOutput = passThruAttribs.forall(
+          currentOutputAttribs.contains)
+        if (passThruAttribs.size == currentOutputAttribs.size &&
+          passThruAttribsContainedInCurrentOutput && tinkeredOrNewNamedExprs.nonEmpty) {
+          // case of new columns being added only
           val attribsReassignedInProj = projList.filter(ne => ne match {
             case _: AttributeReference => false
             case _ => true
@@ -79,13 +76,13 @@ private[sql] object EasilyFlattenable {
                     }.getOrElse(attr)
 
                     case u: UnresolvedAttribute => projList.find(
-                      _.toAttribute.name.equalsIgnoreCase(u.name)).map(x => x match {
+                      _.toAttribute.name.equalsIgnoreCase(u.name)).map {
                       case al: Alias => al.child
                       case u: UnresolvedAttribute =>
                         throw new UnsupportedOperationException("Not able to flatten" +
-                        s"  unresolved attribute $u")
-                      case _ => x
-                    }).getOrElse(throw new UnsupportedOperationException("Not able to flatten" +
+                          s"  unresolved attribute $u")
+                      case x => x
+                    }.getOrElse(throw new UnsupportedOperationException("Not able to flatten" +
                       s"  unresolved attribute $u"))
                   }).asInstanceOf[NamedExpression]
               }
@@ -97,8 +94,30 @@ private[sql] object EasilyFlattenable {
               case Failure(_) => None
             }
           }
+        } else if (passThruAttribs.size + tinkeredOrNewNamedExprs.size == currentOutputAttribs.size
+          && passThruAttribsContainedInCurrentOutput && tinkeredOrNewNamedExprs.forall(
+          ne => ne match {
+            case Alias(_: AttributeReference, _) => true
+            case _ => false
+          })) {
+           // case of renaming of columns
+           val remappedNewProjListResult = newProjList.map {
+               case attr: AttributeReference => projList.find(
+                 _.toAttribute.canonicalized == attr.canonicalized).getOrElse(attr)
+
+               case al @ Alias(ar: AttributeReference, name) =>
+                 projList.find(
+                     _.toAttribute.canonicalized == ar.canonicalized).map {
+                         case al: Alias => al.copy(name = name)(exprId = al.exprId,
+                           qualifier = al.qualifier, explicitMetadata = al.explicitMetadata,
+                           nonInheritableMetadataKeys = al.nonInheritableMetadataKeys)
+
+                         case _: AttributeReference => al
+                   }.get
+                 }
+
+          Option(p.copy(projectList = remappedNewProjListResult))
         } else {
-          // for now None
           None
         }
 
