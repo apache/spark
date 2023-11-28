@@ -279,7 +279,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
 
       // Make sure it generates the progress objects we want to test
       assert(progress.exists { p =>
-        p.sources.size >= 1 && p.stateOperators.size >= 1 && p.sink != null
+        p.sources.length >= 1 && p.stateOperators.length >= 1 && p.sink != null
       })
 
       val array = spark.sparkContext.parallelize(progress.toImmutableArraySeq).collect()

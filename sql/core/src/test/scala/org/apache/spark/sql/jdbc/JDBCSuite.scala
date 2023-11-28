@@ -336,31 +336,31 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SELECT *") {
-    assert(sql("SELECT * FROM foobar").collect().size === 3)
+    assert(sql("SELECT * FROM foobar").collect().length === 3)
   }
 
   test("SELECT * WHERE (simple predicates)") {
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size == 0)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID != 2")).collect().size == 2)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1")).collect().size == 1)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME = 'fred'")).collect().size == 1)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME <=> 'fred'")).collect().size == 1)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME > 'fred'")).collect().size == 2)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME != 'fred'")).collect().size == 2)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().length == 0)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID != 2")).collect().length == 2)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1")).collect().length == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME = 'fred'")).collect().length == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME <=> 'fred'")).collect().length == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME > 'fred'")).collect().length == 2)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME != 'fred'")).collect().length == 2)
 
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME IN ('mary', 'fred')"))
-      .collect().size == 2)
+      .collect().length == 2)
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME NOT IN ('fred')"))
-      .collect().size == 2)
+      .collect().length == 2)
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary'"))
-      .collect().size == 2)
+      .collect().length == 2)
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary' "
-      + "AND THEID = 2")).collect().size == 2)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE 'fr%'")).collect().size == 1)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%ed'")).collect().size == 1)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%re%'")).collect().size == 1)
-    assert(checkPushdown(sql("SELECT * FROM nulltypes WHERE A IS NULL")).collect().size == 1)
-    assert(checkPushdown(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL")).collect().size == 0)
+      + "AND THEID = 2")).collect().length == 2)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE 'fr%'")).collect().length == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%ed'")).collect().length == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%re%'")).collect().length == 1)
+    assert(checkPushdown(sql("SELECT * FROM nulltypes WHERE A IS NULL")).collect().length == 1)
+    assert(checkPushdown(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL")).collect().length == 0)
 
     // This is a test to reflect discussion in SPARK-12218.
     // The older versions of spark have this kind of bugs in parquet data source.
@@ -372,8 +372,10 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       "WHERE (THEID > 0 AND TRIM(NAME) = 'mary') OR (NAME = 'fred')")
     assert(df2.collect().toSet === Set(Row("fred", 1), Row("mary", 2)))
 
-    assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 1) < 2")).collect().size == 0)
-    assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 2) != 4")).collect().size == 2)
+    val df3 = sql("SELECT * FROM foobar WHERE (THEID + 1) < 2")
+    assert(checkNotPushdown(df3).collect().length == 0)
+    val df4 = sql("SELECT * FROM foobar WHERE (THEID + 2) != 4")
+    assert(checkNotPushdown(df4).collect().length == 2)
   }
 
   test("SELECT COUNT(1) WHERE (predicates)") {
@@ -387,12 +389,13 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SELECT * WHERE (quoted strings)") {
-    assert(sql("select * from foobar").where($"NAME" === "joe 'foo' \"bar\"").collect().size === 1)
+    val df = sql("select * from foobar").where($"NAME" === "joe 'foo' \"bar\"")
+    assert(df.collect().length === 1)
   }
 
   test("SELECT first field") {
     val names = sql("SELECT NAME FROM foobar").collect().map(x => x.getString(0)).sortWith(_ < _)
-    assert(names.size === 3)
+    assert(names.length === 3)
     assert(names(0).equals("fred"))
     assert(names(1).equals("joe 'foo' \"bar\""))
     assert(names(2).equals("mary"))
@@ -400,7 +403,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
   test("SELECT first field when fetchsize is two") {
     val names = sql("SELECT NAME FROM fetchtwo").collect().map(x => x.getString(0)).sortWith(_ < _)
-    assert(names.size === 3)
+    assert(names.length === 3)
     assert(names(0).equals("fred"))
     assert(names(1).equals("joe 'foo' \"bar\""))
     assert(names(2).equals("mary"))
@@ -408,7 +411,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
   test("SELECT second field") {
     val ids = sql("SELECT THEID FROM foobar").collect().map(x => x.getInt(0)).sortWith(_ < _)
-    assert(ids.size === 3)
+    assert(ids.length === 3)
     assert(ids(0) === 1)
     assert(ids(1) === 2)
     assert(ids(2) === 3)
@@ -416,7 +419,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
   test("SELECT second field when fetchsize is two") {
     val ids = sql("SELECT THEID FROM fetchtwo").collect().map(x => x.getInt(0)).sortWith(_ < _)
-    assert(ids.size === 3)
+    assert(ids.length === 3)
     assert(ids(0) === 1)
     assert(ids(1) === 2)
     assert(ids(2) === 3)
@@ -444,7 +447,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
   test("SELECT second field partitioned") {
     val ids = sql("SELECT THEID FROM parts").collect().map(x => x.getInt(0)).sortWith(_ < _)
-    assert(ids.size === 3)
+    assert(ids.length === 3)
     assert(ids(0) === 1)
     assert(ids(1) === 2)
     assert(ids(2) === 3)
@@ -497,7 +500,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
        """.stripMargin.replaceAll("\n", " "))
 
     val df = sql("SELECT * FROM renamed")
-    assert(df.schema.fields.size == 2)
+    assert(df.schema.fields.length == 2)
     assert(df.schema.fields(0).name == "NAME1")
     assert(df.schema.fields(1).name == "NAME2")
   }
@@ -1335,23 +1338,23 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-18141: Predicates on quoted column names in the jdbc data source") {
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id < 1").collect().size == 0)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id <= 1").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id > 1").collect().size == 2)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id >= 1").collect().size == 3)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id = 1").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id != 2").collect().size == 2)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id <=> 2").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE 'fr%'").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE '%ed'").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE '%re%'").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IS NULL").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IS NOT NULL").collect().size == 2)
-    assert(sql("SELECT * FROM mixedCaseCols").filter($"Name".isin()).collect().size == 0)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IN ('mary', 'fred')").collect().size == 2)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name NOT IN ('fred')").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id = 1 OR Name = 'mary'").collect().size == 2)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name = 'mary' AND Id = 2").collect().size == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id < 1").collect().length == 0)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id <= 1").collect().length == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id > 1").collect().length == 2)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id >= 1").collect().length == 3)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id = 1").collect().length == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id != 2").collect().length == 2)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id <=> 2").collect().length == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE 'fr%'").collect().length == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE '%ed'").collect().length == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE '%re%'").collect().length == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IS NULL").collect().length == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IS NOT NULL").collect().length == 2)
+    assert(sql("SELECT * FROM mixedCaseCols").filter($"Name".isin()).collect().length == 0)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IN ('mary', 'fred')").collect().length == 2)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name NOT IN ('fred')").collect().length == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id = 1 OR Name = 'mary'").collect().length == 2)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name = 'mary' AND Id = 2").collect().length == 1)
   }
 
   test("SPARK-18419: Fix `asConnectionProperties` to filter case-insensitively") {
