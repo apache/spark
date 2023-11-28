@@ -38,8 +38,8 @@ import org.apache.spark.util.ArrayImplicits._
  * [[ResolvedNamespace]] during analysis.
  */
 case class UnresolvedNamespace(
-  multipartIdentifier: Seq[String],
-  fetchMetadata: Boolean = false) extends UnresolvedLeafNode
+    multipartIdentifier: Seq[String],
+    fetchMetadata: Boolean = false) extends UnresolvedLeafNode
 
 /**
  * A variant of [[UnresolvedNamespace]] that should be resolved to [[ResolvedNamespace]]
@@ -147,9 +147,9 @@ trait LeafNodeWithoutStats extends LeafNode {
  * A plan containing resolved namespace.
  */
 case class ResolvedNamespace(
-  catalog: CatalogPlugin,
-  namespace: Seq[String],
-  metadata: Map[String, String] = Map.empty)
+    catalog: CatalogPlugin,
+    namespace: Seq[String],
+    metadata: Map[String, String] = Map.empty)
   extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = Nil
 }

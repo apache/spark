@@ -421,7 +421,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       case Some(catalogName) => catalogName +: parseIdent(dbName)
       case None => resolveNamespace(dbName)
     }
-    val plan = UnresolvedNamespace(idents, true)
+    val plan = UnresolvedNamespace(idents, fetchMetadata = true)
     sparkSession.sessionState.executePlan(plan).analyzed match {
       case ResolvedNamespace(catalog, namespace, metadata) =>
         new Database(
@@ -508,7 +508,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         case _ => true
       }
     } catch {
-      case _: AnalysisException => false
+      case _: NoSuchNamespaceException => false
     }
   }
 

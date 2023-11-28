@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, LookupCatalog, SupportsNamespaces}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, SupportsNamespaces}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.util.ArrayImplicits._
 
@@ -52,18 +52,25 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case CurrentNamespace =>
       ResolvedNamespace(currentCatalog, catalogManager.currentNamespace.toImmutableArraySeq)
-    case UnresolvedNamespace(Seq(), _) =>
-      ResolvedNamespace(currentCatalog, Seq.empty[String], Map.empty)
+    case UnresolvedNamespace(Seq(), fetchMetadata) =>
+      resolveNamespace(currentCatalog, Seq.empty[String], fetchMetadata)
     case UnresolvedNamespace(CatalogAndNamespace(catalog, ns), fetchMetadata) =>
-      catalog match {
-        case supportsNS: SupportsNamespaces if fetchMetadata =>
-          ResolvedNamespace(
-            catalog,
-            ns,
-            supportsNS.loadNamespaceMetadata(ns.toArray).asScala.toMap)
-        case _ =>
-          ResolvedNamespace(catalog, ns)
-      }
+      resolveNamespace(catalog, ns, fetchMetadata)
+  }
+
+  private def resolveNamespace(
+    catalog: CatalogPlugin,
+    ns: Seq[String],
+    fetchMetadata: Boolean): ResolvedNamespace = {
+    catalog match {
+      case supportsNS: SupportsNamespaces if fetchMetadata =>
+        ResolvedNamespace(
+          catalog,
+          ns,
+          supportsNS.loadNamespaceMetadata(ns.toArray).asScala.toMap)
+      case _ =>
+        ResolvedNamespace(catalog, ns)
+    }
   }
 
   private def resolveVariableName(nameParts: Seq[String]): ResolvedIdentifier = {
