@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -72,8 +73,8 @@ class AddColumnsFlattenSuite extends QueryTest
     assert(newNodes.size === initNodes.size + 1)
   }
 
-  test("withColumns: remap of column should not result in new project if the source of remap" +
-    "is not used in other cols") {
+  test("withColumnRenamed: remap of column should not result in new project if the source" +
+    " of remap is not used in other cols") {
     val testDf = spark.range(1).select($"id" as "a", $"id" as "b")
     val initNodes = testDf.queryExecution.logical.collect {
       case l => l
@@ -87,8 +88,8 @@ class AddColumnsFlattenSuite extends QueryTest
     assert(newNodes.size === initNodes.size)
   }
 
-  test("withColumns: remap of column should not result in new project if the source of remap is" +
-    "an attribute used in other cols") {
+  test("withColumnRenamed: remap of column should not result in new project if the source" +
+    " of remap is an attribute used in other cols") {
     val testDf = spark.range(1).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b")
     val initNodes = testDf.queryExecution.logical.collect {
@@ -103,7 +104,7 @@ class AddColumnsFlattenSuite extends QueryTest
     assert(newNodes.size === initNodes.size )
   }
 
-  test("withColumns: remap of column should not result in new project if the remap" +
+  test("withColumnRenamed: remap of column should not result in new project if the remap" +
     " is on an alias") {
     val testDf = spark.range(1).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d" )
@@ -119,7 +120,7 @@ class AddColumnsFlattenSuite extends QueryTest
     assert(newNodes.size === initNodes.size)
   }
 
-  test("withColumns: remap of column should not  result in new project if the remap" +
+  test("withColumnRenamed: remap of column should not  result in new project if the remap" +
     " source an alias and that attribute is also projected as another attribute") {
     val testDf = spark.range(1).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d").
@@ -136,7 +137,7 @@ class AddColumnsFlattenSuite extends QueryTest
     assert(newNodes.size === initNodes.size)
   }
 
-  test("withColumns: test multi column remap") {
+  test("withColumnRenamed: test multi column remap") {
     val testDf = spark.range(1).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d")
 
@@ -150,6 +151,45 @@ class AddColumnsFlattenSuite extends QueryTest
       case l => l
     }
     assert(newNodes.size === initNodes.size)
+  }
+
+  test("withColumns: test multi column addition") {
+    val testDf = spark.range(1).select($"id" as "a", $"id" as "b").
+      select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d")
+
+    val initNodes = testDf.queryExecution.logical.collect {
+      case l => l
+    }
+
+    val newDf = testDf.withColumns(
+      Seq("newCol1", "newCol2", "newCol3", "newCol4"),
+      Seq(col("a") + 2, col("b") + 7, col("a") + col("b"), col("a") + col("d")),
+    )
+
+    val newNodes = newDf.queryExecution.logical.collect {
+      case l => l
+    }
+    assert(newNodes.size === initNodes.size)
+  }
+
+  test("use of cached inmemory relation when new columns added do not result in new project") {
+    val testDf = spark.range(100).select($"id" as "a", $"id" as "b").
+      select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d")
+
+    val initNodes = testDf.queryExecution.logical.collect {
+      case l => l
+    }
+    testDf.cache()
+    val newDf = testDf.withColumns(
+      Seq("newCol1", "newCol2", "newCol3", "newCol4"),
+      Seq(col("a") + 2, col("b") + 7, col("a") + col("b"), col("a") + col("d")),
+    )
+
+    val newNodes = newDf.queryExecution.logical.collect {
+      case l => l
+    }
+    assert(newNodes.size === initNodes.size)
+    assert(newDf.queryExecution.optimizedPlan.collectLeaves().head.isInstanceOf[InMemoryRelation])
   }
 }
 
