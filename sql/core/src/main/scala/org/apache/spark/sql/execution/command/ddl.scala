@@ -715,7 +715,7 @@ case class RepairTableCommand(
       val total = partitionSpecsAndLocs.length
       logInfo(s"Found $total partitions in $root")
 
-      val partitionStats = if (spark.sqlContext.conf.gatherFastStats) {
+      val partitionStats = if (spark.sessionState.conf.gatherFastStats) {
         gatherPartitionStats(spark, partitionSpecsAndLocs, fs, pathFilter, threshold)
       } else {
         Map.empty[Path, PartitionStatistics]
@@ -957,7 +957,7 @@ object DDLUtils extends Logging {
   def verifyPartitionProviderIsHive(
       spark: SparkSession, table: CatalogTable, action: String): Unit = {
     val tableName = table.identifier.table
-    if (!spark.sqlContext.conf.manageFilesourcePartitions && isDatasourceTable(table)) {
+    if (!spark.sessionState.conf.manageFilesourcePartitions && isDatasourceTable(table)) {
       throw QueryCompilationErrors
         .actionNotAllowedOnTableWithFilesourcePartitionManagementDisabledError(action, tableName)
     }

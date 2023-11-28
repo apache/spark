@@ -58,7 +58,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
       val session = super.getSession(sessionHandle)
       HiveThriftServer2.eventManager.onSessionCreated(
         session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
-      val ctx = if (sqlContext.conf.hiveThriftServerSingleSession) {
+      val ctx = if (sqlContext.sparkSession.sessionState.conf.hiveThriftServerSingleSession) {
         sqlContext
       } else {
         sqlContext.newSession()

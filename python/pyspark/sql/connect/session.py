@@ -194,15 +194,11 @@ class SparkSession:
             has_channel_builder = self._channel_builder is not None
             has_spark_remote = "spark.remote" in self._options
 
-            if has_channel_builder and has_spark_remote:
-                raise ValueError(
-                    "Only one of connection string or channelBuilder "
-                    "can be used to create a new SparkSession."
-                )
-
-            if not has_channel_builder and not has_spark_remote:
-                raise ValueError(
-                    "Needs either connection string or channelBuilder to create a new SparkSession."
+            if (has_channel_builder and has_spark_remote) or (
+                not has_channel_builder and not has_spark_remote
+            ):
+                raise PySparkValueError(
+                    error_class="SESSION_NEED_CONN_STR_OR_BUILDER", message_parameters={}
                 )
 
             if has_channel_builder:
@@ -381,7 +377,7 @@ class SparkSession:
             )
         elif isinstance(data, Sized) and len(data) == 0:
             if _schema is not None:
-                return DataFrame.withPlan(LocalRelation(table=None, schema=_schema.json()), self)
+                return DataFrame(LocalRelation(table=None, schema=_schema.json()), self)
             else:
                 raise PySparkValueError(
                     error_class="CANNOT_INFER_EMPTY_SCHEMA",
@@ -514,9 +510,8 @@ class SparkSession:
                 if _has_nulltype(_schema):
                     # For cases like createDataFrame([("Alice", None, 80.1)], schema)
                     # we can not infer the schema from the data itself.
-                    raise ValueError(
-                        "Some of types cannot be determined after inferring, "
-                        "a StructType Schema is required in this case"
+                    raise PySparkValueError(
+                        error_class="CANNOT_DETERMINE_TYPE", message_parameters={}
                     )
 
             from pyspark.sql.connect.conversion import LocalDataToArrowConversion
@@ -547,7 +542,7 @@ class SparkSession:
         if cache_threshold[0] is not None and int(cache_threshold[0]) <= _table.nbytes:
             plan = CachedLocalRelation(self._cache_local_relation(local_relation))
 
-        df = DataFrame.withPlan(plan, self)
+        df = DataFrame(plan, self)
         if _cols is not None and len(_cols) > 0:
             df = df.toDF(*_cols)
         return df
@@ -558,9 +553,9 @@ class SparkSession:
         cmd = SQL(sqlQuery, args)
         data, properties = self.client.execute_command(cmd.command(self._client))
         if "sql_command_result" in properties:
-            return DataFrame.withPlan(CachedRelation(properties["sql_command_result"]), self)
+            return DataFrame(CachedRelation(properties["sql_command_result"]), self)
         else:
-            return DataFrame.withPlan(cmd, self)
+            return DataFrame(cmd, self)
 
     sql.__doc__ = PySparkSession.sql.__doc__
 
@@ -580,7 +575,7 @@ class SparkSession:
         if numPartitions is not None:
             numPartitions = int(numPartitions)
 
-        return DataFrame.withPlan(
+        return DataFrame(
             Range(
                 start=int(start), end=int(actual_end), step=int(step), num_partitions=numPartitions
             ),
@@ -738,7 +733,13 @@ class SparkSession:
         self, *path: str, pyfile: bool = False, archive: bool = False, file: bool = False
     ) -> None:
         if sum([file, pyfile, archive]) > 1:
-            raise ValueError("'pyfile', 'archive' and/or 'file' cannot be True together.")
+            raise PySparkValueError(
+                error_class="INVALID_MULTIPLE_ARGUMENT_CONDITIONS",
+                message_parameters={
+                    "arg_names": "'pyfile', 'archive' and/or 'file'",
+                    "condition": "True together",
+                },
+            )
         self._client.add_artifacts(*path, pyfile=pyfile, archive=archive, file=file)
 
     addArtifacts.__doc__ = PySparkSession.addArtifacts.__doc__
@@ -754,10 +755,9 @@ class SparkSession:
 
     def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
         if urllib.parse.urlparse(dest_path).scheme:
-            raise ValueError(
-                "`spark_session.copyFromLocalToFs` API only allows `dest_path` to be a path "
-                "without scheme, and spark driver uses the default scheme to "
-                "determine the destination file system."
+            raise PySparkValueError(
+                error_class="NO_SCHEMA_AND_DRIVER_DEFAULT_SCHEME",
+                message_parameters={"arg_name": "dest_path"},
             )
         self._client.copy_from_local_to_fs(local_path, dest_path)
 
@@ -769,7 +769,7 @@ class SparkSession:
         This is used in ForeachBatch() runner, where the remote DataFrame refers to the
         output of a micro batch.
         """
-        return DataFrame.withPlan(CachedRemoteRelation(remote_id), self)
+        return DataFrame(CachedRemoteRelation(remote_id), self)
 
     @staticmethod
     def _start_connect_server(master: str, opts: Dict[str, Any]) -> None:

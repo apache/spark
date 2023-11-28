@@ -12,6 +12,7 @@
 # All configuration values have a default; values that are commented out
 # serve to show the default.
 
+from datetime import datetime
 import sys
 import os
 import shutil
@@ -124,7 +125,8 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'PySpark'
-copyright = ''
+# We have our custom "spark_footer.html" template, using copyright for the current year.
+copyright = f"Copyright @ {datetime.now().year}"
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -194,6 +196,7 @@ html_context = {
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
+    "footer_start": ["spark_footer", "sphinx-version"],
     "navbar_end": ["version-switcher", "theme-switcher"],
     "logo": {
         "image_light": "_static/spark-logo-light.png",
