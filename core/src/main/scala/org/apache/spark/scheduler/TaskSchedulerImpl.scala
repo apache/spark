@@ -296,6 +296,10 @@ private[spark] class TaskSchedulerImpl(
     new TaskSetManager(this, taskSet, maxTaskFailures, healthTrackerOpt, clock)
   }
 
+  // Kill all the tasks in all the stage attempts of the same stage Id. Note stage attempts won't
+  // be aborted but will be marked as zombie. The stage attempt will be finished and cleaned up
+  // once all the tasks has been finished. The stage attempt could be aborted after the call of
+  // `cancelTasks` if required.
   override def cancelTasks(
       stageId: Int,
       interruptThread: Boolean,
@@ -312,11 +316,12 @@ private[spark] class TaskSchedulerImpl(
         //    simply continue.
         tsm.runningTasksSet.foreach { tid =>
           taskIdToExecutorId.get(tid).foreach { execId =>
-            backend.killTask(tid, execId, interruptThread, reason)
+            backend.killTask(tid, execId, interruptThread, s"Stage cancelled: $reason")
           }
         }
-        tsm.abort("Stage %s cancelled".format(stageId))
-        logInfo("Stage %d was cancelled".format(stageId))
+        // Mark as zombie so the attempt won't launch new tasks
+        tsm.isZombie = true
+        logInfo("Stage %s.%s was cancelled".format(stageId, tsm.taskSet.stageAttemptId))
       }
     }
   }

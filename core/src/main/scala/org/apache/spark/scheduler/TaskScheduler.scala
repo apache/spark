@@ -54,7 +54,7 @@ private[spark] trait TaskScheduler {
   // Submit a sequence of tasks to run.
   def submitTasks(taskSet: TaskSet): Unit
 
-  // Kill all the tasks in all the stage attempts of the same stage Id and abort the stage attempts
+  // Kill all the tasks in all the stage attempts of the same stage Id
   // Throw UnsupportedOperationException if the backend doesn't support kill tasks.
   def cancelTasks(stageId: Int, interruptThread: Boolean, reason: String): Unit
 

@@ -2620,4 +2620,13 @@ package object config {
       .stringConf
       .toSequence
       .createWithDefault("org.apache.spark.sql.connect.client" :: Nil)
+
+  private[spark] val ABORT_STAGE_AFTER_CANCEL_TASKS =
+    ConfigBuilder("spark.scheduler.stage.abortStageAfterCancelTasks")
+      .doc("Whether to abort a stage after TaskScheduler.cancelTasks(). This is used to restore " +
+        "the original behavior in case there are any regressions after abort stage is removed " +
+        "from TaskScheduler.cancelTasks()")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
 }

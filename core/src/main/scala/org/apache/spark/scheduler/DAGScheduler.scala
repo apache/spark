@@ -38,7 +38,7 @@ import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.RDD_CACHE_VISIBILITY_TRACKING_ENABLED
+import org.apache.spark.internal.config.{ABORT_STAGE_AFTER_CANCEL_TASKS, RDD_CACHE_VISIBILITY_TRACKING_ENABLED}
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.network.shuffle.{BlockStoreClient, MergeFinalizerListener}
 import org.apache.spark.network.shuffle.protocol.MergeStatuses
@@ -2847,6 +2847,11 @@ private[spark] class DAGScheduler(
           if (runningStages.contains(stage)) {
             try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
               taskScheduler.cancelTasks(stageId, shouldInterruptTaskThread(job), reason)
+              if (sc.getConf.get(ABORT_STAGE_AFTER_CANCEL_TASKS)) {
+                // Abort the stage is not necessary here. This is just for restoring the previous
+                // behavior in case we hit some issues after the change.
+                stageFailed(stageId, reason)
+              }
               markStageAsFinished(stage, Some(reason))
             } catch {
               case e: UnsupportedOperationException =>
