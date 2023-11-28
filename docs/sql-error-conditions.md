@@ -1976,6 +1976,12 @@ The number of aliases supplied in the AS clause does not match the number of col
 Expected `<aliasesSize>` aliases, but got `<aliasesNames>`.
 Please ensure that the number of aliases provided matches the number of columns output by the UDTF.
 
+### UDTF_INVALID_ALIAS_IN_REQUESTED_ORDERING_STRING_FROM_ANALYZE_METHOD
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to evaluate the user-defined table function because its 'analyze' method returned a requested OrderingColumn whose column name expression included an unnecessary alias `<aliasName>`; please remove this alias and then try the query again.
+
 ### UNABLE_TO_ACQUIRE_MEMORY
 
 [SQLSTATE: 53200](sql-error-conditions-sqlstates.html#class-53-insufficient-resources)
