@@ -40,7 +40,7 @@ Users can leverage the functionality to cover two major use cases described belo
 Users can read an instance of state store, which is matched to a single stateful operator in most cases. This means, users can expect that they can read the entire key-value pairs in the state for a single stateful operator. 
 
 Note that there could be an exception, e.g. stream-stream join, which leverages multiple state store instances internally. The data source abstracts the internal representation away from users and
-provide the users friendly approach to read the state. See the section for stream-stream join for more details.
+provides a user-friendly approach to read the state. See the section for stream-stream join for more details.
 
 ### Creating a State store for Batch Queries (all defaults)
 
@@ -158,9 +158,9 @@ To enable the functionality to read the internal state store instance, we also a
 
 Before querying the state from existing checkpoint via state data source, users would like to understand the information for the checkpoint, especially about state operator. This includes which operators and state store instances are available in the checkpoint, available range of batch IDs, etc.
 
-Structured Streaming provides the data source named "State metadata source" to provide the state-related metadata information from the checkpoint.
+Structured Streaming provides a data source named "State metadata source" to provide the state-related metadata information from the checkpoint.
 
-Note: The metadata is constructed when the streaming query is running with Spark 4.0+. The existing checkpoint which has been running with lower Spark version does not have the metadata and be unable to query with this metadata source. It is required to run the streaming query pointing the existing checkpoint in Spark 4.0+ to construct the metadata before querying. 
+Note: The metadata is constructed when the streaming query is running with Spark 4.0+. The existing checkpoint which has been running with lower Spark version does not have the metadata and will be unable to query/use with this metadata source. It is required to run the streaming query pointing the existing checkpoint in Spark 4.0+ to construct the metadata before querying.
 
 ### Creating a State metadata store for Batch Queries
 
