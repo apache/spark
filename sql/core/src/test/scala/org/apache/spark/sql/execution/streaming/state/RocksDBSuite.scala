@@ -646,6 +646,70 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  testWithChangelogCheckpointingEnabled(
+    "RocksDBFileManager: read and write v2 changelog with default col family") {
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
+    val fileManager = new RocksDBFileManager(
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+    val changelogWriter = fileManager.getChangeLogWriter(1, true)
+    for (i <- 1 to 5) changelogWriter.put(i.toString, i.toString,
+      StateStore.DEFAULT_COL_FAMILY_NAME)
+    for (j <- 2 to 4) changelogWriter.delete(j.toString, StateStore.DEFAULT_COL_FAMILY_NAME)
+    changelogWriter.commit()
+    val changelogReader = fileManager.getChangelogReader(1, true)
+    val entries = changelogReader.toSeq
+    val expectedEntries = (1 to 5).map(i =>
+      (RecordType.PUT_RECORD, i.toString.getBytes,
+        i.toString.getBytes, StateStore.DEFAULT_COL_FAMILY_NAME)) ++
+      (2 to 4).map(j => (RecordType.DELETE_RECORD, j.toString.getBytes,
+        null, StateStore.DEFAULT_COL_FAMILY_NAME))
+    assert(entries.size == expectedEntries.size)
+    entries.zip(expectedEntries).map{
+      case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 &&
+        e1._3 === e2._3 && e1._4 === e2._4)
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled(
+    "RocksDBFileManager: read and write v2 changelog with multiple col families") {
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
+    val testColFamily1: String = "testColFamily1"
+    val testColFamily2: String = "testColFamily2"
+    val fileManager = new RocksDBFileManager(
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+    val changelogWriter = fileManager.getChangeLogWriter(1, true)
+    for (i <- 1 to 5) changelogWriter.put(i.toString, i.toString,
+      testColFamily1)
+    for (j <- 2 to 4) changelogWriter.delete(j.toString, testColFamily1)
+
+    for (i <- 1 to 5) changelogWriter.put(i.toString, i.toString,
+      testColFamily2)
+    for (j <- 2 to 4) changelogWriter.delete(j.toString, testColFamily2)
+
+    changelogWriter.commit()
+    val changelogReader = fileManager.getChangelogReader(1, true)
+    val entries = changelogReader.toSeq
+    val expectedEntriesForColFamily1 = (1 to 5).map(i =>
+      (RecordType.PUT_RECORD, i.toString.getBytes,
+        i.toString.getBytes, testColFamily1)) ++
+      (2 to 4).map(j => (RecordType.DELETE_RECORD, j.toString.getBytes,
+        null, testColFamily1))
+
+    val expectedEntriesForColFamily2 = (1 to 5).map(i =>
+      (RecordType.PUT_RECORD, i.toString.getBytes,
+        i.toString.getBytes, testColFamily2)) ++
+      (2 to 4).map(j => (RecordType.DELETE_RECORD, j.toString.getBytes,
+        null, testColFamily2))
+
+    val expectedEntries = expectedEntriesForColFamily1 ++ expectedEntriesForColFamily2
+
+    assert(entries.size == expectedEntries.size)
+    entries.zip(expectedEntries).map{
+      case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 &&
+        e1._3 === e2._3 && e1._4 === e2._4)
+    }
+  }
+
   test("RocksDBFileManager: create init dfs directory with unknown number of keys") {
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
     try {

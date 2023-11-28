@@ -42,6 +42,12 @@ object RecordType extends Enumeration {
   val DELETE_RECORD = Value("delete_record")
 }
 
+/**
+ * Base class for state store changelog writer
+ * @param fm - checkpoint file manager used to manage streaming query checkpoint
+ * @param file - name of file to use to write changelog
+ * @param compressionCodec - compression method using for writing changelog file
+ */
 class StateStoreChangelogWriter(
     fm: CheckpointFileManager,
     file: Path,
@@ -185,6 +191,12 @@ class StateStoreChangelogWriterV2(
   }
 }
 
+/**
+ * Base class for state store changelog reader
+ * @param fm - checkpoint file manager used to manage streaming query checkpoint
+ * @param fileToRead - name of file to use to read changelog
+ * @param compressionCodec - de-compression method using for reading changelog file
+ */
 class StateStoreChangelogReader(
     fm: CheckpointFileManager,
     fileToRead: Path,
@@ -265,6 +277,13 @@ class StateStoreChangelogReaderV2(
     compressionCodec: CompressionCodec) extends StateStoreChangelogReader(fm, fileToRead,
       compressionCodec) {
 
+  private def parseBuffer(input: DataInputStream): Array[Byte] = {
+    val blockSize = input.readInt()
+    val blockBuffer = new Array[Byte](blockSize)
+    ByteStreams.readFully(input, blockBuffer, 0, blockSize)
+    blockBuffer
+  }
+
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte], String) = {
     val recordTypeSize = input.readInt()
     // A -1 key size mean end of file.
@@ -276,38 +295,23 @@ class StateStoreChangelogReaderV2(
         s"Error reading streaming state file $fileToRead: " +
         s"record type size cannot be $recordTypeSize")
     } else {
-      // TODO: reuse the key buffer and value buffer across records.
       val recordTypeBuffer = new Array[Byte](recordTypeSize)
       ByteStreams.readFully(input, recordTypeBuffer, 0, recordTypeSize)
       val recordTypeStr = recordTypeBuffer.map(_.toChar).mkString
       val recordType = RecordType.withName(recordTypeStr)
       recordType match {
         case RecordType.PUT_RECORD =>
-          val keySize = input.readInt()
-          val keyBuffer = new Array[Byte](keySize)
-          ByteStreams.readFully(input, keyBuffer, 0, keySize)
-
-          val valueSize = input.readInt()
-          val valueBuffer = new Array[Byte](valueSize)
-          ByteStreams.readFully(input, valueBuffer, 0, valueSize)
-
-          val colFamilyNameSize = input.readInt()
-          val colFamilyNameBuffer = new Array[Byte](colFamilyNameSize)
-          ByteStreams.readFully(input, colFamilyNameBuffer, 0, colFamilyNameSize)
+          val keyBuffer = parseBuffer(input)
+          val valueBuffer = parseBuffer(input)
+          val colFamilyNameBuffer = parseBuffer(input)
           (RecordType.PUT_RECORD, keyBuffer, valueBuffer,
             colFamilyNameBuffer.map(_.toChar).mkString)
 
         case RecordType.DELETE_RECORD =>
-          val keySize = input.readInt()
-          val keyBuffer = new Array[Byte](keySize)
-          ByteStreams.readFully(input, keyBuffer, 0, keySize)
-
+          val keyBuffer = parseBuffer(input)
           val valueSize = input.readInt()
           assert(valueSize == -1)
-
-          val colFamilyNameSize = input.readInt()
-          val colFamilyNameBuffer = new Array[Byte](colFamilyNameSize)
-          ByteStreams.readFully(input, colFamilyNameBuffer, 0, colFamilyNameSize)
+          val colFamilyNameBuffer = parseBuffer(input)
           (RecordType.DELETE_RECORD, keyBuffer, null,
             colFamilyNameBuffer.map(_.toChar).mkString)
 
