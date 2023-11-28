@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.state.{RocksDBConf, RocksDBStateStoreProvider}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
 
 class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (String, String)] {
@@ -65,61 +65,10 @@ class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcess
 /**
  * Class that adds tests for transformWithState stateful streaming operator
  */
-class TransformWithStateSuite extends StateStoreMetricsTest {
+class TransformWithStateSuite extends StateStoreMetricsTest
+  with AlsoTestWithChangelogCheckpointingEnabled {
 
   import testImplicits._
-
-  val rocksdbChangelogCheckpointingConfKey: String = RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX +
-    ".changelogCheckpointing.enabled"
-
-  test("transformWithState - batch should fail") {
-    val ex = intercept[Exception] {
-      val df = Seq("a", "a", "b").toDS()
-        .groupByKey(x => x)
-        .transformWithState(new RunningCountStatefulProcessor, OutputMode.Append())
-        .write
-        .format("noop")
-        .mode(SaveMode.Append)
-        .save()
-    }
-    assert(ex.isInstanceOf[AnalysisException])
-    assert(ex.getMessage.contains("not supported"))
-  }
-
-  test("transformWithState - streaming with hdfsStateStoreProvider should fail") {
-    val inputData = MemoryStream[String]
-    val result = inputData.toDS()
-      .groupByKey(x => x)
-      .transformWithState(new RunningCountStatefulProcessor(), OutputMode.Update())
-
-    testStream(result, OutputMode.Update())(
-      AddData(inputData, "a"),
-      ExpectFailure[SparkException] {
-        (t: Throwable) => { assert(t.getCause.getMessage.contains("not supported")) }
-      }
-    )
-  }
-
-  test("transformWithState - streaming with RocksDB and changelog checkpointing " +
-    "should fail") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      rocksdbChangelogCheckpointingConfKey -> "true") {
-      val inputData = MemoryStream[String]
-      val result = inputData.toDS()
-        .groupByKey(x => x)
-        .transformWithState(new RunningCountStatefulProcessor(), OutputMode.Update())
-
-      testStream(result, OutputMode.Update())(
-        AddData(inputData, "a"),
-        ExpectFailure[SparkException] {
-          (t: Throwable) => {
-            assert(t.getCause.getMessage.contains("not supported"))
-          }
-        }
-      )
-    }
-  }
 
   test("transformWithState - streaming with rocksdb and invalid processor should fail") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
@@ -162,5 +111,37 @@ class TransformWithStateSuite extends StateStoreMetricsTest {
         CheckNewAnswer(("a", "1"), ("c", "1"))
       )
     }
+  }
+}
+
+class TransformWithStateValidationSuite extends StateStoreMetricsTest {
+  import testImplicits._
+
+  test("transformWithState - batch should fail") {
+    val ex = intercept[Exception] {
+      val df = Seq("a", "a", "b").toDS()
+        .groupByKey(x => x)
+        .transformWithState(new RunningCountStatefulProcessor, OutputMode.Append())
+        .write
+        .format("noop")
+        .mode(SaveMode.Append)
+        .save()
+    }
+    assert(ex.isInstanceOf[AnalysisException])
+    assert(ex.getMessage.contains("not supported"))
+  }
+
+  test("transformWithState - streaming with hdfsStateStoreProvider should fail") {
+    val inputData = MemoryStream[String]
+    val result = inputData.toDS()
+      .groupByKey(x => x)
+      .transformWithState(new RunningCountStatefulProcessor(), OutputMode.Update())
+
+    testStream(result, OutputMode.Update())(
+      AddData(inputData, "a"),
+      ExpectFailure[SparkException] {
+        (t: Throwable) => { assert(t.getCause.getMessage.contains("not supported")) }
+      }
+    )
   }
 }

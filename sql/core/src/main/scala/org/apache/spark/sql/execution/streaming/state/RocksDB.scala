@@ -207,6 +207,10 @@ class RocksDB(
       try {
         changelogReader = fileManager.getChangelogReader(v, useColumnFamilies)
         changelogReader.foreach { case (recordType, key, value, colFamilyName) =>
+          if (useColumnFamilies && !checkColFamilyExists(colFamilyName)) {
+            createColFamilyIfAbsent(colFamilyName)
+          }
+
           recordType match {
             case RecordType.PUT_RECORD =>
               put(key, value, colFamilyName)
