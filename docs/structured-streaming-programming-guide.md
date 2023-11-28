@@ -2452,6 +2452,14 @@ Specifically for built-in HDFS state store provider, users can check the state s
 it is best if cache missing count is minimized that means Spark won't waste too much time on loading checkpointed state.
 User can increase Spark locality waiting configurations to avoid loading state store providers in different executors across batches.
 
+#### State Data Source (Experimental)
+
+Apache Spark provides a streaming state related data source that provides the ability to manipulate state stores in the checkpoint. Users can run the batch query with State Data Source to get the visibility of the states for existing streaming query.
+
+As of Spark 4.0, the data source only supports read feature. See [State Data Source Integration Guide](structured-streaming-state-data-source.html) for more details.
+
+NOTE: this data source is currently marked as experimental - source options and the behavior (output) might be subject to change.
+
 ## Starting Streaming Queries
 Once you have defined the final result DataFrame/Dataset, all that is left is for you to start the streaming computation. To do that, you have to use the `DataStreamWriter`
 ([Python](api/python/reference/pyspark.ss/api/pyspark.sql.streaming.DataStreamWriter.html#pyspark.sql.streaming.DataStreamWriter)/[Scala](api/scala/org/apache/spark/sql/streaming/DataStreamWriter.html)/[Java](api/java/org/apache/spark/sql/streaming/DataStreamWriter.html) docs)

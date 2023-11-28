@@ -157,8 +157,8 @@ abstract class PartitioningAwareFileIndex(
         typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled,
         basePaths = basePaths,
         userSpecifiedSchema = userSpecifiedSchema,
-        caseSensitive = sparkSession.sqlContext.conf.caseSensitiveAnalysis,
-        validatePartitionColumns = sparkSession.sqlContext.conf.validatePartitionColumns,
+        caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis,
+        validatePartitionColumns = sparkSession.sessionState.conf.validatePartitionColumns,
         timeZoneId = timeZoneId)
     }
   }

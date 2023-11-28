@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.errors.exceptions.base import SessionNotSameException
+from pyspark.errors.exceptions.base import SessionNotSameException, PySparkIndexError
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -153,7 +153,7 @@ class DataFrame:
             "spark.sql.repl.eagerEval.truncate",
         )
         if repl_eager_eval_enabled == "true":
-            table, _ = DataFrame.withPlan(
+            table, _ = DataFrame(
                 plan.HtmlString(
                     child=self._plan,
                     num_rows=int(cast(str, repl_eager_eval_max_num_rows)),
@@ -182,7 +182,7 @@ class DataFrame:
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
 
-        return DataFrame.withPlan(plan.Project(self._plan, *cols), session=self._session)
+        return DataFrame(plan.Project(self._plan, *cols), session=self._session)
 
     select.__doc__ = PySparkDataFrame.select.__doc__
 
@@ -196,7 +196,7 @@ class DataFrame:
             else:
                 sql_expr.extend([sql_expression(e) for e in element])
 
-        return DataFrame.withPlan(plan.Project(self._plan, *sql_expr), session=self._session)
+        return DataFrame(plan.Project(self._plan, *sql_expr), session=self._session)
 
     selectExpr.__doc__ = PySparkDataFrame.selectExpr.__doc__
 
@@ -219,7 +219,7 @@ class DataFrame:
     agg.__doc__ = PySparkDataFrame.agg.__doc__
 
     def alias(self, alias: str) -> "DataFrame":
-        return DataFrame.withPlan(plan.SubqueryAlias(self._plan, alias), session=self._session)
+        return DataFrame(plan.SubqueryAlias(self._plan, alias), session=self._session)
 
     alias.__doc__ = PySparkDataFrame.alias.__doc__
 
@@ -259,7 +259,7 @@ class DataFrame:
 
     def crossJoin(self, other: "DataFrame") -> "DataFrame":
         self._check_same_session(other)
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.Join(left=self._plan, right=other._plan, on=None, how="cross"),
             session=self._session,
         )
@@ -279,7 +279,7 @@ class DataFrame:
                 error_class="VALUE_NOT_POSITIVE",
                 message_parameters={"arg_name": "numPartitions", "arg_value": str(numPartitions)},
             )
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.Repartition(self._plan, num_partitions=numPartitions, shuffle=False),
             self._session,
         )
@@ -307,18 +307,18 @@ class DataFrame:
                     },
                 )
             if len(cols) == 0:
-                return DataFrame.withPlan(
+                return DataFrame(
                     plan.Repartition(self._plan, num_partitions=numPartitions, shuffle=True),
                     self._session,
                 )
             else:
-                return DataFrame.withPlan(
+                return DataFrame(
                     plan.RepartitionByExpression(self._plan, numPartitions, list(cols)),
                     self.sparkSession,
                 )
         elif isinstance(numPartitions, (str, Column)):
             cols = (numPartitions,) + cols
-            return DataFrame.withPlan(
+            return DataFrame(
                 plan.RepartitionByExpression(self._plan, None, list(cols)),
                 self.sparkSession,
             )
@@ -372,7 +372,7 @@ class DataFrame:
             else:
                 sort = []
                 sort.extend([_convert_col(c) for c in cols])
-                return DataFrame.withPlan(
+                return DataFrame(
                     plan.RepartitionByExpression(self._plan, numPartitions, sort),
                     self.sparkSession,
                 )
@@ -380,7 +380,7 @@ class DataFrame:
             cols = (numPartitions,) + cols
             sort = []
             sort.extend([_convert_col(c) for c in cols])
-            return DataFrame.withPlan(
+            return DataFrame(
                 plan.RepartitionByExpression(self._plan, None, sort),
                 self.sparkSession,
             )
@@ -403,11 +403,11 @@ class DataFrame:
             )
 
         if subset is None:
-            return DataFrame.withPlan(
+            return DataFrame(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
             )
         else:
-            return DataFrame.withPlan(
+            return DataFrame(
                 plan.Deduplicate(child=self._plan, column_names=subset), session=self._session
             )
 
@@ -423,12 +423,12 @@ class DataFrame:
             )
 
         if subset is None:
-            return DataFrame.withPlan(
+            return DataFrame(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True, within_watermark=True),
                 session=self._session,
             )
         else:
-            return DataFrame.withPlan(
+            return DataFrame(
                 plan.Deduplicate(child=self._plan, column_names=subset, within_watermark=True),
                 session=self._session,
             )
@@ -438,7 +438,7 @@ class DataFrame:
     drop_duplicates_within_watermark = dropDuplicatesWithinWatermark
 
     def distinct(self) -> "DataFrame":
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
         )
 
@@ -452,7 +452,7 @@ class DataFrame:
                 message_parameters={"arg_name": "cols", "arg_type": type(cols).__name__},
             )
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.Drop(
                 child=self._plan,
                 columns=_cols,
@@ -467,7 +467,7 @@ class DataFrame:
             expr = sql_expression(condition)
         else:
             expr = condition
-        return DataFrame.withPlan(plan.Filter(child=self._plan, filter=expr), session=self._session)
+        return DataFrame(plan.Filter(child=self._plan, filter=expr), session=self._session)
 
     filter.__doc__ = PySparkDataFrame.filter.__doc__
 
@@ -487,15 +487,16 @@ class DataFrame:
             elif isinstance(c, str):
                 _cols.append(self[c])
             elif isinstance(c, int) and not isinstance(c, bool):
-                # TODO: should introduce dedicated error class
                 if c < 1:
-                    raise IndexError(f"Column ordinal must be positive but got {c}")
+                    raise PySparkIndexError(
+                        error_class="INDEX_NOT_POSITIVE", message_parameters={"index": str(c)}
+                    )
                 # ordinal is 1-based
                 _cols.append(self[c - 1])
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",
-                    message_parameters={"arg_name": "groupBy", "arg_type": type(c).__name__},
+                    message_parameters={"arg_name": "cols", "arg_type": type(c).__name__},
                 )
 
         return GroupedData(df=self, group_type="groupby", grouping_cols=_cols)
@@ -512,15 +513,16 @@ class DataFrame:
             elif isinstance(c, str):
                 _cols.append(self[c])
             elif isinstance(c, int) and not isinstance(c, bool):
-                # TODO: should introduce dedicated error class
                 if c < 1:
-                    raise IndexError(f"Column ordinal must be positive but got {c}")
+                    raise PySparkIndexError(
+                        error_class="INDEX_NOT_POSITIVE", message_parameters={"index": str(c)}
+                    )
                 # ordinal is 1-based
                 _cols.append(self[c - 1])
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",
-                    message_parameters={"arg_name": "rollup", "arg_type": type(c).__name__},
+                    message_parameters={"arg_name": "cols", "arg_type": type(c).__name__},
                 )
 
         return GroupedData(df=self, group_type="rollup", grouping_cols=_cols)
@@ -535,20 +537,60 @@ class DataFrame:
             elif isinstance(c, str):
                 _cols.append(self[c])
             elif isinstance(c, int) and not isinstance(c, bool):
-                # TODO: should introduce dedicated error class
                 if c < 1:
-                    raise IndexError(f"Column ordinal must be positive but got {c}")
+                    raise PySparkIndexError(
+                        error_class="INDEX_NOT_POSITIVE", message_parameters={"index": str(c)}
+                    )
                 # ordinal is 1-based
                 _cols.append(self[c - 1])
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",
-                    message_parameters={"arg_name": "cube", "arg_type": type(c).__name__},
+                    message_parameters={"arg_name": "cols", "arg_type": type(c).__name__},
                 )
 
         return GroupedData(df=self, group_type="cube", grouping_cols=_cols)
 
     cube.__doc__ = PySparkDataFrame.cube.__doc__
+
+    def groupingSets(
+        self, groupingSets: Sequence[Sequence["ColumnOrName"]], *cols: "ColumnOrName"
+    ) -> "GroupedData":
+        gsets: List[List[Column]] = []
+        for grouping_set in groupingSets:
+            gset: List[Column] = []
+            for c in grouping_set:
+                if isinstance(c, Column):
+                    gset.append(c)
+                elif isinstance(c, str):
+                    gset.append(self[c])
+                else:
+                    raise PySparkTypeError(
+                        error_class="NOT_COLUMN_OR_STR",
+                        message_parameters={
+                            "arg_name": "groupingSets",
+                            "arg_type": type(c).__name__,
+                        },
+                    )
+            gsets.append(gset)
+
+        gcols: List[Column] = []
+        for c in cols:
+            if isinstance(c, Column):
+                gcols.append(c)
+            elif isinstance(c, str):
+                gcols.append(self[c])
+            else:
+                raise PySparkTypeError(
+                    error_class="NOT_COLUMN_OR_STR",
+                    message_parameters={"arg_name": "cols", "arg_type": type(c).__name__},
+                )
+
+        return GroupedData(
+            df=self, group_type="grouping_sets", grouping_cols=gcols, grouping_sets=gsets
+        )
+
+    groupingSets.__doc__ = PySparkDataFrame.groupingSets.__doc__
 
     @overload
     def head(self) -> Optional[Row]:
@@ -580,7 +622,7 @@ class DataFrame:
         self._check_same_session(other)
         if how is not None and isinstance(how, str):
             how = how.lower().replace("_", "")
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.Join(left=self._plan, right=other._plan, on=on, how=how),
             session=self._session,
         )
@@ -607,7 +649,7 @@ class DataFrame:
         if tolerance is not None:
             assert isinstance(tolerance, Column), "tolerance should be Column"
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.AsOfJoin(
                 left=self._plan,
                 right=other._plan,
@@ -625,14 +667,12 @@ class DataFrame:
     _joinAsOf.__doc__ = PySparkDataFrame._joinAsOf.__doc__
 
     def limit(self, n: int) -> "DataFrame":
-        return DataFrame.withPlan(plan.Limit(child=self._plan, limit=n), session=self._session)
+        return DataFrame(plan.Limit(child=self._plan, limit=n), session=self._session)
 
     limit.__doc__ = PySparkDataFrame.limit.__doc__
 
     def tail(self, num: int) -> List[Row]:
-        return DataFrame.withPlan(
-            plan.Tail(child=self._plan, limit=num), session=self._session
-        ).collect()
+        return DataFrame(plan.Tail(child=self._plan, limit=num), session=self._session).collect()
 
     tail.__doc__ = PySparkDataFrame.tail.__doc__
 
@@ -654,7 +694,6 @@ class DataFrame:
         _cols: List[Column] = []
         for c in cols:
             if isinstance(c, int) and not isinstance(c, bool):
-                # TODO: should introduce dedicated error class
                 # ordinal is 1-based
                 if c > 0:
                     _c = self[c - 1]
@@ -662,7 +701,9 @@ class DataFrame:
                 elif c < 0:
                     _c = self[-c - 1].desc()
                 else:
-                    raise IndexError("Column ordinal must not be zero!")
+                    raise PySparkIndexError(
+                        error_class="INDEX_NOT_POSITIVE", message_parameters={"index": str(c)}
+                    )
             else:
                 _c = c  # type: ignore[assignment]
             _cols.append(_to_col(cast("ColumnOrName", _c)))
@@ -686,7 +727,7 @@ class DataFrame:
         *cols: Union[int, str, Column, List[Union[int, str, Column]]],
         **kwargs: Any,
     ) -> "DataFrame":
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.Sort(
                 self._plan,
                 columns=self._sort_cols(cols, kwargs),
@@ -704,7 +745,7 @@ class DataFrame:
         *cols: Union[int, str, Column, List[Union[int, str, Column]]],
         **kwargs: Any,
     ) -> "DataFrame":
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.Sort(
                 self._plan,
                 columns=self._sort_cols(cols, kwargs),
@@ -761,7 +802,7 @@ class DataFrame:
 
         seed = int(seed) if seed is not None else None
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.Sample(
                 child=self._plan,
                 lower_bound=0.0,
@@ -786,7 +827,7 @@ class DataFrame:
                 message_parameters={"arg_name": "colsMap", "arg_type": type(colsMap).__name__},
             )
 
-        return DataFrame.withPlan(plan.WithColumnsRenamed(self._plan, colsMap), self._session)
+        return DataFrame(plan.WithColumnsRenamed(self._plan, colsMap), self._session)
 
     withColumnsRenamed.__doc__ = PySparkDataFrame.withColumnsRenamed.__doc__
 
@@ -819,7 +860,7 @@ class DataFrame:
                     },
                 )
 
-        table, _ = DataFrame.withPlan(
+        table, _ = DataFrame(
             plan.ShowString(
                 child=self._plan,
                 num_rows=n,
@@ -843,7 +884,7 @@ class DataFrame:
             names.append(columnName)
             columns.append(column)
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.WithColumns(
                 self._plan,
                 columnNames=names,
@@ -860,7 +901,7 @@ class DataFrame:
                 error_class="NOT_COLUMN",
                 message_parameters={"arg_name": "col", "arg_type": type(col).__name__},
             )
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.WithColumns(
                 self._plan,
                 columnNames=[colName],
@@ -878,7 +919,7 @@ class DataFrame:
                 message_parameters={"arg_name": "metadata", "arg_type": type(metadata).__name__},
             )
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.WithColumns(
                 self._plan,
                 columnNames=[columnName],
@@ -912,7 +953,7 @@ class DataFrame:
                 lst = [cols]
             return lst
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.Unpivot(
                 self._plan,
                 to_jcols(ids),
@@ -943,7 +984,7 @@ class DataFrame:
                 },
             )
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.WithWatermark(
                 self._plan,
                 event_time=eventTime,
@@ -993,7 +1034,7 @@ class DataFrame:
                         },
                     )
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.Hint(self._plan, name, list(parameters)),
             session=self._session,
         )
@@ -1028,7 +1069,7 @@ class DataFrame:
         while j < length:
             lowerBound = normalizedCumWeights[j - 1]
             upperBound = normalizedCumWeights[j]
-            samplePlan = DataFrame.withPlan(
+            samplePlan = DataFrame(
                 plan.Sample(
                     child=self._plan,
                     lower_bound=lowerBound,
@@ -1067,7 +1108,7 @@ class DataFrame:
         if isinstance(observation, Observation):
             return observation._on(self, *exprs)
         elif isinstance(observation, str):
-            return DataFrame.withPlan(
+            return DataFrame(
                 plan.CollectMetrics(self._plan, observation, list(exprs)),
                 self._session,
             )
@@ -1095,7 +1136,7 @@ class DataFrame:
 
     def unionAll(self, other: "DataFrame") -> "DataFrame":
         self._check_same_session(other)
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.SetOperation(self._plan, other._plan, "union", is_all=True), session=self._session
         )
 
@@ -1103,7 +1144,7 @@ class DataFrame:
 
     def unionByName(self, other: "DataFrame", allowMissingColumns: bool = False) -> "DataFrame":
         self._check_same_session(other)
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.SetOperation(
                 self._plan,
                 other._plan,
@@ -1118,7 +1159,7 @@ class DataFrame:
 
     def subtract(self, other: "DataFrame") -> "DataFrame":
         self._check_same_session(other)
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.SetOperation(self._plan, other._plan, "except", is_all=False),
             session=self._session,
         )
@@ -1127,7 +1168,7 @@ class DataFrame:
 
     def exceptAll(self, other: "DataFrame") -> "DataFrame":
         self._check_same_session(other)
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.SetOperation(self._plan, other._plan, "except", is_all=True), session=self._session
         )
 
@@ -1135,7 +1176,7 @@ class DataFrame:
 
     def intersect(self, other: "DataFrame") -> "DataFrame":
         self._check_same_session(other)
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.SetOperation(self._plan, other._plan, "intersect", is_all=False),
             session=self._session,
         )
@@ -1144,7 +1185,7 @@ class DataFrame:
 
     def intersectAll(self, other: "DataFrame") -> "DataFrame":
         self._check_same_session(other)
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.SetOperation(self._plan, other._plan, "intersect", is_all=True),
             session=self._session,
         )
@@ -1225,7 +1266,7 @@ class DataFrame:
         else:
             _values = [value]
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.NAFill(child=self._plan, cols=_cols, values=_values),
             session=self._session,
         )
@@ -1284,7 +1325,7 @@ class DataFrame:
                     message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
                 )
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.NADrop(child=self._plan, cols=_cols, min_non_nulls=min_non_nulls),
             session=self._session,
         )
@@ -1396,7 +1437,7 @@ class DataFrame:
                 message_parameters={},
             )
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.NAReplace(child=self._plan, cols=subset, replacements=rep_dict),
             session=self._session,
         )
@@ -1417,7 +1458,7 @@ class DataFrame:
                     error_class="NOT_LIST_OF_STR",
                     message_parameters={"arg_name": "statistics", "arg_type": type(s).__name__},
                 )
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.StatSummary(child=self._plan, statistics=_statistics),
             session=self._session,
         )
@@ -1434,7 +1475,7 @@ class DataFrame:
                 _cols.append(column)
             else:
                 _cols.extend([s for s in column])
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.StatDescribe(child=self._plan, cols=_cols),
             session=self._session,
         )
@@ -1452,7 +1493,7 @@ class DataFrame:
                 error_class="NOT_STR",
                 message_parameters={"arg_name": "col2", "arg_type": type(col2).__name__},
             )
-        table, _ = DataFrame.withPlan(
+        table, _ = DataFrame(
             plan.StatCov(child=self._plan, col1=col1, col2=col2),
             session=self._session,
         )._to_table()
@@ -1478,7 +1519,7 @@ class DataFrame:
                 error_class="VALUE_NOT_PEARSON",
                 message_parameters={"arg_name": "method", "arg_value": method},
             )
-        table, _ = DataFrame.withPlan(
+        table, _ = DataFrame(
             plan.StatCorr(child=self._plan, col1=col1, col2=col2, method=method),
             session=self._session,
         )._to_table()
@@ -1549,7 +1590,7 @@ class DataFrame:
                 },
             )
         relativeError = float(relativeError)
-        table, _ = DataFrame.withPlan(
+        table, _ = DataFrame(
             plan.StatApproxQuantile(
                 child=self._plan,
                 cols=list(col),
@@ -1575,7 +1616,7 @@ class DataFrame:
                 error_class="NOT_STR",
                 message_parameters={"arg_name": "col2", "arg_type": type(col2).__name__},
             )
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.StatCrosstab(child=self._plan, col1=col1, col2=col2),
             session=self._session,
         )
@@ -1594,7 +1635,7 @@ class DataFrame:
             )
         if not support:
             support = 0.01
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.StatFreqItems(child=self._plan, cols=cols, support=support),
             session=self._session,
         )
@@ -1631,7 +1672,7 @@ class DataFrame:
                 )
             fractions[k] = float(v)
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.StatSampleBy(child=self._plan, col=col, fractions=fractions, seed=seed),
             session=self._session,
         )
@@ -1776,7 +1817,7 @@ class DataFrame:
 
     def to(self, schema: StructType) -> "DataFrame":
         assert schema is not None
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.ToSchema(child=self._plan, schema=schema),
             session=self._session,
         )
@@ -1790,7 +1831,7 @@ class DataFrame:
                     error_class="NOT_LIST_OF_STR",
                     message_parameters={"arg_name": "cols", "arg_type": type(col_).__name__},
                 )
-        return DataFrame.withPlan(plan.ToDF(self._plan, list(cols)), self._session)
+        return DataFrame(plan.ToDF(self._plan, list(cols)), self._session)
 
     toDF.__doc__ = PySparkDataFrame.toDF.__doc__
 
@@ -1986,7 +2027,7 @@ class DataFrame:
             evalType=evalType,
         )
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.MapPartitions(
                 child=self._plan, function=udf_obj, cols=self.columns, is_barrier=barrier
             ),
@@ -2076,17 +2117,9 @@ class DataFrame:
 
     # SparkConnect specific API
     def offset(self, n: int) -> "DataFrame":
-        return DataFrame.withPlan(plan.Offset(child=self._plan, offset=n), session=self._session)
+        return DataFrame(plan.Offset(child=self._plan, offset=n), session=self._session)
 
     offset.__doc__ = PySparkDataFrame.offset.__doc__
-
-    @classmethod
-    def withPlan(cls, plan: plan.LogicalPlan, session: "SparkSession") -> "DataFrame":
-        """
-        Main initialization method used to construct a new data frame with a child plan.
-        This is for internal purpose.
-        """
-        return DataFrame(plan=plan, session=session)
 
 
 class DataFrameNaFunctions:

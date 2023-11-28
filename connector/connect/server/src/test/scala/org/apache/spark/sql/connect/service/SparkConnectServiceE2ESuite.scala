@@ -32,16 +32,25 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
   // were all already in the buffer.
   val BIG_ENOUGH_QUERY = "select * from range(1000000)"
 
+  test("Execute is sent eagerly to the server upon iterator creation") {
+    // This behavior changed with grpc upgrade from 1.56.0 to 1.59.0.
+    // Testing to be aware of future changes.
+    withClient { client =>
+      val query = client.execute(buildPlan(BIG_ENOUGH_QUERY))
+      // just creating the iterator triggers query to be sent to server.
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        assert(SparkConnectService.executionManager.listExecuteHolders.length == 1)
+      }
+      assert(query.hasNext)
+    }
+  }
+
   test("ReleaseSession releases all queries and does not allow more requests in the session") {
     withClient { client =>
       val query1 = client.execute(buildPlan(BIG_ENOUGH_QUERY))
       val query2 = client.execute(buildPlan(BIG_ENOUGH_QUERY))
-      val query3 = client.execute(buildPlan("select 1"))
-      // just creating the iterator is lazy, trigger query1 and query2 to be sent.
-      query1.hasNext
-      query2.hasNext
       Eventually.eventually(timeout(eventuallyTimeout)) {
-        SparkConnectService.executionManager.listExecuteHolders.length == 2
+        assert(SparkConnectService.executionManager.listExecuteHolders.length == 2)
       }
 
       // Close session
@@ -51,8 +60,7 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
 
       // Check that queries get cancelled
       Eventually.eventually(timeout(eventuallyTimeout)) {
-        SparkConnectService.executionManager.listExecuteHolders.length == 0
-        // SparkConnectService.sessionManager.
+        assert(SparkConnectService.executionManager.listExecuteHolders.length == 0)
       }
 
       // query1 and query2 could get either an:
@@ -75,13 +83,6 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
         query2Error.getMessage.contains("OPERATION_CANCELED") ||
           query2Error.getMessage.contains("INVALID_HANDLE.OPERATION_ABANDONED"))
 
-      // query3 has not been submitted before, so it should now fail with SESSION_CLOSED
-      // TODO(SPARK-46042) Reenable a `releaseSession` test case in SparkConnectServiceE2ESuite
-      val query3Error = intercept[SparkException] {
-        query3.hasNext
-      }
-      assert(query3Error.getMessage.contains("INVALID_HANDLE.SESSION_CLOSED"))
-
       // No other requests should be allowed in the session, failing with SESSION_CLOSED
       val requestError = intercept[SparkException] {
         client.interruptAll()
@@ -99,18 +100,15 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       withClient(sessionId = sessionIdB, userId = userIdB) { clientB =>
         val queryA = clientA.execute(buildPlan(BIG_ENOUGH_QUERY))
         val queryB = clientB.execute(buildPlan(BIG_ENOUGH_QUERY))
-        // just creating the iterator is lazy, trigger query1 and query2 to be sent.
-        queryA.hasNext
-        queryB.hasNext
         Eventually.eventually(timeout(eventuallyTimeout)) {
-          SparkConnectService.executionManager.listExecuteHolders.length == 2
+          assert(SparkConnectService.executionManager.listExecuteHolders.length == 2)
         }
         // Close session A
         clientA.releaseSession()
 
         // A's query gets kicked out.
         Eventually.eventually(timeout(eventuallyTimeout)) {
-          SparkConnectService.executionManager.listExecuteHolders.length == 1
+          assert(SparkConnectService.executionManager.listExecuteHolders.length == 1)
         }
         val queryAError = intercept[SparkException] {
           while (queryA.hasNext) queryA.next()
@@ -151,7 +149,7 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
     withClient(sessionId = sessionId, userId = userId) { client =>
       // this will create the session, and then ReleaseSession at the end of withClient.
       val query = client.execute(buildPlan("SELECT 1"))
-      query.hasNext // trigger execution
+      query.hasNext // guarantees the request was received by server.
       client.releaseSession()
     }
     withClient(sessionId = sessionId, userId = userId) { client =>
@@ -169,17 +167,17 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
     val userId = "Y"
     withClient(sessionId = sessionId, userId = userId) { client =>
       val query = client.execute(buildPlan("SELECT 1"))
-      query.hasNext // trigger execution
+      query.hasNext // guarantees the request was received by server.
       client.releaseSession()
     }
     withClient(sessionId = UUID.randomUUID.toString, userId = userId) { client =>
       val query = client.execute(buildPlan("SELECT 1"))
-      query.hasNext // trigger execution
+      query.hasNext // guarantees the request was received by server.
       client.releaseSession()
     }
     withClient(sessionId = sessionId, userId = "YY") { client =>
       val query = client.execute(buildPlan("SELECT 1"))
-      query.hasNext // trigger execution
+      query.hasNext // guarantees the request was received by server.
       client.releaseSession()
     }
   }
@@ -188,10 +186,9 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
     withRawBlockingStub { stub =>
       val iter =
         stub.executePlan(buildExecutePlanRequest(buildPlan("select * from range(1000000)")))
-      iter.hasNext
       val execution = eventuallyGetExecutionHolder
       Eventually.eventually(timeout(30.seconds)) {
-        execution.eventsManager.status == ExecuteStatus.Finished
+        assert(execution.eventsManager.status == ExecuteStatus.Finished)
       }
     }
   }
@@ -199,10 +196,9 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
   test("SPARK-45133 local relation should reach FINISHED state when results are not consumed") {
     withClient { client =>
       val iter = client.execute(buildLocalRelation((1 to 1000000).map(i => (i, i + 1))))
-      iter.hasNext
       val execution = eventuallyGetExecutionHolder
       Eventually.eventually(timeout(30.seconds)) {
-        execution.eventsManager.status == ExecuteStatus.Finished
+        assert(execution.eventsManager.status == ExecuteStatus.Finished)
       }
     }
   }

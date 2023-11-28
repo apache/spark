@@ -587,6 +587,10 @@ notMatchedBySourceAction
     | UPDATE SET assignmentList
     ;
 
+exceptClause
+    : EXCEPT LEFT_PAREN exceptCols=multipartIdentifierList RIGHT_PAREN
+    ;
+
 assignmentList
     : assignment (COMMA assignment)*
     ;
@@ -969,8 +973,8 @@ primaryExpression
     | LAST LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                                   #last
     | POSITION LEFT_PAREN substr=valueExpression IN str=valueExpression RIGHT_PAREN            #position
     | constant                                                                                 #constantDefault
-    | ASTERISK                                                                                 #star
-    | qualifiedName DOT ASTERISK                                                               #star
+    | ASTERISK exceptClause?                                                                   #star
+    | qualifiedName DOT ASTERISK exceptClause?                                                 #star
     | LEFT_PAREN namedExpression (COMMA namedExpression)+ RIGHT_PAREN                          #rowConstructor
     | LEFT_PAREN query RIGHT_PAREN                                                             #subqueryExpression
     | functionName LEFT_PAREN (setQuantifier? argument+=functionArgument

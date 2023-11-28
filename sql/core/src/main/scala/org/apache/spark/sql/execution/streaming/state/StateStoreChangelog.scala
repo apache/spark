@@ -32,6 +32,9 @@ import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.util.NextIterator
 
+/**
+ * Enum used to write record types to changelog files used with RocksDBStateStoreProvider.
+ */
 object RecordType extends Enumeration {
   type RecordType = Value
 

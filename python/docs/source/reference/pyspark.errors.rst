@@ -43,10 +43,12 @@ Classes
     PySparkRuntimeError
     PySparkTypeError
     PySparkValueError
+    PySparkIndexError
     PythonException
     QueryExecutionException
     SparkRuntimeException
     SparkUpgradeException
+    SparkNoSuchElementException
     StreamingQueryException
     TempTableAlreadyExistsException
     UnknownException

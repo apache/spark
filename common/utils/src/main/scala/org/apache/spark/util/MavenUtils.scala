@@ -523,7 +523,7 @@ private[spark] object MavenUtils extends Logging {
 
       // Parse transitive parameters (e.g., transitive=true) in an Ivy URI, default value is true
       val transitiveParams = groupedParams.get("transitive")
-      if (transitiveParams.map(_.size).getOrElse(0) > 1) {
+      if (transitiveParams.map(_.length).getOrElse(0) > 1) {
         logWarning(
           "It's best to specify `transitive` parameter in ivy URI query only once." +
             " If there are multiple `transitive` parameter, we will select the last one")

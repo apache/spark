@@ -74,14 +74,15 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     // Make sure `largeValue` will cause overflow if we use a Long sum to calc avg.
     assert(largeValue * largeValue != BigInt(largeValue) * BigInt(largeValue))
     val stats =
-      EventTimeStats(max = largeValue, min = largeValue, avg = largeValue, count = largeValue - 1)
+      EventTimeStats(
+        max = largeValue, min = largeValue, avg = largeValue.toDouble, count = largeValue - 1)
     stats.add(largeValue)
     stats.avg should be (largeValue.toDouble +- epsilon)
 
     val stats2 = EventTimeStats(
       max = largeValue + 1,
       min = largeValue,
-      avg = largeValue + 1,
+      avg = largeValue + 1.0,
       count = largeValue)
     stats.merge(stats2)
     stats.avg should be ((largeValue + 0.5) +- epsilon)
