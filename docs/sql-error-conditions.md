@@ -163,6 +163,14 @@ Cannot convert SQL `<sqlColumn>` to Protobuf `<protobufColumn>` because schema i
 
 Cannot convert SQL `<sqlColumn>` to Protobuf `<protobufColumn>` because `<data>` is not in defined values for enum: `<enumString>`.
 
+### [CANNOT_CREATE_DATA_SOURCE_V2_TABLE](sql-error-conditions-cannot-create-data-source-v2-table-error-class.html)
+
+[SQLSTATE: 42KDE](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to create data source V2 table:
+
+For more details see [CANNOT_CREATE_DATA_SOURCE_V2_TABLE](sql-error-conditions-cannot-create-data-source-v2-table-error-class.html)
+
 ### CANNOT_DECODE_URL
 
 [SQLSTATE: 22546](sql-error-conditions-sqlstates.html#class-22-data-exception)

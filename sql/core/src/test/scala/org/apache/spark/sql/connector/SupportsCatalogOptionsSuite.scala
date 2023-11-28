@@ -25,7 +25,7 @@ import scala.util.Try
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
@@ -161,6 +161,16 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     assert(table.partitioning().isEmpty, "Partitioning should be empty")
     assert(table.schema() === new StructType().add("id", LongType), "Schema did not match")
     assert(load("t1", Some(catalogName)).count() === 0)
+  }
+
+  test("SPARK-46043: create table in SQL with catalog options supported source") {
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        sql(s"CREATE TABLE test USING $format")
+      },
+      errorClass = "CANNOT_CREATE_DATA_SOURCE_V2_TABLE.CATALOG_OPTIONS_UNSUPPORTED",
+      parameters = Map("provider" -> format)
+    )
   }
 
   test("append and overwrite modes - session catalog") {

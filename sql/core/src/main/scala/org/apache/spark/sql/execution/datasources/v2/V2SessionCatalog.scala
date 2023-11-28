@@ -23,11 +23,12 @@ import java.util
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, SessionCatalog}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableCatalogCapability, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsCatalogOptions, SupportsNamespaces, Table, TableCatalog, TableCatalogCapability, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
@@ -73,42 +74,43 @@ class V2SessionCatalog(catalog: SessionCatalog)
 
   override def loadTable(ident: Identifier): Table = {
     try {
-      val catalogTable = catalog.getTableMetadata(ident.asTableIdentifier)
-      if (catalogTable.provider.isDefined) {
-        DataSourceV2Utils.getTableProvider(catalogTable.provider.get, conf) match {
-          case Some(tableProvider) =>
-            import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-            val dsOptions = catalogTable.properties
-            val pathOption = catalogTable.storage.locationUri.map(CatalogUtils.URIToString)
-            val optionsWithPath = if (pathOption.isDefined) {
-              dsOptions ++ Map("path" -> pathOption.get)
-            } else {
-              dsOptions
-            }
-            // If the source accepts external table metadata, we can pass the schema and
-            // partitioning information stored in Hive to `getTable` to avoid schema/partitioning
-            // inference, which can be very expensive.
-            if (tableProvider.supportsExternalMetadata()) {
-              val v2Partitioning = catalogTable.partitionColumnNames.asTransforms
-              val v2Bucketing = catalogTable.bucketSpec.map(
-                spec => Array(spec.asTransform)).getOrElse(Array.empty)
-              val v2Clustering = catalogTable.clusterBySpec.map(
-                spec => Array(spec.asTransform)).getOrElse(Array.empty)
-              val partitioning = v2Partitioning ++ v2Bucketing ++ v2Clustering
-              tableProvider.getTable(
-                catalogTable.schema,
-                partitioning,
-                optionsWithPath.asJava)
-            } else {
-              val options = new CaseInsensitiveStringMap(optionsWithPath.asJava)
-              DataSourceV2Utils.getTableFromProvider(
-                tableProvider, options, userSpecifiedSchema = None)
+      val table = catalog.getTableMetadata(ident.asTableIdentifier)
+      if (table.provider.isDefined) {
+        DataSourceV2Utils.getTableProvider(table.provider.get, conf) match {
+          case Some(provider) =>
+            // Get the table properties during creation and append the path option
+            // to the properties.
+            val tableProperties = table.properties
+            val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
+            val properties = tableProperties ++ pathOption
+            val dsOptions = new CaseInsensitiveStringMap(properties.asJava)
+
+            provider match {
+              case p: SupportsCatalogOptions =>
+                throw new IllegalArgumentException(
+                  f"provider $p should not implement SupportsCatalogOptions")
+
+              case _ =>
+                // If the source accepts external table metadata, we can pass the schema and
+                // partitioning information stored in Hive to `getTable` to avoid expensive
+                // schema/partitioning inference.
+                if (provider.supportsExternalMetadata()) {
+                  provider.getTable(
+                    table.schema,
+                    getV2Partitioning(table),
+                    dsOptions.asCaseSensitiveMap())
+                } else {
+                  provider.getTable(
+                    provider.inferSchema(dsOptions),
+                    provider.inferPartitioning(dsOptions),
+                    dsOptions.asCaseSensitiveMap())
+                }
             }
           case _ =>
-            V1Table(catalogTable)
+            V1Table(table)
         }
       } else {
-        V1Table(catalogTable)
+        V1Table(table)
       }
     } catch {
       case _: NoSuchDatabaseException =>
@@ -132,6 +134,16 @@ class V2SessionCatalog(catalog: SessionCatalog)
     throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(nameParts))
   }
 
+  private def getV2Partitioning(table: CatalogTable): Array[Transform] = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    val v2Partitioning = table.partitionColumnNames.asTransforms
+    val v2Bucketing = table.bucketSpec.map(
+      spec => Array(spec.asTransform)).getOrElse(Array.empty)
+    val v2Clustering = table.clusterBySpec.map(
+      spec => Array(spec.asTransform)).getOrElse(Array.empty)
+    v2Partitioning ++ v2Bucketing ++ v2Clustering
+  }
+
   override def invalidateTable(ident: Identifier): Unit = {
     catalog.refreshTable(ident.asTableIdentifier)
   }
@@ -151,9 +163,40 @@ class V2SessionCatalog(catalog: SessionCatalog)
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TransformHelper
+    val provider = properties.getOrDefault(TableCatalog.PROP_PROVIDER, conf.defaultDataSourceName)
+
+    val (newSchema, newPartitions) = DataSourceV2Utils.getTableProvider(provider, conf) match {
+      case Some(_: SupportsCatalogOptions) =>
+        throw new SparkUnsupportedOperationException(
+          errorClass = "CANNOT_CREATE_DATA_SOURCE_V2_TABLE.CATALOG_OPTIONS_UNSUPPORTED",
+          messageParameters = Map("provider" -> provider))
+
+      case Some(p) if !p.supportsExternalMetadata() =>
+        // Partitions cannot be specified when schema is empty.
+        if (schema.nonEmpty) {
+          throw new SparkUnsupportedOperationException(
+            errorClass = "CANNOT_CREATE_DATA_SOURCE_V2_TABLE.EXTERNAL_METADATA_UNSUPPORTED",
+            messageParameters = Map("provider" -> provider))
+        }
+        (schema, partitions)
+
+      case Some(tableProvider) =>
+        assert(tableProvider.supportsExternalMetadata())
+        if (schema.isEmpty) {
+          // Infer the schema and partitions and store them in the catalog.
+          val dsOptions = new CaseInsensitiveStringMap(properties)
+          (tableProvider.inferSchema(dsOptions), tableProvider.inferPartitioning(dsOptions))
+        } else {
+          // TODO: when schema is defined but partitioning is empty, should we infer it?
+          (schema, partitions)
+        }
+
+      case _ =>
+        (schema, partitions)
+    }
+
     val (partitionColumns, maybeBucketSpec, maybeClusterBySpec) =
       partitions.toImmutableArraySeq.convertTransforms
-    val provider = properties.getOrDefault(TableCatalog.PROP_PROVIDER, conf.defaultDataSourceName)
     val tableProperties = properties.asScala
     val location = Option(properties.get(TableCatalog.PROP_LOCATION))
     val storage = DataSource.buildStorageFormatFromOptions(toOptions(tableProperties.toMap))
@@ -169,13 +212,13 @@ class V2SessionCatalog(catalog: SessionCatalog)
       identifier = ident.asTableIdentifier,
       tableType = tableType,
       storage = storage,
-      schema = schema,
+      schema = newSchema,
       provider = Some(provider),
       partitionColumnNames = partitionColumns,
       bucketSpec = maybeBucketSpec,
       properties = tableProperties.toMap ++
         maybeClusterBySpec.map(
-          clusterBySpec => ClusterBySpec.toProperty(schema, clusterBySpec, conf.resolver)),
+          clusterBySpec => ClusterBySpec.toProperty(newSchema, clusterBySpec, conf.resolver)),
       tracksPartitionsInCatalog = conf.manageFilesourcePartitions,
       comment = Option(properties.get(TableCatalog.PROP_COMMENT)))
 
