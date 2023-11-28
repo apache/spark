@@ -417,7 +417,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
 
       assert(JdbcUtils.schemaString(
         schema,
-        spark.sqlContext.conf.caseSensitiveAnalysis,
+        spark.sessionState.conf.caseSensitiveAnalysis,
         url1,
         Option(createTableColTypes)) == expectedSchemaStr)
     }

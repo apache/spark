@@ -114,7 +114,7 @@ class MultinomialLogisticBlockAggregatorSuite extends SparkFunSuite with MLlibTe
   test("check sizes") {
     val rng = new scala.util.Random
     val numFeatures = instances.head.features.size
-    val numClasses = instances.map(_.label).distinct.size
+    val numClasses = instances.map(_.label).distinct.length
     val coefWithIntercept = Vectors.dense(
       Array.fill(numClasses * (numFeatures + 1))(rng.nextDouble()))
     val coefWithoutIntercept = Vectors.dense(
@@ -140,7 +140,7 @@ class MultinomialLogisticBlockAggregatorSuite extends SparkFunSuite with MLlibTe
       Summarizer.getClassificationSummarizers(sc.parallelize(instances.toImmutableArraySeq))
     val featuresStd = featuresSummarizer.std
     val stdCoefMat = Matrices.dense(numClasses, numFeatures,
-      Array.tabulate(coefArray.size)(i => coefArray(i) / featuresStd(i / numClasses)))
+      Array.tabulate(coefArray.length)(i => coefArray(i) / featuresStd(i / numClasses)))
     val weightSum = instances.map(_.weight).sum
 
     // compute the loss
@@ -206,7 +206,7 @@ class MultinomialLogisticBlockAggregatorSuite extends SparkFunSuite with MLlibTe
       Summarizer.getClassificationSummarizers(sc.parallelize(instances.toImmutableArraySeq))
     val featuresStd = featuresSummarizer.std
     val stdCoefMat = Matrices.dense(numClasses, numFeatures,
-      Array.tabulate(coefArray.size)(i => coefArray(i) / featuresStd(i / numClasses)))
+      Array.tabulate(coefArray.length)(i => coefArray(i) / featuresStd(i / numClasses)))
     val weightSum = instances.map(_.weight).sum
 
     // compute the loss
@@ -280,7 +280,7 @@ class MultinomialLogisticBlockAggregatorSuite extends SparkFunSuite with MLlibTe
     val featuresStd = featuresSummarizer.std
     val featuresMean = featuresSummarizer.mean
     val stdCoefMat = Matrices.dense(numClasses, numFeatures,
-      Array.tabulate(coefArray.size)(i => coefArray(i) / featuresStd(i / numClasses)))
+      Array.tabulate(coefArray.length)(i => coefArray(i) / featuresStd(i / numClasses)))
     val weightSum = instances.map(_.weight).sum
 
     // compute the loss

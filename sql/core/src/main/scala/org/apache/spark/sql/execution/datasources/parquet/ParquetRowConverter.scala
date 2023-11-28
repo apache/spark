@@ -42,7 +42,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -234,7 +234,7 @@ private[parquet] class ParquetRowConverter(
     // maintain a boolean array to track which fields have been explicitly assigned for each row.
     if (ResolveDefaultColumns.hasExistenceDefaultValues(catalystType)) {
       val existingValues = ResolveDefaultColumns.existenceDefaultValues(catalystType)
-      for (i <- 0 until existingValues.size) {
+      for (i <- 0 until existingValues.length) {
        bitmask(i) =
           // Assume the schema for a Parquet file-based table contains N fields. Then if we later
           // run a command "ALTER TABLE t ADD COLUMN c DEFAULT <value>" on the Parquet table, this
@@ -497,6 +497,9 @@ private[parquet] class ParquetRowConverter(
           datetimeRebaseSpec,
           int96RebaseSpec,
           wrappedUpdater)
+
+      case t: VariantType =>
+        new ParquetVariantConverter(parquetType.asGroupType(), updater)
 
       case t =>
         throw QueryExecutionErrors.cannotCreateParquetConverterForDataTypeError(
@@ -807,6 +810,40 @@ private[parquet] class ParquetRowConverter(
         currentKey = null
         currentValue = null
       }
+    }
+  }
+
+  /** Parquet converter for Variant */
+  private final class ParquetVariantConverter(
+     parquetType: GroupType,
+     updater: ParentContainerUpdater)
+    extends ParquetGroupConverter(updater) {
+
+    private[this] var currentValue: Any = _
+    private[this] var currentMetadata: Any = _
+
+    private[this] val converters = Array(
+      // Converter for value
+      newConverter(parquetType.getType(0), BinaryType, new ParentContainerUpdater {
+        override def set(value: Any): Unit = currentValue = value
+      }),
+
+      // Converter for metadata
+      newConverter(parquetType.getType(1), BinaryType, new ParentContainerUpdater {
+        override def set(value: Any): Unit = currentMetadata = value
+      }))
+
+    override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
+
+    override def end(): Unit = {
+      updater.set(
+        new VariantVal(currentValue.asInstanceOf[Array[Byte]],
+            currentMetadata.asInstanceOf[Array[Byte]]))
+    }
+
+    override def start(): Unit = {
+      currentValue = null
+      currentMetadata = null
     }
   }
 

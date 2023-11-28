@@ -19,6 +19,7 @@ from typing import Any, Dict, Optional
 
 from py4j.java_gateway import JavaObject, JVMView
 
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql import column
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
@@ -85,9 +86,15 @@ class Observation:
         """
         if name is not None:
             if not isinstance(name, str):
-                raise TypeError("name should be a string")
+                raise PySparkTypeError(
+                    error_class="NOT_STR",
+                    message_parameters={"arg_name": "name", "arg_type": type(name).__name__},
+                )
             if name == "":
-                raise ValueError("name should not be empty")
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_NON_EMPTY_STR",
+                    message_parameters={"arg_name": "name", "arg_value": name},
+                )
         self._name = name
         self._jvm: Optional[JVMView] = None
         self._jo: Optional[JavaObject] = None
