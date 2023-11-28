@@ -38,7 +38,7 @@ import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
- * The main entry point for the Spark SQL port of HiveServer2.  Starts up a `SparkSQLContext` and a
+ * The main entry point for the Spark SQL port of HiveServer2.  Starts up a `SparkSession` and a
  * `HiveThriftServer2` thrift server.
  */
 object HiveThriftServer2 extends Logging {
