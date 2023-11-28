@@ -1,10 +1,11 @@
 # PySpark dependencies (required)
-py4j
+py4j>=0.10.9.7
 
 # PySpark dependencies (optional)
-numpy
-pyarrow
-pandas
+numpy>=1.21
+pyarrow>=4.0.0
+six==1.16.0
+pandas>=1.4.4
 scipy
 plotly
 mlflow>=2.3.1
@@ -30,12 +31,12 @@ pandas-stubs<1.2.0.54
 mkdocs
 
 # Documentation (Python)
-pydata_sphinx_theme
+pydata_sphinx_theme>=0.13
 ipython
 nbsphinx
 numpydoc
-jinja2<3.0.0
-sphinx<3.1.0
+jinja2
+sphinx==4.2.0
 sphinx-plotly-directive
 sphinx-copybutton
 docutils<0.18.0
@@ -51,8 +52,8 @@ black==23.9.1
 py
 
 # Spark Connect (required)
-grpcio==1.59.3
-grpcio-status==1.59.3
+grpcio>=1.59.3
+grpcio-status>=1.59.3
 protobuf==4.25.1
 googleapis-common-protos>=1.56.4
 

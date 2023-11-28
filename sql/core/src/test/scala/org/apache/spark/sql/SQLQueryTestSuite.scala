@@ -454,7 +454,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
   def hasNoDuplicateColumns(schema: String): Boolean = {
     val columnAndTypes = schema.replaceFirst("^struct<", "").stripSuffix(">").split(",")
-    columnAndTypes.size == columnAndTypes.distinct.size
+    columnAndTypes.size == columnAndTypes.distinct.length
   }
 
   def expandCTEQueryAndCompareResult(

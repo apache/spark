@@ -369,7 +369,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     } else {
       val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
       val disabledSources =
-        Utils.stringToSeq(df.sparkSession.sqlContext.conf.disabledV2StreamingWriters)
+        Utils.stringToSeq(df.sparkSession.sessionState.conf.disabledV2StreamingWriters)
       val useV1Source = disabledSources.contains(cls.getCanonicalName) ||
         // file source v2 does not support streaming yet.
         classOf[FileDataSourceV2].isAssignableFrom(cls)

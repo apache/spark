@@ -347,7 +347,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     Batch("Cleanup", fixedPoint,
       CleanupAliases),
     Batch("HandleSpecialCommand", Once,
-      HandleSpecialCommand)
+      HandleSpecialCommand),
+    Batch("Remove watermark for batch query", Once,
+      EliminateEventTimeWatermark)
   )
 
   /**
@@ -3356,7 +3358,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             encOpt.map { enc =>
               val attrs = if (enc.isSerializedAsStructForTopLevel) {
                 // Value class that has been replaced with its underlying type
-                if (enc.schema.fields.size == 1 && enc.schema.fields.head.dataType == dataType) {
+                if (enc.schema.fields.length == 1 && enc.schema.fields.head.dataType == dataType) {
                   DataTypeUtils.toAttributes(enc.schema)
                 } else {
                   DataTypeUtils.toAttributes(dataType.asInstanceOf[StructType])
@@ -3938,7 +3940,7 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
 object EliminateEventTimeWatermark extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(EVENT_TIME_WATERMARK)) {
-    case EventTimeWatermark(_, _, child) if !child.isStreaming => child
+    case EventTimeWatermark(_, _, child) if child.resolved && !child.isStreaming => child
   }
 }
 

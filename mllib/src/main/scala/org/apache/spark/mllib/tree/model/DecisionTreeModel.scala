@@ -244,7 +244,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
       // Build node data into a tree.
       val trees = constructTrees(nodes)
       assert(trees.length == 1,
-        s"Decision tree should contain exactly one tree but got ${trees.size} trees.")
+        s"Decision tree should contain exactly one tree but got ${trees.length} trees.")
       val model = new DecisionTreeModel(trees(0), Algo.fromString(algo))
       assert(model.numNodes == numNodes, s"Unable to load DecisionTreeModel data from: $dataPath." +
         s" Expected $numNodes nodes but found ${model.numNodes}")

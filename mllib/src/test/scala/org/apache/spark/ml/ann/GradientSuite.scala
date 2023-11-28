@@ -43,7 +43,7 @@ class GradientSuite extends SparkFunSuite with MLlibTestSparkContext {
       topology.layers(topology.layers.length - 1) = layerWithError
       val model = topology.model(seed = 12L)
       val weights = model.weights.toArray
-      val numWeights = weights.size
+      val numWeights = weights.length
       val gradient = Vectors.dense(Array.fill[Double](numWeights)(0.0))
       val loss = model.computeGradient(input, target, gradient, 1)
       val eps = 1e-4

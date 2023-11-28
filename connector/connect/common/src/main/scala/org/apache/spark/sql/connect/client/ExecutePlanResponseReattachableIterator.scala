@@ -101,20 +101,7 @@ class ExecutePlanResponseReattachableIterator(
   // throw error on first iter.hasNext() or iter.next()
   // Visible for testing.
   private[connect] var iter: Option[java.util.Iterator[proto.ExecutePlanResponse]] =
-    Some(makeLazyIter(rawBlockingStub.executePlan(initialRequest)))
-
-  // Creates a request that contains the query and returns a stream of `ExecutePlanResponse`.
-  // After upgrading gRPC from 1.56.0 to 1.59.3, it makes the first request when
-  // the stream is created, but here the code here assumes that no request is made before
-  // that, see also SPARK-46042
-  private def makeLazyIter(f: => java.util.Iterator[proto.ExecutePlanResponse])
-      : java.util.Iterator[proto.ExecutePlanResponse] = {
-    new java.util.Iterator[proto.ExecutePlanResponse] {
-      private lazy val internalIter = f
-      override def hasNext: Boolean = internalIter.hasNext
-      override def next(): proto.ExecutePlanResponse = internalIter.next
-    }
-  }
+    Some(rawBlockingStub.executePlan(initialRequest))
 
   // Server side session ID, used to detect if the server side session changed. This is set upon
   // receiving the first response from the server.
@@ -241,7 +228,7 @@ class ExecutePlanResponseReattachableIterator(
   private def callIter[V](iterFun: java.util.Iterator[proto.ExecutePlanResponse] => V) = {
     try {
       if (iter.isEmpty) {
-        iter = Some(makeLazyIter(rawBlockingStub.reattachExecute(createReattachExecuteRequest())))
+        iter = Some(rawBlockingStub.reattachExecute(createReattachExecuteRequest()))
       }
       iterFun(iter.get)
     } catch {
@@ -254,7 +241,7 @@ class ExecutePlanResponseReattachableIterator(
             ex)
         }
         // Try a new ExecutePlan, and throw upstream for retry.
-        iter = Some(makeLazyIter(rawBlockingStub.executePlan(initialRequest)))
+        iter = Some(rawBlockingStub.executePlan(initialRequest))
         val error = new RetryException()
         error.addSuppressed(ex)
         throw error

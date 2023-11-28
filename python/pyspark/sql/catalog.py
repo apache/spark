@@ -19,6 +19,7 @@ import sys
 import warnings
 from typing import Any, Callable, NamedTuple, List, Optional, TYPE_CHECKING
 
+from pyspark.errors import PySparkTypeError
 from pyspark.storagelevel import StorageLevel
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.session import SparkSession
@@ -851,7 +852,13 @@ class Catalog:
             df = self._jcatalog.createTable(tableName, source, description, options)
         else:
             if not isinstance(schema, StructType):
-                raise TypeError("schema should be StructType")
+                raise PySparkTypeError(
+                    error_class="NOT_STRUCT",
+                    message_parameters={
+                        "arg_name": "schema",
+                        "arg_type": type(schema).__name__,
+                    },
+                )
             scala_datatype = self._jsparkSession.parseDataType(schema.json())
             df = self._jcatalog.createTable(tableName, source, scala_datatype, description, options)
         return DataFrame(df, self._sparkSession)

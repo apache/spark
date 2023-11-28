@@ -284,7 +284,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     var prefix = ""
 
     def currentDB = {
-      if (!SparkSQLEnv.sqlContext.conf.getConf(LEGACY_EMPTY_CURRENT_DB_IN_CLI)) {
+      if (!SparkSQLEnv.sqlContext.sparkSession.sessionState.conf
+        .getConf(LEGACY_EMPTY_CURRENT_DB_IN_CLI)) {
         s" (${SparkSQLEnv.sqlContext.sparkSession.catalog.currentDatabase})"
       } else {
         ReflectionUtils.invokeStatic(classOf[CliDriver], "getFormattedDb",
@@ -448,7 +449,8 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   }
 
   override def setHiveVariables(hiveVariables: java.util.Map[String, String]): Unit = {
-    hiveVariables.asScala.foreach(kv => SparkSQLEnv.sqlContext.conf.setConfString(kv._1, kv._2))
+    hiveVariables.asScala.foreach(kv =>
+      SparkSQLEnv.sqlContext.sparkSession.sessionState.conf.setConfString(kv._1, kv._2))
   }
 
   def printMasterAndAppId(): Unit = {
@@ -504,7 +506,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
           ret = rc.getResponseCode
           if (ret != 0) {
-            val format = SparkSQLEnv.sqlContext.conf.errorMessageFormat
+            val format = SparkSQLEnv.sqlContext.sparkSession.sessionState.conf.errorMessageFormat
             val e = rc.getException
             val msg = e match {
               case st: SparkThrowable with Throwable => SparkThrowableHelper.getMessage(st, format)
@@ -523,7 +525,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           val res = new JArrayList[String]()
 
           if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_CLI_PRINT_HEADER) ||
-              SparkSQLEnv.sqlContext.conf.cliPrintHeader) {
+              SparkSQLEnv.sqlContext.sparkSession.sessionState.conf.cliPrintHeader) {
             // Print the column names.
             Option(driver.getSchema.getFieldSchemas).foreach { fields =>
               out.println(fields.asScala.map(_.getName).mkString("\t"))

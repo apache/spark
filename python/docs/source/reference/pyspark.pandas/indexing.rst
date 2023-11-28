@@ -129,8 +129,14 @@ in Spark. These can be accessed by ``Index.spark.<function/property>``.
 
 .. autosummary::
    :toctree: api/
+   :template: autosummary/accessor_attribute.rst
 
    Index.spark.column
+
+.. autosummary::
+   :toctree: api/
+   :template: autosummary/accessor_method.rst
+
    Index.spark.transform
 
 Sorting
@@ -308,9 +314,15 @@ in Spark. These can be accessed by ``MultiIndex.spark.<function/property>``.
 
 .. autosummary::
    :toctree: api/
+   :template: autosummary/accessor_attribute.rst
 
    MultiIndex.spark.data_type
    MultiIndex.spark.column
+
+.. autosummary::
+   :toctree: api/
+   :template: autosummary/accessor_method.rst
+
    MultiIndex.spark.transform
 
 MultiIndex Sorting
