@@ -692,8 +692,6 @@ jobs:
     - name: Install Python linter dependencies
       if: inputs.branch != 'branch-3.3' && inputs.branch != 'branch-3.4' && inputs.branch != 'branch-3.5'
       run: |
-        # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
-        #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
         # Jinja2 3.0.0+ causes error when building with Sphinx.
         #   See also https://issues.apache.org/jira/browse/SPARK-35375.
         python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.982' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==23.9.1'
@@ -745,8 +743,6 @@ jobs:
         Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
     - name: Install dependencies for documentation generation
       run: |
-        # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
-        #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
         # Jinja2 3.0.0+ causes error when building with Sphinx.
         #   See also https://issues.apache.org/jira/browse/SPARK-35375.
         # Pin the MarkupSafe to 2.0.1 to resolve the CI error.
