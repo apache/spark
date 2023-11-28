@@ -88,7 +88,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
             provider match {
               case p: SupportsCatalogOptions =>
                 throw new IllegalArgumentException(
-                  f"provider $p should not implement SupportsCatalogOptions")
+                  f"provider $p should not implement SupportsCatalogOptions.")
 
               case _ =>
                 // If the source accepts external table metadata, we can pass the schema and
@@ -171,23 +171,32 @@ class V2SessionCatalog(catalog: SessionCatalog)
           errorClass = "CANNOT_CREATE_DATA_SOURCE_V2_TABLE.CATALOG_OPTIONS_UNSUPPORTED",
           messageParameters = Map("provider" -> provider))
 
+      // If the provider does not support external metadata, users should not be allowed to
+      // specify custom schema when creating the data source table, since the schema will not
+      // be used when loading the table.
       case Some(p) if !p.supportsExternalMetadata() =>
-        // Partitions cannot be specified when schema is empty.
         if (schema.nonEmpty) {
           throw new SparkUnsupportedOperationException(
             errorClass = "CANNOT_CREATE_DATA_SOURCE_V2_TABLE.EXTERNAL_METADATA_UNSUPPORTED",
             messageParameters = Map("provider" -> provider))
         }
+        // V2CreateTablePlan does not allow non-empty partitions when schema is empty. This
+        // is checked in `PreProcessTableCreation` rule.
+        assert(partitions.isEmpty,
+          s"Partitions should be empty when the schema is empty: ${partitions.mkString(", ")}")
         (schema, partitions)
 
       case Some(tableProvider) =>
         assert(tableProvider.supportsExternalMetadata())
+        lazy val dsOptions = new CaseInsensitiveStringMap(properties)
         if (schema.isEmpty) {
+          assert(partitions.isEmpty,
+            s"Partitions should be empty when the schema is empty: ${partitions.mkString(", ")}")
           // Infer the schema and partitions and store them in the catalog.
-          val dsOptions = new CaseInsensitiveStringMap(properties)
           (tableProvider.inferSchema(dsOptions), tableProvider.inferPartitioning(dsOptions))
+        } else if (partitions.isEmpty) {
+          (schema, tableProvider.inferPartitioning(dsOptions))
         } else {
-          // TODO: when schema is defined but partitioning is empty, should we infer it?
           (schema, partitions)
         }
 

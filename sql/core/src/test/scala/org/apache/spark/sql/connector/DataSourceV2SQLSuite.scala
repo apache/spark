@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector
 
 import java.sql.Timestamp
 import java.time.{Duration, LocalDate, Period}
+import java.util
 import java.util.Locale
 
 import scala.concurrent.duration.MICROSECONDS
@@ -36,7 +37,8 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, _}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
-import org.apache.spark.sql.connector.expressions.LiteralValue
+import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
+import org.apache.spark.sql.connector.read.{InputPartition, ScanBuilder}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -191,7 +193,7 @@ class DataSourceV2SQLSuiteV1Filter
     val testCatalog = catalog(SESSION_CATALOG_NAME).asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array("default"), "table_name"))
 
-    assert(table.name == "default.table_name")
+    assert(table.name == "org.apache.spark.sql.connector.FakeV2Provider")
     assert(table.partitioning.isEmpty)
     assert(table.properties == withDefaultOwnership(Map("provider" -> v2Source)).asJava)
     assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
@@ -666,7 +668,7 @@ class DataSourceV2SQLSuiteV1Filter
     val testCatalog = catalog(SESSION_CATALOG_NAME).asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array("default"), "table_name"))
 
-    assert(table.name == "default.table_name")
+    assert(table.name == "org.apache.spark.sql.connector.FakeV2Provider")
     assert(table.partitioning.isEmpty)
     assert(table.properties == withDefaultOwnership(Map("provider" -> v2Source)).asJava)
     assert(table.schema == new StructType()
@@ -1120,7 +1122,7 @@ class DataSourceV2SQLSuiteV1Filter
         },
         errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
         parameters = Map(
-          "tableName" -> "`default`.`tbl`",
+          "tableName" -> "`org`.`apache`.`spark`.`sql`.`connector`.`FakeV2Provider`",
           "tableColumns" -> "`id`, `data`",
           "dataColumns" -> "`col1`"
         )
@@ -1155,7 +1157,7 @@ class DataSourceV2SQLSuiteV1Filter
         },
         errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
         parameters = Map(
-          "tableName" -> "`default`.`tbl`",
+          "tableName" -> "`org`.`apache`.`spark`.`sql`.`connector`.`FakeV2Provider`",
           "tableColumns" -> "`id`, `data`",
           "dataColumns" -> "`col1`"
         )
@@ -1191,7 +1193,7 @@ class DataSourceV2SQLSuiteV1Filter
         },
         errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
         parameters = Map(
-          "tableName" -> "`default`.`tbl`",
+          "tableName" -> "`org`.`apache`.`spark`.`sql`.`connector`.`FakeV2Provider`",
           "tableColumns" -> "`id`, `data`, `data2`",
           "dataColumns" -> "`col1`, `col2`"
         )
@@ -3366,8 +3368,30 @@ class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
 
 /** Used as a V2 DataSource for V2SessionCatalog DDL */
 class FakeV2Provider extends SimpleTableProvider {
+
+  override def supportsExternalMetadata(): Boolean = true
+
+  class MyScanBuilder extends SimpleScanBuilder {
+    override def planInputPartitions(): Array[InputPartition] = {
+      Array(RangeInputPartition(0, 5), RangeInputPartition(5, 10))
+    }
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    getTable(new CaseInsensitiveStringMap(properties))
+  }
+
   override def getTable(options: CaseInsensitiveStringMap): Table = {
-    throw new UnsupportedOperationException("Unnecessary for DDL tests")
+    new SimpleBatchTable {
+      override def name(): String = options.get("provider")
+
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new MyScanBuilder()
+      }
+    }
   }
 }
 

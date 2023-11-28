@@ -31,6 +31,6 @@ provider '`<provider>`' implements 'SupportsCatalogOptions' which is not support
 
 ## EXTERNAL_METADATA_UNSUPPORTED
 
-provider '`<provider>`' does not support external metadata but schema is provided. Please remove the schema and try again.
+provider '`<provider>`' does not support external metadata but a schema is provided. Please remove the schema when creating the table.
 
 

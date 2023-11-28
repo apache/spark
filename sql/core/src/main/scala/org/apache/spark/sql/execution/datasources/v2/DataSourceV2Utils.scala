@@ -162,16 +162,9 @@ private[sql] object DataSourceV2Utils extends Logging {
     if (DDLUtils.isHiveTable(Some(provider))) return None
     DataSource.lookupDataSourceV2(provider, conf) match {
       // TODO(SPARK-28396): Currently file source v2 can't work with tables.
-      case Some(_: FileDataSourceV2) => None
-      case o => o
+      case Some(p) if !p.isInstanceOf[FileDataSourceV2] => Some(p)
+      case _ => None
     }
-  }
-
-  /**
-   * Check if the provider is a v2 provider.
-   */
-  def isV2Provider(provider: String, conf: SQLConf): Boolean = {
-    getTableProvider(provider, conf).isDefined
   }
 
   private lazy val objectMapper = new ObjectMapper()

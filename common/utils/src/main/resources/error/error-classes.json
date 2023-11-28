@@ -149,6 +149,24 @@
     ],
     "sqlState" : "42846"
   },
+  "CANNOT_CREATE_DATA_SOURCE_V2_TABLE" : {
+    "message" : [
+      "Failed to create data source V2 table:"
+    ],
+    "subClass" : {
+      "CATALOG_OPTIONS_UNSUPPORTED" : {
+        "message" : [
+          "provider '<provider>' implements 'SupportsCatalogOptions' which is not supported. Please use a compatible provider."
+        ]
+      },
+      "EXTERNAL_METADATA_UNSUPPORTED" : {
+        "message" : [
+          "provider '<provider>' does not support external metadata but a schema is provided. Please remove the schema when creating the table."
+        ]
+      }
+    },
+    "sqlState" : "42KDE"
+  },
   "CANNOT_DECODE_URL" : {
     "message" : [
       "The provided URL cannot be decoded: <url>. Please ensure that the URL is properly formatted and try again."
@@ -375,24 +393,6 @@
       }
     },
     "sqlState" : "58030"
-  },
-  "CANNOT_CREATE_DATA_SOURCE_V2_TABLE" : {
-    "message" : [
-      "Failed to create data source V2 table:"
-    ],
-    "subClass" : {
-      "CATALOG_OPTIONS_UNSUPPORTED" : {
-        "message": [
-          "provider '<provider>' implements 'SupportsCatalogOptions' which is not supported. Please use a compatible provider."
-        ]
-      },
-      "EXTERNAL_METADATA_UNSUPPORTED" : {
-        "message": [
-          "provider '<provider>' does not support external metadata but schema is provided. Please remove the schema and try again."
-        ]
-      }
-    },
-    "sqlState": "42KDE"
   },
   "CAST_INVALID_INPUT" : {
     "message" : [

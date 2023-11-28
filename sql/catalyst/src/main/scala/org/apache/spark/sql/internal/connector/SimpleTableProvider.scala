@@ -31,6 +31,7 @@ trait SimpleTableProvider extends TableProvider {
   def getTable(options: CaseInsensitiveStringMap): Table
 
   private[this] var loadedTable: Table = _
+
   private def getOrLoadTable(options: CaseInsensitiveStringMap): Table = {
     if (loadedTable == null) loadedTable = getTable(options)
     loadedTable
