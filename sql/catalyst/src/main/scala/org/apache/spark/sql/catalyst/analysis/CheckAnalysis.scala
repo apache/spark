@@ -275,6 +275,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case _: ShowTableExtended =>
         throw QueryCompilationErrors.commandUnsupportedInV2TableError("SHOW TABLE EXTENDED")
 
+      case o: OverwriteByExpression =>
+        o.deleteExpr.foreach {
+          case s: SubqueryExpression =>
+            s.failAnalysis (
+              errorClass = "UNSUPPORTED_FEATURE.OVERWRITE_BY_SUBQUERY",
+              messageParameters = Map.empty)
+          case _ =>
+        }
+
       case operator: LogicalPlan =>
         operator transformExpressionsDown {
           // Check argument data types of higher-order functions downwards first.
@@ -636,7 +645,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               "DECLARE VARIABLE",
               varName,
               c.defaultExpr.originalSQL)
-
           case _ => // Falls back to the following checks
         }
 
