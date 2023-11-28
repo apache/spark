@@ -148,11 +148,11 @@ The following configurations are optional:
 
 ### Reading state for Stream-stream join
 
-Structured Streaming implements the feature stream-stream join via leveraging multiple instances of state store internally.
+Structured Streaming implements the stream-stream join feature via leveraging multiple instances of state store internally.
 These instances logically compose buffers to store the input rows for left and right.
 
 Since it is more obvious to users to reason about, the data source provides the option 'joinSide' to read the buffered input for specific side of the join.
-To enable the functionality to read the internal state store instance, we also allow specifying the option 'storeName', with restriction that 'storeName' and 'joinSide' cannot be specified together.
+To enable the functionality to read the internal state store instance directly, we also allow specifying the option 'storeName', with restriction that 'storeName' and 'joinSide' cannot be specified together.
 
 ## State metadata source
 
