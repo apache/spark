@@ -97,18 +97,24 @@ private[sql] object EasilyFlattenable {
         } else if (passThruAttribs.size + tinkeredOrNewNamedExprs.size == currentOutputAttribs.size
           && passThruAttribsContainedInCurrentOutput && tinkeredOrNewNamedExprs.forall(
           ne => ne match {
-            case Alias(_: AttributeReference, _) => true
+            case Alias(x: AttributeReference, _) =>
+              val toCheck = projList.find(_.toAttribute.canonicalized == x.canonicalized).get
+              toCheck match {
+                case _: AttributeReference => true
+                case al: Alias => passThruAttribs.forall(
+                  _.toAttribute.canonicalized != al.toAttribute.canonicalized )
+              }
             case _ => false
           })) {
            // case of renaming of columns
            val remappedNewProjListResult = newProjList.map {
                case attr: AttributeReference => projList.find(
-                 _.toAttribute.canonicalized == attr.canonicalized).getOrElse(attr)
+                 _.toAttribute.canonicalized == attr.canonicalized).get
 
                case al @ Alias(ar: AttributeReference, name) =>
                  projList.find(
                      _.toAttribute.canonicalized == ar.canonicalized).map {
-                         case al: Alias => al.copy(name = name)(exprId = al.exprId,
+                         case alx: Alias => alx.copy(name = name)(exprId = al.exprId,
                            qualifier = al.qualifier, explicitMetadata = al.explicitMetadata,
                            nonInheritableMetadataKeys = al.nonInheritableMetadataKeys)
 
