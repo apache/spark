@@ -109,14 +109,14 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
       // commit the ver 1 : cache will have one element
       currentVersion = incrementVersion(provider, currentVersion)
-      assert(getLatestData(provider, false) === Set(("a", 0) -> 1))
+      assert(getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> 1))
       var loadedMaps = provider.getLoadedMaps()
       checkLoadedVersions(loadedMaps, count = 1, earliestKey = 1, latestKey = 1)
       checkVersion(loadedMaps, 1, Map(("a", 0) -> 1))
 
       // commit the ver 2 : cache will have two elements
       currentVersion = incrementVersion(provider, currentVersion)
-      assert(getLatestData(provider, false) === Set(("a", 0) -> 2))
+      assert(getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> 2))
       loadedMaps = provider.getLoadedMaps()
       checkLoadedVersions(loadedMaps, count = 2, earliestKey = 2, latestKey = 1)
       checkVersion(loadedMaps, 2, Map(("a", 0) -> 2))
@@ -125,7 +125,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       // commit the ver 3 : cache has already two elements and adding ver 3 incurs exceeding cache,
       // and ver 3 will be added but ver 1 will be evicted
       currentVersion = incrementVersion(provider, currentVersion)
-      assert(getLatestData(provider, false) === Set(("a", 0) -> 3))
+      assert(getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> 3))
       loadedMaps = provider.getLoadedMaps()
       checkLoadedVersions(loadedMaps, count = 2, earliestKey = 3, latestKey = 2)
       checkVersion(loadedMaps, 3, Map(("a", 0) -> 3))
@@ -141,7 +141,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
       // commit the ver 1 : cache will have one element
       currentVersion = incrementVersion(provider, currentVersion)
-      assert(getLatestData(provider, false) === Set(("a", 0) -> 1))
+      assert(getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> 1))
       var loadedMaps = provider.getLoadedMaps()
       checkLoadedVersions(loadedMaps, count = 1, earliestKey = 1, latestKey = 1)
       checkVersion(loadedMaps, 1, Map(("a", 0) -> 1))
@@ -151,7 +151,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       // this fact ensures cache miss will occur when this partition succeeds commit
       // but there's a failure afterwards so have to reprocess previous batch
       currentVersion = incrementVersion(provider, currentVersion)
-      assert(getLatestData(provider, false) === Set(("a", 0) -> 2))
+      assert(getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> 2))
       loadedMaps = provider.getLoadedMaps()
       checkLoadedVersions(loadedMaps, count = 1, earliestKey = 2, latestKey = 2)
       checkVersion(loadedMaps, 2, Map(("a", 0) -> 2))
@@ -167,7 +167,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       currentVersion += 1
 
       // make sure newly committed version is reflected to the cache (overwritten)
-      assert(getLatestData(provider, false) === Set(("a", 0) -> -2))
+      assert(getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> -2))
       loadedMaps = provider.getLoadedMaps()
       checkLoadedVersions(loadedMaps, count = 1, earliestKey = 2, latestKey = 2)
       checkVersion(loadedMaps, 2, Map(("a", 0) -> -2))
@@ -182,13 +182,13 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
       // commit the ver 1 : never cached
       currentVersion = incrementVersion(provider, currentVersion)
-      assert(getLatestData(provider, false) === Set(("a", 0) -> 1))
+      assert(getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> 1))
       var loadedMaps = provider.getLoadedMaps()
       assert(loadedMaps.size() === 0)
 
       // commit the ver 2 : never cached
       currentVersion = incrementVersion(provider, currentVersion)
-      assert(getLatestData(provider, false) === Set(("a", 0) -> 2))
+      assert(getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> 2))
       loadedMaps = provider.getLoadedMaps()
       assert(loadedMaps.size() === 0)
     }
@@ -211,8 +211,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       assert(!fileExists(provider, version = 1, isSnapshot = false)) // first file should be deleted
 
       // last couple of versions should be retrievable
-      assert(getData(provider, 20, false) === Set(("a", 0) -> 20))
-      assert(getData(provider, 19, false) === Set(("a", 0) -> 19))
+      assert(getData(provider, 20, useColumnFamilies = false) === Set(("a", 0) -> 20))
+      assert(getData(provider, 19, useColumnFamilies = false) === Set(("a", 0) -> 19))
     }
   }
 
@@ -248,10 +248,11 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         fileExists(provider, version, isSnapshot = true)).getOrElse(fail("snapshot file not found"))
 
       // Corrupt snapshot file and verify that it throws error
-      assert(getData(provider, snapshotVersion, false) === Set(("a", 0) -> snapshotVersion))
+      assert(getData(provider, snapshotVersion,
+        useColumnFamilies = false) === Set(("a", 0) -> snapshotVersion))
       corruptFile(provider, snapshotVersion, isSnapshot = true)
       var e = intercept[SparkException] {
-        getData(provider, snapshotVersion, false)
+        getData(provider, snapshotVersion, useColumnFamilies = false)
       }
       checkError(
         e,
