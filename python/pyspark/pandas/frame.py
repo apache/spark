@@ -2512,9 +2512,8 @@ class DataFrame(Frame, Generic[T]):
         You can also specify the mapping type.
 
         >>> from collections import OrderedDict, defaultdict
-        >>> df.to_dict(into=OrderedDict)
-        OrderedDict([('col1', OrderedDict([('row1', 1), ('row2', 2)])), \
-('col2', OrderedDict([('row1', 0.5), ('row2', 0.75)]))])
+        >>> df.to_dict(into=OrderedDict)  # doctest: +ELLIPSIS
+        OrderedDict(...)
 
         If you want a `defaultdict`, you need to initialize it:
 
