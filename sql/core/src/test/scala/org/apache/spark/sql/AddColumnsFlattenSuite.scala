@@ -42,7 +42,7 @@ class AddColumnsFlattenSuite extends QueryTest
   }
 
   test("withColumns: check no new project addition if redefined alias is not used in" +
-    "new columns") {
+    " new columns") {
     val testDf = spark.range(1).select($"id" as "a", $"id" as "b").select($"a" + 1 as "a",
     $"b")
     val initNodes = testDf.queryExecution.logical.collect {
@@ -72,13 +72,79 @@ class AddColumnsFlattenSuite extends QueryTest
     assert(newNodes.size === initNodes.size + 1)
   }
 
-  test("withColumns: remap of column should result in project addition") {
+  test("withColumns: remap of column should not result in new project if the source of remap" +
+    "is not used in other cols") {
     val testDf = spark.range(1).select($"id" as "a", $"id" as "b")
     val initNodes = testDf.queryExecution.logical.collect {
       case l => l
     }
 
     val newDf = testDf.withColumnRenamed("a", "c")
+
+    val newNodes = newDf.queryExecution.logical.collect {
+      case l => l
+    }
+    assert(newNodes.size === initNodes.size)
+  }
+
+  test("withColumns: remap of column should not result in new project if the source of remap is" +
+    "an attribute used in other cols") {
+    val testDf = spark.range(1).select($"id" as "a", $"id" as "b").
+      select($"a" + 1 as "c", $"a", $"b")
+    val initNodes = testDf.queryExecution.logical.collect {
+      case l => l
+    }
+
+    val newDf = testDf.withColumnRenamed("a", "d")
+
+    val newNodes = newDf.queryExecution.logical.collect {
+      case l => l
+    }
+    assert(newNodes.size === initNodes.size )
+  }
+
+  test("withColumns: remap of column should not result in new project if the remap" +
+    " is on an alias") {
+    val testDf = spark.range(1).select($"id" as "a", $"id" as "b").
+      select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d" )
+    val initNodes = testDf.queryExecution.logical.collect {
+      case l => l
+    }
+
+    val newDf = testDf.withColumnRenamed("d", "x")
+
+    val newNodes = newDf.queryExecution.logical.collect {
+      case l => l
+    }
+    assert(newNodes.size === initNodes.size)
+  }
+
+  test("withColumns: remap of column should not  result in new project if the remap" +
+    " source an alias and that attribute is also projected as another attribute") {
+    val testDf = spark.range(1).select($"id" as "a", $"id" as "b").
+      select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d").
+      select($"c", $"a", $"b", $"d", $"d" as "k")
+    val initNodes = testDf.queryExecution.logical.collect {
+      case l => l
+    }
+
+    val newDf = testDf.withColumnRenamed("d", "x")
+
+    val newNodes = newDf.queryExecution.logical.collect {
+      case l => l
+    }
+    assert(newNodes.size === initNodes.size)
+  }
+
+  test("withColumns: test multi column remap") {
+    val testDf = spark.range(1).select($"id" as "a", $"id" as "b").
+      select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d")
+
+    val initNodes = testDf.queryExecution.logical.collect {
+      case l => l
+    }
+
+    val newDf = testDf.withColumnsRenamed(Map("d" -> "x", "c" -> "k", "a" -> "u"))
 
     val newNodes = newDf.queryExecution.logical.collect {
       case l => l
