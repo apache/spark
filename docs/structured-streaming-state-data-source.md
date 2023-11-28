@@ -1,7 +1,7 @@
 ---
 layout: global
-displayTitle: State data source (Experimental) Guide in Structured Streaming
-title: State data source (Experimental) Guide in Structured Streaming
+displayTitle: State Data Source Integration Guide
+title: State Data Source Integration Guide
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -31,7 +31,7 @@ NOTE: this data source is currently marked as experimental - source options and 
 
 ## Reading state key-values from the checkpoint
 
-State data source enables reading key-value pairs from the state in the checkpoint, via running a separate batch query.
+State data source enables reading key-value pairs from the state store in the checkpoint, via running a separate batch query.
 Users can leverage the functionality to cover two major use cases described below:
 
 * Construct a test checking both output and the state. It is non-trivial to deduce the key-value of the state from the output, and having visibility of the state would be a huge win on testing.

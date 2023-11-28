@@ -2454,7 +2454,7 @@ User can increase Spark locality waiting configurations to avoid loading state s
 
 #### State Data Source (Experimental)
 
-Apache Spark provides a streaming state related data source that provides the ability to manipulate states in the checkpoint. Users can run the batch query with State Data Source to get the visibility of the states for existing streaming query.
+Apache Spark provides a streaming state related data source that provides the ability to manipulate state stores in the checkpoint. Users can run the batch query with State Data Source to get the visibility of the states for existing streaming query.
 
 As of Spark 4.0, the data source only supports read feature. See [State Data Source Integration Guide](structured-streaming-state-data-source.html) for more details.
 
