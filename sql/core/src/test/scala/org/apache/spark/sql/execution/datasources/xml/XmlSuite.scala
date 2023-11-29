@@ -2145,8 +2145,14 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       </ROW>""" :: Nil))(Encoders.STRING)
 
   test("Primitive field and type inferring") {
+    val dfWithNodecimal = spark.read
+      .option("nullValue", "null")
+      .xml(primitiveFieldAndType)
+    assert(dfWithNodecimal.schema("decimal").dataType === DoubleType)
+
     val df = spark.read
       .option("nullValue", "null")
+      .option("prefersDecimal", "true")
       .xml(primitiveFieldAndType)
 
     val expectedSchema = StructType(
@@ -2158,7 +2164,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       StructField("null", StringType, true) ::
       StructField("string", StringType, true) :: Nil)
 
-    assert(expectedSchema === df.schema)
+    assert(df.schema === expectedSchema)
 
     checkAnswer(
       df,
@@ -2170,6 +2176,6 @@ class XmlSuite extends QueryTest with SharedSparkSession {
         null,
         "this is a simple string.")
     )
-    testWriteReadRoundTrip(df, Map("nullValue" -> "null"))
+    testWriteReadRoundTrip(df, Map("nullValue" -> "null", "prefersDecimal" -> "true"))
   }
 }

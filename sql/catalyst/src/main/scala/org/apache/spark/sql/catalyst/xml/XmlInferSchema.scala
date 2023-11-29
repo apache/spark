@@ -135,13 +135,12 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
 
     if (options.inferSchema) {
+      lazy val decimalTry = tryParseDecimal(value)
       value match {
         case null => NullType
         case v if v.isEmpty => NullType
         case v if isLong(v) => LongType
-        case v if isDecimal(v) =>
-          val bigDecimal = decimalParser(v)
-          DecimalType(bigDecimal.precision, bigDecimal.scale)
+        case v if options.prefersDecimal && decimalTry.isDefined => decimalTry.get
         case v if isDouble(v) => DoubleType
         case v if isBoolean(v) => BooleanType
         case v if isDate(v) => DateType
@@ -310,7 +309,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
   }
 
-  private def isDecimal(value: String): Boolean = {
+  private def tryParseDecimal(value: String): Option[DataType] = {
     val signSafeValue = if (value.startsWith("+") || value.startsWith("-")) {
       value.substring(1)
     } else {
@@ -320,14 +319,14 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     // the input isn't a decimal. All built-in formats will start with a digit or period.
     if (signSafeValue.isEmpty ||
       !(Character.isDigit(signSafeValue.head) || signSafeValue.head == '.')) {
-      return false
+      return None
     }
     // Rule out strings ending in D or F, as they will parse as double but should be disallowed
     if (signSafeValue.last match {
       case 'd' | 'D' | 'f' | 'F' => true
       case _ => false
     }) {
-      return false
+      return None
     }
 
     try {
@@ -339,13 +338,12 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         // `DecimalType` conversion can fail when
         //   1. The precision is bigger than 38.
         //   2. scale is bigger than precision.
-        DecimalType(bigDecimal.precision, bigDecimal.scale)
-        return true
+        return Some(DecimalType(bigDecimal.precision, bigDecimal.scale))
       }
     } catch {
       case _ : Exception =>
     }
-    false
+    None
   }
 
   private def isDouble(value: String): Boolean = {
