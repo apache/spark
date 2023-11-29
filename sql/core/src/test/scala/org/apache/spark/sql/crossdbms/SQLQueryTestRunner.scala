@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.crossdbms
 
+/**
+ * Trait for classes that can run SQL queries for testing.
+ */
 trait SQLQueryTestRunner {
 
   /**
-   * Runs a given query.
+   * Runs a given query and returns a Seq[String] that represents the query result output.
    */
   def runQuery(query: String): Seq[String]
 
@@ -31,11 +34,10 @@ trait SQLQueryTestRunner {
 }
 
 /**
- * A runner that takes a JDBC connection and uses it to execute queries. We still need the local
- * Spark session to do some things..
+ * A runner that takes a JDBC connection and uses it to execute queries.
  */
-private[sql] case class JdbcSQLQueryTestRunner(
-  connection: JdbcConnection) extends SQLQueryTestRunner {
+private[sql] case class JdbcSQLQueryTestRunner(connection: JdbcConnection)
+  extends SQLQueryTestRunner {
 
   def runQuery(query: String): Seq[String] = connection.runQuery(query)
 
