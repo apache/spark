@@ -637,6 +637,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               "DECLARE VARIABLE",
               varName,
               c.defaultExpr.originalSQL)
+
           case _ => // Falls back to the following checks
         }
 
