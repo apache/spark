@@ -33,8 +33,8 @@ class FileStreamSourceLog(
     path: String)
   extends CompactibleFileStreamLog[FileEntry](metadataLogVersion, sparkSession, path) {
 
-  import org.apache.spark.sql.execution.streaming.CompactibleFileStreamLog._
-  import org.apache.spark.sql.execution.streaming.FileStreamSourceLog._
+  import CompactibleFileStreamLog._
+  import FileStreamSourceLog._
 
   // Configurations about metadata compaction
   protected override val defaultCompactInterval: Int =

@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io.{BufferedReader, InputStreamReader}
 import java.nio.charset.StandardCharsets
 
-import scala.annotation.nowarn
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
@@ -67,7 +66,7 @@ object OperatorStateMetadataV1 {
 
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
-  @nowarn
+  @scala.annotation.nowarn
   private implicit val manifest = Manifest
     .classType[OperatorStateMetadataV1](implicitly[ClassTag[OperatorStateMetadataV1]].runtimeClass)
 
