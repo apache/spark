@@ -42,8 +42,7 @@ export("sparkR.callJStatic")
 
 export("install.spark")
 
-export("sparkRSQL.init",
-       "sparkRHive.init")
+export("sparkRSQL.init")
 
 # MLlib integration
 exportMethods("glm",

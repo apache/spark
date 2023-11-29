@@ -34,7 +34,7 @@ from typing import (
 
 from py4j.java_gateway import JavaObject
 
-from pyspark import _NoValue
+from pyspark import since, _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
@@ -56,9 +56,10 @@ if TYPE_CHECKING:
     )
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
 
-__all__ = ["SQLContext", "HiveContext"]
+__all__ = ["SQLContext"]
 
 
+# TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
 class SQLContext:
     """The entry point for working with structured data (rows and columns) in Spark, in Spark 1.x.
 
@@ -310,6 +311,24 @@ class SQLContext:
             FutureWarning,
         )
         return self.sparkSession.udf.registerJavaFunction(name, javaClassName, returnType)
+
+    # TODO(andrew): delete this once we refactor things to take in SparkSession
+    def _inferSchema(self, rdd: RDD, samplingRatio: Optional[float] = None) -> StructType:
+        """
+        Infer schema from an RDD of Row or tuple.
+
+        Parameters
+        ----------
+        rdd : :class:`RDD`
+            an RDD of Row or tuple
+        samplingRatio : float, optional
+            sampling ratio, or no sampling (default)
+
+        Returns
+        -------
+        :class:`pyspark.sql.types.StructType`
+        """
+        return self.sparkSession._inferSchema(rdd, samplingRatio)
 
     @overload
     def createDataFrame(
@@ -614,28 +633,19 @@ class SQLContext:
         else:
             return [name for name in self._ssql_ctx.tableNames(dbName)]
 
+    @since(1.0)
     def cacheTable(self, tableName: str) -> None:
-        """
-        Caches the specified table in-memory.
-
-        .. versionadded:: 1.0.0
-        """
+        """Caches the specified table in-memory."""
         self._ssql_ctx.cacheTable(tableName)
 
+    @since(1.0)
     def uncacheTable(self, tableName: str) -> None:
-        """
-        Removes the specified table from the in-memory cache.
-
-        .. versionadded:: 1.0.0
-        """
+        """Removes the specified table from the in-memory cache."""
         self._ssql_ctx.uncacheTable(tableName)
 
+    @since(1.3)
     def clearCache(self) -> None:
-        """
-        Removes all cached tables from the in-memory cache.
-
-        .. versionadded:: 1.3.0
-        """
+        """Removes all cached tables from the in-memory cache."""
         self._ssql_ctx.clearCache()
 
     @property
@@ -688,77 +698,6 @@ class SQLContext:
         from pyspark.sql.streaming import StreamingQueryManager
 
         return StreamingQueryManager(self._ssql_ctx.streams())
-
-
-class HiveContext(SQLContext):
-    """A variant of Spark SQL that integrates with data stored in Hive.
-
-    Configuration for Hive is read from ``hive-site.xml`` on the classpath.
-    It supports running both SQL and HiveQL commands.
-
-    .. deprecated:: 2.0.0
-        Use SparkSession.builder.enableHiveSupport().getOrCreate().
-
-    Parameters
-    ----------
-    sparkContext : :class:`SparkContext`
-        The SparkContext to wrap.
-    jhiveContext : optional
-        An optional JVM Scala HiveContext. If set, we do not instantiate a new
-        :class:`HiveContext` in the JVM, instead we make all calls to this object.
-        This is only for internal use.
-
-    """
-
-    _static_conf = {"spark.sql.catalogImplementation": "hive"}
-
-    def __init__(
-        self,
-        sparkContext: SparkContext,
-        sparkSession: Optional[SparkSession] = None,
-        jhiveContext: Optional[JavaObject] = None,
-    ):
-        warnings.warn(
-            "HiveContext is deprecated in Spark 2.0.0. Please use "
-            + "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
-            FutureWarning,
-        )
-        static_conf = {}
-        if jhiveContext is None:
-            static_conf = HiveContext._static_conf
-        # There can be only one running Spark context. That will automatically
-        # be used in the Spark session internally.
-        if sparkSession is not None:
-            sparkSession = SparkSession._getActiveSessionOrCreate(**static_conf)
-        SQLContext.__init__(self, sparkContext, sparkSession, jhiveContext)
-
-    @classmethod
-    def _get_or_create(
-        cls: Type["SQLContext"], sc: SparkContext, **static_conf: Any
-    ) -> "SQLContext":
-        return SQLContext._get_or_create(sc, **HiveContext._static_conf)
-
-    @classmethod
-    def _createForTesting(cls, sparkContext: SparkContext) -> "HiveContext":
-        """(Internal use only) Create a new HiveContext for testing.
-
-        All test code that touches HiveContext *must* go through this method. Otherwise,
-        you may end up launching multiple derby instances and encounter with incredibly
-        confusing error messages.
-        """
-        jsc = sparkContext._jsc.sc()
-        assert sparkContext._jvm is not None
-        jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(jsc, False)
-        return cls(sparkContext, jtestHive)
-
-    def refreshTable(self, tableName: str) -> None:
-        """Invalidate and refresh all the cached metadata of the given
-        table. For performance reasons, Spark SQL or the external data source
-        library it uses might cache certain metadata about a table, such as the
-        location of blocks. When those change outside of Spark SQL, users should
-        call this function to invalidate the cache.
-        """
-        self._ssql_ctx.refreshTable(tableName)
 
 
 def _test() -> None:

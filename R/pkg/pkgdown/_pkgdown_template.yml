@@ -316,6 +316,5 @@ reference:
   - sparkR.session.stop
   - sparkR.uiWebUrl
   - sparkR.version
-  - sparkRHive.init
   - sparkRSQL.init
   - sql

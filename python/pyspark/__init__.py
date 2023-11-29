@@ -140,7 +140,7 @@ def keyword_only(func: _F) -> _F:
 from pyspark.context import SparkContext
 
 # for back compatibility
-from pyspark.sql import SQLContext, HiveContext, Row  # noqa: F401
+from pyspark.sql import SQLContext, Row  # noqa: F401
 
 __all__ = [
     "SparkConf",

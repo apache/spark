@@ -40,7 +40,7 @@ Important classes of Spark SQL and DataFrames:
       For working with window functions.
 """
 from pyspark.sql.types import Row
-from pyspark.sql.context import SQLContext, HiveContext, UDFRegistration, UDTFRegistration
+from pyspark.sql.context import SQLContext, UDFRegistration, UDTFRegistration
 from pyspark.sql.session import SparkSession
 from pyspark.sql.column import Column
 from pyspark.sql.catalog import Catalog
@@ -56,7 +56,6 @@ from pyspark.sql.utils import is_remote
 __all__ = [
     "SparkSession",
     "SQLContext",
-    "HiveContext",
     "UDFRegistration",
     "UDTFRegistration",
     "DataFrame",

@@ -322,33 +322,6 @@ sparkRSQL.init <- function(jsc = NULL) {
   sparkR.session(enableHiveSupport = FALSE)
 }
 
-#' (Deprecated) Initialize a new HiveContext
-#'
-#' This function creates a HiveContext from an existing JavaSparkContext
-#'
-#' Starting SparkR 2.0, a SparkSession is initialized and returned instead.
-#' This API is deprecated and kept for backward compatibility only.
-#'
-#' @param jsc The existing JavaSparkContext created with SparkR.init()
-#' @seealso \link{sparkR.session}
-#' @rdname sparkRHive.init-deprecated
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRHive.init(sc)
-#'}
-#' @note sparkRHive.init since 1.4.0
-sparkRHive.init <- function(jsc = NULL) {
-  .Deprecated("sparkR.session")
-
-  if (exists(".sparkRsession", envir = .sparkREnv)) {
-    return(get(".sparkRsession", envir = .sparkREnv))
-  }
-
-  # Default to without Hive support for backward compatibility.
-  sparkR.session(enableHiveSupport = TRUE)
-}
-
 #' Get the existing SparkSession or initialize a new SparkSession.
 #'
 #' SparkSession is the entry point into SparkR. \code{sparkR.session} gets the existing
