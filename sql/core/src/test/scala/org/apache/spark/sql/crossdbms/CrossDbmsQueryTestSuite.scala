@@ -68,7 +68,7 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
 
   private val crossDbmsToGenerateGoldenFiles: String = {
     val userInputDbms = System.getenv("REF_DBMS")
-    if (userInputDbms.nonEmpty) {
+    if (userInputDbms != null && userInputDbms.nonEmpty) {
       assert(CrossDbmsQueryTestSuite.SUPPORTED_DBMS.contains(userInputDbms),
         s"$userInputDbms is not currently supported.")
       userInputDbms
@@ -78,24 +78,16 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
   }
   private val customConnectionUrl: String = System.getenv("REF_DBMS_CONNECTION_URL")
 
-  // Currently using a separate directory for this because the current SQL tests we have are highly
-  // unlikely to get compatible with the other DBMS.
-  override protected val inputFilePath = {
-    val originalInputs = new File(baseResourcePath, "inputs")
-    new File(originalInputs, s"$crossDbmsToGenerateGoldenFiles-crosstest").getAbsolutePath
-  }
-  override protected val goldenFilePath = new File(
-    baseResourcePath, s"$crossDbmsToGenerateGoldenFiles-results").getAbsolutePath
-
-  private def isSemanticallySorted(plan: LogicalPlan): Boolean = plan match {
-    case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
-    case _: DescribeCommandBase
-         | _: DescribeColumnCommand
-         | _: DescribeRelation
-         | _: DescribeColumn => true
-    case PhysicalOperation(_, _, Sort(_, true, _)) => true
-    case _ => plan.children.iterator.exists(isSemanticallySorted)
-  }
+  override def ignoreList: Set[String] = super.ignoreList ++ Set(
+    "postgreSQL",
+    "subquery",
+    "ansi",
+    "udtf",
+    "udf",
+    "timestampNTZ",
+    "udaf",
+    "typeCoercion"
+  )
 
   override protected def runQueries(
     queries: Seq[String],
@@ -179,9 +171,15 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
     }
   }
 
+  override protected def resultFileForInputFile(file: File): String = {
+    val goldenFilePath = new File(
+      baseResourcePath, s"$crossDbmsToGenerateGoldenFiles-results").getAbsolutePath
+    file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
+  }
+
   override lazy val listTestCases: Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
-      var resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
+      var resultFile = resultFileForInputFile(file)
       // JDK-4511638 changes 'toString' result of Float/Double
       // JDK-8282081 changes DataTimeFormatter 'F' symbol
       if (Utils.isJavaVersionAtLeast21) {
@@ -191,6 +189,16 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
       RegularTestCase(testCaseName, absPath, resultFile) :: Nil
     }.sortBy(_.name)
+  }
+
+  private def isSemanticallySorted(plan: LogicalPlan): Boolean = plan match {
+    case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
+    case _: DescribeCommandBase
+         | _: DescribeColumnCommand
+         | _: DescribeRelation
+         | _: DescribeColumn => true
+    case PhysicalOperation(_, _, Sort(_, true, _)) => true
+    case _ => plan.children.iterator.exists(isSemanticallySorted)
   }
 }
 

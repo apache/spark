@@ -612,9 +612,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     }
   }
 
+  protected def resultFileForInputFile(file: File): String = {
+    file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
+  }
+
   protected lazy val listTestCases: Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
-      var resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
+      var resultFile = resultFileForInputFile(file)
       var analyzerResultFile =
         file.getAbsolutePath.replace(inputFilePath, analyzerGoldenFilePath) + ".out"
       // JDK-4511638 changes 'toString' result of Float/Double
