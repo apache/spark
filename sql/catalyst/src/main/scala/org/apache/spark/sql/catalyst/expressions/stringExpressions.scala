@@ -2670,7 +2670,7 @@ case class StringDecode(bin: Expression, charset: Expression)
 }
 
 /**
- * Encode the given string to a binary using a charset.
+ * Encode the given string to a binary using the provided charset.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
