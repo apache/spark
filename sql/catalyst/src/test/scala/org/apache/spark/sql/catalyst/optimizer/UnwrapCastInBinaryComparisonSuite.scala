@@ -410,23 +410,23 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     val tsNTZLit = Literal.create(ts1, TimestampNTZType)
     val floorDate = Cast(tsLit, DateType, Some(conf.sessionLocalTimeZone))
     val floorDateNTZ = Cast(tsNTZLit, DateType, Some(conf.sessionLocalTimeZone))
-    val ceilDate = DateAdd(floorDate, Literal(1, IntegerType))
-    val ceilDateNTZ = DateAdd(floorDateNTZ, Literal(1, IntegerType))
+    val dateAddOne = DateAdd(floorDate, Literal(1, IntegerType))
+    val dateAddOneNTZ = DateAdd(floorDateNTZ, Literal(1, IntegerType))
     assertEquivalent(
       castTimestamp(f7) > tsLit || castTimestampNTZ(f7) > tsNTZLit,
       f7 > floorDate || f7 > floorDateNTZ)
     assertEquivalent(
       castTimestamp(f7) >= tsLit || castTimestampNTZ(f7) >= tsNTZLit,
-      f7 >= ceilDate || f7 >= ceilDateNTZ)
+      f7 >= dateAddOne || f7 >= dateAddOneNTZ)
     assertEquivalent(
       castTimestamp(f7) === tsLit || castTimestampNTZ(f7) === tsNTZLit,
-      f7 === floorDate && f7 === ceilDate || f7 === floorDateNTZ && f7 === ceilDateNTZ)
+      f7 === floorDate && f7 === dateAddOne || f7 === floorDateNTZ && f7 === dateAddOneNTZ)
     assertEquivalent(
       castTimestamp(f7) <=> tsLit || castTimestampNTZ(f7) <=> tsNTZLit,
       FalseLiteral || FalseLiteral)
     assertEquivalent(
       castTimestamp(f7) < tsLit || castTimestampNTZ(f7) < tsNTZLit,
-      f7 < ceilDate || f7 < ceilDateNTZ)
+      f7 < dateAddOne || f7 < dateAddOneNTZ)
     assertEquivalent(
       castTimestamp(f7) <= tsLit || castTimestampNTZ(f7) <= tsNTZLit,
       f7 <= floorDate || f7 <= floorDateNTZ)
