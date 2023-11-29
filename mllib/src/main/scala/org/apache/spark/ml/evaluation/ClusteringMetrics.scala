@@ -25,6 +25,7 @@ import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.sql.{Column, DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.util.ArrayImplicits._
 
 
 /**
@@ -49,7 +50,7 @@ class ClusteringMetrics private[spark](dataset: Dataset[_]) {
    */
   @Since("3.1.0")
   def silhouette(): Double = {
-    val columns = dataset.columns.toSeq
+    val columns = dataset.columns.toImmutableArraySeq
     if (distanceMeasure.equalsIgnoreCase("squaredEuclidean")) {
       SquaredEuclideanSilhouette.computeSilhouetteScore(
         dataset, columns(0), columns(1), columns(2))

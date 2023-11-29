@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
+import org.apache.spark.util.ArrayImplicits._
 
 
 /**
@@ -110,7 +111,7 @@ abstract class OffsetWindowFunctionFrameBase(
   protected val projection = {
     // Collect the expressions and bind them.
     val boundExpressions = Seq.fill(ordinal)(NoOp) ++ bindReferences(
-      expressions.toSeq.map(_.input), inputAttrs)
+      expressions.toImmutableArraySeq.map(_.input), inputAttrs)
 
     // Create the projection.
     newMutableProjection(boundExpressions, Nil).target(target)
@@ -119,7 +120,7 @@ abstract class OffsetWindowFunctionFrameBase(
   /** Create the projection used when the offset row DOES NOT exists. */
   protected val fillDefaultValue = {
     // Collect the expressions and bind them.
-    val boundExpressions = Seq.fill(ordinal)(NoOp) ++ expressions.toSeq.map { e =>
+    val boundExpressions = Seq.fill(ordinal)(NoOp) ++ expressions.toImmutableArraySeq.map { e =>
       if (e.default == null || e.default.foldable && e.default.eval() == null) {
         // The default value is null.
         Literal.create(null, e.dataType)

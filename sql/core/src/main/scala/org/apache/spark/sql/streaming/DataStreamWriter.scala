@@ -43,6 +43,7 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDat
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -302,7 +303,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       val cmd = CreateTable(
         UnresolvedIdentifier(originalMultipartIdentifier),
         df.schema.asNullable,
-        partitioningColumns.getOrElse(Nil).asTransforms.toSeq,
+        partitioningColumns.getOrElse(Nil).asTransforms.toImmutableArraySeq,
         tableSpec,
         ignoreIfExists = false)
       Dataset.ofRows(df.sparkSession, cmd)

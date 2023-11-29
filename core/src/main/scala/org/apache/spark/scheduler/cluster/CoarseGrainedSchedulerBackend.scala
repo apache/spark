@@ -151,7 +151,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // scheduler can modify the SparkConf object before this view is created.
     private lazy val sparkProperties = scheduler.sc.conf.getAll
       .filter { case (k, _) => k.startsWith("spark.") }
-      .toSeq
+      .toImmutableArraySeq
 
     private val logUrlHandler: ExecutorLogUrlHandler = new ExecutorLogUrlHandler(
       conf.get(UI.CUSTOM_EXECUTOR_LOG_URL))

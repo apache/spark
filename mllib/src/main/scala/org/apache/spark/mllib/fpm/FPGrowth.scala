@@ -41,6 +41,7 @@ import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -120,7 +121,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
         StructField("freq", LongType))
       val schema = StructType(fields)
       val rowDataRDD = model.freqItemsets.map { x =>
-        Row(x.items.toSeq, x.freq)
+        Row(x.items.toImmutableArraySeq, x.freq)
       }
       spark.createDataFrame(rowDataRDD, schema).write.parquet(Loader.dataPath(path))
     }
@@ -247,7 +248,8 @@ class FPGrowth private[spark] (
     data.flatMap { t =>
       val uniq = t.toSet
       if (t.length != uniq.size) {
-        throw new SparkException(s"Items in a transaction must be unique but got ${t.toSeq}.")
+        throw new SparkException(
+          s"Items in a transaction must be unique but got ${t.toImmutableArraySeq}.")
       }
       t
     }.map(v => (v, 1L))

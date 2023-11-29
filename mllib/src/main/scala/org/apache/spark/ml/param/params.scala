@@ -32,6 +32,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{JsonMatrixConverter, JsonVectorConverter, Matrix, Vector}
 import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A param with self-contained documentation and optionally default value. Primitive-typed param
@@ -524,7 +525,7 @@ class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array
 
   override def jsonEncode(value: Array[String]): String = {
     import org.json4s.JsonDSL._
-    compact(render(value.toSeq))
+    compact(render(value.toImmutableArraySeq))
   }
 
   override def jsonDecode(json: String): Array[String] = {
@@ -548,7 +549,7 @@ class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array
 
   override def jsonEncode(value: Array[Double]): String = {
     import org.json4s.JsonDSL._
-    compact(render(value.toSeq.map(DoubleParam.jValueEncode)))
+    compact(render(value.toImmutableArraySeq.map(DoubleParam.jValueEncode)))
   }
 
   override def jsonDecode(json: String): Array[Double] = {
@@ -580,7 +581,8 @@ class DoubleArrayArrayParam(
 
   override def jsonEncode(value: Array[Array[Double]]): String = {
     import org.json4s.JsonDSL._
-    compact(render(value.toSeq.map(_.toSeq.map(DoubleParam.jValueEncode))))
+    compact(
+      render(value.toImmutableArraySeq.map(_.toImmutableArraySeq.map(DoubleParam.jValueEncode))))
   }
 
   override def jsonDecode(json: String): Array[Array[Double]] = {
@@ -613,7 +615,7 @@ class IntArrayParam(parent: Params, name: String, doc: String, isValid: Array[In
 
   override def jsonEncode(value: Array[Int]): String = {
     import org.json4s.JsonDSL._
-    compact(render(value.toSeq))
+    compact(render(value.toImmutableArraySeq))
   }
 
   override def jsonDecode(json: String): Array[Int] = {

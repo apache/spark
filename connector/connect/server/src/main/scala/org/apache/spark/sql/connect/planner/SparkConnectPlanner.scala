@@ -379,7 +379,7 @@ class SparkConnectPlanner(
     val values = rel.getValuesList.asScala.toArray
     if (values.length == 1) {
       val value = LiteralValueProtoConverter.toCatalystValue(values.head)
-      val columns = if (cols.nonEmpty) Some(cols.toSeq) else None
+      val columns = if (cols.nonEmpty) Some(cols.toImmutableArraySeq) else None
       dataset.na.fillValue(value, columns).logicalPlan
     } else {
       val valueMap = mutable.Map.empty[String, Any]
@@ -2434,7 +2434,7 @@ class SparkConnectPlanner(
             .sort(pivotCol) // ensure that the output columns are in a consistent logical order
             .collect()
             .map(_.get(0))
-            .toSeq
+            .toImmutableArraySeq
             .map(expressions.Literal.apply)
         }
 
@@ -3073,7 +3073,7 @@ class SparkConnectPlanner(
         val progressReports = if (command.getLastProgress) {
           Option(query.lastProgress).toSeq
         } else {
-          query.recentProgress.toSeq
+          query.recentProgress.toImmutableArraySeq
         }
         respBuilder.setRecentProgress(
           StreamingQueryCommandResult.RecentProgressResult
