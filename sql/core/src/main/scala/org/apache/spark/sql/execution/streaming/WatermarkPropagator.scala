@@ -235,8 +235,10 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
     inputWatermarks.put(batchId, nextStatefulOperatorToWatermark.toMap)
     batchIdToWatermark.put(batchId, originWatermark)
 
-    logDebug(s"global watermark for batch ID $batchId is set to $originWatermark")
-    logDebug(s"input watermarks for batch ID $batchId is set to $nextStatefulOperatorToWatermark")
+    // scalastyle:off
+    println(s"global watermark for batch ID $batchId is set to $originWatermark")
+    println(s"input watermarks for batch ID $batchId is set to $nextStatefulOperatorToWatermark")
+    // scalastyle:on
   }
 
   override def propagate(batchId: Long, plan: SparkPlan, originWatermark: Long): Unit = {

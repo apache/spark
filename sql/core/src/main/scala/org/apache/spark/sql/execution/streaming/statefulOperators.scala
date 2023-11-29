@@ -573,7 +573,7 @@ case class StateStoreSaveExec(
                     stateManager.remove(store, rowPair.key)
                     numRemovedStateRows += 1
                     // scalastyle:off
-                    println("===StateStoreSaveExec=== remove key: " + rowPair.key + " value:"  + rowPair.value)
+                    println(s"===StateStoreSaveExec opid: ${stateInfo.get.operatorId} === remove key: " + rowPair.key + " value:"  + rowPair.value)
                     // scalastyle:on
                     removedValueRow = rowPair.value
                   }
@@ -660,7 +660,7 @@ case class StateStoreSaveExec(
       newInputWatermark > eventTimeWatermarkForEviction.get
 
     // scalastyle:off
-    println(s"===StateStoreSaveExec=== shouldRunAnotherBatch: $res," +
+    println(s"===StateStoreSaveExec opid: ${stateInfo.get.operatorId}=== shouldRunAnotherBatch: $res," +
       s" newInputWM: $newInputWatermark wm evict: ${eventTimeWatermarkForEviction.getOrElse(-1)}" )
     // scalastyle:on
 

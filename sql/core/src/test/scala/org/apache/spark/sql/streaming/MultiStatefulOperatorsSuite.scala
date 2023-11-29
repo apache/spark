@@ -908,7 +908,7 @@ class MultiStatefulOperatorsSuite
       testStream(clicksAndImpressions)(
         MultiAddData(
           (impressions, Seq(0 to 8: _*)),
-          (clicks, Seq(6))
+          (clicks, Seq(1, 6))
         ),
         // data batch triggered
 
@@ -921,9 +921,9 @@ class MultiStatefulOperatorsSuite
         //    output: None
         // click [clickAdId, clickTime]
         //    wm:     (0, 0)
-        //    input:  (6, 8)
-        //    agg:    [0, 5) -> 0, [5, 10) -> 1
-        //    state:  [0, 5) -> 0, [5, 10) -> 1
+        //    input:  (1, 3), (6, 8)
+        //    agg:    [0, 5) -> 1, [5, 10) -> 1
+        //    state:  [0, 5) -> 1, [5, 10) -> 1
         //    output: None
         // join:
         //    all None
@@ -931,39 +931,40 @@ class MultiStatefulOperatorsSuite
         // no-data batch triggered (shouldRunAnotherBatch)
 
         // global watermark: (0, 8) (default is min across multiple watermarks)
-        // impression:
+        // impression (op2):
         //    wm:     (0, 8)
         //    input:  None
         //    agg:    None
         //    state:  [5, 10) -> 4
-        //    output: [0, 5) -> 5 (actually no, the state is not evicting any rows, why?)
-        // click:
+        //    output: [0, 5) -> 5
+        // click (op1):
         //    wm:     (0, 8)
         //    input:  None
         //    agg:    None
         //    state:  [5, 10) -> 1
-        //    output: [0, 5) -> 0
+        //    output: [0, 5) -> 1
         // join: (all none)
         //    input:
         //        impression: [0, 5) -> 5
-        //        click:      [0, 5) -> 0
+        //        click:      [0, 5) -> 1
         //    state:
         //        impression: [0, 5) -> 5
-        //        click:      [0, 5) -> 0
+        //        click:      [0, 5) -> 1
         //    output: // todo confirm this, what's join's watermark? (0, 8)?
-        //        [0, 5) -> (5, 0)
+        //        [0, 5) -> (5, 1)
 
-        CheckAnswer((0, 5, 5, 0)),
+        CheckAnswer((0, 5, 5, 1))
+
         // TODO: add checks in the execute block below
-         Execute { query =>
-           val lastExecution = query.lastExecution
-           val joinOperator = lastExecution.executedPlan.collect {
-             case j: StreamingSymmetricHashJoinExec => j
-           }.head
-           val aggSaveOperators = lastExecution.executedPlan.collect {
-             case j: StateStoreSaveExec => j
-           }
-         }
+//         Execute { query =>
+//           val lastExecution = query.lastExecution
+//           val joinOperator = lastExecution.executedPlan.collect {
+//             case j: StreamingSymmetricHashJoinExec => j
+//           }.head
+//           val aggSaveOperators = lastExecution.executedPlan.collect {
+//             case j: StateStoreSaveExec => j
+//           }
+//         }
         // assertNumStateRows()
         // assert
 
