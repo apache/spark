@@ -21,7 +21,7 @@ import java.sql.Timestamp
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StateStoreSaveExec, StreamingSymmetricHashJoinExec}
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.functions._
@@ -814,68 +814,41 @@ class MultiStatefulOperatorsSuite
     }
   }
 
-  test("stream-stream time interval join - output watermark for various intervals") {
-    def testOutputWatermarkInJoin(
-        df: DataFrame,
-        input: MemoryStream[(String, Timestamp)],
-        expectedOutputWatermark: Long): Unit = {
-      testStream(df)(
-        // dummy row to trigger execution
-        AddData(input, ("1", Timestamp.valueOf("2023-01-01 01:00:10"))),
-        CheckAnswer(),
-        Execute { query =>
-          val lastExecution = query.lastExecution
-          val joinOperator = lastExecution.executedPlan.collect {
-            case j: StreamingSymmetricHashJoinExec => j
-          }.head
+  test("SPARK-45637-1 join on window, append mode") {
+    val impressions = MemoryStream[Int]
+    val clicks = MemoryStream[Int]
 
-          val outputWatermark = joinOperator.produceOutputWatermark(0)
-          assert(outputWatermark.get === expectedOutputWatermark)
-        }
+    val impressionsWithWatermark = impressions.toDF()
+      .withColumn("impressionTime", timestamp_seconds($"value"))
+      .withColumnRenamed("value", "impressionAdId")
+      .withWatermark("impressionTime", "0 seconds")
+
+    // clickTime is always later than impressionTime for clickAdId = impressionAdId
+    // Here we manually set the difference to 2 seconds (see the (Multi)AddData below)
+    val clicksWithWatermark = clicks.toDF()
+      .withColumn("timeSec", timestamp_seconds($"value"))
+      .selectExpr("value as clickAdId", "timeSec + INTERVAL 2 seconds as clickTime")
+      .withWatermark("clickTime", "0 seconds")
+
+    val clicksWindow = clicksWithWatermark.select(
+      window($"clickTime", "5 seconds")
+    )
+
+    val impressionsWindow = impressionsWithWatermark.select(
+      window($"impressionTime", "5 seconds")
+    )
+
+    val clicksAndImpressions = clicksWindow.join(impressionsWindow, "window", "inner")
+
+    withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "1")) {
+      testStream(clicksAndImpressions)(
+        MultiAddData(
+          (impressions, Seq(0 to 8: _*)),
+          (clicks, Seq(1, 6))
+        ),
+        CheckAnswer((0, 5, 5, 1))
       )
     }
-
-    val input1 = MemoryStream[(String, Timestamp)]
-    val df1 = input1.toDF()
-      .selectExpr("_1 as leftId", "_2 as leftEventTime")
-      .withWatermark("leftEventTime", "5 minutes")
-
-    val input2 = MemoryStream[(String, Timestamp)]
-    val df2 = input2.toDF()
-      .selectExpr("_1 as rightId", "_2 as rightEventTime")
-      .withWatermark("rightEventTime", "10 minutes")
-
-    val join1 = df1.join(df2,
-      expr(
-        """
-          |leftId = rightId AND leftEventTime BETWEEN
-          |  rightEventTime AND rightEventTime + INTERVAL 40 seconds
-          |""".stripMargin))
-
-    // right row should wait for additional 40 seconds (+ 1 ms) to be matched with left rows
-    testOutputWatermarkInJoin(join1, input1, -40L * 1000 - 1)
-
-    val join2 = df1.join(df2,
-      expr(
-        """
-          |leftId = rightId AND leftEventTime BETWEEN
-          |  rightEventTime - INTERVAL 30 seconds AND rightEventTime
-          |""".stripMargin))
-
-    // left row should wait for additional 30 seconds (+ 1 ms) to be matched with left rows
-    testOutputWatermarkInJoin(join2, input1, -30L * 1000 - 1)
-
-    val join3 = df1.join(df2,
-      expr(
-        """
-          |leftId = rightId AND leftEventTime BETWEEN
-          |  rightEventTime - INTERVAL 30 seconds AND rightEventTime + INTERVAL 40 seconds
-          |""".stripMargin))
-
-    // left row should wait for additional 30 seconds (+ 1 ms) to be matched with left rows
-    // right row should wait for additional 40 seconds (+ 1 ms) to be matched with right rows
-    // taking minimum of both criteria - 40 seconds (+ 1 ms)
-    testOutputWatermarkInJoin(join3, input1, -40L * 1000 - 1)
   }
 
   test("SPARK-45637 window agg + window agg -> join on window, append mode") {
@@ -931,13 +904,13 @@ class MultiStatefulOperatorsSuite
         // no-data batch triggered (shouldRunAnotherBatch)
 
         // global watermark: (0, 8) (default is min across multiple watermarks)
-        // impression (op2):
+        // impression (op2 in logs):
         //    wm:     (0, 8)
         //    input:  None
         //    agg:    None
         //    state:  [5, 10) -> 4
         //    output: [0, 5) -> 5
-        // click (op1):
+        // click (op1 in logs):
         //    wm:     (0, 8)
         //    input:  None
         //    agg:    None
