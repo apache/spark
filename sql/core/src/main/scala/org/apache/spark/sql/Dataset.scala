@@ -1244,7 +1244,7 @@ class Dataset[T] private[sql](
 
       withTypedPlan(JoinWith.typedJoinWith(
         joined,
-        sqlContext.conf.dataFrameSelfJoinAutoResolveAmbiguity,
+        sparkSession.sessionState.conf.dataFrameSelfJoinAutoResolveAmbiguity,
         sparkSession.sessionState.analyzer.resolver,
         this.exprEnc.isSerializedAsStructForTopLevel,
         other.exprEnc.isSerializedAsStructForTopLevel))
@@ -1450,7 +1450,7 @@ class Dataset[T] private[sql](
     case "*" =>
       Column(ResolvedStar(queryExecution.analyzed.output))
     case _ =>
-      if (sqlContext.conf.supportQuotedRegexColumnName) {
+      if (sparkSession.sessionState.conf.supportQuotedRegexColumnName) {
         colRegex(colName)
       } else {
         Column(addDataFrameIdToCol(resolve(colName)))

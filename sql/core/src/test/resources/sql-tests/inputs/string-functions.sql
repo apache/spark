@@ -118,6 +118,12 @@ SELECT rpad('abc', 5, x'57');
 SELECT rpad(x'57', 5, 'abc');
 
 -- encode
+set spark.sql.legacy.javaCharsets=true;
+select encode('hello', 'WINDOWS-1252');
+select encode(scol, ecol) from values('hello', 'WINDOWS-1252') as t(scol, ecol);
+set spark.sql.legacy.javaCharsets=false;
+select encode('hello', 'WINDOWS-1252');
+select encode(scol, ecol) from values('hello', 'WINDOWS-1252') as t(scol, ecol);
 select encode('hello', 'Windows-xxx');
 select encode(scol, ecol) from values('hello', 'Windows-xxx') as t(scol, ecol);
 

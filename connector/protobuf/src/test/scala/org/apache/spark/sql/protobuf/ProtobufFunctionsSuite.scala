@@ -503,9 +503,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       }
     }
     assert(
-      toProtoDfToFromProtoDf.select("toProtoToFromProto.value").take(1).toSeq(0).get(0) == null)
+      toProtoDfToFromProtoDf.select("toProtoToFromProto.value").first().isNullAt(0))
     assert(
-      toProtoDfToFromProtoDf.select("toProtoToFromProto.actual.*").take(1).toSeq(0).get(0) == null)
+      toProtoDfToFromProtoDf.select("toProtoToFromProto.actual.*").first().isNullAt(0))
   }
 
   test("Handle extra fields : newProducer -> oldConsumer") {
@@ -558,27 +558,27 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       functions.to_protobuf($"requiredMsg", "requiredMsg", testFileDesc)
         .as("to_proto"))
 
-    val binary = toProtobuf.take(1).toSeq(0).get(0).asInstanceOf[Array[Byte]]
+    val binary = toProtobuf.first().get(0).asInstanceOf[Array[Byte]]
 
     val messageDescriptor = ProtobufUtils.buildDescriptor(testFileDesc, "requiredMsg")
     val actualMessage = DynamicMessage.parseFrom(messageDescriptor, binary)
 
     assert(actualMessage.getField(messageDescriptor.findFieldByName("key"))
-      == inputDf.select("requiredMsg.key").take(1).toSeq(0).get(0))
+      == inputDf.select("requiredMsg.key").first().get(0))
     assert(actualMessage.getField(messageDescriptor.findFieldByName("col_2"))
-      == inputDf.select("requiredMsg.col_2").take(1).toSeq(0).get(0))
+      == inputDf.select("requiredMsg.col_2").first().get(0))
     assert(actualMessage.getField(messageDescriptor.findFieldByName("col_1")) == 0)
     assert(actualMessage.getField(messageDescriptor.findFieldByName("col_3")) == 0)
 
     val fromProtoDf = toProtobuf.select(
       functions.from_protobuf($"to_proto", "requiredMsg", testFileDesc) as Symbol("from_proto"))
 
-    assert(fromProtoDf.select("from_proto.key").take(1).toSeq(0).get(0)
-      == inputDf.select("requiredMsg.key").take(1).toSeq(0).get(0))
-    assert(fromProtoDf.select("from_proto.col_2").take(1).toSeq(0).get(0)
-      == inputDf.select("requiredMsg.col_2").take(1).toSeq(0).get(0))
-    assert(fromProtoDf.select("from_proto.col_1").take(1).toSeq(0).get(0) == null)
-    assert(fromProtoDf.select("from_proto.col_3").take(1).toSeq(0).get(0) == null)
+    assert(fromProtoDf.select("from_proto.key").first().get(0)
+      == inputDf.select("requiredMsg.key").first().get(0))
+    assert(fromProtoDf.select("from_proto.col_2").first().get(0)
+      == inputDf.select("requiredMsg.col_2").first().get(0))
+    assert(fromProtoDf.select("from_proto.col_1").first().isNullAt(0))
+    assert(fromProtoDf.select("from_proto.col_3").first().isNullAt(0))
   }
 
   test("from_protobuf filter to_protobuf") {
@@ -648,10 +648,10 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
         assert(actualFields.size === expectedFields.size)
         assert(actualFields === expectedFields)
-        assert(fromProtoDf.select("timeStampMsg.key").take(1).toSeq(0).get(0)
-          === inputDf.select("timeStampMsg.key").take(1).toSeq(0).get(0))
-        assert(fromProtoDf.select("timeStampMsg.stmp").take(1).toSeq(0).get(0)
-          === inputDf.select("timeStampMsg.stmp").take(1).toSeq(0).get(0))
+        assert(fromProtoDf.select("timeStampMsg.key").first().get(0)
+          === inputDf.select("timeStampMsg.key").first().get(0))
+        assert(fromProtoDf.select("timeStampMsg.stmp").first().get(0)
+          === inputDf.select("timeStampMsg.stmp").first().get(0))
     }
   }
 
@@ -691,10 +691,10 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
         assert(actualFields.size === expectedFields.size)
         assert(actualFields === expectedFields)
-        assert(fromProtoDf.select("durationMsg.key").take(1).toSeq(0).get(0)
-          === inputDf.select("durationMsg.key").take(1).toSeq(0).get(0))
-        assert(fromProtoDf.select("durationMsg.duration").take(1).toSeq(0).get(0)
-          === inputDf.select("durationMsg.duration").take(1).toSeq(0).get(0))
+        assert(fromProtoDf.select("durationMsg.key").first().get(0)
+          === inputDf.select("durationMsg.key").first().get(0))
+        assert(fromProtoDf.select("durationMsg.duration").first().get(0)
+          === inputDf.select("durationMsg.duration").first().get(0))
     }
   }
 
@@ -965,7 +965,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       "OneOfEventWithRecursion", testFileDesc) as Symbol("toProto"))
 
     val eventFromSparkSchema = OneOfEventWithRecursion.parseFrom(
-      dataDfToProto.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
+      dataDfToProto.select("toProto").first().getAs[Array[Byte]](0))
     recursiveField = eventFromSparkSchema.getRecursiveA.getRecursiveOneOffInA
     assert(recursiveField.getKey.equals("keyNested0"))
     assert(recursiveField.getValue.equals("valueNested0"))

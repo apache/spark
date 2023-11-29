@@ -1375,7 +1375,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       spark.createDataFrame(data).repartition(1).write.parquet(dir.getCanonicalPath)
       val file = TestUtils.listDirectory(dir).head;
       {
-        val conf = sqlContext.conf
+        val conf = spark.sessionState.conf
         val reader = new VectorizedParquetRecordReader(
           conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         try {
@@ -1394,7 +1394,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
       // Project just one column
       {
-        val conf = sqlContext.conf
+        val conf = spark.sessionState.conf
         val reader = new VectorizedParquetRecordReader(
           conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         try {
@@ -1412,7 +1412,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
       // Project columns in opposite order
       {
-        val conf = sqlContext.conf
+        val conf = spark.sessionState.conf
         val reader = new VectorizedParquetRecordReader(
           conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         try {
@@ -1431,7 +1431,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
       // Empty projection
       {
-        val conf = sqlContext.conf
+        val conf = spark.sessionState.conf
         val reader = new VectorizedParquetRecordReader(
           conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         try {
@@ -1473,7 +1473,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
       dataTypes.zip(constantValues).foreach { case (dt, v) =>
         val schema = StructType(StructField("pcol", dt) :: Nil)
-        val conf = sqlContext.conf
+        val conf = spark.sessionState.conf
         val vectorizedReader = new VectorizedParquetRecordReader(
           conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         val partitionValues = new GenericInternalRow(Array(v))

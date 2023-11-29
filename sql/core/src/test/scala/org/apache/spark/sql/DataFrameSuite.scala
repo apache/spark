@@ -511,13 +511,13 @@ class DataFrameSuite extends QueryTest
       testData.select("key").coalesce(0)
     }
 
-    assert(testData.select("key").coalesce(1).rdd.partitions.size === 1)
+    assert(testData.select("key").coalesce(1).rdd.partitions.length === 1)
 
     checkAnswer(
       testData.select("key").coalesce(1).select("key"),
       testData.select("key").collect().toSeq)
 
-    assert(spark.emptyDataFrame.coalesce(1).rdd.partitions.size === 1)
+    assert(spark.emptyDataFrame.coalesce(1).rdd.partitions.length === 1)
   }
 
   test("convert $\"attribute name\" into unresolved attribute") {
@@ -914,7 +914,7 @@ class DataFrameSuite extends QueryTest
     checkAnswer(df2.drop("a.b").select("a.b"), Row(3))
 
     // "`" is treated as a normal char here with no interpreting, "`a`b" is a valid column name.
-    assert(df2.drop("`a.b`").columns.size == 2)
+    assert(df2.drop("`a.b`").columns.length == 2)
   }
 
   test("drop(name: String) search and drop all top level columns that matches the name") {
@@ -2503,7 +2503,7 @@ class DataFrameSuite extends QueryTest
     val df = Seq((1, 0), (2, 0), (3, 0)).toDF("a", "b")
     val sampleDf = df.sample(true, 2.00)
     val d = sampleDf.withColumn("c", monotonically_increasing_id()).select($"c").collect()
-    assert(d.size == d.distinct.size)
+    assert(d.length == d.distinct.length)
   }
 
   private def verifyNullabilityInFilterExec(
