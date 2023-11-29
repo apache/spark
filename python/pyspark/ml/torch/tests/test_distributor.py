@@ -399,7 +399,7 @@ class TorchDistributorLocalUnitTestsMixin:
         )
 
     @unittest.skipIf(
-        sys.version_info > (3, 11), "SPARK-46078: Fails with dev torch with Python 3.12"
+        sys.version_info > (3, 12), "SPARK-46078: Fails with dev torch with Python 3.12"
     )
     def test_end_to_end_run_locally(self) -> None:
         train_fn = create_training_function(self.mnist_dir_path)
