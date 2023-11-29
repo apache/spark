@@ -37,7 +37,9 @@ import org.apache.spark.util.ArrayImplicits._
  * Holds the name of a namespace that has yet to be looked up in a catalog. It will be resolved to
  * [[ResolvedNamespace]] during analysis.
  */
-case class UnresolvedNamespace(multipartIdentifier: Seq[String]) extends UnresolvedLeafNode
+case class UnresolvedNamespace(
+    multipartIdentifier: Seq[String],
+    fetchMetadata: Boolean = false) extends UnresolvedLeafNode
 
 /**
  * A variant of [[UnresolvedNamespace]] that should be resolved to [[ResolvedNamespace]]
@@ -144,7 +146,10 @@ trait LeafNodeWithoutStats extends LeafNode {
 /**
  * A plan containing resolved namespace.
  */
-case class ResolvedNamespace(catalog: CatalogPlugin, namespace: Seq[String])
+case class ResolvedNamespace(
+    catalog: CatalogPlugin,
+    namespace: Seq[String],
+    metadata: Map[String, String] = Map.empty)
   extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = Nil
 }

@@ -4125,7 +4125,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       ShowTablePartition(table, UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(spec)))
     }.getOrElse {
       val ns = if (ctx.identifierReference() != null) {
-        withIdentClause(ctx.identifierReference, UnresolvedNamespace)
+        withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
       } else {
         CurrentNamespace
       }
