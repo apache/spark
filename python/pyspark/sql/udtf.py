@@ -38,7 +38,14 @@ if TYPE_CHECKING:
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.session import SparkSession
 
-__all__ = ["AnalyzeArgument", "AnalyzeResult", "UDTFRegistration"]
+__all__ = [
+    "AnalyzeArgument",
+    "AnalyzeResult",
+    "PartitioningColumn",
+    "OrderingColumn",
+    "SkipRestOfInputTableException",
+    "UDTFRegistration",
+]
 
 
 @dataclass(frozen=True)
@@ -48,23 +55,28 @@ class AnalyzeArgument:
 
     Parameters
     ----------
-    data_type : :class:`DataType`
+    dataType : :class:`DataType`
         The argument's data type
-    value : Optional[Any]
+    value : any, optional
         The calculated value if the argument is foldable; otherwise None
-    is_table : bool
+    isTable : bool
         If True, the argument is a table argument.
     """
 
-    data_type: DataType
+    dataType: DataType
     value: Optional[Any]
-    is_table: bool
+    isTable: bool
 
 
 @dataclass(frozen=True)
 class PartitioningColumn:
     """
     Represents a UDTF column for purposes of returning metadata from the 'analyze' method.
+
+    Parameters
+    ----------
+    name : str
+        The name of the partitioning column.
     """
 
     name: str
@@ -75,17 +87,28 @@ class OrderingColumn:
     """
     Represents a single ordering column name for purposes of returning metadata from the 'analyze'
     method.
+
+    Parameters
+    ----------
+    name : str
+        The name of the partitioning column.
+    ascending : bool, default True
+        If this column is in an ascending order or not.
+    overrideNullsFirst : str, optional
+        If this is None, use the default behavior to sort NULL values first when sorting in
+        ascending order, or last when sorting in descending order. Otherwise, if this is
+        True or False, override the default behavior accordingly.
     """
 
     name: str
     ascending: bool = True
-    # If this is None, use the default behavior to sort NULL values first when sorting in ascending
-    # order, or last when sorting in descending order. Otherwise, if this is True or False, override
-    # the default behavior accordingly.
     overrideNullsFirst: Optional[bool] = None
 
 
-@dataclass(frozen=True)
+# Note: this class is a "dataclass" for purposes of convenience, but it is not marked "frozen"
+# because the intention is that users may create subclasses of it for purposes of returning custom
+# information from the "analyze" method.
+@dataclass
 class AnalyzeResult:
     """
     The return of Python UDTF's analyze static method.
@@ -94,25 +117,35 @@ class AnalyzeResult:
     ----------
     schema : :class:`StructType`
         The schema that the Python UDTF will return.
-    with_single_partition : bool
+    withSinglePartition : bool
         If true, the UDTF is specifying for Catalyst to repartition all rows of the input TABLE
         argument to one collection for consumption by exactly one instance of the correpsonding
         UDTF class.
-    partition_by : Sequence[PartitioningColumn]
+    partitionBy : sequence of :class:`PartitioningColumn`
         If non-empty, this is a sequence of columns that the UDTF is specifying for Catalyst to
         partition the input TABLE argument by. In this case, calls to the UDTF may not include any
         explicit PARTITION BY clause, in which case Catalyst will return an error. This option is
-        mutually exclusive with 'with_single_partition'.
-    order_by: Sequence[OrderingColumn]
+        mutually exclusive with 'withSinglePartition'.
+    orderBy: sequence of :class:`OrderingColumn`
         If non-empty, this is a sequence of columns that the UDTF is specifying for Catalyst to
-        sort the input TABLE argument by. Note that the 'partition_by' list must also be non-empty
+        sort the input TABLE argument by. Note that the 'partitionBy' list must also be non-empty
         in this case.
     """
 
     schema: StructType
-    with_single_partition: bool = False
-    partition_by: Sequence[PartitioningColumn] = field(default_factory=tuple)
-    order_by: Sequence[OrderingColumn] = field(default_factory=tuple)
+    withSinglePartition: bool = False
+    partitionBy: Sequence[PartitioningColumn] = field(default_factory=tuple)
+    orderBy: Sequence[OrderingColumn] = field(default_factory=tuple)
+
+
+class SkipRestOfInputTableException(Exception):
+    """
+    This represents an exception that the 'eval' method may raise to indicate that it is done
+    consuming rows from the current partition of the input table. Then the UDTF's 'terminate'
+    method runs (if any).
+    """
+
+    pass
 
 
 def _create_udtf(

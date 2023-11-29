@@ -23,7 +23,7 @@ import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.sql.{Date, Timestamp}
 import java.util.UUID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{AvroTypeException, Schema, SchemaBuilder}
 import org.apache.avro.Schema.{Field, Type}
@@ -32,11 +32,13 @@ import org.apache.avro.file.{DataFileReader, DataFileWriter}
 import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.commons.io.FileUtils
+import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkUpgradeException}
 import org.apache.spark.TestUtils.assertExceptionMsg
 import org.apache.spark.sql._
 import org.apache.spark.sql.TestingUDT.IntervalData
+import org.apache.spark.sql.avro.AvroCompressionCodec._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
@@ -167,7 +169,7 @@ abstract class AvroSuite
 
   test("reading from multiple paths") {
     val df = spark.read.format("avro").load(episodesAvro, episodesAvro)
-    assert(df.count == 16)
+    assert(df.count() == 16)
   }
 
   test("reading and writing partitioned data") {
@@ -196,7 +198,7 @@ abstract class AvroSuite
     withTempPath { dir =>
       val df = spark.read.format("avro").load(episodesAvro)
       df.write.parquet(dir.getCanonicalPath)
-      assert(spark.read.parquet(dir.getCanonicalPath).count() === df.count)
+      assert(spark.read.parquet(dir.getCanonicalPath).count() === df.count())
     }
   }
 
@@ -548,7 +550,7 @@ abstract class AvroSuite
         Row(null, null, null, null, null)))
       val df = spark.createDataFrame(rdd, schema)
       df.write.format("avro").save(dir.toString)
-      assert(spark.read.format("avro").load(dir.toString).count == rdd.count)
+      assert(spark.read.format("avro").load(dir.toString).count() == rdd.count())
     }
   }
 
@@ -567,7 +569,7 @@ abstract class AvroSuite
       ))
       val df = spark.createDataFrame(rdd, schema)
       df.write.format("avro").save(dir.toString)
-      assert(spark.read.format("avro").load(dir.toString).count == rdd.count)
+      assert(spark.read.format("avro").load(dir.toString).count() == rdd.count())
     }
   }
 
@@ -627,7 +629,7 @@ abstract class AvroSuite
         ))
         val df = spark.createDataFrame(rdd, schema)
         df.write.format("avro").save(dir.toString)
-        assert(spark.read.format("avro").load(dir.toString).count == rdd.count)
+        assert(spark.read.format("avro").load(dir.toString).count() == rdd.count())
         checkAnswer(
           spark.read.format("avro").load(dir.toString).select("date"),
           Seq(Row(null), Row(new Date(1451865600000L)), Row(new Date(1459987200000L))))
@@ -665,7 +667,7 @@ abstract class AvroSuite
           Array[Row](Row("Bobby G. can't swim")))))
       val df = spark.createDataFrame(rdd, testSchema)
       df.write.format("avro").save(dir.toString)
-      assert(spark.read.format("avro").load(dir.toString).count == rdd.count)
+      assert(spark.read.format("avro").load(dir.toString).count() == rdd.count())
     }
   }
 
@@ -679,18 +681,18 @@ abstract class AvroSuite
       val zstandardDir = s"$dir/zstandard"
 
       val df = spark.read.format("avro").load(testAvro)
-      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "uncompressed")
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, UNCOMPRESSED.lowerCaseName())
       df.write.format("avro").save(uncompressDir)
-      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "bzip2")
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, BZIP2.lowerCaseName())
       df.write.format("avro").save(bzip2Dir)
-      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "xz")
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, XZ.lowerCaseName())
       df.write.format("avro").save(xzDir)
-      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "deflate")
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, DEFLATE.lowerCaseName())
       spark.conf.set(SQLConf.AVRO_DEFLATE_LEVEL.key, "9")
       df.write.format("avro").save(deflateDir)
-      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "snappy")
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, SNAPPY.lowerCaseName())
       df.write.format("avro").save(snappyDir)
-      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "zstandard")
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, ZSTANDARD.lowerCaseName())
       df.write.format("avro").save(zstandardDir)
 
       val uncompressSize = FileUtils.sizeOfDirectory(new File(uncompressDir))
@@ -793,7 +795,7 @@ abstract class AvroSuite
       val namespace = "org.apache.spark.avro"
       val parameters = Map("recordName" -> name, "recordNamespace" -> namespace)
 
-      val avroDir = tempDir + "/namedAvro"
+      val avroDir = s"$tempDir/namedAvro"
       spark.read.format("avro").load(testAvro)
         .write.options(parameters).format("avro").save(avroDir)
       checkReloadMatchesSaved(testAvro, avroDir)
@@ -811,6 +813,173 @@ abstract class AvroSuite
       sql("SELECT 3.14 a").write.format("avro").save(path.toString)
       val data = spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString).collect()
       assert(data.map(_ (0)).contains(new java.math.BigDecimal("3.140")))
+    }
+  }
+
+  test("SPARK-45638: Avro should read decimal values with the file schema, same scale") {
+    // write schema has precision and scale as 3
+    // read schema has precision as 4 and scale as 3
+    withTempPath { path =>
+      sql("SELECT 0.314 a").write.format("avro").save(path.toString)
+      val data = spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString).collect()
+      assert(data.map(_(0)).contains(new java.math.BigDecimal("0.314")))
+    }
+  }
+
+  test("SPARK-43380: Fix Avro data type conversion" +
+    " of decimal type to avoid producing incorrect results") {
+    withTempPath { path =>
+      val confKey = SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key
+      sql("SELECT 13.1234567890 a").write.format("avro").save(path.toString)
+      // With the flag disabled, we will throw an exception if there is a mismatch
+      withSQLConf(confKey -> "false") {
+        val e = intercept[SparkException] {
+          spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString).collect()
+        }
+        ExceptionUtils.getRootCause(e) match {
+          case ex: AnalysisException =>
+            checkError(
+              exception = ex,
+              errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
+              parameters = Map("avroPath" -> "field 'a'",
+                "sqlPath" -> "field 'a'",
+                "avroType" -> "decimal\\(12,10\\)",
+                "sqlType" -> "\"DECIMAL\\(4,3\\)\""),
+              matchPVals = true
+            )
+          case other =>
+            fail(s"Received unexpected exception", other)
+        }
+      }
+      // The following used to work, so it should still work with the flag enabled
+      checkAnswer(
+        spark.read.schema("a DECIMAL(5, 3)").format("avro").load(path.toString),
+        Row(new java.math.BigDecimal("13.123"))
+      )
+      withSQLConf(confKey -> "true") {
+        // With the flag enabled, we return a null silently, which isn't great
+        checkAnswer(
+          spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString),
+          Row(null)
+        )
+        checkAnswer(
+          spark.read.schema("a DECIMAL(5, 3)").format("avro").load(path.toString),
+          Row(new java.math.BigDecimal("13.123"))
+        )
+      }
+    }
+  }
+
+  test("SPARK-43380: Fix Avro data type conversion" +
+    " of DayTimeIntervalType to avoid producing incorrect results") {
+    withTempPath { path =>
+      val confKey = SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key
+      val schema = StructType(Array(StructField("a", DayTimeIntervalType(), false)))
+      val data = Seq(Row(java.time.Duration.ofDays(1).plusSeconds(1)))
+
+      val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+      df.write.format("avro").save(path.getCanonicalPath)
+
+      withSQLConf(confKey -> "false") {
+        Seq("DATE", "TIMESTAMP", "TIMESTAMP_NTZ").foreach { sqlType =>
+          val e = intercept[SparkException] {
+            spark.read.schema(s"a $sqlType").format("avro").load(path.toString).collect()
+          }
+
+          ExceptionUtils.getRootCause(e) match {
+            case ex: AnalysisException =>
+              checkError(
+                exception = ex,
+                errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
+                parameters = Map("avroPath" -> "field 'a'",
+                  "sqlPath" -> "field 'a'",
+                  "avroType" -> "interval day to second",
+                  "sqlType" -> s""""$sqlType""""),
+                matchPVals = true
+              )
+            case other =>
+              fail(s"Received unexpected exception", other)
+          }
+        }
+      }
+
+      withSQLConf(confKey -> "true") {
+        // Allow conversion and do not need to check result
+        spark.read.schema("a Date").format("avro").load(path.toString)
+        spark.read.schema("a timestamp").format("avro").load(path.toString)
+        spark.read.schema("a timestamp_ntz").format("avro").load(path.toString)
+      }
+    }
+  }
+
+  test("SPARK-43380: Fix Avro data type conversion" +
+    " of YearMonthIntervalType to avoid producing incorrect results") {
+    withTempPath { path =>
+      val confKey = SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key
+      val schema = StructType(Array(StructField("a", YearMonthIntervalType(), false)))
+      val data = Seq(Row(java.time.Period.of(1, 1, 0)))
+
+      val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+      df.write.format("avro").save(path.getCanonicalPath)
+
+      withSQLConf(confKey -> "false") {
+        Seq("DATE", "TIMESTAMP", "TIMESTAMP_NTZ").foreach { sqlType =>
+          val e = intercept[SparkException] {
+            spark.read.schema(s"a $sqlType").format("avro").load(path.toString).collect()
+          }
+
+          ExceptionUtils.getRootCause(e) match {
+            case ex: AnalysisException =>
+              checkError(
+                exception = ex,
+                errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
+                parameters = Map("avroPath" -> "field 'a'",
+                  "sqlPath" -> "field 'a'",
+                  "avroType" -> "interval year to month",
+                  "sqlType" -> s""""$sqlType""""),
+                matchPVals = true
+              )
+            case other =>
+              fail(s"Received unexpected exception", other)
+          }
+        }
+      }
+
+      withSQLConf(confKey -> "true") {
+        // Allow conversion and do not need to check result
+        spark.read.schema("a Date").format("avro").load(path.toString)
+        spark.read.schema("a timestamp").format("avro").load(path.toString)
+        spark.read.schema("a timestamp_ntz").format("avro").load(path.toString)
+      }
+    }
+  }
+
+  Seq(
+    "time-millis",
+    "time-micros",
+    "timestamp-micros",
+    "timestamp-millis",
+    "local-timestamp-millis",
+    "local-timestamp-micros"
+  ).foreach { timeLogicalType =>
+    test(s"converting $timeLogicalType type to long in avro") {
+      withTempPath { path =>
+        val df = Seq(100L)
+          .toDF("dt")
+        val avroSchema =
+          s"""
+             |{
+             |  "type" : "record",
+             |  "name" : "test_schema",
+             |  "fields" : [
+             |    {"name": "dt", "type": {"type": "long", "logicalType": "$timeLogicalType"}}
+             |  ]
+             |}""".stripMargin
+        df.write.format("avro").option("avroSchema", avroSchema).save(path.getCanonicalPath)
+        checkAnswer(
+          spark.read.schema(s"dt long").format("avro").load(path.toString),
+          Row(100L))
+      }
     }
   }
 
@@ -833,7 +1002,7 @@ abstract class AvroSuite
         Row("Munich", 8, new Timestamp(42), Decimal(3.14), arrayOfByte)))
       val cityDataFrame = spark.createDataFrame(cityRDD, testSchema)
 
-      val avroDir = tempDir + "/avro"
+      val avroDir = s"$tempDir/avro"
       cityDataFrame.write.format("avro").save(avroDir)
       assert(spark.read.format("avro").load(avroDir).collect().length == 3)
 
@@ -863,9 +1032,9 @@ abstract class AvroSuite
       val currentDate = new Date(System.currentTimeMillis())
       val schema = StructType(Seq(
         StructField("_1", DateType, false), StructField("_2", TimestampType, false)))
-      val writeDs = Seq((currentDate, currentTime)).toDS
+      val writeDs = Seq((currentDate, currentTime)).toDS()
 
-      val avroDir = tempDir + "/avro"
+      val avroDir = s"$tempDir/avro"
       writeDs.write.format("avro").save(avroDir)
       assert(spark.read.format("avro").load(avroDir).collect().length == 1)
 
@@ -892,14 +1061,14 @@ abstract class AvroSuite
         StructField("_1", DateType, nullable = true),
         StructField("_2", TimestampType, nullable = true))
       )
-      val writeDs = Seq((nullDate, nullTime)).toDS
+      val writeDs = Seq((nullDate, nullTime)).toDS()
 
-      val avroDir = tempDir + "/avro"
+      val avroDir = s"$tempDir/avro"
       writeDs.write.format("avro").save(avroDir)
       val readValues =
-        spark.read.schema(schema).format("avro").load(avroDir).as[(Date, Timestamp)].collect
+        spark.read.schema(schema).format("avro").load(avroDir).as[(Date, Timestamp)].collect()
 
-      assert(readValues.size == 1)
+      assert(readValues.length == 1)
       assert(readValues.head == ((nullDate, nullTime)))
     }
   }
@@ -989,7 +1158,7 @@ abstract class AvroSuite
     val result = spark
       .read
       .option("avroSchema", avroSchema)
-      .format("avro").load(testAvro).select("missingField").first
+      .format("avro").load(testAvro).select("missingField").first()
     assert(result === Row("foo"))
   }
 
@@ -1585,13 +1754,13 @@ abstract class AvroSuite
     // Test if load works as expected
     withTempPath { tempDir =>
       val df = spark.read.format("avro").load(episodesAvro)
-      assert(df.count == 8)
+      assert(df.count() == 8)
 
       val tempSaveDir = s"$tempDir/save/"
 
       df.write.format("avro").save(tempSaveDir)
       val newDf = spark.read.format("avro").load(tempSaveDir)
-      assert(newDf.count == 8)
+      assert(newDf.count() == 8)
     }
   }
 
@@ -1599,7 +1768,7 @@ abstract class AvroSuite
     // Test if load works as expected
     withTempPath { tempDir =>
       val df = spark.read.format("avro").load(episodesAvro)
-      assert(df.count == 8)
+      assert(df.count() == 8)
 
       val tempSaveDir = s"$tempDir/save/"
       df.write.format("avro").save(tempSaveDir)
@@ -1770,12 +1939,12 @@ abstract class AvroSuite
 
   test("read avro file partitioned") {
     withTempPath { dir =>
-      val df = (0 to 1024 * 3).toDS.map(i => s"record${i}").toDF("records")
+      val df = (0 to 1024 * 3).toDS().map(i => s"record${i}").toDF("records")
       val outputDir = s"$dir/${UUID.randomUUID}"
       df.write.format("avro").save(outputDir)
       val input = spark.read.format("avro").load(outputDir)
-      assert(input.collect.toSet.size === 1024 * 3 + 1)
-      assert(input.rdd.partitions.size > 2)
+      assert(input.collect().toSet.size === 1024 * 3 + 1)
+      assert(input.rdd.partitions.length > 2)
     }
   }
 
@@ -1899,21 +2068,21 @@ abstract class AvroSuite
 
       val fileWithoutExtension = s"${dir.getCanonicalPath}/episodes"
       val df1 = spark.read.format("avro").load(fileWithoutExtension)
-      assert(df1.count == 8)
+      assert(df1.count() == 8)
 
       val schema = new StructType()
         .add("title", StringType)
         .add("air_date", StringType)
         .add("doctor", IntegerType)
       val df2 = spark.read.schema(schema).format("avro").load(fileWithoutExtension)
-      assert(df2.count == 8)
+      assert(df2.count() == 8)
     }
   }
 
   test("SPARK-24836: checking the ignoreExtension option") {
     withTempPath { tempDir =>
       val df = spark.read.format("avro").load(episodesAvro)
-      assert(df.count == 8)
+      assert(df.count() == 8)
 
       val tempSaveDir = s"$tempDir/save/"
       df.write.format("avro").save(tempSaveDir)
@@ -1926,7 +2095,7 @@ abstract class AvroSuite
         .format("avro")
         .load(tempSaveDir)
 
-      assert(newDf.count == 8)
+      assert(newDf.count() == 8)
     }
   }
 
@@ -1958,7 +2127,7 @@ abstract class AvroSuite
         val reader = new DataFileReader(file, new GenericDatumReader[Any]())
         val r = reader.getMetaString("avro.codec")
         r
-      }.map(v => if (v == "null") "uncompressed" else v).headOption
+      }.map(v => if (v == "null") UNCOMPRESSED.lowerCaseName() else v).headOption
     }
     def checkCodec(df: DataFrame, dir: String, codec: String): Unit = {
       val subdir = s"$dir/$codec"
@@ -1969,17 +2138,15 @@ abstract class AvroSuite
       val path = dir.toString
       val df = spark.read.format("avro").load(testAvro)
 
-      checkCodec(df, path, "uncompressed")
-      checkCodec(df, path, "deflate")
-      checkCodec(df, path, "snappy")
-      checkCodec(df, path, "bzip2")
-      checkCodec(df, path, "xz")
+      AvroCompressionCodec.values().foreach { codec =>
+        checkCodec(df, path, codec.lowerCaseName())
+      }
     }
   }
 
   private def checkSchemaWithRecursiveLoop(avroSchema: String): Unit = {
     val message = intercept[IncompatibleSchemaException] {
-      SchemaConverters.toSqlType(new Schema.Parser().parse(avroSchema))
+      SchemaConverters.toSqlType(new Schema.Parser().parse(avroSchema), false)
     }.getMessage
 
     assert(message.contains("Found recursive reference in Avro schema"))

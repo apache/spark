@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import K8SSparkSubmitOperation.getGracePeriod
 import io.fabric8.kubernetes.api.model.Pod

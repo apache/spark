@@ -21,9 +21,9 @@ import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.util.LinkedHashMap
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
@@ -219,9 +219,13 @@ private[spark] class MemoryStore(
       unrollMemoryUsedByThisBlock += initialMemoryThreshold
     }
 
+    // Only do the thread interruption check on the executors.
+    val shouldCheckThreadInterruption = Option(TaskContext.get()).isDefined
+
     // Unroll this block safely, checking whether we have exceeded our threshold periodically
     // and if no thread interrupts have been received.
-    while (values.hasNext && keepUnrolling && !Thread.currentThread().isInterrupted) {
+    while (values.hasNext && keepUnrolling &&
+      (!shouldCheckThreadInterruption || !Thread.currentThread().isInterrupted)) {
       valuesHolder.storeValue(values.next())
       if (elementsUnrolled % memoryCheckPeriod == 0) {
         val currentSize = valuesHolder.estimatedSize()
@@ -242,7 +246,7 @@ private[spark] class MemoryStore(
 
     // SPARK-45025 - if a thread interrupt was received, we log a warning and return used memory
     // to avoid getting killed by task reaper eventually.
-    if (Thread.currentThread().isInterrupted) {
+    if (shouldCheckThreadInterruption && Thread.currentThread().isInterrupted) {
       logInfo(s"Failed to unroll block=$blockId since thread interrupt was received")
       Left(unrollMemoryUsedByThisBlock)
     } else if (keepUnrolling) {
@@ -746,7 +750,7 @@ private class SerializedValuesHolder[T](
     // We successfully unrolled the entirety of this block
     serializationStream.close()
 
-    override def preciseSize(): Long = bbos.size
+    override def preciseSize: Long = bbos.size
 
     override def build(): MemoryEntry[T] =
       SerializedMemoryEntry[T](bbos.toChunkedByteBuffer, memoryMode, classTag)

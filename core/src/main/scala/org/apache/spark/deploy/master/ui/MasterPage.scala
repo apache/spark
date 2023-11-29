@@ -32,13 +32,17 @@ import org.apache.spark.util.Utils
 
 private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private val master = parent.masterEndpointRef
+  private val jsonFieldPattern = "/json/([a-zA-Z]+).*".r
 
   def getMasterState: MasterStateResponse = {
     master.askSync[MasterStateResponse](RequestMasterState)
   }
 
   override def renderJson(request: HttpServletRequest): JValue = {
-    JsonProtocol.writeMasterState(getMasterState)
+    jsonFieldPattern.findFirstMatchIn(request.getRequestURI()) match {
+      case None => JsonProtocol.writeMasterState(getMasterState)
+      case Some(m) => JsonProtocol.writeMasterState(getMasterState, Some(m.group(1)))
+    }
   }
 
   def handleAppKillRequest(request: HttpServletRequest): Unit = {
@@ -79,13 +83,13 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       .flatMap(_.iterator)
       .groupBy(_._1) // group by resource name
       .map { case (rName, rInfoArr) =>
-      rName -> rInfoArr.map(_._2.addresses.size).sum
+      rName -> rInfoArr.map(_._2.addresses.length).sum
     }
     val usedInfo = aliveWorkers.map(_.resourcesInfoUsed)
       .flatMap(_.iterator)
       .groupBy(_._1) // group by resource name
       .map { case (rName, rInfoArr) =>
-      rName -> rInfoArr.map(_._2.addresses.size).sum
+      rName -> rInfoArr.map(_._2.addresses.length).sum
     }
     formatResourcesUsed(totalInfo, usedInfo)
   }
@@ -94,10 +98,15 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   def render(request: HttpServletRequest): Seq[Node] = {
     val state = getMasterState
 
-    val workerHeaders = Seq("Worker Id", "Address", "State", "Cores", "Memory", "Resources")
+    val showResourceColumn = state.workers.filter(_.resourcesInfoUsed.nonEmpty).nonEmpty
+    val workerHeaders = if (showResourceColumn) {
+      Seq("Worker Id", "Address", "State", "Cores", "Memory", "Resources")
+    } else {
+      Seq("Worker Id", "Address", "State", "Cores", "Memory")
+    }
     val workers = state.workers.sortBy(_.id)
     val aliveWorkers = state.workers.filter(_.state == WorkerState.ALIVE)
-    val workerTable = UIUtils.listingTable(workerHeaders, workerRow, workers)
+    val workerTable = UIUtils.listingTable(workerHeaders, workerRow(showResourceColumn), workers)
 
     val appHeaders = Seq("Application ID", "Name", "Cores", "Memory per Executor",
       "Resources Per Executor", "Submitted Time", "User", "State", "Duration")
@@ -149,7 +158,12 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
               <li><strong>Drivers:</strong>
                 {state.activeDrivers.length} Running
                 ({state.activeDrivers.count(_.state == DriverState.SUBMITTED)} Waiting),
-                {state.completedDrivers.length} Completed </li>
+                {state.completedDrivers.length} Completed
+                ({state.completedDrivers.count(_.state == DriverState.KILLED)} Killed,
+                {state.completedDrivers.count(_.state == DriverState.FAILED)} Failed,
+                {state.completedDrivers.count(_.state == DriverState.ERROR)} Error,
+                {state.completedDrivers.count(_.state == DriverState.RELAUNCHING)} Relaunching)
+              </li>
               <li><strong>Status:</strong> {state.status}</li>
             </ul>
           </div>
@@ -247,7 +261,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     UIUtils.basicSparkPage(request, content, "Spark Master at " + state.uri)
   }
 
-  private def workerRow(worker: WorkerInfo): Seq[Node] = {
+  private def workerRow(showResourceColumn: Boolean): WorkerInfo => Seq[Node] = worker => {
     <tr>
       <td>
         {
@@ -267,7 +281,9 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         {Utils.megabytesToString(worker.memory)}
         ({Utils.megabytesToString(worker.memoryUsed)} Used)
       </td>
-      <td>{formatWorkerResourcesDetails(worker)}</td>
+      {if (showResourceColumn) {
+        <td>{formatWorkerResourcesDetails(worker)}</td>
+      }}
     </tr>
   }
 

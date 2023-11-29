@@ -36,6 +36,7 @@ object TreePattern extends Enumeration  {
   val CASE_WHEN: Value = Value
   val CAST: Value = Value
   val COALESCE: Value = Value
+  val COMMON_EXPR_REF: Value = Value
   val CONCAT: Value = Value
   val COUNT: Value = Value
   val CREATE_NAMED_STRUCT: Value = Value
@@ -105,6 +106,7 @@ object TreePattern extends Enumeration  {
   val AS_OF_JOIN: Value = Value
   val COMMAND: Value = Value
   val CTE: Value = Value
+  val DF_DROP_COLUMNS: Value = Value
   val DISTINCT_LIKE: Value = Value
   val EVAL_PYTHON_UDF: Value = Value
   val EVAL_PYTHON_UDTF: Value = Value
@@ -121,6 +123,7 @@ object TreePattern extends Enumeration  {
   val NATURAL_LIKE_JOIN: Value = Value
   val OUTER_JOIN: Value = Value
   val PROJECT: Value = Value
+  val PYTHON_DATA_SOURCE: Value = Value
   val RELATION_TIME_TRAVEL: Value = Value
   val REPARTITION_OPERATION: Value = Value
   val REBALANCE_PARTITIONS: Value = Value
@@ -131,6 +134,7 @@ object TreePattern extends Enumeration  {
   val TYPED_FILTER: Value = Value
   val WINDOW: Value = Value
   val WINDOW_GROUP_LIMIT: Value = Value
+  val WITH_EXPRESSION: Value = Value
   val WITH_WINDOW_DEFINITION: Value = Value
 
   // Unresolved expression patterns (Alphabetically ordered)

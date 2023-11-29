@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.io.UnsupportedEncodingException
 import java.text.{BreakIterator, DecimalFormat, DecimalFormatSymbols}
 import java.util.{Base64 => JBase64}
 import java.util.{HashMap, Locale, Map => JMap}
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -30,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, SQLQueryContext}
+import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -39,6 +41,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
+import org.apache.spark.util.ArrayImplicits._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines expressions for string operations.
@@ -312,7 +315,7 @@ case class Elt(
           )
         )
       }
-      TypeUtils.checkForSameTypeInputExpr(inputTypes, prettyName)
+      TypeUtils.checkForSameTypeInputExpr(inputTypes.toImmutableArraySeq, prettyName)
     }
   }
 
@@ -355,7 +358,7 @@ case class Elt(
     }
 
     val codes = ctx.splitExpressionsWithCurrentInputs(
-      expressions = assignInputValue,
+      expressions = assignInputValue.toImmutableArraySeq,
       funcName = "eltFunc",
       extraArguments = ("int", indexVal) :: Nil,
       returnType = CodeGenerator.JAVA_BOOLEAN,
@@ -411,7 +414,7 @@ case class Elt(
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Elt =
     copy(children = newChildren)
 
-  override def initQueryContext(): Option[SQLQueryContext] = if (failOnError) {
+  override def initQueryContext(): Option[QueryContext] = if (failOnError) {
     Some(origin.context)
   } else {
     None
@@ -523,7 +526,8 @@ trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
 
 object BinaryPredicate {
   def unapply(expr: Expression): Option[StaticInvoke] = expr match {
-    case s @ StaticInvoke(clz, _, "contains" | "startsWith" | "endsWith", Seq(_, _), _, _, _, _)
+    case s @ StaticInvoke(
+        clz, _, "contains" | "startsWith" | "endsWith", Seq(_, _), _, _, _, _, _)
       if clz == classOf[ByteArrayMethods] => Some(s)
     case _ => None
   }
@@ -2230,16 +2234,18 @@ case class Levenshtein(
     val resultCode = s"${ev.value} = ${leftGen.value}.levenshteinDistance(" +
       s"${rightGen.value}, ${thresholdGen.value});"
     if (nullable) {
-      val nullSafeEval = leftGen.code + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
-        rightGen.code + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
-          thresholdGen.code + ctx.nullSafeExec(thresholdExpr.nullable, thresholdGen.isNull) {
-            s"""
-              ${ev.isNull} = false;
-              $resultCode
-             """
+      val nullSafeEval =
+        leftGen.code.toString + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
+          rightGen.code.toString + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
+            thresholdGen.code.toString +
+              ctx.nullSafeExec(thresholdExpr.nullable, thresholdGen.isNull) {
+                s"""
+                  ${ev.isNull} = false;
+                  $resultCode
+                 """
+              }
           }
         }
-      }
       ev.copy(code = code"""
         boolean ${ev.isNull} = true;
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -2258,14 +2264,15 @@ case class Levenshtein(
     val rightGen = children(1).genCode(ctx)
     val resultCode = s"${ev.value} = ${leftGen.value}.levenshteinDistance(${rightGen.value});"
     if (nullable) {
-      val nullSafeEval = leftGen.code + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
-        rightGen.code + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
-          s"""
-            ${ev.isNull} = false;
-            $resultCode
-           """
+      val nullSafeEval =
+        leftGen.code.toString + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
+          rightGen.code.toString + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
+            s"""
+              ${ev.isNull} = false;
+              $resultCode
+             """
+          }
         }
-      }
       ev.copy(code = code"""
         boolean ${ev.isNull} = true;
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -2564,15 +2571,15 @@ object Decode {
         var default: Expression = Literal.create(null, StringType)
         val branches = ArrayBuffer.empty[(Expression, Expression)]
         while (itr.hasNext) {
-          val search = itr.next
+          val search = itr.next()
           if (itr.hasNext) {
             val condition = EqualNullSafe(input, search)
-            branches += ((condition, itr.next))
+            branches += ((condition, itr.next()))
           } else {
             default = search
           }
         }
-        CaseWhen(branches.seq.toSeq, default)
+        CaseWhen(branches.toSeq, default)
     }
   }
 }
@@ -2678,31 +2685,58 @@ case class StringDecode(bin: Expression, charset: Expression)
   since = "1.5.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class Encode(value: Expression, charset: Expression)
+case class Encode(value: Expression, charset: Expression, legacyCharsets: Boolean)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  def this(value: Expression, charset: Expression) =
+    this(value, charset, SQLConf.get.legacyJavaCharsets)
 
   override def left: Expression = value
   override def right: Expression = charset
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
+  private val supportedCharsets = Set(
+    "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-16")
+
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val toCharset = input2.asInstanceOf[UTF8String].toString
-    input1.asInstanceOf[UTF8String].toString.getBytes(toCharset)
+    try {
+      if (legacyCharsets || supportedCharsets.contains(toCharset.toUpperCase(Locale.ROOT))) {
+        input1.asInstanceOf[UTF8String].toString.getBytes(toCharset)
+      } else throw new UnsupportedEncodingException
+    } catch {
+      case _: UnsupportedEncodingException =>
+        throw QueryExecutionErrors.invalidCharsetError(prettyName, toCharset)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (string, charset) =>
+    nullSafeCodeGen(ctx, ev, (string, charset) => {
+      val toCharset = ctx.freshName("toCharset")
+      val sc = JavaCode.global(
+        ctx.addReferenceObj("supportedCharsets", supportedCharsets),
+        supportedCharsets.getClass)
       s"""
+        String $toCharset = $charset.toString();
         try {
-          ${ev.value} = $string.toString().getBytes($charset.toString());
+          if ($legacyCharsets || $sc.contains($toCharset.toUpperCase(java.util.Locale.ROOT))) {
+            ${ev.value} = $string.toString().getBytes($toCharset);
+          } else {
+            throw new java.io.UnsupportedEncodingException();
+          }
         } catch (java.io.UnsupportedEncodingException e) {
-          org.apache.spark.unsafe.Platform.throwException(e);
-        }""")
+          throw QueryExecutionErrors.invalidCharsetError("$prettyName", $toCharset);
+        }"""
+    })
   }
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Encode = copy(value = newLeft, charset = newRight)
+}
+
+object Encode {
+  def apply(value: Expression, charset: Expression): Encode = new Encode(value, charset)
 }
 
 /**

@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types.{DataType, Decimal, StructType}
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
 
 /**
  * An [[InternalRow]] that projects particular columns from another [[InternalRow]] without copying
@@ -97,6 +97,10 @@ case class ProjectingInternalRow(schema: StructType, colOrdinals: Seq[Int]) exte
 
   override def getInterval(ordinal: Int): CalendarInterval = {
     row.getInterval(colOrdinals(ordinal))
+  }
+
+  override def getVariant(ordinal: Int): VariantVal = {
+    row.getVariant(colOrdinals(ordinal))
   }
 
   override def getStruct(ordinal: Int, numFields: Int): InternalRow = {

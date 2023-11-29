@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpress
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, NamedTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkSchemaUtils
 
 
@@ -53,7 +54,7 @@ private[spark] object SchemaUtils {
         checkSchemaColumnNameDuplication(valueType, caseSensitiveAnalysis)
       case structType: StructType =>
         val fields = structType.fields
-        checkColumnNameDuplication(fields.map(_.name), caseSensitiveAnalysis)
+        checkColumnNameDuplication(fields.map(_.name).toImmutableArraySeq, caseSensitiveAnalysis)
         fields.foreach { field =>
           checkSchemaColumnNameDuplication(field.dataType, caseSensitiveAnalysis)
         }
@@ -167,7 +168,8 @@ private[spark] object SchemaUtils {
       isCaseSensitive: Boolean): Unit = {
     val extractedTransforms = transforms.map {
       case b: BucketTransform =>
-        val colNames = b.columns.map(c => UnresolvedAttribute(c.fieldNames()).name)
+        val colNames =
+          b.columns.map(c => UnresolvedAttribute(c.fieldNames().toImmutableArraySeq).name)
         // We need to check that we're not duplicating columns within our bucketing transform
         checkColumnNameDuplication(colNames, isCaseSensitive)
         b.name -> colNames

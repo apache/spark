@@ -28,12 +28,13 @@ class SparkConnectReleaseExecuteHandler(
     extends Logging {
 
   def handle(v: proto.ReleaseExecuteRequest): Unit = {
-    val sessionHolder = SparkConnectService
-      .getIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
+    val sessionHolder = SparkConnectService.sessionManager
+      .getIsolatedSession(SessionKey(v.getUserContext.getUserId, v.getSessionId))
 
     val responseBuilder = proto.ReleaseExecuteResponse
       .newBuilder()
       .setSessionId(v.getSessionId)
+      .setServerSideSessionId(sessionHolder.serverSessionId)
 
     // ExecuteHolder may be concurrently released by SparkConnectExecutionManager if the
     // ReleaseExecute arrived after it was abandoned and timed out.

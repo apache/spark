@@ -29,7 +29,6 @@ from pyspark.rdd import RDD
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import Vectors, _convert_to_vector
 from pyspark.mllib.util import JavaLoader, JavaSaveable
-
 from pyspark.context import SparkContext
 from pyspark.mllib.linalg import Vector
 from pyspark.mllib.regression import LabeledPoint

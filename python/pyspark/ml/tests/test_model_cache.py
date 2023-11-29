@@ -15,10 +15,10 @@
 # limitations under the License.
 #
 import unittest
+from uuid import uuid4
 
 from pyspark.ml.model_cache import ModelCache
 from pyspark.testing.mlutils import SparkSessionTestCase
-from uuid import uuid4
 
 
 class ModelCacheTests(SparkSessionTestCase):

@@ -20,9 +20,7 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.FetchErrorDetailsResponse
-import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.utils.ErrorUtils
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Handles [[proto.FetchErrorDetailsRequest]]s for the [[SparkConnectService]]. The handler
@@ -46,9 +44,7 @@ class SparkConnectFetchErrorDetailsHandler(
 
         ErrorUtils.throwableToFetchErrorDetailsResponse(
           st = error,
-          serverStackTraceEnabled = sessionHolder.session.conf.get(
-            Connect.CONNECT_SERVER_STACKTRACE_ENABLED) || sessionHolder.session.conf.get(
-            SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED))
+          serverStackTraceEnabled = true)
       }
       .getOrElse(FetchErrorDetailsResponse.newBuilder().build())
 

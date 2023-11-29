@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.service
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.grpc.stub.StreamObserver
 
@@ -201,7 +201,9 @@ private[connect] class SparkConnectAnalyzeHandler(
       case other => throw InvalidPlanInput(s"Unknown Analyze Method $other!")
     }
 
-    builder.setSessionId(request.getSessionId)
+    builder
+      .setSessionId(request.getSessionId)
+      .setServerSideSessionId(sessionHolder.serverSessionId)
     builder.build()
   }
 }

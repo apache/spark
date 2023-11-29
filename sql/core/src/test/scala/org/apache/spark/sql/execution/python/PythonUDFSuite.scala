@@ -98,7 +98,7 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
     df.count()
 
     val statusStore = spark.sharedState.statusStore
-    val lastExecId = statusStore.executionsList.last.executionId
+    val lastExecId = statusStore.executionsList().last.executionId
     val executionMetrics = statusStore.execution(lastExecId).get.metrics.mkString
     for (metric <- pythonSQLMetrics) {
       assert(executionMetrics.contains(metric))

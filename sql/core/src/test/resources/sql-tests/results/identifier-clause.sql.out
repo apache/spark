@@ -205,9 +205,9 @@ struct<coalesce(NULL, 1):int>
 
 
 -- !query
-SELECT IDENTIFIER('abs')(-1)
+SELECT IDENTIFIER('abs')(c1) FROM VALUES(-1) AS T(c1)
 -- !query schema
-struct<abs(-1):int>
+struct<abs(c1):int>
 -- !query output
 1
 
@@ -421,6 +421,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NOT_A_PARTITIONED_TABLE",
+  "sqlState" : "42809",
   "messageParameters" : {
     "operation" : "MSCK REPAIR TABLE",
     "tableIdentWithDB" : "`spark_catalog`.`default`.`tab`"
@@ -814,6 +815,29 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 19,
     "stopIndex" : 48,
     "fragment" : "SUBSTR('HELLO', 1, RAND() + 1)"
+  } ]
+}
+
+
+-- !query
+SELECT `IDENTIFIER`('abs')(c1) FROM VALUES(-1) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`IDENTIFIER`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "`IDENTIFIER`('abs')"
   } ]
 }
 

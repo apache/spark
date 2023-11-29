@@ -22,7 +22,7 @@ import java.util
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
@@ -197,8 +197,10 @@ private[sql] object H2Dialect extends JdbcDialect {
           // TABLE_OR_VIEW_NOT_FOUND_1
           case 42102 =>
             val quotedName = quoteNameParts(UnresolvedAttribute.parseAttributeName(message))
-            throw new NoSuchTableException(errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-              messageParameters = Map("relationName" -> quotedName))
+            throw new NoSuchTableException(
+              errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+              messageParameters = Map("relationName" -> quotedName),
+              cause = Some(e))
           // SCHEMA_NOT_FOUND_1
           case 90079 =>
             val regex = """"((?:[^"\\]|\\[\\"ntbrf])+)"""".r
@@ -240,6 +242,14 @@ private[sql] object H2Dialect extends JdbcDialect {
   }
 
   class H2SQLBuilder extends JDBCSQLBuilder {
+    override def escapeSpecialCharsForLikePattern(str: String): String = {
+      str.map {
+        case '_' => "\\_"
+        case '%' => "\\%"
+        case c => c.toString
+      }.mkString
+    }
+
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {

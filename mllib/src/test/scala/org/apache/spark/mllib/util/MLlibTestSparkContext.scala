@@ -26,6 +26,7 @@ import org.apache.spark.ml.feature._
 import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util.TempDirectory
 import org.apache.spark.sql.{SparkSession, SQLContext, SQLImplicits}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 trait MLlibTestSparkContext extends TempDirectory { self: Suite =>
@@ -35,7 +36,7 @@ trait MLlibTestSparkContext extends TempDirectory { self: Suite =>
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    spark = SparkSession.builder
+    spark = SparkSession.builder()
       .master("local[2]")
       .appName("MLlibUnitTest")
       .getOrCreate()
@@ -73,7 +74,7 @@ trait MLlibTestSparkContext extends TempDirectory { self: Suite =>
 
   private[spark] def standardize(instances: Array[Instance]): Array[Instance] = {
     val (featuresSummarizer, _) =
-      Summarizer.getClassificationSummarizers(sc.parallelize(instances))
+      Summarizer.getClassificationSummarizers(sc.parallelize(instances.toImmutableArraySeq))
     val inverseStd = featuresSummarizer.std.toArray
       .map { std => if (std != 0) 1.0 / std else 0.0 }
     val func = StandardScalerModel.getTransformFunc(Array.empty, inverseStd, false, true)

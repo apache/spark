@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.rules
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.common.util.concurrent.AtomicLongMap
 
@@ -86,7 +86,7 @@ case class QueryExecutionMetering() {
     val colRunTime = "Effective Time / Total Time".padTo(len = 47, " ").mkString
     val colNumRuns = "Effective Runs / Total Runs".padTo(len = 47, " ").mkString
 
-    val ruleMetrics = map.toSeq.sortBy(_._2).reverseMap { case (name, time) =>
+    val ruleMetrics = map.toSeq.sortBy(_._2).reverseIterator.map { case (name, time) =>
       val timeEffectiveRun = timeEffectiveRunsMap.get(name)
       val numRuns = numRunsMap.get(name)
       val numEffectiveRun = numEffectiveRunsMap.get(name)

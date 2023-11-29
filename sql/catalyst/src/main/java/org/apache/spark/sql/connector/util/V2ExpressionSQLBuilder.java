@@ -48,23 +48,48 @@ import org.apache.spark.sql.types.DataType;
  */
 public class V2ExpressionSQLBuilder {
 
+  /**
+   * Escape the special chars for like pattern.
+   *
+   * Note: This method adopts the escape representation within Spark and is not bound to any JDBC
+   * dialect. JDBC dialect should overwrite this API if the underlying database have more special
+   * chars other than _ and %.
+   */
+  protected String escapeSpecialCharsForLikePattern(String str) {
+    StringBuilder builder = new StringBuilder();
+
+    for (char c : str.toCharArray()) {
+      switch (c) {
+        case '_':
+          builder.append("\\_");
+          break;
+        case '%':
+          builder.append("\\%");
+          break;
+        case '\'':
+          builder.append("\\\'");
+          break;
+        default:
+          builder.append(c);
+      }
+    }
+
+    return builder.toString();
+  }
+
   public String build(Expression expr) {
     if (expr instanceof Literal) {
       return visitLiteral((Literal<?>) expr);
     } else if (expr instanceof NamedReference) {
       return visitNamedReference((NamedReference) expr);
-    } else if (expr instanceof Cast) {
-      Cast cast = (Cast) expr;
+    } else if (expr instanceof Cast cast) {
       return visitCast(build(cast.expression()), cast.dataType());
-    } else if (expr instanceof Extract) {
-      Extract extract = (Extract) expr;
+    } else if (expr instanceof Extract extract) {
       return visitExtract(extract.field(), build(extract.source()));
-    } else if (expr instanceof SortOrder) {
-      SortOrder sortOrder = (SortOrder) expr;
+    } else if (expr instanceof SortOrder sortOrder) {
       return visitSortOrder(
         build(sortOrder.expression()), sortOrder.direction(), sortOrder.nullOrdering());
-    } else if (expr instanceof GeneralScalarExpression) {
-      GeneralScalarExpression e = (GeneralScalarExpression) expr;
+    } else if (expr instanceof GeneralScalarExpression e) {
       String name = e.name();
       switch (name) {
         case "IN": {
@@ -181,26 +206,21 @@ public class V2ExpressionSQLBuilder {
         default:
           return visitUnexpectedExpr(expr);
       }
-    } else if (expr instanceof Min) {
-      Min min = (Min) expr;
+    } else if (expr instanceof Min min) {
       return visitAggregateFunction("MIN", false,
         expressionsToStringArray(min.children()));
-    } else if (expr instanceof Max) {
-      Max max = (Max) expr;
+    } else if (expr instanceof Max max) {
       return visitAggregateFunction("MAX", false,
         expressionsToStringArray(max.children()));
-    } else if (expr instanceof Count) {
-      Count count = (Count) expr;
+    } else if (expr instanceof Count count) {
       return visitAggregateFunction("COUNT", count.isDistinct(),
         expressionsToStringArray(count.children()));
-    } else if (expr instanceof Sum) {
-      Sum sum = (Sum) expr;
+    } else if (expr instanceof Sum sum) {
       return visitAggregateFunction("SUM", sum.isDistinct(),
         expressionsToStringArray(sum.children()));
     } else if (expr instanceof CountStar) {
       return visitAggregateFunction("COUNT", false, new String[]{"*"});
-    } else if (expr instanceof Avg) {
-      Avg avg = (Avg) expr;
+    } else if (expr instanceof Avg avg) {
       return visitAggregateFunction("AVG", avg.isDistinct(),
         expressionsToStringArray(avg.children()));
     } else if (expr instanceof GeneralAggregateFunc) {
@@ -247,21 +267,21 @@ public class V2ExpressionSQLBuilder {
     // Remove quotes at the beginning and end.
     // e.g. converts "'str'" to "str".
     String value = r.substring(1, r.length() - 1);
-    return l + " LIKE '" + value + "%'";
+    return l + " LIKE '" + escapeSpecialCharsForLikePattern(value) + "%' ESCAPE '\\'";
   }
 
   protected String visitEndsWith(String l, String r) {
     // Remove quotes at the beginning and end.
     // e.g. converts "'str'" to "str".
     String value = r.substring(1, r.length() - 1);
-    return l + " LIKE '%" + value + "'";
+    return l + " LIKE '%" + escapeSpecialCharsForLikePattern(value) + "' ESCAPE '\\'";
   }
 
   protected String visitContains(String l, String r) {
     // Remove quotes at the beginning and end.
     // e.g. converts "'str'" to "str".
     String value = r.substring(1, r.length() - 1);
-    return l + " LIKE '%" + value + "%'";
+    return l + " LIKE '%" + escapeSpecialCharsForLikePattern(value) + "%' ESCAPE '\\'";
   }
 
   private String inputToSQL(Expression input) {
@@ -273,12 +293,10 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String visitBinaryComparison(String name, String l, String r) {
-    switch (name) {
-      case "<=>":
-        return "(" + l + " = " + r + ") OR (" + l + " IS NULL AND " + r + " IS NULL)";
-      default:
-        return l + " " + name + " " + r;
+    if (name.equals("<=>")) {
+      return "(" + l + " = " + r + ") OR (" + l + " IS NULL AND " + r + " IS NULL)";
     }
+    return l + " " + name + " " + r;
   }
 
   protected String visitBinaryArithmetic(String name, String l, String r) {

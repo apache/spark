@@ -288,13 +288,13 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
     val taskReq = new TaskResourceRequests().resource("gpu", 1)
     val eReq = new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
     rprofBuilder.require(taskReq).require(eReq)
-    val rprof = rprofBuilder.build
+    val rprof = rprofBuilder.build()
 
     val rprofBuilder2 = new ResourceProfileBuilder()
     val taskReq2 = new TaskResourceRequests().resource("gpu", 1)
     val eReq2 = new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
     rprofBuilder2.require(taskReq2).require(eReq2)
-    val rprof2 = rprofBuilder.build
+    val rprof2 = rprofBuilder.build()
     rprof2.setResourceProfileId(rprof.id)
 
     assert(rprof === rprof2, "resource profile equality not working")
@@ -374,7 +374,7 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
     rprof.require(eReq)
 
     // Update this if new resource type added
-    assert(ResourceProfile.allSupportedExecutorResources.size === 5,
+    assert(ResourceProfile.allSupportedExecutorResources.length === 5,
       "Executor resources should have 5 supported resources")
     assert(rprof.build().getCustomExecutorResources().size === 1,
       "Executor resources should have 1 custom resource")

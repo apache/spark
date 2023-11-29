@@ -17,8 +17,8 @@
 
 import numbers
 from abc import ABCMeta
-from itertools import chain
 from typing import Any, Optional, Union
+from itertools import chain
 
 import numpy as np
 import pandas as pd
@@ -134,8 +134,8 @@ def _as_categorical_type(
                 *[(F.lit(category), F.lit(code)) for code, category in enumerate(categories)]
             )
             map_scol = F.create_map(*kvs)
-
             scol = F.coalesce(map_scol[index_ops.spark.column], F.lit(-1))
+
         return index_ops._with_new_scol(
             scol.cast(spark_type),
             field=index_ops._internal.data_fields[0].copy(

@@ -183,7 +183,7 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
     @classmethod
     def conf(cls):
         conf = super().conf()
-        conf.set("spark.connect.copyFromLocalToFs.allowDestLocal", "true")
+        conf.set("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
         return conf
 
     def test_basic_requests(self):
@@ -387,6 +387,13 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
         actualHash = self.artifact_manager.cache_artifact(blob)
         self.assertEqual(actualHash, expected_hash)
         self.assertEqual(self.artifact_manager.is_cached_artifact(expected_hash), True)
+
+    def test_add_not_existing_artifact(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(FileNotFoundError):
+                self.artifact_manager.add_artifacts(
+                    os.path.join(d, "not_existing"), file=True, pyfile=False, archive=False
+                )
 
 
 class LocalClusterArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):

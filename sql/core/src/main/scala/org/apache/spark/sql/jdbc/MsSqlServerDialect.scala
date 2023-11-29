@@ -109,7 +109,9 @@ private object MsSqlServerDialect extends JdbcDialect {
         None
       } else {
         sqlType match {
-          case java.sql.Types.SMALLINT => Some(ShortType)
+          // Data range of TINYINT is 0-255 so it needs to be stored in ShortType.
+          // Reference doc: https://learn.microsoft.com/en-us/sql/t-sql/data-types
+          case java.sql.Types.SMALLINT | java.sql.Types.TINYINT => Some(ShortType)
           case java.sql.Types.REAL => Some(FloatType)
           case SpecificTypes.GEOMETRY | SpecificTypes.GEOGRAPHY => Some(BinaryType)
           case _ => None

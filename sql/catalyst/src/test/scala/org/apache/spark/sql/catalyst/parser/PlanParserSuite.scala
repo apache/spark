@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import scala.annotation.nowarn
+
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedParameter, PosParameter, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
@@ -1678,7 +1680,8 @@ class PlanParserSuite extends AnalysisTest {
           List.empty, List.empty, None, None, false)))
 
     // verify with ROW FORMAT DELIMETED
-    assertEqual(
+    @nowarn("cat=deprecation")
+    val sqlWithRowFormatDelimiters: String =
       """
         |SELECT TRANSFORM(a, b, c)
         |  ROW FORMAT DELIMITED
@@ -1695,7 +1698,9 @@ class PlanParserSuite extends AnalysisTest {
         |  LINES TERMINATED BY '\n'
         |  NULL DEFINED AS 'NULL'
         |FROM testData
-      """.stripMargin,
+      """.stripMargin
+    assertEqual(
+      sqlWithRowFormatDelimiters,
       ScriptTransformation(
         "cat",
         Seq(AttributeReference("a", StringType)(),

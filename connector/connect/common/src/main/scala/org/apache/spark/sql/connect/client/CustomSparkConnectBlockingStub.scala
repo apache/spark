@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect.client
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.grpc.ManagedChannel
 
@@ -24,57 +24,110 @@ import org.apache.spark.connect.proto._
 
 private[connect] class CustomSparkConnectBlockingStub(
     channel: ManagedChannel,
-    retryPolicy: GrpcRetryHandler.RetryPolicy) {
+    stubState: SparkConnectStubState) {
 
   private val stub = SparkConnectServiceGrpc.newBlockingStub(channel)
-  private val retryHandler = new GrpcRetryHandler(retryPolicy)
+
+  private val retryHandler = stubState.retryHandler
+
+  // GrpcExceptionConverter with a GRPC stub for fetching error details from server.
+  private val grpcExceptionConverter = stubState.exceptionConverter
 
   def executePlan(request: ExecutePlanRequest): CloseableIterator[ExecutePlanResponse] = {
-    GrpcExceptionConverter.convert {
-      GrpcExceptionConverter.convertIterator[ExecutePlanResponse](
+    grpcExceptionConverter.convert(
+      request.getSessionId,
+      request.getUserContext,
+      request.getClientType) {
+      grpcExceptionConverter.convertIterator[ExecutePlanResponse](
+        request.getSessionId,
+        request.getUserContext,
+        request.getClientType,
         retryHandler.RetryIterator[ExecutePlanRequest, ExecutePlanResponse](
           request,
-          r => CloseableIterator(stub.executePlan(r).asScala)))
+          r => {
+            stubState.responseValidator.wrapIterator(
+              CloseableIterator(stub.executePlan(r).asScala))
+          }))
     }
   }
 
   def executePlanReattachable(
       request: ExecutePlanRequest): CloseableIterator[ExecutePlanResponse] = {
-    GrpcExceptionConverter.convert {
-      GrpcExceptionConverter.convertIterator[ExecutePlanResponse](
-        // Don't use retryHandler - own retry handling is inside.
-        new ExecutePlanResponseReattachableIterator(request, channel, retryPolicy))
+    grpcExceptionConverter.convert(
+      request.getSessionId,
+      request.getUserContext,
+      request.getClientType) {
+      grpcExceptionConverter.convertIterator[ExecutePlanResponse](
+        request.getSessionId,
+        request.getUserContext,
+        request.getClientType,
+        stubState.responseValidator.wrapIterator(
+          // ExecutePlanResponseReattachableIterator does all retries by itself, don't wrap it here
+          new ExecutePlanResponseReattachableIterator(request, channel, stubState.retryHandler)))
     }
   }
 
   def analyzePlan(request: AnalyzePlanRequest): AnalyzePlanResponse = {
-    GrpcExceptionConverter.convert {
+    grpcExceptionConverter.convert(
+      request.getSessionId,
+      request.getUserContext,
+      request.getClientType) {
       retryHandler.retry {
-        stub.analyzePlan(request)
+        stubState.responseValidator.verifyResponse {
+          stub.analyzePlan(request)
+        }
       }
     }
   }
 
   def config(request: ConfigRequest): ConfigResponse = {
-    GrpcExceptionConverter.convert {
+    grpcExceptionConverter.convert(
+      request.getSessionId,
+      request.getUserContext,
+      request.getClientType) {
       retryHandler.retry {
-        stub.config(request)
+        stubState.responseValidator.verifyResponse {
+          stub.config(request)
+        }
       }
     }
   }
 
   def interrupt(request: InterruptRequest): InterruptResponse = {
-    GrpcExceptionConverter.convert {
+    grpcExceptionConverter.convert(
+      request.getSessionId,
+      request.getUserContext,
+      request.getClientType) {
       retryHandler.retry {
-        stub.interrupt(request)
+        stubState.responseValidator.verifyResponse {
+          stub.interrupt(request)
+        }
+      }
+    }
+  }
+
+  def releaseSession(request: ReleaseSessionRequest): ReleaseSessionResponse = {
+    grpcExceptionConverter.convert(
+      request.getSessionId,
+      request.getUserContext,
+      request.getClientType) {
+      retryHandler.retry {
+        stubState.responseValidator.verifyResponse {
+          stub.releaseSession(request)
+        }
       }
     }
   }
 
   def artifactStatus(request: ArtifactStatusesRequest): ArtifactStatusesResponse = {
-    GrpcExceptionConverter.convert {
+    grpcExceptionConverter.convert(
+      request.getSessionId,
+      request.getUserContext,
+      request.getClientType) {
       retryHandler.retry {
-        stub.artifactStatus(request)
+        stubState.responseValidator.verifyResponse {
+          stub.artifactStatus(request)
+        }
       }
     }
   }

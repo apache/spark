@@ -210,7 +210,7 @@ object Metadata {
       // `map.mapValues` return `Map` in Scala 2.12 and return `MapView` in Scala 2.13, call
       // `toMap` for Scala version compatibility.
       case map: Map[_, _] =>
-        map.mapValues(hash).toMap.##
+        map.view.mapValues(hash).toMap.##
       case arr: Array[_] =>
         // Seq.empty[T] has the same hashCode regardless of T.
         arr.toSeq.map(hash).##

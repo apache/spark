@@ -29,7 +29,7 @@ import sun.nio.cs.StreamDecoder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.unsafe.types.UTF8String
 
-private[sql] object CreateJacksonParser extends Serializable {
+object CreateJacksonParser extends Serializable {
   def string(jsonFactory: JsonFactory, record: String): JsonParser = {
     jsonFactory.createParser(record)
   }

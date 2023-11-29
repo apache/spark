@@ -36,6 +36,7 @@ import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.{AtomicType, StructType}
 import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
@@ -273,10 +274,11 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
           case transform: RewritableTransform =>
             val rewritten = transform.references().map { ref =>
               // Throws an exception if the reference cannot be resolved
-              val position = SchemaUtils.findColumnPosition(ref.fieldNames(), schema, resolver)
+              val position = SchemaUtils
+                .findColumnPosition(ref.fieldNames().toImmutableArraySeq, schema, resolver)
               FieldReference(SchemaUtils.getColumnName(position, schema))
             }
-            transform.withReferences(rewritten)
+            transform.withReferences(rewritten.toImmutableArraySeq)
           case other => other
         }
 
@@ -284,10 +286,11 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       }
   }
 
-  private def fallBackV2ToV1(cls: Class[_]): Class[_] = cls.newInstance match {
-    case f: FileDataSourceV2 => f.fallbackFileFormat
-    case _ => cls
-  }
+  private def fallBackV2ToV1(cls: Class[_]): Class[_] =
+    cls.getDeclaredConstructor().newInstance() match {
+      case f: FileDataSourceV2 => f.fallbackFileFormat
+      case _ => cls
+    }
 
   private def normalizeCatalogTable(schema: StructType, table: CatalogTable): CatalogTable = {
     SchemaUtils.checkSchemaColumnNameDuplication(
@@ -403,11 +406,14 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
       insert.query
     }
     val newQuery = try {
+      val byName = hasColumnList || insert.byName
+      TableOutputResolver.suitableForByNameCheck(byName, expected = expectedColumns,
+        queryOutput = query.output)
       TableOutputResolver.resolveOutputColumns(
         tblName,
         expectedColumns,
         query,
-        byName = hasColumnList || insert.byName,
+        byName,
         conf,
         supportColDefaultValue = true)
     } catch {

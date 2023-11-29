@@ -181,14 +181,11 @@ public class ArrowColumnVector extends ColumnVector {
       accessor = new TimestampAccessor((TimeStampMicroTZVector) vector);
     } else if (vector instanceof TimeStampMicroVector) {
       accessor = new TimestampNTZAccessor((TimeStampMicroVector) vector);
-    } else if (vector instanceof MapVector) {
-      MapVector mapVector = (MapVector) vector;
+    } else if (vector instanceof MapVector mapVector) {
       accessor = new MapAccessor(mapVector);
-    } else if (vector instanceof ListVector) {
-      ListVector listVector = (ListVector) vector;
+    } else if (vector instanceof ListVector listVector) {
       accessor = new ArrayAccessor(listVector);
-    } else if (vector instanceof StructVector) {
-      StructVector structVector = (StructVector) vector;
+    } else if (vector instanceof StructVector structVector) {
       accessor = new StructAccessor(structVector);
 
       childColumns = new ArrowColumnVector[structVector.size()];

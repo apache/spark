@@ -44,7 +44,6 @@ import warnings
 
 import pandas as pd
 from pandas.api.types import is_number, is_hashable, is_list_like  # type: ignore[attr-defined]
-
 from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
 
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
@@ -57,7 +56,6 @@ from pyspark.sql.types import (
     StructType,
     StringType,
 )
-
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, FrameLike, Label, Name
 from pyspark.pandas.typedef import infer_return_type, DataFrameType, ScalarType, SeriesType
@@ -611,18 +609,17 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             min_count=min_count,
         )
 
-    def mean(self, numeric_only: Optional[bool] = True) -> FrameLike:
+    def mean(self, numeric_only: Optional[bool] = False) -> FrameLike:
         """
         Compute mean of groups, excluding missing values.
 
         Parameters
         ----------
-        numeric_only : bool, default True
-            Include only float, int, boolean columns. If None, will attempt to use
-            everything, then use only numeric data. False is not supported.
-            This parameter is mainly for pandas compatibility.
+        numeric_only : bool, default False
+            Include only float, int, boolean columns.
 
             .. versionadded:: 3.4.0
+            .. versionchanged:: 4.0.0
 
         Returns
         -------
@@ -842,7 +839,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             bool_to_numeric=True,
         )
 
-    def sum(self, numeric_only: Optional[bool] = True, min_count: int = 0) -> FrameLike:
+    def sum(self, numeric_only: bool = False, min_count: int = 0) -> FrameLike:
         """
         Compute sum of group values
 
@@ -851,11 +848,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Parameters
         ----------
         numeric_only : bool, default False
-            Include only float, int, boolean columns. If None, will attempt to use
-            everything, then use only numeric data.
-            It takes no effect since only numeric columns can be support here.
+            Include only float, int, boolean columns.
 
             .. versionadded:: 3.4.0
+            .. versionchanged:: 4.0.0
         min_count : int, default 0
             The required number of valid values to perform the operation.
             If fewer than min_count non-NA values are present the result will be NA.
@@ -897,11 +893,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
         """
-        warnings.warn(
-            "Default value of `numeric_only` will be changed to `False` "
-            "instead of `True` in 4.0.0.",
-            FutureWarning,
-        )
         if numeric_only is not None and not isinstance(numeric_only, bool):
             raise TypeError("numeric_only must be None or bool")
         if not isinstance(min_count, int):
@@ -927,7 +918,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         )
 
     # TODO: sync the doc.
-    def var(self, ddof: int = 1, numeric_only: Optional[bool] = True) -> FrameLike:
+    def var(self, ddof: int = 1, numeric_only: bool = False) -> FrameLike:
         """
         Compute variance of groups, excluding missing values.
 
@@ -942,10 +933,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             .. versionchanged:: 3.4.0
                Supported including arbitary integers.
 
-        numeric_only : bool, default True
-             Include only float, int, boolean columns. If None, will attempt to use
-             everything, then use only numeric data. False is not supported.
-             This parameter is mainly for pandas compatibility.
+        numeric_only : bool, default False
+             Include only float, int, boolean columns.
 
              .. versionadded:: 4.0.0
 
@@ -1179,7 +1168,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         return self._prepare_return(DataFrame(internal), agg_column_names=agg_column_names)
 
-    def prod(self, numeric_only: Optional[bool] = True, min_count: int = 0) -> FrameLike:
+    def prod(self, numeric_only: bool = False, min_count: int = 0) -> FrameLike:
         """
         Compute prod of groups.
 
@@ -1188,8 +1177,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Parameters
         ----------
         numeric_only : bool, default False
-            Include only float, int, boolean columns. If None, will attempt to use
-            everything, then use only numeric data.
+            Include only float, int, boolean columns.
+
+            .. versionchanged:: 4.0.0
 
         min_count : int, default 0
             The required number of valid values to perform the operation.
@@ -1234,12 +1224,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         if not isinstance(min_count, int):
             raise TypeError("min_count must be integer")
-
-        warnings.warn(
-            "Default value of `numeric_only` will be changed to `False` "
-            "instead of `True` in 4.0.0.",
-            FutureWarning,
-        )
 
         self._validate_agg_columns(numeric_only=numeric_only, function_name="prod")
 
@@ -2630,20 +2614,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         return self.fillna(method="bfill", limit=limit)
 
-    def backfill(self, limit: Optional[int] = None) -> FrameLike:
-        """
-        Alias for bfill.
-
-        .. deprecated:: 3.4.0
-        """
-        warnings.warn(
-            "The GroupBy.backfill method is deprecated "
-            "and will be removed in a future version. "
-            "Use GroupBy.bfill instead.",
-            FutureWarning,
-        )
-        return self.bfill(limit=limit)
-
     def ffill(self, limit: Optional[int] = None) -> FrameLike:
         """
         Synonym for `DataFrame.fillna()` with ``method=`ffill```.
@@ -2692,20 +2662,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         3  3.0  1.0  4
         """
         return self.fillna(method="ffill", limit=limit)
-
-    def pad(self, limit: Optional[int] = None) -> FrameLike:
-        """
-        Alias for ffill.
-
-        .. deprecated:: 3.4.0
-        """
-        warnings.warn(
-            "The GroupBy.pad method is deprecated "
-            "and will be removed in a future version. "
-            "Use GroupBy.ffill instead.",
-            FutureWarning,
-        )
-        return self.ffill(limit=limit)
 
     def _limit(self, n: int, asc: bool) -> FrameLike:
         """
@@ -3441,7 +3397,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         return self._handle_output(DataFrame(internal))
 
-    def median(self, numeric_only: Optional[bool] = True, accuracy: int = 10000) -> FrameLike:
+    def median(self, numeric_only: bool = False, accuracy: int = 10000) -> FrameLike:
         """
         Compute median of groups, excluding missing values.
 
@@ -3454,10 +3410,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Parameters
         ----------
         numeric_only : bool, default False
-            Include only float, int, boolean columns. If None, will attempt to use
-            everything, then use only numeric data.
+            Include only float, int, boolean columns.
 
             .. versionadded:: 3.4.0
+            .. versionchanged:: 4.0.0
 
         Returns
         -------
@@ -3508,12 +3464,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             )
 
         self._validate_agg_columns(numeric_only=numeric_only, function_name="median")
-
-        warnings.warn(
-            "Default value of `numeric_only` will be changed to `False` "
-            "instead of `True` in 4.0.0.",
-            FutureWarning,
-        )
 
         def stat_function(col: Column) -> Column:
             return F.percentile_approx(col, 0.5, accuracy)

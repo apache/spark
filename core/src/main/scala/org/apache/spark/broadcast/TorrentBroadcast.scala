@@ -22,7 +22,7 @@ import java.lang.ref.{Reference, SoftReference, WeakReference}
 import java.nio.ByteBuffer
 import java.util.zip.Adler32
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
 

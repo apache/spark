@@ -48,6 +48,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 from pandas.tseries.offsets import DateOffset
 import pyarrow as pa
 import pyarrow.parquet as pq
+
 from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
@@ -67,7 +68,6 @@ from pyspark.sql.types import (
     DataType,
 )
 from pyspark.sql.dataframe import DataFrame as PySparkDataFrame
-
 from pyspark import pandas as ps
 from pyspark.pandas._typing import Axis, Dtype, Label, Name
 from pyspark.pandas.base import IndexOpsMixin
@@ -158,7 +158,8 @@ def from_pandas(pobj: Union[pd.DataFrame, pd.Series, pd.Index]) -> Union[Series,
         raise TypeError("Unknown data type: {}".format(type(pobj).__name__))
 
 
-_range = range  # built-in range
+# built-in range
+_range: Type[range] = range  # type: ignore[assignment]
 
 
 def range(
@@ -221,7 +222,6 @@ def read_csv(
     names: Optional[Union[str, List[str]]] = None,
     index_col: Optional[Union[str, List[str]]] = None,
     usecols: Optional[Union[List[int], List[str], Callable[[str], bool]]] = None,
-    mangle_dupe_cols: bool = True,
     dtype: Optional[Union[str, Dtype, Dict[str, Union[str, Dtype]]]] = None,
     nrows: Optional[int] = None,
     parse_dates: bool = False,
@@ -260,14 +260,6 @@ def read_csv(
         from the document header row(s).
         If callable, the callable function will be evaluated against the column names,
         returning names where the callable function evaluates to `True`.
-    mangle_dupe_cols : bool, default True
-        Duplicate columns will be specified as 'X0', 'X1', ... 'XN', rather
-        than 'X' ... 'X'. Passing in False will cause data to be overwritten if
-        there are duplicate names in the columns.
-        Currently only `True` is allowed.
-
-        .. deprecated:: 3.4.0
-
     dtype : Type name or dict of column -> type, default None
         Data type for data or columns. E.g. {‘a’: np.float64, ‘b’: np.int32} Use str or object
         together with suitable na_values settings to preserve and not interpret dtype.
@@ -309,8 +301,6 @@ def read_csv(
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")
 
-    if mangle_dupe_cols is not True:
-        raise ValueError("mangle_dupe_cols can only be `True`: %s" % mangle_dupe_cols)
     if parse_dates is not False:
         raise ValueError("parse_dates can only be `False`: %s" % parse_dates)
 
@@ -701,20 +691,19 @@ def read_spark_io(
 
     See Also
     --------
-    DataFrame.to_spark_io
     DataFrame.read_table
     DataFrame.read_delta
     DataFrame.read_parquet
 
     Examples
     --------
-    >>> ps.range(1).to_spark_io('%s/read_spark_io/data.parquet' % path)
+    >>> ps.range(1).spark.to_spark_io('%s/read_spark_io/data.parquet' % path)
     >>> ps.read_spark_io(
     ...     '%s/read_spark_io/data.parquet' % path, format='parquet', schema='id long')
        id
     0   0
 
-    >>> ps.range(10, 15, num_partitions=1).to_spark_io('%s/read_spark_io/data.json' % path,
+    >>> ps.range(10, 15, num_partitions=1).spark.to_spark_io('%s/read_spark_io/data.json' % path,
     ...                                                format='json', lineSep='__')
     >>> ps.read_spark_io(
     ...     '%s/read_spark_io/data.json' % path, format='json', schema='id long', lineSep='__')
@@ -727,7 +716,7 @@ def read_spark_io(
 
     You can preserve the index in the roundtrip as below.
 
-    >>> ps.range(10, 15, num_partitions=1).to_spark_io('%s/read_spark_io/data.orc' % path,
+    >>> ps.range(10, 15, num_partitions=1).spark.to_spark_io('%s/read_spark_io/data.orc' % path,
     ...                                                format='orc', index_col="index")
     >>> ps.read_spark_io(
     ...     path=r'%s/read_spark_io/data.orc' % path, format="orc", index_col="index")
@@ -917,8 +906,6 @@ def read_excel(
     thousands: Optional[str] = None,
     comment: Optional[str] = None,
     skipfooter: int = 0,
-    convert_float: bool = True,
-    mangle_dupe_cols: bool = True,
     **kwds: Any,
 ) -> Union[DataFrame, Series, Dict[str, Union[DataFrame, Series]]]:
     """
@@ -1041,20 +1028,6 @@ def read_excel(
         comment string and the end of the current line is ignored.
     skipfooter : int, default 0
         Rows at the end to skip (0-indexed).
-    convert_float : bool, default True
-        Convert integral floats to int (i.e., 1.0 --> 1). If False, all numeric
-        data will be read in as floats: Excel stores all numbers as floats
-        internally.
-
-        .. deprecated:: 3.4.0
-
-    mangle_dupe_cols : bool, default True
-        Duplicate columns will be specified as 'X', 'X.1', ...'X.N', rather than
-        'X'...'X'. Passing in False will cause data to be overwritten if there
-        are duplicate names in the columns.
-
-        .. deprecated:: 3.4.0
-
     **kwds : optional
         Optional keyword arguments can be passed to ``TextFileReader``.
 
@@ -1150,8 +1123,6 @@ def read_excel(
             thousands=thousands,
             comment=comment,
             skipfooter=skipfooter,
-            convert_float=convert_float,
-            mangle_dupe_cols=mangle_dupe_cols,
             **kwds,
         )
 

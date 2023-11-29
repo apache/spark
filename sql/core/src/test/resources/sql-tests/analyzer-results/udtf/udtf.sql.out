@@ -123,13 +123,19 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT * FROM UDTFWithSinglePartition(TABLE(t2))
+SELECT * FROM UDTFWithSinglePartition(0, TABLE(t2))
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
-SELECT * FROM UDTFWithSinglePartition(TABLE(t2) WITH SINGLE PARTITION)
+SELECT * FROM UDTFWithSinglePartition(1, TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM UDTFWithSinglePartition(0, TABLE(t2) WITH SINGLE PARTITION)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
@@ -144,14 +150,14 @@ org.apache.spark.sql.AnalysisException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 15,
-    "stopIndex" : 70,
-    "fragment" : "UDTFWithSinglePartition(TABLE(t2) WITH SINGLE PARTITION)"
+    "stopIndex" : 73,
+    "fragment" : "UDTFWithSinglePartition(0, TABLE(t2) WITH SINGLE PARTITION)"
   } ]
 }
 
 
 -- !query
-SELECT * FROM UDTFWithSinglePartition(TABLE(t2) PARTITION BY partition_col)
+SELECT * FROM UDTFWithSinglePartition(0, TABLE(t2) PARTITION BY partition_col)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
@@ -166,8 +172,8 @@ org.apache.spark.sql.AnalysisException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 15,
-    "stopIndex" : 75,
-    "fragment" : "UDTFWithSinglePartition(TABLE(t2) PARTITION BY partition_col)"
+    "stopIndex" : 78,
+    "fragment" : "UDTFWithSinglePartition(0, TABLE(t2) PARTITION BY partition_col)"
   } ]
 }
 
@@ -176,7 +182,7 @@ org.apache.spark.sql.AnalysisException
 SELECT * FROM
     VALUES (0), (1) AS t(col)
     JOIN LATERAL
-    UDTFWithSinglePartition(TABLE(t2) PARTITION BY partition_col)
+    UDTFWithSinglePartition(0, TABLE(t2) PARTITION BY partition_col)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
@@ -191,8 +197,8 @@ org.apache.spark.sql.AnalysisException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 66,
-    "stopIndex" : 126,
-    "fragment" : "UDTFWithSinglePartition(TABLE(t2) PARTITION BY partition_col)"
+    "stopIndex" : 129,
+    "fragment" : "UDTFWithSinglePartition(0, TABLE(t2) PARTITION BY partition_col)"
   } ]
 }
 
@@ -442,6 +448,312 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 66,
     "stopIndex" : 139,
     "fragment" : "UDTFInvalidOrderByWithoutPartitionBy(TABLE(t2) PARTITION BY partition_col)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnScalarType(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnArrayType(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnArrayElementType(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnStructType(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnMapType(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnScalarType(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnArrayType(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnArrayElementType(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnStructType(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnMapType(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs()
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs(1, 2)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
+  "messageParameters" : {
+    "msg" : "Failed to evaluate the user-defined table function 'UDTFForwardStateFromAnalyzeWithKwargs' because the function arguments did not match the expected signature of the static 'analyze' method (too many positional arguments). Please update the query so that this table function call provides arguments matching the expected signature, or else update the table function so that its static 'analyze' method accepts the provided arguments, and then try the query again."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 57,
+    "fragment" : "UDTFForwardStateFromAnalyzeWithKwargs(1, 2)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs(invalid => 2)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs(argument => 1, argument => 2)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+  "sqlState" : "4274K",
+  "messageParameters" : {
+    "functionName" : "`UDTFForwardStateFromAnalyzeWithKwargs`",
+    "parameterName" : "`argument`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 81,
+    "fragment" : "UDTFForwardStateFromAnalyzeWithKwargs(argument => 1, argument => 2)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM InvalidAnalyzeMethodWithSinglePartitionNoInputTable(argument => 1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
+  "messageParameters" : {
+    "msg" : "Failed to evaluate the user-defined table function 'InvalidAnalyzeMethodWithSinglePartitionNoInputTable' because the static 'analyze' method returned an 'AnalyzeResult' object with the 'withSinglePartition' field set to 'true', but the function call did not provide any table argument. Please update the query so that it provides a table argument, or else update the table function so that its 'analyze' method returns an 'AnalyzeResult' object with the 'withSinglePartition' field set to 'false', and then try the query again."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 80,
+    "fragment" : "InvalidAnalyzeMethodWithSinglePartitionNoInputTable(argument => 1)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM InvalidAnalyzeMethodWithPartitionByNoInputTable(argument => 1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
+  "messageParameters" : {
+    "msg" : "Failed to evaluate the user-defined table function 'InvalidAnalyzeMethodWithPartitionByNoInputTable' because the static 'analyze' method returned an 'AnalyzeResult' object with the 'partitionBy' list set to non-empty, but the function call did not provide any table argument. Please update the query so that it provides a table argument, or else update the table function so that its 'analyze' method returns an 'AnalyzeResult' object with the 'partitionBy' list set to empty, and then try the query again."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 76,
+    "fragment" : "InvalidAnalyzeMethodWithPartitionByNoInputTable(argument => 1)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM InvalidAnalyzeMethodReturnsNonStructTypeSchema(TABLE(t2))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
+  "messageParameters" : {
+    "msg" : "Failed to evaluate the user-defined table function 'InvalidAnalyzeMethodReturnsNonStructTypeSchema' because the static 'analyze' method expects a result of type pyspark.sql.udtf.AnalyzeResult with a 'schema' field comprising a StructType, but the 'schema' field had the wrong type: <class 'int'>"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 71,
+    "fragment" : "InvalidAnalyzeMethodReturnsNonStructTypeSchema(TABLE(t2))"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM InvalidAnalyzeMethodWithPartitionByListOfStrings(argument => TABLE(t2))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
+  "messageParameters" : {
+    "msg" : "Failed to evaluate the user-defined table function 'InvalidAnalyzeMethodWithPartitionByListOfStrings' because the static 'analyze' method returned an 'AnalyzeResult' object with the 'partitionBy' field set to a value besides a list or tuple of 'PartitioningColumn' objects. Please update the table function and then try the query again."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 85,
+    "fragment" : "InvalidAnalyzeMethodWithPartitionByListOfStrings(argument => TABLE(t2))"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM InvalidForwardStateFromAnalyzeTooManyInitArgs(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM InvalidNotForwardStateFromAnalyzeTooManyInitArgs(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM UDTFWithSinglePartition(1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
+  "messageParameters" : {
+    "msg" : "Failed to evaluate the user-defined table function 'UDTFWithSinglePartition' because the function arguments did not match the expected signature of the static 'analyze' method (missing a required argument: 'input_table'). Please update the query so that this table function call provides arguments matching the expected signature, or else update the table function so that its static 'analyze' method accepts the provided arguments, and then try the query again."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 40,
+    "fragment" : "UDTFWithSinglePartition(1)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM UDTFWithSinglePartition(1, 2, 3)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
+  "messageParameters" : {
+    "msg" : "Failed to evaluate the user-defined table function 'UDTFWithSinglePartition' because the function arguments did not match the expected signature of the static 'analyze' method (too many positional arguments). Please update the query so that this table function call provides arguments matching the expected signature, or else update the table function so that its static 'analyze' method accepts the provided arguments, and then try the query again."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 46,
+    "fragment" : "UDTFWithSinglePartition(1, 2, 3)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM UDTFWithSinglePartition(1, invalid_arg_name => 2)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
+  "messageParameters" : {
+    "msg" : "Failed to evaluate the user-defined table function 'UDTFWithSinglePartition' because the function arguments did not match the expected signature of the static 'analyze' method (missing a required argument: 'input_table'). Please update the query so that this table function call provides arguments matching the expected signature, or else update the table function so that its static 'analyze' method accepts the provided arguments, and then try the query again."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 63,
+    "fragment" : "UDTFWithSinglePartition(1, invalid_arg_name => 2)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM UDTFWithSinglePartition(1, initial_count => 2)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
+  "messageParameters" : {
+    "msg" : "Failed to evaluate the user-defined table function 'UDTFWithSinglePartition' because the function arguments did not match the expected signature of the static 'analyze' method (multiple values for argument 'initial_count'). Please update the query so that this table function call provides arguments matching the expected signature, or else update the table function so that its static 'analyze' method accepts the provided arguments, and then try the query again."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 60,
+    "fragment" : "UDTFWithSinglePartition(1, initial_count => 2)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM UDTFWithSinglePartition(initial_count => 1, initial_count => 2)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+  "sqlState" : "4274K",
+  "messageParameters" : {
+    "functionName" : "`UDTFWithSinglePartition`",
+    "parameterName" : "`initial_count`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 77,
+    "fragment" : "UDTFWithSinglePartition(initial_count => 1, initial_count => 2)"
   } ]
 }
 

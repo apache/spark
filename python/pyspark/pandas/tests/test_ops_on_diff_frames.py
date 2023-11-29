@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-from distutils.version import LooseVersion
 from itertools import product
 import unittest
 
@@ -24,11 +23,9 @@ import numpy as np
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
-from pyspark.pandas.frame import DataFrame
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.typedef.typehints import (
-    extension_dtypes,
     extension_dtypes_available,
     extension_float_dtypes_available,
     extension_object_dtypes_available,

@@ -162,6 +162,7 @@ private[spark] object ChiSqTest extends Logging {
           .map { case ((label, _), c) => (label, c) }
           .toArray
           .groupBy(_._1)
+          .view
           .mapValues(_.map(_._2).sum)
         labelCounts.foreach { case (label, countByLabel) =>
           val nnzByLabel = labelNNZ.getOrElse(label, 0L)
@@ -200,7 +201,7 @@ private[spark] object ChiSqTest extends Logging {
     counts.foreach { case ((label, value), c) =>
       val i = value2Index(value)
       val j = label2Index(label)
-      contingency.update(i, j, c)
+      contingency.update(i, j, c.toDouble)
     }
 
     ChiSqTest.chiSquaredMatrix(contingency, methodName)

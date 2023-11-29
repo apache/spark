@@ -22,10 +22,10 @@ import java.nio.ByteBuffer;
 
 import io.netty.channel.Channel;
 import io.netty.channel.local.LocalChannel;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.buffer.NioManagedBuffer;

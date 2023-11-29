@@ -19,7 +19,7 @@ package org.apache.spark.status.protobuf
 
 import java.util.Date
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.collections4.MapUtils
 
@@ -382,7 +382,7 @@ private[protobuf] class StageDataWrapperSerializer extends ProtobufSerDe[StageDa
     new StageDataWrapper(
       info = info,
       jobIds = binary.getJobIdsList.asScala.map(_.toInt).toSet,
-      locality = binary.getLocalityMap.asScala.mapValues(_.toLong).toMap
+      locality = binary.getLocalityMap.asScala.view.mapValues(_.toLong).toMap
     )
   }
 
@@ -402,7 +402,7 @@ private[protobuf] class StageDataWrapperSerializer extends ProtobufSerDe[StageDa
         entry => (entry._1.toLong, deserializeTaskData(entry._2))).toMap)
     } else None
     val executorSummary = if (MapUtils.isNotEmpty(binary.getExecutorSummaryMap)) {
-      Some(binary.getExecutorSummaryMap.asScala.mapValues(
+      Some(binary.getExecutorSummaryMap.asScala.view.mapValues(
         ExecutorStageSummarySerializer.deserialize).toMap)
     } else None
     val speculationSummary =
@@ -475,7 +475,7 @@ private[protobuf] class StageDataWrapperSerializer extends ProtobufSerDe[StageDa
       tasks = tasks,
       executorSummary = executorSummary,
       speculationSummary = speculationSummary,
-      killedTasksSummary = binary.getKilledTasksSummaryMap.asScala.mapValues(_.toInt).toMap,
+      killedTasksSummary = binary.getKilledTasksSummaryMap.asScala.view.mapValues(_.toInt).toMap,
       resourceProfileId = binary.getResourceProfileId,
       peakExecutorMetrics = peakExecutorMetrics,
       taskMetricsDistributions = taskMetricsDistributions,

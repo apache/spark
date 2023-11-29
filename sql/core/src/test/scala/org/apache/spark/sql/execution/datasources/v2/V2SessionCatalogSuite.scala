@@ -21,7 +21,7 @@ import java.net.URI
 import java.util
 import java.util.Collections
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfter
@@ -827,7 +827,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     // remove location and comment that are automatically added by HMS unless they are expected
     val toRemove =
       CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filter(expected.contains)
-    assert(expected -- toRemove === actual)
+    assert(expected.toMap -- toRemove === actual)
   }
 
   test("listNamespaces: basic behavior") {

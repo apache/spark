@@ -966,7 +966,7 @@ abstract class SchemaPruningSuite
             |  {"itemId": 2, "itemData": "b"}
             |]}
             |""".stripMargin
-        val df = spark.read.json(Seq(jsonStr).toDS)
+        val df = spark.read.json(Seq(jsonStr).toDS())
         makeDataSourceFile(df, new File(path))
 
         spark.read.format(dataSourceName).load(path)

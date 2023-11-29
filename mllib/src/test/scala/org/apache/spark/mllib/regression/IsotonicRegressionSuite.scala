@@ -22,6 +22,7 @@ import org.scalatest.matchers.must.Matchers
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -68,7 +69,7 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
   private def runIsotonicRegression(
       labels: Seq[Double],
       isotonic: Boolean): IsotonicRegressionModel = {
-    runIsotonicRegression(labels, Array.fill(labels.size)(1d), isotonic)
+    runIsotonicRegression(labels, Array.fill(labels.size)(1d).toImmutableArraySeq, isotonic)
   }
 
   private def runIsotonicRegression(

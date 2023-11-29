@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.optimization
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.scalatest.matchers.must.Matchers
@@ -101,7 +101,7 @@ class GradientDescentSuite extends SparkFunSuite with MLlibTestSparkContext with
     assert(loss.last - loss.head < 0, "loss isn't decreasing.")
 
     val lossDiff = loss.init.zip(loss.tail).map { case (lhs, rhs) => lhs - rhs }
-    assert(lossDiff.count(_ > 0).toDouble / lossDiff.size > 0.8)
+    assert(lossDiff.count(_ > 0).toDouble / lossDiff.length > 0.8)
   }
 
   test("Test the loss and gradient of first iteration with regularization.") {

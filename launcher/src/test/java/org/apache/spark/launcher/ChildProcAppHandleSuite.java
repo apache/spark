@@ -34,12 +34,12 @@ import org.apache.logging.log4j.core.Filter;
 import org.apache.logging.log4j.core.Layout;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.apache.logging.log4j.core.LogEvent;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import static org.junit.Assert.*;
-import static org.junit.Assume.*;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.*;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
@@ -56,7 +56,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
 
   private static File TEST_SCRIPT_PATH;
 
-  @AfterClass
+  @AfterAll
   public static void cleanupClass() throws Exception {
     if (TEST_SCRIPT_PATH != null) {
       TEST_SCRIPT_PATH.delete();
@@ -64,7 +64,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     }
   }
 
-  @BeforeClass
+  @BeforeAll
   public static void setupClass() throws Exception {
     TEST_SCRIPT_PATH = File.createTempFile("output-redir-test", ".sh");
     Files.setPosixFilePermissions(TEST_SCRIPT_PATH.toPath(),
@@ -72,7 +72,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     Files.write(TEST_SCRIPT_PATH.toPath(), TEST_SCRIPT);
   }
 
-  @Before
+  @BeforeEach
   public void cleanupLog() {
     MESSAGES.clear();
   }

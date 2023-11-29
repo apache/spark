@@ -38,13 +38,13 @@ import org.apache.spark.TestUtils
 import org.apache.spark.TestUtils.JavaSourceFromString
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.SparkSubmit._
-import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 import org.apache.spark.deploy.history.EventLogFileReader
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
-import org.apache.spark.util.{CommandLineUtils, DependencyUtils, ResetSystemProperties, Utils}
+import org.apache.spark.util.{CommandLineUtils, DependencyUtils, IvyTestUtils, ResetSystemProperties, Utils}
+import org.apache.spark.util.MavenUtils.MavenCoordinate
 
 trait TestPrematureExit {
   suite: SparkFunSuite =>
@@ -435,28 +435,6 @@ class SparkSubmitSuite
     conf.get(UI_ENABLED) should be (false)
   }
 
-  test("handles mesos client mode") {
-    val clArgs = Seq(
-      "--deploy-mode", "client",
-      "--master", "mesos://h:p",
-      "--executor-memory", "5g",
-      "--total-executor-cores", "5",
-      "--class", "org.SomeClass",
-      "--driver-memory", "4g",
-      "--conf", "spark.ui.enabled=false",
-      "thejar.jar",
-      "arg1", "arg2")
-    val appArgs = new SparkSubmitArguments(clArgs)
-    val (childArgs, classpath, conf, mainClass) = submit.prepareSubmitEnvironment(appArgs)
-    childArgs.mkString(" ") should be ("arg1 arg2")
-    mainClass should be ("org.SomeClass")
-    classpath should have length (1)
-    classpath(0) should endWith ("thejar.jar")
-    conf.get("spark.executor.memory") should be ("5g")
-    conf.get("spark.cores.max") should be ("5")
-    conf.get(UI_ENABLED) should be (false)
-  }
-
   test("handles k8s cluster mode") {
     val clArgs = Seq(
       "--deploy-mode", "cluster",
@@ -753,6 +731,7 @@ class SparkSubmitSuite
         "--conf", "spark.master.rest.enabled=false",
         "--conf", "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD=secret_password",
         "--conf", "spark.eventLog.enabled=true",
+        "--conf", "spark.eventLog.rolling.enabled=false",
         "--conf", "spark.eventLog.testing=true",
         "--conf", s"spark.eventLog.dir=${testDirPath.toUri.toString}",
         "--conf", "spark.hadoop.fs.defaultFS=unsupported://example.com",
@@ -1435,6 +1414,83 @@ class SparkSubmitSuite
     runSparkSubmit(args)
   }
 
+  test("SPARK-45762: The ShuffleManager plugin to use can be defined in a user jar") {
+    val shuffleManagerBody = """
+      |@Override
+      |public <K, V, C> org.apache.spark.shuffle.ShuffleHandle registerShuffle(
+      |    int shuffleId,
+      |    org.apache.spark.ShuffleDependency<K, V, C> dependency) {
+      |  throw new java.lang.UnsupportedOperationException("This is a test ShuffleManager!");
+      |}
+      |
+      |@Override
+      |public <K, V> org.apache.spark.shuffle.ShuffleWriter<K, V> getWriter(
+      |    org.apache.spark.shuffle.ShuffleHandle handle,
+      |    long mapId,
+      |    org.apache.spark.TaskContext context,
+      |    org.apache.spark.shuffle.ShuffleWriteMetricsReporter metrics) {
+      |  throw new java.lang.UnsupportedOperationException("This is a test ShuffleManager!");
+      |}
+      |
+      |@Override
+      |public <K, C> org.apache.spark.shuffle.ShuffleReader<K, C> getReader(
+      |    org.apache.spark.shuffle.ShuffleHandle handle,
+      |    int startMapIndex,
+      |    int endMapIndex,
+      |    int startPartition,
+      |    int endPartition,
+      |    org.apache.spark.TaskContext context,
+      |    org.apache.spark.shuffle.ShuffleReadMetricsReporter metrics) {
+      |  throw new java.lang.UnsupportedOperationException("This is a test ShuffleManager!");
+      |}
+      |
+      |@Override
+      |public boolean unregisterShuffle(int shuffleId) {
+      |  throw new java.lang.UnsupportedOperationException("This is a test ShuffleManager!");
+      |}
+      |
+      |@Override
+      |public org.apache.spark.shuffle.ShuffleBlockResolver shuffleBlockResolver() {
+      |  throw new java.lang.UnsupportedOperationException("This is a test ShuffleManager!");
+      |}
+      |
+      |@Override
+      |public void stop() {
+      |}
+  """.stripMargin
+
+    val tempDir = Utils.createTempDir()
+    val compiledShuffleManager = TestUtils.createCompiledClass(
+      "TestShuffleManager",
+      tempDir,
+      "",
+      null,
+      Seq.empty,
+      Seq("org.apache.spark.shuffle.ShuffleManager"),
+      shuffleManagerBody)
+
+    val jarUrl = TestUtils.createJar(
+      Seq(compiledShuffleManager),
+      new File(tempDir, "testplugin.jar"))
+
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val argsBase = Seq(
+      "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--master", "local-cluster[1,1,1024]",
+      "--conf", "spark.shuffle.manager=TestShuffleManager",
+      "--conf", "spark.ui.enabled=false")
+
+    val argsError = argsBase :+ unusedJar.toString
+    // check process error exit code
+    assertResult(1)(runSparkSubmit(argsError, expectFailure = true))
+
+    val argsSuccess = (argsBase ++ Seq("--jars", jarUrl.toString)) :+ unusedJar.toString
+    // check process success exit code
+    assertResult(0)(
+      runSparkSubmit(argsSuccess, expectFailure = false))
+  }
+
   private def testRemoteResources(
       enableHttpFs: Boolean,
       forceDownloadSchemes: Seq[String] = Nil): Unit = {
@@ -1655,7 +1711,7 @@ object JarCreationTest extends Logging {
         Utils.classForName(args(1))
       } catch {
         case t: Throwable =>
-          exception = t + "\n" + Utils.exceptionString(t)
+          exception = t.toString + "\n" + Utils.exceptionString(t)
           exception = exception.replaceAll("\n", "\n\t")
       }
       Option(exception).toSeq.iterator
@@ -1680,7 +1736,7 @@ object SimpleApplicationTest {
         .map(x => SparkEnv.get.conf.get(config))
         .collect()
         .distinct
-      if (executorValues.size != 1) {
+      if (executorValues.length != 1) {
         throw new SparkException(s"Inconsistent values for $config: " +
           s"${executorValues.mkString("values(", ", ", ")")}")
       }
@@ -1739,7 +1795,7 @@ class TestFileSystem extends org.apache.hadoop.fs.LocalFileSystem {
 class TestSparkApplication extends SparkApplication with Matchers {
 
   override def start(args: Array[String], conf: SparkConf): Unit = {
-    assert(args.size === 1)
+    assert(args.length === 1)
     assert(args(0) === "hello")
     assert(conf.get("spark.test.hello") === "world")
     assert(sys.props.get("spark.test.hello") === None)

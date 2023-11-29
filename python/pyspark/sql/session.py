@@ -74,6 +74,7 @@ if TYPE_CHECKING:
     from pyspark.sql.streaming import StreamingQueryManager
     from pyspark.sql.udf import UDFRegistration
     from pyspark.sql.udtf import UDTFRegistration
+    from pyspark.sql.datasource import DataSourceRegistration
 
     # Running MyPy type checks will always require pandas and
     # other dependencies so importing here is fine.
@@ -252,12 +253,17 @@ class SparkSession(SparkConversionMixin):
             -------
             :class:`SparkSession.Builder`
 
+            See Also
+            --------
+            :class:`SparkConf`
+
             Examples
             --------
-            For an existing class:`SparkConf`, use `conf` parameter.
+            For an existing :class:`SparkConf`, use `conf` parameter.
 
             >>> from pyspark.conf import SparkConf
-            >>> SparkSession.builder.config(conf=SparkConf())
+            >>> conf = SparkConf().setAppName("example").setMaster("local")
+            >>> SparkSession.builder.config(conf=conf)
             <pyspark.sql.session.SparkSession.Builder...
 
             For a (key, value) pair, you can omit parameter names.
@@ -265,7 +271,13 @@ class SparkSession(SparkConversionMixin):
             >>> SparkSession.builder.config("spark.some.config.option", "some-value")
             <pyspark.sql.session.SparkSession.Builder...
 
-            Additionally, you can pass a dictionary of configurations to set.
+            Set multiple configurations.
+
+            >>> SparkSession.builder.config(
+            ...     "spark.some.config.number", 123).config("spark.some.config.float", 0.123)
+            <pyspark.sql.session.SparkSession.Builder...
+
+            Set multiple configurations using a dictionary.
 
             >>> SparkSession.builder.config(
             ...     map={"spark.some.config.number": 123, "spark.some.config.float": 0.123})
@@ -468,6 +480,14 @@ class SparkSession(SparkConversionMixin):
                             and SparkSession._instantiatedSession is None
                         ):
                             url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+
+                            if url is None:
+                                raise RuntimeError(
+                                    "Cannot create a Spark Connect session because the "
+                                    "Spark Connect remote URL has not been set. Please define "
+                                    "the remote URL by setting either the 'spark.remote' option "
+                                    "or the 'SPARK_REMOTE' environment variable."
+                                )
 
                             if url.startswith("local"):
                                 os.environ["SPARK_LOCAL_REMOTE"] = "1"
@@ -862,6 +882,24 @@ class SparkSession(SparkConversionMixin):
         from pyspark.sql.udtf import UDTFRegistration
 
         return UDTFRegistration(self)
+
+    @property
+    def dataSource(self) -> "DataSourceRegistration":
+        """Returns a :class:`DataSourceRegistration` for data source registration.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`DataSourceRegistration`
+
+        Notes
+        -----
+        This feature is experimental and unstable.
+        """
+        from pyspark.sql.datasource import DataSourceRegistration
+
+        return DataSourceRegistration(self)
 
     def range(
         self,
@@ -2010,11 +2048,19 @@ class SparkSession(SparkConversionMixin):
         """
         Add a tag to be assigned to all the operations started by this thread in this session.
 
+        Often, a unit of execution in an application consists of multiple Spark executions.
+        Application programmers can use this method to group all those jobs together and give a
+        group tag. The application can use :meth:`SparkSession.interruptTag` to cancel all running
+        executions with this tag.
+
+        There may be multiple tags present at the same time, so different parts of application may
+        use different tags to perform cancellation at different levels of granularity.
+
         .. versionadded:: 3.5.0
 
         Parameters
         ----------
-        tag : list of str
+        tag : str
             The tag to be added. Cannot contain ',' (comma) character or be an empty string.
         """
         raise RuntimeError(

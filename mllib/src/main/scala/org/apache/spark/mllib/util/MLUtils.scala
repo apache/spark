@@ -359,7 +359,8 @@ object MLUtils extends Logging {
         col(c)
       }
     }
-    dataset.select(exprs: _*)
+    import org.apache.spark.util.ArrayImplicits._
+    dataset.select(exprs.toImmutableArraySeq: _*)
   }
 
   /**
@@ -411,7 +412,8 @@ object MLUtils extends Logging {
         col(c)
       }
     }
-    dataset.select(exprs: _*)
+    import org.apache.spark.util.ArrayImplicits._
+    dataset.select(exprs.toImmutableArraySeq: _*)
   }
 
   /**
@@ -461,7 +463,8 @@ object MLUtils extends Logging {
         col(c)
       }
     }
-    dataset.select(exprs: _*)
+    import org.apache.spark.util.ArrayImplicits._
+    dataset.select(exprs.toImmutableArraySeq: _*)
   }
 
   /**
@@ -511,7 +514,8 @@ object MLUtils extends Logging {
         col(c)
       }
     }
-    dataset.select(exprs: _*)
+    import org.apache.spark.util.ArrayImplicits._
+    dataset.select(exprs.toImmutableArraySeq: _*)
   }
 
 

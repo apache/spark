@@ -178,6 +178,7 @@ SELECT * FROM t1, LATERAL (SELECT t1.*, t2.* FROM t2, LATERAL (SELECT t1.*, t2.*
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "CANNOT_RESOLVE_STAR_EXPAND",
+  "sqlState" : "42704",
   "messageParameters" : {
     "columns" : "`c1`, `c2`",
     "targetString" : "`t1`"
@@ -1376,10 +1377,10 @@ WithCTE
 :           :                 +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
 :           :                    +- LocalRelation [col1#x, col2#x]
 :           +- SubqueryAlias cte1
-:              +- CTERelationRef xxxx, true, [c1#x]
+:              +- CTERelationRef xxxx, true, [c1#x], false
 +- Project [c1#x, c2#x]
    +- SubqueryAlias cte2
-      +- CTERelationRef xxxx, true, [c1#x, c2#x]
+      +- CTERelationRef xxxx, true, [c1#x, c2#x], false
 
 
 -- !query

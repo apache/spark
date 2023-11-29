@@ -21,7 +21,7 @@ import java.io.{File, IOException}
 import java.nio.file.{Files, StandardOpenOption}
 import java.sql.Timestamp
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.common.io.{ByteStreams, Closeables}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
@@ -165,7 +165,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
       val thrown = intercept[UnsupportedOperationException] {
         df.write
           .format(BINARY_FILE)
-          .save(tmpDir + "/test_save")
+          .save(s"$tmpDir/test_save")
       }
       assert(thrown.getMessage.contains("Write is not supported for binary file data source"))
     }

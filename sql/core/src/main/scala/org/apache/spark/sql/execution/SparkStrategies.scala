@@ -24,7 +24,6 @@ import org.apache.spark.sql.{execution, AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, JoinSelectionHelper, NormalizeFloatingNumbers}
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
@@ -444,7 +443,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             AggUtils.planStreamingAggregationForSession(
               normalizedGroupingExpressions,
               sessionWindow,
-              aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
+              aggregateExpressions,
               rewrittenResultExpressions,
               stateVersion,
               conf.streamingSessionWindowMergeSessionInLocalPartition,
@@ -455,7 +454,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
             AggUtils.planStreamingAggregation(
               normalizedGroupingExpressions,
-              aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
+              aggregateExpressions,
               rewrittenResultExpressions,
               stateVersion,
               planLater(child))
@@ -752,6 +751,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ArrowEvalPythonUDTF(udtf, requiredChildOutput, resultAttrs, child, evalType) =>
         ArrowEvalPythonUDTFExec(
           udtf, requiredChildOutput, resultAttrs, planLater(child), evalType) :: Nil
+      case PythonDataSourcePartitions(output, partitions) =>
+        PythonDataSourcePartitionsExec(output, partitions) :: Nil
       case _ =>
         Nil
     }

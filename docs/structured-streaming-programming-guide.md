@@ -2385,6 +2385,16 @@ Here are the configs regarding to RocksDB instance of the state store provider:
     <td>Total memory to be occupied by blocks in high priority pool as a fraction of memory allocated across all RocksDB instances on a single node using maxMemoryUsageMB.</td>
     <td>0.1</td>
   </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.allowFAllocate</td>
+    <td>Allow the rocksdb runtime to use fallocate to pre-allocate disk space for logs, etc...  Disable for apps that have many smaller state stores to trade off disk space for write performance.</td>
+    <td>true</td>
+  </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.compression</td>
+    <td>Compression type used in RocksDB. The string is converted RocksDB compression type through RocksDB Java API getCompressionType(). </td>
+    <td>lz4</td>
+  </tr>
 </table>
 
 ##### RocksDB State Store Memory Management
@@ -2441,6 +2451,14 @@ For stateful operations in Structured Streaming, it can be used to let state sto
 Specifically for built-in HDFS state store provider, users can check the state store metrics such as `loadedMapCacheHitCount` and `loadedMapCacheMissCount`. Ideally,
 it is best if cache missing count is minimized that means Spark won't waste too much time on loading checkpointed state.
 User can increase Spark locality waiting configurations to avoid loading state store providers in different executors across batches.
+
+#### State Data Source (Experimental)
+
+Apache Spark provides a streaming state related data source that provides the ability to manipulate state stores in the checkpoint. Users can run the batch query with State Data Source to get the visibility of the states for existing streaming query.
+
+As of Spark 4.0, the data source only supports read feature. See [State Data Source Integration Guide](structured-streaming-state-data-source.html) for more details.
+
+NOTE: this data source is currently marked as experimental - source options and the behavior (output) might be subject to change.
 
 ## Starting Streaming Queries
 Once you have defined the final result DataFrame/Dataset, all that is left is for you to start the streaming computation. To do that, you have to use the `DataStreamWriter`
@@ -3837,10 +3855,10 @@ class Listener(StreamingQueryListener):
         print("Query started: " + queryStarted.id)
 
     def onQueryProgress(self, event):
-        println("Query terminated: " + queryTerminated.id)
+        print("Query made progress: " + queryProgress.progress)
 
     def onQueryTerminated(self, event):
-        println("Query made progress: " + queryProgress.progress)
+    	print("Query terminated: " + queryTerminated.id)
 
 
 spark.streams.addListener(Listener())

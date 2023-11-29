@@ -55,6 +55,8 @@ class ArrowPythonUDTFRunner(
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
       funcs.head.funcs.head.pythonExec)
 
+  override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
+
   override val errorOnDuplicatedFieldNames: Boolean = true
 
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback

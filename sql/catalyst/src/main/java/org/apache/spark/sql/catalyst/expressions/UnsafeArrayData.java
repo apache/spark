@@ -38,6 +38,7 @@ import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.unsafe.types.VariantVal;
 
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 
@@ -232,6 +233,12 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
   }
 
   @Override
+  public VariantVal getVariant(int ordinal) {
+    if (isNullAt(ordinal)) return null;
+    return VariantVal.readFromUnsafeRow(getLong(ordinal), baseObject, baseOffset);
+  }
+
+  @Override
   public UnsafeRow getStruct(int ordinal, int numFields) {
     if (isNullAt(ordinal)) return null;
     final long offsetAndSize = getLong(ordinal);
@@ -329,8 +336,7 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof UnsafeArrayData) {
-      UnsafeArrayData o = (UnsafeArrayData) other;
+    if (other instanceof UnsafeArrayData o) {
       return (sizeInBytes == o.sizeInBytes) &&
         ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
           sizeInBytes);

@@ -28,6 +28,7 @@ from pyspark.sql import Row
 from pyspark.sql import functions as F
 from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
 from pyspark.sql.types import (
+    DataType,
     ByteType,
     ShortType,
     IntegerType,
@@ -1288,6 +1289,17 @@ class TypesTestsMixin:
         schema1 = self.spark.range(1).select(F.make_interval(F.lit(1))).schema
         self.assertEqual(schema1.fields[0].dataType, CalendarIntervalType())
 
+    def test_from_ddl(self):
+        self.assertEqual(DataType.fromDDL("long"), LongType())
+        self.assertEqual(
+            DataType.fromDDL("a: int, b: string"),
+            StructType([StructField("a", IntegerType()), StructField("b", StringType())]),
+        )
+        self.assertEqual(
+            DataType.fromDDL("a int, b string"),
+            StructType([StructField("a", IntegerType()), StructField("b", StringType())]),
+        )
+
 
 class DataTypeTests(unittest.TestCase):
     # regression test for SPARK-6055
@@ -1566,6 +1578,13 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
 
         self.assertEqual(r, expected)
         self.assertEqual(repr(r), "Row(b=1, a=2)")
+
+    def test_struct_field_from_json(self):
+        # SPARK-40820: fromJson with only name and type
+        json = {"name": "c1", "type": "string"}
+        struct_field = StructField.fromJson(json)
+
+        self.assertEqual(repr(struct_field), "StructField('c1', StringType(), True)")
 
 
 class TypesTests(TypesTestsMixin, ReusedSQLTestCase):

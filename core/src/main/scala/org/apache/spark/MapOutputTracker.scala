@@ -23,10 +23,10 @@ import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolE
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import scala.collection
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, ListBuffer, Map}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
@@ -906,12 +906,8 @@ private[spark] class MapOutputTrackerMaster(
   /** Unregister shuffle data */
   def unregisterShuffle(shuffleId: Int): Unit = {
     shuffleStatuses.remove(shuffleId).foreach { shuffleStatus =>
-      // SPARK-39553: Add protection for Scala 2.13 due to https://github.com/scala/bug/issues/12613
-      // We should revert this if Scala 2.13 solves this issue.
-      if (shuffleStatus != null) {
-        shuffleStatus.invalidateSerializedMapOutputStatusCache()
-        shuffleStatus.invalidateSerializedMergeOutputStatusCache()
-      }
+      shuffleStatus.invalidateSerializedMapOutputStatusCache()
+      shuffleStatus.invalidateSerializedMergeOutputStatusCache()
     }
   }
 

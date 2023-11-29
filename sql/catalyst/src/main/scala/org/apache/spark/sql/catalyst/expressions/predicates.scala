@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A base class for generated/interpreted predicate
@@ -173,7 +174,7 @@ trait PredicateHelper extends AliasHelper with Logging {
         }
         i += 2
       }
-      currentResult = nextResult
+      currentResult = nextResult.toImmutableArraySeq
     }
     currentResult.head
   }
@@ -469,7 +470,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(IN)
   private val legacyNullInEmptyBehavior =
-    SQLConf.get.getConf(SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR)
+    SQLConf.get.legacyNullInEmptyBehavior
 
   override lazy val canonicalized: Expression = {
     val basic = withNewChildren(children.map(_.canonicalized)).asInstanceOf[In]
@@ -626,7 +627,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 
   final override val nodePatterns: Seq[TreePattern] = Seq(INSET)
   private val legacyNullInEmptyBehavior =
-    SQLConf.get.getConf(SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR)
+    SQLConf.get.legacyNullInEmptyBehavior
 
   override def eval(input: InternalRow): Any = {
     if (hset.isEmpty && !legacyNullInEmptyBehavior) {
@@ -1150,7 +1151,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
        true
   """,
   since = "3.4.0",
-  group = "misc_funcs")
+  group = "predicate_funcs")
 case class EqualNull(left: Expression, right: Expression, replacement: Expression)
     extends RuntimeReplaceable with InheritAnalysisRules {
   def this(left: Expression, right: Expression) = this(left, right, EqualNullSafe(left, right))
@@ -1312,7 +1313,7 @@ object IsUnknown {
   def apply(child: Expression): Predicate = {
     new IsNull(child) with ExpectsInputTypes {
       override def inputTypes: Seq[DataType] = Seq(BooleanType)
-      override def sql: String = s"(${child.sql} IS UNKNOWN)"
+      override def sql: String = s"(${this.child.sql} IS UNKNOWN)"
     }
   }
 }
@@ -1321,7 +1322,7 @@ object IsNotUnknown {
   def apply(child: Expression): Predicate = {
     new IsNotNull(child) with ExpectsInputTypes {
       override def inputTypes: Seq[DataType] = Seq(BooleanType)
-      override def sql: String = s"(${child.sql} IS NOT UNKNOWN)"
+      override def sql: String = s"(${this.child.sql} IS NOT UNKNOWN)"
     }
   }
 }

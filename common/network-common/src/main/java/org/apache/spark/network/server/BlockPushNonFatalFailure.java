@@ -154,14 +154,14 @@ public class BlockPushNonFatalFailure extends RuntimeException {
   }
 
   public static ReturnCode getReturnCode(byte id) {
-    switch (id) {
-      case 0: return ReturnCode.SUCCESS;
-      case 1: return ReturnCode.TOO_LATE_BLOCK_PUSH;
-      case 2: return ReturnCode.BLOCK_APPEND_COLLISION_DETECTED;
-      case 3: return ReturnCode.STALE_BLOCK_PUSH;
-      case 4: return ReturnCode.TOO_OLD_ATTEMPT_PUSH;
-      default: throw new IllegalArgumentException("Unknown block push return code: " + id);
-    }
+    return switch (id) {
+      case 0 -> ReturnCode.SUCCESS;
+      case 1 -> ReturnCode.TOO_LATE_BLOCK_PUSH;
+      case 2 -> ReturnCode.BLOCK_APPEND_COLLISION_DETECTED;
+      case 3 -> ReturnCode.STALE_BLOCK_PUSH;
+      case 4 -> ReturnCode.TOO_OLD_ATTEMPT_PUSH;
+      default -> throw new IllegalArgumentException("Unknown block push return code: " + id);
+    };
   }
 
   public static boolean shouldNotRetryErrorCode(ReturnCode returnCode) {

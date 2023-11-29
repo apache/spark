@@ -25,7 +25,7 @@ import java.time.{Duration, Instant, LocalDate, Period}
 import java.util.HashSet
 import java.util.Locale
 
-import scala.collection.JavaConverters.asScalaBufferConverter
+import scala.jdk.CollectionConverters._
 
 import org.apache.parquet.filter2.predicate._
 import org.apache.parquet.filter2.predicate.SparkFilterApi._
@@ -110,6 +110,7 @@ class ParquetFilters(
       primitiveFields
         .groupBy(_._1.toLowerCase(Locale.ROOT))
         .filter(_._2.size == 1)
+        .view
         .mapValues(_.head._2)
       CaseInsensitiveMap(dedupPrimitiveFields.toMap)
     }
