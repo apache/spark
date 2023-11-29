@@ -48,18 +48,17 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     extends Logging {
 
   // Time when the session was started.
-  private val startTime: Long = System.currentTimeMillis()
+  private val startTimeMs: Long = System.currentTimeMillis()
 
   // Time when the session was last accessed (retrieved from SparkConnectSessionManager)
-  @volatile private var lastAccessTime: Long = System.currentTimeMillis()
+  @volatile private var lastAccessTimeMs: Long = System.currentTimeMillis()
 
   // Time when the session was closed.
-  @volatile private var closedTime: Option[Long] = None
+  @volatile private var closedTimeMs: Option[Long] = None
 
-  // Custom time when the session is to expire.
-  // If it is set, and SparkConnectSessionManager periodic check expires session once it passes.
-  // If not set, session expiration happens based on lastAccessTime and default timeout.
-  @volatile private var customExpirationTime: Option[Long] = None
+  // Custom timeout after a session expires due to inactivity.
+  // Used by SparkConnectSessionManager instead of default timeout if set.
+  @volatile private var customInactiveTimeoutMs: Option[Long] = None
 
   private val executions: ConcurrentMap[String, ExecuteHolder] =
     new ConcurrentHashMap[String, ExecuteHolder]()
@@ -103,7 +102,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * Called only by SparkConnectExecutionManager under executionsLock.
    */
   private[service] def addExecuteHolder(executeHolder: ExecuteHolder): Unit = {
-    if (closedTime.isDefined) {
+    if (closedTimeMs.isDefined) {
       // Do not accept new executions if the session is closing.
       throw new SparkSQLException(
         errorClass = "INVALID_HANDLE.SESSION_CLOSED",
@@ -196,13 +195,13 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   def classloader: ClassLoader = artifactManager.classloader
 
   private[connect] def updateAccessTime(): Unit = {
-    lastAccessTime = System.currentTimeMillis()
-    logInfo(s"Session $key accessed, time $lastAccessTime.")
+    lastAccessTimeMs = System.currentTimeMillis()
+    logInfo(s"Session $key accessed, time $lastAccessTimeMs.")
   }
 
-  private[connect] def setExpirationTime(newExpirationTime: Option[Long]): Unit = {
-    customExpirationTime = newExpirationTime
-    logInfo(s"Session $key expiration time set to $customExpirationTime.")
+  private[connect] def setCustomInactiveTimeoutMs(newInactiveTimeoutMs: Option[Long]): Unit = {
+    customInactiveTimeoutMs = newInactiveTimeoutMs
+    logInfo(s"Session $key inactive timout set to $customInactiveTimeoutMs ms.")
   }
 
   /**
@@ -222,18 +221,18 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[connect] def close(): Unit = {
     // It is called only by SparkConnectSessionManager.closeSession, only after it's removed from
     // the sessionStore there guarantees that it is called only once.
-    if (closedTime.isDefined) {
+    if (closedTimeMs.isDefined) {
       throw new IllegalStateException(s"Session $key is already closed.")
     }
 
     logInfo(s"Closing session with userId: $userId and sessionId: $sessionId")
 
-    // After closedTime is defined, SessionHolder.addExecuteHolder() will not allow new executions
+    // After closedTimeMs is defined, SessionHolder.addExecuteHolder() will not allow new executions
     // to be added for this session. Because both SessionHolder.addExecuteHolder() and
     // SparkConnectExecutionManager.removeAllExecutionsForSession() are executed under
     // executionsLock, this guarantees that removeAllExecutionsForSession triggered below will
     // remove all executions and no new executions will be added in the meanwhile.
-    closedTime = Some(System.currentTimeMillis())
+    closedTimeMs = Some(System.currentTimeMillis())
 
     if (eventManager.status == SessionStatus.Pending) {
       // Testing-only: Some sessions created by SessionHolder.forTesting are not fully initialized
@@ -282,10 +281,10 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
       userId = userId,
       sessionId = sessionId,
       status = eventManager.status,
-      startTime = startTime,
-      lastAccessTime = lastAccessTime,
-      customExpirationTime = customExpirationTime,
-      closedTime = closedTime)
+      startTimeMs = startTimeMs,
+      lastAccessTimeMs = lastAccessTimeMs,
+      customInactiveTimeoutMs = customInactiveTimeoutMs,
+      closedTimeMs = closedTimeMs)
 
   /**
    * Caches given DataFrame with the ID. The cache does not expire. The entry needs to be
@@ -384,7 +383,9 @@ case class SessionHolderInfo(
     userId: String,
     sessionId: String,
     status: SessionStatus,
-    startTime: Long,
-    lastAccessTime: Long,
-    customExpirationTime: Option[Long],
-    closedTime: Option[Long])
+    customInactiveTimeoutMs: Option[Long],
+    startTimeMs: Long,
+    lastAccessTimeMs: Long,
+    closedTimeMs: Option[Long]) {
+  def key: SessionKey = SessionKey(userId, sessionId)
+}

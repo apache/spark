@@ -97,18 +97,18 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession with BeforeAndA
     assert(
       SparkConnectService.sessionManager.listActiveSessions.exists(
         _.sessionId == sessionHolder.sessionId))
-    sessionHolder.setExpirationTime(Some(System.currentTimeMillis() + 5.days.toMillis))
+    sessionHolder.setCustomInactiveTimeoutMs(Some(5.days.toMillis))
 
     // clean up with inactivity timeout of 0.
-    SparkConnectService.sessionManager.periodicMaintenance(defaultInactiveTimeout = 0L)
+    SparkConnectService.sessionManager.periodicMaintenance(defaultInactiveTimeoutMs = 0L)
     // session should still be there.
     assert(
       SparkConnectService.sessionManager.listActiveSessions.exists(
         _.sessionId == sessionHolder.sessionId))
 
-    sessionHolder.setExpirationTime(None)
+    sessionHolder.setCustomInactiveTimeoutMs(None)
     // it will be cleaned up now.
-    SparkConnectService.sessionManager.periodicMaintenance(defaultInactiveTimeout = 0L)
+    SparkConnectService.sessionManager.periodicMaintenance(defaultInactiveTimeoutMs = 0L)
     assert(SparkConnectService.sessionManager.listActiveSessions.isEmpty)
     assert(
       SparkConnectService.sessionManager.listClosedSessions.exists(
@@ -123,7 +123,7 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession with BeforeAndA
       _.sessionId == sessionHolder.sessionId)
     assert(activeSessionInfo.isDefined)
     assert(activeSessionInfo.get.status == SessionStatus.Started)
-    assert(activeSessionInfo.get.closedTime.isEmpty)
+    assert(activeSessionInfo.get.closedTimeMs.isEmpty)
 
     SparkConnectService.sessionManager.closeSession(sessionHolder.key)
 
@@ -132,6 +132,6 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession with BeforeAndA
       _.sessionId == sessionHolder.sessionId)
     assert(closedSessionInfo.isDefined)
     assert(closedSessionInfo.get.status == SessionStatus.Closed)
-    assert(closedSessionInfo.get.closedTime.isDefined)
+    assert(closedSessionInfo.get.closedTimeMs.isDefined)
   }
 }
