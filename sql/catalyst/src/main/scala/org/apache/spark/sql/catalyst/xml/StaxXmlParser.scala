@@ -407,7 +407,6 @@ class StaxXmlParser(schema: StructType, val options: XmlOptions)
               row(index) = convertTo(c.getData, schema(index).dataType)
             } else {
               // do nothing
-              print("dur")
             }
 
           case e: EndElement =>
