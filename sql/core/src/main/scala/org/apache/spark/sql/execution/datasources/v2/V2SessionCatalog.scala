@@ -201,7 +201,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
     }
 
     val (partitionColumns, maybeBucketSpec, maybeClusterBySpec) =
-      partitions.toImmutableArraySeq.convertTransforms
+      newPartitions.toImmutableArraySeq.convertTransforms
     val tableProperties = properties.asScala
     val location = Option(properties.get(TableCatalog.PROP_LOCATION))
     val storage = DataSource.buildStorageFormatFromOptions(toOptions(tableProperties.toMap))
