@@ -271,14 +271,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case _ =>
         }
 
-      case o: OverwriteByExpression =>
-        o.deleteExpr.foreach {
-          case s: SubqueryExpression =>
-            s.failAnalysis (
-              errorClass = "UNSUPPORTED_FEATURE.OVERWRITE_BY_SUBQUERY",
-              messageParameters = Map.empty)
-          case _ =>
-        }
+      case o: OverwriteByExpression if o.deleteExpr.exists(_.isInstanceOf[SubqueryExpression]) =>
+        o.deleteExpr.failAnalysis (
+          errorClass = "UNSUPPORTED_FEATURE.OVERWRITE_BY_SUBQUERY",
+          messageParameters = Map.empty)
 
       case operator: LogicalPlan =>
         operator transformExpressionsDown {
