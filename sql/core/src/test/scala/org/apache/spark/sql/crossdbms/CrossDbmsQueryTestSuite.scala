@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, DescribeColumn, D
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeCommandBase}
 
+// TODO: Add header
 class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
   private val DBMS_MAPPING = Map(
     "postgres" ->((connection_url: Option[String]) =>
@@ -59,7 +60,7 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
 
     // Run the SQL queries preparing them for comparison.
     val outputs: Seq[QueryTestOutput] = queries.map { sql =>
-      val (schema, output) =
+      val output =
         if (regenerateGoldenFiles && crossDbmsToGenerateGoldenFiles.nonEmpty) {
           if (runner.isEmpty) {
             val connectionUrl = if (customConnectionUrl.nonEmpty) {
@@ -70,7 +71,6 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
             runner = Some(DBMS_MAPPING(crossDbmsToGenerateGoldenFiles)(connectionUrl))
           }
           val sparkDf = spark.sql(sql)
-          val schema = sparkDf.schema.catalogString
           val output = runner.map(_.runQuery(sql)).get
           // Use Spark analyzed plan to check if the query result is already semantically sorted
           val result = if (isSemanticallySorted(sparkDf.queryExecution.analyzed)) {
@@ -79,14 +79,15 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
             // Sort the answer manually if it isn't sorted.
             output
           }
-          (schema, result)
+          result
         } else {
-          handleExceptions(getNormalizedQueryExecutionResult(localSparkSession, sql))
+          handleExceptions(getNormalizedQueryExecutionResult(localSparkSession, sql))._2
         }
       // We do some query canonicalization now.
       val executionOutput = ExecutionOutput(
         sql = sql,
-        schema = Some(schema),
+        // Don't care about the schema for this test. Only care about correctness.
+        schema = None,
         output = normalizeTestResults(output.mkString("\n")))
       if (testCase.isInstanceOf[CTETest]) {
         expandCTEQueryAndCompareResult(localSparkSession, sql, executionOutput)

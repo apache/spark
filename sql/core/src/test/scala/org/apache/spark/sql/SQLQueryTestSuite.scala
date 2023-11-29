@@ -928,10 +928,14 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       output: String) extends QueryTestOutput {
     override def toString: String = {
       // We are explicitly not using multi-line string due to stripMargin removing "|" in output.
+      val schemaString = if (schema.nonEmpty) {
+        s"-- !query schema\n" + schema.get + "\n"
+      } else {
+        ""
+      }
       s"-- !query\n" +
         sql + "\n" +
-        s"-- !query schema\n" +
-        schema.get + "\n" +
+        schemaString +
         s"-- !query output\n" +
         output
     }
