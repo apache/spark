@@ -491,7 +491,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     val progress = getStreamingQuery(streamingInputDF.join(streamingInputDF, "value"))
       .recentProgress.head
     assert(progress.numInputRows === 20) // data is read multiple times in self-joins
-    assert(progress.sources.size === 1)
+    assert(progress.sources.length === 1)
     assert(progress.sources(0).numInputRows === 20)
   }
 
@@ -505,7 +505,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     val progress = getStreamingQuery(streamingInputDF.join(staticInputDF, "value"))
       .recentProgress.head
     assert(progress.numInputRows === 10)
-    assert(progress.sources.size === 1)
+    assert(progress.sources.length === 1)
     assert(progress.sources(0).numInputRows === 10)
   }
 
@@ -518,7 +518,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     // After the first trigger, the calculated input rows should be 10
     val progress = getStreamingQuery(streamingInputDF).recentProgress.head
     assert(progress.numInputRows === 10)
-    assert(progress.sources.size === 1)
+    assert(progress.sources.length === 1)
     assert(progress.sources(0).numInputRows === 10)
   }
 

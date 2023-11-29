@@ -424,6 +424,11 @@ class QueryExecutionErrorsSuite
     } else {
       "`luckyCharOfWord \\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+\\)`"
     }
+    val reason = if (Utils.isJavaVersionAtLeast21) {
+      "java.lang.StringIndexOutOfBoundsException: Range \\[5, 6\\) out of bounds for length 5"
+    } else {
+      "java.lang.StringIndexOutOfBoundsException: begin 5, end 6, length 5"
+    }
 
     checkError(
       exception = e.getCause.asInstanceOf[SparkException],
@@ -432,7 +437,7 @@ class QueryExecutionErrorsSuite
         "functionName" -> functionNameRegex,
         "signature" -> "string, int",
         "result" -> "string",
-        "reason" -> "java.lang.StringIndexOutOfBoundsException: begin 5, end 6, length 5"),
+        "reason" -> reason),
       matchPVals = true)
   }
 
@@ -450,6 +455,11 @@ class QueryExecutionErrorsSuite
     } else {
       "`QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+`"
     }
+    val reason = if (Utils.isJavaVersionAtLeast21) {
+      "java.lang.StringIndexOutOfBoundsException: Range \\[5, 6\\) out of bounds for length 5"
+    } else {
+      "java.lang.StringIndexOutOfBoundsException: begin 5, end 6, length 5"
+    }
 
     checkError(
       exception = e.getCause.asInstanceOf[SparkException],
@@ -457,7 +467,7 @@ class QueryExecutionErrorsSuite
       parameters = Map("functionName" -> functionNameRegex,
         "signature" -> "string, int",
         "result" -> "string",
-        "reason" -> "java.lang.StringIndexOutOfBoundsException: begin 5, end 6, length 5"),
+        "reason" -> reason),
       matchPVals = true)
   }
 

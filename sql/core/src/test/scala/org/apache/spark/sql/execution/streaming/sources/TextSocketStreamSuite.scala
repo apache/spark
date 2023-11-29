@@ -358,7 +358,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
       numPartitions = 2,
       options = new CaseInsensitiveStringMap(Map("includeTimestamp" -> "true").asJava))
     val partitions = stream.planInputPartitions(stream.initialOffset())
-    assert(partitions.size == 2)
+    assert(partitions.length == 2)
 
     val numRecords = 4
     // inject rows, read and check the data and offsets

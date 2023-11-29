@@ -1068,7 +1068,7 @@ abstract class AvroSuite
       val readValues =
         spark.read.schema(schema).format("avro").load(avroDir).as[(Date, Timestamp)].collect()
 
-      assert(readValues.size == 1)
+      assert(readValues.length == 1)
       assert(readValues.head == ((nullDate, nullTime)))
     }
   }
@@ -1944,7 +1944,7 @@ abstract class AvroSuite
       df.write.format("avro").save(outputDir)
       val input = spark.read.format("avro").load(outputDir)
       assert(input.collect().toSet.size === 1024 * 3 + 1)
-      assert(input.rdd.partitions.size > 2)
+      assert(input.rdd.partitions.length > 2)
     }
   }
 

@@ -3358,7 +3358,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             encOpt.map { enc =>
               val attrs = if (enc.isSerializedAsStructForTopLevel) {
                 // Value class that has been replaced with its underlying type
-                if (enc.schema.fields.size == 1 && enc.schema.fields.head.dataType == dataType) {
+                if (enc.schema.fields.length == 1 && enc.schema.fields.head.dataType == dataType) {
                   DataTypeUtils.toAttributes(enc.schema)
                 } else {
                   DataTypeUtils.toAttributes(dataType.asInstanceOf[StructType])
