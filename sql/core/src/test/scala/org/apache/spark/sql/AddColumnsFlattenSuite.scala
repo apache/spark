@@ -151,7 +151,7 @@ class AddColumnsFlattenSuite extends QueryTest
     checkAnswer(newDfOpt, newDfUnopt)
   }
 
-  test("use of cached inmemory relation when new columns added do not result in new project") {
+  test("use of cached InMemoryRelation when new columns added do not result in new project") {
     val testDf = spark.range(10).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d")
     testDf.cache()
@@ -170,7 +170,7 @@ class AddColumnsFlattenSuite extends QueryTest
       isInstanceOf[InMemoryRelation])
   }
 
-  test("use of cached inmemory relation when renamed columns do not result in new project") {
+  test("use of cached InMemoryRelation when renamed columns do not result in new project") {
     val testDf = spark.range(10).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d")
     testDf.cache()
