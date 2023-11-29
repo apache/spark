@@ -23,7 +23,7 @@ import java.nio.file.Files
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.json4s._
+import org.json4s.{DefaultFormats, Extraction, Formats}
 import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.SparkException
