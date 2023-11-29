@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveUtils._
 import org.apache.spark.sql.internal.SQLConf
@@ -33,6 +33,8 @@ import org.apache.spark.util.Utils
 private[hive] object SparkSQLEnv extends Logging {
   logDebug("Initializing SparkSQLEnv")
 
+  @deprecated("Use SparkSQLEnv.sparkSession instead", "4.0.0")
+  var sqlContext: SQLContext = _
   var sparkSession: SparkSession = _
   var sparkContext: SparkContext = _
 
@@ -63,6 +65,7 @@ private[hive] object SparkSQLEnv extends Logging {
       }
       sparkSession = builder.getOrCreate()
       sparkContext = sparkSession.sparkContext
+      sqlContext = sparkSession.sqlContext
 
       // SPARK-29604: force initialization of the session state with the Spark class loader,
       // instead of having it happen during the initialization of the Hive client (which may use a
@@ -87,6 +90,7 @@ private[hive] object SparkSQLEnv extends Logging {
       sparkContext.stop(exitCode)
       sparkContext = null
       sparkSession = null
+      sqlContext = null
     }
   }
 }
