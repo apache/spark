@@ -3245,8 +3245,8 @@ class DataSourceV2SQLSuiteV1Filter
         sqlState = "0A000",
         parameters = Map.empty,
         context = ExpectedContext(
-          fragment = "(select c2 from values(1) as t(c2))",
-          start = 43,
+          fragment = "id = (select c2 from values(1) as t(c2))",
+          start = 38,
           stop = 77
         ))
     }
