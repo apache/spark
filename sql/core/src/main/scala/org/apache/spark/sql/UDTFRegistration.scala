@@ -46,6 +46,7 @@ class UDTFRegistration private[sql] (tableFunctionRegistry: TableFunctionRegistr
       """.stripMargin)
 
     tableFunctionRegistry.createOrReplaceTempFunction(
-      name, udtf.builder(_, new CatalystSqlParser()), "python_udtf")
+      name, udtf.builder(_, SparkSession.getActiveSession.get.sessionState.sqlParser),
+      source = "python_udtf")
   }
 }
