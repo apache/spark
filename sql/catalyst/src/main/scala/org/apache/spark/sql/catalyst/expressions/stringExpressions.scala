@@ -2670,13 +2670,16 @@ case class StringDecode(bin: Expression, charset: Expression)
 }
 
 /**
- * Encodes the first argument into a BINARY using the provided character set
- * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
- * If either argument is null, the result will also be null.
+ * Encode the given string to a binary using a charset.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(str, charset) - Encodes the first argument using the second argument character set.",
+  usage = "_FUNC_(str, charset) - Encodes the first argument using the second argument character set. If either argument is null, the result will also be null.",
+  arguments = """
+    Arguments:
+      * str - a string expression
+      * charset - one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16' to encode `str` into a BINARY
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('abc', 'utf-8');
