@@ -39,7 +39,7 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
 
   override protected val inputFilePath = {
     val originalInputs = new File(baseResourcePath, "inputs").getAbsolutePath
-    new File(originalInputs, crossDbmsToGenerateGoldenFiles).getAbsolutePath
+    new File(originalInputs, s"$crossDbmsToGenerateGoldenFiles-crosstest").getAbsolutePath
   }
   override protected val goldenFilePath = new File(
     baseResourcePath, s"$crossDbmsToGenerateGoldenFiles-results").getAbsolutePath
@@ -133,7 +133,7 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
             runSqlTestCase(testCase, listTestCases)
           }
         case _ =>
-          ignore(s"Ignoring test cases that are not RegularTestCases are now") {
+          ignore(s"Ignoring test cases that are not [[RegularTestCase]] for now") {
             /* Do nothing */
           }
       }
