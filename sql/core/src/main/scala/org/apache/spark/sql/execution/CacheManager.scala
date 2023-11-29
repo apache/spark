@@ -23,7 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, NamedExpression, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, Project, ResolvedHint, SubqueryAlias, UnaryNode, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
@@ -293,6 +293,20 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     lookupCachedData(query.queryExecution.normalized)
   }
 
+
+  /*
+      Partial match cases:
+      InComingPlan (case of add cols)         cached plan      InComing Plan ( case of rename)
+     Project P2                              Project P1         Project P2
+       attr1                                  attr1               attr1
+       attr2                                  attr2               Alias2'(x, attr2)
+       Alias3                                 Alias3              Alias3'(y, Alias3-childExpr)
+       Alias4                                 Alias4              Alias4'(z, Alias4-childExpr)
+       Alias5 (k, f(attr1, attr2, al3, al4)
+       Alias6 (p, f(attr1, attr2, al3, al4)
+   */
+
+
   /** Optionally returns cached data for the given [[LogicalPlan]]. */
   def lookupCachedData(plan: LogicalPlan): Option[CachedData] = {
     val fullMatch = cachedData.find(cd => plan.sameResult(cd.plan))
@@ -309,10 +323,29 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                 val cdPlanProject = cachedPlan.asInstanceOf[Project]
                 val canonicalizedInProj = incomingProject.canonicalized.asInstanceOf[Project]
                 val canonicalizedCdProj = cdPlanProject.canonicalized.asInstanceOf[Project]
-                // index if -1 indicates it is created out of existing output attribs
+                // matchIndexInCdPlanProj remains  -1 in the end, itindicates it is
+                // new cols created out of existing output attribs
                 val (equivMapping, inComingProjNeedingMod) = canonicalizedInProj.projectList.
                   zipWithIndex.map {
-                  case (ne, index) => index -> canonicalizedCdProj.projectList.indexWhere(_ == ne)
+                  case (inComingNE, index) =>
+                    // first check for equivalent named expressions..if index is != -1, that means
+                    // it is pass thru Alias or pass thru - Attribute
+                    var matchIndexInCdPlanProj =
+                    canonicalizedCdProj.projectList.indexWhere(_ == inComingNE)
+                    if (matchIndexInCdPlanProj == -1) {
+                      // check if it is case of rename:
+                      inComingNE match {
+                        case Alias(attrx: AttributeReference, _) =>
+                          matchIndexInCdPlanProj =
+                            canonicalizedCdProj.projectList.indexWhere(_ == attrx)
+                        case Alias(childExpr, _) => matchIndexInCdPlanProj =
+                          canonicalizedCdProj.projectList.indexWhere(
+                            _.children.headOption.map(_ == childExpr).getOrElse(false))
+                      }
+                    }
+
+                    index -> matchIndexInCdPlanProj
+
                 }.partition(_._2 != -1)
 
                 val cdAttribToInAttrib = equivMapping.map {

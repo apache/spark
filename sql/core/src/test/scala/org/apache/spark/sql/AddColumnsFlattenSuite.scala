@@ -163,7 +163,7 @@ class AddColumnsFlattenSuite extends QueryTest
 
     val newDf = testDf.withColumns(
       Seq("newCol1", "newCol2", "newCol3", "newCol4"),
-      Seq(col("a") + 2, col("b") + 7, col("a") + col("b"), col("a") + col("d")),
+      Seq(col("a") + 2, col("b") + 7, col("a") + col("b"), col("a") + col("d"))
     )
 
     val newNodes = newDf.queryExecution.logical.collect {
@@ -182,8 +182,26 @@ class AddColumnsFlattenSuite extends QueryTest
     testDf.cache()
     val newDf = testDf.withColumns(
       Seq("newCol1", "newCol2", "newCol3", "newCol4"),
-      Seq(col("a") + 2, col("b") + 7, col("a") + col("b"), col("a") + col("d")),
+      Seq(col("a") + 2, col("b") + 7, col("a") + col("b"), col("a") + col("d"))
     )
+
+    val newNodes = newDf.queryExecution.logical.collect {
+      case l => l
+    }
+    assert(newNodes.size === initNodes.size)
+    assert(newDf.queryExecution.optimizedPlan.collectLeaves().head.isInstanceOf[InMemoryRelation])
+  }
+
+  test("use of cached inmemory relation when renamed columns do not result in new project") {
+    val testDf = spark.range(100).select($"id" as "a", $"id" as "b").
+      select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d")
+
+    val initNodes = testDf.queryExecution.logical.collect {
+      case l => l
+    }
+    testDf.cache()
+    val newDf = testDf.withColumnsRenamed(
+     Map("c" -> "c1", "a" -> "a1", "b" -> "b1", "d" -> "d1"))
 
     val newNodes = newDf.queryExecution.logical.collect {
       case l => l
