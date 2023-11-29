@@ -163,16 +163,6 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     assert(load("t1", Some(catalogName)).count() === 0)
   }
 
-  test("SPARK-46043: create table in SQL with catalog options supported source") {
-    checkError(
-      exception = intercept[SparkUnsupportedOperationException] {
-        sql(s"CREATE TABLE test USING $format")
-      },
-      errorClass = "CANNOT_CREATE_DATA_SOURCE_V2_TABLE.CATALOG_OPTIONS_UNSUPPORTED",
-      parameters = Map("provider" -> format)
-    )
-  }
-
   test("append and overwrite modes - session catalog") {
     sql(s"create table t1 (id bigint) using $format")
     val df = spark.range(10)

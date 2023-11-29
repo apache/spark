@@ -253,6 +253,8 @@ class InMemoryV1Provider
   extends SimpleTableProvider
   with DataSourceRegister
   with CreatableRelationProvider {
+  override def supportsExternalMetadata(): Boolean = true
+
   override def getTable(options: CaseInsensitiveStringMap): Table = {
 
     InMemoryV1Provider.tables.getOrElse(options.get("name"), {

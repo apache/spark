@@ -81,14 +81,15 @@ class V2SessionCatalog(catalog: SessionCatalog)
             // Get the table properties during creation and append the path option
             // to the properties.
             val tableProperties = table.properties
-            val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
-            val properties = tableProperties ++ pathOption
+            val properties = tableProperties ++
+              table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
             val dsOptions = new CaseInsensitiveStringMap(properties.asJava)
 
             provider match {
-              case p: SupportsCatalogOptions =>
-                throw new IllegalArgumentException(
-                  f"provider $p should not implement SupportsCatalogOptions.")
+              case _: SupportsCatalogOptions =>
+                // Currently, loadTable cannot support V2 provider that implements the
+                // SupportsCatalogOptions. Keep the behavior as before.
+                V1Table(table)
 
               case _ =>
                 // If the source accepts external table metadata, we can pass the schema and
@@ -166,11 +167,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
     val provider = properties.getOrDefault(TableCatalog.PROP_PROVIDER, conf.defaultDataSourceName)
 
     val (newSchema, newPartitions) = DataSourceV2Utils.getTableProvider(provider, conf) match {
-      case Some(_: SupportsCatalogOptions) =>
-        throw new SparkUnsupportedOperationException(
-          errorClass = "CANNOT_CREATE_DATA_SOURCE_V2_TABLE.CATALOG_OPTIONS_UNSUPPORTED",
-          messageParameters = Map("provider" -> provider))
-
       // If the provider does not support external metadata, users should not be allowed to
       // specify custom schema when creating the data source table, since the schema will not
       // be used when loading the table.

@@ -25,10 +25,6 @@ Failed to create data source V2 table:
 
 This error class has the following derived error classes:
 
-## CATALOG_OPTIONS_UNSUPPORTED
-
-provider '`<provider>`' implements 'SupportsCatalogOptions' which is not supported. Please use a compatible provider.
-
 ## EXTERNAL_METADATA_UNSUPPORTED
 
 provider '`<provider>`' does not support external metadata but a schema is provided. Please remove the schema when creating the table.
