@@ -2678,7 +2678,7 @@ case class StringDecode(bin: Expression, charset: Expression)
   arguments = """
     Arguments:
       * str - a string expression
-      * charset - one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16' to encode `str` into a BINARY
+      * charset - one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16' to encode `str` into a BINARY. It is case insensitive.
   """,
   examples = """
     Examples:
