@@ -1683,6 +1683,37 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(taskScheduler.taskSetManagerForAttempt(0, 0).isEmpty)
   }
 
+  test("cancelTasks shall kill all the running tasks and not fail the stage") {
+    val taskScheduler = setupScheduler()
+
+    taskScheduler.initialize(new FakeSchedulerBackend {
+      override def killTask(
+          taskId: Long,
+          executorId: String,
+          interruptThread: Boolean,
+          reason: String): Unit = {
+        // Since we only submit one stage attempt, the following call is sufficient to mark the
+        // task as killed.
+        taskScheduler.taskSetManagerForAttempt(0, 0).get.runningTasksSet.remove(taskId)
+      }
+    })
+
+    val attempt1 = FakeTask.createTaskSet(10)
+    taskScheduler.submitTasks(attempt1)
+
+    val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 1),
+      new WorkerOffer("executor1", "host1", 1))
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(2 === taskDescriptions.length)
+    val tsm = taskScheduler.taskSetManagerForAttempt(0, 0).get
+    assert(2 === tsm.runningTasks)
+
+    taskScheduler.cancelTasks(0, false, "test")
+    assert(0 === tsm.runningTasks)
+    assert(!tsm.isZombie)
+    assert(taskScheduler.taskSetManagerForAttempt(0, 0).isDefined)
+  }
+
   test("mark taskset for a barrier stage as zombie in case a task fails") {
     val taskScheduler = setupScheduler()
 
