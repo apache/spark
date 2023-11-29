@@ -47,6 +47,7 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  * <li>Customized Parser.</li>
  * <li>(External) Catalog listeners.</li>
  * <li>Columnar Rules.</li>
+ * <li>Adaptive Query Post Planner Strategy Rules.</li>
  * <li>Adaptive Query Stage Preparation Rules.</li>
  * <li>Adaptive Query Execution Runtime Optimizer Rules.</li>
  * <li>Adaptive Query Stage Optimizer Rules.</li>
@@ -114,12 +115,15 @@ class SparkSessionExtensions {
   type ColumnarRuleBuilder = SparkSession => ColumnarRule
   type QueryStagePrepRuleBuilder = SparkSession => Rule[SparkPlan]
   type QueryStageOptimizerRuleBuilder = SparkSession => Rule[SparkPlan]
+  type QueryPostPlannerStrategyBuilder = SparkSession => Rule[SparkPlan]
 
   private[this] val columnarRuleBuilders = mutable.Buffer.empty[ColumnarRuleBuilder]
   private[this] val queryStagePrepRuleBuilders = mutable.Buffer.empty[QueryStagePrepRuleBuilder]
   private[this] val runtimeOptimizerRules = mutable.Buffer.empty[RuleBuilder]
   private[this] val queryStageOptimizerRuleBuilders =
     mutable.Buffer.empty[QueryStageOptimizerRuleBuilder]
+  private[this] val queryPostPlannerStrategyRuleBuilders =
+    mutable.Buffer.empty[QueryPostPlannerStrategyBuilder]
 
   /**
    * Build the override rules for columnar execution.
@@ -147,6 +151,14 @@ class SparkSessionExtensions {
    */
   private[sql] def buildQueryStageOptimizerRules(session: SparkSession): Seq[Rule[SparkPlan]] = {
     queryStageOptimizerRuleBuilders.map(_.apply(session)).toSeq
+  }
+
+  /**
+   * Build the override rules for the query post planner strategy phase of adaptive query execution.
+   */
+  private[sql] def buildQueryPostPlannerStrategyRules(
+      session: SparkSession): Seq[Rule[SparkPlan]] = {
+    queryPostPlannerStrategyRuleBuilders.map(_.apply(session)).toSeq
   }
 
   /**
@@ -183,6 +195,15 @@ class SparkSessionExtensions {
    */
   def injectQueryStageOptimizerRule(builder: QueryStageOptimizerRuleBuilder): Unit = {
     queryStageOptimizerRuleBuilders += builder
+  }
+
+  /**
+   * Inject a rule that applied between `plannerStrategy` and `queryStagePrepRules`, so
+   * it can get the whole plan before injecting exchanges.
+   * Note, these rules can only be applied within AQE.
+   */
+  def injectQueryPostPlannerStrategyRule(builder: QueryPostPlannerStrategyBuilder): Unit = {
+    queryPostPlannerStrategyRuleBuilders += builder
   }
 
   private[this] val resolutionRuleBuilders = mutable.Buffer.empty[RuleBuilder]
