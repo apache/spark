@@ -2517,6 +2517,24 @@
     ],
     "sqlState" : "0A000"
   },
+  "INVALID_PARAMETRIZED_QUERY" : {
+    "message" : [
+      "Parametrize query must either use positional, or named parameters, but not both."
+    ],
+    "sqlState" : "42609"
+  },
+  "INVALID_STATEMENT_FOR_EXECUTE_INTO" : {
+    "message" : [
+      "The INTO clause of EXECUTE IMMEDIATE is only valid for queries. The statement starting with: <sqlString> is a(n) <stmtType>."
+    ],
+    "sqlState" : "42606"
+  },
+  "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
+    "message" : [
+      "Variable passed query must be of type STRING"
+    ],
+    "sqlState" : "42609"
+  },
   "NESTED_AGGREGATE_FUNCTION" : {
     "message" : [
       "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."

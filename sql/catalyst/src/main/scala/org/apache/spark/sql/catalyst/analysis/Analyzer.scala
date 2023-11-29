@@ -255,6 +255,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
   override def batches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
+      new SubstituteExecuteImmediate(catalogManager),
       // This rule optimizes `UpdateFields` expression chains so looks more like optimization rule.
       // However, when manipulating deeply nested schema, `UpdateFields` expression tree could be
       // very complex and make analysis impossible. Thus we need to optimize `UpdateFields` early
@@ -1484,6 +1485,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   class ResolveReferences(val catalogManager: CatalogManager)
     extends Rule[LogicalPlan] with ColumnResolutionHelper {
 
+    private val resolveArgumentsInParametrizedQuery =
+      new ResolveReferencesInParametrizedQuery(catalogManager)
     private val resolveColumnDefaultInCommandInputQuery =
       new ResolveColumnDefaultInCommandInputQuery(catalogManager)
     private val resolveReferencesInAggregate =
@@ -1524,6 +1527,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       // Don't wait other rules to resolve the child plans of `SetVariable` as we need
       // to resolve column "DEFAULT" in the child plans so that they must be unresolved.
       case s: SetVariable => resolveColumnDefaultInCommandInputQuery(s)
+
+      // Resolve arguments of parametrerized query
+      case p: ParameterizedQuery => resolveArgumentsInParametrizedQuery(p)
 
       // Wait for other rules to resolve child plans first
       case p: LogicalPlan if !p.childrenResolved => p

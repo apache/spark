@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.{ArrayBuffer, Set}
 import scala.jdk.CollectionConverters._
+import scala.util.{Left, Right}
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
@@ -164,6 +165,33 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
     // Apply CTEs
     query.optionalMap(ctx.ctes)(withCTE)
+  }
+
+  override def visitExecuteImmediate(ctx: ExecuteImmediateContext): LogicalPlan = withOrigin(ctx) {
+    // need to figure out based on parsed plan whether its named or parametrized
+    val queryString = Option(ctx.queryParam.stringLit()).map(sl => Left(stringLitToStr(sl)))
+    val queryVariable = Option(ctx.queryParam.multipartIdentifier)
+      .map(mpi => Right(UnresolvedAttribute(visitMultipartIdentifier(mpi))))
+    val targetVars = Option(ctx.targetVariable)
+      .map(v => visitMultipartIdentifierList(v))
+    val exprs = visitExecuteImmediateArgumentSeq(ctx.params)
+
+    ExecuteImmediateQuery(exprs, queryString.getOrElse(queryVariable.get), targetVars)
+  }
+
+  override def visitExecuteImmediateArgumentSeq
+    (ctx: ExecuteImmediateArgumentSeqContext) : Seq[Expression] = {
+    Option(ctx).toSeq
+      .flatMap(c => c.executeImmediateArgument.asScala).map { c =>
+        val reference : Option[Expression] = Option(c.multipartIdentifier)
+          .map(r => UnresolvedAttribute(visitMultipartIdentifier(r)))
+        val literal : Option[Expression] = Option(c.constant)
+          .map(typedVisit[Literal])
+        val arg = reference.getOrElse(literal.get)
+        Option(c.name)
+          .map(n => Alias(arg, n.getText)())
+          .getOrElse(arg);
+      }
   }
 
   override def visitDmlStatement(ctx: DmlStatementContext): AnyRef = withOrigin(ctx) {
@@ -557,7 +585,13 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       notMatchedBySourceActions.toSeq)
   }
 
-  /**
+  override def visitMultipartIdentifierList(
+      ctx: MultipartIdentifierListContext): Seq[UnresolvedAttribute] = withOrigin(ctx) {
+    ctx.multipartIdentifier.asScala.map(typedVisit[Seq[String]]).map(new UnresolvedAttribute(_))
+      .toSeq
+  }
+
+/**
    * Create a partition specification map.
    */
   override def visitPartitionSpec(
@@ -3908,6 +3942,11 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       }
     }
   }
+
+  /**
+   * Converts a string literal to a string.
+   */
+  protected def stringLitToStr(x: StringLitContext) = string(visitStringLit(x))
 
   /**
    * Create a table, returning a [[CreateTable]] or [[CreateTableAsSelect]] logical plan.

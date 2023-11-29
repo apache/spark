@@ -72,6 +72,7 @@ singleTableSchema
 
 statement
     : query                                                            #statementDefault
+    | executeImmediate                                                 # visitExecuteImmediate
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE identifierReference                                          #use
     | USE namespace identifierReference                                #useNamespace
@@ -228,6 +229,23 @@ statement
         (OPTIONS options=propertyList)?                                #createIndex
     | DROP INDEX (IF EXISTS)? identifier ON TABLE? identifierReference #dropIndex
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
+    ;
+
+executeImmediate
+    : EXECUTE IMMEDIATE queryParam=executeImmediateQueryParam (INTO LEFT_PAREN targetVariable=multipartIdentifierList RIGHT_PAREN)? (USING params=executeImmediateArgumentSeq)?
+    ;
+
+executeImmediateQueryParam
+    : stringLit
+    | multipartIdentifier
+    ;
+
+executeImmediateArgument
+    : (constant|multipartIdentifier) (AS name=errorCapturingIdentifier)?
+    ;
+
+executeImmediateArgumentSeq
+    : executeImmediateArgument (COMMA executeImmediateArgument)*
     ;
 
 timezone
