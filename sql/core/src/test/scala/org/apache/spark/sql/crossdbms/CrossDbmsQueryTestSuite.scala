@@ -37,10 +37,11 @@ import org.apache.spark.util.Utils
  * some kind of conversion, to increase coverage.
  *
  * You need to have a database server up before running this test.
- * For postgres:
- * 1. On a mac: `brew install postgresql@13`
+ * For example, for postgres:
+ * 1. Install PostgreSQL.
+ *   a. On a mac: `brew install postgresql@13`
  * 2. After installing PostgreSQL, start the database server, then create a role named pg with
- * superuser permissions: `createuser -s pg`` OR `psql> CREATE role pg superuser``
+ *    superuser permissions: `createuser -s pg`` OR `psql> CREATE role pg superuser``
  *
  * To run the entire test suite:
  * {{{
@@ -64,17 +65,15 @@ import org.apache.spark.util.Utils
  */
 // scalastyle:on line.size.limit
 class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
-  private val DEFAULT = "postgres"
-  private val DBMS_MAPPING = Map(
-    "postgres" ->((connection_url: Option[String]) =>
-      JdbcSQLQueryTestRunner(PostgresConnection(connection_url))))
 
   private val crossDbmsToGenerateGoldenFiles: String = {
     val userInputDbms = System.getenv("REF_DBMS")
-    if (userInputDbms.isEmpty) {
-      DEFAULT
-    } else {
+    if (userInputDbms.nonEmpty) {
+      assert(CrossDbmsQueryTestSuite.SUPPORTED_DBMS.contains(userInputDbms),
+        s"$userInputDbms is not currently supported.")
       userInputDbms
+    } else {
+      CrossDbmsQueryTestSuite.DEFAULT_DBMS
     }
   }
   private val customConnectionUrl: String = System.getenv("REF_DBMS_CONNECTION_URL")
@@ -82,11 +81,8 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
   // Currently using a separate directory for this because the current SQL tests we have are highly
   // unlikely to get compatible with the other DBMS.
   override protected val inputFilePath = {
-    val originalInputs = new File(baseResourcePath, "inputs").getAbsolutePath
-    val x = new File(originalInputs, s"$crossDbmsToGenerateGoldenFiles-crosstest").getAbsolutePath
-    log.info("HERE " + originalInputs)
-    log.info("HERE " + x)
-    x
+    val originalInputs = new File(baseResourcePath, "inputs")
+    new File(originalInputs, s"$crossDbmsToGenerateGoldenFiles-crosstest").getAbsolutePath
   }
   override protected val goldenFilePath = new File(
     baseResourcePath, s"$crossDbmsToGenerateGoldenFiles-results").getAbsolutePath
@@ -117,7 +113,8 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
             } else {
               None
             }
-            runner = Some(DBMS_MAPPING(crossDbmsToGenerateGoldenFiles)(connectionUrl))
+            runner = Some(CrossDbmsQueryTestSuite.DBMS_TO_CONNECTION_MAPPING(
+              crossDbmsToGenerateGoldenFiles)(connectionUrl))
           }
           val sparkDf = spark.sql(sql)
           val output = runner.map(_.runQuery(sql)).get
@@ -195,4 +192,15 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
       RegularTestCase(testCaseName, absPath, resultFile) :: Nil
     }.sortBy(_.name)
   }
+}
+
+object CrossDbmsQueryTestSuite {
+
+  private final val POSTGRES = "postgres"
+  private final val SUPPORTED_DBMS = Seq(POSTGRES)
+  private final val DEFAULT_DBMS = POSTGRES
+  private final val DBMS_TO_CONNECTION_MAPPING = Map(
+    POSTGRES -> ((connection_url: Option[String]) =>
+      JdbcSQLQueryTestRunner(PostgresConnection(connection_url)))
+  )
 }
