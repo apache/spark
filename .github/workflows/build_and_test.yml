@@ -707,7 +707,7 @@ jobs:
     - name: Python linter
       run: PYTHON_EXECUTABLE=python3.9 ./dev/lint-python
     # Should delete this section after SPARK 3.5 EOL.
-    - name: Install dependencies for Python code generation check
+    - name: Install dependencies for Python code generation check for branch-3.5
       if: inputs.branch == 'branch-3.5'
       run: |
         # See more in "Installation" https://docs.buf.build/installation#tarball
@@ -717,7 +717,7 @@ jobs:
         rm buf-Linux-x86_64.tar.gz
         python3.9 -m pip install 'protobuf==4.25.1' 'mypy-protobuf==3.3.0'
     # Should delete this section after SPARK 3.5 EOL.
-    - name: Python code generation check
+    - name: Python code generation check for branch-3.5
       if: inputs.branch == 'branch-3.5'
       run: if test -f ./dev/connect-check-protos.py; then PATH=$PATH:$HOME/buf/bin PYTHON_EXECUTABLE=python3.9 ./dev/connect-check-protos.py; fi
     # Should delete this section after SPARK 3.5 EOL.
