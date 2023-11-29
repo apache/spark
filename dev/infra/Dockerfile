@@ -138,4 +138,5 @@ RUN python3.12 -m pip install numpy 'pyarrow>=14.0.0' 'six==1.16.0' 'pandas<=2.1
 RUN python3.12 -m pip install 'grpcio==1.59.3' 'grpcio-status==1.59.3' 'protobuf==4.25.1' 'googleapis-common-protos==1.56.4'
 # TODO(SPARK-46078) Use official one instead of nightly build when it's ready
 RUN python3.12 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
+RUN python3.12 -m pip install torchvision --index-url https://download.pytorch.org/whl/cpu
 RUN python3.12 -m pip install torcheval

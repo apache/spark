@@ -12368,7 +12368,7 @@ def array_join(
 @_try_remote_functions
 def concat(*cols: "ColumnOrName") -> Column:
     """
-    Concatenates multiple input columns together into a single column.
+    Collection function: Concatenates multiple input columns together into a single column.
     The function works with strings, numeric, binary and compatible array columns.
 
     .. versionadded:: 1.5.0
@@ -12392,19 +12392,61 @@ def concat(*cols: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('abcd','123')], ['s', 'd'])
-    >>> df = df.select(concat(df.s, df.d).alias('s'))
-    >>> df.collect()
-    [Row(s='abcd123')]
-    >>> df
-    DataFrame[s: string]
+    Example 1: Concatenating string columns
 
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('abcd','123')], ['s', 'd'])
+    >>> df.select(sf.concat(df.s, df.d)).show()
+    +------------+
+    |concat(s, d)|
+    +------------+
+    |     abcd123|
+    +------------+
+
+    Example 2: Concatenating array columns
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([([1, 2], [3, 4], [5]), ([1, 2], None, [3])], ['a', 'b', 'c'])
-    >>> df = df.select(concat(df.a, df.b, df.c).alias("arr"))
-    >>> df.collect()
-    [Row(arr=[1, 2, 3, 4, 5]), Row(arr=None)]
-    >>> df
-    DataFrame[arr: array<bigint>]
+    >>> df.select(sf.concat(df.a, df.b, df.c)).show()
+    +---------------+
+    |concat(a, b, c)|
+    +---------------+
+    |[1, 2, 3, 4, 5]|
+    |           NULL|
+    +---------------+
+
+    Example 3: Concatenating numeric columns
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 2, 3)], ['a', 'b', 'c'])
+    >>> df.select(sf.concat(df.a, df.b, df.c)).show()
+    +---------------+
+    |concat(a, b, c)|
+    +---------------+
+    |            123|
+    +---------------+
+
+    Example 4: Concatenating binary columns
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytearray(b'abc'), bytearray(b'def'))], ['a', 'b'])
+    >>> df.select(sf.concat(df.a, df.b)).show()
+    +-------------------+
+    |       concat(a, b)|
+    +-------------------+
+    |[61 62 63 64 65 66]|
+    +-------------------+
+
+    Example 5: Concatenating mixed types of columns
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1,"abc",3,"def")], ['a','b','c','d'])
+    >>> df.select(sf.concat(df.a, df.b, df.c, df.d)).show()
+    +------------------+
+    |concat(a, b, c, d)|
+    +------------------+
+    |          1abc3def|
+    +------------------+
     """
     return _invoke_function_over_seq_of_columns("concat", cols)
 
@@ -12412,7 +12454,7 @@ def concat(*cols: "ColumnOrName") -> Column:
 @_try_remote_functions
 def array_position(col: "ColumnOrName", value: Any) -> Column:
     """
-    Collection function: Locates the position of the first occurrence of the given value
+    Array function: Locates the position of the first occurrence of the given value
     in the given array. Returns null if either of the arguments are null.
 
     .. versionadded:: 2.4.0
@@ -12439,9 +12481,62 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(["c", "b", "a"],), ([],)], ['data'])
-    >>> df.select(array_position(df.data, "a")).collect()
-    [Row(array_position(data, a)=3), Row(array_position(data, a)=0)]
+    Example 1: Finding the position of a string in an array of strings
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["c", "b", "a"],)], ['data'])
+    >>> df.select(sf.array_position(df.data, "a")).show()
+    +-----------------------+
+    |array_position(data, a)|
+    +-----------------------+
+    |                      3|
+    +-----------------------+
+
+    Example 2: Finding the position of a string in an empty array
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, StringType, StructField, StructType
+    >>> schema = StructType([StructField("data", ArrayType(StringType()), True)])
+    >>> df = spark.createDataFrame([([],)], schema=schema)
+    >>> df.select(sf.array_position(df.data, "a")).show()
+    +-----------------------+
+    |array_position(data, a)|
+    +-----------------------+
+    |                      0|
+    +-----------------------+
+
+    Example 3: Finding the position of an integer in an array of integers
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3],)], ['data'])
+    >>> df.select(sf.array_position(df.data, 2)).show()
+    +-----------------------+
+    |array_position(data, 2)|
+    +-----------------------+
+    |                      2|
+    +-----------------------+
+
+    Example 4: Finding the position of a non-existing value in an array
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["c", "b", "a"],)], ['data'])
+    >>> df.select(sf.array_position(df.data, "d")).show()
+    +-----------------------+
+    |array_position(data, d)|
+    +-----------------------+
+    |                      0|
+    +-----------------------+
+
+    Example 5: Finding the position of a value in an array with nulls
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([None, "b", "a"],)], ['data'])
+    >>> df.select(sf.array_position(df.data, "a")).show()
+    +-----------------------+
+    |array_position(data, a)|
+    +-----------------------+
+    |                      3|
+    +-----------------------+
     """
     return _invoke_function("array_position", _to_java_column(col), value)
 
@@ -12449,10 +12544,14 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
 @_try_remote_functions
 def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     """
-    Collection function: Returns element of array at given index in `extraction` if col is array.
-    Returns value for the given key in `extraction` if col is map. If position is negative
-    then location of the element will start from end, if number is outside the
-    array boundaries then None will be returned.
+    Collection function:
+    (array, index) - Returns element of array at given (1-based) index. If Index is 0, Spark will
+    throw an error. If index < 0, accesses elements from the last to the first.
+    If 'spark.sql.ansi.enabled' is set to true, an exception will be thrown if the index is out
+    of array boundaries instead of returning NULL.
+
+    (map, key) - Returns value for given key in `extraction` if col is map. The function always
+    returns NULL if the key is not contained in the map.
 
     .. versionadded:: 2.4.0
 
@@ -12481,15 +12580,49 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
-    >>> df.select(element_at(df.data, 1)).collect()
-    [Row(element_at(data, 1)='a')]
-    >>> df.select(element_at(df.data, -1)).collect()
-    [Row(element_at(data, -1)='c')]
+    Example 1: Getting the first element of an array
 
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
+    >>> df.select(sf.element_at(df.data, 1)).show()
+    +-------------------+
+    |element_at(data, 1)|
+    +-------------------+
+    |                  a|
+    +-------------------+
+
+    Example 2: Getting the last element of an array using negative index
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
+    >>> df.select(sf.element_at(df.data, -1)).show()
+    +--------------------+
+    |element_at(data, -1)|
+    +--------------------+
+    |                   c|
+    +--------------------+
+
+    Example 3: Getting a value from a map using a key
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0},)], ['data'])
-    >>> df.select(element_at(df.data, lit("a"))).collect()
-    [Row(element_at(data, a)=1.0)]
+    >>> df.select(sf.element_at(df.data, sf.lit("a"))).show()
+    +-------------------+
+    |element_at(data, a)|
+    +-------------------+
+    |                1.0|
+    +-------------------+
+
+    Example 4: Getting a non-existing value from a map using a key
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0},)], ['data'])
+    >>> df.select(sf.element_at(df.data, sf.lit("c"))).show()
+    +-------------------+
+    |element_at(data, c)|
+    +-------------------+
+    |               NULL|
+    +-------------------+
     """
     return _invoke_function_over_columns("element_at", col, lit(extraction))
 
@@ -12497,6 +12630,7 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
 @_try_remote_functions
 def try_element_at(col: "ColumnOrName", extraction: "ColumnOrName") -> Column:
     """
+    Collection function:
     (array, index) - Returns element of array at given (1-based) index. If Index is 0, Spark will
     throw an error. If index < 0, accesses elements from the last to the first. The function
     always returns NULL if the index exceeds the length of the array.
@@ -12515,15 +12649,60 @@ def try_element_at(col: "ColumnOrName", extraction: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
-    >>> df.select(try_element_at(df.data, lit(1)).alias('r')).collect()
-    [Row(r='a')]
-    >>> df.select(try_element_at(df.data, lit(-1)).alias('r')).collect()
-    [Row(r='c')]
+    Example 1: Getting the first element of an array
 
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
+    >>> df.select(sf.try_element_at(df.data, sf.lit(1))).show()
+    +-----------------------+
+    |try_element_at(data, 1)|
+    +-----------------------+
+    |                      a|
+    +-----------------------+
+
+    Example 2: Getting the last element of an array using negative index
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
+    >>> df.select(sf.try_element_at(df.data, sf.lit(-1))).show()
+    +------------------------+
+    |try_element_at(data, -1)|
+    +------------------------+
+    |                       c|
+    +------------------------+
+
+    Example 3: Getting a value from a map using a key
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0},)], ['data'])
-    >>> df.select(try_element_at(df.data, lit("a")).alias('r')).collect()
-    [Row(r=1.0)]
+    >>> df.select(sf.try_element_at(df.data, sf.lit("a"))).show()
+    +-----------------------+
+    |try_element_at(data, a)|
+    +-----------------------+
+    |                    1.0|
+    +-----------------------+
+
+    Example 4: Getting a non-existing element from an array
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
+    >>> df.select(sf.try_element_at(df.data, sf.lit(4))).show()
+    +-----------------------+
+    |try_element_at(data, 4)|
+    +-----------------------+
+    |                   NULL|
+    +-----------------------+
+
+    Example 5: Getting a non-existing value from a map using a key
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0},)], ['data'])
+    >>> df.select(sf.try_element_at(df.data, sf.lit("c"))).show()
+    +-----------------------+
+    |try_element_at(data, c)|
+    +-----------------------+
+    |                   NULL|
+    +-----------------------+
     """
     return _invoke_function_over_columns("try_element_at", col, extraction)
 

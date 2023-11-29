@@ -40,8 +40,7 @@ sphinx==4.2.0
 sphinx-plotly-directive
 sphinx-copybutton
 docutils<0.18.0
-# See SPARK-38279.
-markupsafe==2.0.1
+markupsafe
 
 # Development scripts
 jira>=3.5.2
