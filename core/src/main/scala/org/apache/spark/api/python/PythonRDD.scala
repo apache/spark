@@ -106,7 +106,8 @@ private[spark] case class SimplePythonFunction(
       pythonVer: String,
       broadcastVars: JList[Broadcast[PythonBroadcast]],
       accumulator: PythonAccumulatorV2) = {
-    this(command.toSeq, envVars, pythonIncludes, pythonExec, pythonVer, broadcastVars, accumulator)
+    this(command.toImmutableArraySeq,
+      envVars, pythonIncludes, pythonExec, pythonVer, broadcastVars, accumulator)
   }
 }
 

@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulia
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Some utility function to convert Spark data source filters to Parquet filters.
@@ -98,7 +99,7 @@ class ParquetFilters(
 
     val primitiveFields = getPrimitiveFields(schema.getFields.asScala.toSeq).map { field =>
       import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-      (field.fieldNames.toSeq.quoted, field)
+      (field.fieldNames.toImmutableArraySeq.quoted, field)
     }
     if (caseSensitive) {
       primitiveFields.toMap

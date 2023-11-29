@@ -26,6 +26,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 private[spark] class ParallelCollectionPartition[T: ClassTag](
@@ -149,7 +150,7 @@ private object ParallelCollectionRDD {
       case _ =>
         val array = seq.toArray // To prevent O(n^2) operations for List etc
         positions(array.length, numSlices).map { case (start, end) =>
-            array.slice(start, end).toSeq
+            array.slice(start, end).toImmutableArraySeq
         }.toSeq
     }
   }

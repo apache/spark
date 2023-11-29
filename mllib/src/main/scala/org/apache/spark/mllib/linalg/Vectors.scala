@@ -759,7 +759,7 @@ class DenseVector @Since("1.0.0") (
 
   @Since("1.6.0")
   override def toJson: String = {
-    val jValue = ("type" -> 1) ~ ("values" -> values.toSeq)
+    val jValue = ("type" -> 1) ~ ("values" -> values.toImmutableArraySeq)
     compact(render(jValue))
   }
 
@@ -972,8 +972,8 @@ class SparseVector @Since("1.0.0") (
   override def toJson: String = {
     val jValue = ("type" -> 0) ~
       ("size" -> size) ~
-      ("indices" -> indices.toSeq) ~
-      ("values" -> values.toSeq)
+      ("indices" -> indices.toImmutableArraySeq) ~
+      ("values" -> values.toImmutableArraySeq)
     compact(render(jValue))
   }
 
