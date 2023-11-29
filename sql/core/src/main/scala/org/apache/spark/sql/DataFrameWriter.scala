@@ -461,7 +461,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
       case SaveMode.Overwrite =>
         val conf = df.sparkSession.sessionState.conf
-        val dynamicPartitionOverwrite = table.table.partitioning.size > 0 &&
+        val dynamicPartitionOverwrite = table.table.partitioning.length > 0 &&
           conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
 
         if (dynamicPartitionOverwrite) {

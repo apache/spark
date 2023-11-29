@@ -779,7 +779,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
         Map("path" -> dir.getAbsolutePath), description2)
 
       val tables = spark.catalog.listTables("testcat.my_db").collect()
-      assert(tables.size == 2)
+      assert(tables.length == 2)
 
       val expectedTable1 =
         new Table(tableName, catalogName, Array(dbName), description,
