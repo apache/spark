@@ -115,10 +115,11 @@ def main(infile: IO, outfile: IO) -> None:
 
         _accumulatorRegistry.clear()
 
+        udtf_name = utf8_deserializer.loads(infile)
         handler = read_udtf(infile)
         args, kwargs = read_arguments(infile)
 
-        error_prefix = f"Failed to evaluate the user-defined table function '{handler.__name__}'"
+        error_prefix = f"Failed to evaluate the user-defined table function '{udtf_name}'"
 
         def format_error(msg: str) -> str:
             return dedent(msg).replace("\n", " ")
