@@ -993,6 +993,18 @@
     ],
     "sqlState" : "54006"
   },
+  "EXCEPT_NESTED_COLUMN_INVALID_TYPE" : {
+    "message" : [
+      "EXCEPT column <columnName> was resolved and expected to be StructType, but found type <dataType>."
+    ],
+    "sqlState" : "428H2"
+  },
+  "EXCEPT_OVERLAPPING_COLUMNS" : {
+    "message" : [
+      "Columns in an EXCEPT list must be distinct and non-overlapping, but got (<columns>)."
+    ],
+    "sqlState" : "42702"
+  },
   "EXPECT_PERMANENT_VIEW_NOT_TEMP" : {
     "message" : [
       "'<operation>' expects a permanent view but <viewName> is a temp view."
@@ -1055,7 +1067,7 @@
   },
   "FAILED_EXECUTE_UDF" : {
     "message" : [
-      "Failed to execute user defined function (<functionName>: (<signature>) => <result>)."
+      "User defined function (<functionName>: (<signature>) => <result>) failed due to: <reason>."
     ],
     "sqlState" : "39000"
   },
@@ -2030,6 +2042,11 @@
           "expects an integer value in [0, <upper>), but got <invalidValue>."
         ]
       },
+      "CHARSET" : {
+        "message" : [
+          "expects one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', but got <charset>."
+        ]
+      },
       "DATETIME_UNIT" : {
         "message" : [
           "expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal <invalidValue>."
@@ -2960,6 +2977,12 @@
       "sortBy must be used together with bucketBy."
     ],
     "sqlState" : "42601"
+  },
+  "SPARK_JOB_CANCELLED" : {
+    "message" : [
+      "Job <jobId> cancelled <reason>"
+    ],
+    "sqlState" : "XXKDA"
   },
   "SPECIFY_BUCKETING_IS_NOT_ALLOWED" : {
     "message" : [

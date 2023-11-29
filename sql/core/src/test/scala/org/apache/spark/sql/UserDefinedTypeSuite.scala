@@ -84,14 +84,14 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
   test("register user type: MyDenseVector for MyLabeledPoint") {
     val labels: RDD[Double] = pointsRDD.select($"label").rdd.map { case Row(v: Double) => v }
     val labelsArrays: Array[Double] = labels.collect()
-    assert(labelsArrays.size === 2)
+    assert(labelsArrays.length === 2)
     assert(labelsArrays.contains(1.0))
     assert(labelsArrays.contains(0.0))
 
     val features: RDD[TestUDT.MyDenseVector] =
       pointsRDD.select($"features").rdd.map { case Row(v: TestUDT.MyDenseVector) => v }
     val featuresArrays: Array[TestUDT.MyDenseVector] = features.collect()
-    assert(featuresArrays.size === 2)
+    assert(featuresArrays.length === 2)
     assert(featuresArrays.contains(new TestUDT.MyDenseVector(Array(0.1, 1.0))))
     assert(featuresArrays.contains(new TestUDT.MyDenseVector(Array(0.2, 2.0))))
   }
@@ -277,7 +277,7 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
     val unwrappedFeatures = pointsRDD.select(unwrap_udt(col("features")))
       .rdd.map { (row: Row) => row.getAs[Seq[Double]](0).toArray }
     val unwrappedFeaturesArrays: Array[Array[Double]] = unwrappedFeatures.collect()
-    assert(unwrappedFeaturesArrays.size === 2)
+    assert(unwrappedFeaturesArrays.length === 2)
 
     java.util.Arrays.equals(unwrappedFeaturesArrays(0), Array(0.1, 1.0))
     java.util.Arrays.equals(unwrappedFeaturesArrays(1), Array(0.2, 2.0))

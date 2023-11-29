@@ -800,6 +800,27 @@ package object dsl {
         Relation.newBuilder().setAggregate(agg.build()).build()
       }
 
+      def groupingSets(groupingSets: Seq[Seq[Expression]], groupingExprs: Expression*)(
+          aggregateExprs: Expression*): Relation = {
+        val agg = Aggregate.newBuilder()
+        agg.setInput(logicalPlan)
+        agg.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPING_SETS)
+        for (groupingSet <- groupingSets) {
+          val groupingSetMsg = Aggregate.GroupingSets.newBuilder()
+          for (groupCol <- groupingSet) {
+            groupingSetMsg.addGroupingSet(groupCol)
+          }
+          agg.addGroupingSets(groupingSetMsg)
+        }
+        for (groupingExpr <- groupingExprs) {
+          agg.addGroupingExpressions(groupingExpr)
+        }
+        for (aggregateExpr <- aggregateExprs) {
+          agg.addAggregateExpressions(aggregateExpr)
+        }
+        Relation.newBuilder().setAggregate(agg.build()).build()
+      }
+
       def except(otherPlan: Relation, isAll: Boolean): Relation = {
         Relation
           .newBuilder()

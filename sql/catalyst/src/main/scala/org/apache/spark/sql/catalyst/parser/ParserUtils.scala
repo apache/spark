@@ -78,7 +78,7 @@ object ParserUtils extends SparkParserUtils {
   /** Convert a string node into a string without unescaping. */
   def stringWithoutUnescape(node: Token): String = {
     // STRING parser rule forces that the input always has quotes at the starting and ending.
-    node.getText.slice(1, node.getText.size - 1)
+    node.getText.slice(1, node.getText.length - 1)
   }
 
   /** Collect the entries if any. */

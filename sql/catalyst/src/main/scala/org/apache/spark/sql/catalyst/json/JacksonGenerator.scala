@@ -75,7 +75,8 @@ class JacksonGenerator(
   private val gen = {
     val generator = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
     if (options.pretty) {
-      generator.setPrettyPrinter(new DefaultPrettyPrinter(""))
+      generator.setPrettyPrinter(
+        new DefaultPrettyPrinter(PrettyPrinter.DEFAULT_SEPARATORS.withRootSeparator("")))
     }
     if (options.writeNonAsciiCharacterAsCodePoint) {
       generator.setHighestNonEscapedChar(0x7F)

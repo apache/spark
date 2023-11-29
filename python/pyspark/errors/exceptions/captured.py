@@ -36,6 +36,7 @@ from pyspark.errors.exceptions.base import (
     QueryExecutionException as BaseQueryExecutionException,
     SparkRuntimeException as BaseSparkRuntimeException,
     SparkUpgradeException as BaseSparkUpgradeException,
+    SparkNoSuchElementException as BaseNoSuchElementException,
     StreamingQueryException as BaseStreamingQueryException,
     UnknownException as BaseUnknownException,
 )
@@ -152,6 +153,8 @@ def convert_exception(e: Py4JJavaError) -> CapturedException:
         return SparkRuntimeException(origin=e)
     elif is_instance_of(gw, e, "org.apache.spark.SparkUpgradeException"):
         return SparkUpgradeException(origin=e)
+    elif is_instance_of(gw, e, "org.apache.spark.SparkNoSuchElementException"):
+        return SparkNoSuchElementException(origin=e)
 
     c: Py4JJavaError = e.getCause()
     stacktrace: str = jvm.org.apache.spark.util.Utils.exceptionString(e)
@@ -301,7 +304,13 @@ class SparkUpgradeException(CapturedException, BaseSparkUpgradeException):
     """
 
 
+class SparkNoSuchElementException(CapturedException, BaseNoSuchElementException):
+    """
+    No such element exception.
+    """
+
+
 class UnknownException(CapturedException, BaseUnknownException):
     """
-    None of the above exceptions.
+    None of the other exceptions.
     """

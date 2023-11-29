@@ -90,9 +90,9 @@ class TimedeltaIndexTestsMixin:
         )
 
         # ps.TimedeltaIndex(ps.Index([1, 2, 3]))
-        with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
+        with self.assertRaisesRegex(TypeError, "Index.name must be a hashable type"):
             ps.TimedeltaIndex([timedelta(1), timedelta(microseconds=2)], name=[(1, 2)])
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
             TypeError, "Cannot perform 'all' with this index type: TimedeltaIndex"
         ):
             psidx.all()

@@ -32,6 +32,7 @@ from pyspark.errors.exceptions.base import (
     StreamingQueryException as BaseStreamingQueryException,
     QueryExecutionException as BaseQueryExecutionException,
     SparkRuntimeException as BaseSparkRuntimeException,
+    SparkNoSuchElementException as BaseNoSuchElementException,
     SparkUpgradeException as BaseSparkUpgradeException,
 )
 
@@ -176,6 +177,14 @@ def convert_exception(
         return PythonException(
             "\n  An exception was thrown from the Python worker. "
             "Please see the stack trace below.\n%s" % message
+        )
+    elif "org.apache.spark.SparkNoSuchElementException" in classes:
+        return SparkNoSuchElementException(
+            message,
+            error_class=error_class,
+            sql_state=sql_state,
+            server_stacktrace=stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
         )
     # Make sure that the generic SparkException is handled last.
     elif "org.apache.spark.SparkException" in classes:
@@ -359,3 +368,9 @@ class SparkUpgradeException(SparkConnectGrpcException, BaseSparkUpgradeException
 
 class SparkException(SparkConnectGrpcException):
     """ """
+
+
+class SparkNoSuchElementException(SparkConnectGrpcException, BaseNoSuchElementException):
+    """
+    No such element exception.
+    """

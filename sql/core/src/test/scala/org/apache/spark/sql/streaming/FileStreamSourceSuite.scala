@@ -1466,7 +1466,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         val finalFile = new File(src, tempFile.getName)
         stringToFile(finalFile, i)
       }
-      assert(src.listFiles().size === numFiles)
+      assert(src.listFiles().length === numFiles)
 
       val files = spark.readStream.text(root.getCanonicalPath).as[(String, Int)]
 

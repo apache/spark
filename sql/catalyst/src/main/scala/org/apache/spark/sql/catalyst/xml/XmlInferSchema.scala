@@ -238,7 +238,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     while (!shouldStop) {
       parser.nextEvent match {
         case e: StartElement =>
-          val attributes = e.getAttributes.asScala.map(_.asInstanceOf[Attribute]).toArray
+          val attributes = e.getAttributes.asScala.toArray
           val valuesMap = StaxXmlParserUtils.convertAttributesToValuesMap(attributes, options)
           val inferredType = inferField(parser) match {
             case st: StructType if valuesMap.nonEmpty =>
