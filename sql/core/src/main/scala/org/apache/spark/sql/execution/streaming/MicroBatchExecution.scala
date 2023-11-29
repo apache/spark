@@ -563,11 +563,15 @@ class MicroBatchExecution(
     val lastExecutionRequiresAnotherBatch = noDataBatchesEnabled &&
       Option(lastExecution).exists(_.shouldRunAnotherBatch(offsetSeqMetadata))
     val shouldConstructNextBatch = isNewDataAvailable || lastExecutionRequiresAnotherBatch
-    logTrace(
-      s"noDataBatchesEnabled = $noDataBatchesEnabled, " +
+
+    // scalastyle:off
+    println(" ")
+    println("-=-=-=-=-=-=-=\n")
+    println( s"currentBatchId = $currentBatchId, " +
       s"lastExecutionRequiresAnotherBatch = $lastExecutionRequiresAnotherBatch, " +
       s"isNewDataAvailable = $isNewDataAvailable, " +
-      s"shouldConstructNextBatch = $shouldConstructNextBatch")
+      s"shouldConstructNextBatch (with currbatchID) = $shouldConstructNextBatch")
+    // scalastyle:on
 
     if (shouldConstructNextBatch) {
       // Commit the next batch offset range to the offset log

@@ -572,6 +572,9 @@ case class StateStoreSaveExec(
                   if (watermarkPredicateForKeysForEviction.get.eval(rowPair.key)) {
                     stateManager.remove(store, rowPair.key)
                     numRemovedStateRows += 1
+                    // scalastyle:off
+                    println("===StateStoreSaveExec=== remove key: " + rowPair.key + " value:"  + rowPair.value)
+                    // scalastyle:on
                     removedValueRow = rowPair.value
                   }
                 }
@@ -652,9 +655,16 @@ case class StateStoreSaveExec(
   override def shortName: String = "stateStoreSave"
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
-    (outputMode.contains(Append) || outputMode.contains(Update)) &&
+    val res = (outputMode.contains(Append) || outputMode.contains(Update)) &&
       eventTimeWatermarkForEviction.isDefined &&
       newInputWatermark > eventTimeWatermarkForEviction.get
+
+    // scalastyle:off
+    println(s"===StateStoreSaveExec=== shouldRunAnotherBatch: $res," +
+      s" newInputWM: $newInputWatermark wm evict: ${eventTimeWatermarkForEviction.getOrElse(-1)}" )
+    // scalastyle:on
+
+    res
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): StateStoreSaveExec =

@@ -232,6 +232,7 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
+    // scalastyle:off
     val watermarkUsedForStateCleanup =
       stateWatermarkPredicates.left.nonEmpty || stateWatermarkPredicates.right.nonEmpty
 
@@ -240,7 +241,14 @@ case class StreamingSymmetricHashJoinExec(
       eventTimeWatermarkForEviction.isDefined &&
         newInputWatermark > eventTimeWatermarkForEviction.get
 
+    println(s"===hash=== shouldRunAnotherBatch: ${watermarkUsedForStateCleanup && watermarkHasChanged}" +
+      s" watermarkHasChanged: $watermarkHasChanged" +
+      s" newInputWatermark: $newInputWatermark" +
+      s" eventTimeWatermarkForEviction: ${eventTimeWatermarkForEviction.getOrElse(-1)}" +
+    s" stateWatermarkPredicates: ${stateWatermarkPredicates}")
+
     watermarkUsedForStateCleanup && watermarkHasChanged
+    // scalastyle:on
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
