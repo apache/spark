@@ -1002,6 +1002,17 @@ private[spark] class TaskSetManager(
     maybeFinishTaskSet()
   }
 
+  // Suspends this TSM to avoid launching new tasks.
+  //
+  // Unlike `abort()`, this function intentionally to not notify DAGScheduler to avoid
+  // redundant operations. So the invocation to this function should assume DAGScheduler
+  // already knows about this TSM failure. For example, this function can be called from
+  // `TaskScheduler.cancelTasks` by DAGScheduler.
+  def suspend(): Unit = {
+    isZombie = true
+    maybeFinishTaskSet()
+  }
+
   /** If the given task ID is not in the set of running tasks, adds it.
    *
    * Used to keep track of the number of running tasks, for enforcing scheduling policies.

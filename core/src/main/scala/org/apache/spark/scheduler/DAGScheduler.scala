@@ -1896,8 +1896,8 @@ private[spark] class DAGScheduler(
                   job.numFinished += 1
                   // If the whole job has finished, remove it
                   if (job.numFinished == job.numPartitions) {
-                    markStageAsFinished(resultStage)
                     cancelRunningIndependentStages(job, s"Job ${job.jobId} is finished.")
+                    markStageAsFinished(resultStage)
                     cleanupStateForJobAndIndependentStages(job)
                     listenerBus.post(
                       SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))

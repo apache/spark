@@ -319,8 +319,7 @@ private[spark] class TaskSchedulerImpl(
             backend.killTask(tid, execId, interruptThread, s"Stage cancelled: $reason")
           }
         }
-        // Mark as zombie so the attempt won't launch new tasks
-        tsm.isZombie = true
+        tsm.suspend()
         logInfo("Stage %s.%s was cancelled".format(stageId, tsm.taskSet.stageAttemptId))
       }
     }
