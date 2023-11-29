@@ -55,7 +55,7 @@ import org.apache.spark.util.Utils
  *
  * To re-generate golden file for a single test, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.CrossDbmsQueryTestSuite" -- -z describe.sql"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.CrossDbmsQueryTestSuite -- -z describe.sql"
  * }}}
  *
  * To specify a DBMS to use (the default is postgres):
@@ -66,7 +66,9 @@ import org.apache.spark.util.Utils
 // scalastyle:on line.size.limit
 class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
 
-  private val crossDbmsToGenerateGoldenFiles: String = {
+  // Note: the below two functions have to be functions instead of variables because the superclass
+  // runs the test first before the subclass variables can be instantiated.
+  private def crossDbmsToGenerateGoldenFiles: String = {
     val userInputDbms = System.getenv("REF_DBMS")
     if (userInputDbms != null && userInputDbms.nonEmpty) {
       assert(CrossDbmsQueryTestSuite.SUPPORTED_DBMS.contains(userInputDbms),
@@ -76,18 +78,7 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
       CrossDbmsQueryTestSuite.DEFAULT_DBMS
     }
   }
-  private val customConnectionUrl: String = System.getenv("REF_DBMS_CONNECTION_URL")
-
-  override def ignoreList: Set[String] = super.ignoreList ++ Set(
-    "postgreSQL",
-    "subquery",
-    "ansi",
-    "udtf",
-    "udf",
-    "timestampNTZ",
-    "udaf",
-    "typeCoercion"
-  )
+  private def customConnectionUrl: String = System.getenv("REF_DBMS_CONNECTION_URL")
 
   override protected def runQueries(
     queries: Seq[String],
@@ -100,7 +91,7 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
       val output =
         if (regenerateGoldenFiles) {
           if (runner.isEmpty) {
-            val connectionUrl = if (customConnectionUrl.nonEmpty) {
+            val connectionUrl = if (customConnectionUrl != null && customConnectionUrl.nonEmpty) {
               Some(customConnectionUrl)
             } else {
               None
@@ -112,10 +103,10 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
           val output = runner.map(_.runQuery(sql)).get
           // Use Spark analyzed plan to check if the query result is already semantically sorted
           val result = if (isSemanticallySorted(sparkDf.queryExecution.analyzed)) {
-            output.sorted
+            output
           } else {
             // Sort the answer manually if it isn't sorted.
-            output
+            output.sorted
           }
           result
         } else {
@@ -172,8 +163,9 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
   }
 
   override protected def resultFileForInputFile(file: File): String = {
+    val defaultResultsDir = new File(baseResourcePath, "results")
     val goldenFilePath = new File(
-      baseResourcePath, s"$crossDbmsToGenerateGoldenFiles-results").getAbsolutePath
+      defaultResultsDir, s"$crossDbmsToGenerateGoldenFiles-results").getAbsolutePath
     file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
   }
 
@@ -200,6 +192,18 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
     case PhysicalOperation(_, _, Sort(_, true, _)) => true
     case _ => plan.children.iterator.exists(isSemanticallySorted)
   }
+
+  // Ignore all earlier tests for now due to incompatibility.
+  override def ignoreList: Set[String] = super.ignoreList ++ Set(
+    "postgreSQL",
+    "subquery",
+    "ansi",
+    "udtf",
+    "udf",
+    "timestampNTZ",
+    "udaf",
+    "typeCoercion"
+  )
 }
 
 object CrossDbmsQueryTestSuite {

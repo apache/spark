@@ -943,7 +943,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         s"-- !query output\n" +
         output
     }
-    override def numSegments: Int = 3
+    override def numSegments: Int = if (schema.isDefined) { 3 } else { 2 }
   }
 
   /** A single SQL query's analysis results. */
