@@ -91,8 +91,8 @@ class AssociationRules private[fpm] (
       .map { case (antecedent, ((consequent, freqUnion), freqAntecedent)) =>
         new Rule(antecedent.toArray,
           consequent.toArray,
-          freqUnion,
-          freqAntecedent,
+          freqUnion.toDouble,
+          freqAntecedent.toDouble,
           // the consequent contains always only one element
           itemSupport.get(consequent.head))
       }.filter(_.confidence >= minConfidence)

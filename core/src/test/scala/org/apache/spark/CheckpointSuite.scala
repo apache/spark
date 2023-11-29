@@ -170,10 +170,10 @@ trait RDDCheckpointTester { self: SparkFunSuite =>
    * upon checkpointing. Ignores the checkpointData field, which may grow when we checkpoint.
    */
   private def getSerializedSizes(rdd: RDD[_]): (Int, Int) = {
-    val rddSize = Utils.serialize(rdd).size
-    val rddCpDataSize = Utils.serialize(rdd.checkpointData).size
-    val rddPartitionSize = Utils.serialize(rdd.partitions).size
-    val rddDependenciesSize = Utils.serialize(rdd.dependencies).size
+    val rddSize = Utils.serialize(rdd).length
+    val rddCpDataSize = Utils.serialize(rdd.checkpointData).length
+    val rddPartitionSize = Utils.serialize(rdd.partitions).length
+    val rddDependenciesSize = Utils.serialize(rdd.dependencies).length
 
     // Print detailed size, helps in debugging
     logInfo("Serialized sizes of " + rdd +
@@ -339,7 +339,7 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
 
   runTest("ParallelCollectionRDD") { reliableCheckpoint: Boolean =>
     val parCollection = sc.makeRDD(1 to 4, 2)
-    val numPartitions = parCollection.partitions.size
+    val numPartitions = parCollection.partitions.length
     checkpoint(parCollection, reliableCheckpoint)
     assert(parCollection.dependencies === Nil)
     val result = parCollection.collect()
@@ -358,7 +358,7 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
     val blockManager = SparkEnv.get.blockManager
     blockManager.putSingle(blockId, "test", StorageLevel.MEMORY_ONLY)
     val blockRDD = new BlockRDD[String](sc, Array(blockId))
-    val numPartitions = blockRDD.partitions.size
+    val numPartitions = blockRDD.partitions.length
     checkpoint(blockRDD, reliableCheckpoint)
     val result = blockRDD.collect()
     if (reliableCheckpoint) {
@@ -507,7 +507,7 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
 
   runTest("CheckpointRDD with zero partitions") { reliableCheckpoint: Boolean =>
     val rdd = new BlockRDD[Int](sc, Array.empty[BlockId])
-    assert(rdd.partitions.size === 0)
+    assert(rdd.partitions.length === 0)
     assert(rdd.isCheckpointed === false)
     assert(rdd.isCheckpointedAndMaterialized === false)
     checkpoint(rdd, reliableCheckpoint)
@@ -516,7 +516,7 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
     assert(rdd.count() === 0)
     assert(rdd.isCheckpointed)
     assert(rdd.isCheckpointedAndMaterialized)
-    assert(rdd.partitions.size === 0)
+    assert(rdd.partitions.length === 0)
   }
 
   runTest("checkpointAllMarkedAncestors") { reliableCheckpoint: Boolean =>

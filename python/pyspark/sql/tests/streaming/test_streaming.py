@@ -36,7 +36,7 @@ class StreamingTestsMixin:
             .start()
         )
         try:
-            self.assertEquals(query.name, "test_streaming_query_functions_basic")
+            self.assertEqual(query.name, "test_streaming_query_functions_basic")
             self.assertTrue(isinstance(query.id, str))
             self.assertTrue(isinstance(query.runId, str))
             self.assertTrue(query.isActive)
@@ -381,6 +381,30 @@ class StreamingTestsMixin:
             q.stop()
             result = self.spark.sql("SELECT value FROM output_table").collect()
             self.assertTrue(len(result) > 0)
+
+    def test_streaming_with_temporary_view(self):
+        """
+        This verifies createOrReplaceTempView() works with a streaming dataframe. An SQL
+        SELECT query on such a table results in a streaming dataframe and the streaming query works
+        as expected.
+        """
+        with self.table("input_table", "this_query"):
+            self.spark.sql("CREATE TABLE input_table (value string) USING parquet")
+            self.spark.sql("INSERT INTO input_table VALUES ('a'), ('b'), ('c')")
+            df = self.spark.readStream.table("input_table")
+            self.assertTrue(df.isStreaming)
+            # Create a temp view
+            df.createOrReplaceTempView("test_view")
+            # Create a select query
+            view_df = self.spark.sql("SELECT CONCAT('view_', value) as vv from test_view")
+            self.assertTrue(view_df.isStreaming)
+            q = view_df.writeStream.format("memory").queryName("this_query").start()
+            q.processAllAvailable()
+            q.stop()
+            result = self.spark.sql("SELECT * FROM this_query ORDER BY vv").collect()
+            self.assertEqual(
+                set([Row(value="view_a"), Row(value="view_b"), Row(value="view_c")]), set(result)
+            )
 
 
 class StreamingTests(StreamingTestsMixin, ReusedSQLTestCase):

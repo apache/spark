@@ -449,7 +449,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
           joined.sort("bucketed_table1.k", "bucketed_table2.k"),
           df1.join(df2, joinCondition(df1, df2), joinType).sort("df1.k", "df2.k"))
 
-        val joinOperator = if (joined.sqlContext.conf.adaptiveExecutionEnabled) {
+        val joinOperator = if (joined.sparkSession.sessionState.conf.adaptiveExecutionEnabled) {
           val executedPlan =
             joined.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
           assert(executedPlan.isInstanceOf[SortMergeJoinExec])

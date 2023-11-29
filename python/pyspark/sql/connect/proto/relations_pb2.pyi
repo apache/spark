@@ -1380,6 +1380,7 @@ class Aggregate(google.protobuf.message.Message):
         GROUP_TYPE_ROLLUP: Aggregate._GroupType.ValueType  # 2
         GROUP_TYPE_CUBE: Aggregate._GroupType.ValueType  # 3
         GROUP_TYPE_PIVOT: Aggregate._GroupType.ValueType  # 4
+        GROUP_TYPE_GROUPING_SETS: Aggregate._GroupType.ValueType  # 5
 
     class GroupType(_GroupType, metaclass=_GroupTypeEnumTypeWrapper): ...
     GROUP_TYPE_UNSPECIFIED: Aggregate.GroupType.ValueType  # 0
@@ -1387,6 +1388,7 @@ class Aggregate(google.protobuf.message.Message):
     GROUP_TYPE_ROLLUP: Aggregate.GroupType.ValueType  # 2
     GROUP_TYPE_CUBE: Aggregate.GroupType.ValueType  # 3
     GROUP_TYPE_PIVOT: Aggregate.GroupType.ValueType  # 4
+    GROUP_TYPE_GROUPING_SETS: Aggregate.GroupType.ValueType  # 5
 
     class Pivot(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1423,11 +1425,35 @@ class Aggregate(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["col", b"col", "values", b"values"]
         ) -> None: ...
 
+    class GroupingSets(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        GROUPING_SET_FIELD_NUMBER: builtins.int
+        @property
+        def grouping_set(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]:
+            """(Required) Individual grouping set"""
+        def __init__(
+            self,
+            *,
+            grouping_set: collections.abc.Iterable[
+                pyspark.sql.connect.proto.expressions_pb2.Expression
+            ]
+            | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["grouping_set", b"grouping_set"]
+        ) -> None: ...
+
     INPUT_FIELD_NUMBER: builtins.int
     GROUP_TYPE_FIELD_NUMBER: builtins.int
     GROUPING_EXPRESSIONS_FIELD_NUMBER: builtins.int
     AGGREGATE_EXPRESSIONS_FIELD_NUMBER: builtins.int
     PIVOT_FIELD_NUMBER: builtins.int
+    GROUPING_SETS_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for a RelationalGroupedDataset."""
@@ -1450,6 +1476,13 @@ class Aggregate(google.protobuf.message.Message):
     @property
     def pivot(self) -> global___Aggregate.Pivot:
         """(Optional) Pivots a column of the current `DataFrame` and performs the specified aggregation."""
+    @property
+    def grouping_sets(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___Aggregate.GroupingSets
+    ]:
+        """(Optional) List of values that will be translated to columns in the output DataFrame."""
     def __init__(
         self,
         *,
@@ -1464,6 +1497,7 @@ class Aggregate(google.protobuf.message.Message):
         ]
         | None = ...,
         pivot: global___Aggregate.Pivot | None = ...,
+        grouping_sets: collections.abc.Iterable[global___Aggregate.GroupingSets] | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input", "pivot", b"pivot"]
@@ -1477,6 +1511,8 @@ class Aggregate(google.protobuf.message.Message):
             b"group_type",
             "grouping_expressions",
             b"grouping_expressions",
+            "grouping_sets",
+            b"grouping_sets",
             "input",
             b"input",
             "pivot",

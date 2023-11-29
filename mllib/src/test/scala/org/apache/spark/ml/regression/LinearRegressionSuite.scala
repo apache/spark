@@ -202,7 +202,7 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
         coefficients = original.coefficients,
         intercept = original.intercept)
       val output = deserialized.transform(datasetWithDenseFeature)
-      assert(output.collect().size > 0) // simple assertion to ensure no exception thrown
+      assert(output.collect().length > 0) // simple assertion to ensure no exception thrown
     }
   }
 

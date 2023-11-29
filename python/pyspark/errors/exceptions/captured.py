@@ -36,6 +36,7 @@ from pyspark.errors.exceptions.base import (
     QueryExecutionException as BaseQueryExecutionException,
     SparkRuntimeException as BaseSparkRuntimeException,
     SparkUpgradeException as BaseSparkUpgradeException,
+    SparkNoSuchElementException as BaseNoSuchElementException,
     StreamingQueryException as BaseStreamingQueryException,
     UnknownException as BaseUnknownException,
 )
@@ -303,7 +304,7 @@ class SparkUpgradeException(CapturedException, BaseSparkUpgradeException):
     """
 
 
-class SparkNoSuchElementException(CapturedException, BaseUnknownException):
+class SparkNoSuchElementException(CapturedException, BaseNoSuchElementException):
     """
     No such element exception.
     """
@@ -311,5 +312,5 @@ class SparkNoSuchElementException(CapturedException, BaseUnknownException):
 
 class UnknownException(CapturedException, BaseUnknownException):
     """
-    None of the above exceptions.
+    None of the other exceptions.
     """

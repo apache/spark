@@ -93,8 +93,8 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
       partitionReader,
       new StructType().add("i", "int"),
       mockContext,
-      dataQueueSize = sqlContext.conf.continuousStreamingExecutorQueueSize,
-      epochPollIntervalMs = sqlContext.conf.continuousStreamingExecutorPollIntervalMs)
+      dataQueueSize = spark.sessionState.conf.continuousStreamingExecutorQueueSize,
+      epochPollIntervalMs = spark.sessionState.conf.continuousStreamingExecutorPollIntervalMs)
 
     (queue, reader)
   }
