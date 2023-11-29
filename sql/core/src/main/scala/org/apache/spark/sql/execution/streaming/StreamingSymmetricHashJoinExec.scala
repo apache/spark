@@ -551,7 +551,10 @@ case class StreamingSymmetricHashJoinExec(
       case Some(JoinStateKeyWatermarkPredicate(expr)) =>
         // inputSchema can be empty as expr should only have BoundReferences and does not require
         // the schema to generated predicate. See [[StreamingSymmetricHashJoinHelper]].
+        // scalastyle:off
+        println("stateKeyWatermarkPredicateFunc: " + expr)
         Predicate.create(expr, Seq.empty).eval _
+        // scalastyle:on
       case _ =>
         Predicate.create(Literal(false), Seq.empty).eval _ // false = do not remove if no predicate
     }
@@ -621,11 +624,14 @@ case class StreamingSymmetricHashJoinExec(
 
       nonLateRows.flatMap { row =>
         val thisRow = row.asInstanceOf[UnsafeRow]
+        // scalastyle:off
+        println(s"wei==thisrow: $thisRow")
         // If this row fails the pre join filter, that means it can never satisfy the full join
         // condition no matter what other side row it's matched with. This allows us to avoid
         // adding it to the state, and generate an outer join row immediately (or do nothing in
         // the case of inner join).
         if (preJoinFilter(thisRow)) {
+          println(s"this row filtered: $thisRow")
           val key = keyGenerator(thisRow)
           val joinedRowIter: Iterator[JoinedRow] = otherSideJoiner.joinStateManager.getJoinedRows(
             key,
@@ -635,7 +641,9 @@ case class StreamingSymmetricHashJoinExec(
           val outputIter = generateOutputIter(thisRow, joinedRowIter)
           new AddingProcessedRowToStateCompletionIterator(key, thisRow, outputIter)
         } else {
+          println(s"this row not filtered: $thisRow")
           generateFilteredJoinedRow(thisRow)
+          // scalastyle:on
         }
       }
     }
@@ -645,7 +653,7 @@ case class StreamingSymmetricHashJoinExec(
         thisRow: UnsafeRow,
         subIter: Iterator[InternalRow])
       extends CompletionIterator[InternalRow, Iterator[InternalRow]](subIter) {
-
+      // scalastyle:off
       private val iteratorNotEmpty: Boolean = super.hasNext
 
       override def completion(): Unit = {
@@ -653,10 +661,14 @@ case class StreamingSymmetricHashJoinExec(
           joinType == LeftSemi && joinSide == LeftSide && iteratorNotEmpty
         // Add to state store only if both removal predicates do not match,
         // and the row is not matched for left side of left semi join.
+        println(s"!stateKeyWatermarkPredicateFunc(key): ${!stateKeyWatermarkPredicateFunc(key)}" +
+          s" !stateValueWatermarkPredicateFunc(thisRow): ${!stateValueWatermarkPredicateFunc(thisRow)}")
         val shouldAddToState =
           !stateKeyWatermarkPredicateFunc(key) && !stateValueWatermarkPredicateFunc(thisRow) &&
           !isLeftSemiWithMatch
         if (shouldAddToState) {
+          println(s"wei==add to state: $thisRow")
+          // scalastyle:on
           joinStateManager.append(key, thisRow, matched = iteratorNotEmpty)
           updatedStateRowsCount += 1
         }

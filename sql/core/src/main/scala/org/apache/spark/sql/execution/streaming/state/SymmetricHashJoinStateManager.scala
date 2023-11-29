@@ -112,18 +112,24 @@ class SymmetricHashJoinStateManager(
       generateJoinedRow: InternalRow => JoinedRow,
       predicate: JoinedRow => Boolean,
       excludeRowsAlreadyMatched: Boolean = false): Iterator[JoinedRow] = {
+    // scalastyle:off
     val numValues = keyToNumValues.get(key)
+    println(s"getJoinedRows ------ key: $key numValues: " + numValues)
     keyWithIndexToValue.getAll(key, numValues).filterNot { keyIdxToValue =>
       excludeRowsAlreadyMatched && keyIdxToValue.matched
     }.map { keyIdxToValue =>
       val joinedRow = generateJoinedRow(keyIdxToValue.value)
+      println("joinedRow: " + joinedRow)
       if (predicate(joinedRow)) {
         if (!keyIdxToValue.matched) {
           keyWithIndexToValue.put(key, keyIdxToValue.valueIndex, keyIdxToValue.value,
             matched = true)
         }
+        println("---joinedRow emitted")
         joinedRow
       } else {
+        println("---joinedRow NOT emitted, postJoinFilter returns false")
+        // scalastyle:on
         null
       }
     }.filter(_ != null)
@@ -140,7 +146,7 @@ class SymmetricHashJoinStateManager(
    */
   def removeByKeyCondition(removalCondition: UnsafeRow => Boolean): Iterator[KeyToValuePair] = {
     new NextIterator[KeyToValuePair] {
-
+      // scalastyle:off
       private val allKeyToNumValues = keyToNumValues.iterator
 
       private var currentKeyToNumValue: KeyAndNumValues = null
@@ -153,7 +159,9 @@ class SymmetricHashJoinStateManager(
       private def getAndRemoveValue(): KeyToValuePair = {
         val keyWithIndexAndValue = currentValues.next()
         keyWithIndexToValue.remove(currentKey, keyWithIndexAndValue.valueIndex)
-        reusedRet.withNew(currentKey, keyWithIndexAndValue.value, keyWithIndexAndValue.matched)
+        val ret = reusedRet.withNew(currentKey, keyWithIndexAndValue.value, keyWithIndexAndValue.matched)
+        println("removeByKeyCondition--------------- return: " + ret)
+        ret
       }
 
       override def getNext(): KeyToValuePair = {
@@ -162,9 +170,13 @@ class SymmetricHashJoinStateManager(
           return getAndRemoveValue()
         }
 
+        println("allKeyToNumValues.hasNext: " + allKeyToNumValues.hasNext)
         // If there weren't any values left, try and find the next key that satisfies the removal
         // condition and has values.
         while (allKeyToNumValues.hasNext) {
+          println("---------------removeByKeyCondition--------------- allKeyToNumValues.hasNext")
+          println("---------------removeByKeyCondition--------------- currentKey: " + currentKey)
+          println("---------------removeByKeyCondition--------------- removalCondition(currentKey): " + removalCondition(currentKey))
           currentKeyToNumValue = allKeyToNumValues.next()
           if (removalCondition(currentKey)) {
             currentValues = keyWithIndexToValue.getAll(currentKey, currentKeyToNumValue.numValue)
@@ -178,6 +190,8 @@ class SymmetricHashJoinStateManager(
 
         // We only reach here if there were no satisfying keys left, which means we're done.
         finished = true
+        println("---------------removeByKeyCondition--------------- finished and return null")
+        // scalastyle:on
         null
       }
 

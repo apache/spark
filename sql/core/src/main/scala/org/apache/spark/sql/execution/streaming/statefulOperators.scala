@@ -234,7 +234,12 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
       predicateDropRowByWatermark: BasePredicate): Iterator[InternalRow] = {
     iter.filterNot { row =>
       val shouldDrop = predicateDropRowByWatermark.eval(row)
-      if (shouldDrop) longMetric("numRowsDroppedByWatermark") += 1
+      if (shouldDrop) {
+        // sclaastyle:off
+        println("wei== dropped by wm join!")
+        // sclaastyle:on
+        longMetric("numRowsDroppedByWatermark") += 1
+      }
       shouldDrop
     }
   }
