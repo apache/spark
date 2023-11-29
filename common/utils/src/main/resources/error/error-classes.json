@@ -2085,6 +2085,12 @@
     },
     "sqlState" : "22023"
   },
+  "INVALID_PARAMETRIZED_QUERY" : {
+    "message" : [
+      "Parametrize query must either use positional, or named parameters, but not both."
+    ],
+    "sqlState" : "42609"
+  },
   "INVALID_PARTITION_OPERATION" : {
     "message" : [
       "The partition command is invalid."
@@ -2261,6 +2267,12 @@
     },
     "sqlState" : "42000"
   },
+  "INVALID_STATEMENT_FOR_EXECUTE_INTO" : {
+    "message" : [
+      "The INTO clause of EXECUTE IMMEDIATE is only valid for queries. The statement starting with: <sqlString> is a(n) <stmtType>."
+    ],
+    "sqlState" : "42606"
+  },
   "INVALID_SUBQUERY_EXPRESSION" : {
     "message" : [
       "Invalid subquery:"
@@ -2337,6 +2349,12 @@
       "Invalid usage of <elem> in <prettyName>."
     ],
     "sqlState" : "42000"
+  },
+  "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
+    "message" : [
+      "Variable passed query must be of type STRING"
+    ],
+    "sqlState" : "42609"
   },
   "INVALID_VIEW_TEXT" : {
     "message" : [
@@ -2516,24 +2534,6 @@
       "Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
     ],
     "sqlState" : "0A000"
-  },
-  "INVALID_PARAMETRIZED_QUERY" : {
-    "message" : [
-      "Parametrize query must either use positional, or named parameters, but not both."
-    ],
-    "sqlState" : "42609"
-  },
-  "INVALID_STATEMENT_FOR_EXECUTE_INTO" : {
-    "message" : [
-      "The INTO clause of EXECUTE IMMEDIATE is only valid for queries. The statement starting with: <sqlString> is a(n) <stmtType>."
-    ],
-    "sqlState" : "42606"
-  },
-  "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
-    "message" : [
-      "Variable passed query must be of type STRING"
-    ],
-    "sqlState" : "42609"
   },
   "NESTED_AGGREGATE_FUNCTION" : {
     "message" : [

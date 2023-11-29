@@ -1207,6 +1207,12 @@ The value of parameter(s) `<parameter>` in `<functionName>` is invalid:
 
 For more details see [INVALID_PARAMETER_VALUE](sql-error-conditions-invalid-parameter-value-error-class.html)
 
+### INVALID_PARAMETRIZED_QUERY
+
+[SQLSTATE: 42609](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Parametrize query must either use positional, or named parameters, but not both.
+
 ### [INVALID_PARTITION_OPERATION](sql-error-conditions-invalid-partition-operation-error-class.html)
 
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1261,6 +1267,12 @@ Invalid SQL syntax:
 
 For more details see [INVALID_SQL_SYNTAX](sql-error-conditions-invalid-sql-syntax-error-class.html)
 
+### INVALID_STATEMENT_FOR_EXECUTE_INTO
+
+[SQLSTATE: 42606](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The INTO clause of EXECUTE IMMEDIATE is only valid for queries. The statement starting with: `<sqlString>` is a(n) `<stmtType>`.
+
 ### [INVALID_SUBQUERY_EXPRESSION](sql-error-conditions-invalid-subquery-expression-error-class.html)
 
 [SQLSTATE: 42823](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1312,6 +1324,12 @@ The url is invalid: `<url>`. If necessary set `<ansiConfig>` to "false" to bypas
 [SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Invalid usage of `<elem>` in `<prettyName>`.
+
+### INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE
+
+[SQLSTATE: 42609](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Variable passed query must be of type STRING
 
 ### INVALID_VIEW_TEXT
 

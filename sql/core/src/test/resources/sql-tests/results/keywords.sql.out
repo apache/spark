@@ -99,6 +99,7 @@ ESCAPED	false
 EXCEPT	false
 EXCHANGE	false
 EXCLUDE	false
+EXECUTE	true
 EXISTS	false
 EXPLAIN	false
 EXPORT	false
@@ -133,6 +134,7 @@ IDENTIFIER	false
 IF	false
 IGNORE	false
 ILIKE	false
+IMMEDIATE	true
 IMPORT	false
 IN	false
 INCLUDE	false
@@ -343,4 +345,5 @@ SELECT keyword from SQL_KEYWORDS() WHERE reserved
 -- !query schema
 struct<keyword:string>
 -- !query output
-
+EXECUTE
+IMMEDIATE
