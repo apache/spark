@@ -147,6 +147,17 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     makeTablesDataset(plan)
   }
 
+  private def makeTablesDataset(plan: ShowTables): Dataset[Table] = {
+    val qe = sparkSession.sessionState.executePlan(plan)
+    val catalog = qe.analyzed.collectFirst {
+      case ShowTables(r: ResolvedNamespace, _, _) => r.catalog
+      case _: ShowTablesCommand =>
+        sparkSession.sessionState.catalogManager.v2SessionCatalog
+    }.get
+    val tables = qe.toRdd.collect().flatMap { row => resolveTable(row, catalog.name()) }
+    CatalogImpl.makeDataset(tables.toImmutableArraySeq, sparkSession)
+  }
+
   private[sql] def resolveTable(row: InternalRow, catalogName: String): Option[Table] = {
     val tableName = row.getString(1)
     val namespaceName = row.getString(0)
@@ -175,17 +186,6 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     } catch {
       case e: AnalysisException if e.getErrorClass == "TABLE_OR_VIEW_NOT_FOUND" => None
     }
-  }
-
-  private def makeTablesDataset(plan: ShowTables): Dataset[Table] = {
-    val qe = sparkSession.sessionState.executePlan(plan)
-    val catalog = qe.analyzed.collectFirst {
-      case ShowTables(r: ResolvedNamespace, _, _) => r.catalog
-      case _: ShowTablesCommand =>
-        sparkSession.sessionState.catalogManager.v2SessionCatalog
-    }.get
-    val tables = qe.toRdd.collect().flatMap { row => resolveTable(row, catalog.name()) }
-    CatalogImpl.makeDataset(tables.toImmutableArraySeq, sparkSession)
   }
 
   private def tableExists(nameParts: Seq[String]): Boolean = {
