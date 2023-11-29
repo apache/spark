@@ -99,3 +99,46 @@ private[sql] case class PostgresConnection(connection_url: Option[String] = None
 
   def close(): Unit = if (!conn.isClosed) conn.close()
 }
+
+var runner: Option[SQLQueryTestRunner] = None
+
+  // Run the SQL queries preparing them for comparison.
+  val outputs: Seq[QueryTestOutput] = queries.map { sql =>
+  testCase match {
+  case _: AnalyzerTest =>
+  val (_, output) =
+  handleExceptions(getNormalizedQueryAnalysisResult(localSparkSession, sql))
+  // We do some query canonicalization now.
+  AnalyzerOutput(
+  sql = sql,
+  schema = None,
+  output = normalizeTestResults(output.mkString("\n")))
+  case _ =>
+  val (schema, output) =
+  if (regenerateGoldenFiles && crossDbmsToGenerateGoldenFiles.nonEmpty) {
+  if (runner.isEmpty) {
+  val connectionUrl = if (customConnectionUrl.nonEmpty) {
+  Some(customConnectionUrl)
+  } else {
+  None
+  }
+  runner = Some(DBMS_MAPPING(crossDbmsToGenerateGoldenFiles)(connectionUrl))
+  }
+  val output = handleExceptions(runner.map(_.runQuery(sql)).get)
+  val schema = spark.sql(sql).schema.catalogString
+  (schema, output)
+  } else {
+  handleExceptions(getNormalizedQueryExecutionResult(localSparkSession, sql))
+  }
+  // We do some query canonicalization now.
+  val executionOutput = ExecutionOutput(
+  sql = sql,
+  schema = Some(schema),
+  output = normalizeTestResults(output.mkString("\n")))
+  if (testCase.isInstanceOf[CTETest]) {
+  expandCTEQueryAndCompareResult(localSparkSession, sql, executionOutput)
+  }
+  executionOutput
+  }
+  }
+  jdbcRunner.foreach(_.cleanUp())

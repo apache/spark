@@ -17,20 +17,12 @@
 
 package org.apache.spark.sql.crossdbms
 
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeCommandBase}
-import org.apache.spark.sql.test.SQLTestUtils
-
 trait SQLQueryTestRunner {
 
   /**
    * Runs a given query.
-   * @return Returns a tuple with first argument being the schema and the second argument being a
-   *         Sequence of strings representing the output.
    */
-  def runQuery(query: String): (String, Seq[String])
+  def runQuery(query: String): Seq[String]
 
   /**
    * Perform clean up, such as dropping tables and closing the database connection.
@@ -40,46 +32,12 @@ trait SQLQueryTestRunner {
 
 /**
  * A runner that takes a JDBC connection and uses it to execute queries. We still need the local
- * Spark session to do some things, such as generate the schema and load test data into
- * dataframes, before creating tables in the database.
+ * Spark session to do some things..
  */
 private[sql] case class JdbcSQLQueryTestRunner(
-  connection: JdbcConnection, spark: SparkSession) extends SQLQueryTestRunner with SQLTestUtils {
-  setUp()
+  connection: JdbcConnection) extends SQLQueryTestRunner {
 
-  def runQuery(query: String): (String, Seq[String]) = {
-    def isSorted(plan: LogicalPlan): Boolean = plan match {
-      case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
-      case _: DescribeCommandBase
-           | _: DescribeColumnCommand
-           | _: DescribeRelation
-           | _: DescribeColumn => true
-      case PhysicalOperation(_, _, Sort(_, true, _)) => true
+  def runQuery(query: String): Seq[String] = connection.runQuery(query)
 
-      case _ => plan.children.iterator.exists(isSorted)
-    }
-
-    val df = spark.sql(query)
-    val schema = df.schema.catalogString
-    val output = connection.runQuery(query)
-    // Use Spark analyzed plan to check if the query result is already semantically sorted.
-    val result = if (isSorted(df.queryExecution.analyzed)) {
-      output
-    } else {
-      // Sort the answer manually if it isn't sorted.
-      output.sorted
-    }
-    // Use the Spark schema for schema generation.
-    (schema, result)
-  }
-
-  def cleanUp(): Unit = {
-    connection.close()
-  }
-
-  private def setUp(): Unit = {
-    loadTestData()
-  }
-
-  override def loadTestData(): Unit = {} // TODO: Load test data
+  def cleanUp(): Unit = connection.close()
 }
