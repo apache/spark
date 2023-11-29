@@ -147,7 +147,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     makeTablesDataset(plan)
   }
 
-  private[sql] def resolveTable(row: InternalRow, catalog: CatalogPlugin): Option[Table] = {
+  private[sql] def resolveTable(row: InternalRow, catalogName: String): Option[Table] = {
     val tableName = row.getString(1)
     val namespaceName = row.getString(0)
     val isTemp = row.getBoolean(2)
@@ -159,12 +159,12 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       } else {
         val ns = parseIdent(namespaceName)
         try {
-          Some(makeTable(catalog.name() +: ns :+ tableName))
+          Some(makeTable(catalogName +: ns :+ tableName))
         } catch {
           case e: AnalysisException if e.getErrorClass == "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE" =>
             Some(new Table(
               name = tableName,
-              catalog = catalog.name(),
+              catalog = catalogName,
               namespace = ns.toArray,
               description = null,
               tableType = null,
@@ -184,7 +184,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       case _: ShowTablesCommand =>
         sparkSession.sessionState.catalogManager.v2SessionCatalog
     }.get
-    val tables = qe.toRdd.collect().flatMap { row => resolveTable(row, catalog) }
+    val tables = qe.toRdd.collect().flatMap { row => resolveTable(row, catalog.name()) }
     CatalogImpl.makeDataset(tables.toImmutableArraySeq, sparkSession)
   }
 
