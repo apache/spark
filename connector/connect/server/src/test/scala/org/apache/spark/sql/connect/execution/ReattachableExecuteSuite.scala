@@ -302,8 +302,7 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
     // If something is wrong, it can fail only from time to time.
     withRawBlockingStub { stub =>
       val operationId = UUID.randomUUID().toString
-      val interruptRequest = proto.InterruptRequest
-        .newBuilder
+      val interruptRequest = proto.InterruptRequest.newBuilder
         .setUserContext(userContext)
         .setSessionId(defaultSessionId)
         .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_OPERATION_ID)
