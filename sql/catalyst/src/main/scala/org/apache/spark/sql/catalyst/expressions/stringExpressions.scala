@@ -2648,18 +2648,26 @@ case class StringDecode(bin: Expression, charset: Expression)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val fromCharset = input2.asInstanceOf[UTF8String].toString
-    UTF8String.fromString(new String(input1.asInstanceOf[Array[Byte]], fromCharset))
+    try {
+      UTF8String.fromString(new String(input1.asInstanceOf[Array[Byte]], fromCharset))
+    } catch {
+      case _: UnsupportedEncodingException =>
+        throw QueryExecutionErrors.invalidCharsetError(prettyName, fromCharset)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (bytes, charset) =>
+    nullSafeCodeGen(ctx, ev, (bytes, charset) => {
+      val fromCharset = ctx.freshName("fromCharset")
       s"""
+        String $fromCharset = $charset.toString();
         try {
-          ${ev.value} = UTF8String.fromString(new String($bytes, $charset.toString()));
+          ${ev.value} = UTF8String.fromString(new String($bytes, $fromCharset));
         } catch (java.io.UnsupportedEncodingException e) {
-          org.apache.spark.unsafe.Platform.throwException(e);
+          throw QueryExecutionErrors.invalidCharsetError("$prettyName", $fromCharset);
         }
-      """)
+      """
+    })
   }
 
   override protected def withNewChildrenInternal(
