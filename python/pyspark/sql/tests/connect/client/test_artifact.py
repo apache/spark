@@ -72,7 +72,7 @@ class ArtifactTestsMixin:
                 f.write("my_func = lambda: 11")
 
             with self.assertRaisesRegex(
-                SparkConnectGrpcException, "\(java.lang.RuntimeException\) Duplicate Artifact"
+                SparkConnectGrpcException, "\\(java.lang.RuntimeException\\) Duplicate Artifact"
             ):
                 self.spark.addArtifacts(pyfile_path, pyfile=True)
 
