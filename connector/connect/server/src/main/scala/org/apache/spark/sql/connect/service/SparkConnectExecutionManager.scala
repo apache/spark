@@ -189,13 +189,14 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       case Some(_) => // Already running.
       case None =>
         val interval = SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL).toLong
-        val timeout = SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT).toLong
         logInfo(s"Starting thread for cleanup of abandoned executions every $interval ms")
         scheduledExecutor = Some(Executors.newSingleThreadScheduledExecutor())
         scheduledExecutor.get.scheduleAtFixedRate(
           () => {
-            try periodicMaintenance(timeout)
-            catch {
+            try {
+              val timeout = SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT).toLong
+              periodicMaintenance(timeout)
+            } catch {
               case NonFatal(ex) => logWarning("Unexpected exception in periodic task", ex)
             }
           },

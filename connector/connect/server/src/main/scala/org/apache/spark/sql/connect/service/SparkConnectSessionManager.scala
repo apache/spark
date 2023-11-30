@@ -95,6 +95,8 @@ class SparkConnectSessionManager extends Logging {
   }
 
   private def getSession(key: SessionKey, default: Option[() => SessionHolder]): SessionHolder = {
+    schedulePeriodicChecks() // Starts the maintenance thread if it hasn't started yet.
+
     sessionsLock.synchronized {
       // try to get existing session from store
       val sessionOpt = sessionStore.get(key)
@@ -123,7 +125,7 @@ class SparkConnectSessionManager extends Logging {
   }
 
   // Removes session from sessionStore and returns it.
-  private def removeSession(key: SessionKey): Option[SessionHolder] = {
+  private def removeSessionHolder(key: SessionKey): Option[SessionHolder] = {
     var sessionHolder: Option[SessionHolder] = None
     sessionsLock.synchronized {
       sessionHolder = sessionStore.remove(key)
@@ -137,17 +139,17 @@ class SparkConnectSessionManager extends Logging {
   }
 
   // Shut downs the session after removing.
-  private def shutdownSession(sessionHolder: SessionHolder): Unit = {
+  private def shutdownSessionHolder(sessionHolder: SessionHolder): Unit = {
     sessionHolder.close()
     // Update in closedSessionsCache: above it wasn't updated with closedTime etc. yet.
     closedSessionsCache.put(sessionHolder.key, sessionHolder.getSessionHolderInfo)
   }
 
   def closeSession(key: SessionKey): Unit = {
-    val sessionHolder = removeSession(key)
+    val sessionHolder = removeSessionHolder(key)
     // Rest of the cleanup outside sessionLock - the session cannot be accessed anymore by
     // getOrCreateIsolatedSession.
-    sessionHolder.foreach(shutdownSession(_))
+    sessionHolder.foreach(shutdownSessionHolder(_))
   }
 
   private[connect] def shutdown(): Unit = sessionsLock.synchronized {
@@ -179,15 +181,15 @@ class SparkConnectSessionManager extends Logging {
       case Some(_) => // Already running.
       case None =>
         val interval = SparkEnv.get.conf.get(CONNECT_SESSION_MANAGER_MAINTENANCE_INTERVAL)
-        // Default for sessions that don't have expiration time set.
-        val defaultInactiveTimeoutMs =
-          SparkEnv.get.conf.get(CONNECT_SESSION_MANAGER_DEFAULT_SESSION_TIMEOUT)
         logInfo(s"Starting thread for cleanup of expired sessions every $interval ms")
         scheduledExecutor = Some(Executors.newSingleThreadScheduledExecutor())
         scheduledExecutor.get.scheduleAtFixedRate(
           () => {
-            try periodicMaintenance(defaultInactiveTimeoutMs)
-            catch {
+            try {
+              val defaultInactiveTimeoutMs =
+                SparkEnv.get.conf.get(CONNECT_SESSION_MANAGER_DEFAULT_SESSION_TIMEOUT)
+              periodicMaintenance(defaultInactiveTimeoutMs)
+            } catch {
               case NonFatal(ex) => logWarning("Unexpected exception in periodic task", ex)
             }
           },
@@ -228,15 +230,15 @@ class SparkConnectSessionManager extends Logging {
       val removedSession = sessionsLock.synchronized {
         // Last chance - check expiration time and remove under lock if expired.
         val info = sessionHolder.getSessionHolderInfo
-        if (shouldExpire(sessionHolder.getSessionHolderInfo, System.currentTimeMillis())) {
+        if (shouldExpire(info, System.currentTimeMillis())) {
           logInfo(s"Found session $info that expired and will be closed.")
-          removeSession(info.key)
+          removeSessionHolder(info.key)
         } else {
           None
         }
       }
       // do shutdown and cleanup outside of lock.
-      try removedSession.foreach(shutdownSession(_))
+      try removedSession.foreach(shutdownSessionHolder(_))
       catch {
         case NonFatal(ex) => logWarning("Unexpected exception closing session", ex)
       }
