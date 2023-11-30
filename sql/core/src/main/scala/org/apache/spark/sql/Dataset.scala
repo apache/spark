@@ -283,7 +283,8 @@ class Dataset[T] private[sql](
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond `truncate` characters, replace it with the
     // first `truncate-3` and "..."
-    (schema.fieldNames.map(SchemaUtils.escapeMetaCharacters).toSeq +: data.map { row =>
+    (schema.fieldNames
+      .map(SchemaUtils.escapeMetaCharacters).toImmutableArraySeq +: data.map { row =>
       row.toSeq.map { cell =>
         assert(cell != null, "ToPrettyString is not nullable and should not return null value")
         // Escapes meta-characters not to break the `showString` format
@@ -778,8 +779,7 @@ class Dataset[T] private[sql](
       val parsedDelay = IntervalUtils.fromIntervalString(delayThreshold)
       require(!IntervalUtils.isNegative(parsedDelay),
         s"delay threshold ($delayThreshold) should not be negative.")
-      EliminateEventTimeWatermark(
-        EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan))
+      EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan)
     }
   }
 
@@ -994,7 +994,7 @@ class Dataset[T] private[sql](
    * @since 3.4.0
    */
   def join(right: Dataset[_], usingColumns: Array[String]): DataFrame = {
-    join(right, usingColumns.toSeq)
+    join(right, usingColumns.toImmutableArraySeq)
   }
 
   /**
@@ -1063,7 +1063,7 @@ class Dataset[T] private[sql](
    * @since 3.4.0
    */
   def join(right: Dataset[_], usingColumns: Array[String], joinType: String): DataFrame = {
-    join(right, usingColumns.toSeq, joinType)
+    join(right, usingColumns.toImmutableArraySeq, joinType)
   }
 
   /**
@@ -1245,7 +1245,7 @@ class Dataset[T] private[sql](
 
       withTypedPlan(JoinWith.typedJoinWith(
         joined,
-        sqlContext.conf.dataFrameSelfJoinAutoResolveAmbiguity,
+        sparkSession.sessionState.conf.dataFrameSelfJoinAutoResolveAmbiguity,
         sparkSession.sessionState.analyzer.resolver,
         this.exprEnc.isSerializedAsStructForTopLevel,
         other.exprEnc.isSerializedAsStructForTopLevel))
@@ -1451,7 +1451,7 @@ class Dataset[T] private[sql](
     case "*" =>
       Column(ResolvedStar(queryExecution.analyzed.output))
     case _ =>
-      if (sqlContext.conf.supportQuotedRegexColumnName) {
+      if (sparkSession.sessionState.conf.supportQuotedRegexColumnName) {
         colRegex(colName)
       } else {
         Column(addDataFrameIdToCol(resolve(colName)))
@@ -1832,10 +1832,10 @@ class Dataset[T] private[sql](
    *
    * {{{
    *   // Compute the average for all numeric columns group by specific grouping sets.
-   *   ds.groupingSets(Seq(Seq($"department", $"group"),Seq()),$"department", $"group").avg()
+   *   ds.groupingSets(Seq(Seq($"department", $"group"), Seq()), $"department", $"group").avg()
    *
    *   // Compute the max age and average salary, group by specific grouping sets.
-   *   ds.groupingSets(Seq($"department", $"gender"), Seq()),$"department", $"group").agg(Map(
+   *   ds.groupingSets(Seq($"department", $"gender"), Seq()), $"department", $"group").agg(Map(
    *     "salary" -> "avg",
    *     "age" -> "max"
    *   ))
@@ -3145,7 +3145,8 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 2.0.0
    */
-  def dropDuplicates(colNames: Array[String]): Dataset[T] = dropDuplicates(colNames.toSeq)
+  def dropDuplicates(colNames: Array[String]): Dataset[T] =
+    dropDuplicates(colNames.toImmutableArraySeq)
 
   /**
    * Returns a new [[Dataset]] with duplicate rows removed, considering only
@@ -3232,7 +3233,7 @@ class Dataset[T] private[sql](
    * @since 3.5.0
    */
   def dropDuplicatesWithinWatermark(colNames: Array[String]): Dataset[T] = {
-    dropDuplicatesWithinWatermark(colNames.toSeq)
+    dropDuplicatesWithinWatermark(colNames.toImmutableArraySeq)
   }
 
   /**

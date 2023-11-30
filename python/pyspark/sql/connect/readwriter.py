@@ -134,7 +134,7 @@ class DataFrameReader(OptionUtils):
     def _df(self, plan: LogicalPlan) -> "DataFrame":
         from pyspark.sql.connect.dataframe import DataFrame
 
-        return DataFrame.withPlan(plan, self._client)
+        return DataFrame(plan, self._client)
 
     def table(self, tableName: str) -> "DataFrame":
         return self._df(Read(tableName, self._options))

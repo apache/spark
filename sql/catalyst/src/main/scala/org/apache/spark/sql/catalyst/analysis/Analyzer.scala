@@ -347,7 +347,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     Batch("Cleanup", fixedPoint,
       CleanupAliases),
     Batch("HandleSpecialCommand", Once,
-      HandleSpecialCommand)
+      HandleSpecialCommand),
+    Batch("Remove watermark for batch query", Once,
+      EliminateEventTimeWatermark)
   )
 
   /**
@@ -1272,7 +1274,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       resolveTempView(u.multipartIdentifier, u.isStreaming, finalTimeTravelSpec.isDefined).orElse {
         expandIdentifier(u.multipartIdentifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
-            val key = ((catalog.name +: ident.namespace :+ ident.name).toSeq, finalTimeTravelSpec)
+            val key =
+              ((catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq,
+              finalTimeTravelSpec)
             AnalysisContext.get.relationCache.get(key).map(_.transform {
               case multi: MultiInstanceRelation =>
                 val newRelation = multi.newInstance()
@@ -3356,7 +3360,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             encOpt.map { enc =>
               val attrs = if (enc.isSerializedAsStructForTopLevel) {
                 // Value class that has been replaced with its underlying type
-                if (enc.schema.fields.size == 1 && enc.schema.fields.head.dataType == dataType) {
+                if (enc.schema.fields.length == 1 && enc.schema.fields.head.dataType == dataType) {
                   DataTypeUtils.toAttributes(enc.schema)
                 } else {
                   DataTypeUtils.toAttributes(dataType.asInstanceOf[StructType])
@@ -3938,7 +3942,7 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
 object EliminateEventTimeWatermark extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(EVENT_TIME_WATERMARK)) {
-    case EventTimeWatermark(_, _, child) if !child.isStreaming => child
+    case EventTimeWatermark(_, _, child) if child.resolved && !child.isStreaming => child
   }
 }
 

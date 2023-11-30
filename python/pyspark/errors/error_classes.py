@@ -76,7 +76,7 @@ ERROR_CLASSES_JSON = """
   },
   "CANNOT_BE_NONE": {
     "message": [
-      "Argument `<arg_name>` can not be None."
+      "Argument `<arg_name>` cannot be None."
     ]
   },
   "CANNOT_CONVERT_COLUMN_INTO_BOOL": {
@@ -242,6 +242,16 @@ ERROR_CLASSES_JSON = """
       " must be set to `true` to enable Python profile."
     ]
   },
+  "INDEX_NOT_POSITIVE" : {
+    "message" : [
+      "Index must be positive, got '<index>'."
+    ]
+  },
+  "INDEX_OUT_OF_RANGE" : {
+    "message" : [
+      "<arg_name> index out of range, got '<index>'."
+    ]
+  },
   "INVALID_ARROW_UDTF_RETURN_TYPE" : {
     "message" : [
       "The return type of the arrow-optimized Python UDTF should be of type 'pandas.DataFrame', but the '<func>' method returned a value of type <type_name> with value: <value>."
@@ -267,6 +277,11 @@ ERROR_CLASSES_JSON = """
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
     ]
   },
+  "INVALID_MULTIPLE_ARGUMENT_CONDITIONS" : {
+    "message" : [
+      "[{arg_names}] cannot be <condition>."
+    ]
+  },
   "INVALID_NDARRAY_DIMENSION": {
     "message": [
       "NumPy array input should be of <dimensions> dimensions."
@@ -285,6 +300,11 @@ ERROR_CLASSES_JSON = """
   "INVALID_RETURN_TYPE_FOR_PANDAS_UDF": {
     "message": [
       "Pandas UDF should return StructType for <eval_type>, got <return_type>."
+    ]
+  },
+  "INVALID_SESSION_UUID_ID": {
+    "message": [
+      "Parameter value <arg_name> must be a valid UUID format: <origin>"
     ]
   },
   "INVALID_TIMEOUT_TIMESTAMP" : {
@@ -602,6 +622,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a str, got <arg_type>."
     ]
   },
+  "NOT_STRUCT" : {
+    "message" : [
+      "Argument `<arg_name>` should be a struct type, got <arg_type>."
+    ]
+  },
   "NOT_STR_OR_LIST_OF_RDD" : {
     "message" : [
       "Argument `<arg_name>` should be a str or list[RDD], got <arg_type>."
@@ -609,7 +634,7 @@ ERROR_CLASSES_JSON = """
   },
   "NOT_STR_OR_STRUCT" : {
     "message" : [
-      "Argument `<arg_name>` should be a str or structType, got <arg_type>."
+      "Argument `<arg_name>` should be a str or struct type, got <arg_type>."
     ]
   },
   "NOT_WINDOWSPEC" : {
@@ -625,6 +650,11 @@ ERROR_CLASSES_JSON = """
   "NO_ACTIVE_SESSION" : {
     "message" : [
       "No active Spark session found. Please create a new Spark session before running the code."
+    ]
+  },
+  "NO_SCHEMA_AND_DRIVER_DEFAULT_SCHEME" : {
+    "message" : [
+      "Only allows <arg_name> to be a path without scheme, and Spark Driver should use the default scheme to determine the destination file system."
     ]
   },
   "ONLY_ALLOWED_FOR_SINGLE_COLUMN" : {
@@ -703,6 +733,11 @@ ERROR_CLASSES_JSON = """
       "Cannot start a remote Spark session because there is a regular Spark session already running."
     ]
   },
+  "SESSION_NEED_CONN_STR_OR_BUILDER" : {
+    "message" : [
+      "Needs either connection string or channelBuilder (mutually exclusive) to create a new SparkSession."
+    ]
+  },
   "SESSION_NOT_SAME" : {
     "message" : [
       "Both Datasets must belong to the same SparkSession."
@@ -748,6 +783,11 @@ ERROR_CLASSES_JSON = """
       "Expected <expected> values for `<item>`, got <actual>."
     ]
   },
+  "TYPE_HINT_REQUIRED" : {
+    "message" : [
+      "A <arg_type> is required <where>."
+    ]
+  },
   "UDF_RETURN_TYPE" : {
     "message" : [
       "Return type of the user-defined function should be <expected>, but is <actual>."
@@ -756,6 +796,21 @@ ERROR_CLASSES_JSON = """
   "UDTF_ARROW_TYPE_CAST_ERROR" : {
     "message" : [
       "Cannot convert the output value of the column '<col_name>' with type '<col_type>' to the specified return type of the column: '<arrow_type>'. Please check if the data types match and try again."
+    ]
+  },
+  "UDTF_CONSTRUCTOR_INVALID_IMPLEMENTS_ANALYZE_METHOD" : {
+    "message" : [
+      "Failed to evaluate the user-defined table function '<name>' because its constructor is invalid: the function implements the 'analyze' method, but its constructor has more than two arguments (including the 'self' reference). Please update the table function so that its constructor accepts exactly one 'self' argument, or one 'self' argument plus another argument for the result of the 'analyze' method, and try the query again."
+    ]
+  },
+  "UDTF_CONSTRUCTOR_INVALID_NO_ANALYZE_METHOD" : {
+    "message" : [
+      "Failed to evaluate the user-defined table function '<name>' because its constructor is invalid: the function does not implement the 'analyze' method, and its constructor has more than one argument (including the 'self' reference). Please update the table function so that its constructor accepts exactly one 'self' argument, and try the query again."
+    ]
+  },
+  "UDTF_EVAL_METHOD_ARGUMENTS_DO_NOT_MATCH_SIGNATURE" : {
+    "message" : [
+      "Failed to evaluate the user-defined table function '<name>' because the function arguments did not match the expected signature of the 'eval' method (<reason>). Please update the query so that this table function call provides arguments matching the expected signature, or else update the table function so that its 'eval' method accepts the provided arguments, and then try the query again."
     ]
   },
   "UDTF_EXEC_ERROR" : {
@@ -866,6 +921,11 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_WITH_ARROW_OPTIMIZATION" : {
     "message" : [
       "<feature> is not supported with Arrow optimization enabled in Python UDFs. Disable 'spark.sql.execution.pythonUDF.arrow.enabled' to workaround.."
+    ]
+  },
+  "VALUE_ALLOWED" : {
+    "message" : [
+      "Value for `<arg_name>` does not allow <disallowed_value>."
     ]
   },
   "VALUE_NOT_ACCESSIBLE": {

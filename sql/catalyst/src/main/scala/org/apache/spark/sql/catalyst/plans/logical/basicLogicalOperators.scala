@@ -862,6 +862,7 @@ case class CTERelationRef(
     cteId: Long,
     _resolved: Boolean,
     override val output: Seq[Attribute],
+    override val isStreaming: Boolean,
     statsOpt: Option[Statistics] = None) extends LeafNode with MultiInstanceRelation {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
@@ -1126,7 +1127,8 @@ case class Range(
           val upperBinValue = getRangeValue(math.max(upperIndexPos, 0))
           val ndv = math.max(upperIndexPos - lowerIndexPos, 1)
           // Update the lowerIndex and lowerBinValue with upper ones for the next iteration.
-          (upperIndex, upperBinValue, binAr :+ HistogramBin(lowerBinValue, upperBinValue, ndv))
+          (upperIndex, upperBinValue,
+            binAr :+ HistogramBin(lowerBinValue.toDouble, upperBinValue.toDouble, ndv))
       }
     Histogram(height, binArray.toArray)
   }

@@ -1631,7 +1631,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> from collections import OrderedDict, defaultdict
         >>> s.to_dict(OrderedDict)
-        OrderedDict([(0, 1), (1, 2), (2, 3), (3, 4)])
+        OrderedDict(...)
 
         >>> dd = defaultdict(list)
         >>> s.to_dict(dd)  # doctest: +ELLIPSIS

@@ -37,6 +37,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{NumericType, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A set of methods for aggregations on a `DataFrame`, created by [[Dataset#groupBy groupBy]],
@@ -432,7 +433,7 @@ class RelationalGroupedDataset protected[sql](
       .sort(pivotColumn)  // ensure that the output columns are in a consistent logical order
       .collect()
       .map(_.get(0))
-      .toSeq
+      .toImmutableArraySeq
 
     if (values.length > maxValues) {
       throw QueryCompilationErrors.aggregationFunctionAppliedOnNonNumericColumnError(

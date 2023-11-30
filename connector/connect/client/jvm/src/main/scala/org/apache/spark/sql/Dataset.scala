@@ -39,6 +39,7 @@ import org.apache.spark.sql.functions.{struct, to_json}
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkClassUtils
 
 /**
@@ -650,7 +651,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def join(right: Dataset[_], usingColumns: Array[String]): DataFrame = {
-    join(right, usingColumns.toSeq)
+    join(right, usingColumns.toImmutableArraySeq)
   }
 
   /**
@@ -729,7 +730,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def join(right: Dataset[_], usingColumns: Array[String], joinType: String): DataFrame = {
-    join(right, usingColumns.toSeq, joinType)
+    join(right, usingColumns.toImmutableArraySeq, joinType)
   }
 
   /**
@@ -1306,12 +1307,12 @@ class Dataset[T] private[sql] (
       valueColumnName: String): DataFrame = sparkSession.newDataFrame { builder =>
     val unpivot = builder.getUnpivotBuilder
       .setInput(plan.getRoot)
-      .addAllIds(ids.toSeq.map(_.expr).asJava)
+      .addAllIds(ids.toImmutableArraySeq.map(_.expr).asJava)
       .setValueColumnName(variableColumnName)
       .setValueColumnName(valueColumnName)
     valuesOption.foreach { values =>
       unpivot.getValuesBuilder
-        .addAllValues(values.toSeq.map(_.expr).asJava)
+        .addAllValues(values.toImmutableArraySeq.map(_.expr).asJava)
     }
   }
 
@@ -1530,6 +1531,41 @@ class Dataset[T] private[sql] (
       toDF(),
       colNames.map(colName => Column(colName)),
       proto.Aggregate.GroupType.GROUP_TYPE_CUBE)
+  }
+
+  /**
+   * Create multi-dimensional aggregation for the current Dataset using the specified grouping
+   * sets, so we can run aggregation on them. See [[RelationalGroupedDataset]] for all the
+   * available aggregate functions.
+   *
+   * {{{
+   *   // Compute the average for all numeric columns group by specific grouping sets.
+   *   ds.groupingSets(Seq(Seq($"department", $"group"), Seq()), $"department", $"group").avg()
+   *
+   *   // Compute the max age and average salary, group by specific grouping sets.
+   *   ds.groupingSets(Seq($"department", $"gender"), Seq()), $"department", $"group").agg(Map(
+   *     "salary" -> "avg",
+   *     "age" -> "max"
+   *   ))
+   * }}}
+   *
+   * @group untypedrel
+   * @since 4.0.0
+   */
+  @scala.annotation.varargs
+  def groupingSets(groupingSets: Seq[Seq[Column]], cols: Column*): RelationalGroupedDataset = {
+    val groupingSetMsgs = groupingSets.map { groupingSet =>
+      val groupingSetMsg = proto.Aggregate.GroupingSets.newBuilder()
+      for (groupCol <- groupingSet) {
+        groupingSetMsg.addGroupingSet(groupCol.expr)
+      }
+      groupingSetMsg.build()
+    }
+    new RelationalGroupedDataset(
+      toDF(),
+      cols,
+      proto.Aggregate.GroupType.GROUP_TYPE_GROUPING_SETS,
+      groupingSets = Some(groupingSetMsgs))
   }
 
   /**
@@ -2461,7 +2497,8 @@ class Dataset[T] private[sql] (
    * @group typedrel
    * @since 3.4.0
    */
-  def dropDuplicates(colNames: Array[String]): Dataset[T] = dropDuplicates(colNames.toSeq)
+  def dropDuplicates(colNames: Array[String]): Dataset[T] =
+    dropDuplicates(colNames.toImmutableArraySeq)
 
   /**
    * Returns a new [[Dataset]] with duplicate rows removed, considering only the subset of
@@ -2483,7 +2520,7 @@ class Dataset[T] private[sql] (
   }
 
   def dropDuplicatesWithinWatermark(colNames: Array[String]): Dataset[T] = {
-    dropDuplicatesWithinWatermark(colNames.toSeq)
+    dropDuplicatesWithinWatermark(colNames.toImmutableArraySeq)
   }
 
   @scala.annotation.varargs

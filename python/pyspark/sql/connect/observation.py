@@ -17,7 +17,11 @@
 from typing import Any, Dict, Optional
 import uuid
 
-from pyspark.errors import IllegalArgumentException
+from pyspark.errors import (
+    PySparkTypeError,
+    PySparkValueError,
+    IllegalArgumentException,
+)
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.observation import Observation as PySparkObservation
@@ -31,9 +35,15 @@ class Observation:
     def __init__(self, name: Optional[str] = None) -> None:
         if name is not None:
             if not isinstance(name, str):
-                raise TypeError("name should be a string")
+                raise PySparkTypeError(
+                    error_class="NOT_STR",
+                    message_parameters={"arg_name": "name", "arg_type": type(name).__name__},
+                )
             if name == "":
-                raise ValueError("name should not be empty")
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_NON_EMPTY_STR",
+                    message_parameters={"arg_name": "name", "arg_value": name},
+                )
         self._name = name
         self._result: Optional[Dict[str, Any]] = None
 
@@ -46,10 +56,13 @@ class Observation:
             self._name = str(uuid.uuid4())
 
         if df.isStreaming:
-            raise IllegalArgumentException("Observation does not support streaming Datasets")
+            raise IllegalArgumentException(
+                error_class="UNSUPPORTED_OPERATION",
+                message_parameters={"operation": "Streaming DataFrame with Observation"},
+            )
 
         self._result = {}
-        return DataFrame.withPlan(plan.CollectMetrics(df._plan, self, list(exprs)), df._session)
+        return DataFrame(plan.CollectMetrics(df._plan, self, list(exprs)), df._session)
 
     _on.__doc__ = PySparkObservation._on.__doc__
 

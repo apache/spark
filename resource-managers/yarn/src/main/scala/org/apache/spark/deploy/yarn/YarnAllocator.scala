@@ -384,19 +384,28 @@ private[yarn] class YarnAllocator(
     this.numLocalityAwareTasksPerResourceProfileId = numLocalityAwareTasksPerResourceProfileId
     this.hostToLocalTaskCountPerResourceProfileId = hostToLocalTaskCountPerResourceProfileId
 
-    val res = resourceProfileToTotalExecs.map { case (rp, numExecs) =>
-      createYarnResourceForResourceProfile(rp)
-      if (numExecs != getOrUpdateTargetNumExecutorsForRPId(rp.id)) {
-        logInfo(s"Driver requested a total number of $numExecs executor(s) " +
-          s"for resource profile id: ${rp.id}.")
-        targetNumExecutorsPerResourceProfileId(rp.id) = numExecs
-        allocatorNodeHealthTracker.setSchedulerExcludedNodes(excludedNodes)
-        true
-      } else {
-        false
+    if (resourceProfileToTotalExecs.isEmpty) {
+      // Set target executor number to 0 to cancel pending allocate request.
+      targetNumExecutorsPerResourceProfileId.keys.foreach { rp =>
+        targetNumExecutorsPerResourceProfileId(rp) = 0
       }
+      allocatorNodeHealthTracker.setSchedulerExcludedNodes(excludedNodes)
+      true
+    } else {
+      val res = resourceProfileToTotalExecs.map { case (rp, numExecs) =>
+        createYarnResourceForResourceProfile(rp)
+        if (numExecs != getOrUpdateTargetNumExecutorsForRPId(rp.id)) {
+          logInfo(s"Driver requested a total number of $numExecs executor(s) " +
+            s"for resource profile id: ${rp.id}.")
+          targetNumExecutorsPerResourceProfileId(rp.id) = numExecs
+          allocatorNodeHealthTracker.setSchedulerExcludedNodes(excludedNodes)
+          true
+        } else {
+          false
+        }
+      }
+      res.exists(_ == true)
     }
-    res.exists(_ == true)
   }
 
   /**
