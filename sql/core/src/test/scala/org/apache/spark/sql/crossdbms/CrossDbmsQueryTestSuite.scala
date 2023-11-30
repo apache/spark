@@ -91,7 +91,7 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
         // the already generated golden files.
         if (regenerateGoldenFiles) {
           val connectionUrl = Option(customConnectionUrl).filter(_.nonEmpty)
-          runner = runner.getOrElse(
+          runner = runner.orElse(
             Some(CrossDbmsQueryTestSuite.DBMS_TO_CONNECTION_MAPPING(
               crossDbmsToGenerateGoldenFiles)(connectionUrl)))
           val sparkDf = spark.sql(sql)
@@ -173,14 +173,14 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
   override def ignoreList: Set[String] =
     // Directories
     Set(
-      "postgreSQL",
+      // "postgreSQL",
       "subquery",
       "ansi",
       "udtf",
       "udf",
       "timestampNTZ",
       "udaf",
-      "typeCoercion",
+      "typeCoercion"
     ) ++
     // Files
     Set(
