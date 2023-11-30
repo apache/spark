@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableId
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, SessionCatalog}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsCatalogOptions, SupportsNamespaces, Table, TableCatalog, TableCatalogCapability, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableCatalogCapability, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
@@ -84,28 +84,19 @@ class V2SessionCatalog(catalog: SessionCatalog)
             val properties = tableProperties ++
               table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
             val dsOptions = new CaseInsensitiveStringMap(properties.asJava)
-
-            provider match {
-              case _: SupportsCatalogOptions =>
-                // Currently, loadTable cannot support V2 provider that implements the
-                // SupportsCatalogOptions. Keep the behavior as before.
-                V1Table(table)
-
-              case _ =>
-                // If the source accepts external table metadata, we can pass the schema and
-                // partitioning information stored in Hive to `getTable` to avoid expensive
-                // schema/partitioning inference.
-                if (provider.supportsExternalMetadata()) {
-                  provider.getTable(
-                    table.schema,
-                    getV2Partitioning(table),
-                    dsOptions.asCaseSensitiveMap())
-                } else {
-                  provider.getTable(
-                    provider.inferSchema(dsOptions),
-                    provider.inferPartitioning(dsOptions),
-                    dsOptions.asCaseSensitiveMap())
-                }
+            // If the source accepts external table metadata, we can pass the schema and
+            // partitioning information stored in Hive to `getTable` to avoid expensive
+            // schema/partitioning inference.
+            if (provider.supportsExternalMetadata()) {
+              provider.getTable(
+                table.schema,
+                getV2Partitioning(table),
+                dsOptions.asCaseSensitiveMap())
+            } else {
+              provider.getTable(
+                provider.inferSchema(dsOptions),
+                provider.inferPartitioning(dsOptions),
+                dsOptions.asCaseSensitiveMap())
             }
           case _ =>
             V1Table(table)

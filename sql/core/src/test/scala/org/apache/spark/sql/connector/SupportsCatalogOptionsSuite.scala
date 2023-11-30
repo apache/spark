@@ -25,7 +25,7 @@ import scala.util.Try
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
@@ -192,7 +192,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
   }
 
   test("fail on user specified schema when reading - session catalog") {
-    sql(s"create table t1 (id bigint) using $format")
+    sql(s"create table t1 (id bigint) using $format options ('name'='t1')")
     val e = intercept[IllegalArgumentException] {
       spark.read.format(format).option("name", "t1").schema("id bigint").load()
     }
