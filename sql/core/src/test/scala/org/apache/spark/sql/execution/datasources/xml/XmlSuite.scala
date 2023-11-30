@@ -34,7 +34,7 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row,RowFactory, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, RowFactory, SaveMode}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlInferSchema, XmlOptions}
 import org.apache.spark.sql.catalyst.xml.XmlOptions._
