@@ -57,16 +57,16 @@ class StateStoreChangelogWriter(
 
   def put(key: Array[Byte], value: Array[Byte]): Unit = {
     assert(compressedStream != null)
-    compressedStream.writeInt(key.size)
+    compressedStream.writeInt(key.length)
     compressedStream.write(key)
-    compressedStream.writeInt(value.size)
+    compressedStream.writeInt(value.length)
     compressedStream.write(value)
     size += 1
   }
 
   def delete(key: Array[Byte]): Unit = {
     assert(compressedStream != null)
-    compressedStream.writeInt(key.size)
+    compressedStream.writeInt(key.length)
     compressedStream.write(key)
     // -1 in the value field means record deletion.
     compressedStream.writeInt(-1)

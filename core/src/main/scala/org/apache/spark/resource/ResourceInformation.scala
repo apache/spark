@@ -48,13 +48,14 @@ class ResourceInformation(
     obj match {
       case that: ResourceInformation =>
         that.getClass == this.getClass &&
-        that.name == name && that.addresses.toSeq == addresses.toSeq
+        that.name == name &&
+        that.addresses.toImmutableArraySeq == addresses.toImmutableArraySeq
       case _ =>
         false
     }
   }
 
-  override def hashCode(): Int = Seq(name, addresses.toSeq).hashCode()
+  override def hashCode(): Int = Seq(name, addresses.toImmutableArraySeq).hashCode()
 
   // TODO(SPARK-39658): reconsider whether we want to expose a third-party library's
   // symbols as part of a public API:

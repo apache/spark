@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.state.StateStoreConf
 import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /** An implementation of [[Table]] with [[SupportsRead]] for State Store data source. */
 class StateTable(
@@ -67,7 +68,7 @@ class StateTable(
   override def properties(): util.Map[String, String] = Map.empty[String, String].asJava
 
   private def isValidSchema(schema: StructType): Boolean = {
-    if (schema.fieldNames.toSeq != Seq("key", "value")) {
+    if (schema.fieldNames.toImmutableArraySeq != Seq("key", "value")) {
       false
     } else if (!SchemaUtil.getSchemaAsDataType(schema, "key").isInstanceOf[StructType]) {
       false

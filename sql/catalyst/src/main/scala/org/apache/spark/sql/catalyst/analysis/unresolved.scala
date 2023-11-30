@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, Metadata, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Thrown when an invalid attempt is made to access a property of a tree that has yet to be fully
@@ -562,7 +563,8 @@ case class UnresolvedStarExcept(target: Option[Seq[String]], excepts: Seq[Seq[St
               col.toAttribute -> nestedExcept.tail
             }.get
           }
-          Alias(CreateStruct(filterColumns(extractedFields.toSeq, newExcepts)), col.name)()
+          Alias(CreateStruct(
+            filterColumns(extractedFields.toImmutableArraySeq, newExcepts)), col.name)()
         // if there are multiple nestedExcepts but one is empty we must have overlapping except
         // columns. throw an error.
         case (col, Some(nestedExcepts)) if nestedExcepts.size > 1 =>
@@ -712,6 +714,8 @@ case class UnresolvedAlias(
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_ALIAS)
 
   override lazy val resolved = false
+
+  override def toString: String = s"$prettyName(${child.toString})"
 
   override protected def withNewChildInternal(newChild: Expression): UnresolvedAlias =
     copy(child = newChild)
