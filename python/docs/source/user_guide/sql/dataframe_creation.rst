@@ -18,7 +18,7 @@
 ==================
 DataFrame Creation
 ==================
-
+PySpark allows you to create DataFrames in several ways. Let's explore these methods with simple examples.
 .. currentmodule:: pyspark.sql
 
 Creating through `createDataFrame`
@@ -30,7 +30,7 @@ a NumPy :class:`numpy.ndarray` and an :class:`pyspark.RDD`.
 :meth:`SparkSession.createDataFrame` takes the `schema` argument to specify the schema of the :class:`DataFrame`.
 When it is omitted, PySpark infers the corresponding schema by taking a sample from the data.
 
-Creating a PySpark :class:`DataFrame` from a list of lists
+Creating a :class:`DataFrame` from Lists
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
@@ -60,14 +60,16 @@ Creating a PySpark :class:`DataFrame` from a list of tuples
     +-----+---+
 
 
-Creating a PySpark :class:`DataFrame` with the explicit schema specified
+Creating a :class:`DataFrame` with a Specified Schema
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
+Define a schema and use it to create a DataFrame. A schema describes the column names and types.
 .. code-block:: python
 
     >>> from pyspark.sql.types import *
-    >>> schema = StructType([StructField("name", StringType(), True),
-    ...     StructField("age", IntegerType(), True)])
+schema = StructType([
+    StructField("name", StringType(), True),
+    StructField("age", IntegerType(), True)
+])
     >>> df = spark.createDataFrame([('Alice', 1), ('Bob', 5)], schema)
     >>> df.show()
     +-----+---+
@@ -93,8 +95,9 @@ Creating a PySpark :class:`DataFrame` with the explicit DDL-formatted string sch
     +-----+---+
 
 
-Creating a PySpark :class:`DataFrame` from a list of dictionaries
+Creating a :class:`DataFrame` from Dictionaries
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Dictionaries with keys as column names can also be used.
 
 .. code-block:: python
 
@@ -107,8 +110,9 @@ Creating a PySpark :class:`DataFrame` from a list of dictionaries
     +---+-----+
 
 
-Creating a PySpark :class:`DataFrame` from a list of :class:`Row`
+Creating a :class:`DataFrame` from :class:`Row`s
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Use the Row type to define rows of a DataFrame.
 
 .. code-block:: python
 
@@ -124,7 +128,7 @@ Creating a PySpark :class:`DataFrame` from a list of :class:`Row`
     +-----+---+
 
 
-Creating a PySpark :class:`DataFrame` from a :class:`pandas.DataFrame`
+Creating a :class:`DataFrame` from a :class:`pandas.DataFrame` or a :class:`numpy.ndarray`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
