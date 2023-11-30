@@ -93,11 +93,11 @@ class HiveSessionStateBuilder(
         new ResolveSessionCatalog(catalogManager) +:
         ResolveWriteToStream +:
         new EvalSubqueriesForTimeTravel +:
+        new DetermineTableStats(session) +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
       DetectAmbiguousSelfJoin +:
-        new DetermineTableStats(session) +:
         RelationConversions(catalog) +:
         QualifyLocationWithWarehouse(catalog) +:
         PreprocessTableCreation(catalog) +:
