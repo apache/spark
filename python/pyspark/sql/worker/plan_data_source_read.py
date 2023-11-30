@@ -137,9 +137,9 @@ def main(infile: IO, outfile: IO) -> None:
                     },
                 )
             if len(partitions) == 0:
-                partitions = [None]
+                partitions = [None]  # type: ignore
         except NotImplementedError:
-            partitions = [None]
+            partitions = [None]  # type: ignore
         except Exception as e:
             raise PySparkRuntimeError(
                 error_class="PYTHON_DATA_SOURCE_CREATE_ERROR",

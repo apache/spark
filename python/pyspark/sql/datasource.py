@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from abc import ABC, abstractmethod
-from typing import final, Any, Dict, Iterable, Iterator, List, Tuple, Type, Union, TYPE_CHECKING
+from typing import final, Any, Dict, Iterator, List, Sequence, Tuple, Type, Union, TYPE_CHECKING
 
 from pyspark.sql import Row
 from pyspark.sql.types import StructType
@@ -154,7 +154,7 @@ class InputPartition:
 
     Notes
     -----
-    This class must be serializable.
+    This class must be picklable.
 
     Examples
     --------
@@ -175,10 +175,10 @@ class InputPartition:
     ...     return [RangeInputPartition(1, 3), RangeInputPartition(4, 6)]
     """
 
-    def __init__(self, value):
+    def __init__(self, value: Any) -> None:
         self.value = value
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         attributes = ", ".join([f"{k}={v!r}" for k, v in self.__dict__.items()])
         return f"{self.__class__.__name__}({attributes})"
 
@@ -191,7 +191,7 @@ class DataSourceReader(ABC):
     .. versionadded: 4.0.0
     """
 
-    def partitions(self) -> List[InputPartition]:
+    def partitions(self) -> Sequence[InputPartition]:
         """
         Returns an iterator of partitions for this data source.
 
@@ -209,13 +209,13 @@ class DataSourceReader(ABC):
 
         Returns
         -------
-        Iterator[Any]
-            An iterator of partitions for this data source. The partition value can be
-            any serializable objects.
+        Sequence[InputPartition]
+            A sequence of partitions for this data source. Each partition value
+            must be an instance of `InputPartition` or a subclass of it.
 
         Notes
         -----
-        This method should not return any un-picklable objects.
+        All partition values must be picklable objects.
 
         Examples
         --------
@@ -354,7 +354,7 @@ class WriterCommitMessage:
 
     Notes
     -----
-    This class must be serializable.
+    This class must be picklable.
     """
 
     ...
