@@ -36,6 +36,9 @@ import org.apache.spark.util.Utils
  * tests will not be compatible with other DBMSes. There will be more work in the future, such as
  * some kind of conversion, to increase coverage.
  *
+ * If your SQL query test is not compatible with other DBMSes, please add it to the `ignoreList` at
+ * the bottom of this file.
+ *
  * You need to have a database server up before running this test.
  * For example, for postgres:
  * 1. Install PostgreSQL.
@@ -196,7 +199,7 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
     case _ => plan.children.iterator.exists(isSemanticallySorted)
   }
 
-  // Ignore all earlier tests for now due to incompatibility.
+  // Ignore all tests for now due to likely incompatibility.
   override def ignoreList: Set[String] = super.ignoreList ++ Set(
     "postgreSQL",
     "subquery",
