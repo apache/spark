@@ -165,7 +165,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     if (TestUtils.testCommandAvailable("/bin/bash")) Nil else Set("transform.sql")
   /** List of test cases to ignore, in lower cases. */
   protected def ignoreList: Set[String] = Set(
-    "ignored.sql" // Do NOT remove this one. It is here to test the ignore functionality.
+    "ignored.sql", // Do NOT remove this one. It is here to test the ignore functionality.
+    "postgres-crosstest"
   ) ++ otherIgnoreList
 
   // Create all the test cases.

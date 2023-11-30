@@ -170,7 +170,7 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
   }
 
   // Ignore all tests for now due to likely incompatibility.
-  override def ignoreList: Set[String] = super.ignoreList ++
+  override def ignoreList: Set[String] =
     // Directories
     Set(
       "postgreSQL",
