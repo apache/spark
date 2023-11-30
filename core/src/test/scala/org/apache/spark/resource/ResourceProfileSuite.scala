@@ -374,7 +374,7 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
     rprof.require(eReq)
 
     // Update this if new resource type added
-    assert(ResourceProfile.allSupportedExecutorResources.size === 5,
+    assert(ResourceProfile.allSupportedExecutorResources.length === 5,
       "Executor resources should have 5 supported resources")
     assert(rprof.build().getCustomExecutorResources().size === 1,
       "Executor resources should have 1 custom resource")

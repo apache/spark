@@ -34,6 +34,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Regression model for isotonic regression.
@@ -190,7 +191,7 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
       spark.createDataFrame(
-        boundaries.toSeq.zip(predictions).map { case (b, p) => Data(b, p) }
+        boundaries.toImmutableArraySeq.zip(predictions).map { case (b, p) => Data(b, p) }
       ).write.parquet(dataPath(path))
     }
 

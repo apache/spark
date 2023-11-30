@@ -45,7 +45,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
 
         val gbt = GradientBoostedTrees.train(rdd, boostingStrategy)
 
-        assert(gbt.trees.size === numIterations)
+        assert(gbt.trees.length === numIterations)
         try {
           EnsembleTestHelper.validateRegressor(
             gbt, GradientBoostedTreesSuite.data.toImmutableArraySeq, 0.06)
@@ -76,7 +76,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
 
         val gbt = GradientBoostedTrees.train(rdd, boostingStrategy)
 
-        assert(gbt.trees.size === numIterations)
+        assert(gbt.trees.length === numIterations)
         try {
           EnsembleTestHelper.validateRegressor(
             gbt, GradientBoostedTreesSuite.data.toImmutableArraySeq, 0.85, "mae")
@@ -108,7 +108,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
 
         val gbt = GradientBoostedTrees.train(rdd, boostingStrategy)
 
-        assert(gbt.trees.size === numIterations)
+        assert(gbt.trees.length === numIterations)
         try {
           EnsembleTestHelper.validateClassifier(
             gbt, GradientBoostedTreesSuite.data.toImmutableArraySeq, 0.9)

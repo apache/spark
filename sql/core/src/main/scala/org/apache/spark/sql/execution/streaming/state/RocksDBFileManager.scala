@@ -405,8 +405,8 @@ class RocksDBFileManager(
 
     val sstDir = new Path(dfsRootDir, RocksDBImmutableFile.SST_FILES_DFS_SUBDIR)
     val logDir = new Path(dfsRootDir, RocksDBImmutableFile.LOG_FILES_DFS_SUBDIR)
-    val allSstFiles = if (fm.exists(sstDir)) fm.list(sstDir).toSeq else Seq.empty
-    val allLogFiles = if (fm.exists(logDir)) fm.list(logDir).toSeq else Seq.empty
+    val allSstFiles = if (fm.exists(sstDir)) fm.list(sstDir).toImmutableArraySeq else Seq.empty
+    val allLogFiles = if (fm.exists(logDir)) fm.list(logDir).toImmutableArraySeq else Seq.empty
     filesToDelete ++= findOrphanFiles(fileToMaxUsedVersion.keys.toSeq, allSstFiles ++ allLogFiles)
       .map(_ -> -1L)
     logInfo(s"Deleting ${filesToDelete.size} files not used in versions >= $minVersionToRetain")

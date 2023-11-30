@@ -43,7 +43,7 @@ from py4j.java_gateway import JavaObject, JVMView
 from pyspark import copy_func, _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.context import SparkContext
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkIndexError
 from pyspark.rdd import (
     RDD,
     _load_from_socket,
@@ -3222,9 +3222,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         _cols = []
         for c in cols:
             if isinstance(c, int) and not isinstance(c, bool):
-                # TODO: should introduce dedicated error class
                 if c < 1:
-                    raise IndexError(f"Column ordinal must be positive but got {c}")
+                    raise PySparkIndexError(
+                        error_class="INDEX_NOT_POSITIVE", message_parameters={"index": str(c)}
+                    )
                 # ordinal is 1-based
                 _cols.append(self[c - 1])
             else:
@@ -3256,7 +3257,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 elif c < 0:
                     _c = self[-c - 1].desc()
                 else:
-                    raise IndexError("Column ordinal must not be zero!")
+                    raise PySparkIndexError(
+                        error_class="INDEX_NOT_POSITIVE", message_parameters={"index": str(c)}
+                    )
             else:
                 _c = c  # type: ignore[assignment]
             jcols.append(_to_java_column(cast("ColumnOrName", _c)))
@@ -4204,7 +4207,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         return GroupedData(jgd, self)
 
-    # TODO(SPARK-46048): Add it to Python Spark Connect client.
     def groupingSets(
         self, groupingSets: Sequence[Sequence["ColumnOrName"]], *cols: "ColumnOrName"
     ) -> "GroupedData":

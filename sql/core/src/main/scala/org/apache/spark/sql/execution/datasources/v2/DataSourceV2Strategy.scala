@@ -131,7 +131,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case PhysicalOperation(project, filters,
         DataSourceV2ScanRelation(_, scan: LocalScan, output, _, _)) =>
-      val localScanExec = LocalTableScanExec(output, scan.rows().toSeq)
+      val localScanExec = LocalTableScanExec(output, scan.rows().toImmutableArraySeq)
       withProjectAndFilter(project, filters, localScanExec, needsUnsafeConversion = false) :: Nil
 
     case PhysicalOperation(project, filters, relation: DataSourceV2ScanRelation) =>
@@ -330,7 +330,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case WriteToContinuousDataSource(writer, query, customMetrics) =>
       WriteToContinuousDataSourceExec(writer, planLater(query), customMetrics) :: Nil
 
-    case DescribeNamespace(ResolvedNamespace(catalog, ns), extended, output) =>
+    case DescribeNamespace(ResolvedNamespace(catalog, ns, _), extended, output) =>
       DescribeNamespaceExec(output, catalog.asNamespaceCatalog, ns, extended) :: Nil
 
     case DescribeRelation(r: ResolvedTable, partitionSpec, isExtended, output) =>
@@ -369,10 +369,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         invalidateTableCache(r),
         session.sharedState.cacheManager.cacheQuery) :: Nil
 
-    case SetNamespaceProperties(ResolvedNamespace(catalog, ns), properties) =>
+    case SetNamespaceProperties(ResolvedNamespace(catalog, ns, _), properties) =>
       AlterNamespaceSetPropertiesExec(catalog.asNamespaceCatalog, ns, properties) :: Nil
 
-    case SetNamespaceLocation(ResolvedNamespace(catalog, ns), location) =>
+    case SetNamespaceLocation(ResolvedNamespace(catalog, ns, _), location) =>
       if (StringUtils.isEmpty(location)) {
         throw QueryExecutionErrors.invalidEmptyLocationError(location)
       }
@@ -381,13 +381,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         ns,
         Map(SupportsNamespaces.PROP_LOCATION -> makeQualifiedDBObjectPath(location))) :: Nil
 
-    case CommentOnNamespace(ResolvedNamespace(catalog, ns), comment) =>
+    case CommentOnNamespace(ResolvedNamespace(catalog, ns, _), comment) =>
       AlterNamespaceSetPropertiesExec(
         catalog.asNamespaceCatalog,
         ns,
         Map(SupportsNamespaces.PROP_COMMENT -> comment)) :: Nil
 
-    case CreateNamespace(ResolvedNamespace(catalog, ns), ifNotExists, properties) =>
+    case CreateNamespace(ResolvedNamespace(catalog, ns, _), ifNotExists, properties) =>
       val location = properties.get(SupportsNamespaces.PROP_LOCATION)
       if (location.isDefined && location.get.isEmpty) {
         throw QueryExecutionErrors.invalidEmptyLocationError(location.get)
@@ -397,17 +397,17 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }.getOrElse(properties)
       CreateNamespaceExec(catalog.asNamespaceCatalog, ns, ifNotExists, finalProperties) :: Nil
 
-    case DropNamespace(ResolvedNamespace(catalog, ns), ifExists, cascade) =>
+    case DropNamespace(ResolvedNamespace(catalog, ns, _), ifExists, cascade) =>
       DropNamespaceExec(catalog, ns, ifExists, cascade) :: Nil
 
-    case ShowNamespaces(ResolvedNamespace(catalog, ns), pattern, output) =>
+    case ShowNamespaces(ResolvedNamespace(catalog, ns, _), pattern, output) =>
       ShowNamespacesExec(output, catalog.asNamespaceCatalog, ns, pattern) :: Nil
 
-    case ShowTables(ResolvedNamespace(catalog, ns), pattern, output) =>
+    case ShowTables(ResolvedNamespace(catalog, ns, _), pattern, output) =>
       ShowTablesExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
 
     case ShowTablesExtended(
-        ResolvedNamespace(catalog, ns),
+        ResolvedNamespace(catalog, ns, _),
         pattern,
         output) =>
       ShowTablesExtendedExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
@@ -416,7 +416,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       ShowTablePartitionExec(output, r.catalog, r.identifier,
         r.table.asPartitionable, Seq(part).asResolvedPartitionSpecs.head) :: Nil
 
-    case SetCatalogAndNamespace(ResolvedNamespace(catalog, ns)) =>
+    case SetCatalogAndNamespace(ResolvedNamespace(catalog, ns, _)) =>
       val catalogManager = session.sessionState.catalogManager
       val namespace = if (ns.nonEmpty) Some(ns) else None
       SetCatalogAndNamespaceExec(catalogManager, Some(catalog.name()), namespace) :: Nil
@@ -534,7 +534,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           s"DropIndex is not supported in this table ${table.name}.")
       }
 
-    case ShowFunctions(ResolvedNamespace(catalog, ns), userScope, systemScope, pattern, output) =>
+    case ShowFunctions(
+      ResolvedNamespace(catalog, ns, _), userScope, systemScope, pattern, output) =>
       ShowFunctionsExec(
         output,
         catalog.asFunctionCatalog,

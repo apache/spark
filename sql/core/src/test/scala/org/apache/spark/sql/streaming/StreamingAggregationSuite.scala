@@ -708,7 +708,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       .groupBy("group")
       .agg(collect_list("value"))
     testStream(df, outputMode = OutputMode.Update)(
-      AddData(input, (1 to spark.sqlContext.conf.objectAggSortBasedFallbackThreshold): _*),
+      AddData(input, (1 to spark.sessionState.conf.objectAggSortBasedFallbackThreshold): _*),
       AssertOnQuery { q =>
         q.processAllAvailable()
         true

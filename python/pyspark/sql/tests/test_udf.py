@@ -825,7 +825,7 @@ class BaseUDFTestsMixin(object):
 
             for offheap in ["true", "false"]:
                 with self.sql_conf({"spark.sql.columnVector.offheap.enabled": offheap}):
-                    self.assertEquals(
+                    self.assertEqual(
                         self.spark.read.parquet(path).select(fUdf("id")).head(), Row(0)
                     )
         finally:
@@ -843,12 +843,12 @@ class BaseUDFTestsMixin(object):
         )
         # Input
         row = df.select(udf(lambda x: str(x))("nested_struct")).first()
-        self.assertEquals(
+        self.assertEqual(
             row[0], "Row(col1=1, col2=Row(col1='John', col2=30, col3=Row(col1='value', col2=10)))"
         )
         # Output
         row = df.select(udf(lambda x: x, returnType=df.dtypes[0][1])("nested_struct")).first()
-        self.assertEquals(
+        self.assertEqual(
             row[0], Row(col1=1, col2=Row(col1="John", col2=30, col3=Row(col1="value", col2=10)))
         )
 
@@ -856,7 +856,7 @@ class BaseUDFTestsMixin(object):
         df = self.spark.range(1).selectExpr("map('a', map('b', 'c')) as nested_map")
         # Input
         row = df.select(udf(lambda x: str(x))("nested_map")).first()
-        self.assertEquals(row[0], "{'a': {'b': 'c'}}")
+        self.assertEqual(row[0], "{'a': {'b': 'c'}}")
         # Output
 
         @udf(returnType=df.dtypes[0][1])
@@ -865,13 +865,13 @@ class BaseUDFTestsMixin(object):
             return x
 
         row = df.select(f("nested_map")).first()
-        self.assertEquals(row[0], {"a": {"b": "d"}})
+        self.assertEqual(row[0], {"a": {"b": "d"}})
 
     def test_nested_array(self):
         df = self.spark.range(1).selectExpr("array(array(1, 2), array(3, 4)) as nested_array")
         # Input
         row = df.select(udf(lambda x: str(x))("nested_array")).first()
-        self.assertEquals(row[0], "[[1, 2], [3, 4]]")
+        self.assertEqual(row[0], "[[1, 2], [3, 4]]")
         # Output
 
         @udf(returnType=df.dtypes[0][1])
@@ -880,7 +880,7 @@ class BaseUDFTestsMixin(object):
             return x
 
         row = df.select(f("nested_array")).first()
-        self.assertEquals(row[0], [[1, 2], [3, 4], [4, 5]])
+        self.assertEqual(row[0], [[1, 2], [3, 4], [4, 5]])
 
     def test_complex_return_types(self):
         row = (
@@ -894,9 +894,9 @@ class BaseUDFTestsMixin(object):
             .first()
         )
 
-        self.assertEquals(row[0], [1, 2, 3])
-        self.assertEquals(row[1], {"a": "b"})
-        self.assertEquals(row[2], Row(col1=1, col2=2))
+        self.assertEqual(row[0], [1, 2, 3])
+        self.assertEqual(row[1], {"a": "b"})
+        self.assertEqual(row[2], Row(col1=1, col2=2))
 
     def test_named_arguments(self):
         @udf("int")

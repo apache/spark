@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
-/* global $, Mustache, formatDuration, formatTimeMillis, jQuery, uiRoot */
+/* global $, Mustache, jQuery, uiRoot */
+
+import {formatDuration, formatTimeMillis} from "./utils.js";
 
 var appLimit = -1;
 

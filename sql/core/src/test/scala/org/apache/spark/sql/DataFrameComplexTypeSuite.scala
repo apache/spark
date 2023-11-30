@@ -82,7 +82,7 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSparkSession {
         )) as "items"
       ).collect()
 
-      assert(result.size === 1)
+      assert(result.length === 1)
       assert(result === Row(Seq(Seq(Row(1)), Seq(Row(2)), Seq(Row(3)))) :: Nil)
     }
   }

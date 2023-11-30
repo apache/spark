@@ -40,6 +40,7 @@ import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems,
@@ -337,7 +338,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                 external = false)
               runCommand(df.sparkSession) {
                 CreateTableAsSelect(
-                  UnresolvedIdentifier(catalog.name +: ident.namespace.toSeq :+ ident.name),
+                  UnresolvedIdentifier(
+                    catalog.name +: ident.namespace.toImmutableArraySeq :+ ident.name),
                   partitioningAsV2,
                   df.queryExecution.analyzed,
                   tableSpec,
@@ -461,7 +463,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
       case SaveMode.Overwrite =>
         val conf = df.sparkSession.sessionState.conf
-        val dynamicPartitionOverwrite = table.table.partitioning.size > 0 &&
+        val dynamicPartitionOverwrite = table.table.partitioning.length > 0 &&
           conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
 
         if (dynamicPartitionOverwrite) {

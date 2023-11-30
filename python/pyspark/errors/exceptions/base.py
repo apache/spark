@@ -190,9 +190,15 @@ class SparkUpgradeException(PySparkException):
     """
 
 
+class SparkNoSuchElementException(PySparkException):
+    """
+    Exception thrown for `java.util.NoSuchElementException`.
+    """
+
+
 class UnknownException(PySparkException):
     """
-    None of the above exceptions.
+    None of the other exceptions.
     """
 
 
@@ -205,6 +211,12 @@ class PySparkValueError(PySparkException, ValueError):
 class PySparkTypeError(PySparkException, TypeError):
     """
     Wrapper class for TypeError to support error classes.
+    """
+
+
+class PySparkIndexError(PySparkException, IndexError):
+    """
+    Wrapper class for IndexError to support error classes.
     """
 
 
