@@ -26,33 +26,36 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
 
 /**
- * Represents a connection (session) to a database.
+ * Represents a connection (session) to a database using JDBC.
  */
 private[sql] trait JdbcConnection {
+
   /**
-   * Runs the given query.
-   * @return A Seq[String] representing the output. This is a Seq where each element represents a
-   *         single row.
+   * Executes the given SQL query and returns the result as a sequence of strings.
+   * @return A Seq[String] representing the output, where each element represents a single row.
    */
   def runQuery(query: String): Seq[String]
 
   /**
-   * Drop the table with the given table name.
+   * Drops the table with the specified table name.
    */
   def dropTable(tableName: String): Unit
 
   /**
-   * Create a table with the given table name and schema.
+   * Creates a table with the specified name and schema.
+   * @param schemaString The schema definition for the table. Note that this may vary depending on
+   *                     the database system.
    */
   def createTable(tableName: String, schemaString: String): Unit
 
   /**
-   * Load data from the given Spark Dataframe into the table with given name.
+   * Loads data from the given Spark DataFrame into the table with the specified name.
+   * @param df        The Spark DataFrame containing the data to be loaded.
    */
   def loadData(df: DataFrame, tableName: String): Unit
 
   /**
-   * Close the connection.
+   * Closes the JDBC connection.
    */
   def close(): Unit
 }

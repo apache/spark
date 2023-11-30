@@ -23,7 +23,6 @@ import java.util.Locale
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLQueryTestSuite
 import org.apache.spark.sql.catalyst.util.stringToFile
-import org.apache.spark.util.Utils
 
 // scalastyle:off line.size.limit
 /**
@@ -111,16 +110,11 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
           output
         }
       }
-      // We do some query canonicalization now.
-      val executionOutput = ExecutionOutput(
+      ExecutionOutput(
         sql = sql,
         // Don't care about the schema for this test. Only care about correctness.
         schema = None,
         output = normalizeTestResults(output.mkString("\n")))
-      if (testCase.isInstanceOf[CTETest]) {
-        expandCTEQueryAndCompareResult(localSparkSession, sql, executionOutput)
-      }
-      executionOutput
     }
     runner.foreach(_.cleanUp())
 
@@ -169,11 +163,6 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
   override lazy val listTestCases: Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
       var resultFile = resultFileForInputFile(file)
-      // JDK-4511638 changes 'toString' result of Float/Double
-      // JDK-8282081 changes DataTimeFormatter 'F' symbol
-      if (Utils.isJavaVersionAtLeast21) {
-        if (new File(resultFile + ".java21").exists()) resultFile += ".java21"
-      }
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
       RegularTestCase(testCaseName, absPath, resultFile) :: Nil
@@ -328,7 +317,7 @@ object CrossDbmsQueryTestSuite {
 
   // System argument to indicate which reference DBMS is being used.
   private final val REF_DBMS_ARGUMENT = "REF_DBMS"
-  // System arguemnt to indicate a custom connection URL to the reference DBMS.
+  // System argument to indicate a custom connection URL to the reference DBMS.
   private final val REF_DBMS_CONNECTION_URL = "REF_DBMS_CONNECTION_URL"
 
   private final val POSTGRES = "postgres"
