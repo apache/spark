@@ -72,7 +72,7 @@ training error) and minimizing model complexity (i.e., to avoid overfitting).
 The following table summarizes the loss functions and their gradients or sub-gradients for the
 methods `spark.mllib` supports:
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr><th></th><th>loss function $L(\wv; \x, y)$</th><th>gradient or sub-gradient</th></tr>
   </thead>
@@ -105,7 +105,7 @@ The purpose of the
 encourage simple models and avoid overfitting.  We support the following
 regularizers in `spark.mllib`:
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr><th></th><th>regularizer $R(\wv)$</th><th>gradient or sub-gradient</th></tr>
   </thead>
