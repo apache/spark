@@ -33,6 +33,7 @@ import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Latent Dirichlet Allocation (LDA) model.
@@ -456,7 +457,7 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
       val metadata = compact(render
         (("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
           ("k" -> k) ~ ("vocabSize" -> topicsMatrix.numRows) ~
-          ("docConcentration" -> docConcentration.toArray.toSeq) ~
+          ("docConcentration" -> docConcentration.toArray.toImmutableArraySeq) ~
           ("topicConcentration" -> topicConcentration) ~
           ("gammaShape" -> gammaShape)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
@@ -864,9 +865,9 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
       val metadata = compact(render
         (("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
           ("k" -> k) ~ ("vocabSize" -> vocabSize) ~
-          ("docConcentration" -> docConcentration.toArray.toSeq) ~
+          ("docConcentration" -> docConcentration.toArray.toImmutableArraySeq) ~
           ("topicConcentration" -> topicConcentration) ~
-          ("iterationTimes" -> iterationTimes.toSeq) ~
+          ("iterationTimes" -> iterationTimes.toImmutableArraySeq) ~
           ("gammaShape" -> gammaShape)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 

@@ -30,6 +30,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.ArrayImplicits._
 
 /** Utilities for serialization / deserialization between Python and Java, using Pickle. */
 private[spark] object SerDeUtil extends Logging {
@@ -121,7 +122,7 @@ private[spark] object SerDeUtil extends Logging {
         val obj = unpickle.loads(row)
         if (batched) {
           obj match {
-            case array: Array[Any] => array.toSeq
+            case array: Array[Any] => array.toImmutableArraySeq
             case _ => obj.asInstanceOf[JArrayList[_]].asScala
           }
         } else {
