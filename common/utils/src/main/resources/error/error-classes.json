@@ -527,6 +527,12 @@
     ],
     "sqlState" : "22018"
   },
+  "COURSE_GRAINED_SCHEDULER_NEGATIVE_EXECUTORS" : {
+    "message" : [
+      "Attempted to request a negative number of additional executor(s) <numAdditionalExecutors> from the cluster manager. Please specify a positive number!"
+    ],
+    "sqlState" : "42K0J"
+  },
   "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
     "message" : [
       "Not allowed to create the permanent view <name> without explicitly assigning an alias for the expression <attr>."
@@ -1191,6 +1197,22 @@
     ],
     "sqlState" : "42822"
   },
+  "HEALTH_TRACKER_NEGATIVE_CONFIG" : {
+    "message" : [
+      "<k> was <v>, but must be > 0."
+    ],
+    "sqlState" : "42K0J"
+  },
+  "HEALTH_TRACKER_TOO_MANY_ATTEMPTS" : {
+    "message" : [
+      "<maxNodeAttemptsKey>",
+      "( = <maxNodeAttempts>) was >= <maxTaskFailuresKey>",
+      "( = <maxTaskFailures> ). Though excludeOnFailure is enabled, with this configuration,",
+      "Spark will not be robust to one bad node. Decrease <maxNodeAttemptsKey>, increase <maxTaskFailuresKey>,",
+      "or disable excludeOnFailure with <excludeOnFailureKey>"
+    ],
+    "sqlState" : "42K0J"
+  },
   "HLL_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
       "Invalid call to <function>; only valid HLL sketch buffers are supported as inputs (such as those produced by the `hll_sketch_agg` function)."
@@ -1391,6 +1413,18 @@
       "Cannot find the index <indexName> on table <tableName>."
     ],
     "sqlState" : "42704"
+  },
+  "INPUT_FORMAT_NOT_FOUND" : {
+    "message" : [
+      "Specified inputformat <inputFormatClass> + cannot be found ? <e>"
+    ],
+    "sqlState" : "42K0J"
+  },
+  "INPUT_FORMAT_NOT_SUPPORTED" : {
+    "message" : [
+      "Specified inputformat <inputFormatClass> is NOT a supported input format ? does not implement either of the supported hadoop api's"
+    ],
+    "sqlState" : "42K0J"
   },
   "INSERT_COLUMN_ARITY_MISMATCH" : {
     "message" : [
@@ -2392,6 +2426,24 @@
     ],
     "sqlState" : "54006"
   },
+  "LIVE_LISTENER_BUS_STARTED" : {
+    "message" : [
+      "LiveListenerBus already started."
+    ],
+    "sqlState" : "42K0J"
+  },
+  "LIVE_LISTENER_BUS_STOPPED" : {
+    "message" : [
+      "LiveListenerBus is stopped."
+    ],
+    "sqlState" : "42K0J"
+  },
+  "LIVE_LISTENER_BUS_STOPPED_WITHOUT_STARTING" : {
+    "message" : [
+      "Attempted to stop bus that has not yet started!"
+    ],
+    "sqlState" : "42K0J"
+  },
   "LOAD_DATA_PATH_NOT_EXISTS" : {
     "message" : [
       "LOAD DATA input path does not exist: <path>."
@@ -2808,6 +2860,12 @@
     ],
     "sqlState" : "XXKD0"
   },
+  "POOL_UNSUPPORTED_SCHEDULING_MODE" : {
+    "message" : [
+      "Unsupported scheduling mode: <schedulingMode>. Use FAIR or FIFO instead."
+    ],
+    "sqlState" : "42K0J"
+  },
   "PROTOBUF_DEPENDENCY_NOT_FOUND" : {
     "message" : [
       "Could not find dependency: <dependencyName>."
@@ -3082,6 +3140,18 @@
       "If you want to allow it, please set \"spark.sql.allowMultipleTableArguments.enabled\" to \"true\""
     ],
     "sqlState" : "54023"
+  },
+  "TASK_SCHEDULER_STOPPED" : {
+    "message" : [
+      "Spark context stopped while waiting for backend"
+    ],
+    "sqlState" : "42K0J"
+  },
+  "TASK_SCHEDULER_UNSUPPORTED_SCHEDULING_MODE" : {
+    "message" : [
+      "Unsupported <SCHEDULER_MODE_PROPERTY>: <schedulingMode>"
+    ],
+    "sqlState" : "42K0J"
   },
   "TASK_WRITE_FAILED" : {
     "message" : [

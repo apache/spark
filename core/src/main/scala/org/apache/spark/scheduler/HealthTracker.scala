@@ -22,38 +22,38 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkContext}
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
- * HealthTracker is designed to track problematic executors and nodes.  It supports excluding
+ * HealthTracker is designed to track problematic executors and nodes. It supports excluding
  * executors and nodes across an entire application (with a periodic expiry). TaskSetManagers add
  * additional logic for exclusion of executors and nodes for individual tasks and stages which
  * works in concert with the logic here.
  *
  * The tracker needs to deal with a variety of workloads, e.g.:
  *
- *  * bad user code -- this may lead to many task failures, but that should not count against
- *      individual executors
- *  * many small stages -- this may prevent a bad executor for having many failures within one
- *      stage, but still many failures over the entire application
- *  * "flaky" executors -- they don't fail every task, but are still faulty enough to merit
- *      excluding
- *  * missing shuffle files -- may trigger fetch failures on healthy executors.
+ * * bad user code -- this may lead to many task failures, but that should not count against
+ * individual executors * many small stages -- this may prevent a bad executor for having many
+ * failures within one stage, but still many failures over the entire application * "flaky"
+ * executors -- they don't fail every task, but are still faulty enough to merit excluding *
+ * missing shuffle files -- may trigger fetch failures on healthy executors.
  *
- * See the design doc on SPARK-8425 for a more in-depth discussion. Note SPARK-32037 renamed
- * the feature.
+ * See the design doc on SPARK-8425 for a more in-depth discussion. Note SPARK-32037 renamed the
+ * feature.
  *
- * THREADING: As with most helpers of TaskSchedulerImpl, this is not thread-safe.  Though it is
- * called by multiple threads, callers must already have a lock on the TaskSchedulerImpl.  The
- * one exception is [[excludedNodeList()]], which can be called without holding a lock.
+ * THREADING: As with most helpers of TaskSchedulerImpl, this is not thread-safe. Though it is
+ * called by multiple threads, callers must already have a lock on the TaskSchedulerImpl. The one
+ * exception is [[excludedNodeList()]], which can be called without holding a lock.
  */
-private[scheduler] class HealthTracker (
+private[scheduler] class HealthTracker(
     private val listenerBus: LiveListenerBus,
     conf: SparkConf,
     allocationClient: Option[ExecutorAllocationClient],
-    clock: Clock = new SystemClock()) extends Logging {
+    clock: Clock = new SystemClock())
+    extends Logging {
 
   def this(sc: SparkContext, allocationClient: Option[ExecutorAllocationClient]) = {
     this(sc.listenerBus, sc.conf, allocationClient)
@@ -71,30 +71,33 @@ private[scheduler] class HealthTracker (
   /**
    * A map from executorId to information on task failures. Tracks the time of each task failure,
    * so that we can avoid excluding executors due to failures that are very far apart. We do not
-   * actively remove from this as soon as tasks hit their timeouts, to avoid the time it would take
-   * to do so. But it will not grow too large, because as soon as an executor gets too many
+   * actively remove from this as soon as tasks hit their timeouts, to avoid the time it would
+   * take to do so. But it will not grow too large, because as soon as an executor gets too many
    * failures, we exclude the executor and remove its entry here.
    */
   private val executorIdToFailureList = new HashMap[String, ExecutorFailureList]()
   val executorIdToExcludedStatus = new HashMap[String, ExcludedExecutor]()
   val nodeIdToExcludedExpiryTime = new HashMap[String, Long]()
+
   /**
-   * An immutable copy of the set of nodes that are currently excluded.  Kept in an
-   * AtomicReference to make [[excludedNodeList()]] thread-safe.
+   * An immutable copy of the set of nodes that are currently excluded. Kept in an AtomicReference
+   * to make [[excludedNodeList()]] thread-safe.
    */
   private val _excludedNodeList = new AtomicReference[Set[String]](Set())
+
   /**
-   * Time when the next excluded node will expire.  Used as a shortcut to
-   * avoid iterating over all entries in the excludedNodeList when none will have expired.
+   * Time when the next excluded node will expire. Used as a shortcut to avoid iterating over all
+   * entries in the excludedNodeList when none will have expired.
    */
   var nextExpiryTime: Long = Long.MaxValue
+
   /**
    * Mapping from nodes to all of the executors that have been excluded on that node. We do *not*
    * remove from this when executors are removed from spark, so we can track when we get multiple
-   * successive excluded executors on one node.  Nonetheless, it will not grow too large because
-   * there cannot be many excluded executors on one node, before we stop requesting more
-   * executors on that node, and we clean up the list of excluded executors once an executor has
-   * been excluded for EXCLUDE_ON_FAILURE_TIMEOUT_MILLIS.
+   * successive excluded executors on one node. Nonetheless, it will not grow too large because
+   * there cannot be many excluded executors on one node, before we stop requesting more executors
+   * on that node, and we clean up the list of excluded executors once an executor has been
+   * excluded for EXCLUDE_ON_FAILURE_TIMEOUT_MILLIS.
    */
   val nodeToExcludedExecs = new HashMap[String, HashSet[String]]()
 
@@ -111,8 +114,9 @@ private[scheduler] class HealthTracker (
       val execsToInclude = executorIdToExcludedStatus.filter(_._2.expiryTime < now).keys
       if (execsToInclude.nonEmpty) {
         // Include any executors that have been excluded longer than the excludeOnFailure timeout.
-        logInfo(s"Removing executors $execsToInclude from exclude list because the " +
-          s"the executors have reached the timed out")
+        logInfo(
+          s"Removing executors $execsToInclude from exclude list because the " +
+            s"the executors have reached the timed out")
         execsToInclude.foreach { exec =>
           val status = executorIdToExcludedStatus.remove(exec).get
           val failedExecsOnNode = nodeToExcludedExecs(status.node)
@@ -128,8 +132,9 @@ private[scheduler] class HealthTracker (
       val nodesToInclude = nodeIdToExcludedExpiryTime.filter(_._2 < now).keys
       if (nodesToInclude.nonEmpty) {
         // Include any nodes that have been excluded longer than the excludeOnFailure timeout.
-        logInfo(s"Removing nodes $nodesToInclude from exclude list because the " +
-          s"nodes have reached has timed out")
+        logInfo(
+          s"Removing nodes $nodesToInclude from exclude list because the " +
+            s"nodes have reached has timed out")
         nodesToInclude.foreach { node =>
           nodeIdToExcludedExpiryTime.remove(node)
           // post both to keep backwards compatibility
@@ -144,7 +149,7 @@ private[scheduler] class HealthTracker (
 
   private def updateNextExpiryTime(): Unit = {
     val execMinExpiry = if (executorIdToExcludedStatus.nonEmpty) {
-      executorIdToExcludedStatus.map{_._2.expiryTime}.min
+      executorIdToExcludedStatus.map { _._2.expiryTime }.min
     } else {
       Long.MaxValue
     }
@@ -166,27 +171,36 @@ private[scheduler] class HealthTracker (
       case Some(a) =>
         logInfo(fullMsg)
         if (EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED) {
-          a.decommissionExecutor(exec, ExecutorDecommissionInfo(fullMsg),
+          a.decommissionExecutor(
+            exec,
+            ExecutorDecommissionInfo(fullMsg),
             adjustTargetNumExecutors = false)
         } else {
-          a.killExecutors(Seq(exec), adjustTargetNumExecutors = false, countFailures = false,
+          a.killExecutors(
+            Seq(exec),
+            adjustTargetNumExecutors = false,
+            countFailures = false,
             force = true)
         }
       case None =>
-        logInfo(s"Not attempting to kill excluded executor id $exec " +
-          s"since allocation client is not defined.")
+        logInfo(
+          s"Not attempting to kill excluded executor id $exec " +
+            s"since allocation client is not defined.")
     }
   }
 
   private def killExcludedExecutor(exec: String): Unit = {
     if (conf.get(config.EXCLUDE_ON_FAILURE_KILL_ENABLED)) {
-      killExecutor(exec, s"Killing excluded executor id $exec since " +
-        s"${config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key} is set.")
+      killExecutor(
+        exec,
+        s"Killing excluded executor id $exec since " +
+          s"${config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key} is set.")
     }
   }
 
   private[scheduler] def killExcludedIdleExecutor(exec: String): Unit = {
-    killExecutor(exec,
+    killExecutor(
+      exec,
       s"Killing excluded idle executor id $exec because of task unschedulability and trying " +
         "to acquire a new executor.")
   }
@@ -196,21 +210,24 @@ private[scheduler] class HealthTracker (
       allocationClient match {
         case Some(a) =>
           if (EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED) {
-            logInfo(s"Decommissioning all executors on excluded host $node " +
-              s"since ${config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key} is set.")
+            logInfo(
+              s"Decommissioning all executors on excluded host $node " +
+                s"since ${config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key} is set.")
             if (!a.decommissionExecutorsOnHost(node)) {
               logError(s"Decommissioning executors on $node failed.")
             }
           } else {
-            logInfo(s"Killing all executors on excluded host $node " +
-              s"since ${config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key} is set.")
+            logInfo(
+              s"Killing all executors on excluded host $node " +
+                s"since ${config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key} is set.")
             if (!a.killExecutorsOnHost(node)) {
               logError(s"Killing executors on node $node failed.")
             }
           }
         case None =>
-          logWarning(s"Not attempting to kill executors on excluded host $node " +
-            s"since allocation client is not defined.")
+          logWarning(
+            s"Not attempting to kill executors on excluded host $node " +
+              s"since allocation client is not defined.")
       }
     }
   }
@@ -279,8 +296,9 @@ private[scheduler] class HealthTracker (
       // some of the logic around expiry times a little more confusing.  But it also wouldn't be a
       // problem to re-exclude, with a later expiry time.
       if (newTotal >= MAX_FAILURES_PER_EXEC && !executorIdToExcludedStatus.contains(exec)) {
-        logInfo(s"Excluding executor id: $exec because it has $newTotal" +
-          s" task failures in successful task sets")
+        logInfo(
+          s"Excluding executor id: $exec because it has $newTotal" +
+            s" task failures in successful task sets")
         val node = failuresInTaskSet.node
         executorIdToExcludedStatus.put(exec, ExcludedExecutor(node, expiryTimeForNewExcludes))
         // post both to keep backwards compatibility
@@ -297,9 +315,10 @@ private[scheduler] class HealthTracker (
         // If the node is already excluded, we avoid adding it again with a later expiry
         // time.
         if (excludedExecsOnNode.size >= MAX_FAILED_EXEC_PER_NODE &&
-            !nodeIdToExcludedExpiryTime.contains(node)) {
-          logInfo(s"Excluding node $node because it has ${excludedExecsOnNode.size} " +
-            s"executors excluded: ${excludedExecsOnNode}")
+          !nodeIdToExcludedExpiryTime.contains(node)) {
+          logInfo(
+            s"Excluding node $node because it has ${excludedExecsOnNode.size} " +
+              s"executors excluded: ${excludedExecsOnNode}")
           nodeIdToExcludedExpiryTime.put(node, expiryTimeForNewExcludes)
           // post both to keep backwards compatibility
           listenerBus.post(SparkListenerNodeBlacklisted(now, node, excludedExecsOnNode.size))
@@ -316,7 +335,7 @@ private[scheduler] class HealthTracker (
   }
 
   /**
-   * Get the full set of nodes that are excluded.  Unlike other methods in this class, this *IS*
+   * Get the full set of nodes that are excluded. Unlike other methods in this class, this *IS*
    * thread-safe -- no lock required on a taskScheduler.
    */
   def excludedNodeList(): Set[String] = {
@@ -340,8 +359,8 @@ private[scheduler] class HealthTracker (
   /**
    * Tracks all failures for one executor (that have not passed the timeout).
    *
-   * In general we actually expect this to be extremely small, since it won't contain more than the
-   * maximum number of task failures before an executor is failed (default 2).
+   * In general we actually expect this to be extremely small, since it won't contain more than
+   * the maximum number of task failures before an executor is failed (default 2).
    */
   private[scheduler] final class ExecutorFailureList extends Logging {
 
@@ -351,6 +370,7 @@ private[scheduler] class HealthTracker (
      * All failures on this executor in successful task sets.
      */
     private var failuresAndExpiryTimes = ArrayBuffer[(TaskId, Long)]()
+
     /**
      * As an optimization, we track the min expiry time over all entries in failuresAndExpiryTimes
      * so its quick to tell if there are any failures with expiry before the current time.
@@ -372,7 +392,7 @@ private[scheduler] class HealthTracker (
     }
 
     /**
-     * The number of unique tasks that failed on this executor.  Only counts failures within the
+     * The number of unique tasks that failed on this executor. Only counts failures within the
      * timeout, and in successful tasksets.
      */
     def numUniqueTaskFailures: Int = failuresAndExpiryTimes.size
@@ -380,17 +400,13 @@ private[scheduler] class HealthTracker (
     def isEmpty: Boolean = failuresAndExpiryTimes.isEmpty
 
     /**
-     * Apply the timeout to individual tasks.  This is to prevent one-off failures that are very
+     * Apply the timeout to individual tasks. This is to prevent one-off failures that are very
      * spread out in time (and likely have nothing to do with problems on the executor) from
-     * triggering exclusion.  However, note that we do *not* remove executors and nodes from
-     * being excluded as we expire individual task failures -- each have their own timeout.  E.g.,
-     * suppose:
-     *  * timeout = 10, maxFailuresPerExec = 2
-     *  * Task 1 fails on exec 1 at time 0
-     *  * Task 2 fails on exec 1 at time 5
-     * -->  exec 1 is excluded from time 5 - 15.
-     * This is to simplify the implementation, as well as keep the behavior easier to understand
-     * for the end user.
+     * triggering exclusion. However, note that we do *not* remove executors and nodes from being
+     * excluded as we expire individual task failures -- each have their own timeout. E.g.,
+     * suppose: * timeout = 10, maxFailuresPerExec = 2 * Task 1 fails on exec 1 at time 0 * Task 2
+     * fails on exec 1 at time 5 --> exec 1 is excluded from time 5 - 15. This is to simplify the
+     * implementation, as well as keep the behavior easier to understand for the end user.
      */
     def dropFailuresWithTimeoutBefore(dropBefore: Long): Unit = {
       if (minExpiryTime < dropBefore) {
@@ -421,11 +437,10 @@ private[spark] object HealthTracker extends Logging {
   private val DEFAULT_TIMEOUT = "1h"
 
   /**
-   * Returns true if the excludeOnFailure is enabled, based on checking the configuration
-   * in the following order:
-   * 1. Is it specifically enabled or disabled?
-   * 2. Is it enabled via the legacy timeout conf?
-   * 3. Default is off
+   * Returns true if the excludeOnFailure is enabled, based on checking the configuration in the
+   * following order:
+   *   1. Is it specifically enabled or disabled? 2. Is it enabled via the legacy timeout conf? 3.
+   *      Default is off
    */
   def isExcludeOnFailureEnabled(conf: SparkConf): Boolean = {
     conf.get(config.EXCLUDE_ON_FAILURE_ENABLED) match {
@@ -437,7 +452,8 @@ private[spark] object HealthTracker extends Logging {
         val legacyKey = config.EXCLUDE_ON_FAILURE_LEGACY_TIMEOUT_CONF.key
         conf.get(config.EXCLUDE_ON_FAILURE_LEGACY_TIMEOUT_CONF).exists { legacyTimeout =>
           if (legacyTimeout == 0) {
-            logWarning(s"Turning off excludeOnFailure due to legacy configuration: $legacyKey == 0")
+            logWarning(
+              s"Turning off excludeOnFailure due to legacy configuration: $legacyKey == 0")
             false
           } else {
             logWarning(s"Turning on excludeOnFailure due to legacy configuration: $legacyKey > 0")
@@ -459,15 +475,17 @@ private[spark] object HealthTracker extends Logging {
    * Verify that exclude on failure configurations are consistent; if not, throw an exception.
    * Should only be called if excludeOnFailure is enabled.
    *
-   * The configuration is expected to adhere to a few invariants.  Default values
-   * follow these rules of course, but users may unwittingly change one configuration
-   * without making the corresponding adjustment elsewhere. This ensures we fail-fast when
-   * there are such misconfigurations.
+   * The configuration is expected to adhere to a few invariants. Default values follow these
+   * rules of course, but users may unwittingly change one configuration without making the
+   * corresponding adjustment elsewhere. This ensures we fail-fast when there are such
+   * misconfigurations.
    */
   def validateExcludeOnFailureConfs(conf: SparkConf): Unit = {
 
     def mustBePos(k: String, v: String): Unit = {
-      throw new IllegalArgumentException(s"$k was $v, but must be > 0.")
+      throw new SparkIllegalArgumentException(
+        errorClass = "HEALTH_TRACKER_NEGATIVE_CONFIG",
+        messageParameters = Map("k" -> k.toString, "v" -> v.toString))
     }
 
     Seq(
@@ -476,8 +494,7 @@ private[spark] object HealthTracker extends Logging {
       config.MAX_FAILURES_PER_EXEC_STAGE,
       config.MAX_FAILED_EXEC_PER_NODE_STAGE,
       config.MAX_FAILURES_PER_EXEC,
-      config.MAX_FAILED_EXEC_PER_NODE
-    ).foreach { config =>
+      config.MAX_FAILED_EXEC_PER_NODE).foreach { config =>
       val v = conf.get(config)
       if (v <= 0) {
         mustBePos(config.key, v.toString)
@@ -499,12 +516,14 @@ private[spark] object HealthTracker extends Logging {
     val maxNodeAttempts = conf.get(config.MAX_TASK_ATTEMPTS_PER_NODE)
 
     if (maxNodeAttempts >= maxTaskFailures) {
-      throw new IllegalArgumentException(s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key} " +
-        s"( = ${maxNodeAttempts}) was >= ${config.TASK_MAX_FAILURES.key} " +
-        s"( = ${maxTaskFailures} ). Though excludeOnFailure is enabled, with this configuration, " +
-        s"Spark will not be robust to one bad node. Decrease " +
-        s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key}, increase ${config.TASK_MAX_FAILURES.key}, " +
-        s"or disable excludeOnFailure with ${config.EXCLUDE_ON_FAILURE_ENABLED.key}")
+      throw new SparkIllegalArgumentException(
+        errorClass = "HEALTH_TRACKER_TOO_MANY_ATTEMPTS",
+        messageParameters = Map(
+          "maxNodeAttemptsKey" -> config.MAX_TASK_ATTEMPTS_PER_NODE.key.toString,
+          "maxNodeAttempts" -> maxNodeAttempts.toString,
+          "maxTaskFailuresKey" -> config.TASK_MAX_FAILURES.key.toString,
+          "maxTaskFailures" -> maxTaskFailures.toString,
+          "excludeOnFailureKey" -> config.EXCLUDE_ON_FAILURE_ENABLED.key.toString))
     }
   }
 }

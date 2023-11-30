@@ -23,6 +23,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.config
 import org.apache.spark.util.ManualClock
 
@@ -36,7 +37,9 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
   private var conf: SparkConf = _
 
   override def beforeEach(): Unit = {
-    conf = new SparkConf().setAppName("test").setMaster("local")
+    conf = new SparkConf()
+      .setAppName("test")
+      .setMaster("local")
       .set(config.EXCLUDE_ON_FAILURE_ENABLED.key, "true")
     scheduler = mockTaskSchedWithConf(conf)
 
@@ -67,8 +70,8 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
   }.toSet ++ (1 to 100).map(_.toString)
 
   /**
-   * Its easier to write our tests as if we could directly look at the sets of nodes & executors in
-   * the exclude.  However the api doesn't expose a set, so this is a simple way to test
+   * Its easier to write our tests as if we could directly look at the sets of nodes & executors
+   * in the exclude. However the api doesn't expose a set, so this is a simple way to test
    * something similar, since we know the universe of values that might appear in these sets.
    */
   def assertEquivalentToSet(f: String => Boolean, expected: Set[String]): Unit = {
@@ -108,7 +111,10 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
       if (stageId % 2 == 0) {
         // fail one task in every other taskset
         taskSetExclude.updateExcludedForFailedTask(
-          "hostA", exec = "1", index = 0, failureReason = "testing")
+          "hostA",
+          exec = "1",
+          index = 0,
+          failureReason = "testing")
         failuresSoFar += 1
       }
       healthTracker.updateExcludedForSuccessfulTaskSet(stageId, 0, taskSetExclude.execToFailures)
@@ -133,7 +139,10 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
     (0 until failuresUntilExcludeed * 10).foreach { stage =>
       val taskSetExclude = createTaskSetExcludelist(stage)
       taskSetExclude.updateExcludedForFailedTask(
-        "hostA", exec = "1", index = 0, failureReason = "testing")
+        "hostA",
+        exec = "1",
+        index = 0,
+        failureReason = "testing")
     }
     assertEquivalentToSet(healthTracker.isExecutorExcluded(_), Set())
   }
@@ -145,11 +154,15 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
       // But if the taskset fails, we shouldn't exclude the executor after the stage.
       val taskSetExclude = createTaskSetExcludelist(0)
       // We trigger enough failures for both the taskset exclude, and the application exclude.
-      val numFailures = math.max(conf.get(config.MAX_FAILURES_PER_EXEC),
+      val numFailures = math.max(
+        conf.get(config.MAX_FAILURES_PER_EXEC),
         conf.get(config.MAX_FAILURES_PER_EXEC_STAGE))
       (0 until numFailures).foreach { index =>
         taskSetExclude.updateExcludedForFailedTask(
-          "hostA", exec = "1", index = index, failureReason = "testing")
+          "hostA",
+          exec = "1",
+          index = index,
+          failureReason = "testing")
       }
       assert(taskSetExclude.isExecutorExcludedForTaskSet("1"))
       assertEquivalentToSet(healthTracker.isExecutorExcluded(_), Set())
@@ -173,7 +186,10 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
     // application.
     (0 until 4).foreach { partition =>
       taskSetExclude0.updateExcludedForFailedTask(
-        "hostA", exec = "1", index = partition, failureReason = "testing")
+        "hostA",
+        exec = "1",
+        index = partition,
+        failureReason = "testing")
     }
     healthTracker.updateExcludedForSuccessfulTaskSet(0, 0, taskSetExclude0.execToFailures)
     assert(healthTracker.excludedNodeList() === Set())
@@ -188,7 +204,10 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
     // exclude that node.
     (0 until 4).foreach { partition =>
       taskSetExclude1.updateExcludedForFailedTask(
-        "hostA", exec = "2", index = partition, failureReason = "testing")
+        "hostA",
+        exec = "2",
+        index = partition,
+        failureReason = "testing")
     }
     healthTracker.updateExcludedForSuccessfulTaskSet(0, 0, taskSetExclude1.execToFailures)
     assert(healthTracker.excludedNodeList() === Set("hostA"))
@@ -217,7 +236,10 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
     // on that executor should have been reset to 0.
     val taskSetExclude2 = createTaskSetExcludelist(stageId = 2)
     taskSetExclude2.updateExcludedForFailedTask(
-      "hostA", exec = "1", index = 0, failureReason = "testing")
+      "hostA",
+      exec = "1",
+      index = 0,
+      failureReason = "testing")
     healthTracker.updateExcludedForSuccessfulTaskSet(2, 0, taskSetExclude2.execToFailures)
     assert(healthTracker.excludedNodeList() === Set())
     assertEquivalentToSet(healthTracker.isNodeExcluded(_), Set())
@@ -232,7 +254,10 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
     // the taskset then finishes successfully (elsewhere).
     (0 until 4).foreach { partition =>
       taskSetExclude0.updateExcludedForFailedTask(
-        "hostA", exec = "1", index = partition, failureReason = "testing")
+        "hostA",
+        exec = "1",
+        index = partition,
+        failureReason = "testing")
     }
     healthTracker.handleRemovedExecutor("1")
     healthTracker.updateExcludedForSuccessfulTaskSet(
@@ -248,7 +273,10 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
     val taskSetExclude1 = createTaskSetExcludelist(stageId = 1)
     (0 until 4).foreach { partition =>
       taskSetExclude1.updateExcludedForFailedTask(
-        "hostA", exec = "2", index = partition, failureReason = "testing")
+        "hostA",
+        exec = "2",
+        index = partition,
+        failureReason = "testing")
     }
     healthTracker.handleRemovedExecutor("2")
     healthTracker.updateExcludedForSuccessfulTaskSet(
@@ -376,23 +404,36 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
     // want to make sure that when taskset 1 finishes, even though we've now got two task failures,
     // we realize that the task failure we just added was well before the timeout.
     clock.advance(1)
-    healthTracker.updateExcludedForSuccessfulTaskSet(stageId = 2, 0, taskSetExclude2.execToFailures)
+    healthTracker.updateExcludedForSuccessfulTaskSet(
+      stageId = 2,
+      0,
+      taskSetExclude2.execToFailures)
     clock.advance(1)
-    healthTracker.updateExcludedForSuccessfulTaskSet(stageId = 1, 0, taskSetExclude1.execToFailures)
+    healthTracker.updateExcludedForSuccessfulTaskSet(
+      stageId = 1,
+      0,
+      taskSetExclude1.execToFailures)
 
     // Make sure nothing was excluded
     assertEquivalentToSet(healthTracker.isExecutorExcluded(_), Set())
   }
 
-  test("only exclude nodes for the application when enough executors have failed on that " +
-    "specific host") {
+  test(
+    "only exclude nodes for the application when enough executors have failed on that " +
+      "specific host") {
     // we exclude executors on two different hosts -- make sure that doesn't lead to any
     // node excluding
     val taskSetExclude0 = createTaskSetExcludelist(stageId = 0)
     taskSetExclude0.updateExcludedForFailedTask(
-      "hostA", exec = "1", index = 0, failureReason = "testing")
+      "hostA",
+      exec = "1",
+      index = 0,
+      failureReason = "testing")
     taskSetExclude0.updateExcludedForFailedTask(
-      "hostA", exec = "1", index = 1, failureReason = "testing")
+      "hostA",
+      exec = "1",
+      index = 1,
+      failureReason = "testing")
     healthTracker.updateExcludedForSuccessfulTaskSet(0, 0, taskSetExclude0.execToFailures)
     assertEquivalentToSet(healthTracker.isExecutorExcluded(_), Set("1"))
     verify(listenerBusMock).post(SparkListenerExecutorExcluded(0, "1", 2))
@@ -400,9 +441,15 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
 
     val taskSetExclude1 = createTaskSetExcludelist(stageId = 1)
     taskSetExclude1.updateExcludedForFailedTask(
-      "hostB", exec = "2", index = 0, failureReason = "testing")
+      "hostB",
+      exec = "2",
+      index = 0,
+      failureReason = "testing")
     taskSetExclude1.updateExcludedForFailedTask(
-      "hostB", exec = "2", index = 1, failureReason = "testing")
+      "hostB",
+      exec = "2",
+      index = 1,
+      failureReason = "testing")
     healthTracker.updateExcludedForSuccessfulTaskSet(1, 0, taskSetExclude1.execToFailures)
     assertEquivalentToSet(healthTracker.isExecutorExcluded(_), Set("1", "2"))
     verify(listenerBusMock).post(SparkListenerExecutorExcluded(0, "2", 2))
@@ -412,9 +459,15 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
     // and make sure this time we *do* exclude the node.
     val taskSetExclude2 = createTaskSetExcludelist(stageId = 0)
     taskSetExclude2.updateExcludedForFailedTask(
-      "hostA", exec = "3", index = 0, failureReason = "testing")
+      "hostA",
+      exec = "3",
+      index = 0,
+      failureReason = "testing")
     taskSetExclude2.updateExcludedForFailedTask(
-      "hostA", exec = "3", index = 1, failureReason = "testing")
+      "hostA",
+      exec = "3",
+      index = 1,
+      failureReason = "testing")
     healthTracker.updateExcludedForSuccessfulTaskSet(0, 0, taskSetExclude2.execToFailures)
     assertEquivalentToSet(healthTracker.isExecutorExcluded(_), Set("1", "2", "3"))
     verify(listenerBusMock).post(SparkListenerExecutorExcluded(0, "3", 2))
@@ -443,21 +496,13 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
 
   test("check exclude configuration invariants") {
     val conf = new SparkConf().setMaster("yarn").set(config.SUBMIT_DEPLOY_MODE, "cluster")
-    Seq(
-      (2, 2),
-      (2, 3)
-    ).foreach { case (maxTaskFailures, maxNodeAttempts) =>
+    Seq((2, 2), (2, 3)).foreach { case (maxTaskFailures, maxNodeAttempts) =>
       conf.set(config.TASK_MAX_FAILURES, maxTaskFailures)
       conf.set(config.MAX_TASK_ATTEMPTS_PER_NODE.key, maxNodeAttempts.toString)
-      val excMsg = intercept[IllegalArgumentException] {
+      val e1 = intercept[SparkIllegalArgumentException] {
         HealthTracker.validateExcludeOnFailureConfs(conf)
-      }.getMessage()
-      assert(excMsg === s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key} " +
-        s"( = ${maxNodeAttempts}) was >= ${config.TASK_MAX_FAILURES.key} " +
-        s"( = ${maxTaskFailures} ). Though excludeOnFailure is enabled, with this " +
-        s"configuration, Spark will not be robust to one bad node. Decrease " +
-        s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key}, increase ${config.TASK_MAX_FAILURES.key}, " +
-        s"or disable excludeOnFailure with ${config.EXCLUDE_ON_FAILURE_ENABLED.key}")
+      }
+      assert(e1.getErrorClass === "HEALTH_TRACKER_TOO_MANY_ATTEMPTS")
     }
 
     conf.remove(config.TASK_MAX_FAILURES)
@@ -470,13 +515,12 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
       config.MAX_FAILED_EXEC_PER_NODE_STAGE,
       config.MAX_FAILURES_PER_EXEC,
       config.MAX_FAILED_EXEC_PER_NODE,
-      config.EXCLUDE_ON_FAILURE_TIMEOUT_CONF
-    ).foreach { config =>
+      config.EXCLUDE_ON_FAILURE_TIMEOUT_CONF).foreach { config =>
       conf.set(config.key, "0")
-      val excMsg = intercept[IllegalArgumentException] {
+      val e2 = intercept[SparkIllegalArgumentException] {
         HealthTracker.validateExcludeOnFailureConfs(conf)
-      }.getMessage()
-      assert(excMsg.contains(s"${config.key} was 0, but must be > 0."))
+      }
+      assert(e2.getErrorClass === "HEALTH_TRACKER_NEGATIVE_CONFIG")
       conf.remove(config)
     }
   }
@@ -504,7 +548,10 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
     // application.
     (0 until 4).foreach { partition =>
       taskSetExclude0.updateExcludedForFailedTask(
-        "hostA", exec = "1", index = partition, failureReason = "testing")
+        "hostA",
+        exec = "1",
+        index = partition,
+        failureReason = "testing")
     }
     healthTracker.updateExcludedForSuccessfulTaskSet(0, 0, taskSetExclude0.execToFailures)
 
@@ -516,7 +563,10 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
     // exclude that node.
     (0 until 4).foreach { partition =>
       taskSetExclude1.updateExcludedForFailedTask(
-        "hostA", exec = "2", index = partition, failureReason = "testing")
+        "hostA",
+        exec = "2",
+        index = partition,
+        failureReason = "testing")
     }
     healthTracker.updateExcludedForSuccessfulTaskSet(0, 0, taskSetExclude1.execToFailures)
 
@@ -532,7 +582,10 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
     // application.
     (0 until 4).foreach { partition =>
       taskSetExclude2.updateExcludedForFailedTask(
-        "hostA", exec = "1", index = partition, failureReason = "testing")
+        "hostA",
+        exec = "1",
+        index = partition,
+        failureReason = "testing")
     }
     healthTracker.updateExcludedForSuccessfulTaskSet(0, 0, taskSetExclude2.execToFailures)
 
@@ -544,7 +597,10 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
     // exclude that node.
     (0 until 4).foreach { partition =>
       taskSetExclude3.updateExcludedForFailedTask(
-        "hostA", exec = "2", index = partition, failureReason = "testing")
+        "hostA",
+        exec = "2",
+        index = partition,
+        failureReason = "testing")
     }
     healthTracker.updateExcludedForSuccessfulTaskSet(0, 0, taskSetExclude3.execToFailures)
 
@@ -568,16 +624,18 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
     val taskSetExclude2 = createTaskSetExcludelist(stageId = 0)
     (0 until 4).foreach { partition =>
       taskSetExclude2.updateExcludedForFailedTask(
-        "hostA", exec = "1", index = partition, failureReason = "testing")
+        "hostA",
+        exec = "1",
+        index = partition,
+        failureReason = "testing")
     }
     healthTracker.updateExcludedForSuccessfulTaskSet(0, 0, taskSetExclude2.execToFailures)
 
     val msg1 =
       "Killing excluded executor id 1 since spark.excludeOnFailure.killExcludedExecutors is set." +
-      " (actually decommissioning)"
+        " (actually decommissioning)"
 
-    verify(allocationClientMock).decommissionExecutor(
-      "1", ExecutorDecommissionInfo(msg1), false)
+    verify(allocationClientMock).decommissionExecutor("1", ExecutorDecommissionInfo(msg1), false)
 
     val taskSetExclude3 = createTaskSetExcludelist(stageId = 1)
     // Fail 4 tasks in one task set on executor 2, so that executor gets excluded for the whole
@@ -585,15 +643,21 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
     // exclude that node.
     (0 until 4).foreach { partition =>
       taskSetExclude3.updateExcludedForFailedTask(
-        "hostA", exec = "2", index = partition, failureReason = "testing")
+        "hostA",
+        exec = "2",
+        index = partition,
+        failureReason = "testing")
     }
     healthTracker.updateExcludedForSuccessfulTaskSet(0, 0, taskSetExclude3.execToFailures)
 
     val msg2 =
       "Killing excluded executor id 2 since spark.excludeOnFailure.killExcludedExecutors is set." +
-      " (actually decommissioning)"
+        " (actually decommissioning)"
     verify(allocationClientMock).decommissionExecutor(
-      "2", ExecutorDecommissionInfo(msg2), false, false)
+      "2",
+      ExecutorDecommissionInfo(msg2),
+      false,
+      false)
     verify(allocationClientMock).decommissionExecutorsOnHost("hostA")
   }
 
@@ -635,9 +699,11 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
 
     assert(healthTracker.executorIdToExcludedStatus.contains("1"))
     assert(healthTracker.executorIdToExcludedStatus("1").node === "hostA")
-    assert(healthTracker.executorIdToExcludedStatus("1").expiryTime ===
-      1000 + healthTracker.EXCLUDE_ON_FAILURE_TIMEOUT_MILLIS)
-    assert(healthTracker.nextExpiryTime === 1000 + healthTracker.EXCLUDE_ON_FAILURE_TIMEOUT_MILLIS)
+    assert(
+      healthTracker.executorIdToExcludedStatus("1").expiryTime ===
+        1000 + healthTracker.EXCLUDE_ON_FAILURE_TIMEOUT_MILLIS)
+    assert(
+      healthTracker.nextExpiryTime === 1000 + healthTracker.EXCLUDE_ON_FAILURE_TIMEOUT_MILLIS)
     assert(healthTracker.nodeIdToExcludedExpiryTime.isEmpty)
     assert(healthTracker.nodeToExcludedExecs.contains("hostA"))
     assert(healthTracker.nodeToExcludedExecs("hostA").contains("1"))
@@ -651,8 +717,10 @@ class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSpark
     verify(allocationClientMock).killExecutorsOnHost("hostA")
 
     assert(healthTracker.nodeIdToExcludedExpiryTime.contains("hostA"))
-    assert(healthTracker.nodeIdToExcludedExpiryTime("hostA") ===
-      2000 + healthTracker.EXCLUDE_ON_FAILURE_TIMEOUT_MILLIS)
-    assert(healthTracker.nextExpiryTime === 1000 + healthTracker.EXCLUDE_ON_FAILURE_TIMEOUT_MILLIS)
+    assert(
+      healthTracker.nodeIdToExcludedExpiryTime("hostA") ===
+        2000 + healthTracker.EXCLUDE_ON_FAILURE_TIMEOUT_MILLIS)
+    assert(
+      healthTracker.nextExpiryTime === 1000 + healthTracker.EXCLUDE_ON_FAILURE_TIMEOUT_MILLIS)
   }
 }

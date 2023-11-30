@@ -420,6 +420,12 @@ For more details see [CONNECT](sql-error-conditions-connect-error-class.html)
 
 The value `<str>` (`<fmt>`) cannot be converted to `<targetType>` because it is malformed. Correct the value as per the syntax, or change its format. Use `<suggestion>` to tolerate malformed input and return NULL instead.
 
+### COURSE_GRAINED_SCHEDULER_NEGATIVE_EXECUTORS
+
+[SQLSTATE: 42K0J](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Attempted to request a negative number of additional executor(s) `<numAdditionalExecutors>` from the cluster manager. Please specify a positive number!
+
 ### CREATE_PERMANENT_VIEW_WITHOUT_ALIAS
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
@@ -765,6 +771,22 @@ GROUP BY position `<index>` is not in select list (valid range is [1, `<size>`])
 
 The expression `<sqlExpr>` cannot be used as a grouping expression because its data type `<dataType>` is not an orderable data type.
 
+### HEALTH_TRACKER_NEGATIVE_CONFIG
+
+[SQLSTATE: 42K0J](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+`<k>` was `<v>`, but must be > 0.
+
+### HEALTH_TRACKER_TOO_MANY_ATTEMPTS
+
+[SQLSTATE: 42K0J](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+`<maxNodeAttemptsKey>`
+( = `<maxNodeAttempts>`) was >= `<maxTaskFailuresKey>`
+( = `<maxTaskFailures>` ). Though excludeOnFailure is enabled, with this configuration,
+Spark will not be robust to one bad node. Decrease `<maxNodeAttemptsKey>`, increase `<maxTaskFailuresKey>`,
+or disable excludeOnFailure with `<excludeOnFailureKey>`
+
 ### HLL_INVALID_INPUT_SKETCH_BUFFER
 
 [SQLSTATE: 22546](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -867,6 +889,18 @@ Cannot create the index `<indexName>` on table `<tableName>` because it already 
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot find the index `<indexName>` on table `<tableName>`.
+
+### INPUT_FORMAT_NOT_FOUND
+
+[SQLSTATE: 42K0J](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Specified inputformat `<inputFormatClass>` + cannot be found ? `<e>`
+
+### INPUT_FORMAT_NOT_SUPPORTED
+
+[SQLSTATE: 42K0J](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Specified inputformat `<inputFormatClass>` is NOT a supported input format ? does not implement either of the supported hadoop api's
 
 ### [INSERT_COLUMN_ARITY_MISMATCH](sql-error-conditions-insert-column-arity-mismatch-error-class.html)
 
@@ -1352,6 +1386,24 @@ The join condition `<joinCondition>` has the invalid type `<conditionType>`, exp
 
 Kryo serialization failed: `<exceptionMsg>`. To avoid this, increase "`<bufferSizeConfKey>`" value.
 
+### LIVE_LISTENER_BUS_STARTED
+
+[SQLSTATE: 42K0J](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+LiveListenerBus already started.
+
+### LIVE_LISTENER_BUS_STOPPED
+
+[SQLSTATE: 42K0J](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+LiveListenerBus is stopped.
+
+### LIVE_LISTENER_BUS_STOPPED_WITHOUT_STARTING
+
+[SQLSTATE: 42K0J](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Attempted to stop bus that has not yet started!
+
 ### LOAD_DATA_PATH_NOT_EXISTS
 
 [SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1692,6 +1744,12 @@ The input plan of `<ruleExecutor>` is invalid: `<reason>`
 
 Rule `<rule>` in batch `<batch>` generated an invalid plan: `<reason>`
 
+### POOL_UNSUPPORTED_SCHEDULING_MODE
+
+[SQLSTATE: 42K0J](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Unsupported scheduling mode: `<schedulingMode>`. Use FAIR or FIFO instead.
+
 ### PROTOBUF_DEPENDENCY_NOT_FOUND
 
 [SQLSTATE: 42K0G](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1966,6 +2024,18 @@ Failed to evaluate the table function `<functionName>` because its table metadat
 There are too many table arguments for table-valued function.
 It allows one table argument, but got: `<num>`.
 If you want to allow it, please set "spark.sql.allowMultipleTableArguments.enabled" to "true"
+
+### TASK_SCHEDULER_STOPPED
+
+[SQLSTATE: 42K0J](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Spark context stopped while waiting for backend
+
+### TASK_SCHEDULER_UNSUPPORTED_SCHEDULING_MODE
+
+[SQLSTATE: 42K0J](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Unsupported `<SCHEDULER_MODE_PROPERTY>`: `<schedulingMode>`
 
 ### TASK_WRITE_FAILED
 

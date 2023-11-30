@@ -22,6 +22,7 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 
@@ -33,7 +34,8 @@ private[spark] class Pool(
     val schedulingMode: SchedulingMode,
     initMinShare: Int,
     initWeight: Int)
-  extends Schedulable with Logging {
+    extends Schedulable
+    with Logging {
 
   val schedulableQueue = new ConcurrentLinkedQueue[Schedulable]
   val schedulableNameToSchedulable = new ConcurrentHashMap[String, Schedulable]
@@ -54,8 +56,9 @@ private[spark] class Pool(
       case SchedulingMode.FIFO =>
         new FIFOSchedulingAlgorithm()
       case _ =>
-        val msg = s"Unsupported scheduling mode: $schedulingMode. Use FAIR or FIFO instead."
-        throw new IllegalArgumentException(msg)
+        throw new SparkIllegalArgumentException(
+          errorClass = "POOL_UNSUPPORTED_SCHEDULING_MODE",
+          messageParameters = Map("schedulingMode" -> schedulingMode.toString))
     }
   }
 
@@ -86,7 +89,10 @@ private[spark] class Pool(
     null
   }
 
-  override def executorLost(executorId: String, host: String, reason: ExecutorLossReason): Unit = {
+  override def executorLost(
+      executorId: String,
+      host: String,
+      reason: ExecutorLossReason): Unit = {
     schedulableQueue.asScala.foreach(_.executorLost(executorId, host, reason))
   }
 
