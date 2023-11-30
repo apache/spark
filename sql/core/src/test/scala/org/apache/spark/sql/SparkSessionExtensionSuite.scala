@@ -527,20 +527,18 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
     withSession(extensions) { session =>
       assert(session.sessionState.adaptiveRulesHolder.queryPostPlannerStrategyRules
         .contains(MyQueryPostPlannerStrategyRule))
-      import session.sqlContext.implicits._
+      import session.implicits._
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
           SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false") {
-        val input = Seq((10), (20), (10)).toDF("c1")
+        val input = Seq(10, 20, 10).toDF("c1")
         val df = input.groupBy("c1").count()
         df.collect()
         assert(df.rdd.partitions.length == 1)
-        assert(find(df.queryExecution.executedPlan) {
+        assert(collectFirst(df.queryExecution.executedPlan) {
           case s: ShuffleExchangeExec if s.outputPartitioning == SinglePartition => true
-          case _ => false
         }.isDefined)
-        assert(find(df.queryExecution.executedPlan) {
+        assert(collectFirst(df.queryExecution.executedPlan) {
           case _: SortExec => true
-          case _ => false
         }.isDefined)
       }
     }
