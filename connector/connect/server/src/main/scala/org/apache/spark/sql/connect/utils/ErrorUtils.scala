@@ -231,10 +231,10 @@ private[connect] object ErrorUtils extends Logging {
         StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, sessionHolderOpt))
       case e: StatusRuntimeException => e
       case e: Throwable =>
-          Status.UNKNOWN
-            .withCause(e)
-            .withDescription(StringUtils.abbreviate(e.getMessage, 2048))
-            .asRuntimeException()
+        Status.UNKNOWN
+          .withCause(e)
+          .withDescription(StringUtils.abbreviate(e.getMessage, 2048))
+          .asRuntimeException()
     }
     partial.andThen {
       // All values must be throwable.
