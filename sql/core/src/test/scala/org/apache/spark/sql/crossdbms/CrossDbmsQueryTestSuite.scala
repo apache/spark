@@ -20,6 +20,8 @@ package org.apache.spark.sql.crossdbms
 import java.io.File
 import java.util.Locale
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLQueryTestSuite
 import org.apache.spark.sql.catalyst.util.stringToFile
@@ -94,14 +96,28 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
           runner = runner.orElse(
             Some(CrossDbmsQueryTestSuite.DBMS_TO_CONNECTION_MAPPING(
               crossDbmsToGenerateGoldenFiles)(connectionUrl)))
-          val sparkDf = spark.sql(sql)
-          val output = runner.map(_.runQuery(sql)).get
-          // Use Spark analyzed plan to check if the query result is already semantically sorted.
-          if (isSemanticallySorted(sparkDf.queryExecution.analyzed)) {
-            output
-          } else {
-            // Sort the answer manually if it isn't sorted.
-            output.sorted
+          try {
+            // Either of the below two lines can error. If we go into the catch statement, then it
+            // is likely one of the following scenarios:
+            // 1. Error thrown in Spark analysis:
+            //    a. The query is either incompatible between Spark and the other DBMS
+            //    b. There is issue with the schema in Spark.
+            //    c. The error is expected - it errors on both systems, but only the Spark error
+            //       will be printed to the golden file, because it errors first.
+            // 2. Error thrown in other DBMS execution:
+            //    a. The query is either incompatible between Spark and the other DBMS
+            //    b. Some test table/view is not created on the other DBMS.
+            val sparkDf = spark.sql(sql)
+            val output = runner.map(_.runQuery(sql)).get
+            // Use Spark analyzed plan to check if the query result is already semantically sorted.
+            if (isSemanticallySorted(sparkDf.queryExecution.analyzed)) {
+              output
+            } else {
+              // Sort the answer manually if it isn't sorted.
+              output.sorted
+            }
+          } catch {
+            case NonFatal(e) => Seq(e.getClass.getName, e.getMessage)
           }
         } else {
           // Use Spark.
