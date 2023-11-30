@@ -51,7 +51,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   private val lock = new Object
 
   /** Launches the execution in a background thread, returns immediately. */
-  def start(): Unit = {
+  private[connect] def start(): Unit = {
     lock.synchronized {
       assert(!started)
       // Do not start if already interrupted.
@@ -63,7 +63,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   }
 
   /** Joins the background execution thread after it is finished. */
-  def join(): Unit = {
+  private[connect] def join(): Unit = {
     // only called when the execution is completed or interrupted.
     assert(completed || interrupted)
     executionThread.join()
@@ -74,7 +74,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
    * @return
    *   true if it was not interrupted before, false if it was already interrupted or completed.
    */
-  def interrupt(): Boolean = {
+  private[connect] def interrupt(): Boolean = {
     lock.synchronized {
       if (!started && !interrupted) {
         // execution thread hasn't started yet, and will not be started.
