@@ -20,16 +20,17 @@
 Creating DataFrames
 ===================
 
-PySpark allows you to create :class:`DataFrame`s in several ways. Let's explore these methods with simple examples.
-
 .. currentmodule:: pyspark.sql
+
+PySpark allows you to create :class:`DataFrame`\s in several ways. Let's explore these methods with simple examples.
 
 Creating a :class:`DataFrame` from Lists
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
-    :emphasize-lines: 4
+    :emphasize-lines: 5
 
+    >>> # when the schema is not provided, the resulting DataFrame has _1 and _2 as the schema
     >>> df = spark.createDataFrame([['Alice', 1], ['Bob', 5]])
     >>> df.show()
     +-----+---+
@@ -43,7 +44,7 @@ Creating a :class:`DataFrame` from Lists
 Creating a :class:`DataFrame` with a Specified Schema
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Define a schema and use it to create a DataFrame. A schema describes the column names and types.
+Define a schema and use it to create a :class:`DataFrame`. A schema describes the column names and types.
 
 .. code-block:: python
 
@@ -51,7 +52,7 @@ Define a schema and use it to create a DataFrame. A schema describes the column 
     >>> schema = StructType([
     ...     StructField("name", StringType(), True),
     ...     StructField("age", IntegerType(), True)
-    ...     ])
+    ... ])
     >>> df = spark.createDataFrame([('Alice', 1), ('Bob', 5)], schema)
     >>> df.show()
     +-----+---+
@@ -61,7 +62,7 @@ Define a schema and use it to create a DataFrame. A schema describes the column 
     |  Bob|  5|
     +-----+---+
 
-Use DDL-formatted string schema to create a DataFrame.
+Use DDL-formatted string schema to create a :class:`DataFrame`.
 
 .. code-block:: python
 
@@ -91,10 +92,10 @@ Dictionaries with keys as column names can also be used.
     +---+-----+
 
 
-Creating a :class:`DataFrame` from :class:`Row`s
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Creating a :class:`DataFrame` from :class:`Row`\s
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Use the Row type to define rows of a DataFrame.
+Use the :class:`Row` type to define rows of a :class:`DataFrame`.
 
 .. code-block:: python
 
