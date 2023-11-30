@@ -30,7 +30,7 @@ import org.apache.spark.util.Utils
 
 // scalastyle:off line.size.limit
 /**
- * See SQLQueryTestSuite.scala for the more information. This class builds off of that to allow us
+ * See SQLQueryTestSuite.scala for more information. This class builds off of that to allow us
  * to generate golden files with other DBMS to perform cross-checking for correctness. Note that the
  * input directory path is currently limited because most, if not all, of our current SQL query
  * tests will not be compatible with other DBMSes. There will be more work in the future, such as
@@ -88,7 +88,9 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
 
     var runner: Option[SQLQueryTestRunner] = None
     val outputs: Seq[QueryTestOutput] = queries.map { sql =>
-      val output =
+      val output = {
+        // Use the runner when generating golden files, and Spark when running the test against
+        // the already generated golden files.
         if (regenerateGoldenFiles) {
           if (runner.isEmpty) {
             val connectionUrl = if (customConnectionUrl != null && customConnectionUrl.nonEmpty) {
@@ -112,6 +114,7 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
         } else {
           handleExceptions(getNormalizedQueryExecutionResult(localSparkSession, sql))._2
         }
+      }
       // We do some query canonicalization now.
       val executionOutput = ExecutionOutput(
         sql = sql,
