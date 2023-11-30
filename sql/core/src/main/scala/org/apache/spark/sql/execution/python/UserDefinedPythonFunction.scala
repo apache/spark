@@ -106,7 +106,7 @@ case class UserDefinedPythonTableFunction(
     this(name, func, None, pythonEvalType, udfDeterministic)
   }
 
-  def builder(exprs: Seq[Expression], parser: ParserInterface): LogicalPlan = {
+  def builder(exprs: Seq[Expression], parser: => ParserInterface): LogicalPlan = {
     /*
      * Check if the named arguments:
      * - don't have duplicated names
