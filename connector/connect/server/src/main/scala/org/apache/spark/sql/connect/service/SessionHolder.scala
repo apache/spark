@@ -55,6 +55,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   @volatile private var lastAccessTimeMs: Long = System.currentTimeMillis()
 
   // Time when the session was closed.
+  // Set only by close(), and only once.
   @volatile private var closedTimeMs: Option[Long] = None
 
   // Custom timeout after a session expires due to inactivity.
