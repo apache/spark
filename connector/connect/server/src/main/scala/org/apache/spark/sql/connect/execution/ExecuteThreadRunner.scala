@@ -42,6 +42,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   // forwarding of thread locals needs to be taken into account.
   private val executionThread: Thread = new ExecutionThread()
 
+  private var started: Boolean = false
+
   private var interrupted: Boolean = false
 
   private var completed: Boolean = false
@@ -50,11 +52,20 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
 
   /** Launches the execution in a background thread, returns immediately. */
   def start(): Unit = {
-    executionThread.start()
+    lock.synchronized {
+      assert(!started)
+      // Do not start if already interrupted.
+      if (!interrupted) {
+        executionThread.start()
+        started = true
+      }
+    }
   }
 
   /** Joins the background execution thread after it is finished. */
   def join(): Unit = {
+    // only called when the execution is completed or interrupted.
+    assert(completed || interrupted)
     executionThread.join()
   }
 
@@ -65,7 +76,19 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
    */
   def interrupt(): Boolean = {
     lock.synchronized {
-      if (!interrupted && !completed) {
+      if (!started && !interrupted) {
+        // execution thread hasn't started yet, and will not be started.
+        // handle the interrupted error here directly.
+        interrupted = true
+        ErrorUtils.handleError(
+          "execute",
+          executeHolder.responseObserver,
+          executeHolder.sessionHolder.userId,
+          executeHolder.sessionHolder.sessionId,
+          Some(executeHolder.eventsManager),
+          interrupted)(new SparkSQLException("OPERATION_CANCELED", Map.empty))
+        true
+      } else if (!interrupted && !completed) {
         // checking completed prevents sending interrupt onError after onCompleted
         interrupted = true
         executionThread.interrupt()
