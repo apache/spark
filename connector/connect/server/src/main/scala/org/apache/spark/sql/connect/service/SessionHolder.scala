@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.service
 import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -101,6 +102,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    *
    * Called only by SparkConnectExecutionManager under executionsLock.
    */
+  @GuardedBy("SparkConnectService.executionManager.executionsLock")
   private[service] def addExecuteHolder(executeHolder: ExecuteHolder): Unit = {
     if (closedTimeMs.isDefined) {
       // Do not accept new executions if the session is closing.
@@ -117,7 +119,12 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     }
   }
 
-  /** Remove ExecuteHolder to this session. Called only by SparkConnectExecutionManager. */
+  /**
+   * Remove ExecuteHolder from this session.
+   *
+   * Called only by SparkConnectExecutionManager under executionsLock.
+   */
+  @GuardedBy("SparkConnectService.executionManager.executionsLock")
   private[service] def removeExecuteHolder(operationId: String): Unit = {
     executions.remove(operationId)
   }
@@ -216,22 +223,17 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   /**
    * Expire this session and trigger state cleanup mechanisms.
    *
-   * Called only by SparkConnectSessionManager.
+   * Called only by SparkConnectSessionManager.shutdownSessionHolder.
    */
   private[connect] def close(): Unit = {
-    // It is called only by SparkConnectSessionManager.closeSession, only after it's removed from
-    // the sessionStore there guarantees that it is called only once.
+    // Called only by SparkConnectSessionManager.shutdownSessionHolder.
+    // It is not called under SparkConnectSessionManager.sessionsLock, but it's guaranteed to be
+    // called only once, since removing the session from SparkConnectSessionManager.sessionStore is
+    // synchronized and guaranteed to happen only once.
     if (closedTimeMs.isDefined) {
       throw new IllegalStateException(s"Session $key is already closed.")
     }
-
     logInfo(s"Closing session with userId: $userId and sessionId: $sessionId")
-
-    // After closedTimeMs is defined, SessionHolder.addExecuteHolder() will not allow new executions
-    // to be added for this session. Because both SessionHolder.addExecuteHolder() and
-    // SparkConnectExecutionManager.removeAllExecutionsForSession() are executed under
-    // executionsLock, this guarantees that removeAllExecutionsForSession triggered below will
-    // remove all executions and no new executions will be added in the meanwhile.
     closedTimeMs = Some(System.currentTimeMillis())
 
     if (eventManager.status == SessionStatus.Pending) {
@@ -255,8 +257,12 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     streamingForeachBatchRunnerCleanerCache.cleanUpAll() // Clean up any streaming workers.
     removeAllListeners() // removes all listener and stop python listener processes if necessary.
 
-    // Clean up all executions
-    // It is guaranteed at this point that no new addExecuteHolder are getting started.
+    // Clean up all executions.
+    // After closedTimeMs is defined, SessionHolder.addExecuteHolder() will not allow new executions
+    // to be added for this session anymore. Because both SessionHolder.addExecuteHolder() and
+    // SparkConnectExecutionManager.removeAllExecutionsForSession() are executed under
+    // executionsLock, this guarantees that removeAllExecutionsForSession triggered here will
+    // remove all executions and no new executions will be added in the meanwhile.
     SparkConnectService.executionManager.removeAllExecutionsForSession(this.key)
 
     eventManager.postClosed()
