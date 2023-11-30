@@ -612,6 +612,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     }
   }
 
+  /**
+   * Returns the desired file path for results, given the input file. This is implemented as a
+   * function because differente Suites extending this class may want their results files with
+   * different names or in different locations.
+   */
   protected def resultFileForInputFile(file: File): String = {
     file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
   }
@@ -943,6 +948,12 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         s"-- !query output\n" +
         output
     }
+
+    /**
+     * Some suites extending this one, such as [[CrossDbmsQueryTestSuite]], only test for
+     * correctness and do not care about the schema. The logic here allows passing the check for
+     * number of segments in the golden files when testing.
+     */
     override def numSegments: Int = if (schema.isDefined) { 3 } else { 2 }
   }
 

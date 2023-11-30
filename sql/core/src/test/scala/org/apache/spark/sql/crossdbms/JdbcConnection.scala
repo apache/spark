@@ -25,6 +25,9 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
 
+/**
+ * Represents a connection (session) to a database.
+ */
 private[sql] trait JdbcConnection {
   /**
    * Runs the given query.
@@ -53,6 +56,9 @@ private[sql] trait JdbcConnection {
   def close(): Unit
 }
 
+/**
+ * Represents a connection (session) to a PostgreSQL database.
+ */
 private[sql] case class PostgresConnection(connection_url: Option[String] = None)
   extends JdbcConnection {
 

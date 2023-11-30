@@ -22,10 +22,7 @@ import java.util.Locale
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLQueryTestSuite
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, DescribeColumn, DescribeRelation, Distinct, Generate, Join, LogicalPlan, Sample, Sort}
 import org.apache.spark.sql.catalyst.util.stringToFile
-import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeCommandBase}
 import org.apache.spark.util.Utils
 
 // scalastyle:off line.size.limit
@@ -72,21 +69,20 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
   // Note: the below two functions have to be functions instead of variables because the superclass
   // runs the test first before the subclass variables can be instantiated.
   private def crossDbmsToGenerateGoldenFiles: String = {
-    val userInputDbms = System.getenv("REF_DBMS")
-    if (userInputDbms != null && userInputDbms.nonEmpty) {
-      assert(CrossDbmsQueryTestSuite.SUPPORTED_DBMS.contains(userInputDbms),
-        s"$userInputDbms is not currently supported.")
-      userInputDbms
-    } else {
-      CrossDbmsQueryTestSuite.DEFAULT_DBMS
-    }
+    val userInputDbms = System.getenv(CrossDbmsQueryTestSuite.REF_DBMS_ARGUMENT)
+    val selectedDbms = Option(userInputDbms).filter(_.nonEmpty).getOrElse(
+      CrossDbmsQueryTestSuite.DEFAULT_DBMS)
+    assert(CrossDbmsQueryTestSuite.SUPPORTED_DBMS.contains(selectedDbms),
+      s"$selectedDbms is not currently supported.")
+    selectedDbms
   }
-  private def customConnectionUrl: String = System.getenv("REF_DBMS_CONNECTION_URL")
+  private def customConnectionUrl: String = System.getenv(
+    CrossDbmsQueryTestSuite.REF_DBMS_CONNECTION_URL)
 
   override protected def runQueries(
-    queries: Seq[String],
-    testCase: TestCase,
-    configSet: Seq[(String, String)]): Unit = {
+      queries: Seq[String],
+      testCase: TestCase,
+      configSet: Seq[(String, String)]): Unit = {
     val localSparkSession = spark.newSession()
 
     var runner: Option[SQLQueryTestRunner] = None
@@ -95,18 +91,13 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
         // Use the runner when generating golden files, and Spark when running the test against
         // the already generated golden files.
         if (regenerateGoldenFiles) {
-          if (runner.isEmpty) {
-            val connectionUrl = if (customConnectionUrl != null && customConnectionUrl.nonEmpty) {
-              Some(customConnectionUrl)
-            } else {
-              None
-            }
-            runner = Some(CrossDbmsQueryTestSuite.DBMS_TO_CONNECTION_MAPPING(
-              crossDbmsToGenerateGoldenFiles)(connectionUrl))
-          }
+          val connectionUrl = Option(customConnectionUrl).filter(_.nonEmpty)
+          runner = runner.getOrElse(
+            Some(CrossDbmsQueryTestSuite.DBMS_TO_CONNECTION_MAPPING(
+              crossDbmsToGenerateGoldenFiles)(connectionUrl)))
           val sparkDf = spark.sql(sql)
           val output = runner.map(_.runQuery(sql)).get
-          // Use Spark analyzed plan to check if the query result is already semantically sorted
+          // Use Spark analyzed plan to check if the query result is already semantically sorted.
           val result = if (isSemanticallySorted(sparkDf.queryExecution.analyzed)) {
             output
           } else {
@@ -115,7 +106,9 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
           }
           result
         } else {
-          handleExceptions(getNormalizedQueryExecutionResult(localSparkSession, sql))._2
+          val (_, output) = handleExceptions(
+            getNormalizedQueryExecutionResult(localSparkSession, sql))
+          output
         }
       }
       // We do some query canonicalization now.
@@ -148,23 +141,21 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
   }
 
   override def createScalaTestCase(testCase: TestCase): Unit = {
-    if (ignoreList.exists(t =>
-      testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
-      ignore(testCase.name) {
-        /* Do nothing */
-      }
-    } else {
-      testCase match {
-        case _: RegularTestCase =>
-          // Create a test case to run this case.
-          test(testCase.name) {
-            runSqlTestCase(testCase, listTestCases)
-          }
-        case _ =>
-          ignore(s"Ignoring test cases that are not [[RegularTestCase]] for now") {
-            /* Do nothing */
-          }
-      }
+    testCase match {
+      case _ if ignoreList.exists(t =>
+        testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT))) =>
+        ignore(s"${testCase.name} is in the ignore list.") {
+          log.debug(s"${testCase.name} is in the ignore list.")
+        }
+      case _: RegularTestCase =>
+        // Create a test case to run this case.
+        test(testCase.name) {
+          runSqlTestCase(testCase, listTestCases)
+        }
+      case _ =>
+        ignore(s"Ignoring test cases that are not [[RegularTestCase]] for now") {
+          log.debug(s"${testCase.name} is not a RegularTestCase and is ignored.")
+        }
     }
   }
 
@@ -187,16 +178,6 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
       RegularTestCase(testCaseName, absPath, resultFile) :: Nil
     }.sortBy(_.name)
-  }
-
-  private def isSemanticallySorted(plan: LogicalPlan): Boolean = plan match {
-    case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
-    case _: DescribeCommandBase
-         | _: DescribeColumnCommand
-         | _: DescribeRelation
-         | _: DescribeColumn => true
-    case PhysicalOperation(_, _, Sort(_, true, _)) => true
-    case _ => plan.children.iterator.exists(isSemanticallySorted)
   }
 
   // Ignore all tests for now due to likely incompatibility.
@@ -339,6 +320,11 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
 }
 
 object CrossDbmsQueryTestSuite {
+
+  // System argument to indicate which reference DBMS is being used.
+  private final val REF_DBMS_ARGUMENT = "REF_DBMS"
+  // System arguemnt to indicate a custom connection URL to the reference DBMS.
+  private final val REF_DBMS_CONNECTION_URL = "REF_DBMS_CONNECTION_URL"
 
   private final val POSTGRES = "postgres"
   private final val SUPPORTED_DBMS = Seq(POSTGRES)

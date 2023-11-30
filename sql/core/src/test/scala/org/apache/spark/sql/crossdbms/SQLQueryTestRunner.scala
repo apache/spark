@@ -18,7 +18,9 @@
 package org.apache.spark.sql.crossdbms
 
 /**
- * Trait for classes that can run SQL queries for testing.
+ * Trait for classes that can run SQL queries for testing. This is specifically used as a wrapper
+ * around a connection to a system that can run SQL queries, to run queries from
+ * [[SQLQueryTestSuite]].
  */
 trait SQLQueryTestRunner {
 
