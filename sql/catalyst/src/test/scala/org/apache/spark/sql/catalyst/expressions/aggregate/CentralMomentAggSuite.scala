@@ -20,10 +20,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.types.DoubleType
 
-class CentralMomentAggSuite extends WithAndWithoutCodegen {
+class CentralMomentAggSuite extends TestWithAndWithoutCodegen {
   val input = AttributeReference("input", DoubleType, nullable = true)()
 
-  testBothCodegenAndInterpreted("pandas_kurtosis eval") {
+  testBothCodegenAndInterpreted("SPARK-46189: pandas_kurtosis eval") {
     val evaluator = DeclarativeAggregateEvaluator(PandasKurtosis(input), Seq(input))
     val buffer = evaluator.update(
       InternalRow(1.0d),
@@ -36,7 +36,7 @@ class CentralMomentAggSuite extends WithAndWithoutCodegen {
     assert(result === InternalRow(-2.5772889417360285d))
   }
 
-  testBothCodegenAndInterpreted("pandas_skew eval") {
+  testBothCodegenAndInterpreted("SPARK-46189: pandas_skew eval") {
     val evaluator = DeclarativeAggregateEvaluator(PandasSkewness(input), Seq(input))
     val buffer = evaluator.update(
       InternalRow(1.0d),
@@ -49,7 +49,7 @@ class CentralMomentAggSuite extends WithAndWithoutCodegen {
     assert(result === InternalRow(2.4489389171333733d))
   }
 
-  testBothCodegenAndInterpreted("pandas_stddev eval") {
+  testBothCodegenAndInterpreted("SPARK-46189: pandas_stddev eval") {
     val evaluator = DeclarativeAggregateEvaluator(PandasStddev(input, 1), Seq(input))
     val buffer = evaluator.update(
       InternalRow(1.0d),
@@ -62,7 +62,7 @@ class CentralMomentAggSuite extends WithAndWithoutCodegen {
     assert(result === InternalRow(3.40587727318528d))
   }
 
-  testBothCodegenAndInterpreted("pandas_variance eval") {
+  testBothCodegenAndInterpreted("SPARK-46189: pandas_variance eval") {
     val evaluator = DeclarativeAggregateEvaluator(PandasVariance(input, 1), Seq(input))
     val buffer = evaluator.update(
       InternalRow(1.0d),

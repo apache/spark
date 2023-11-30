@@ -20,11 +20,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.types.DoubleType
 
-class CovarianceAggSuite extends WithAndWithoutCodegen {
+class CovarianceAggSuite extends TestWithAndWithoutCodegen {
   val a = AttributeReference("a", DoubleType, nullable = true)()
   val b = AttributeReference("b", DoubleType, nullable = true)()
 
-  testBothCodegenAndInterpreted("pandas_covar eval") {
+  testBothCodegenAndInterpreted("SPARK-46189: pandas_covar eval") {
     val evaluator = DeclarativeAggregateEvaluator(PandasCovar(a, b, 1), Seq(a, b))
     val buffer = evaluator.update(
       InternalRow(1.0d, 1.0d),

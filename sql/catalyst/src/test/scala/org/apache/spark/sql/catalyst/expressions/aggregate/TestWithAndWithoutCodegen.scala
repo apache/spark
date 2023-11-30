@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 
-trait WithAndWithoutCodegen extends SparkFunSuite with SQLHelper {
+trait TestWithAndWithoutCodegen extends SparkFunSuite with SQLHelper {
   def testBothCodegenAndInterpreted(name: String)(f: => Unit): Unit = {
     val modes = Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
     for (fallbackMode <- modes) {
