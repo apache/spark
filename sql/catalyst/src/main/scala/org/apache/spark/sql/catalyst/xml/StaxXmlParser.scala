@@ -224,8 +224,6 @@ class StaxXmlParser(
         parser.peek match {
           case _: StartElement => convertComplicatedType(dataType, attributes)
           case _: EndElement if data.isEmpty => null
-          // treat empty values as null
-          case _: EndElement if options.nullValue == "" => null
           case _: EndElement => convertTo(data, dataType)
           case _ => convertField(parser, dataType, attributes)
         }

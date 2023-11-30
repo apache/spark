@@ -539,7 +539,7 @@ private[spark] class SparkSubmit extends Logging {
     }
 
     if (localPyFiles != null) {
-      sparkConf.set(SUBMIT_PYTHON_FILES, localPyFiles.split(",").toSeq)
+      sparkConf.set(SUBMIT_PYTHON_FILES, localPyFiles.split(",").toImmutableArraySeq)
     }
 
     // In YARN mode for an R app, add the SparkR package archive and the R package
@@ -861,7 +861,7 @@ private[spark] class SparkSubmit extends Logging {
       // locally.
       resolvedPyFiles
     }
-    sparkConf.set(SUBMIT_PYTHON_FILES, formattedPyFiles.split(",").toSeq)
+    sparkConf.set(SUBMIT_PYTHON_FILES, formattedPyFiles.split(",").toImmutableArraySeq)
 
     if (args.verbose && isSqlShell(childMainClass)) {
       childArgs ++= Seq("--verbose")
@@ -1162,7 +1162,7 @@ private[spark] object SparkSubmitUtils {
   }
 
   def parseSparkConfProperty(pair: String): (String, String) = {
-    pair.split("=", 2).toSeq match {
+    pair.split("=", 2).toImmutableArraySeq match {
       case Seq(k, v) => (k, v)
       case _ => throw new SparkException(s"Spark config without '=': $pair")
     }

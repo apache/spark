@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.trees.TernaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CASE_WHEN, IF, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils.{toSQLExpr, toSQLId, toSQLType}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -418,7 +419,7 @@ object CaseKeyWhen {
     val cases = branches.grouped(2).flatMap {
       case Seq(cond, value) => Some((EqualTo(key, cond), value))
       case Seq(value) => None
-    }.toArray.toSeq  // force materialization to make the seq serializable
+    }.toArray.toImmutableArraySeq  // force materialization to make the seq serializable
     val elseValue = if (branches.size % 2 != 0) Some(branches.last) else None
     CaseWhen(cases, elseValue)
   }

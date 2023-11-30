@@ -1274,7 +1274,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       resolveTempView(u.multipartIdentifier, u.isStreaming, finalTimeTravelSpec.isDefined).orElse {
         expandIdentifier(u.multipartIdentifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
-            val key = ((catalog.name +: ident.namespace :+ ident.name).toSeq, finalTimeTravelSpec)
+            val key =
+              ((catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq,
+              finalTimeTravelSpec)
             AnalysisContext.get.relationCache.get(key).map(_.transform {
               case multi: MultiInstanceRelation =>
                 val newRelation = multi.newInstance()
