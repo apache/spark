@@ -154,6 +154,13 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(toDate("1999-08-").isEmpty)
     assert(toDate("").isEmpty)
     assert(toDate("   ").isEmpty)
+    assert(toDate("xxx2015-01-28").isEmpty)
+
+    // This is a problem:
+    // assert(toDate("2015-01-28 x").get === days(2015, 1, 28))
+    assert(toDate("2015-01-28 x").isEmpty)
+
+    assert(toDate("2015-01-28xx").isEmpty)
   }
 
   test("SPARK-35780: support full range of date string") {

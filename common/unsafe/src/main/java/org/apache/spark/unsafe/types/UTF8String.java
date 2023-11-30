@@ -502,7 +502,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Determines if the specified character (Unicode code point) is white space or an ISO control
    * character according to Java.
    */
-  private boolean isWhitespaceOrISOControl(int codePoint) {
+  public static boolean isWhitespaceOrISOControl(int codePoint) {
     return Character.isWhitespace(codePoint) || Character.isISOControl(codePoint);
   }
 

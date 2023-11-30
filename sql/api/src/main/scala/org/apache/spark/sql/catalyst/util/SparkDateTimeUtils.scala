@@ -305,17 +305,23 @@ trait SparkDateTimeUtils {
       (segment == 0 && digits >= 4 && digits <= maxDigitsYear) ||
         (segment != 0 && digits > 0 && digits <= 2)
     }
-    if (s == null || s.trimAll().numBytes() == 0) {
+    if (s == null) {
       return None
     }
+
     val segments: Array[Int] = Array[Int](1, 1, 1)
     var sign = 1
     var i = 0
     var currentSegmentValue = 0
     var currentSegmentDigits = 0
-    val bytes = s.trimAll().getBytes
+    val bytes = s.getBytes
     var j = 0
-    if (bytes(j) == '-' || bytes(j) == '+') {
+
+    while (j < bytes.length && UTF8String.isWhitespaceOrISOControl(bytes(j))) {
+      j += 1;
+    }
+
+    if (j < bytes.length && (bytes(j) == '-' || bytes(j) == '+')) {
       sign = if (bytes(j) == '-') -1 else 1
       j += 1
     }
