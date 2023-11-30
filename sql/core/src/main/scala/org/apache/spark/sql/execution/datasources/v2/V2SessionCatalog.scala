@@ -154,7 +154,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TransformHelper
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     val provider = properties.getOrDefault(TableCatalog.PROP_PROVIDER, conf.defaultDataSourceName)
 
     val (newSchema, newPartitions) = DataSourceV2Utils.getTableProvider(provider, conf) match {
@@ -164,8 +164,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
       case Some(p) if !p.supportsExternalMetadata() =>
         if (schema.nonEmpty) {
           throw new SparkUnsupportedOperationException(
-            errorClass = "CANNOT_CREATE_DATA_SOURCE_V2_TABLE.EXTERNAL_METADATA_UNSUPPORTED",
-            messageParameters = Map("provider" -> provider))
+            errorClass = "CANNOT_CREATE_DATA_SOURCE_TABLE.EXTERNAL_METADATA_UNSUPPORTED",
+            messageParameters = Map("tableName" -> ident.quoted, "provider" -> provider))
         }
         // V2CreateTablePlan does not allow non-empty partitions when schema is empty. This
         // is checked in `PreProcessTableCreation` rule.
@@ -188,6 +188,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
         }
 
       case _ =>
+        // The provider is not a V2 provider so we return the schema and partitions as is.
         (schema, partitions)
     }
 

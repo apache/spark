@@ -650,8 +650,8 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
           exception = intercept[SparkUnsupportedOperationException] {
             sql(s"CREATE TABLE test(a INT, b INT) USING ${cls.getName}")
           },
-          errorClass = "CANNOT_CREATE_DATA_SOURCE_V2_TABLE.EXTERNAL_METADATA_UNSUPPORTED",
-          parameters = Map("provider" -> cls.getName)
+          errorClass = "CANNOT_CREATE_DATA_SOURCE_TABLE.EXTERNAL_METADATA_UNSUPPORTED",
+          parameters = Map("tableName" -> "default.test", "provider" -> cls.getName)
         )
       }
     }
@@ -682,6 +682,17 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       }
       assert(e.getMessage.contains(
         "java.lang.ArrayIndexOutOfBoundsException: Index 2 out of bounds for length 2"))
+    }
+  }
+
+  test("SPARK-46043: create table in SQL with partitioning required data source") {
+    val cls = classOf[PartitionsRequiredDataSource]
+    val e = intercept[IllegalArgumentException](
+      sql(s"CREATE TABLE test(a INT) USING ${cls.getName}"))
+    assert(e.getMessage.contains("user-supplied partitioning"))
+    withTable("test") {
+      sql(s"CREATE TABLE test(i INT, j INT) USING ${cls.getName} PARTITIONED BY (i)")
+      checkAnswer(sql(s"SELECT * FROM test"), Seq(Row(0, 0), Row(1, -1)))
     }
   }
 
@@ -1014,6 +1025,12 @@ class SchemaRequiredDataSource extends TableProvider {
         new MyScanBuilder(userGivenSchema)
       }
     }
+  }
+}
+
+class PartitionsRequiredDataSource extends SchemaRequiredDataSource {
+  override def inferPartitioning(options: CaseInsensitiveStringMap): Array[Transform] = {
+    throw new IllegalArgumentException("requires user-supplied partitioning")
   }
 }
 

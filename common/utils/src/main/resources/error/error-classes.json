@@ -149,9 +149,9 @@
     ],
     "sqlState" : "42846"
   },
-  "CANNOT_CREATE_DATA_SOURCE_V2_TABLE" : {
+  "CANNOT_CREATE_DATA_SOURCE_TABLE" : {
     "message" : [
-      "Failed to create data source V2 table:"
+      "Failed to create data source table <tableName>:"
     ],
     "subClass" : {
       "EXTERNAL_METADATA_UNSUPPORTED" : {

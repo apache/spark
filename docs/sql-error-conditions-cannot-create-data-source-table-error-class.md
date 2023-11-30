@@ -1,7 +1,7 @@
 ---
 layout: global
-title: CANNOT_CREATE_DATA_SOURCE_V2_TABLE error class
-displayTitle: CANNOT_CREATE_DATA_SOURCE_V2_TABLE error class
+title: CANNOT_CREATE_DATA_SOURCE_TABLE error class
+displayTitle: CANNOT_CREATE_DATA_SOURCE_TABLE error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -21,7 +21,7 @@ license: |
 
 [SQLSTATE: 42KDE](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Failed to create data source V2 table:
+Failed to create data source table `<tableName>`:
 
 This error class has the following derived error classes:
 

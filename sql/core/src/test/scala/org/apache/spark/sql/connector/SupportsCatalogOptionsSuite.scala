@@ -192,7 +192,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
   }
 
   test("fail on user specified schema when reading - session catalog") {
-    sql(s"create table t1 (id bigint) using $format options ('name'='t1')")
+    sql(s"create table t1 (id bigint) using $format")
     val e = intercept[IllegalArgumentException] {
       spark.read.format(format).option("name", "t1").schema("id bigint").load()
     }
