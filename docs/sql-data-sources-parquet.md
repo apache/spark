@@ -386,7 +386,7 @@ Data source options of Parquet can be set via:
   * `DataStreamWriter`
 * `OPTIONS` clause at [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
 
-<table class="table table-striped">
+<table>
   <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr></thead>
   <tr>
     <td><code>datetimeRebaseMode</code></td>
@@ -434,7 +434,7 @@ Other generic options can be found in <a href="https://spark.apache.org/docs/lat
 Configuration of Parquet can be done using the `setConf` method on `SparkSession` or by running
 `SET key=value` commands using SQL.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.sql.parquet.binaryAsString</code></td>
