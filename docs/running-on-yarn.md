@@ -143,7 +143,7 @@ To use a custom metrics.properties for the application master and executors, upd
 
 #### Spark Properties
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.yarn.am.memory</code></td>
@@ -696,7 +696,7 @@ To use a custom metrics.properties for the application master and executors, upd
 
 #### Available patterns for SHS custom executor log URL
 
-<table class="table table-striped">
+<table>
     <thead><tr><th>Pattern</th><th>Meaning</th></tr></thead>
     <tr>
       <td>&#123;&#123;HTTP_SCHEME&#125;&#125;</td>
@@ -783,7 +783,7 @@ staging directory of the Spark application.
 
 ## YARN-specific Kerberos Configuration
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.kerberos.keytab</code></td>
@@ -882,7 +882,7 @@ to avoid garbage collection issues during shuffle.
 
 The following extra configuration options are available when the shuffle service is running on YARN:
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr></thead>
 <tr>
   <td><code>spark.yarn.shuffle.stopOnFailure</code></td>
