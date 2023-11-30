@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 
 import com.google.protobuf.{Any => ProtoAny}
 import com.google.rpc.{Code => RPCCode, ErrorInfo, Status => RPCStatus}
-import io.grpc.Status
+import io.grpc.{Status, StatusRuntimeException}
 import io.grpc.protobuf.StatusProto
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.StringUtils
@@ -153,7 +153,15 @@ private[connect] object ErrorUtils extends Logging {
       .build()
   }
 
-  private def buildStatusFromThrowable(
+  /**
+   * This is a helper method that can be used by any GRPC handler to convert existing Throwables
+   * into GRPC conform status objects.
+   *
+   * @param st
+   * @param sessionHolderOpt
+   * @return
+   */
+  private[connect] def buildStatusFromThrowable(
       st: Throwable,
       sessionHolderOpt: Option[SessionHolder]): RPCStatus = {
     val errorInfo = ErrorInfo
@@ -211,6 +219,30 @@ private[connect] object ErrorUtils extends Logging {
     se.getCause != null && se.getCause
       .isInstanceOf[PythonException] && se.getCause.getStackTrace
       .exists(_.toString.contains("org.apache.spark.sql.execution.python"))
+  }
+
+  def handleNonQueryError[V](
+      opName: String,
+      observer: StreamObserver[V],
+      sessionHolderOpt: Option[SessionHolder],
+      callback: Option[() => Unit] = None): PartialFunction[Throwable, Unit] = {
+    val partial: PartialFunction[Throwable, Throwable] = {
+      case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
+        StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, sessionHolderOpt))
+      case e: StatusRuntimeException => e
+      case e: Throwable =>
+          Status.UNKNOWN
+            .withCause(e)
+            .withDescription(StringUtils.abbreviate(e.getMessage, 2048))
+            .asRuntimeException()
+    }
+    partial.andThen {
+      // All values must be throwable.
+      case t: Throwable =>
+        logError(s"Error during processing of $opName", t)
+        callback.foreach(c => c())
+        observer.onError(t)
+    }
   }
 
   /**
