@@ -31,7 +31,8 @@ import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
 private[sql] trait JdbcConnection {
   /**
    * Runs the given query.
-   * @return A Seq[String] representing the output.
+   * @return A Seq[String] representing the output. This is a Seq where each element represents a
+   *         single row.
    */
   def runQuery(query: String): Seq[String]
 

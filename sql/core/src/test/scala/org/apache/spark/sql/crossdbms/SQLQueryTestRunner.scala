@@ -25,7 +25,8 @@ package org.apache.spark.sql.crossdbms
 trait SQLQueryTestRunner {
 
   /**
-   * Runs a given query and returns a Seq[String] that represents the query result output.
+   * Runs a given query and returns a Seq[String] that represents the query result output. This is a
+   * Seq where each element represents a single row.
    */
   def runQuery(query: String): Seq[String]
 

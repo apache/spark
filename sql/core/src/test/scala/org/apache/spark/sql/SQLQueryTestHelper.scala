@@ -124,7 +124,11 @@ trait SQLQueryTestHelper extends Logging {
     }
 
     // If the output is not pre-sorted, sort it.
-    if (isSemanticallySorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
+    if (isSemanticallySorted(df.queryExecution.analyzed)) {
+      (schema, answer)
+    } else {
+      (schema, answer.sorted)
+    }
   }
 
   /**
