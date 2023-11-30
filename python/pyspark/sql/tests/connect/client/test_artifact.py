@@ -20,6 +20,7 @@ import tempfile
 import unittest
 import os
 
+from pyspark.errors.exceptions.connect import SparkConnectGrpcException
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 from pyspark.testing.utils import SPARK_HOME
@@ -70,9 +71,10 @@ class ArtifactTestsMixin:
             with open(pyfile_path, "w+") as f:
                 f.write("my_func = lambda: 11")
 
-            with self.assertRaises(Exception):
+            with self.assertRaisesRegex(
+                SparkConnectGrpcException, "\(java.lang.RuntimeException\) Duplicate Artifact"
+            ):
                 self.spark.addArtifacts(pyfile_path, pyfile=True)
-
 
     def check_add_zipped_package(self, spark_session):
         with tempfile.TemporaryDirectory() as d:
