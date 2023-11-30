@@ -1114,13 +1114,14 @@ table {
   border-collapse: collapse; /* Ensures that the borders collapse into a single border */
 }
 
-table th, table td {
-  border: 1px solid #cccccc; /* Adds a border to each table header and data cell */
-  padding: 6px 13px; /* Optional: Adds padding inside each cell for better readability */
+table td {
+  padding: 6px 13px; /* Padding inside each cell */
 }
 
 table tr {
   background-color: white; /* Sets a default background color for all rows */
+  border-top: 1px solid #cccccc;
+  border-bottom: 1px solid #cccccc;
 }
 
 table tr:nth-child(2n) {
