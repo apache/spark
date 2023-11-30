@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.executor
+package org.apache.spark.executor.profiler
 
 import java.io.{BufferedInputStream, FileInputStream, InputStream}
 import java.net.URI
@@ -26,21 +26,20 @@ import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
 import org.apache.spark.util.ThreadUtils
 
 
 /**
  * A class that enables the async code profiler
- *
  */
-private[spark] class ExecutorCodeProfiler(conf: SparkConf, executorId: String) extends Logging {
+private[spark] class ExecutorJVMProfiler(conf: SparkConf, executorId: String) extends Logging {
 
   private var running = false
   private val enableProfiler = conf.get(EXECUTOR_CODE_PROFILING_ENABLED)
   private val profilerOptions = conf.get(EXECUTOR_CODE_PROFILING_OPTIONS)
   private val profilerOutputDir = conf.get(EXECUTOR_CODE_PROFILING_OUTPUT_DIR)
   private val profilerLocalDir = conf.get(EXECUTOR_CODE_PROFILING_LOCAL_DIR)
+  private val writeInterval = conf.get(EXECUTOR_CODE_PROFILING_WRITE_INTERVAL)
 
   private val startcmd = s"start,$profilerOptions,file=$profilerLocalDir/profile.jfr"
   private val stopcmd = s"stop,$profilerOptions,file=$profilerLocalDir/profile.jfr"
@@ -48,7 +47,6 @@ private[spark] class ExecutorCodeProfiler(conf: SparkConf, executorId: String) e
   private val resumecmd = s"resume,$profilerOptions,file=$profilerLocalDir/profile.jfr"
 
   private val UPLOAD_SIZE = 8 * 1024 * 1024 // 8 MB
-  private val WRITE_INTERVAL = 30 // seconds
   private var outputStream: FSDataOutputStream = _
   private var inputStream: InputStream = _
   private val dataBuffer = new Array[Byte](UPLOAD_SIZE)
@@ -112,7 +110,7 @@ private[spark] class ExecutorCodeProfiler(conf: SparkConf, executorId: String) e
         threadpool = ThreadUtils.newDaemonSingleThreadScheduledExecutor("profilerOutputThread")
         threadpool.scheduleWithFixedDelay(new Runnable() {
           override def run(): Unit = writeChunk()
-        }, WRITE_INTERVAL, WRITE_INTERVAL,
+        }, writeInterval, writeInterval,
           TimeUnit.SECONDS)
         writing = true
       } catch {

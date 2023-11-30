@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.executor
+package org.apache.spark.executor.profiler
 
 import java.util.{Map => JMap}
 
@@ -24,12 +24,10 @@ import scala.util.Random
 import org.apache.spark.SparkConf
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{EXECUTOR_CODE_PROFILING_ENABLED, EXECUTOR_CODE_PROFILING_FRACTION}
 
 
 /**
  * Spark plugin to do code profiling of executors
- *
  */
 class ExecutorProfilerPlugin extends SparkPlugin {
   override def driverPlugin(): DriverPlugin = null
@@ -42,7 +40,7 @@ class CodeProfilerExecutorPlugin extends ExecutorPlugin with Logging {
 
   private var sparkConf: SparkConf = _
   private var pluginCtx: PluginContext = _
-  private var profiler: ExecutorCodeProfiler = _
+  private var profiler: ExecutorJVMProfiler = _
   private var codeProfilingEnabled: Boolean = _
   private var codeProfilingFraction: Double = _
   private val rand: Random = new Random(System.currentTimeMillis())
@@ -56,7 +54,7 @@ class CodeProfilerExecutorPlugin extends ExecutorPlugin with Logging {
     if (codeProfilingEnabled) {
       if (rand.nextInt(100) * 0.01 < codeProfilingFraction) {
         logInfo(s"Executor id ${pluginCtx.executorID()} selected for code profiling")
-        profiler = new ExecutorCodeProfiler(sparkConf, pluginCtx.executorID())
+        profiler = new ExecutorJVMProfiler(sparkConf, pluginCtx.executorID())
         profiler.start()
       }
     }
@@ -64,12 +62,9 @@ class CodeProfilerExecutorPlugin extends ExecutorPlugin with Logging {
   }
 
   override def shutdown(): Unit = {
-
     logInfo("Executor code profiler shutting down")
     if (profiler != null) {
       profiler.stop()
     }
   }
-
-
 }

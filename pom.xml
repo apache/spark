@@ -3658,7 +3658,7 @@
     </profile>
 
     <profile>
-      <id>code-profiler</id>
+      <id>jvm-profiler</id>
       <modules>
         <module>connector/profiler</module>
       </modules>
