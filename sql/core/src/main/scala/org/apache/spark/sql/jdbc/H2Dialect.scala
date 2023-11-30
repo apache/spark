@@ -20,8 +20,11 @@ package org.apache.spark.sql.jdbc
 import java.sql.{SQLException, Types}
 import java.util.Locale
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, ShortType, StringType}
@@ -97,5 +100,26 @@ private object H2Dialect extends JdbcDialect {
       case _ => // do nothing
     }
     super.classifyException(message, e)
+  }
+
+  override def compileExpression(expr: Expression): Option[String] = {
+    val h2SQLBuilder = new H2SQLBuilder()
+    try {
+      Some(h2SQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
+    }
+  }
+
+  class H2SQLBuilder extends JDBCSQLBuilder {
+    override def escapeSpecialCharsForLikePattern(str: String): String = {
+      str.map {
+        case '_' => "\\_"
+        case '%' => "\\%"
+        case c => c.toString
+      }.mkString
+    }
   }
 }
