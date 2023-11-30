@@ -97,14 +97,14 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
           val sparkDf = spark.sql(sql)
           val output = runner.map(_.runQuery(sql)).get
           // Use Spark analyzed plan to check if the query result is already semantically sorted.
-          val result = if (isSemanticallySorted(sparkDf.queryExecution.analyzed)) {
+          if (isSemanticallySorted(sparkDf.queryExecution.analyzed)) {
             output
           } else {
             // Sort the answer manually if it isn't sorted.
             output.sorted
           }
-          result
         } else {
+          // Use Spark.
           val (_, output) = handleExceptions(
             getNormalizedQueryExecutionResult(localSparkSession, sql))
           output
@@ -162,7 +162,7 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
 
   override lazy val listTestCases: Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
-      var resultFile = resultFileForInputFile(file)
+      val resultFile = resultFileForInputFile(file)
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
       RegularTestCase(testCaseName, absPath, resultFile) :: Nil

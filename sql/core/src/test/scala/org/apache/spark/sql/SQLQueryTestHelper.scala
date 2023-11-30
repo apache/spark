@@ -102,7 +102,7 @@ trait SQLQueryTestHelper extends Logging {
    * Uses the Spark logical plan to determine whether the plan is semantically sorted. This is
    * important to make non-sorted queries test cases more deterministic.
    */
-  def isSemanticallySorted(plan: LogicalPlan): Boolean = plan match {
+  protected def isSemanticallySorted(plan: LogicalPlan): Boolean = plan match {
     case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
     case _: DescribeCommandBase
          | _: DescribeColumnCommand
