@@ -950,6 +950,40 @@ SQL
 
 
 -- !query
+select decode(X'68656c6c6f', 'Windows-xxx')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "Windows-xxx",
+    "functionName" : "`decode`",
+    "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
+select decode(scol, ecol) from values(X'68656c6c6f', 'Windows-xxx') as t(scol, ecol)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "Windows-xxx",
+    "functionName" : "`decode`",
+    "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
 SELECT CONTAINS(null, 'Spark')
 -- !query schema
 struct<contains(NULL, Spark):boolean>

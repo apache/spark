@@ -24,6 +24,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.errors.DataTypeErrors
+import org.apache.spark.util.ArrayImplicits._
 
 
 /**
@@ -213,7 +214,7 @@ object Metadata {
         map.view.mapValues(hash).toMap.##
       case arr: Array[_] =>
         // Seq.empty[T] has the same hashCode regardless of T.
-        arr.toSeq.map(hash).##
+        arr.toImmutableArraySeq.map(hash).##
       case x: Long =>
         x.##
       case x: Double =>

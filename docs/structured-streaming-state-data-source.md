@@ -83,7 +83,7 @@ Dataset<Row> df = spark
 
 Each row in the source has the following schema:
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Column</th><th>Type</th><th>Note</th></tr></thead>
 <tr>
   <td>key</td>
@@ -107,7 +107,7 @@ Users are encouraged to query about the schema via df.schema() / df.printSchema(
 
 The following options must be set for the source.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Option</th><th>value</th><th>meaning</th></tr></thead>
 <tr>
   <td>path</td>
@@ -118,7 +118,7 @@ The following options must be set for the source.
 
 The following configurations are optional:
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Option</th><th>value</th><th>default</th><th>meaning</th></tr></thead>
 <tr>
   <td>batchId</td>
@@ -203,7 +203,7 @@ Dataset<Row> df = spark
 
 Each row in the source has the following schema:
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Column</th><th>Type</th><th>Note</th></tr></thead>
 <tr>
   <td>operatorId</td>

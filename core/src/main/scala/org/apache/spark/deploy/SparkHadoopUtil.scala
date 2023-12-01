@@ -237,7 +237,7 @@ private[spark] class SparkHadoopUtil extends Logging {
 
   def globPath(fs: FileSystem, pattern: Path): Seq[Path] = {
     Option(fs.globStatus(pattern)).map { statuses =>
-      statuses.map(_.getPath.makeQualified(fs.getUri, fs.getWorkingDirectory)).toSeq
+      statuses.map(_.getPath.makeQualified(fs.getUri, fs.getWorkingDirectory)).toImmutableArraySeq
     }.getOrElse(Seq.empty[Path])
   }
 

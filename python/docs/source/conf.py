@@ -197,6 +197,7 @@ html_context = {
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
+    "header_links_before_dropdown": 6,
     "navbar_end": ["version-switcher", "theme-switcher", "navbar-icon-links"],
     "footer_start": ["spark_footer", "sphinx-version"],
     "logo": {

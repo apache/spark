@@ -65,7 +65,6 @@ connect_requirement_message = (
 should_test_connect: str = typing.cast(str, connect_requirement_message is None)
 
 if should_test_connect:
-    from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect.plan import Read, Range, SQL, LogicalPlan
     from pyspark.sql.connect.session import SparkSession
 
@@ -88,20 +87,21 @@ class MockRemoteSession:
         return functools.partial(self.hooks[item])
 
 
-class MockDF(DataFrame):
-    """Helper class that must only be used for the mock plan tests."""
-
-    def __init__(self, plan: LogicalPlan, session: SparkSession):
-        super().__init__(plan, session)
-
-    def __getattr__(self, name):
-        """All attributes are resolved to columns, because none really exist in the
-        mocked DataFrame."""
-        return self[name]
-
-
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
+    from pyspark.sql.connect.dataframe import DataFrame
+
+    class MockDF(DataFrame):
+        """Helper class that must only be used for the mock plan tests."""
+
+        def __init__(self, plan: LogicalPlan, session: SparkSession):
+            super().__init__(plan, session)
+
+        def __getattr__(self, name):
+            """All attributes are resolved to columns, because none really exist in the
+            mocked DataFrame."""
+            return self[name]
+
     @classmethod
     def _read_table(cls, table_name):
         return cls._df_mock(Read(table_name))
@@ -112,7 +112,7 @@ class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
 
     @classmethod
     def _df_mock(cls, plan: LogicalPlan) -> MockDF:
-        return MockDF(plan, cls.connect)
+        return PlanOnlyTestFixture.MockDF(plan, cls.connect)
 
     @classmethod
     def _session_range(

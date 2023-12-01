@@ -28,7 +28,7 @@ from pyspark.serializers import (
     SpecialLengths,
     CloudPickleSerializer,
 )
-from pyspark.sql.datasource import DataSource
+from pyspark.sql.datasource import DataSource, InputPartition
 from pyspark.sql.types import _parse_datatype_json_string, StructType
 from pyspark.util import handle_worker_exception
 from pyspark.worker_util import (
@@ -110,10 +110,41 @@ def main(infile: IO, outfile: IO) -> None:
                 message_parameters={"type": "reader", "error": str(e)},
             )
 
-        # Generate all partitions.
-        partitions = list(reader.partitions() or [])
-        if len(partitions) == 0:
-            partitions = [None]
+        # Get the partitions if any.
+        try:
+            partitions = reader.partitions()
+            if not isinstance(partitions, list):
+                raise PySparkRuntimeError(
+                    error_class="PYTHON_DATA_SOURCE_CREATE_ERROR",
+                    message_parameters={
+                        "type": "reader",
+                        "error": (
+                            "Expect 'partitions' to return a list, but got "
+                            f"'{type(partitions).__name__}'"
+                        ),
+                    },
+                )
+            if not all(isinstance(p, InputPartition) for p in partitions):
+                partition_types = ", ".join([f"'{type(p).__name__}'" for p in partitions])
+                raise PySparkRuntimeError(
+                    error_class="PYTHON_DATA_SOURCE_CREATE_ERROR",
+                    message_parameters={
+                        "type": "reader",
+                        "error": (
+                            "All elements in 'partitions' should be of type "
+                            f"'InputPartition', but got {partition_types}"
+                        ),
+                    },
+                )
+            if len(partitions) == 0:
+                partitions = [None]  # type: ignore
+        except NotImplementedError:
+            partitions = [None]  # type: ignore
+        except Exception as e:
+            raise PySparkRuntimeError(
+                error_class="PYTHON_DATA_SOURCE_CREATE_ERROR",
+                message_parameters={"type": "reader", "error": str(e)},
+            )
 
         # Construct a UDTF.
         class PythonDataSourceReaderUDTF:
