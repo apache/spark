@@ -1,6 +1,7 @@
 -- First 6 queries of the sql-logic-tests with some minor changes for compatibility, available here:
 -- https://www.sqlite.org/sqllogictest/file?name=test/select1.test&ci=tip.
 
+--DBMS_TO_GENERATE_GOLDEN_FILE postgres
 CREATE VIEW t1(a, b, c, d, e) AS VALUES
     (103,102,100,101,104),
     (107,106,108,109,105),
