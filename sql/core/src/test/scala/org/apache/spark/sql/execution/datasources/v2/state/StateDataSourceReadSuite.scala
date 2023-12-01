@@ -108,46 +108,47 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
     val exc = intercept[StateDataSourceUnspecifiedRequiredOption] {
       spark.read.format("statestore").load()
     }
-    assert(exc.getMessage.contains(StateSourceOptions.PATH))
+    checkError(exc, "STDS_REQUIRED_OPTION_UNSPECIFIED", "42601",
+      Map("optionName" -> StateSourceOptions.PATH))
   }
 
   test("ERROR: operator ID specified to negative") {
     withTempDir { tempDir =>
-      val exc = intercept[StateDataSourceInvalidOptionValue] {
+      val exc = intercept[StateDataSourceInvalidOptionValueIsNegative] {
         spark.read.format("statestore")
           .option(StateSourceOptions.OPERATOR_ID, -1)
           // trick to bypass getting the last committed batch before validating operator ID
           .option(StateSourceOptions.BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
-      assert(exc.getMessage.contains(StateSourceOptions.OPERATOR_ID))
-      assert(exc.getMessage.contains("cannot be negative"))
+      checkError(exc, "STDS_INVALID_OPTION_VALUE.IS_NEGATIVE", "42616",
+        Map("optionName" -> StateSourceOptions.OPERATOR_ID))
     }
   }
 
   test("ERROR: batch ID specified to negative") {
     withTempDir { tempDir =>
-      val exc = intercept[StateDataSourceInvalidOptionValue] {
+      val exc = intercept[StateDataSourceInvalidOptionValueIsNegative] {
         spark.read.format("statestore")
           .option(StateSourceOptions.BATCH_ID, -1)
           .load(tempDir.getAbsolutePath)
       }
-      assert(exc.getMessage.contains(StateSourceOptions.BATCH_ID))
-      assert(exc.getMessage.contains("cannot be negative"))
+      checkError(exc, "STDS_INVALID_OPTION_VALUE.IS_NEGATIVE", "42616",
+        Map("optionName" -> StateSourceOptions.BATCH_ID))
     }
   }
 
   test("ERROR: store name is empty") {
     withTempDir { tempDir =>
-      val exc = intercept[StateDataSourceInvalidOptionValue] {
+      val exc = intercept[StateDataSourceInvalidOptionValueIsEmpty] {
         spark.read.format("statestore")
           .option(StateSourceOptions.STORE_NAME, "")
           // trick to bypass getting the last committed batch before validating operator ID
           .option(StateSourceOptions.BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
-      assert(exc.getMessage.contains(StateSourceOptions.STORE_NAME))
-      assert(exc.getMessage.contains("cannot be an empty string"))
+      checkError(exc, "STDS_INVALID_OPTION_VALUE.IS_EMPTY", "42616",
+        Map("optionName" -> StateSourceOptions.STORE_NAME))
     }
   }
 
@@ -160,8 +161,10 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
           .option(StateSourceOptions.BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
-      assert(exc.getMessage.contains(StateSourceOptions.JOIN_SIDE))
-      assert(exc.getMessage.contains("Valid values are left,right,none"))
+      checkError(exc, "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE", "42616",
+        Map(
+          "optionName" -> StateSourceOptions.JOIN_SIDE,
+          "message" -> "Valid values are left,right,none"))
     }
   }
 
@@ -175,8 +178,9 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
           .option(StateSourceOptions.BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
-      assert(exc.getMessage.contains(StateSourceOptions.JOIN_SIDE))
-      assert(exc.getMessage.contains(StateSourceOptions.STORE_NAME))
+      checkError(exc, "STDS_CONFLICT_OPTIONS", "42613",
+        Map("options" ->
+          s"['${StateSourceOptions.JOIN_SIDE}', '${StateSourceOptions.STORE_NAME}']"))
     }
   }
 

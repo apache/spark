@@ -3058,8 +3058,25 @@
   },
   "STDS_INVALID_OPTION_VALUE" : {
     "message" : [
-      "Invalid value for source option '<optionName>': <message>"
+      "Invalid value for source option '<optionName>': "
     ],
+    "subClass" : {
+      "WITH_MESSAGE": {
+        "message" : [
+          "<message>"
+        ]
+      },
+      "IS_NEGATIVE" : {
+        "message" : [
+          "cannot be negative."
+        ]
+      },
+      "IS_EMPTY" : {
+        "message" : [
+          "cannot be empty."
+        ]
+      }
+    },
     "sqlState" : "42616"
   },
   "STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE" : {

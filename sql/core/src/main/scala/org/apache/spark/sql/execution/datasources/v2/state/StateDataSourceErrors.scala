@@ -33,6 +33,14 @@ object StateDataSourceErrors {
     new StateDataSourceInvalidOptionValue(optionName, message)
   }
 
+  def invalidOptionValueIsNegative(optionName: String): StateDataSourceException = {
+    new StateDataSourceInvalidOptionValueIsNegative(optionName)
+  }
+
+  def invalidOptionValueIsEmpty(optionName: String): StateDataSourceException = {
+    new StateDataSourceInvalidOptionValueIsEmpty(optionName)
+  }
+
   def requiredOptionUnspecified(missingOptionName: String): StateDataSourceException = {
     new StateDataSourceUnspecifiedRequiredOption(missingOptionName)
   }
@@ -42,7 +50,6 @@ object StateDataSourceErrors {
       checkpointLocation: String): StateDataSourceException = {
     new StateDataSourceOffsetLogUnavailable(batchId, checkpointLocation)
   }
-
 
   def offsetMetadataLogUnavailable(
       batchId: Long,
@@ -87,8 +94,20 @@ class StateDataSourceInternalError(message: String, cause: Throwable = null)
 
 class StateDataSourceInvalidOptionValue(optionName: String, message: String)
   extends StateDataSourceException(
-    "STDS_INVALID_OPTION_VALUE",
+    "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE",
     Map("optionName" -> optionName, "message" -> message),
+    cause = null)
+
+class StateDataSourceInvalidOptionValueIsNegative(optionName: String)
+  extends StateDataSourceException(
+    "STDS_INVALID_OPTION_VALUE.IS_NEGATIVE",
+    Map("optionName" -> optionName),
+    cause = null)
+
+class StateDataSourceInvalidOptionValueIsEmpty(optionName: String)
+  extends StateDataSourceException(
+    "STDS_INVALID_OPTION_VALUE.IS_EMPTY",
+    Map("optionName" -> optionName),
     cause = null)
 
 class StateDataSourceUnspecifiedRequiredOption(

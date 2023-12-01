@@ -158,14 +158,14 @@ object StateSourceOptions extends DataSourceOptions {
     }.get
 
     if (batchId < 0) {
-      throw StateDataSourceErrors.invalidOptionValue(BATCH_ID, "cannot be negative")
+      throw StateDataSourceErrors.invalidOptionValueIsNegative(BATCH_ID)
     }
 
     val operatorId = Option(options.get(OPERATOR_ID)).map(_.toInt)
       .orElse(Some(0)).get
 
     if (operatorId < 0) {
-      throw StateDataSourceErrors.invalidOptionValue(OPERATOR_ID, "cannot be negative")
+      throw StateDataSourceErrors.invalidOptionValueIsNegative(OPERATOR_ID)
     }
 
     val storeName = Option(options.get(STORE_NAME))
@@ -173,7 +173,7 @@ object StateSourceOptions extends DataSourceOptions {
       .getOrElse(StateStoreId.DEFAULT_STORE_NAME)
 
     if (storeName.isEmpty) {
-      throw StateDataSourceErrors.invalidOptionValue(STORE_NAME, "cannot be an empty string")
+      throw StateDataSourceErrors.invalidOptionValueIsEmpty(STORE_NAME)
     }
 
     val joinSide = try {
