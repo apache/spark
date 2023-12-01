@@ -279,23 +279,9 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-SELECT * FROM UDTFPartitionByComplexExpr(TABLE(t2))
+SELECT * FROM UDTFPartitionByOrderByComplexExpr(TABLE(t2))
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVABLE_TABLE_VALUED_FUNCTION",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "name" : "`UDTFPartitionByComplexExpr`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 51,
-    "fragment" : "UDTFPartitionByComplexExpr(TABLE(t2))"
-  } ]
-}
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -553,26 +539,6 @@ SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnMapType(TABLE(t2))
 
 
 -- !query
-SELECT * FROM InvalidUDTFPartitionByComplexExprParseError(TABLE(t2))
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVABLE_TABLE_VALUED_FUNCTION",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "name" : "`InvalidUDTFPartitionByComplexExprParseError`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 68,
-    "fragment" : "InvalidUDTFPartitionByComplexExprParseError(TABLE(t2))"
-  } ]
-}
-
-
--- !query
 SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs()
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
@@ -819,9 +785,40 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT * FROM UDTFInvalidPartitionByOrderByParseError(TABLE(t2))
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`unparsable`",
+    "proposal" : "`input`, `partition_col`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 10,
+    "fragment" : "unparsable"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM UDTFInvalidOrderByAscKeyword(TABLE(t2))
+
 DROP VIEW t1
 -- !query analysis
-DropTempViewCommand t1
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'VIEW'",
+    "hint" : ""
+  }
+}
 
 
 -- !query

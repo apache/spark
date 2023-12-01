@@ -336,25 +336,12 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-SELECT * FROM UDTFPartitionByComplexExpr(TABLE(t2))
+SELECT * FROM UDTFPartitionByOrderByComplexExpr(TABLE(t2))
 -- !query schema
-struct<>
+struct<partition_col:int,count:int,total:int,last:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVABLE_TABLE_VALUED_FUNCTION",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "name" : "`UDTFPartitionByComplexExpr`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 51,
-    "fragment" : "UDTFPartitionByComplexExpr(TABLE(t2))"
-  } ]
-}
+0	1	1	1
+1	2	5	3
 
 
 -- !query
@@ -660,28 +647,6 @@ pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defin
 
 
 -- !query
-SELECT * FROM InvalidUDTFPartitionByComplexExprParseError(TABLE(t2))
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVABLE_TABLE_VALUED_FUNCTION",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "name" : "`InvalidUDTFPartitionByComplexExprParseError`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 68,
-    "fragment" : "InvalidUDTFPartitionByComplexExprParseError(TABLE(t2))"
-  } ]
-}
-
-
--- !query
 SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs()
 -- !query schema
 struct<>
@@ -962,11 +927,44 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT * FROM UDTFInvalidPartitionByOrderByParseError(TABLE(t2))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`unparsable`",
+    "proposal" : "`input`, `partition_col`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 10,
+    "fragment" : "unparsable"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM UDTFInvalidOrderByAscKeyword(TABLE(t2))
+
 DROP VIEW t1
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'VIEW'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
