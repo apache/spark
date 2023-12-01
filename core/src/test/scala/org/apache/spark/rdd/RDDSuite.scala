@@ -32,6 +32,7 @@ import org.apache.hadoop.mapred.{FileSplit, TextInputFormat}
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.config.{RDD_LIMIT_INITIAL_NUM_PARTITIONS, RDD_PARALLEL_LISTING_THRESHOLD}
 import org.apache.spark.rdd.RDDSuiteUtils._

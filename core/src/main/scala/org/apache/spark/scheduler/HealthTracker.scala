@@ -22,8 +22,8 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkContext}
-import org.apache.spark.internal.Logging
 import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 

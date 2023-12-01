@@ -1479,7 +1479,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(taskDescs.head.executorId === "exec2")
   }
 
-  test("TaskScheduler should throw SparkIllegalArgumentException when schedulingMode is not supported") {
+  test("TaskScheduler should throw SparkIllegalArgumentException when " +
+    "schedulingMode is not supported") {
     intercept[SparkIllegalArgumentException] {
       val taskScheduler = setupScheduler(
         TaskSchedulerImpl.SCHEDULER_MODE_PROPERTY -> SchedulingMode.NONE.toString)

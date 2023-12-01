@@ -36,6 +36,7 @@ import org.scalatest.exceptions.TestFailedException
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
@@ -3482,7 +3483,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build()
 
     val rdd = sc.parallelize(1 to 10).withResources(rp1).map(x => (x, x)).withResources(rp2)
-    val error = intercept[SparkException] {
+    val error = intercept[SparkIllegalArgumentException] {
       val (shuffledeps, resourceprofiles) = scheduler.getShuffleDependenciesAndResourceProfiles(rdd)
       scheduler.mergeResourceProfilesForStage(resourceprofiles)
     }.getMessage()
