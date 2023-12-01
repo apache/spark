@@ -35,7 +35,8 @@ import org.apache.spark.util.Utils
  * To run this benchmark:
  * {{{
  *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars `find ~/.cache/coursier -name 'curator-test-*.jar'` <spark core test jar>
+ *      bin/spark-submit --class <this class> --jars `find ~/.cache/coursier \
+ *        -name 'curator-test-*.jar'` <spark core test jar>
  *   2. build/sbt "core/Test/runMain <this class>"
  *   3. generate result:
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/Test/runMain <this class>"
