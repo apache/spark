@@ -246,6 +246,26 @@ trait ExternalCatalog {
       partialSpec: Option[TablePartitionSpec] = None): Seq[String]
 
   /**
+   * List the original names from external catalog for all partitions that belong to
+   * the specified table, assuming it exists.
+   *
+   * For a table with partition columns p1, p2, p3, each partition name is formatted as
+   * `p1=v1/p2=v2/p3=v3`. Each partition column name and value is an escaped path name, and can be
+   * decoded with the `ExternalCatalogUtils.unescapePathName` method.
+   *
+   * A partial partition spec may optionally be provided to filter the partitions returned, as
+   * described in the `listPartitions` method.
+   *
+   * @param db database name
+   * @param table table name
+   * @param partialSpec partition spec
+   */
+  def listCatalogPartitionNames(
+      db: String,
+      table: String,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[String]
+
+  /**
    * List the metadata of all partitions that belong to the specified table, assuming it exists.
    *
    * A partial partition spec may optionally be provided to filter the partitions returned.
@@ -275,6 +295,19 @@ trait ExternalCatalog {
       table: String,
       predicates: Seq[Expression],
       defaultTimeZoneId: String): Seq[CatalogTablePartition]
+
+  /**
+   * List the metadata of partitions that belong to the specified table, assuming it exists, whose
+   * names are in the list of partition names.
+   *
+   * @param db database name
+   * @param table table name
+   * @param partitionNames list of partition names
+   */
+  def listPartitionsByNames(
+      db: String,
+      table: String,
+      partitionNames: Seq[String]): Seq[CatalogTablePartition]
 
   // --------------------------------------------------------------------------
   // Functions

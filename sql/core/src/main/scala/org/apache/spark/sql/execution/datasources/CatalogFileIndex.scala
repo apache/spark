@@ -71,7 +71,8 @@ class CatalogFileIndex(
     if (table.partitionColumnNames.nonEmpty) {
       val startTime = System.nanoTime()
       val selectedPartitions = ExternalCatalogUtils.listPartitionsByFilter(
-        sparkSession.sessionState.conf, sparkSession.sessionState.catalog, table, filters)
+        sparkSession.sparkContext, sparkSession.sessionState.conf,
+        sparkSession.sessionState.catalog, table, filters)
       val partitions = selectedPartitions.map { p =>
         val path = new Path(p.location)
         val fs = path.getFileSystem(hadoopConf)

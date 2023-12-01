@@ -132,16 +132,59 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
 
         Seq("true", "false").foreach { hivePruning =>
           withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key -> hivePruning) {
-            // If the pruning predicate is used, getHiveQlPartitions should only return the
-            // qualified partition; Otherwise, it return all the partitions.
-            val expectedNumPartitions = if (hivePruning == "true") 1 else 2
+            // If the pruning predicate exists, getHiveQlPartitions should only return the
+            // qualified partition.
             checkNumScannedPartitions(
-              stmt = s"SELECT id, p2 FROM $table WHERE p2 <= 'b'", expectedNumPartitions)
+              stmt = s"SELECT id, p2 FROM $table WHERE p2 <= 'b'", 1)
           }
         }
 
         Seq("true", "false").foreach { hivePruning =>
           withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key -> hivePruning) {
+            // If the pruning predicate does not exist, getHiveQlPartitions should always
+            // return all the partitions.
+            checkNumScannedPartitions(
+              stmt = s"SELECT id, p2 FROM $table WHERE id <= 3", expectedNumParts = 2)
+          }
+        }
+      }
+    }
+  }
+
+  test("Verify SQLConf HIVE_METASTORE_GET_PARTITION_BY_NAME") {
+    val view = "src"
+    withTempView(view) {
+      spark.range(1, 5).createOrReplaceTempView(view)
+      val table = "table_with_partition"
+      withTable(table) {
+        sql(
+          s"""
+             |CREATE TABLE $table(id string)
+             |USING hive
+             |PARTITIONED BY (p1 string,p2 string,p3 string,p4 string,p5 string)
+           """.stripMargin)
+        sql(
+          s"""
+             |FROM $view v
+             |INSERT INTO TABLE $table
+             |PARTITION (p1='a',p2='b',p3='c',p4='d',p5='e')
+             |SELECT v.id
+             |INSERT INTO TABLE $table
+             |PARTITION (p1='a',p2='c',p3='c',p4='d',p5='e')
+             |SELECT v.id
+           """.stripMargin)
+
+        Seq("true", "false").foreach { byName =>
+          withSQLConf(SQLConf.HIVE_METASTORE_GET_PARTITION_BY_NAME.key -> byName) {
+            // If the pruning predicate exists, getHiveQlPartitions should only return the
+            // qualified partition.
+            checkNumScannedPartitions(
+              stmt = s"SELECT id, p2 FROM $table WHERE p2 <= 'b'", 1)
+          }
+        }
+
+        Seq("true", "false").foreach { byName =>
+          withSQLConf(SQLConf.HIVE_METASTORE_GET_PARTITION_BY_NAME.key -> byName) {
             // If the pruning predicate does not exist, getHiveQlPartitions should always
             // return all the partitions.
             checkNumScannedPartitions(

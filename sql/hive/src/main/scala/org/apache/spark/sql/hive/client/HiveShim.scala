@@ -104,6 +104,11 @@ private[client] sealed abstract class Shim {
       predicates: Seq[Expression],
       catalogTable: CatalogTable): Seq[Partition]
 
+  def getPartitionsByNames(
+      hive: Hive,
+      table: Table,
+      partitionNames: Seq[String]): Seq[Partition]
+
   def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor
 
   def getDriverResults(driver: Driver): Seq[String]
@@ -347,52 +352,57 @@ private[client] class Shim_v2_0 extends Shim with Logging {
     // predicates like "str_key=\"value\" and int_key=1 ..."
     val filter = convertFilters(table, predicates)
 
-    val partitions =
-      if (filter.isEmpty) {
-        prunePartitionsFastFallback(hive, table, catalogTable, predicates)
-      } else {
-        logDebug(s"Hive metastore filter is '$filter'.")
-        val tryDirectSqlConfVar = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL
-        val shouldFallback = SQLConf.get.metastorePartitionPruningFallbackOnException
-        try {
-          // Hive may throw an exception when calling this method in some circumstances, such as
-          // when filtering on a non-string partition column when the hive config key
-          // hive.metastore.try.direct.sql is false. In some cases the remote metastore will throw
-          // exceptions even if the config is true, due to various reasons including the
-          // underlying RDBMS, Hive bugs when generating the filter, etc.
-          //
-          // Because of the above we'll fallback to use `Hive.getAllPartitionsOf` when the exception
-          // occurs and the config`spark.sql.hive.metastorePartitionPruningFallbackOnException` is
-          // enabled.
-          recordHiveCall()
-          hive.getPartitionsByFilter(table, filter)
-        } catch {
-          case ex: MetaException if shouldFallback =>
-            logWarning("Caught Hive MetaException attempting to get partition metadata by " +
-              "filter from Hive. Falling back to fetching all partition metadata, which will " +
-              "degrade performance. Modifying your Hive metastore configuration to set " +
-              s"${tryDirectSqlConfVar.varname} to true (if it is not true already) may resolve " +
-              "this problem. Or you can enable " +
-              s"${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK.key} " +
-              "to alleviate performance downgrade. " +
-              "Otherwise, to avoid degraded performance you can set " +
-              s"${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key} " +
-              " to false and let the query fail instead.", ex)
-            // HiveShim clients are expected to handle a superset of the requested partitions
-            prunePartitionsFastFallback(hive, table, catalogTable, predicates)
-          case ex: MetaException =>
-            throw QueryExecutionErrors.getPartitionMetadataByFilterError(ex)
-        }
+    if (filter.isEmpty) {
+      prunePartitionsFastFallback(hive, table, catalogTable, predicates)
+    } else {
+      logDebug(s"Hive metastore filter is '$filter'.")
+      val tryDirectSqlConfVar = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL
+      val shouldFallback = SQLConf.get.metastorePartitionPruningFallbackOnException
+      try {
+        // Hive may throw an exception when calling this method in some circumstances, such as
+        // when filtering on a non-string partition column when the hive config key
+        // hive.metastore.try.direct.sql is false. In some cases the remote metastore will throw
+        // exceptions even if the config is true, due to various reasons including the
+        // underlying RDBMS, Hive bugs when generating the filter, etc.
+        //
+        // Because of the above we'll fallback to use `Hive.getAllPartitionsOf` when the exception
+        // occurs and the config`spark.sql.hive.metastorePartitionPruningFallbackOnException` is
+        // enabled.
+        recordHiveCall()
+        hive.getPartitionsByFilter(table, filter).asScala.toSeq
+      } catch {
+        case ex: MetaException if shouldFallback =>
+          logWarning("Caught Hive MetaException attempting to get partition metadata by " +
+            "filter from Hive. Falling back to fetching all partition metadata, which will " +
+            "degrade performance. Modifying your Hive metastore configuration to set " +
+            s"${tryDirectSqlConfVar.varname} to true (if it is not true already) may resolve " +
+            "this problem. Or you can enable " +
+            s"${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK.key} " +
+            "to alleviate performance downgrade. " +
+            "Otherwise, to avoid degraded performance you can set " +
+            s"${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key} " +
+            " to false and let the query fail instead.", ex)
+          // HiveShim clients are expected to handle a superset of the requested partitions
+          prunePartitionsFastFallback(hive, table, catalogTable, predicates)
+        case ex: MetaException =>
+          throw QueryExecutionErrors.getPartitionMetadataByFilterError(ex)
       }
+    }
+  }
 
-    partitions.asScala.toSeq
+  override def getPartitionsByNames(
+      hive: Hive,
+      table: Table,
+      partitionNames: Seq[String]): Seq[Partition] = {
+    recordHiveCall()
+    hive.getPartitionsByNames(table, partitionNames.asJava).asScala.toSeq
   }
 
   private def prunePartitionsFastFallback(
       hive: Hive,
       table: Table,
       catalogTable: CatalogTable,
-      predicates: Seq[Expression]): java.util.Collection[Partition] = {
+      predicates: Seq[Expression]): Seq[Partition] = {
     val timeZoneId = SQLConf.get.sessionLocalTimeZone
 
     // Because there is no way to know whether the partition properties has timeZone,
@@ -408,14 +418,13 @@ private[client] class Shim_v2_0 extends Shim with Logging {
     if (!SQLConf.get.metastorePartitionPruningFastFallback ||
       predicates.isEmpty ||
       predicates.exists(hasTimeZoneAwareExpression)) {
-      recordHiveCall()
-      hive.getAllPartitionsOf(table)
+      getAllPartitions(hive, table)
     } else {
       try {
         val partitionSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
           catalogTable.partitionSchema)
         val boundPredicate = ExternalCatalogUtils.generatePartitionPredicateByFilter(
-          catalogTable, partitionSchema, predicates)
+          partitionSchema, predicates)
 
         def toRow(spec: TablePartitionSpec): InternalRow = {
           InternalRow.fromSeq(partitionSchema.map { field =>
@@ -428,21 +437,17 @@ private[client] class Shim_v2_0 extends Shim with Logging {
           })
         }
 
-        recordHiveCall()
-        val allPartitionNames = hive.getPartitionNames(
-          table.getDbName, table.getTableName, -1).asScala
+        val allPartitionNames = getPartitionNames(hive, table.getDbName, table.getTableName, -1)
         val partNames = allPartitionNames.filter { p =>
           val spec = PartitioningUtils.parsePathFragment(p)
           boundPredicate.eval(toRow(spec))
         }
-        recordHiveCall()
-        hive.getPartitionsByNames(table, partNames.asJava)
+        getPartitionsByNames(hive, table, partNames)
       } catch {
         case ex: HiveException if ex.getCause.isInstanceOf[MetaException] =>
           logWarning("Caught Hive MetaException attempting to get partition metadata by " +
             "filter from client side. Falling back to fetching all partition metadata", ex)
-          recordHiveCall()
-          hive.getAllPartitionsOf(table)
+          getAllPartitions(hive, table)
       }
     }
   }

@@ -809,6 +809,16 @@ private[hive] class HiveClientImpl(
     parts
   }
 
+  override def getPartitionsByNames(
+      rawHiveTable: RawHiveTable,
+      partitionNames: Seq[String]): Seq[CatalogTablePartition] = withHiveState {
+    val hiveTable = rawHiveTable.rawTable.asInstanceOf[HiveTable]
+    hiveTable.setOwner(userName)
+    val parts = shim.getPartitionsByNames(client, hiveTable, partitionNames).map(fromHivePartition)
+    HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
+    parts
+  }
+
   override def listTables(dbName: String): Seq[String] = withHiveState {
     shim.getAllTables(client, dbName)
   }

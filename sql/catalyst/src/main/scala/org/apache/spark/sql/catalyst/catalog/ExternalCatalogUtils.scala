@@ -23,9 +23,11 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.Shell
 
+import org.apache.spark.SparkContext
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, BasePredicate, BoundReference, Expression, Predicate}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, BasePredicate, BoundReference, Cast, Expression, Literal, Predicate}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -35,6 +37,8 @@ object ExternalCatalogUtils {
   // This duplicates default value of Hive `ConfVars.DEFAULTPARTITIONNAME`, since catalyst doesn't
   // depend on Hive.
   val DEFAULT_PARTITION_NAME = "__HIVE_DEFAULT_PARTITION__"
+
+  private val PATTERN_FOR_KEY_EQ_VAL = "(.+)=(.+)".r
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // The following string escaping code is mainly copied from Hive (o.a.h.h.common.FileUtils).
@@ -148,6 +152,75 @@ object ExternalCatalogUtils {
     }
   }
 
+  /**
+   * Copied from org.apache.spark.sql.execution.datasources.PartitioningUtils#parsePathFragment.
+   */
+  def parsePathFragment(partitionName: String): TablePartitionSpec = {
+    partitionName.split("/").map { kv =>
+      val pair = kv.split("=", 2)
+      (unescapePathName(pair(0)), unescapePathName(pair(1)))
+    }.toMap
+  }
+
+  /**
+   * Copied from org.apache.spark.sql.execution.datasources.PartitioningUtils#getPathFragment.
+   */
+  def getPathFragment(spec: TablePartitionSpec, partitionSchema: StructType): String = {
+    partitionSchema.map { field =>
+      escapePathName(field.name) + "=" + getPartitionValueString(spec(field.name))
+    }.mkString("/")
+  }
+
+  def listPartitionsByFilter(
+      sparkContext: SparkContext,
+      conf: SQLConf,
+      catalog: SessionCatalog,
+      table: CatalogTable,
+      partitionFilters: Seq[Expression]): Seq[CatalogTablePartition] = {
+    if (conf.metastoreGetPartitionsByName) {
+      def partitionNameToInternalRow(
+          partitionName: String,
+          partitionSchema: StructType,
+          timeZone: Option[String]): InternalRow = {
+        val partitionValues = partitionName.split(Path.SEPARATOR).map {
+          case PATTERN_FOR_KEY_EQ_VAL(_, v) => unescapePathName(v)
+        }
+        InternalRow.fromSeq(partitionSchema.fields.zip(partitionValues)
+          .toSeq.map { case(field, value) =>
+          val partValue = if (value == DEFAULT_PARTITION_NAME) {
+            null
+          } else {
+            value
+          }
+          Cast(Literal(partValue), field.dataType, timeZone).eval()
+        })
+      }
+
+      // NOTE: We use listCatalogPartitionNames and not push down filters here, because:
+      // 1. The case of partition column does not affect the result.
+      // 2. The filters will cause heavy load on metastore service when querying tables containing
+      //    large partitions, OTOH this query is lightweight and filters can be handled in Spark.
+      val partitionNames = catalog.listCatalogPartitionNames(table.identifier)
+      val partitionSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
+        table.partitionSchema)
+      val timeZone = Option(conf.sessionLocalTimeZone)
+      val parallelism = math.min(partitionNames.size, sparkContext.defaultParallelism)
+      // Run in parallelism to speed up the filter
+      val prunedPartitionNames = sparkContext.parallelize(partitionNames, parallelism)
+        .mapPartitions { iterator =>
+          val predicate = generatePartitionPredicateByFilter(partitionSchema, partitionFilters)
+          iterator.filter { partName =>
+            val row = partitionNameToInternalRow(partName, partitionSchema, timeZone)
+            predicate.eval(row)
+          }
+        }
+        .collect().toSeq
+      catalog.listPartitionsByNames(table.identifier, prunedPartitionNames)
+    } else {
+      listPartitionsByFilter(conf, catalog, table, partitionFilters)
+    }
+  }
+
   def prunePartitionsByFilter(
       catalogTable: CatalogTable,
       inputPartitions: Seq[CatalogTablePartition],
@@ -158,8 +231,7 @@ object ExternalCatalogUtils {
     } else {
       val partitionSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
         catalogTable.partitionSchema)
-      val boundPredicate = generatePartitionPredicateByFilter(catalogTable,
-        partitionSchema, predicates)
+      val boundPredicate = generatePartitionPredicateByFilter(partitionSchema, predicates)
 
       inputPartitions.filter { p =>
         boundPredicate.eval(p.toRow(partitionSchema, defaultTimeZoneId))
@@ -168,10 +240,9 @@ object ExternalCatalogUtils {
   }
 
   def generatePartitionPredicateByFilter(
-      catalogTable: CatalogTable,
       partitionSchema: StructType,
       predicates: Seq[Expression]): BasePredicate = {
-    val partitionColumnNames = catalogTable.partitionColumnNames.toSet
+    val partitionColumnNames = partitionSchema.fields.map(_.name).toSet
 
     val nonPartitionPruningPredicates = predicates.filterNot {
       _.references.map(_.name).toSet.subsetOf(partitionColumnNames)

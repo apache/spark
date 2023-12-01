@@ -247,6 +247,13 @@ class ExternalCatalogWithListener(delegate: ExternalCatalog)
     delegate.listPartitionNames(db, table, partialSpec)
   }
 
+  override def listCatalogPartitionNames(
+      db: String,
+      table: String,
+      partialSpec: Option[TablePartitionSpec]): Seq[String] = {
+    delegate.listCatalogPartitionNames(db, table, partialSpec)
+  }
+
   override def listPartitions(
       db: String,
       table: String,
@@ -260,6 +267,13 @@ class ExternalCatalogWithListener(delegate: ExternalCatalog)
       predicates: Seq[Expression],
       defaultTimeZoneId: String): Seq[CatalogTablePartition] = {
     delegate.listPartitionsByFilter(db, table, predicates, defaultTimeZoneId)
+  }
+
+  override def listPartitionsByNames(
+      db: String,
+      table: String,
+      partitionNames: Seq[String]): Seq[CatalogTablePartition] = {
+    delegate.listPartitionsByNames(db, table, partitionNames)
   }
 
   // --------------------------------------------------------------------------

@@ -1275,6 +1275,17 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   /**
+   * Returns the original partition names from hive metastore for a given table in a database.
+   */
+  override def listCatalogPartitionNames(
+      db: String,
+      table: String,
+      partialSpec: Option[TablePartitionSpec]): Seq[String] = withClient {
+    val catalogTable = getTable(db, table)
+    client.getPartitionNames(catalogTable, partialSpec.map(toMetaStorePartitionSpec))
+  }
+
+  /**
    * Returns the partitions from hive metastore for a given table in a database.
    */
   override def listPartitions(
@@ -1314,6 +1325,19 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         restorePartitionMetadata(part, catalogTable)
       }
     prunePartitionsByFilter(catalogTable, clientPrunedPartitions, predicates, defaultTimeZoneId)
+  }
+
+  override def listPartitionsByNames(
+      db: String,
+      table: String,
+      partitionNames: Seq[String]): Seq[CatalogTablePartition] = withClient {
+    val rawHiveTable = client.getRawHiveTable(db, table)
+    val catalogTable = restoreTableMetadata(rawHiveTable.toCatalogTable)
+    val partColNameMap = buildLowerCasePartColNameMap(catalogTable)
+    client.getPartitionsByNames(rawHiveTable, partitionNames).map { part =>
+      part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
+      restorePartitionMetadata(part, catalogTable)
+    }
   }
 
   // --------------------------------------------------------------------------

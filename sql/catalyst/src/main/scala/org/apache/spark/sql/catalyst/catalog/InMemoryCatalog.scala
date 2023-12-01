@@ -579,6 +579,13 @@ class InMemoryCatalog(
     }.sorted
   }
 
+  override def listCatalogPartitionNames(
+      db: String,
+      table: String,
+      partSpec: Option[TablePartitionSpec]): Seq[String] = synchronized {
+    listPartitionNames(db, table, partSpec)
+  }
+
   override def listPartitions(
       db: String,
       table: String,
@@ -602,6 +609,14 @@ class InMemoryCatalog(
     val catalogTable = getTable(db, table)
     val allPartitions = listPartitions(db, table)
     prunePartitionsByFilter(catalogTable, allPartitions, predicates, defaultTimeZoneId)
+  }
+
+  override def listPartitionsByNames(
+      db: String,
+      table: String,
+      partitionNames: Seq[String]): Seq[CatalogTablePartition] = synchronized {
+    requireTableExists(db, table)
+    partitionNames.map(parsePathFragment).flatMap(catalog(db).tables(table).partitions.get)
   }
 
   // --------------------------------------------------------------------------

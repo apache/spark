@@ -1271,6 +1271,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val HIVE_METASTORE_GET_PARTITION_BY_NAME =
+    buildConf("spark.sql.hive.getPartitionByName.enabled")
+      .doc("When true, Spark will get all partition names first, and then get partitions " +
+           "based on the filtered partition names, which can alleviate the strain on the " +
+           "Hive metastore service, particularly when querying tables with large partitions. " +
+           "To improve the performance of filter, Spark will start a job to do the filter.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val HIVE_METASTORE_PARTITION_PRUNING =
     buildConf("spark.sql.hive.metastorePartitionPruning")
       .doc("When true, some predicates will be pushed down into the Hive metastore so that " +
@@ -4918,6 +4928,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def isOrcSchemaMergingEnabled: Boolean = getConf(ORC_SCHEMA_MERGING_ENABLED)
 
   def metastoreDropPartitionsByName: Boolean = getConf(HIVE_METASTORE_DROP_PARTITION_BY_NAME)
+
+  def metastoreGetPartitionsByName: Boolean = getConf(HIVE_METASTORE_GET_PARTITION_BY_NAME)
 
   def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 

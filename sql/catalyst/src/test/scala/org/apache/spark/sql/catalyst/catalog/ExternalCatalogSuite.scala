@@ -573,6 +573,25 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
     }
   }
 
+  test("list partitions by names") {
+    val catalog = newBasicCatalog()
+
+    def checkAnswer(
+        table: CatalogTable, names: Seq[String], expected: Set[CatalogTablePartition])
+        : Unit = {
+
+      assertResult(expected.map(_.spec)) {
+        catalog.listPartitionsByNames(table.database, table.identifier.identifier, names)
+          .map(_.spec).toSet
+      }
+    }
+
+    val tbl2 = catalog.getTable("db2", "tbl2")
+
+    checkAnswer(tbl2, Seq("a=1/b=2", "a=3/b=4"), Set(part1, part2))
+    checkAnswer(tbl2, Seq("a=1/b=2"), Set(part1))
+  }
+
   test("drop partitions") {
     val catalog = newBasicCatalog()
     assert(catalogPartitionsEqual(catalog, "db2", "tbl2", Seq(part1, part2)))

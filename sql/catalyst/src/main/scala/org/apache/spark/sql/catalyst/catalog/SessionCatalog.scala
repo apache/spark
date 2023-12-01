@@ -1287,6 +1287,28 @@ class SessionCatalog(
   }
 
   /**
+   * List the original names from external catalog for all partitions that
+   * belong to the specified table, assuming it exists.
+   *
+   * A partial partition spec may optionally be provided to filter the partitions returned.
+   * For instance, if there exist partitions (a='1', b='2'), (a='1', b='3') and (a='2', b='4'),
+   * then a partial spec of (a='1') will return the first two only.
+   */
+  def listCatalogPartitionNames(
+      tableName: TableIdentifier,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[String] = {
+    val qualifiedIdent = qualifyIdentifier(tableName)
+    val db = qualifiedIdent.database.get
+    requireDbExists(db)
+    requireTableExists(qualifiedIdent)
+    partialSpec.foreach { spec =>
+      requirePartialMatchedPartitionSpec(Seq(spec), getTableMetadata(qualifiedIdent))
+      requireNonEmptyValueInPartitionSpec(Seq(spec))
+    }
+    externalCatalog.listCatalogPartitionNames(db, qualifiedIdent.table, partialSpec)
+  }
+
+  /**
    * List the metadata of all partitions that belong to the specified table, assuming it exists.
    *
    * A partial partition spec may optionally be provided to filter the partitions returned.
@@ -1320,6 +1342,20 @@ class SessionCatalog(
     requireTableExists(qualifiedIdent)
     externalCatalog.listPartitionsByFilter(
       db, qualifiedIdent.table, predicates, conf.sessionLocalTimeZone)
+  }
+
+  /**
+   * List the metadata of partitions that belong to the specified table, assuming it exists, whose
+   * names are in the list of partition names.
+   */
+  def listPartitionsByNames(
+      tableName: TableIdentifier,
+      partitionNames: Seq[String]): Seq[CatalogTablePartition] = {
+    val qualifiedIdent = qualifyIdentifier(tableName)
+    val db = qualifiedIdent.database.get
+    requireDbExists(db)
+    requireTableExists(qualifiedIdent)
+    externalCatalog.listPartitionsByNames(db, qualifiedIdent.table, partitionNames)
   }
 
   /**

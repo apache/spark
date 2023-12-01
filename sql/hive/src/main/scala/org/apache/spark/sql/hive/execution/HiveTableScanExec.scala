@@ -33,7 +33,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.CastSupport
-import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
+import org.apache.spark.sql.catalyst.catalog.{ExternalCatalogUtils, HiveTableRelation}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.execution._
@@ -187,14 +187,13 @@ case class HiveTableScanExec(
   // exposed for tests
   @transient lazy val rawPartitions: Seq[HivePartition] = {
     val prunedPartitions =
-      if (sparkSession.sessionState.conf.metastorePartitionPruning &&
-        partitionPruningPred.nonEmpty) {
+      if (partitionPruningPred.nonEmpty) {
         // Retrieve the original attributes based on expression ID so that capitalization matches.
         val normalizedFilters = partitionPruningPred.map(_.transform {
           case a: AttributeReference => originalAttributes(a)
         })
-        sparkSession.sessionState.catalog
-          .listPartitionsByFilter(relation.tableMeta.identifier, normalizedFilters)
+        ExternalCatalogUtils.listPartitionsByFilter(sparkSession.sparkContext,
+          conf, sparkSession.sessionState.catalog, relation.tableMeta, normalizedFilters)
       } else {
         sparkSession.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
       }

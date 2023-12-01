@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.catalog.{HiveTableRelation, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{ExternalCatalogUtils, HiveTableRelation, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -136,7 +136,8 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
               // for the case where partitions have already been pruned by PruneHiveTablePartitions
               case Some(parts) => parts
               case None => if (partFilters.nonEmpty) {
-                catalog.listPartitionsByFilter(relation.tableMeta.identifier, normalizedFilters)
+                ExternalCatalogUtils.listPartitionsByFilter(
+                  conf, catalog, relation.tableMeta, normalizedFilters)
               } else {
                 catalog.listPartitions(relation.tableMeta.identifier)
               }

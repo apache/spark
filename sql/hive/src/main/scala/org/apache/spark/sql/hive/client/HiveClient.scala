@@ -245,6 +245,11 @@ private[hive] trait HiveClient {
       catalogTable: RawHiveTable,
       predicates: Seq[Expression]): Seq[CatalogTablePartition]
 
+  /** Returns partitions based on partition names for the given table. */
+  def getPartitionsByNames(
+      rawHiveTable: RawHiveTable,
+      partitionNames: Seq[String]): Seq[CatalogTablePartition]
+
   /** Loads a static partition into an existing table. */
   def loadPartition(
       loadPath: String,
