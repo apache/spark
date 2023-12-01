@@ -85,15 +85,10 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
       holder.userId,
       holder.sessionId,
       None,
-      false)
-
-//    ErrorUtils.handleNonQueryError(
-//      "addArtifacts.onNext",
-//      responseObserver,
-//      Some(this.holder),
-//      Some(() => {
-//        cleanUpStagedArtifacts()
-//      }))
+      false,
+      Some(() => {
+        cleanUpStagedArtifacts()
+      }))
   }
 
   override def onError(throwable: Throwable): Unit = {
@@ -144,10 +139,16 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
       responseObserver.onNext(builder.build())
       responseObserver.onCompleted()
     } catch {
-      ErrorUtils.handleNonQueryError(
-        "addArtifacts.onCompleted",
+      ErrorUtils.handleError(
+        "addArtifacts.onComplete",
         responseObserver,
-        Some(this.holder))
+        holder.userId,
+        holder.sessionId,
+        None,
+        false,
+        Some(() => {
+          cleanUpStagedArtifacts()
+        }))
     }
   }
 
