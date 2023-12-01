@@ -24,7 +24,7 @@ import scala.reflect.ClassTag
 import com.google.rpc.ErrorInfo
 import io.grpc.{ManagedChannel, StatusRuntimeException}
 import io.grpc.protobuf.StatusProto
-import org.json4s.DefaultFormats
+import org.json4s.{DefaultFormats, Formats}
 import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{QueryContext, QueryContextType, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
@@ -354,7 +354,7 @@ private[client] object GrpcExceptionConverter {
    * truncated error message.
    */
   private def errorInfoToThrowable(info: ErrorInfo, message: String): Throwable = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     val classes =
       JsonMethods.parse(info.getMetadataOrDefault("classes", "[]")).extract[Array[String]]
     val errorClass = info.getMetadataOrDefault("errorClass", null)

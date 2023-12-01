@@ -57,15 +57,17 @@ jobs:
           - hive2.3
         modules:
           - >-
-            core,launcher,common#unsafe,common#kvstore,common#network-common,common#network-shuffle,common#sketch
+            core,launcher,common#unsafe,common#kvstore,common#network-common,common#network-shuffle,common#sketch,common#utils
           - >-
-            graphx,streaming,mllib-local,mllib,hadoop-cloud
+            graphx,streaming,hadoop-cloud
+          - >-
+            mllib-local,mllib
           - >-
             repl,sql#hive-thriftserver
           - >-
             connector#kafka-0-10,connector#kafka-0-10-sql,connector#kafka-0-10-token-provider,connector#spark-ganglia-lgpl,connector#protobuf,connector#avro
           - >-
-            sql#catalyst,resource-managers#yarn,resource-managers#kubernetes#core
+            sql#api,sql#catalyst,resource-managers#yarn,resource-managers#kubernetes#core
           - >-
             connect
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
@@ -140,29 +142,29 @@ jobs:
           key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
           restore-keys: |
             build-
-      - name: Cache Coursier local repository
+      - name: Cache Maven local repository
         uses: actions/cache@v3
         with:
-          path: ~/.cache/coursier
-          key: ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          path: ~/.m2/repository
+          key: java${{ matrix.java }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
-            ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
+            java${{ matrix.java }}-maven-
       - name: Install Java ${{ matrix.java }}
         uses: actions/setup-java@v3
         with:
-          distribution: temurin
+          distribution: zulu
           java-version: ${{ matrix.java }}
       - name: Install Python 3.9
         uses: actions/setup-python@v4
         # We should install one Python that is higher than 3+ for SQL and Yarn because:
         # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
         # - Yarn has a Python specific test too, for example, YarnClusterSuite.
-        if: contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core'))
+        if: contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect')
         with:
           python-version: '3.9'
           architecture: x64
       - name: Install Python packages (Python 3.9)
-        if: (contains(matrix.modules, 'sql#core'))
+        if: (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect')
         run: |
           python3.9 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'grpcio==1.59.3' 'grpcio-status==1.59.3' 'protobuf==4.25.1'
           python3.9 -m pip list

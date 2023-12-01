@@ -415,10 +415,10 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         withNumberInvalid { p.processedRowsPerSecond })), Array.empty[(Long, Double)])
     val inputRowsData = withNoProgress(query,
       query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
-        withNumberInvalid { p.numInputRows })), Array.empty[(Long, Double)])
+        withNumberInvalid { p.numInputRows.toDouble })), Array.empty[(Long, Double)])
     val batchDurations = withNoProgress(query,
       query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
-        withNumberInvalid { p.batchDuration })), Array.empty[(Long, Double)])
+        withNumberInvalid { p.batchDuration.toDouble })), Array.empty[(Long, Double)])
     val operationDurationData = withNoProgress(
       query,
       query.recentProgress.map { p =>
@@ -437,7 +437,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         inputRateData.toImmutableArraySeq,
         minBatchTime,
         maxBatchTime,
-        minRecordRate,
+        minRecordRate.toDouble,
         maxRecordRate,
         "records/sec")
     graphUIDataForInputRate.generateDataJs(jsCollector)
@@ -449,7 +449,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         processRateData.toImmutableArraySeq,
         minBatchTime,
         maxBatchTime,
-        minProcessRate,
+        minProcessRate.toDouble,
         maxProcessRate,
         "records/sec")
     graphUIDataForProcessRate.generateDataJs(jsCollector)
@@ -461,8 +461,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         inputRowsData.toImmutableArraySeq,
         minBatchTime,
         maxBatchTime,
-        minRows,
-        maxRows,
+        minRows.toDouble,
+        maxRows.toDouble,
         "records")
     graphUIDataForInputRows.generateDataJs(jsCollector)
 
@@ -473,8 +473,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         batchDurations.toImmutableArraySeq,
         minBatchTime,
         maxBatchTime,
-        minBatchDuration,
-        maxBatchDuration,
+        minBatchDuration.toDouble,
+        maxBatchDuration.toDouble,
         "ms")
     graphUIDataForBatchDuration.generateDataJs(jsCollector)
 

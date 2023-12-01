@@ -46,7 +46,7 @@ class Catalog:
         self._sparkSession = sparkSession
 
     def _execute_and_fetch(self, catalog: plan.LogicalPlan) -> pa.Table:
-        table, _ = DataFrame.withPlan(catalog, session=self._sparkSession)._to_table()
+        table, _ = DataFrame(catalog, session=self._sparkSession)._to_table()
         assert table is not None
         return table
 
@@ -222,7 +222,7 @@ class Catalog:
             schema=schema,
             options=options,
         )
-        df = DataFrame.withPlan(catalog, session=self._sparkSession)
+        df = DataFrame(catalog, session=self._sparkSession)
         df._to_table()  # Eager execution.
         return df
 
@@ -245,7 +245,7 @@ class Catalog:
             description=description,
             options=options,
         )
-        df = DataFrame.withPlan(catalog, session=self._sparkSession)
+        df = DataFrame(catalog, session=self._sparkSession)
         df._to_table()  # Eager execution.
         return df
 

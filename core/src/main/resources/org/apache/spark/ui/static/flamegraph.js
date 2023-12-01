@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
+export {drawFlamegraph, toggleFlamegraph};
+
 /* global $, d3, flamegraph */
 
-/* eslint-disable no-unused-vars */
 function drawFlamegraph() {
   const width = (window.innerWidth * 95) / 100;
   const chart = flamegraph()
@@ -45,4 +46,3 @@ function toggleFlamegraph() {
     d3.select("#executor-flamegraph-chart").style("display", "none");
   }
 }
-/* eslint-enable no-unused-vars */

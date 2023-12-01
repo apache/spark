@@ -177,7 +177,7 @@ jobs:
         # In benchmark, we use local as master so set driver memory only. Note that GitHub Actions has 7 GB memory limit.
         bin/spark-submit \
           --driver-memory 6g --class org.apache.spark.benchmark.Benchmarks \
-          --jars "`find . -name '*-SNAPSHOT-tests.jar' -o -name '*avro*-SNAPSHOT.jar' | paste -sd ',' -`" \
+          --jars "`find . -name '*-SNAPSHOT-tests.jar' -o -name '*avro*-SNAPSHOT.jar' | paste -sd ',' -`,`find ~/.cache/coursier -name 'curator-test-*.jar'`" \
           "`find . -name 'spark-core*-SNAPSHOT-tests.jar'`" \
           "${{ github.event.inputs.class }}"
         # To keep the directory structure and file permissions, tar them

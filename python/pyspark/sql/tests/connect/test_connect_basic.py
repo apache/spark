@@ -704,11 +704,14 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.assertRaises(ParseException):
             self.connect.createDataFrame(data, "col1 magic_type, col2 int, col3 int, col4 int")
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "Length mismatch: Expected axis has 3 elements, new values have 4 elements",
-        ):
+        with self.assertRaises(PySparkValueError) as pe:
             self.connect.createDataFrame(data, "col1 int, col2 int, col3 int")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="AXIS_LENGTH_MISMATCH",
+            message_parameters={"expected_length": "3", "actual_length": "4"},
+        )
 
     def test_with_local_rows(self):
         # SPARK-41789, SPARK-41810: Test creating a dataframe with list of rows and dictionaries
@@ -1824,7 +1827,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.assert_eq(cdf, df)
 
-        self.assertEquals(cobservation.get, observation.get)
+        self.assertEqual(cobservation.get, observation.get)
 
         observed_metrics = cdf.attrs["observed_metrics"]
         self.assert_eq(len(observed_metrics), 1)
@@ -3449,11 +3452,11 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         self.assertIsNotNone(self.spark._client)
         # Creates a new remote session.
         other = PySparkSession.builder.remote("sc://other.remote:114/").create()
-        self.assertNotEquals(self.spark, other)
+        self.assertNotEqual(self.spark, other)
 
         # Gets currently active session.
         same = PySparkSession.builder.remote("sc://other.remote.host:114/").getOrCreate()
-        self.assertEquals(other, same)
+        self.assertEqual(other, same)
         same.release_session_on_close = False  # avoid sending release to dummy connection
         same.stop()
 
@@ -3708,9 +3711,7 @@ class ChannelBuilderTests(unittest.TestCase):
         with self.assertRaises(ValueError) as ve:
             chan = ChannelBuilder("sc://host/;session_id=abcd")
             SparkConnectClient(chan)
-        self.assertIn(
-            "Parameter value 'session_id' must be a valid UUID format.", str(ve.exception)
-        )
+        self.assertIn("Parameter value session_id must be a valid UUID format", str(ve.exception))
 
         chan = ChannelBuilder("sc://host/")
         self.assertIsNone(chan.session_id)

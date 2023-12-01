@@ -15,9 +15,8 @@
 # limitations under the License.
 #
 from abc import ABC, abstractmethod
-from typing import final, Any, Dict, Iterator, List, Tuple, Type, Union, TYPE_CHECKING
+from typing import final, Any, Dict, Iterator, List, Sequence, Tuple, Type, Union, TYPE_CHECKING
 
-from pyspark import since
 from pyspark.sql import Row
 from pyspark.sql.types import StructType
 
@@ -29,7 +28,6 @@ if TYPE_CHECKING:
 __all__ = ["DataSource", "DataSourceReader", "DataSourceWriter", "DataSourceRegistration"]
 
 
-@since(4.0)
 class DataSource(ABC):
     """
     A base class for data sources.
@@ -42,6 +40,8 @@ class DataSource(ABC):
 
     After implementing this interface, you can start to load your data source using
     ``spark.read.format(...).load()`` and save data using ``df.write.format(...).save()``.
+
+    .. versionadded: 4.0.0
     """
 
     @final
@@ -145,14 +145,53 @@ class DataSource(ABC):
         raise NotImplementedError
 
 
-@since(4.0)
+class InputPartition:
+    """
+    A base class representing an input partition returned by the `partitions()`
+    method of `DataSourceReader`.
+
+    .. versionadded: 4.0.0
+
+    Notes
+    -----
+    This class must be picklable.
+
+    Examples
+    --------
+    Use the default input partition implementation:
+
+    >>> def partitions(self):
+    ...     return [InputPartition(1)]
+
+    Subclass the input partition class:
+
+    >>> from dataclasses import dataclass
+    >>> @dataclass
+    ... class RangeInputPartition(InputPartition):
+    ...     start: int
+    ...     end: int
+
+    >>> def partitions(self):
+    ...     return [RangeInputPartition(1, 3), RangeInputPartition(4, 6)]
+    """
+
+    def __init__(self, value: Any) -> None:
+        self.value = value
+
+    def __repr__(self) -> str:
+        attributes = ", ".join([f"{k}={v!r}" for k, v in self.__dict__.items()])
+        return f"{self.__class__.__name__}({attributes})"
+
+
 class DataSourceReader(ABC):
     """
     A base class for data source readers. Data source readers are responsible for
     outputting data from a data source.
+
+    .. versionadded: 4.0.0
     """
 
-    def partitions(self) -> Iterator[Any]:
+    def partitions(self) -> Sequence[InputPartition]:
         """
         Returns an iterator of partitions for this data source.
 
@@ -170,40 +209,40 @@ class DataSourceReader(ABC):
 
         Returns
         -------
-        Iterator[Any]
-            An iterator of partitions for this data source. The partition value can be
-            any serializable objects.
+        Sequence[InputPartition]
+            A sequence of partitions for this data source. Each partition value
+            must be an instance of `InputPartition` or a subclass of it.
 
         Notes
         -----
-        This method should not return any un-picklable objects.
+        All partition values must be picklable objects.
 
         Examples
         --------
         Returns a list of integers:
 
         >>> def partitions(self):
-        ...     return [1, 2, 3]
+        ...     return [InputPartition(1), InputPartition(2), InputPartition(3)]
 
         Returns a list of string:
 
         >>> def partitions(self):
-        ...     return ["a", "b", "c"]
+        ...     return [InputPartition("a"), InputPartition("b"), InputPartition("c")]
 
-        Returns a list of tuples:
+        Returns a list of ranges:
+
+        >>> class RangeInputPartition(InputPartition):
+        ...    def __init__(self, start, end):
+        ...        self.start = start
+        ...        self.end = end
 
         >>> def partitions(self):
-        ...     return [("a", 1), ("b", 2), ("c", 3)]
-
-        Returns a list of dictionaries:
-
-        >>> def partitions(self):
-        ...     return [{"a": 1}, {"b": 2}, {"c": 3}]
+        ...     return [RangeInputPartition(1, 3), RangeInputPartition(5, 10)]
         """
-        yield None
+        raise NotImplementedError
 
     @abstractmethod
-    def read(self, partition: Any) -> Iterator[Union[Tuple, Row]]:
+    def read(self, partition: InputPartition) -> Iterator[Union[Tuple, Row]]:
         """
         Generates data for a given partition and returns an iterator of tuples or rows.
 
@@ -228,24 +267,25 @@ class DataSourceReader(ABC):
         --------
         Yields a list of tuples:
 
-        >>> def read(self, partition):
-        ...     yield (partition, 0)
-        ...     yield (partition, 1)
+        >>> def read(self, partition: InputPartition):
+        ...     yield (partition.value, 0)
+        ...     yield (partition.value, 1)
 
         Yields a list of rows:
 
-        >>> def read(self, partition):
-        ...     yield Row(partition=partition, value=0)
-        ...     yield Row(partition=partition, value=1)
+        >>> def read(self, partition: InputPartition):
+        ...     yield Row(partition=partition.value, value=0)
+        ...     yield Row(partition=partition.value, value=1)
         """
         ...
 
 
-@since(4.0)
 class DataSourceWriter(ABC):
     """
     A base class for data source writers. Data source writers are responsible for saving
     the data to the data source.
+
+    .. versionadded: 4.0.0
     """
 
     @abstractmethod
@@ -305,21 +345,27 @@ class DataSourceWriter(ABC):
         ...
 
 
-@since(4.0)
 class WriterCommitMessage:
     """
     A commit message returned by the ``write`` method of ``DataSourceWriter`` and will be
     sent back to the driver side as input parameter of ``commit`` or ``abort`` method.
+
+    .. versionadded: 4.0.0
+
+    Notes
+    -----
+    This class must be picklable.
     """
 
     ...
 
 
-@since(4.0)
 class DataSourceRegistration:
     """
     Wrapper for data source registration. This instance can be accessed by
     :attr:`spark.dataSource`.
+
+    .. versionadded: 4.0.0
     """
 
     def __init__(self, sparkSession: "SparkSession"):

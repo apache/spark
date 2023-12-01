@@ -174,7 +174,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     // note: this does not cleanly shut down the executions, but the server is shutting down.
     executions.clear()
     abandonedTombstones.invalidateAll()
-    if (!lastExecutionTimeMs.isDefined) {
+    if (lastExecutionTimeMs.isEmpty) {
       lastExecutionTimeMs = Some(System.currentTimeMillis())
     }
   }

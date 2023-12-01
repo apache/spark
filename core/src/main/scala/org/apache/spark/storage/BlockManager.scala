@@ -848,7 +848,7 @@ private[spark] class BlockManager(
     (blockInfoManager.entries.map(_._1) ++ diskBlockManager.getAllBlocks())
       .filter(filter)
       .toArray
-      .toSeq
+      .toImmutableArraySeq
   }
 
   /**

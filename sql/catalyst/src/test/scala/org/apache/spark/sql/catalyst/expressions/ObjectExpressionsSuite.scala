@@ -492,7 +492,8 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  implicit private def mapIntStrEncoder = ExpressionEncoder[Map[Int, String]]()
+  implicit private def mapIntStrEncoder: ExpressionEncoder[Map[Int, String]] =
+    ExpressionEncoder[Map[Int, String]]()
 
   test("SPARK-23588 CatalystToExternalMap should support interpreted execution") {
     // To get a resolved `CatalystToExternalMap` expression, we build a deserializer plan

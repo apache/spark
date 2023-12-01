@@ -56,7 +56,7 @@ class RateStreamProviderSuite extends StreamTest {
   }
 
   test("RateStreamProvider in registry") {
-    val ds = DataSource.lookupDataSource("rate", spark.sqlContext.conf)
+    val ds = DataSource.lookupDataSource("rate", spark.sessionState.conf)
       .getConstructor().newInstance()
     assert(ds.isInstanceOf[RateStreamProvider], "Could not find rate source")
   }
@@ -64,7 +64,7 @@ class RateStreamProviderSuite extends StreamTest {
   test("compatible with old path in registry") {
     val ds = DataSource.lookupDataSource(
       "org.apache.spark.sql.execution.streaming.RateSourceProvider",
-      spark.sqlContext.conf).getConstructor().newInstance()
+      spark.sessionState.conf).getConstructor().newInstance()
     assert(ds.isInstanceOf[RateStreamProvider], "Could not find rate source")
   }
 
@@ -165,7 +165,7 @@ class RateStreamProviderSuite extends StreamTest {
         checkpointLocation = temp.getCanonicalPath)
       val partitions = stream.planInputPartitions(LongOffset(0L), LongOffset(1L))
       val readerFactory = stream.createReaderFactory()
-      assert(partitions.size == 1)
+      assert(partitions.length == 1)
       val dataReader = readerFactory.createReader(partitions(0))
       val data = ArrayBuffer[InternalRow]()
       while (dataReader.next()) {
@@ -184,7 +184,7 @@ class RateStreamProviderSuite extends StreamTest {
         checkpointLocation = temp.getCanonicalPath)
       val partitions = stream.planInputPartitions(LongOffset(0L), LongOffset(1L))
       val readerFactory = stream.createReaderFactory()
-      assert(partitions.size == 11)
+      assert(partitions.length == 11)
 
       val readData = partitions
         .map(readerFactory.createReader)
@@ -359,7 +359,7 @@ class RateStreamProviderSuite extends StreamTest {
     val stream = new RateStreamContinuousStream(rowsPerSecond = 20, numPartitions = 2)
     val partitions = stream.planInputPartitions(stream.initialOffset)
     val readerFactory = stream.createContinuousReaderFactory()
-    assert(partitions.size == 2)
+    assert(partitions.length == 2)
 
     val data = scala.collection.mutable.ListBuffer[InternalRow]()
     partitions.foreach {
