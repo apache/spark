@@ -24,7 +24,8 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLQueryTestSuite
-import org.apache.spark.sql.catalyst.util.stringToFile
+import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
+import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
 // scalastyle:off line.size.limit
 /**
@@ -34,9 +35,6 @@ import org.apache.spark.sql.catalyst.util.stringToFile
  * tests will not be compatible with other DBMSes. There will be more work in the future, such as
  * some kind of conversion, to increase coverage.
  *
- * If your SQL query test is not compatible with other DBMSes, please add it to the `ignoreList` at
- * the bottom of this file.
- *
  * You need to have a database server up before running this test.
  * For example, for postgres:
  * 1. Install PostgreSQL.
@@ -44,7 +42,13 @@ import org.apache.spark.sql.catalyst.util.stringToFile
  * 2. After installing PostgreSQL, start the database server, then create a role named pg with
  *    superuser permissions: `createuser -s pg`` OR `psql> CREATE role pg superuser``
  *
- * To run the entire test suite:
+ * To indicate that the SQL file is eligible for testing with this suite, add the following comment
+ * into the input file:
+ * {{{
+ *   --DBMS_TO_GENERATE_GOLDEN_FILE postgres
+ * }}}
+ *
+ * And then, to run the entire test suite:
  * {{{
  *   build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.CrossDbmsQueryTestSuite"
  * }}}
@@ -54,14 +58,14 @@ import org.apache.spark.sql.catalyst.util.stringToFile
  *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.CrossDbmsQueryTestSuite"
  * }}}
  *
- * To re-generate golden file for a single test, run:
+ * To re-generate golden file for a single test, e.g. `describe.sql`, run:
  * {{{
  *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.CrossDbmsQueryTestSuite -- -z describe.sql"
  * }}}
  *
  * To specify a DBMS to use (the default is postgres):
  * {{{
- *   REF_DBMS=mysql SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.CrossDbmsQueryTestSuite"
+ *   REF_DBMS=postgres SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.CrossDbmsQueryTestSuite"
  * }}}
  */
 // scalastyle:on line.size.limit
@@ -80,11 +84,40 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
   private def customConnectionUrl: String = System.getenv(
     CrossDbmsQueryTestSuite.REF_DBMS_CONNECTION_URL)
 
+  override protected def runSqlTestCase(testCase: TestCase, listTestCases: Seq[TestCase]): Unit = {
+    val input = fileToString(new File(testCase.inputFile))
+    val (comments, code) = splitCommentsAndCodes(input)
+    val queries = getQueries(code, comments)
+    val settings = getSparkSettings(comments)
+
+    if (regenerateGoldenFiles) {
+      // If `--DBMS_TO_GENERATE_GOLDEN_FILE` found,
+      val dbmsConfig = comments.filter(_.startsWith(s"--${
+        CrossDbmsQueryTestSuite.DBMS_TO_GENERATE_GOLDEN_FILE} ")).map(_.substring(31))
+      val otherConfigs = dbmsConfig.map(
+        (CrossDbmsQueryTestSuite.DBMS_TO_GENERATE_GOLDEN_FILE, _)).toMap
+      runQueries(queries, testCase, settings.toImmutableArraySeq, otherConfigs)
+    } else {
+      val configSets = getSparkConfigDimensions(comments)
+      runQueriesWithSparkConfigDimensions(
+        queries, testCase, settings, configSets)
+    }
+  }
+
   override protected def runQueries(
       queries: Seq[String],
       testCase: TestCase,
-      configSet: Seq[(String, String)]): Unit = {
+      sparkConfigSet: Seq[(String, String)],
+      otherConfigs: Map[String, String] = Map.empty): Unit = {
     val localSparkSession = spark.newSession()
+
+    if (!otherConfigs.contains(CrossDbmsQueryTestSuite.DBMS_TO_GENERATE_GOLDEN_FILE) ||
+      !otherConfigs.get(CrossDbmsQueryTestSuite.DBMS_TO_GENERATE_GOLDEN_FILE)
+        .contains(crossDbmsToGenerateGoldenFiles)) {
+      log.info(s"This test case (${testCase.name}) is ignored because it does not indicate " +
+        s"testing with $crossDbmsToGenerateGoldenFiles")
+      return
+    }
 
     var runner: Option[SQLQueryTestRunner] = None
     val outputs: Seq[QueryTestOutput] = queries.map { sql =>
@@ -121,6 +154,9 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
           }
         } else {
           // Use Spark.
+          // Execute the list of set operation in order to add the desired configs
+          val setOperations = sparkConfigSet.map { case (key, value) => s"set $key=$value" }
+          setOperations.foreach(localSparkSession.sql)
           val (_, output) = handleExceptions(
             getNormalizedQueryExecutionResult(localSparkSession, sql))
           output
@@ -136,8 +172,8 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
 
     if (regenerateGoldenFiles) {
       val goldenOutput = {
-        s"-- Automatically generated by ${getClass.getSimpleName}\n" +
-          outputs.mkString("\n\n\n") + "\n"
+        s"-- Automatically generated by ${getClass.getSimpleName} with " +
+          s"$crossDbmsToGenerateGoldenFiles\n" + outputs.mkString("\n\n\n") + "\n"
       }
       val resultFile = new File(testCase.resultFile)
       val parent = resultFile.getParentFile
@@ -184,149 +220,6 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
       RegularTestCase(testCaseName, absPath, resultFile) :: Nil
     }.sortBy(_.name)
   }
-
-  // Ignore all tests for now due to likely incompatibility.
-  override def ignoreList: Set[String] =
-    // Directories
-    Set(
-      "postgreSQL",
-      "subquery",
-      "ansi",
-      "udtf",
-      "udf",
-      "timestampNTZ",
-      "udaf",
-      "typeCoercion"
-    ) ++
-    // Files
-    Set(
-      "group-by.sql",
-      "natural-join.sql",
-      "timestamp-ltz.sql",
-      "csv-functions.sql",
-      "datetime-formatting-invalid.sql",
-      "except.sql",
-      "string-functions.sql",
-      "cte-command.sql",
-      "identifier-clause.sql",
-      "try_reflect.sql",
-      "order-by-all.sql",
-      "timestamp-ntz.sql",
-      "url-functions.sql",
-      "math.sql",
-      "random.sql",
-      "tablesample-negative.sql",
-      "date.sql",
-      "window.sql",
-      "linear-regression.sql",
-      "join-empty-relation.sql",
-      "null-propagation.sql",
-      "operators.sql",
-      "change-column.sql",
-      "count.sql",
-      "mask-functions.sql",
-      "decimalArithmeticOperations.sql",
-      "column-resolution-sort.sql",
-      "group-analytics.sql",
-      "inline-table.sql",
-      "comparator.sql",
-      "ceil-floor-with-scale-param.sql",
-      "show-tblproperties.sql",
-      "timezone.sql",
-      "ilike.sql",
-      "parse-schema-string.sql",
-      "charvarchar.sql",
-      "ignored.sql",
-      "cte.sql",
-      "selectExcept.sql",
-      "order-by-nulls-ordering.sql",
-      "query_regex_column.sql",
-      "show_columns.sql",
-      "columnresolution-views.sql",
-      "percentiles.sql",
-      "hll.sql",
-      "group-by-all.sql",
-      "like-any.sql",
-      "struct.sql",
-      "show-create-table.sql",
-      "try_cast.sql",
-      "unpivot.sql",
-      "describe-query.sql",
-      "describe.sql",
-      "columnresolution.sql",
-      "union.sql",
-      "order-by-ordinal.sql",
-      "explain-cbo.sql",
-      "intersect-all.sql",
-      "ilike-all.sql",
-      "try_aggregates.sql",
-      "try-string-functions.sql",
-      "show-views.sql",
-      "xml-functions.sql",
-      "datetime-parsing.sql",
-      "cte-nested.sql",
-      "columnresolution-negative.sql",
-      "datetime-special.sql",
-      "describe-table-after-alter-table.sql",
-      "column-resolution-aggregate.sql",
-      "keywords.sql",
-      "table-aliases.sql",
-      "bitwise.sql",
-      "like-all.sql",
-      "named-function-arguments.sql",
-      "try_datetime_functions.sql",
-      "datetime-legacy.sql",
-      "outer-join.sql",
-      "explain.sql",
-      "sql-compatibility-functions.sql",
-      "join-lateral.sql",
-      "pred-pushdown.sql",
-      "cast.sql",
-      "except-all.sql",
-      "predicate-functions.sql",
-      "timestamp.sql",
-      "group-by-filter.sql",
-      "pivot.sql",
-      "try_arithmetic.sql",
-      "higher-order-functions.sql",
-      "cte-legacy.sql",
-      "misc-functions.sql",
-      "describe-part-after-analyze.sql",
-      "extract.sql",
-      "datetime-formatting.sql",
-      "interval.sql",
-      "double-quoted-identifiers.sql",
-      "datetime-formatting-legacy.sql",
-      "group-by-ordinal.sql",
-      "having.sql",
-      "inner-join.sql",
-      "null-handling.sql",
-      "ilike-any.sql",
-      "show-tables.sql",
-      "sql-session-variables.sql",
-      "using-join.sql",
-      "subexp-elimination.sql",
-      "cte-nonlegacy.sql",
-      "group-by-all-duckdb.sql",
-      "transform.sql",
-      "map.sql",
-      "table-valued-functions.sql",
-      "comments.sql",
-      "regexp-functions.sql",
-      "datetime-parsing-legacy.sql",
-      "cross-join.sql",
-      "array.sql",
-      "group-by-all-mosha.sql",
-      "limit.sql",
-      "non-excludable-rule.sql",
-      "grouping_set.sql",
-      "json-functions.sql",
-      "datetime-parsing-invalid.sql",
-      "try_element_at.sql",
-      "explain-aqe.sql",
-      "current_database_catalog.sql",
-      "literals.sql"
-    )
 }
 
 object CrossDbmsQueryTestSuite {
@@ -335,6 +228,8 @@ object CrossDbmsQueryTestSuite {
   private final val REF_DBMS_ARGUMENT = "REF_DBMS"
   // System argument to indicate a custom connection URL to the reference DBMS.
   private final val REF_DBMS_CONNECTION_URL = "REF_DBMS_CONNECTION_URL"
+  // Argument in input files to indicate that golden file should be generated with a reference DBMS
+  private final val DBMS_TO_GENERATE_GOLDEN_FILE = "DBMS_TO_GENERATE_GOLDEN_FILE"
 
   private final val POSTGRES = "postgres"
   private final val SUPPORTED_DBMS = Seq(POSTGRES)
