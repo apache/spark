@@ -116,6 +116,23 @@ SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnArrayType(TABLE(t2))
 SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnArrayElementType(TABLE(t2));
 SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnStructType(TABLE(t2));
 SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnMapType(TABLE(t2));
+-- The following UDTF calls exercise various invalid function definitions and calls to show the
+-- error messages.
+SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs();
+SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs(1, 2);
+SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs(invalid => 2);
+SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs(argument => 1, argument => 2);
+SELECT * FROM InvalidAnalyzeMethodWithSinglePartitionNoInputTable(argument => 1);
+SELECT * FROM InvalidAnalyzeMethodWithPartitionByNoInputTable(argument => 1);
+SELECT * FROM InvalidAnalyzeMethodReturnsNonStructTypeSchema(TABLE(t2));
+SELECT * FROM InvalidAnalyzeMethodWithPartitionByListOfStrings(argument => TABLE(t2));
+SELECT * FROM InvalidForwardStateFromAnalyzeTooManyInitArgs(TABLE(t2));
+SELECT * FROM InvalidNotForwardStateFromAnalyzeTooManyInitArgs(TABLE(t2));
+SELECT * FROM UDTFWithSinglePartition(1);
+SELECT * FROM UDTFWithSinglePartition(1, 2, 3);
+SELECT * FROM UDTFWithSinglePartition(1, invalid_arg_name => 2);
+SELECT * FROM UDTFWithSinglePartition(1, initial_count => 2);
+SELECT * FROM UDTFWithSinglePartition(initial_count => 1, initial_count => 2);
 
 -- cleanup
 DROP VIEW t1;

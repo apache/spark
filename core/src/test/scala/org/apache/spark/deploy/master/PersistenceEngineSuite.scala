@@ -40,6 +40,19 @@ class PersistenceEngineSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-46191: FileSystemPersistenceEngine.persist error message for the existing file") {
+    withTempDir { dir =>
+      val conf = new SparkConf()
+      val serializer = new JavaSerializer(conf)
+      val engine = new FileSystemPersistenceEngine(dir.getAbsolutePath, serializer)
+      engine.persist("test_1", "test_1_value")
+      val m = intercept[IllegalStateException] {
+        engine.persist("test_1", "test_1_value")
+      }.getMessage
+      assert(m.contains("File already exists"))
+    }
+  }
+
   test("ZooKeeperPersistenceEngine") {
     val conf = new SparkConf()
     // TestingServer logs the port conflict exception rather than throwing an exception.

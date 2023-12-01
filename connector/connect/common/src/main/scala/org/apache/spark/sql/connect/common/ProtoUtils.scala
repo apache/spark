@@ -33,7 +33,7 @@ private[connect] object ProtoUtils {
     message.getAllFields.asScala.iterator.foreach {
       case (field: FieldDescriptor, string: String)
           if field.getJavaType == FieldDescriptor.JavaType.STRING && string != null =>
-        val size = string.size
+        val size = string.length
         if (size > maxStringSize) {
           builder.setField(field, createString(string.take(maxStringSize), size))
         } else {
@@ -55,7 +55,7 @@ private[connect] object ProtoUtils {
 
       case (field: FieldDescriptor, byteArray: Array[Byte])
           if field.getJavaType == FieldDescriptor.JavaType.BYTE_STRING && byteArray != null =>
-        val size = byteArray.size
+        val size = byteArray.length
         if (size > MAX_BYTES_SIZE) {
           builder.setField(
             field,

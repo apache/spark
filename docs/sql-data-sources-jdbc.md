@@ -51,7 +51,7 @@ For connection properties, users can specify the JDBC connection properties in t
 <code>user</code> and <code>password</code> are normally provided as connection properties for
 logging into the data sources.
 
-<table class="table table-striped">
+<table>
   <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr></thead>
   <tr>
     <td><code>url</code></td>

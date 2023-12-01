@@ -39,7 +39,8 @@ class RelationalGroupedDataset private[sql] (
     private[sql] val df: DataFrame,
     private[sql] val groupingExprs: Seq[Column],
     groupType: proto.Aggregate.GroupType,
-    pivot: Option[proto.Aggregate.Pivot] = None) {
+    pivot: Option[proto.Aggregate.Pivot] = None,
+    groupingSets: Option[Seq[proto.Aggregate.GroupingSets]] = None) {
 
   private[this] def toDF(aggExprs: Seq[Column]): DataFrame = {
     df.sparkSession.newDataFrame { builder =>
@@ -60,6 +61,11 @@ class RelationalGroupedDataset private[sql] (
           builder.getAggregateBuilder
             .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_PIVOT)
             .setPivot(pivot.get)
+        case proto.Aggregate.GroupType.GROUP_TYPE_GROUPING_SETS =>
+          assert(groupingSets.isDefined)
+          val aggBuilder = builder.getAggregateBuilder
+            .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPING_SETS)
+          groupingSets.get.foreach(aggBuilder.addGroupingSets)
         case g => throw new UnsupportedOperationException(g.toString)
       }
     }

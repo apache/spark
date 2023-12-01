@@ -110,7 +110,7 @@ private[sql] object ArrowUtils {
         new Field(name, fieldType,
           fields.map { field =>
             toArrowField(field.name, field.dataType, field.nullable, timeZoneId, largeVarTypes)
-          }.toSeq.asJava)
+          }.toImmutableArraySeq.asJava)
       case MapType(keyType, valueType, valueContainsNull) =>
         val mapType = new FieldType(nullable, new ArrowType.Map(false), null)
         // Note: Map Type struct can not be null, Struct Type key field can not be null

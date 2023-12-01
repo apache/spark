@@ -224,8 +224,6 @@ class StaxXmlParser(
         parser.peek match {
           case _: StartElement => convertComplicatedType(dataType, attributes)
           case _: EndElement if data.isEmpty => null
-          // treat empty values as null
-          case _: EndElement if options.nullValue == "" => null
           case _: EndElement => convertTo(data, dataType)
           case _ => convertField(parser, dataType, attributes)
         }
@@ -349,7 +347,7 @@ class StaxXmlParser(
     while (!shouldStop) {
       parser.nextEvent match {
         case e: StartElement => try {
-          val attributes = e.getAttributes.asScala.map(_.asInstanceOf[Attribute]).toArray
+          val attributes = e.getAttributes.asScala.toArray
           val field = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
 
           nameToIndex.get(field) match {

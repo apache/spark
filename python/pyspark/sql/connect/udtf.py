@@ -167,7 +167,7 @@ class UserDefinedTableFunction:
         session = SparkSession.active()
 
         plan = self._build_common_inline_user_defined_table_function(*args, **kwargs)
-        return DataFrame.withPlan(plan, session)
+        return DataFrame(plan, session)
 
     def asDeterministic(self) -> "UserDefinedTableFunction":
         self.deterministic = True

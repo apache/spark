@@ -183,7 +183,7 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
     @classmethod
     def conf(cls):
         conf = super().conf()
-        conf.set("spark.connect.copyFromLocalToFs.allowDestLocal", "true")
+        conf.set("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
         return conf
 
     def test_basic_requests(self):

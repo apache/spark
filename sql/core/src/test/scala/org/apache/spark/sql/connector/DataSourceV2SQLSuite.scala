@@ -3226,6 +3226,32 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-46144: Fail overwrite statement if the condition contains subquery") {
+    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t SELECT * FROM source")
+      val invalidQuery = s"INSERT INTO $t REPLACE WHERE id = (select c2 from values(1) as t(c2))" +
+        s" SELECT * FROM source"
+      val exception = intercept[AnalysisException] {
+        spark.sql(invalidQuery)
+      }
+      checkError(
+        exception,
+        errorClass = "UNSUPPORTED_FEATURE.OVERWRITE_BY_SUBQUERY",
+        sqlState = "0A000",
+        parameters = Map.empty,
+        context = ExpectedContext(
+          fragment = "id = (select c2 from values(1) as t(c2))",
+          start = 38,
+          stop = 77
+        ))
+    }
+  }
+
   test("SPARK-41154: Incorrect relation caching for queries with time travel spec") {
     sql("use testcat")
     val t1 = "testcat.t1"

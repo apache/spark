@@ -83,13 +83,13 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       .flatMap(_.iterator)
       .groupBy(_._1) // group by resource name
       .map { case (rName, rInfoArr) =>
-      rName -> rInfoArr.map(_._2.addresses.size).sum
+      rName -> rInfoArr.map(_._2.addresses.length).sum
     }
     val usedInfo = aliveWorkers.map(_.resourcesInfoUsed)
       .flatMap(_.iterator)
       .groupBy(_._1) // group by resource name
       .map { case (rName, rInfoArr) =>
-      rName -> rInfoArr.map(_._2.addresses.size).sum
+      rName -> rInfoArr.map(_._2.addresses.length).sum
     }
     formatResourcesUsed(totalInfo, usedInfo)
   }
