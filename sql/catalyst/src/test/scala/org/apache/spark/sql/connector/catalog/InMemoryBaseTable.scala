@@ -58,10 +58,7 @@ abstract class InMemoryBaseTable(
     val advisoryPartitionSize: Option[Long] = None,
     val isDistributionStrictlyRequired: Boolean = true,
     val numRowsPerSplit: Int = Int.MaxValue)
-    extends Table
-    with SupportsRead
-    with SupportsWrite
-    with SupportsMetadataColumns {
+  extends Table with SupportsRead with SupportsWrite with SupportsMetadataColumns {
 
   protected object PartitionKeyColumn extends MetadataColumn {
     override def name: String = "_partition"
@@ -108,8 +105,7 @@ abstract class InMemoryBaseTable(
   def rows: Seq[InternalRow] = dataMap.values.flatten.flatMap(_.rows).toSeq
 
   val partCols: Array[Array[String]] = partitioning.flatMap(_.references).map { ref =>
-    schema
-      .findNestedField(ref.fieldNames().toImmutableArraySeq, includeCollections = false) match {
+    schema.findNestedField(ref.fieldNames().toImmutableArraySeq, includeCollections = false) match {
       case Some(_) => ref.fieldNames()
       case None => throw new IllegalArgumentException(s"${ref.describe()} does not exist.")
     }
@@ -185,7 +181,9 @@ abstract class InMemoryBaseTable(
       case BucketTransform(numBuckets, cols, _) =>
         val valueTypePairs = cols.map(col => extractor(col.fieldNames, cleanedSchema, row))
         var valueHashCode = 0
-        valueTypePairs.foreach(pair => if (pair._1 != null) valueHashCode += pair._1.hashCode())
+        valueTypePairs.foreach( pair =>
+          if ( pair._1 != null) valueHashCode += pair._1.hashCode()
+        )
         var dataTypeHashCode = 0
         valueTypePairs.foreach(dataTypeHashCode += _._2.hashCode())
         ((valueHashCode + 31 * dataTypeHashCode) & Integer.MAX_VALUE) % numBuckets
@@ -263,12 +261,12 @@ abstract class InMemoryBaseTable(
     withData(data, schema)
   }
 
-  def withData(data: Array[BufferedRows], writeSchema: StructType): InMemoryBaseTable =
-    dataMap.synchronized {
-      data.foreach(_.rows.foreach { row =>
-        val key = getKey(row, writeSchema)
-        dataMap += dataMap
-          .get(key)
+  def withData(
+      data: Array[BufferedRows],
+      writeSchema: StructType): InMemoryBaseTable = dataMap.synchronized {
+    data.foreach(_.rows.foreach { row =>
+      val key = getKey(row, writeSchema)
+      dataMap += dataMap.get(key)
           .map { splits =>
             val newSplits = if (splits.last.rows.size >= numRowsPerSplit) {
               splits :+ new BufferedRows(key)
@@ -279,10 +277,10 @@ abstract class InMemoryBaseTable(
             key -> newSplits
           }
           .getOrElse(key -> Seq(new BufferedRows(key).withRow(row)))
-        addPartitionKey(key)
-      })
-      this
-    }
+      addPartitionKey(key)
+    })
+    this
+  }
 
   override def capabilities: util.Set[TableCapability] = util.EnumSet.of(
     TableCapability.BATCH_READ,
@@ -307,10 +305,8 @@ abstract class InMemoryBaseTable(
     }
   }
 
-  class InMemoryScanBuilder(tableSchema: StructType)
-      extends ScanBuilder
-      with SupportsPushDownRequiredColumns
-      with SupportsPushDownFilters {
+  class InMemoryScanBuilder(tableSchema: StructType) extends ScanBuilder
+      with SupportsPushDownRequiredColumns with SupportsPushDownFilters {
     private var schema: StructType = tableSchema
     private var postScanFilters: Array[Filter] = Array.empty
     private var evaluableFilters: Array[Filter] = Array.empty
@@ -318,9 +314,7 @@ abstract class InMemoryBaseTable(
 
     override def build: Scan = {
       val scan = InMemoryBatchScan(
-        data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq,
-        schema,
-        tableSchema)
+        data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq, schema, tableSchema)
       if (evaluableFilters.nonEmpty) {
         scan.filter(evaluableFilters)
       }
@@ -353,12 +347,11 @@ abstract class InMemoryBaseTable(
       sizeInBytes: OptionalLong,
       numRows: OptionalLong,
       override val columnStats: util.Map[NamedReference, ColumnStatistics])
-      extends Statistics
+    extends Statistics
 
   case class InMemoryColumnStats(
       override val distinctCount: OptionalLong,
-      override val nullCount: OptionalLong)
-      extends ColumnStatistics
+      override val nullCount: OptionalLong) extends ColumnStatistics
 
   case class InMemoryHistogramBin(lo: Double, hi: Double, ndv: Long) extends HistogramBin
 
@@ -368,10 +361,7 @@ abstract class InMemoryBaseTable(
       var data: Seq[InputPartition],
       readSchema: StructType,
       tableSchema: StructType)
-      extends Scan
-      with Batch
-      with SupportsReportStatistics
-      with SupportsReportPartitioning {
+    extends Scan with Batch with SupportsReportStatistics with SupportsReportPartitioning {
 
     override def toBatch: Batch = this
 
@@ -402,7 +392,9 @@ abstract class InMemoryBaseTable(
             if (row.isNullAt(i)) {
               numOfNulls(i) += 1
             }
-          }))
+          }
+        )
+      )
 
       val map = new util.HashMap[NamedReference, ColumnStatistics]()
       val colNames = tableSchema.fields.map(_.name)
@@ -447,13 +439,11 @@ abstract class InMemoryBaseTable(
       var _data: Seq[InputPartition],
       readSchema: StructType,
       tableSchema: StructType)
-      extends BatchScanBaseClass(_data, readSchema, tableSchema)
-      with SupportsRuntimeFiltering {
+    extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeFiltering {
 
     override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet
-      partitioning
-        .flatMap(_.references)
+      partitioning.flatMap(_.references)
         .filter(ref => scanFields.contains(ref.fieldNames.mkString(".")))
     }
 
@@ -480,10 +470,8 @@ abstract class InMemoryBaseTable(
     }
   }
 
-  abstract class InMemoryWriterBuilder()
-      extends SupportsTruncate
-      with SupportsDynamicOverwrite
-      with SupportsStreamingUpdateAsAppend {
+  abstract class InMemoryWriterBuilder() extends SupportsTruncate with SupportsDynamicOverwrite
+    with SupportsStreamingUpdateAsAppend {
 
     protected var writer: BatchWrite = Append
     protected var streamingWriter: StreamingWrite = StreamingAppend
@@ -563,8 +551,7 @@ abstract class InMemoryBaseTable(
   }
 
   protected class StreamingNotSupportedOperation(operation: String) extends TestStreamingWrite {
-    override def createStreamingWriterFactory(
-        info: PhysicalWriteInfo): StreamingDataWriterFactory =
+    override def createStreamingWriterFactory(info: PhysicalWriteInfo): StreamingDataWriterFactory =
       throwsException()
 
     override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit =
@@ -573,9 +560,8 @@ abstract class InMemoryBaseTable(
     override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit =
       throwsException()
 
-    def throwsException[T](): T = throw new IllegalStateException(
-      "The operation " +
-        s"${operation} isn't supported for streaming query.")
+    def throwsException[T](): T = throw new IllegalStateException("The operation " +
+      s"${operation} isn't supported for streaming query.")
   }
 
   private object StreamingAppend extends TestStreamingWrite {
@@ -599,7 +585,10 @@ abstract class InMemoryBaseTable(
 object InMemoryBaseTable {
   val SIMULATE_FAILED_WRITE_OPTION = "spark.sql.test.simulateFailedWrite"
 
-  def extractValue(attr: String, partFieldNames: Seq[String], partValues: Seq[Any]): Any = {
+  def extractValue(
+      attr: String,
+      partFieldNames: Seq[String],
+      partValues: Seq[Any]): Any = {
     partFieldNames.zipWithIndex.find(_._1 == attr) match {
       case Some((_, partIndex)) =>
         partValues(partIndex)
@@ -615,11 +604,8 @@ object InMemoryBaseTable {
   }
 }
 
-class BufferedRows(val key: Seq[Any] = Seq.empty)
-    extends WriterCommitMessage
-    with InputPartition
-    with HasPartitionKey
-    with Serializable {
+class BufferedRows(val key: Seq[Any] = Seq.empty) extends WriterCommitMessage
+    with InputPartition with HasPartitionKey with Serializable {
   val rows = new mutable.ArrayBuffer[InternalRow]()
   val deletes = new mutable.ArrayBuffer[Int]()
 
@@ -636,14 +622,13 @@ class BufferedRows(val key: Seq[Any] = Seq.empty)
 }
 
 /**
- * Theoretically, [[org.apache.spark.sql.catalyst.InternalRow]] returned by
- * [[org.apache.spark.sql.connector.read.HasPartitionKey#partitionKey()]] does not need to
- * implement equal and hashcode methods. But
- * [[org.apache.spark.sql.catalyst.expressions.GenericInternalRow]] implements equals and hashcode
- * methods already. Here we override it to simulate that it has not been implemented to verify
- * codes correctness.
+ * Theoretically, [[InternalRow]] returned by [[HasPartitionKey#partitionKey()]]
+ * does not need to implement equal and hashcode methods.
+ * But [[GenericInternalRow]] implements equals and hashcode methods already. Here we override it
+ * to simulate that it has not been implemented to verify codes correctness.
  */
-case class PartitionInternalRow(keys: Array[Any]) extends GenericInternalRow(keys) {
+case class PartitionInternalRow(keys: Array[Any])
+  extends GenericInternalRow(keys) {
   override def equals(other: Any): Boolean = {
     if (!other.isInstanceOf[PartitionInternalRow]) {
       return false
@@ -659,14 +644,10 @@ case class PartitionInternalRow(keys: Array[Any]) extends GenericInternalRow(key
 private class BufferedRowsReaderFactory(
     metadataColumnNames: Seq[String],
     nonMetaDataColumns: Seq[StructField],
-    tableSchema: StructType)
-    extends PartitionReaderFactory {
+    tableSchema: StructType) extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
-    new BufferedRowsReader(
-      partition.asInstanceOf[BufferedRows],
-      metadataColumnNames,
-      nonMetaDataColumns,
-      tableSchema)
+    new BufferedRowsReader(partition.asInstanceOf[BufferedRows], metadataColumnNames,
+      nonMetaDataColumns, tableSchema)
   }
 }
 
@@ -674,8 +655,7 @@ private class BufferedRowsReader(
     partition: BufferedRows,
     metadataColumnNames: Seq[String],
     nonMetadataColumns: Seq[StructField],
-    tableSchema: StructType)
-    extends PartitionReader[InternalRow] {
+    tableSchema: StructType) extends PartitionReader[InternalRow] {
   private def addMetadata(row: InternalRow): InternalRow = {
     val metadataRow = new GenericInternalRow(metadataColumnNames.map {
       case "index" => index
@@ -702,7 +682,10 @@ private class BufferedRowsReader(
 
   override def close(): Unit = {}
 
-  private def extractFieldValue(field: StructField, schema: StructType, row: InternalRow): Any = {
+  private def extractFieldValue(
+      field: StructField,
+      schema: StructType,
+      row: InternalRow): Any = {
     val index = schema.fieldIndex(field.name)
     field.dataType match {
       case StructType(fields) =>
@@ -723,9 +706,7 @@ private class BufferedRowsReader(
   }
 }
 
-private object BufferedRowsWriterFactory
-    extends DataWriterFactory
-    with StreamingDataWriterFactory {
+private object BufferedRowsWriterFactory extends DataWriterFactory with StreamingDataWriterFactory {
   override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
     new BufferWriter
   }

@@ -35,11 +35,8 @@ import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
 
-class SparkListenerSuite
-    extends SparkFunSuite
-    with LocalSparkContext
-    with Matchers
-    with ResetSystemProperties {
+class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Matchers
+  with ResetSystemProperties {
 
   import LiveListenerBus._
 
@@ -53,10 +50,7 @@ class SparkListenerSuite
   }
 
   private def sharedQueueSize(bus: LiveListenerBus): Int = {
-    bus.metrics.metricRegistry
-      .getGauges()
-      .get(s"queue.$SHARED_QUEUE.size")
-      .getValue()
+    bus.metrics.metricRegistry.getGauges().get(s"queue.$SHARED_QUEUE.size").getValue()
       .asInstanceOf[Int]
   }
 
@@ -117,14 +111,14 @@ class SparkListenerSuite
     assert(eventProcessingTimeCount(bus) === 5)
 
     // Listener bus must not be started twice
-    val e1 = intercept[SparkIllegalStateException] {
+    intercept[SparkIllegalStateException] {
       val bus = new LiveListenerBus(conf)
       bus.start(mockSparkContext, mockMetricsSystem)
       bus.start(mockSparkContext, mockMetricsSystem)
     }
 
     // ... or stopped before starting
-    val e2 = intercept[SparkIllegalStateException] {
+    intercept[SparkIllegalStateException] {
       val bus = new LiveListenerBus(conf)
       bus.stop()
     }
@@ -230,15 +224,15 @@ class SparkListenerSuite
 
     sc.listenerBus.waitUntilEmpty()
 
-    listener.stageInfos.size should be { 1 }
+    listener.stageInfos.size should be {1}
     val (stageInfo, taskInfoMetrics) = listener.stageInfos.head
-    stageInfo.rddInfos.size should be { 2 }
-    stageInfo.rddInfos.forall(_.numPartitions == 4) should be { true }
-    stageInfo.rddInfos.exists(_.name == "Target RDD") should be { true }
-    stageInfo.numTasks should be { 4 }
-    stageInfo.submissionTime should be(Symbol("defined"))
-    stageInfo.completionTime should be(Symbol("defined"))
-    taskInfoMetrics.length should be { 4 }
+    stageInfo.rddInfos.size should be {2}
+    stageInfo.rddInfos.forall(_.numPartitions == 4) should be {true}
+    stageInfo.rddInfos.exists(_.name == "Target RDD") should be {true}
+    stageInfo.numTasks should be {4}
+    stageInfo.submissionTime should be (Symbol("defined"))
+    stageInfo.completionTime should be (Symbol("defined"))
+    taskInfoMetrics.length should be {4}
   }
 
   test("basic creation of StageInfo with shuffle") {
@@ -254,29 +248,29 @@ class SparkListenerSuite
 
     rdd1.count()
     sc.listenerBus.waitUntilEmpty()
-    listener.stageInfos.size should be { 1 }
+    listener.stageInfos.size should be {1}
     val stageInfo1 = listener.stageInfos.keys.find(_.stageId == 0).get
-    stageInfo1.rddInfos.size should be { 1 } // ParallelCollectionRDD
-    stageInfo1.rddInfos.forall(_.numPartitions == 4) should be { true }
-    stageInfo1.rddInfos.exists(_.name == "Un") should be { true }
+    stageInfo1.rddInfos.size should be {1} // ParallelCollectionRDD
+    stageInfo1.rddInfos.forall(_.numPartitions == 4) should be {true}
+    stageInfo1.rddInfos.exists(_.name == "Un") should be {true}
     listener.stageInfos.clear()
 
     rdd2.count()
     sc.listenerBus.waitUntilEmpty()
-    listener.stageInfos.size should be { 1 }
+    listener.stageInfos.size should be {1}
     val stageInfo2 = listener.stageInfos.keys.find(_.stageId == 1).get
-    stageInfo2.rddInfos.size should be { 3 }
-    stageInfo2.rddInfos.forall(_.numPartitions == 4) should be { true }
-    stageInfo2.rddInfos.exists(_.name == "Deux") should be { true }
+    stageInfo2.rddInfos.size should be {3}
+    stageInfo2.rddInfos.forall(_.numPartitions == 4) should be {true}
+    stageInfo2.rddInfos.exists(_.name == "Deux") should be {true}
     listener.stageInfos.clear()
 
     rdd3.count()
     sc.listenerBus.waitUntilEmpty()
-    listener.stageInfos.size should be { 2 } // Shuffle map stage + result stage
+    listener.stageInfos.size should be {2} // Shuffle map stage + result stage
     val stageInfo3 = listener.stageInfos.keys.find(_.stageId == 3).get
-    stageInfo3.rddInfos.size should be { 1 } // ShuffledRDD
-    stageInfo3.rddInfos.forall(_.numPartitions == 4) should be { true }
-    stageInfo3.rddInfos.exists(_.name == "Trois") should be { true }
+    stageInfo3.rddInfos.size should be {1} // ShuffledRDD
+    stageInfo3.rddInfos.forall(_.numPartitions == 4) should be {true}
+    stageInfo3.rddInfos.exists(_.name == "Trois") should be {true}
   }
 
   test("StageInfo with fewer tasks than partitions") {
@@ -289,11 +283,11 @@ class SparkListenerSuite
 
     sc.listenerBus.waitUntilEmpty()
 
-    listener.stageInfos.size should be { 1 }
+    listener.stageInfos.size should be {1}
     val (stageInfo, _) = listener.stageInfos.head
-    stageInfo.numTasks should be { 2 }
-    stageInfo.rddInfos.size should be { 2 }
-    stageInfo.rddInfos.forall(_.numPartitions == 4) should be { true }
+    stageInfo.numTasks should be {2}
+    stageInfo.rddInfos.size should be {2}
+    stageInfo.rddInfos.forall(_.numPartitions == 4) should be {true}
   }
 
   test("local metrics") {
@@ -316,7 +310,7 @@ class SparkListenerSuite
     val d = sc.parallelize(0 to 10000, numSlices).map(w)
     d.count()
     sc.listenerBus.waitUntilEmpty()
-    listener.stageInfos.size should be(1)
+    listener.stageInfos.size should be (1)
 
     val d2 = d.map { i => w(i) -> i * 2 }.setName("shuffle input 1")
     val d3 = d.map { i => w(i) -> (0 to (i % 5)) }.setName("shuffle input 2")
@@ -327,11 +321,11 @@ class SparkListenerSuite
     d4.collectAsMap()
 
     sc.listenerBus.waitUntilEmpty()
-    listener.stageInfos.size should be(4)
+    listener.stageInfos.size should be (4)
     listener.stageInfos.foreach { case (stageInfo, taskInfoMetrics) =>
       /**
-       * Small test, so some tasks might take less than 1 millisecond, but average should be
-       * greater than 0 ms.
+       * Small test, so some tasks might take less than 1 millisecond, but average should be greater
+       * than 0 ms.
        */
       checkNonZeroAvg(
         taskInfoMetrics.map(_._2.executorRunTime),
@@ -346,7 +340,7 @@ class SparkListenerSuite
           taskInfoMetrics.map(_._2.shuffleReadMetrics.get.fetchWaitTime),
           stageInfo + " fetchWaitTime")
       }
-       */
+      */
 
       taskInfoMetrics.foreach { case (taskInfo, taskMetrics) =>
         taskMetrics.resultSize should be > (0L)
@@ -372,8 +366,7 @@ class SparkListenerSuite
     // Make a task whose result is larger than the RPC message size
     val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(conf)
     assert(maxRpcMessageSize === 1024 * 1024)
-    val result = sc
-      .parallelize(Seq(1), 1)
+    val result = sc.parallelize(Seq(1), 1)
       .map { x => 1.to(maxRpcMessageSize).toArray }
       .reduce { case (x, y) => x }
     assert(result === 1.to(maxRpcMessageSize).toArray)
@@ -461,16 +454,14 @@ class SparkListenerSuite
       classOf[ListenerThatAcceptsSparkConf],
       classOf[FirehoseListenerThatAcceptsSparkConf],
       classOf[BasicJobCounter])
-    val conf = new SparkConf()
-      .setMaster("local")
-      .setAppName("test")
+    val conf = new SparkConf().setMaster("local").setAppName("test")
       .set(EXTRA_LISTENERS, listeners.map(_.getName))
     sc = new SparkContext(conf)
-    sc.listenerBus.listeners.asScala.count(_.isInstanceOf[BasicJobCounter]) should be(1)
+    sc.listenerBus.listeners.asScala.count(_.isInstanceOf[BasicJobCounter]) should be (1)
     sc.listenerBus.listeners.asScala
-      .count(_.isInstanceOf[ListenerThatAcceptsSparkConf]) should be(1)
+      .count(_.isInstanceOf[ListenerThatAcceptsSparkConf]) should be (1)
     sc.listenerBus.listeners.asScala
-      .count(_.isInstanceOf[FirehoseListenerThatAcceptsSparkConf]) should be(1)
+      .count(_.isInstanceOf[FirehoseListenerThatAcceptsSparkConf]) should be (1)
   }
 
   test("add and remove listeners to/from LiveListenerBus queues") {
@@ -529,9 +520,7 @@ class SparkListenerSuite
       assert(counter2.count === 1)
 
       // posting more events should be fine, they'll just get processed from the OK queue.
-      (0 until 5).foreach { _ =>
-        bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
-      }
+      (0 until 5).foreach { _ => bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) }
       bus.waitUntilEmpty()
       assert(counter1.count === 6)
       assert(counter2.count === 6)
@@ -615,15 +604,16 @@ class SparkListenerSuite
     sc = new SparkContext(
       "local",
       "SparkListenerSuite",
-      new SparkConf().set(LISTENER_BUS_METRICS_MAX_LISTENER_CLASSES_TIMED.key, 0.toString))
+      new SparkConf().set(
+        LISTENER_BUS_METRICS_MAX_LISTENER_CLASSES_TIMED.key, 0.toString))
     val testAppender = new LogAppender("Error logger for timers")
     withLogAppender(testAppender) {
-      sc.addSparkListener(new SparkListener {})
-      sc.addSparkListener(new SparkListener {})
+      sc.addSparkListener(new SparkListener { })
+      sc.addSparkListener(new SparkListener { })
     }
     assert(!testAppender.loggingEvents
-      .exists(
-        _.getMessage.getFormattedMessage.contains("Not measuring processing time for listener")))
+      .exists(_.getMessage.getFormattedMessage.contains(
+        "Not measuring processing time for listener")))
   }
 
   /**
@@ -687,8 +677,7 @@ class SparkListenerSuite
   /**
    * A simple listener that interrupts on job end.
    */
-  private class InterruptingListener(val throwInterruptedException: Boolean)
-      extends SparkListener {
+  private class InterruptingListener(val throwInterruptedException: Boolean) extends SparkListener {
     override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
       if (throwInterruptedException) {
         throw new InterruptedException("got interrupted")
@@ -700,13 +689,14 @@ class SparkListenerSuite
 
   /**
    * A simple listener that works as follows:
-   *   1. sleep and wait when `sleep` is true 2. when `sleep` is false, start to work: if it is
-   *      interruptOnJobId, interrupt else count SparkListenerJobEnd numbers
+   * 1. sleep and wait when `sleep` is true
+   * 2. when `sleep` is false, start to work:
+   *    if it is interruptOnJobId, interrupt
+   *    else count SparkListenerJobEnd numbers
    */
   private class DelayInterruptingJobCounter(
       val throwInterruptedException: Boolean,
-      val interruptOnJobId: Int)
-      extends SparkListener {
+      val interruptOnJobId: Int) extends SparkListener {
     @volatile var sleep = true
     var count = 0
 
@@ -758,8 +748,7 @@ private class ListenerThatAcceptsSparkConf(conf: SparkConf) extends SparkListene
   override def onJobEnd(job: SparkListenerJobEnd): Unit = count += 1
 }
 
-private class FirehoseListenerThatAcceptsSparkConf(conf: SparkConf)
-    extends SparkFirehoseListener {
+private class FirehoseListenerThatAcceptsSparkConf(conf: SparkConf) extends SparkFirehoseListener {
   var count = 0
   override def onEvent(event: SparkListenerEvent): Unit = event match {
     case job: SparkListenerJobEnd => count += 1
@@ -769,9 +758,9 @@ private class FirehoseListenerThatAcceptsSparkConf(conf: SparkConf)
 
 private class SlowDeserializable extends Externalizable {
 
-  override def writeExternal(out: ObjectOutput): Unit = {}
+  override def writeExternal(out: ObjectOutput): Unit = { }
 
   override def readExternal(in: ObjectInput): Unit = Thread.sleep(1)
 
-  def use(): Unit = {}
+  def use(): Unit = { }
 }
