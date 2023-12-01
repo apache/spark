@@ -156,7 +156,7 @@ case class PandasCovar(
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(n === ddof, divideByZeroEvalResult, ck / (n - ddof)))
+      If(n === ddof.toDouble, divideByZeroEvalResult, ck / (n - ddof.toDouble)))
   }
   override def prettyName: String = "pandas_covar"
 
