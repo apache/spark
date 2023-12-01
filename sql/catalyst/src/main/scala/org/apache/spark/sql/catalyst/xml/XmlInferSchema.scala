@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.util.{DateFormatter, PermissiveMode, Timest
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.types._
 
-private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
+class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     extends Serializable
     with Logging {
 
@@ -48,13 +48,6 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
-
-  private val timestampNTZFormatter = TimestampFormatter(
-    options.timestampNTZFormatInRead,
-    options.zoneId,
-    legacyFormat = FAST_DATE_FORMAT,
-    isParsing = true,
-    forTimestampNTZ = true)
 
   private lazy val dateFormatter = DateFormatter(
     options.dateFormatInRead,
@@ -142,11 +135,12 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
 
     if (options.inferSchema) {
+      lazy val decimalTry = tryParseDecimal(value)
       value match {
         case null => NullType
         case v if v.isEmpty => NullType
         case v if isLong(v) => LongType
-        case v if isInteger(v) => IntegerType
+        case v if options.prefersDecimal && decimalTry.isDefined => decimalTry.get
         case v if isDouble(v) => DoubleType
         case v if isBoolean(v) => BooleanType
         case v if isDate(v) => DateType
@@ -171,7 +165,7 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         parser.peek match {
           case _: StartElement => inferObject(parser)
           case _: EndElement if data.isEmpty => NullType
-          case _: EndElement if options.treatEmptyValuesAsNulls => NullType
+          case _: EndElement if options.nullValue == "" => NullType
           case _: EndElement => StringType
           case _ => inferField(parser)
         }
@@ -214,12 +208,11 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
      * In case-insensitive mode, we will infer an array named by foo
      * (as it's the first one we encounter)
      */
-    val caseSensitivityOrdering: Ordering[String] = (x: String, y: String) =>
-      if (caseSensitive) {
-        x.compareTo(y)
-      } else {
-      x.compareToIgnoreCase(y)
-      }
+    val caseSensitivityOrdering: Ordering[String] = if (caseSensitive) {
+      (x: String, y: String) => x.compareTo(y)
+    } else {
+      (x: String, y: String) => x.compareToIgnoreCase(y)
+    }
 
     val nameToDataType =
       collection.mutable.TreeMap.empty[String, DataType](caseSensitivityOrdering)
@@ -249,7 +242,7 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     while (!shouldStop) {
       parser.nextEvent match {
         case e: StartElement =>
-          val attributes = e.getAttributes.asScala.map(_.asInstanceOf[Attribute]).toArray
+          val attributes = e.getAttributes.asScala.toArray
           val valuesMap = StaxXmlParserUtils.convertAttributesToValuesMap(attributes, options)
           val inferredType = inferField(parser) match {
             case st: StructType if valuesMap.nonEmpty =>
@@ -316,6 +309,43 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
   }
 
+  private def tryParseDecimal(value: String): Option[DataType] = {
+    val signSafeValue = if (value.startsWith("+") || value.startsWith("-")) {
+      value.substring(1)
+    } else {
+      value
+    }
+    // A little shortcut to avoid trying many formatters in the common case that
+    // the input isn't a decimal. All built-in formats will start with a digit or period.
+    if (signSafeValue.isEmpty ||
+      !(Character.isDigit(signSafeValue.head) || signSafeValue.head == '.')) {
+      return None
+    }
+    // Rule out strings ending in D or F, as they will parse as double but should be disallowed
+    if (signSafeValue.last match {
+      case 'd' | 'D' | 'f' | 'F' => true
+      case _ => false
+    }) {
+      return None
+    }
+
+    try {
+      // The conversion can fail when the `field` is not a form of number.
+      val bigDecimal = decimalParser(signSafeValue)
+      // Because many other formats do not support decimal, it reduces the cases for
+      // decimals by disallowing values having scale (e.g. `1.1`).
+      if (bigDecimal.scale <= 0) {
+        // `DecimalType` conversion can fail when
+        //   1. The precision is bigger than 38.
+        //   2. scale is bigger than precision.
+        return Some(DecimalType(bigDecimal.precision, bigDecimal.scale))
+      }
+    } catch {
+      case _ : Exception =>
+    }
+    None
+  }
+
   private def isDouble(value: String): Boolean = {
     val signSafeValue = if (value.startsWith("+") || value.startsWith("-")) {
       value.substring(1)
@@ -329,27 +359,13 @@ private[sql] class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       return false
     }
     // Rule out strings ending in D or F, as they will parse as double but should be disallowed
-    if (value.nonEmpty && (value.last match {
+    if (signSafeValue.last match {
       case 'd' | 'D' | 'f' | 'F' => true
       case _ => false
-    })) {
+    }) {
       return false
     }
     (allCatch opt signSafeValue.toDouble).isDefined
-  }
-
-  private def isInteger(value: String): Boolean = {
-    val signSafeValue = if (value.startsWith("+") || value.startsWith("-")) {
-      value.substring(1)
-    } else {
-      value
-    }
-    // A little shortcut to avoid trying many formatters in the common case that
-    // the input isn't a number. All built-in formats will start with a digit.
-    if (signSafeValue.isEmpty || !Character.isDigit(signSafeValue.head)) {
-      return false
-    }
-    (allCatch opt signSafeValue.toInt).isDefined
   }
 
   private def isLong(value: String): Boolean = {

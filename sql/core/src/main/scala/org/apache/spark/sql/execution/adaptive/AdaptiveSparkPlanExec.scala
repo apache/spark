@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.adaptive
 import java.util
 import java.util.concurrent.LinkedBlockingQueue
 
+import scala.collection.{mutable, Seq}
 import scala.collection.concurrent.TrieMap
-import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -165,7 +165,13 @@ case class AdaptiveSparkPlanExec(
   )
 
   private def optimizeQueryStage(plan: SparkPlan, isFinalStage: Boolean): SparkPlan = {
-    val optimized = queryStageOptimizerRules.foldLeft(plan) { case (latestPlan, rule) =>
+    val rules = if (isFinalStage &&
+        !conf.getConf(SQLConf.ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS)) {
+      queryStageOptimizerRules.filterNot(_.isInstanceOf[AQEShuffleReadRule])
+    } else {
+      queryStageOptimizerRules
+    }
+    val optimized = rules.foldLeft(plan) { case (latestPlan, rule) =>
       val applied = rule.apply(latestPlan)
       val result = rule match {
         case _: AQEShuffleReadRule if !applied.fastEquals(latestPlan) =>
@@ -193,9 +199,19 @@ case class AdaptiveSparkPlanExec(
     optimized
   }
 
+  private def applyQueryPostPlannerStrategyRules(plan: SparkPlan): SparkPlan = {
+    applyPhysicalRules(
+      plan,
+      context.session.sessionState.adaptiveRulesHolder.queryPostPlannerStrategyRules,
+      Some((planChangeLogger, "AQE Query Post Planner Strategy Rules"))
+    )
+  }
+
   @transient val initialPlan = context.session.withActive {
     applyPhysicalRules(
-      inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
+      applyQueryPostPlannerStrategyRules(inputPlan),
+      queryStagePreparationRules,
+      Some((planChangeLogger, "AQE Preparations")))
   }
 
   @volatile private var currentPhysicalPlan = initialPlan
@@ -281,8 +297,7 @@ case class AdaptiveSparkPlanExec(
       val doBroadcastVarPush = conf.pushBroadcastedJoinKeysASFilterToScan
       var allStages = Map[Int, QueryStageExec]()
       val cachedBatchScansForStage = mutable.Map[Int, Seq[BatchScanExec]]()
-      val stageIdToBuildsideJoinKeys = mutable
-        .Map[Int, (LogicalPlan, Seq[ProxyBroadcastVarAndStageIdentifier], Seq[Expression])]()
+      val stageIdToBuildsideJoinKeys = mutable.Map[Int, TupleBuildLpProxyVarCanonBuildKeys]()
       var allStageIdsProcessed = Set[Int]()
 
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
@@ -519,8 +534,7 @@ case class AdaptiveSparkPlanExec(
 
   private def pushBroadcastVarToDelayedStages(
       allStages: Map[Int, QueryStageExec],
-      stageIdToBuildsideJoinKeys: Map[Int,
-        (LogicalPlan, Seq[ProxyBroadcastVarAndStageIdentifier], Seq[Expression])],
+      stageIdToBuildsideJoinKeys: Map[Int, TupleBuildLpProxyVarCanonBuildKeys],
       allStageIdsProcessed: Set[Int],
       delayedStages: Set[Int],
       cachedBatchScansForStage: mutable.Map[Int, Seq[BatchScanExec]],
@@ -576,8 +590,7 @@ case class AdaptiveSparkPlanExec(
 
   private def pushBroadcastVarToUnreadyBatchScans(
       allUnreadyBatchScans: Seq[BatchScanExec],
-      stageIdToBuildsideJoinKeys: Map[Int, (LogicalPlan, Seq[ProxyBroadcastVarAndStageIdentifier],
-        Seq[Expression])],
+      stageIdToBuildsideJoinKeys: Map[Int, TupleBuildLpProxyVarCanonBuildKeys],
       allStages: Map[Int, QueryStageExec],
       allProcessedStageIds: Set[Int]): Unit = {
     val identityHashMap = new util.IdentityHashMap[BatchScanExec, java.util.Set[java.lang.Long]]()
@@ -795,8 +808,7 @@ case class AdaptiveSparkPlanExec(
    */
   private def createQueryStages(
       plan: SparkPlan,
-      stageIdToBuildsideJoinKeys: mutable.Map[Int,
-        (LogicalPlan, Seq[ProxyBroadcastVarAndStageIdentifier], Seq[Expression])],
+      stageIdToBuildsideJoinKeys: mutable.Map[Int, TupleBuildLpProxyVarCanonBuildKeys],
       orphanBSCollect: OrphanBSCollect,
       hasStreamSidePushdownDependent: Boolean = false): CreateStageResult = plan match {
     case e: Exchange =>
@@ -1133,7 +1145,7 @@ case class AdaptiveSparkPlanExec(
       val optimized = optimizer.execute(logicalPlan)
       val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
       val newPlan = applyPhysicalRules(
-        sparkPlan,
+        applyQueryPostPlannerStrategyRules(sparkPlan),
         preprocessingRules ++ queryStagePreparationRules,
         Some((planChangeLogger, "AQE Replanning")))
 
@@ -1252,6 +1264,9 @@ object AdaptiveSparkPlanExec {
    * the temp logical links.
    */
   val TEMP_LOGICAL_PLAN_TAG = TreeNodeTag[LogicalPlan]("temp_logical_plan")
+
+  type TupleBuildLpProxyVarCanonBuildKeys =
+    (LogicalPlan, Seq[ProxyBroadcastVarAndStageIdentifier], Seq[Expression])
 
   /**
    * Apply a list of physical operator rules on a [[SparkPlan]].

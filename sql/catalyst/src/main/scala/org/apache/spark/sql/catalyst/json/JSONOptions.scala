@@ -34,7 +34,7 @@ import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
  *
  * Most of these map directly to Jackson's internal options, specified in [[JsonReadFeature]].
  */
-private[sql] class JSONOptions(
+class JSONOptions(
     @transient val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
@@ -212,7 +212,7 @@ private[sql] class JSONOptions(
   }
 }
 
-private[sql] class JSONOptionsInRead(
+class JSONOptionsInRead(
     @transient override val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
@@ -242,7 +242,7 @@ private[sql] class JSONOptionsInRead(
   }
 }
 
-private[sql] object JSONOptionsInRead {
+object JSONOptionsInRead {
   // The following encodings are not supported in per-line mode (multiline is false)
   // because they cause some problems in reading files with BOM which is supposed to
   // present in the files with such encodings. After splitting input files by lines,

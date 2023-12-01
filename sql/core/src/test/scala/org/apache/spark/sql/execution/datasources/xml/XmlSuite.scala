@@ -32,7 +32,7 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, Dataset, Encoders, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.xml.XmlOptions
 import org.apache.spark.sql.catalyst.xml.XmlOptions._
@@ -77,7 +77,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
   test("DSL test with xml having unbalanced datatypes") {
     val results = spark.read
       .option("rowTag", "ROW")
-      .option("treatEmptyValuesAsNulls", "true")
+      .option("nullValue", "")
       .option("multiLine", "true")
       .xml(getTestResourcePath(resDir + "gps-empty-field.xml"))
 
@@ -440,7 +440,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     assert(getLines(xmlFile).count(_.contains("<foo>")) === 2)
   }
 
-  test("DSL save with nullValue and treatEmptyValuesAsNulls") {
+  test("DSL save with nullValue") {
     val copyFilePath = getEmptyTempDir().resolve("books-copy.xml")
 
     val books = spark.read
@@ -452,7 +452,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
 
     val booksCopy = spark.read
       .option("rowTag", "book")
-      .option("treatEmptyValuesAsNulls", "true")
+      .option("nullValue", "")
       .xml(copyFilePath.toString)
 
     assert(booksCopy.count() === books.count())
@@ -741,7 +741,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       field("age", IntegerType))
     val results = spark.read.schema(schema)
       .option("rowTag", "ROW")
-      .option("treatEmptyValuesAsNulls", true)
+      .option("nullValue", "")
       .xml(getTestResourcePath(resDir + "null-numbers.xml"))
       .select("name", "age")
       .collect()
@@ -950,10 +950,10 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       "requirement failed: 'valueTag' and 'attributePrefix' options should not be the same.")
   }
 
-  test("nullValue and treatEmptyValuesAsNulls test") {
+  test("nullValue test") {
     val resultsOne = spark.read
       .option("rowTag", "ROW")
-      .option("treatEmptyValuesAsNulls", "true")
+      .option("nullValue", "")
       .xml(getTestResourcePath(resDir + "gps-empty-field.xml"))
     assert(resultsOne.selectExpr("extensions.TrackPointExtension").head().getStruct(0) !== null)
     assert(resultsOne.selectExpr("extensions.TrackPointExtension")
@@ -2114,5 +2114,68 @@ class XmlSuite extends QueryTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  def testWriteReadRoundTrip(df: DataFrame,
+                             options: Map[String, String] = Map.empty): Unit = {
+    withTempDir { dir =>
+      df.write
+        .options(options)
+        .option("rowTag", "ROW")
+        .mode("overwrite")
+        .xml(dir.getCanonicalPath)
+      val df2 = spark.read
+        .options(options)
+        .option("rowTag", "ROW")
+        .xml(dir.getCanonicalPath)
+      checkAnswer(df, df2)
+    }
+  }
+
+  def primitiveFieldAndType: Dataset[String] =
+    spark.createDataset(spark.sparkContext.parallelize("""
+      <ROW>
+        <string>this is a simple string.</string>
+        <integer>10</integer>
+        <long>21474836470</long>
+        <decimal>92233720368547758070</decimal>
+        <double>1.7976931348623157</double>
+        <boolean>true</boolean>
+        <null>null</null>
+      </ROW>""" :: Nil))(Encoders.STRING)
+
+  test("Primitive field and type inferring") {
+    val dfWithNodecimal = spark.read
+      .option("nullValue", "null")
+      .xml(primitiveFieldAndType)
+    assert(dfWithNodecimal.schema("decimal").dataType === DoubleType)
+
+    val df = spark.read
+      .option("nullValue", "null")
+      .option("prefersDecimal", "true")
+      .xml(primitiveFieldAndType)
+
+    val expectedSchema = StructType(
+      StructField("boolean", BooleanType, true) ::
+      StructField("decimal", DecimalType(20, 0), true) ::
+      StructField("double", DoubleType, true) ::
+      StructField("integer", LongType, true) ::
+      StructField("long", LongType, true) ::
+      StructField("null", StringType, true) ::
+      StructField("string", StringType, true) :: Nil)
+
+    assert(df.schema === expectedSchema)
+
+    checkAnswer(
+      df,
+      Row(true,
+        new java.math.BigDecimal("92233720368547758070"),
+        1.7976931348623157,
+        10,
+        21474836470L,
+        null,
+        "this is a simple string.")
+    )
+    testWriteReadRoundTrip(df, Map("nullValue" -> "null", "prefersDecimal" -> "true"))
   }
 }

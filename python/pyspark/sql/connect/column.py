@@ -461,6 +461,8 @@ class Column:
                     message_parameters={},
                 )
             return self.substr(k.start, k.stop)
+        elif isinstance(k, Column):
+            return Column(UnresolvedExtractValue(self._expr, k._expr))
         else:
             return Column(UnresolvedExtractValue(self._expr, LiteralExpression._from_value(k)))
 

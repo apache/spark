@@ -115,7 +115,7 @@ class SparkConnectServiceSuite
         .build()
       val response2 = handler.process(request2, sparkSessionHolder)
       assert(response2.hasExplain)
-      assert(response2.getExplain.getExplainString.size > 0)
+      assert(response2.getExplain.getExplainString.length > 0)
 
       val request3 = proto.AnalyzePlanRequest
         .newBuilder()

@@ -1739,16 +1739,16 @@ class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
         try:
             df.select(sha2(df.a, 1024)).collect()
         except IllegalArgumentException as e:
-            self.assertRegex(e.desc, "1024 is not in the permitted values")
-            self.assertRegex(e.stackTrace, "org.apache.spark.sql.functions")
+            self.assertRegex(e._desc, "1024 is not in the permitted values")
+            self.assertRegex(e._stackTrace, "org.apache.spark.sql.functions")
 
     def test_get_error_class_state(self):
         # SPARK-36953: test CapturedException.getErrorClass and getSqlState (from SparkThrowable)
         try:
             self.spark.sql("""SELECT a""")
         except AnalysisException as e:
-            self.assertEquals(e.getErrorClass(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
-            self.assertEquals(e.getSqlState(), "42703")
+            self.assertEqual(e.getErrorClass(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
+            self.assertEqual(e.getSqlState(), "42703")
 
 
 if __name__ == "__main__":

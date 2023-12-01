@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 
 import org.apache.spark.{MapOutputTracker, SparkEnv}
 import org.apache.spark.internal.Logging
@@ -38,7 +38,8 @@ class BlockManagerStorageEndpoint(
 
   private val asyncThreadPool =
     ThreadUtils.newDaemonCachedThreadPool("block-manager-storage-async-thread-pool", 100)
-  private implicit val asyncExecutionContext = ExecutionContext.fromExecutorService(asyncThreadPool)
+  private implicit val asyncExecutionContext: ExecutionContextExecutorService =
+    ExecutionContext.fromExecutorService(asyncThreadPool)
 
   // Operations that involve removing blocks may be slow and should be done asynchronously
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {

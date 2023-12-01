@@ -30,7 +30,7 @@ import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 /**
  * Options for the XML data source.
  */
-private[sql] class XmlOptions(
+class XmlOptions(
     val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String,
@@ -86,7 +86,6 @@ private[sql] class XmlOptions(
   val samplingRatio = parameters.get(SAMPLING_RATIO).map(_.toDouble).getOrElse(1.0)
   require(samplingRatio > 0, s"$SAMPLING_RATIO ($samplingRatio) should be greater than 0")
   val excludeAttributeFlag = getBool(EXCLUDE_ATTRIBUTE, false)
-  val treatEmptyValuesAsNulls = getBool(TREAT_EMPTY_VALUE_AS_NULLS, false)
   val attributePrefix =
     parameters.getOrElse(ATTRIBUTE_PREFIX, XmlOptions.DEFAULT_ATTRIBUTE_PREFIX)
   val valueTag = parameters.getOrElse(VALUE_TAG, XmlOptions.DEFAULT_VALUE_TAG)
@@ -103,6 +102,8 @@ private[sql] class XmlOptions(
   val wildcardColName =
     parameters.getOrElse(WILDCARD_COL_NAME, XmlOptions.DEFAULT_WILDCARD_COL_NAME)
   val ignoreNamespace = getBool(IGNORE_NAMESPACE, false)
+  val prefersDecimal =
+    parameters.get(PREFERS_DECIMAL).map(_.toBoolean).getOrElse(false)
   // setting indent to "" disables indentation in the generated XML.
   // Each row will be written in a new line.
   val indent = parameters.getOrElse(INDENT, DEFAULT_INDENT)
@@ -172,7 +173,7 @@ private[sql] class XmlOptions(
   }
 }
 
-private[sql] object XmlOptions extends DataSourceOptions {
+object XmlOptions extends DataSourceOptions {
   val DEFAULT_ATTRIBUTE_PREFIX = "_"
   val DEFAULT_VALUE_TAG = "_VALUE"
   val DEFAULT_ROW_TAG = "ROW"
@@ -188,7 +189,6 @@ private[sql] object XmlOptions extends DataSourceOptions {
   val DECLARATION = newOption("declaration")
   val ARRAY_ELEMENT_NAME = newOption("arrayElementName")
   val EXCLUDE_ATTRIBUTE = newOption("excludeAttribute")
-  val TREAT_EMPTY_VALUE_AS_NULLS = newOption("treatEmptyValuesAsNulls")
   val ATTRIBUTE_PREFIX = newOption("attributePrefix")
   val VALUE_TAG = newOption("valueTag")
   val NULL_VALUE = newOption("nullValue")
@@ -209,6 +209,7 @@ private[sql] object XmlOptions extends DataSourceOptions {
   val TIMESTAMP_NTZ_FORMAT = newOption("timestampNTZFormat")
   val TIME_ZONE = newOption("timeZone")
   val INDENT = newOption("indent")
+  val PREFERS_DECIMAL = newOption("prefersDecimal")
   // Options with alternative
   val ENCODING = "encoding"
   val CHARSET = "charset"

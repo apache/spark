@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdenti
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryCatalog}
@@ -36,6 +37,7 @@ import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.unsafe.types.UTF8String
 
 
 /**
@@ -779,7 +781,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
         Map("path" -> dir.getAbsolutePath), description2)
 
       val tables = spark.catalog.listTables("testcat.my_db").collect()
-      assert(tables.size == 2)
+      assert(tables.length == 2)
 
       val expectedTable1 =
         new Table(tableName, catalogName, Array(dbName), description,
@@ -1048,6 +1050,15 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       func2.catalog === "testcat" && func2.description === "hello" &&
       func2.isTemporary === false &&
       func2.className.startsWith("org.apache.spark.sql.internal.CatalogSuite"))
+  }
+
+  test("SPARK-46145: listTables does not throw exception when the table or view is not found") {
+    val impl = spark.catalog.asInstanceOf[CatalogImpl]
+    for ((isTemp, dbName) <- Seq((true, ""), (false, "non_existing_db"))) {
+      val row = new GenericInternalRow(
+        Array(UTF8String.fromString(dbName), UTF8String.fromString("non_existing_table"), isTemp))
+      impl.resolveTable(row, CatalogManager.SESSION_CATALOG_NAME)
+    }
   }
 
   private def getConstructorParameterValues(obj: DefinedByConstructorParams): Seq[AnyRef] = {
