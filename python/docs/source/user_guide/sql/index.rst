@@ -16,9 +16,9 @@
     under the License.
 
 
-========================
-Spark SQL and DataFrames
-========================
+=========
+Spark SQL
+=========
 
 .. toctree::
    :maxdepth: 2
