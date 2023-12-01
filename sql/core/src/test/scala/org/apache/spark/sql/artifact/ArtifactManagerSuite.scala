@@ -206,7 +206,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
         // Remove resources
         artifactManager.cleanUpResources()
 
-        assert(!blockManager.getLocalBytes(blockId).isDefined)
+        assert(blockManager.getLocalBytes(blockId).isEmpty)
         assert(!expectedPath.toFile.exists())
       } finally {
         try {

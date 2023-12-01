@@ -697,7 +697,7 @@ class SparkSubmitSuite
     var sc2: SparkContext = null
     try {
       sc2 = new SparkContext(conf2)
-      assert(!sc2.progressBar.isDefined)
+      assert(sc2.progressBar.isEmpty)
     } finally {
       if (sc2 != null) {
         sc2.stop()
