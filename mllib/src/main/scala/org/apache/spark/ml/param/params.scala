@@ -130,7 +130,7 @@ private[ml] object Param {
       case JObject(v) =>
         val keys = v.map(_._1)
         if (keys.contains("class")) {
-          implicit val formats = DefaultFormats
+          implicit val formats: Formats = DefaultFormats
           val className = (jValue \ "class").extract[String]
           className match {
             case JsonMatrixConverter.className =>
@@ -399,7 +399,7 @@ class IntParam(parent: String, name: String, doc: String, isValid: Int => Boolea
   }
 
   override def jsonDecode(json: String): Int = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     parse(json).extract[Int]
   }
 }
@@ -485,7 +485,7 @@ class LongParam(parent: String, name: String, doc: String, isValid: Long => Bool
   }
 
   override def jsonDecode(json: String): Long = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     parse(json).extract[Long]
   }
 }
@@ -506,7 +506,7 @@ class BooleanParam(parent: String, name: String, doc: String) // No need for isV
   }
 
   override def jsonDecode(json: String): Boolean = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     parse(json).extract[Boolean]
   }
 }
@@ -529,7 +529,7 @@ class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array
   }
 
   override def jsonDecode(json: String): Array[String] = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     parse(json).extract[Seq[String]].toArray
   }
 }
@@ -619,7 +619,7 @@ class IntArrayParam(parent: Params, name: String, doc: String, isValid: Array[In
   }
 
   override def jsonDecode(json: String): Array[Int] = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     parse(json).extract[Seq[Int]].toArray
   }
 }
