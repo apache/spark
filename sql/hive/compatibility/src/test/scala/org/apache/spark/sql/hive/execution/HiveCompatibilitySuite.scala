@@ -26,6 +26,7 @@ import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.tags.SlowHiveTest
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Runs the test cases that are included in the hive distribution.
@@ -41,11 +42,13 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
   private val originalSessionLocalTimeZone = TestHive.conf.sessionLocalTimeZone
   private val originalAnsiMode = TestHive.conf.getConf(SQLConf.ANSI_ENABLED)
+  private val originalStoreAssignmentPolicy =
+    TestHive.conf.getConf(SQLConf.STORE_ASSIGNMENT_POLICY)
   private val originalCreateHiveTable =
     TestHive.conf.getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT)
 
   def testCases: Seq[(String, File)] = {
-    hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
+    hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f).toImmutableArraySeq
   }
 
   override def beforeAll(): Unit = {
@@ -76,6 +79,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
       TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, originalCrossJoinEnabled)
       TestHive.setConf(SQLConf.SESSION_LOCAL_TIMEZONE, originalSessionLocalTimeZone)
       TestHive.setConf(SQLConf.ANSI_ENABLED, originalAnsiMode)
+      TestHive.setConf(SQLConf.STORE_ASSIGNMENT_POLICY, originalStoreAssignmentPolicy)
       TestHive.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT, originalCreateHiveTable)
 
       // For debugging dump some statistics about how much time was spent in various optimizer rules

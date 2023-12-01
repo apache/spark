@@ -189,7 +189,7 @@ JavaSparkContext sc = new JavaSparkContext(conf);
 </div>
 
 The `appName` parameter is a name for your application to show on the cluster UI.
-`master` is a [Spark, Mesos or YARN cluster URL](submitting-applications.html#master-urls),
+`master` is a [Spark or YARN cluster URL](submitting-applications.html#master-urls),
 or a special "local" string to run in local mode.
 In practice, when running on a cluster, you will not want to hardcode `master` in the program,
 but rather [launch the application with `spark-submit`](submitting-applications.html) and
@@ -378,7 +378,7 @@ resulting Java objects using [pickle](https://github.com/irmen/pickle/). When sa
 PySpark does the reverse. It unpickles Python objects into Java objects and then converts them to Writables. The following
 Writables are automatically converted:
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Writable Type</th><th>Python Type</th></tr></thead>
 <tr><td>Text</td><td>str</td></tr>
 <tr><td>IntWritable</td><td>int</td></tr>
@@ -954,7 +954,7 @@ and pair RDD functions doc
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
 for details.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th style="width:25%">Transformation</th><th>Meaning</th></tr></thead>
 <tr>
   <td> <b>map</b>(<i>func</i>) </td>
@@ -1069,7 +1069,7 @@ and pair RDD functions doc
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
 for details.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Action</th><th>Meaning</th></tr></thead>
 <tr>
   <td> <b>reduce</b>(<i>func</i>) </td>
@@ -1214,7 +1214,7 @@ to `persist()`. The `cache()` method is a shorthand for using the default storag
 which is `StorageLevel.MEMORY_ONLY` (store deserialized objects in memory). The full set of
 storage levels is:
 
-<table class="table table-striped">
+<table>
 <thead><tr><th style="width:23%">Storage Level</th><th>Meaning</th></tr></thead>
 <tr>
   <td> MEMORY_ONLY </td>

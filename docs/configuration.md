@@ -135,7 +135,7 @@ of the most common options to set are:
 
 ### Application Properties
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.app.name</code></td>
@@ -188,7 +188,7 @@ of the most common options to set are:
     Amount of non-heap memory to be allocated per driver process in cluster mode, in MiB unless
     otherwise specified. This is memory that accounts for things like VM overheads, interned strings,
     other native overheads, etc. This tends to grow with the container size (typically 6-10%).
-    This option is currently supported on YARN, Mesos and Kubernetes.
+    This option is currently supported on YARN and Kubernetes.
     <em>Note:</em> Non-heap memory includes off-heap memory
     (when <code>spark.memory.offHeap.enabled=true</code>) and memory used by other driver processes
     (e.g. python process that goes with a PySpark driver) and memory used by other non-driver
@@ -370,7 +370,7 @@ of the most common options to set are:
     comma-separated list of multiple directories on different disks.
 
     <br/>
-    <em>Note:</em> This will be overridden by SPARK_LOCAL_DIRS (Standalone), MESOS_SANDBOX (Mesos) or
+    <em>Note:</em> This will be overridden by SPARK_LOCAL_DIRS (Standalone) or
     LOCAL_DIRS (YARN) environment variables set by the cluster manager.
   </td>
   <td>0.5.0</td>
@@ -426,7 +426,7 @@ of the most common options to set are:
   <td>false</td>
   <td>
     If true, restarts the driver automatically if it fails with a non-zero exit status.
-    Only has effect in Spark standalone mode or Mesos cluster deploy mode.
+    Only has effect in Spark standalone mode.
   </td>
   <td>1.3.0</td>
 </tr>
@@ -528,7 +528,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Runtime Environment
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.driver.extraClassPath</code></td>
@@ -666,7 +666,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.executor.logs.rolling.maxRetainedFiles</code></td>
-  <td>(none)</td>
+  <td>-1</td>
   <td>
     Sets the number of latest rolling log files that are going to be retained by the system.
     Older log files will be deleted. Disabled by default.
@@ -684,7 +684,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.executor.logs.rolling.maxSize</code></td>
-  <td>(none)</td>
+  <td>1024 * 1024</td>
   <td>
     Set the max size of the file in bytes by which the executor logs will be rolled over.
     Rolling is disabled by default. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
@@ -915,7 +915,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Shuffle Behavior
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.reducer.maxSizeInFlight</code></td>
@@ -1280,9 +1280,9 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.service.db.backend</code></td>
-  <td>LEVELDB</td>
+  <td>ROCKSDB</td>
   <td>
-    Specifies a disk-based store used in shuffle service local db. Setting as LEVELDB or ROCKSDB.
+    Specifies a disk-based store used in shuffle service local db. Setting as ROCKSDB or LEVELDB (deprecated).
   </td>
   <td>3.4.0</td>
 </tr>
@@ -1290,7 +1290,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Spark UI
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.eventLog.logBlockUpdates.enabled</code></td>
@@ -1682,7 +1682,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Compression and Serialization
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.broadcast.compress</code></td>
@@ -1880,7 +1880,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Memory Management
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.memory.fraction</code></td>
@@ -2005,7 +2005,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Execution Behavior
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.broadcast.blockSize</code></td>
@@ -2038,14 +2038,10 @@ Apart from these, the following properties are also available, and may be useful
 <tr>
   <td><code>spark.executor.cores</code></td>
   <td>
-    1 in YARN mode, all the available cores on the worker in
-    standalone and Mesos coarse-grained modes.
+    1 in YARN mode, all the available cores on the worker in standalone mode.
   </td>
   <td>
     The number of cores to use on each executor.
-
-    In standalone and Mesos coarse-grained modes, for more detail, see
-    <a href="spark-standalone.html#Executors Scheduling">this description</a>.
   </td>
   <td>1.0.0</td>
 </tr>
@@ -2057,7 +2053,6 @@ Apart from these, the following properties are also available, and may be useful
     with no parent RDDs, it depends on the cluster manager:
     <ul>
       <li>Local mode: number of cores on the local machine</li>
-      <li>Mesos fine grained mode: 8</li>
       <li>Others: total number of cores on all executor nodes or 2, whichever is larger</li>
     </ul>
   </td>
@@ -2255,7 +2250,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Executor Metrics
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.eventLog.logStageExecutorMetrics</code></td>
@@ -2323,7 +2318,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Networking
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.rpc.message.maxSize</code></td>
@@ -2486,18 +2481,16 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Scheduling
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.cores.max</code></td>
   <td>(not set)</td>
   <td>
-    When running on a <a href="spark-standalone.html">standalone deploy cluster</a> or a
-    <a href="running-on-mesos.html#mesos-run-modes">Mesos cluster in "coarse-grained"
-    sharing mode</a>, the maximum amount of CPU cores to request for the application from
+    When running on a <a href="spark-standalone.html">standalone deploy cluster</a>, 
+    the maximum amount of CPU cores to request for the application from
     across the cluster (not from each machine). If not set, the default will be
-    <code>spark.deploy.defaultCores</code> on Spark's standalone cluster manager, or
-    infinite (all available cores) on Mesos.
+    <code>spark.deploy.defaultCores</code> on Spark's standalone cluster manager.
   </td>
   <td>0.6.0</td>
 </tr>
@@ -2550,11 +2543,10 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.scheduler.minRegisteredResourcesRatio</code></td>
-  <td>0.8 for KUBERNETES mode; 0.8 for YARN mode; 0.0 for standalone mode and Mesos coarse-grained mode</td>
+  <td>0.8 for KUBERNETES mode; 0.8 for YARN mode; 0.0 for standalone mode</td>
   <td>
     The minimum ratio of registered resources (registered resources / total expected resources)
-    (resources are executors in yarn mode and Kubernetes mode, CPU cores in standalone mode and Mesos coarse-grained
-     mode ['spark.cores.max' value is total expected resources for Mesos coarse-grained mode] )
+    (resources are executors in yarn mode and Kubernetes mode, CPU cores in standalone mode)
     to wait for before scheduling begins. Specified as a double between 0.0 and 1.0.
     Regardless of whether the minimum ratio of resources has been reached,
     the maximum amount of time it will wait before scheduling begins is controlled by config
@@ -2970,7 +2962,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Barrier Execution Mode
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.barrier.sync.timeout</code></td>
@@ -3017,7 +3009,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Dynamic Allocation
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.dynamicAllocation.enabled</code></td>
@@ -3159,7 +3151,7 @@ finer granularity starting from driver and executor. Take RPC module as example 
 like shuffle, just replace "rpc" with "shuffle" in the property names except
 <code>spark.{driver|executor}.rpc.netty.dispatcher.numThreads</code>, which is only for RPC module.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.{driver|executor}.rpc.io.serverThreads</code></td>
@@ -3302,7 +3294,7 @@ External users can query the static sql config values via `SparkSession.conf` or
 
 ### Spark Streaming
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.streaming.backpressure.enabled</code></td>
@@ -3434,7 +3426,7 @@ External users can query the static sql config values via `SparkSession.conf` or
 
 ### SparkR
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.r.numRBackendThreads</code></td>
@@ -3490,7 +3482,7 @@ External users can query the static sql config values via `SparkSession.conf` or
 
 ### GraphX
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.graphx.pregel.checkpointInterval</code></td>
@@ -3503,40 +3495,12 @@ External users can query the static sql config values via `SparkSession.conf` or
 </tr>
 </table>
 
-### Deploy
-
-<table class="table table-striped">
-  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
-  <tr>
-    <td><code>spark.deploy.recoveryMode</code></td>
-    <td>NONE</td>
-    <td>The recovery mode setting to recover submitted Spark jobs with cluster mode when it failed and relaunches.
-    This is only applicable for cluster mode when running with Standalone or Mesos.</td>
-    <td>0.8.1</td>
-  </tr>
-  <tr>
-    <td><code>spark.deploy.zookeeper.url</code></td>
-    <td>None</td>
-    <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper URL to connect to.</td>
-    <td>0.8.1</td>
-  </tr>
-  <tr>
-    <td><code>spark.deploy.zookeeper.dir</code></td>
-    <td>None</td>
-    <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper directory to store recovery state.</td>
-    <td>0.8.1</td>
-  </tr>
-</table>
-
-
 ### Cluster Managers
 
 Each cluster manager in Spark has additional configuration options. Configurations
 can be found on the pages for each mode:
 
 #### [YARN](running-on-yarn.html#configuration)
-
-#### [Mesos](running-on-mesos.html#configuration)
 
 #### [Kubernetes](running-on-kubernetes.html#configuration)
 
@@ -3546,7 +3510,7 @@ can be found on the pages for each mode:
 
 Certain Spark settings can be configured through environment variables, which are read from the
 `conf/spark-env.sh` script in the directory where Spark is installed (or `conf/spark-env.cmd` on
-Windows). In Standalone and Mesos modes, this file can give machine specific information such as
+Windows). In Standalone mode, this file can give machine specific information such as
 hostnames. It is also sourced when running local Spark applications or submission scripts.
 
 Note that `conf/spark-env.sh` does not exist by default when Spark is installed. However, you can
@@ -3555,7 +3519,7 @@ copy `conf/spark-env.sh.template` to create it. Make sure you make the copy exec
 The following variables can be set in `spark-env.sh`:
 
 
-<table class="table table-striped">
+<table>
   <thead><tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr></thead>
   <tr>
     <td><code>JAVA_HOME</code></td>
@@ -3673,12 +3637,12 @@ There are configurations available to request resources for the driver: <code>sp
 
 Spark will use the configurations specified to first request containers with the corresponding resources from the cluster manager. Once it gets the container, Spark launches an Executor in that container which will discover what resources the container has and the addresses associated with each resource. The Executor will register with the Driver and report back the resources available to that Executor. The Spark scheduler can then schedule tasks to each Executor and assign specific resource addresses based on the resource requirements the user specified. The user can see the resources assigned to a task using the <code>TaskContext.get().resources</code> api. On the driver, the user can see the resources assigned with the SparkContext <code>resources</code> call. It's then up to the user to use the assignedaddresses to do the processing they want or pass those into the ML/AI framework they are using.
 
-See your cluster manager specific page for requirements and details on each of - [YARN](running-on-yarn.html#resource-allocation-and-configuration-overview), [Kubernetes](running-on-kubernetes.html#resource-allocation-and-configuration-overview) and [Standalone Mode](spark-standalone.html#resource-allocation-and-configuration-overview). It is currently not available with Mesos or local mode. And please also note that local-cluster mode with multiple workers is not supported(see Standalone documentation).
+See your cluster manager specific page for requirements and details on each of - [YARN](running-on-yarn.html#resource-allocation-and-configuration-overview), [Kubernetes](running-on-kubernetes.html#resource-allocation-and-configuration-overview) and [Standalone Mode](spark-standalone.html#resource-allocation-and-configuration-overview). It is currently not available with local mode. And please also note that local-cluster mode with multiple workers is not supported(see Standalone documentation).
 
 # Stage Level Scheduling Overview
 
 The stage level scheduling feature allows users to specify task and executor resource requirements at the stage level. This allows for different stages to run with executors that have different resources. A prime example of this is one ETL stage runs with executors with just CPUs, the next stage is an ML stage that needs GPUs. Stage level scheduling allows for user to request different executors that have GPUs when the ML stage runs rather then having to acquire executors with GPUs at the start of the application and them be idle while the ETL stage is being run.
-This is only available for the RDD API in Scala, Java, and Python.  It is available on YARN, Kubernetes and Standalone when dynamic allocation is enabled. When dynamic allocation is disabled, it allows users to specify different task resource requirements at stage level, and this is supported on Standalone cluster right now. See the [YARN](running-on-yarn.html#stage-level-scheduling-overview) page or [Kubernetes](running-on-kubernetes.html#stage-level-scheduling-overview) page or [Standalone](spark-standalone.html#stage-level-scheduling-overview) page for more implementation details.
+This is only available for the RDD API in Scala, Java, and Python.  It is available on YARN, Kubernetes and Standalone when dynamic allocation is enabled. When dynamic allocation is disabled, it allows users to specify different task resource requirements at stage level, and this is supported on YARN, Kubernetes and Standalone cluster right now. See the [YARN](running-on-yarn.html#stage-level-scheduling-overview) page or [Kubernetes](running-on-kubernetes.html#stage-level-scheduling-overview) page or [Standalone](spark-standalone.html#stage-level-scheduling-overview) page for more implementation details.
 
 See the `RDD.withResources` and `ResourceProfileBuilder` API's for using this feature. When dynamic allocation is disabled, tasks with different task resource requirements will share executors with `DEFAULT_RESOURCE_PROFILE`. While when dynamic allocation is enabled, the current implementation acquires new executors for each `ResourceProfile`  created and currently has to be an exact match. Spark does not try to fit tasks into an executor that require a different ResourceProfile than the executor was created with. Executors that are not in use will idle timeout with the dynamic allocation logic. The default configuration for this feature is to only allow one ResourceProfile per stage. If the user associates more then 1 ResourceProfile to an RDD, Spark will throw an exception by default. See config `spark.scheduler.resource.profileMergeConflicts` to control that behavior. The current merge strategy Spark implements when `spark.scheduler.resource.profileMergeConflicts` is enabled is a simple max of each resource within the conflicting ResourceProfiles. Spark will create a new ResourceProfile with the max of each of the resources.
 
@@ -3692,7 +3656,7 @@ Push-based shuffle helps improve the reliability and performance of spark shuffl
 
 ### External Shuffle service(server) side configuration options
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.shuffle.push.server.mergedShuffleFileManagerImpl</code></td>
@@ -3726,7 +3690,7 @@ Push-based shuffle helps improve the reliability and performance of spark shuffl
 
 ### Client side configuration options
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.shuffle.push.enabled</code></td>

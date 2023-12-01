@@ -149,33 +149,6 @@ class GroupTestsMixin:
             with self.assertRaises(IndexError):
                 df.orderBy(-3)
 
-    def test_order_by_ordinal_duplicated_column(self):
-        spark = self.spark
-        df = spark.createDataFrame(
-            [
-                (1, 1),
-                (1, 2),
-                (2, 1),
-                (2, 2),
-                (3, 1),
-                (3, 2),
-            ],
-            ["a", "a"],
-        )
-
-        with self.tempView("v"):
-            df.createOrReplaceTempView("v")
-
-            df1 = spark.sql("select * from v order by 2, 1;")
-            df2 = df.orderBy(2, 1)
-            assertSchemaEqual(df1.schema, df2.schema)
-            assertDataFrameEqual(df1, df2)
-
-            df1 = spark.sql("select * from v order by 1 desc, 2;")
-            df2 = df.orderBy(-1, 2)
-            assertSchemaEqual(df1.schema, df2.schema)
-            assertDataFrameEqual(df1, df2)
-
 
 class GroupTests(GroupTestsMixin, ReusedSQLTestCase):
     pass

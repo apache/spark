@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import java.text.SimpleDateFormat
 import java.util.{Date, Optional, UUID}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
@@ -136,16 +136,16 @@ trait ProgressReporter extends Logging {
       from: StreamProgress,
       to: StreamProgress,
       latest: StreamProgress): Unit = {
-    currentTriggerStartOffsets = from.mapValues(_.json).toMap
-    currentTriggerEndOffsets = to.mapValues(_.json).toMap
-    currentTriggerLatestOffsets = latest.mapValues(_.json).toMap
+    currentTriggerStartOffsets = from.view.mapValues(_.json).toMap
+    currentTriggerEndOffsets = to.view.mapValues(_.json).toMap
+    currentTriggerLatestOffsets = latest.view.mapValues(_.json).toMap
     latestStreamProgress = to
   }
 
   private def addNewProgress(newProgress: StreamingQueryProgress): Unit = {
     progressBuffer.synchronized {
       progressBuffer += newProgress
-      while (progressBuffer.length >= sparkSession.sqlContext.conf.streamingProgressRetention) {
+      while (progressBuffer.length >= sparkSession.sessionState.conf.streamingProgressRetention) {
         progressBuffer.dequeue()
       }
     }
@@ -243,7 +243,7 @@ trait ProgressReporter extends Logging {
       batchId = currentBatchId,
       batchDuration = processingTimeMills,
       durationMs =
-        new java.util.HashMap(currentDurationsMs.toMap.mapValues(long2Long).toMap.asJava),
+        new java.util.HashMap(currentDurationsMs.toMap.view.mapValues(long2Long).toMap.asJava),
       eventTime = new java.util.HashMap(executionStats.eventTimeStats.asJava),
       stateOperators = executionStats.stateOperators.toArray,
       sources = sourceProgress.toArray,
@@ -297,7 +297,7 @@ trait ProgressReporter extends Logging {
         Map(
           "max" -> stats.max,
           "min" -> stats.min,
-          "avg" -> stats.avg.toLong).mapValues(formatTimestamp)
+          "avg" -> stats.avg.toLong).view.mapValues(formatTimestamp)
     }.headOption.getOrElse(Map.empty) ++ watermarkTimestamp
 
     ExecutionStats(numInputRows, stateOperators, eventTimeStats.toMap)
@@ -307,7 +307,7 @@ trait ProgressReporter extends Logging {
   private def extractSourceToNumInputRows(): Map[SparkDataStream, Long] = {
 
     def sumRows(tuples: Seq[(SparkDataStream, Long)]): Map[SparkDataStream, Long] = {
-      tuples.groupBy(_._1).mapValues(_.map(_._2).sum).toMap // sum up rows for each source
+      tuples.groupBy(_._1).view.mapValues(_.map(_._2).sum).toMap // sum up rows for each source
     }
 
     def unrollCTE(plan: LogicalPlan): LogicalPlan = {

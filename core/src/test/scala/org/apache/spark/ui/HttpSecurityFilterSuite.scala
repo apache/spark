@@ -21,7 +21,7 @@ import java.util.UUID
 import javax.servlet.FilterChain
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, eq => meq}

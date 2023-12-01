@@ -155,7 +155,7 @@ private[spark] class TaskSchedulerImpl(
       .build[String, ExecutorDecommissionState]()
 
   def runningTasksByExecutors: Map[String, Int] = synchronized {
-    executorIdToRunningTaskIds.toMap.mapValues(_.size).toMap
+    executorIdToRunningTaskIds.toMap.view.mapValues(_.size).toMap
   }
 
   // The set of executors we have on each host; this is used to compute hostsAlive, which
@@ -434,7 +434,7 @@ private[spark] class TaskSchedulerImpl(
                 // addresses are the same as that we allocated in taskResourceAssignments since it's
                 // synchronized. We don't remove the exact addresses allocated because the current
                 // approach produces the identical result with less time complexity.
-                availableResources(i)(rName).remove(0, rInfo.addresses.size)
+                availableResources(i)(rName).remove(0, rInfo.addresses.length)
               }
             }
           } catch {
@@ -752,7 +752,7 @@ private[spark] class TaskSchedulerImpl(
               .mkString(",")
             addressesWithDescs.foreach(_._2.properties.setProperty("addresses", addressesStr))
 
-            logInfo(s"Successfully scheduled all the ${addressesWithDescs.size} tasks for " +
+            logInfo(s"Successfully scheduled all the ${addressesWithDescs.length} tasks for " +
               s"barrier stage ${taskSet.stageId}.")
           }
           taskSet.barrierPendingLaunchTasks.clear()
@@ -1059,7 +1059,7 @@ private[spark] class TaskSchedulerImpl(
           case None =>
             // We may get multiple executorLost() calls with different loss reasons. For example,
             // one may be triggered by a dropped connection from the worker while another may be a
-            // report of executor termination from Mesos. We produce log messages for both so we
+            // report of executor termination. We produce log messages for both so we
             // eventually report the termination reason.
             logError(s"Lost an executor $executorId (already removed): $reason")
         }
@@ -1214,10 +1214,10 @@ private[spark] class TaskSchedulerImpl(
   }
 
   private def waitBackendReady(): Unit = {
-    if (backend.isReady) {
+    if (backend.isReady()) {
       return
     }
-    while (!backend.isReady) {
+    while (!backend.isReady()) {
       // Might take a while for backend to be ready if it is waiting on resources.
       if (sc.stopped.get) {
         // For example: the master removes the application for some reason

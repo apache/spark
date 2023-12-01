@@ -22,7 +22,7 @@ This packaging is currently experimental and may change in future versions (alth
 Using PySpark requires the Spark JARs, and if you are building this from source please see the builder instructions at
 ["Building Spark"](https://spark.apache.org/docs/latest/building-spark.html).
 
-The Python packaging for Spark is not intended to replace all of the other use cases. This Python packaged version of Spark is suitable for interacting with an existing cluster (be it Spark standalone, YARN, or Mesos) - but does not contain the tools required to set up your own standalone Spark cluster. You can download the full version of Spark from the [Apache Spark downloads page](https://spark.apache.org/downloads.html).
+The Python packaging for Spark is not intended to replace all of the other use cases. This Python packaged version of Spark is suitable for interacting with an existing cluster (be it Spark standalone, YARN) - but does not contain the tools required to set up your own standalone Spark cluster. You can download the full version of Spark from the [Apache Spark downloads page](https://spark.apache.org/downloads.html).
 
 
 **NOTE:** If you are using this with a Spark standalone cluster you must ensure that the version (including minor version) matches or you may experience odd errors.

@@ -74,7 +74,7 @@ private[r] class LDAWrapper private (
     if (vocabulary.isEmpty || vocabulary.length < vocabSize) {
       topicIndices
     } else {
-      val index2term = udf { indices: mutable.WrappedArray[Int] => indices.map(i => vocabulary(i)) }
+      val index2term = udf { indices: mutable.ArraySeq[Int] => indices.map(i => vocabulary(i)) }
       topicIndices
         .select(col("topic"), index2term(col("termIndices")).as("term"), col("termWeights"))
     }

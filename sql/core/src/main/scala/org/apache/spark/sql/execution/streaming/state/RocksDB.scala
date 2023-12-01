@@ -26,9 +26,10 @@ import scala.ref.WeakReference
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
-import org.json4s.NoTypeHints
+import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 import org.rocksdb.{RocksDB => NativeRocksDB, _}
+import org.rocksdb.CompressionType._
 import org.rocksdb.TickerType._
 
 import org.apache.spark.TaskContext
@@ -91,7 +92,7 @@ class RocksDB(
     tableFormatConfig.setPinL0FilterAndIndexBlocksInCache(true)
   }
 
-  private val columnFamilyOptions = new ColumnFamilyOptions()
+  private[state] val columnFamilyOptions = new ColumnFamilyOptions()
 
   // Set RocksDB options around MemTable memory usage. By default, we let RocksDB
   // use its internal default values for these settings.
@@ -103,12 +104,15 @@ class RocksDB(
     columnFamilyOptions.setMaxWriteBufferNumber(conf.maxWriteBufferNumber)
   }
 
+  columnFamilyOptions.setCompressionType(getCompressionType(conf.compression))
+
   private val dbOptions =
     new Options(new DBOptions(), columnFamilyOptions) // options to open the RocksDB
 
   dbOptions.setCreateIfMissing(true)
   dbOptions.setTableFormatConfig(tableFormatConfig)
   dbOptions.setMaxOpenFiles(conf.maxOpenFiles)
+  dbOptions.setAllowFAllocate(conf.allowFAllocate)
 
   if (conf.boundedMemoryUsage) {
     dbOptions.setWriteBufferManager(writeBufferManager)
@@ -503,7 +507,7 @@ class RocksDB(
       "put" -> DB_WRITE,
       "compaction" -> COMPACTION_TIME
     ).toMap
-    val nativeOpsLatencyMicros = nativeOpsHistograms.mapValues { typ =>
+    val nativeOpsLatencyMicros = nativeOpsHistograms.view.mapValues { typ =>
       RocksDBNativeHistogram(nativeStats.getHistogramData(typ))
     }
     val nativeOpsMetricTickers = Seq(
@@ -526,7 +530,7 @@ class RocksDB(
       /** Number of bytes written during flush */
       "totalBytesWrittenByFlush" -> FLUSH_WRITE_BYTES
     ).toMap
-    val nativeOpsMetrics = nativeOpsMetricTickers.mapValues { typ =>
+    val nativeOpsMetrics = nativeOpsMetricTickers.view.mapValues { typ =>
       nativeStats.getTickerCount(typ)
     }
 
@@ -558,12 +562,12 @@ class RocksDB(
     }
     if (isAcquiredByDifferentThread) {
       val stackTraceOutput = acquiredThreadInfo.threadRef.get.get.getStackTrace.mkString("\n")
-      throw QueryExecutionErrors.unreleasedThreadError(loggingId, newAcquiredThreadInfo.toString,
-        acquiredThreadInfo.toString, timeWaitedMs, stackTraceOutput)
+      throw QueryExecutionErrors.unreleasedThreadError(loggingId, newAcquiredThreadInfo.toString(),
+        acquiredThreadInfo.toString(), timeWaitedMs, stackTraceOutput)
     } else {
       acquiredThreadInfo = newAcquiredThreadInfo
       // Add a listener to always release the lock when the task (if active) completes
-      Option(TaskContext.get).foreach(_.addTaskCompletionListener[Unit] { _ => this.release() })
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] { _ => this.release() })
       logInfo(s"RocksDB instance was acquired by $acquiredThreadInfo")
     }
   }
@@ -674,7 +678,9 @@ case class RocksDBConf(
     totalMemoryUsageMB: Long,
     writeBufferCacheRatio: Double,
     highPriorityPoolRatio: Double,
-    compressionCodec: String)
+    compressionCodec: String,
+    allowFAllocate: Boolean,
+    compression: String)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -757,6 +763,18 @@ object RocksDBConf {
   private val HIGH_PRIORITY_POOL_RATIO_CONF = SQLConfEntry(HIGH_PRIORITY_POOL_RATIO_CONF_KEY,
     "0.1")
 
+  // Allow files to be pre-allocated on disk using fallocate
+  // Disabling may slow writes, but can solve an issue where
+  // significant quantities of disk are wasted if there are
+  // many smaller concurrent state-stores running with the
+  // spark context
+  val ALLOW_FALLOCATE_CONF_KEY = "allowFAllocate"
+  private val ALLOW_FALLOCATE_CONF = SQLConfEntry(ALLOW_FALLOCATE_CONF_KEY, "true")
+
+  // Pass as compression type to RocksDB.
+  val COMPRESSION_KEY = "compression"
+  private val COMPRESSION_CONF = SQLConfEntry(COMPRESSION_KEY, "lz4")
+
   def apply(storeConf: StateStoreConf): RocksDBConf = {
     val sqlConfs = CaseInsensitiveMap[String](storeConf.sqlConfs)
     val extraConfs = CaseInsensitiveMap[String](storeConf.extraOptions)
@@ -816,6 +834,14 @@ object RocksDBConf {
       }
     }
 
+    def getStringConf(conf: ConfEntry): String = {
+      Try { getConfigMap(conf).getOrElse(conf.fullName, conf.default).toString } getOrElse {
+        throw new IllegalArgumentException(
+          s"Invalid value for '${conf.fullName}', must be a string"
+        )
+      }
+    }
+
     RocksDBConf(
       storeConf.minVersionsToRetain,
       storeConf.minDeltasForSnapshot,
@@ -834,7 +860,9 @@ object RocksDBConf {
       getLongConf(MAX_MEMORY_USAGE_MB_CONF),
       getRatioConf(WRITE_BUFFER_CACHE_RATIO_CONF),
       getRatioConf(HIGH_PRIORITY_POOL_RATIO_CONF),
-      storeConf.compressionCodec)
+      storeConf.compressionCodec,
+      getBooleanConf(ALLOW_FALLOCATE_CONF),
+      getStringConf(COMPRESSION_CONF))
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())
@@ -858,7 +886,7 @@ case class RocksDBMetrics(
 }
 
 object RocksDBMetrics {
-  val format = Serialization.formats(NoTypeHints)
+  val format: Formats = Serialization.formats(NoTypeHints)
 }
 
 /** Class to wrap RocksDB's native histogram */
@@ -887,8 +915,8 @@ case class AcquiredThreadInfo() {
   override def toString(): String = {
     val taskStr = if (tc != null) {
       val taskDetails =
-        s"partition ${tc.partitionId}.${tc.attemptNumber} in stage " +
-          s"${tc.stageId}.${tc.stageAttemptNumber()}, TID ${tc.taskAttemptId}"
+        s"partition ${tc.partitionId()}.${tc.attemptNumber()} in stage " +
+          s"${tc.stageId()}.${tc.stageAttemptNumber()}, TID ${tc.taskAttemptId()}"
       s", task: $taskDetails"
     } else ""
 

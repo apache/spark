@@ -53,6 +53,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
     CategoricalDtype,
 )
 from pandas.tseries.frequencies import DateOffset
+
 from pyspark.sql import functions as F, Column as PySparkColumn, DataFrame as SparkDataFrame
 from pyspark.sql.types import (
     ArrayType,
@@ -61,7 +62,6 @@ from pyspark.sql.types import (
     DoubleType,
     FloatType,
     IntegerType,
-    IntegralType,
     LongType,
     NumericType,
     Row,
@@ -71,7 +71,6 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.window import Window
 from pyspark.sql.utils import get_column_class, get_window_class
-
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T
 from pyspark.pandas.accessors import PandasOnSparkSeriesMethods
@@ -703,9 +702,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     # create accessor for pandas-on-Spark specific methods.
     pandas_on_spark = CachedAccessor("pandas_on_spark", PandasOnSparkSeriesMethods)
-
-    # keep the name "koalas" for backward compatibility.
-    koalas = CachedAccessor("koalas", PandasOnSparkSeriesMethods)
 
     # Comparison Operators
     def eq(self, other: Any) -> "Series":
@@ -1635,7 +1631,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> from collections import OrderedDict, defaultdict
         >>> s.to_dict(OrderedDict)
-        OrderedDict([(0, 1), (1, 2), (2, 3), (3, 4)])
+        OrderedDict(...)
 
         >>> dd = defaultdict(list)
         >>> s.to_dict(dd)  # doctest: +ELLIPSIS
@@ -4054,7 +4050,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     # TODO: add axis, pct, na_option parameter
     def rank(
-        self, method: str = "average", ascending: bool = True, numeric_only: Optional[bool] = None
+        self, method: str = "average", ascending: bool = True, numeric_only: bool = False
     ) -> "Series":
         """
         Compute numerical data ranks (1 through n) along axis. Equal values are
@@ -4075,9 +4071,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             * dense: like 'min', but rank always increases by 1 between groups
         ascending : boolean, default True
             False for ranks by high (1) to low (N)
-        numeric_only : bool, optional
-            If set to True, rank numeric Series, or raise TypeError for non-numeric Series.
-            False is not supported. This parameter is mainly for pandas compatibility.
+        numeric_only : bool, default False
+            For DataFrame objects, rank only numeric columns if set to True.
+
+            .. versionchanged:: 4.0.0
+                The default value of ``numeric_only`` is now ``False``.
+
 
         Returns
         -------
@@ -6973,36 +6972,17 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         return psser._cum(F.sum, skipna, part_cols)
 
     def _cumprod(self, skipna: bool, part_cols: Sequence["ColumnOrName"] = ()) -> "Series":
-        if isinstance(self.spark.data_type, BooleanType):
-            scol = self._cum(
-                lambda scol: F.min(F.coalesce(scol, F.lit(True))), skipna, part_cols
-            ).spark.column.cast(LongType())
-        elif isinstance(self.spark.data_type, NumericType):
-            num_zeros = self._cum(
-                lambda scol: F.sum(F.when(scol == 0, 1).otherwise(0)), skipna, part_cols
-            ).spark.column
-            num_negatives = self._cum(
-                lambda scol: F.sum(F.when(scol < 0, 1).otherwise(0)), skipna, part_cols
-            ).spark.column
-            sign = F.when(num_negatives % 2 == 0, 1).otherwise(-1)
-
-            abs_prod = F.exp(
-                self._cum(lambda scol: F.sum(F.log(F.abs(scol))), skipna, part_cols).spark.column
-            )
-
-            scol = F.when(num_zeros > 0, 0).otherwise(sign * abs_prod)
-
-            if isinstance(self.spark.data_type, IntegralType):
-                scol = F.round(scol).cast(LongType())
-        else:
+        psser = self
+        if isinstance(psser.spark.data_type, BooleanType):
+            psser = psser.spark.transform(lambda scol: scol.cast(LongType()))
+        elif not isinstance(psser.spark.data_type, NumericType):
             raise TypeError(
                 "Could not convert {} ({}) to numeric".format(
-                    spark_type_to_pandas_dtype(self.spark.data_type),
-                    self.spark.data_type.simpleString(),
+                    spark_type_to_pandas_dtype(psser.spark.data_type),
+                    psser.spark.data_type.simpleString(),
                 )
             )
-
-        return self._with_new_scol(scol)
+        return psser._cum(lambda c: SF.product(c, skipna), skipna, part_cols)
 
     # ----------------------------------------------------------------------
     # Accessor Methods
@@ -7033,7 +7013,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sfun: Callable[["Series"], PySparkColumn],
         name: str_type,
         axis: Optional[Axis] = None,
-        numeric_only: bool = True,
+        numeric_only: bool = False,
         skipna: bool = True,
         **kwargs: Any,
     ) -> Scalar:

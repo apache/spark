@@ -19,13 +19,12 @@ package org.apache.spark.shuffle
 
 import java.io.{File, FileNotFoundException}
 import java.net.ConnectException
-import java.nio.ByteBuffer
 import java.util.concurrent.ExecutorService
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 import scala.util.control.NonFatal
 
-import org.apache.spark.{ShuffleDependency, SparkConf, SparkContext, SparkEnv}
+import org.apache.spark.{SecurityManager, ShuffleDependency, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.annotation.Since
 import org.apache.spark.executor.{CoarseGrainedExecutorBackend, ExecutorBackend}
 import org.apache.spark.internal.Logging
@@ -108,7 +107,9 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       dep: ShuffleDependency[_, _, _],
       mapIndex: Int): Unit = {
     val numPartitions = dep.partitioner.numPartitions
-    val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
+    val securityManager = new SecurityManager(conf)
+    val transportConf = SparkTransportConf.fromSparkConf(
+      conf, "shuffle", sslOptions = Some(securityManager.getRpcSSLOptions()))
     this.shuffleId = dep.shuffleId
     this.shuffleMergeId = dep.shuffleMergeId
     this.mapIndex = mapIndex
@@ -293,7 +294,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         case (offset, size) =>
           new NioManagedBuffer(inMemoryBuffer.duplicate()
             .position(offset)
-            .limit(offset + size).asInstanceOf[ByteBuffer].slice())
+            .limit(offset + size).slice())
       }.toArray
     }
   }

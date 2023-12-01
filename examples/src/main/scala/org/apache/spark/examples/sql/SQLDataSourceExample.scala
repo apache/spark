@@ -39,6 +39,7 @@ object SQLDataSourceExample {
     runCsvDatasetExample(spark)
     runTextDatasetExample(spark)
     runJdbcDatasetExample(spark)
+    runXmlDatasetExample(spark)
 
     spark.stop()
   }
@@ -108,7 +109,7 @@ object SQLDataSourceExample {
     // |file1.parquet|
     // +-------------+
     val afterFilterDF = spark.read.format("parquet")
-       // Files modified after 06/01/2020 at 05:30 are allowed
+      // Files modified after 06/01/2020 at 05:30 are allowed
       .option("modifiedAfter", "2020-06-01T05:30:00")
       .load("examples/src/main/resources/dir1");
     afterFilterDF.show();
@@ -308,7 +309,7 @@ object SQLDataSourceExample {
     // +-----+---+---------+
 
     // You can also use options() to use multiple options
-    val df4 = spark.read.options(Map("delimiter"->";", "header"->"true")).csv(path)
+    val df4 = spark.read.options(Map("delimiter" -> ";", "header" -> "true")).csv(path)
 
     // "output" is a folder which contains multiple csv files and a _SUCCESS file.
     df3.write.csv("output")
@@ -417,5 +418,54 @@ object SQLDataSourceExample {
       .option("createTableColumnTypes", "name CHAR(64), comments VARCHAR(1024)")
       .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties)
     // $example off:jdbc_dataset$
+  }
+
+  private def runXmlDatasetExample(spark: SparkSession): Unit = {
+    // $example on:xml_dataset$
+    // Primitive types (Int, String, etc) and Product types (case classes) encoders are
+    // supported by importing this when creating a Dataset.
+    import spark.implicits._
+    // An XML dataset is pointed to by path.
+    // The path can be either a single xml file or more xml files
+    val path = "examples/src/main/resources/people.xml"
+    val peopleDF = spark.read.option("rowTag", "person").xml(path)
+
+    // The inferred schema can be visualized using the printSchema() method
+    peopleDF.printSchema()
+    // root
+    //  |-- age: long (nullable = true)
+    //  |-- name: string (nullable = true)
+
+    // Creates a temporary view using the DataFrame
+    peopleDF.createOrReplaceTempView("people")
+
+    // SQL statements can be run by using the sql methods provided by spark
+    val teenagerNamesDF = spark.sql("SELECT name FROM people WHERE age BETWEEN 13 AND 19")
+    teenagerNamesDF.show()
+    // +------+
+    // |  name|
+    // +------+
+    // |Justin|
+    // +------+
+
+    // Alternatively, a DataFrame can be created for a XML dataset represented by a Dataset[String]
+    val otherPeopleDataset = spark.createDataset(
+      """
+        |<person>
+        |    <name>laglangyue</name>
+        |    <job>Developer</job>
+        |    <age>28</age>
+        |</person>
+        |""".stripMargin :: Nil)
+    val otherPeople = spark.read
+      .option("rowTag", "person")
+      .xml(otherPeopleDataset)
+    otherPeople.show()
+    // +---+---------+----------+
+    // |age|      job|      name|
+    // +---+---------+----------+
+    // | 28|Developer|laglangyue|
+    // +---+---------+----------+
+    // $example off:xml_dataset$
   }
 }

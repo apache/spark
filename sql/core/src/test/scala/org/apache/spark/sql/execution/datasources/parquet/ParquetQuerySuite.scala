@@ -964,7 +964,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     withAllParquetReaders {
       withTempPath { path =>
         // Repeated values for dictionary encoding.
-        Seq(Some("A"), Some("A"), None).toDF.repartition(1)
+        Seq(Some("A"), Some("A"), None).toDF().repartition(1)
           .write.parquet(path.getAbsolutePath)
         val df = spark.read.parquet(path.getAbsolutePath)
         checkAnswer(stripSparkFilter(df.where("NOT (value <=> 'A')")), df)
@@ -1305,7 +1305,7 @@ object TestingUDT {
     override def userClass: Class[TestArray] = classOf[TestArray]
 
     override def deserialize(datum: Any): TestArray = datum match {
-      case value: ArrayData => TestArray(value.toLongArray.toSeq)
+      case value: ArrayData => TestArray(value.toLongArray().toSeq)
     }
   }
 

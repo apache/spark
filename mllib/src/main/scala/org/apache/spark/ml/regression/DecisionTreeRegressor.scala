@@ -129,7 +129,8 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
 
     instr.logPipelineStage(this)
     instr.logDataset(instances)
-    instr.logParams(this, params: _*)
+    import org.apache.spark.util.ArrayImplicits._
+    instr.logParams(this, params.toImmutableArraySeq: _*)
 
     val trees = RandomForest.run(instances, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))

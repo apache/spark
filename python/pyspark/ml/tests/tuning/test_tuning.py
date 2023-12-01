@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 import numpy as np
+
 from pyspark.ml import Estimator, Model
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.evaluation import (

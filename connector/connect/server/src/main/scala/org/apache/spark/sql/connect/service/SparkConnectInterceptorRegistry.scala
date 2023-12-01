@@ -24,6 +24,7 @@ import io.grpc.netty.NettyServerBuilder
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.sql.connect.config.Connect
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -64,7 +65,8 @@ object SparkConnectInterceptorRegistry {
         .map(_.trim)
         .filter(_.nonEmpty)
         .map(Utils.classForName[ServerInterceptor](_))
-        .map(createInstance(_))
+        .map(createInstance)
+        .toImmutableArraySeq
     } else {
       Seq.empty
     }

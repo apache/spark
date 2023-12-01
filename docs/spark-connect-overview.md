@@ -261,7 +261,7 @@ spark-connect-repl --host myhost.com --port 443 --token ABCDEFG
 
 The supported list of CLI arguments may be found [here](https://github.com/apache/spark/blob/master/connector/connect/client/jvm/src/main/scala/org/apache/spark/sql/connect/client/SparkConnectClientParser.scala#L48).
 
-#### Configure programmatically with a connection ctring
+#### Configure programmatically with a connection string
 
 The connection may also be programmatically created using _SparkSession#builder_ as in this example:
 {% highlight scala %}
@@ -279,11 +279,11 @@ The connection may also be programmatically created using _SparkSession#builder_
 
 <div data-lang="python"  markdown="1">
 
-First, install PySpark with `pip install pyspark==3.5.0` or if building a packaged PySpark application/library,
+First, install PySpark with `pip install pyspark[connect]==3.5.0` or if building a packaged PySpark application/library,
 add it your setup.py file as:
 {% highlight python %}
 install_requires=[
-'pyspark==3.5.0'
+'pyspark[connect]==3.5.0'
 ]
 {% endhighlight %}
 

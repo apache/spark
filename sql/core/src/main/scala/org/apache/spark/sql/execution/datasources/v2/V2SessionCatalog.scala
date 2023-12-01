@@ -20,12 +20,12 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.net.URI
 import java.util
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, SessionCatalog}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableCatalogCapability, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
@@ -37,6 +37,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A [[TableCatalog]] that translates calls to the v1 SessionCatalog.
@@ -114,7 +115,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TransformHelper
-    val (partitionColumns, maybeBucketSpec) = partitions.toSeq.convertTransforms
+    val (partitionColumns, maybeBucketSpec, maybeClusterBySpec) =
+      partitions.toImmutableArraySeq.convertTransforms
     val provider = properties.getOrDefault(TableCatalog.PROP_PROVIDER, conf.defaultDataSourceName)
     val tableProperties = properties.asScala
     val location = Option(properties.get(TableCatalog.PROP_LOCATION))
@@ -135,7 +137,9 @@ class V2SessionCatalog(catalog: SessionCatalog)
       provider = Some(provider),
       partitionColumnNames = partitionColumns,
       bucketSpec = maybeBucketSpec,
-      properties = tableProperties.toMap,
+      properties = tableProperties.toMap ++
+        maybeClusterBySpec.map(
+          clusterBySpec => ClusterBySpec.toProperty(schema, clusterBySpec, conf.resolver)),
       tracksPartitionsInCatalog = conf.manageFilesourcePartitions,
       comment = Option(properties.get(TableCatalog.PROP_COMMENT)))
 
@@ -150,7 +154,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   private def toOptions(properties: Map[String, String]): Map[String, String] = {
-    properties.filterKeys(_.startsWith(TableCatalog.OPTION_PREFIX)).map {
+    properties.view.filterKeys(_.startsWith(TableCatalog.OPTION_PREFIX)).map {
       case (key, value) => key.drop(TableCatalog.OPTION_PREFIX.length) -> value
     }.toMap
   }
@@ -242,7 +246,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
         case Array(db) =>
           TableIdentifier(ident.name, Some(db))
         case other =>
-          throw QueryCompilationErrors.requiresSinglePartNamespaceError(other)
+          throw QueryCompilationErrors.requiresSinglePartNamespaceError(other.toImmutableArraySeq)
       }
     }
 
@@ -251,7 +255,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
         case Array(db) =>
           FunctionIdentifier(ident.name, Some(db))
         case other =>
-          throw QueryCompilationErrors.requiresSinglePartNamespaceError(other)
+          throw QueryCompilationErrors.requiresSinglePartNamespaceError(other.toImmutableArraySeq)
       }
     }
   }
@@ -344,7 +348,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   def isTempView(ident: Identifier): Boolean = {
-    catalog.isTempView(ident.namespace() :+ ident.name())
+    catalog.isTempView((ident.namespace() :+ ident.name()).toImmutableArraySeq)
   }
 
   override def loadFunction(ident: Identifier): UnboundFunction = {

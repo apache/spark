@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.{SupportsReportOrdering, SupportsReportPartitioning}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, UnknownPartitioning}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils.sequenceToOption
 
 /**
@@ -44,7 +45,8 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with SQLConfHelpe
       val catalystPartitioning = scan.outputPartitioning() match {
         case kgp: KeyGroupedPartitioning =>
           val partitioning = sequenceToOption(
-            kgp.keys().map(V2ExpressionUtils.toCatalystOpt(_, relation, relation.funCatalog)))
+            kgp.keys().map(V2ExpressionUtils.toCatalystOpt(_, relation, relation.funCatalog))
+              .toImmutableArraySeq)
           if (partitioning.isEmpty) {
             None
           } else {

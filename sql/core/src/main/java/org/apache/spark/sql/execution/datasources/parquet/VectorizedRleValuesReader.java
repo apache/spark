@@ -147,13 +147,10 @@ public final class VectorizedRleValuesReader extends ValuesReader
     if (this.currentCount == 0) { this.readNextGroup(); }
 
     this.currentCount--;
-    switch (mode) {
-      case RLE:
-        return this.currentValue;
-      case PACKED:
-        return this.currentBuffer[currentBufferIdx++];
-    }
-    throw new RuntimeException("Unreachable");
+    return switch (mode) {
+      case RLE -> this.currentValue;
+      case PACKED -> this.currentBuffer[currentBufferIdx++];
+    };
   }
 
   /**

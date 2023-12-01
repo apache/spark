@@ -809,7 +809,7 @@ private[spark] class TaskSetManager(
 
     info.markFinished(TaskState.FINISHED, clock.getTimeMillis())
     if (speculationEnabled) {
-      successfulTaskDurations.insert(info.duration)
+      successfulTaskDurations.insert(info.duration.toDouble)
       taskProcessRateCalculator.foreach(_.updateAvgTaskProcessRate(tid, result))
     }
     removeRunningTask(tid)
@@ -999,7 +999,6 @@ private[spark] class TaskSetManager(
   }
 
   def abort(message: String, exception: Option[Throwable] = None): Unit = sched.synchronized {
-    // TODO: Kill running tasks if we were not terminated due to a Mesos error
     sched.dagScheduler.taskSetFailed(taskSet, message, exception)
     isZombie = true
     maybeFinishTaskSet()
@@ -1033,7 +1032,7 @@ private[spark] class TaskSetManager(
 
   override def removeSchedulable(schedulable: Schedulable): Unit = {}
 
-  override def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager] = {
+  override def getSortedTaskSetQueue: ArrayBuffer[TaskSetManager] = {
     val sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]()
     sortedTaskSetQueue += this
     sortedTaskSetQueue
@@ -1153,7 +1152,7 @@ private[spark] class TaskSetManager(
               // config executorDecommissionKillInterval. If the task is going to finish after
               // decommissioning, then we will eagerly speculate the task.
               val taskEndTimeBasedOnMedianDuration =
-                info.launchTime + successfulTaskDurations.percentile
+                info.launchTime + successfulTaskDurations.percentile()
               val executorDecomTime = decomState.startTime + executorDecommissionKillInterval.get
               executorDecomTime < taskEndTimeBasedOnMedianDuration
             }
@@ -1196,8 +1195,8 @@ private[spark] class TaskSetManager(
     val numSuccessfulTasks = successfulTaskDurations.size()
     val timeMs = clock.getTimeMillis()
     if (numSuccessfulTasks >= minFinishedForSpeculation) {
-      val medianDuration = successfulTaskDurations.percentile
-      val threshold = max(speculationMultiplier * medianDuration, minTimeToSpeculation)
+      val medianDuration = successfulTaskDurations.percentile()
+      val threshold = max(speculationMultiplier * medianDuration, minTimeToSpeculation.toDouble)
       // TODO: Threshold should also look at standard deviation of task durations and have a lower
       // bound based on that.
       logDebug("Task length threshold for speculation: " + threshold)
@@ -1205,7 +1204,8 @@ private[spark] class TaskSetManager(
     } else if (isSpeculationThresholdSpecified && speculationTasksLessEqToSlots) {
       val threshold = speculationTaskDurationThresOpt.get
       logDebug(s"Tasks taking longer time than provided speculation threshold: $threshold")
-      foundTasks = checkAndSubmitSpeculatableTasks(timeMs, threshold, customizedThreshold = true)
+      foundTasks = checkAndSubmitSpeculatableTasks(
+        timeMs, threshold.toDouble, customizedThreshold = true)
     }
     // avoid more warning logs.
     if (foundTasks) {

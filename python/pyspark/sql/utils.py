@@ -50,7 +50,7 @@ if TYPE_CHECKING:
     from pyspark.sql.window import Window
     from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 
-has_numpy = False
+has_numpy: bool = False
 try:
     import numpy as np  # noqa: F401
 
@@ -194,6 +194,21 @@ def try_remote_functions(f: FuncT) -> FuncT:
     return cast(FuncT, wrapped)
 
 
+def try_partitioning_remote_functions(f: FuncT) -> FuncT:
+    """Mark API supported from Spark Connect."""
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.sql.connect.functions import partitioning
+
+            return getattr(partitioning, f.__name__)(*args, **kwargs)
+        else:
+            return f(*args, **kwargs)
+
+    return cast(FuncT, wrapped)
+
+
 def try_remote_avro_functions(f: FuncT) -> FuncT:
     """Mark API supported from Spark Connect."""
 
@@ -261,22 +276,6 @@ def get_active_spark_context() -> SparkContext:
     if sc is None or sc._jvm is None:
         raise RuntimeError("SparkContext or SparkSession should be created first.")
     return sc
-
-
-def try_remote_observation(f: FuncT) -> FuncT:
-    """Mark API supported from Spark Connect."""
-
-    @functools.wraps(f)
-    def wrapped(*args: Any, **kwargs: Any) -> Any:
-        # TODO(SPARK-41527): Add the support of Observation.
-        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            raise PySparkNotImplementedError(
-                error_class="NOT_IMPLEMENTED",
-                message_parameters={"feature": "Observation support for Spark Connect"},
-            )
-        return f(*args, **kwargs)
-
-    return cast(FuncT, wrapped)
 
 
 def try_remote_session_classmethod(f: FuncT) -> FuncT:

@@ -20,9 +20,9 @@ package org.apache.spark.deploy
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually._
@@ -213,7 +213,7 @@ class DecommissionWorkerSuite
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
     val executorIdToWorkerInfo = getExecutorToWorkerAssignments
-    val executorToDecom = executorIdToWorkerInfo.keysIterator.next
+    val executorToDecom = executorIdToWorkerInfo.keysIterator.next()
 
     // The task code below cannot call executorIdToWorkerInfo, so we need to pre-compute
     // the worker to decom to force it to be serialized into the task.
@@ -249,7 +249,7 @@ class DecommissionWorkerSuite
       }, preservesPartitioning = true)
         .repartition(1).mapPartitions(iter => {
         val context = TaskContext.get()
-        if (context.attemptNumber == 0 && context.stageAttemptNumber() == 0) {
+        if (context.attemptNumber() == 0 && context.stageAttemptNumber() == 0) {
           // Wait a bit for the decommissioning to be triggered in the listener
           Thread.sleep(5000)
           // MapIndex is explicitly -1 to force the entire host to be decommissioned
@@ -414,7 +414,7 @@ class DecommissionWorkerSuite
     master.self.askSync[MasterStateResponse](RequestMasterState)
   }
 
-  private def getApplications(): Seq[ApplicationInfo] = {
+  private def getApplications(): Array[ApplicationInfo] = {
     getMasterState.activeApps
   }
 
@@ -439,7 +439,7 @@ class DecommissionWorkerSuite
     val appId = sc.applicationId
     eventually(timeout(1.minute), interval(1.seconds)) {
       val apps = getApplications()
-      assert(apps.size === 1)
+      assert(apps.length === 1)
       assert(apps.head.id === appId)
       assert(apps.head.getExecutorLimit === Int.MaxValue)
     }

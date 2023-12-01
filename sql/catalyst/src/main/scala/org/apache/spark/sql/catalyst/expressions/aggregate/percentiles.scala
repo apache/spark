@@ -31,6 +31,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.TypeCollection.NumericAndAnsiInterval
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.OpenHashMap
 
 abstract class PercentileBase
@@ -166,7 +167,7 @@ abstract class PercentileBase
       case ((key1, count1), (key2, count2)) => (key2, count1 + count2)
     }.tail
 
-    percentages.map(getPercentile(accumulatedCounts, _))
+    percentages.map(getPercentile(accumulatedCounts, _)).toImmutableArraySeq
   }
 
   private def generateOutput(percentiles: Seq[Double]): Any = {

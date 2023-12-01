@@ -23,9 +23,9 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
@@ -344,7 +344,7 @@ private[yarn] class YarnAllocator(
         val gpuResource = sparkConf.get(YARN_GPU_DEVICE)
         val fpgaResource = sparkConf.get(YARN_FPGA_DEVICE)
         getYarnResourcesAndAmounts(sparkConf, config.YARN_EXECUTOR_RESOURCE_TYPES_PREFIX) ++
-          customSparkResources.filterKeys { r =>
+          customSparkResources.view.filterKeys { r =>
             (r == gpuResource || r == fpgaResource)
           }
       } else {
@@ -384,19 +384,28 @@ private[yarn] class YarnAllocator(
     this.numLocalityAwareTasksPerResourceProfileId = numLocalityAwareTasksPerResourceProfileId
     this.hostToLocalTaskCountPerResourceProfileId = hostToLocalTaskCountPerResourceProfileId
 
-    val res = resourceProfileToTotalExecs.map { case (rp, numExecs) =>
-      createYarnResourceForResourceProfile(rp)
-      if (numExecs != getOrUpdateTargetNumExecutorsForRPId(rp.id)) {
-        logInfo(s"Driver requested a total number of $numExecs executor(s) " +
-          s"for resource profile id: ${rp.id}.")
-        targetNumExecutorsPerResourceProfileId(rp.id) = numExecs
-        allocatorNodeHealthTracker.setSchedulerExcludedNodes(excludedNodes)
-        true
-      } else {
-        false
+    if (resourceProfileToTotalExecs.isEmpty) {
+      // Set target executor number to 0 to cancel pending allocate request.
+      targetNumExecutorsPerResourceProfileId.keys.foreach { rp =>
+        targetNumExecutorsPerResourceProfileId(rp) = 0
       }
+      allocatorNodeHealthTracker.setSchedulerExcludedNodes(excludedNodes)
+      true
+    } else {
+      val res = resourceProfileToTotalExecs.map { case (rp, numExecs) =>
+        createYarnResourceForResourceProfile(rp)
+        if (numExecs != getOrUpdateTargetNumExecutorsForRPId(rp.id)) {
+          logInfo(s"Driver requested a total number of $numExecs executor(s) " +
+            s"for resource profile id: ${rp.id}.")
+          targetNumExecutorsPerResourceProfileId(rp.id) = numExecs
+          allocatorNodeHealthTracker.setSchedulerExcludedNodes(excludedNodes)
+          true
+        } else {
+          false
+        }
+      }
+      res.exists(_ == true)
     }
-    res.exists(_ == true)
   }
 
   /**

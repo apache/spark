@@ -16,7 +16,6 @@
 #
 
 from typing import Generic, List, Optional, Tuple, TypeVar, Union
-
 import sys
 
 from pyspark import since
@@ -463,7 +462,7 @@ class RankingMetrics(JavaModelWrapper, Generic[T]):
         sc = predictionAndLabels.ctx
         sql_ctx = SQLContext.getOrCreate(sc)
         df = sql_ctx.createDataFrame(
-            predictionAndLabels, schema=sql_ctx._inferSchema(predictionAndLabels)
+            predictionAndLabels, schema=sql_ctx.sparkSession._inferSchema(predictionAndLabels)
         )
         java_model = callMLlibFunc("newRankingMetrics", df._jdf)
         super(RankingMetrics, self).__init__(java_model)
@@ -577,7 +576,7 @@ class MultilabelMetrics(JavaModelWrapper):
         sc = predictionAndLabels.ctx
         sql_ctx = SQLContext.getOrCreate(sc)
         df = sql_ctx.createDataFrame(
-            predictionAndLabels, schema=sql_ctx._inferSchema(predictionAndLabels)
+            predictionAndLabels, schema=sql_ctx.sparkSession._inferSchema(predictionAndLabels)
         )
         assert sc._jvm is not None
         java_class = sc._jvm.org.apache.spark.mllib.evaluation.MultilabelMetrics

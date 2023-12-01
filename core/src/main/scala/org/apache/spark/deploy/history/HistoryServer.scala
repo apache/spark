@@ -40,7 +40,7 @@ import org.apache.spark.util.{ShutdownHookManager, SystemClock, Utils}
  * A web server that renders SparkUIs of completed applications.
  *
  * For the standalone mode, MasterWebUI already achieves this functionality. Thus, the
- * main use case of the HistoryServer is in other deploy modes (e.g. Yarn or Mesos).
+ * main use case of the HistoryServer is in other deploy modes (e.g. Yarn).
  *
  * The logging directory structure is as follows: Within the given base directory, each
  * application's event logs are maintained in the application's own sub-directory. This
@@ -101,7 +101,7 @@ class HistoryServer(
       // Since we may have applications with multiple attempts mixed with applications with a
       // single attempt, we need to try both. Try the single-attempt route first, and if an
       // error is raised, then try the multiple attempt route.
-      if (!loadAppUi(appId, None) && (!attemptId.isDefined || !loadAppUi(appId, attemptId))) {
+      if (!loadAppUi(appId, None) && (attemptId.isEmpty || !loadAppUi(appId, attemptId))) {
         val msg = <div class="row">Application {appId} not found.</div>
         res.setStatus(HttpServletResponse.SC_NOT_FOUND)
         UIUtils.basicSparkPage(req, msg, "Not Found").foreach { n =>

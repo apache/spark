@@ -19,6 +19,7 @@ import sys
 import warnings
 from typing import Any, Callable, NamedTuple, List, Optional, TYPE_CHECKING
 
+from pyspark.errors import PySparkTypeError
 from pyspark.storagelevel import StorageLevel
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.session import SparkSession
@@ -126,7 +127,7 @@ class Catalog:
 
         Parameters
         ----------
-        pattern : str
+        pattern : str, optional
             The pattern that the catalog name needs to match.
 
             .. versionadded: 3.5.0
@@ -197,7 +198,7 @@ class Catalog:
 
         Parameters
         ----------
-        pattern : str
+        pattern : str, optional
             The pattern that the database name needs to match.
 
             .. versionadded: 3.5.0
@@ -314,13 +315,13 @@ class Catalog:
 
         Parameters
         ----------
-        dbName : str
+        dbName : str, optional
             name of the database to list the tables.
 
             .. versionchanged:: 3.4.0
                Allow ``dbName`` to be qualified with catalog name.
 
-        pattern : str
+        pattern : str, optional
             The pattern that the database name needs to match.
 
             .. versionadded: 3.5.0
@@ -446,10 +447,10 @@ class Catalog:
 
         Parameters
         ----------
-        dbName : str
+        dbName : str, optional
             name of the database to list the functions.
             ``dbName`` can be qualified with catalog name.
-        pattern : str
+        pattern : str, optional
             The pattern that the function name needs to match.
 
             .. versionadded: 3.5.0
@@ -851,7 +852,13 @@ class Catalog:
             df = self._jcatalog.createTable(tableName, source, description, options)
         else:
             if not isinstance(schema, StructType):
-                raise TypeError("schema should be StructType")
+                raise PySparkTypeError(
+                    error_class="NOT_STRUCT",
+                    message_parameters={
+                        "arg_name": "schema",
+                        "arg_type": type(schema).__name__,
+                    },
+                )
             scala_datatype = self._jsparkSession.parseDataType(schema.json())
             df = self._jcatalog.createTable(tableName, source, scala_datatype, description, options)
         return DataFrame(df, self._sparkSession)
@@ -1005,7 +1012,7 @@ class Catalog:
             .. versionchanged:: 3.4.0
                 Allow ``tableName`` to be qualified with catalog name.
 
-        storageLevel : :class:`StorageLevel`
+        storageLevel : :class:`StorageLevel`, optional
             storage level to set for persistence.
 
             .. versionchanged:: 3.5.0

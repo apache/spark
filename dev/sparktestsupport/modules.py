@@ -113,6 +113,17 @@ tags = Module(
     ],
 )
 
+utils = Module(
+    name="utils",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/utils/",
+    ],
+    sbt_test_goals=[
+        "common-utils/test",
+    ],
+)
+
 kvstore = Module(
     name="kvstore",
     dependencies=[tags],
@@ -126,7 +137,7 @@ kvstore = Module(
 
 network_common = Module(
     name="network-common",
-    dependencies=[tags],
+    dependencies=[tags, utils],
     source_file_regexes=[
         "common/network-common/",
     ],
@@ -148,7 +159,7 @@ network_shuffle = Module(
 
 unsafe = Module(
     name="unsafe",
-    dependencies=[tags],
+    dependencies=[tags, utils],
     source_file_regexes=[
         "common/unsafe",
     ],
@@ -170,7 +181,7 @@ launcher = Module(
 
 core = Module(
     name="core",
-    dependencies=[kvstore, network_common, network_shuffle, unsafe, launcher],
+    dependencies=[kvstore, network_common, network_shuffle, unsafe, launcher, utils],
     source_file_regexes=[
         "core/",
     ],
@@ -179,9 +190,17 @@ core = Module(
     ],
 )
 
+api = Module(
+    name="api",
+    dependencies=[utils, unsafe],
+    source_file_regexes=[
+        "sql/api/",
+    ],
+)
+
 catalyst = Module(
     name="catalyst",
-    dependencies=[tags, core],
+    dependencies=[tags, core, api],
     source_file_regexes=[
         "sql/catalyst/",
     ],
@@ -198,6 +217,7 @@ sql = Module(
     dependencies=[catalyst],
     source_file_regexes=[
         "sql/core/",
+        "python/pyspark/sql/worker/",  # analyze_udtf is invoked and tested in JVM
     ],
     sbt_test_goals=[
         "sql/test",
@@ -449,8 +469,10 @@ pyspark_sql = Module(
         "pyspark.sql.catalog",
         "pyspark.sql.column",
         "pyspark.sql.dataframe",
+        "pyspark.sql.datasource",
         "pyspark.sql.group",
-        "pyspark.sql.functions",
+        "pyspark.sql.functions.builtin",
+        "pyspark.sql.functions.partitioning",
         "pyspark.sql.readwriter",
         "pyspark.sql.streaming.query",
         "pyspark.sql.streaming.readwriter",
@@ -493,6 +515,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.pandas.test_pandas_udf_window",
         "pyspark.sql.tests.pandas.test_converter",
         "pyspark.sql.tests.test_pandas_sqlmetrics",
+        "pyspark.sql.tests.test_python_datasource",
         "pyspark.sql.tests.test_readwriter",
         "pyspark.sql.tests.test_serde",
         "pyspark.sql.tests.test_session",
@@ -837,7 +860,9 @@ pyspark_connect = Module(
         "pyspark.sql.connect.column",
         "pyspark.sql.connect.readwriter",
         "pyspark.sql.connect.dataframe",
-        "pyspark.sql.connect.functions",
+        "pyspark.sql.connect.functions.builtin",
+        "pyspark.sql.connect.functions.partitioning",
+        "pyspark.sql.connect.observation",
         "pyspark.sql.connect.avro.functions",
         "pyspark.sql.connect.protobuf.functions",
         "pyspark.sql.connect.streaming.readwriter",
@@ -870,6 +895,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_utils",
         "pyspark.sql.tests.connect.client.test_artifact",
         "pyspark.sql.tests.connect.client.test_client",
+        "pyspark.sql.tests.connect.client.test_reattach",
         "pyspark.sql.tests.connect.streaming.test_parity_streaming",
         "pyspark.sql.tests.connect.streaming.test_parity_listener",
         "pyspark.sql.tests.connect.streaming.test_parity_foreach",
@@ -1156,14 +1182,6 @@ yarn = Module(
         "network-yarn/test",
     ],
     test_tags=["org.apache.spark.tags.ExtendedYarnTest"],
-)
-
-mesos = Module(
-    name="mesos",
-    dependencies=[],
-    source_file_regexes=["resource-managers/mesos/"],
-    build_profile_flags=["-Pmesos"],
-    sbt_test_goals=["mesos/test"],
 )
 
 kubernetes = Module(

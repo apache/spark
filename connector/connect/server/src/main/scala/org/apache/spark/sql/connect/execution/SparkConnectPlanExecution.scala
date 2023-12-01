@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.connect.execution
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success}
 
 import com.google.protobuf.ByteString
@@ -56,8 +56,8 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       throw new IllegalStateException(
         s"Illegal operation type ${request.getPlan.getOpTypeCase} to be handled here.")
     }
-    val planner = new SparkConnectPlanner(sessionHolder)
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker
+    val planner = new SparkConnectPlanner(executeHolder)
+    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val dataframe =
       Dataset.ofRows(
         sessionHolder.session,
@@ -65,11 +65,9 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         tracker)
     responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(dataframe, responseObserver, executeHolder)
-    responseObserver.onNext(
-      MetricGenerator.createMetricsResponse(request.getSessionId, dataframe))
-    if (dataframe.queryExecution.observedMetrics.nonEmpty) {
-      responseObserver.onNext(createObservedMetricsResponse(request.getSessionId, dataframe))
-    }
+    responseObserver.onNext(MetricGenerator.createMetricsResponse(sessionHolder, dataframe))
+    createObservedMetricsResponse(request.getSessionId, dataframe).foreach(
+      responseObserver.onNext)
   }
 
   type Batch = (Array[Byte], Long)
@@ -110,12 +108,17 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       errorOnDuplicatedFieldNames = false)
 
     var numSent = 0
-    def sendBatch(bytes: Array[Byte], count: Long): Unit = {
-      val response = proto.ExecutePlanResponse.newBuilder().setSessionId(sessionId)
+    def sendBatch(bytes: Array[Byte], count: Long, startOffset: Long): Unit = {
+      val response = proto.ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setServerSideSessionId(sessionHolder.serverSessionId)
+
       val batch = proto.ExecutePlanResponse.ArrowBatch
         .newBuilder()
         .setRowCount(count)
         .setData(ByteString.copyFrom(bytes))
+        .setStartOffset(startOffset)
         .build()
       response.setArrowBatch(batch)
       responseObserver.onNext(response.build())
@@ -125,8 +128,10 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     dataframe.queryExecution.executedPlan match {
       case LocalTableScanExec(_, rows) =>
         executePlan.eventsManager.postFinished(Some(rows.length))
+        var offset = 0L
         converter(rows.iterator).foreach { case (bytes, count) =>
-          sendBatch(bytes, count)
+          sendBatch(bytes, count, offset)
+          offset += count
         }
       case _ =>
         SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectArrow")) {
@@ -185,6 +190,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
             // tasks not related to scheduling. This is particularly important if there are
             // multiple users or clients running code at the same time.
             var currentPartitionId = 0
+            var currentOffset = 0L
             while (currentPartitionId < numPartitions) {
               val partition = signal.synchronized {
                 var part = partitions(currentPartitionId)
@@ -201,7 +207,8 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
               }
 
               partition.foreach { case (bytes, count) =>
-                sendBatch(bytes, count)
+                sendBatch(bytes, count, currentOffset)
+                currentOffset += count
               }
 
               currentPartitionId += 1
@@ -220,6 +227,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
           schema,
           timeZoneId,
           errorOnDuplicatedFieldNames = false),
+        0L,
         0L)
     }
   }
@@ -229,25 +237,48 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     ExecutePlanResponse
       .newBuilder()
       .setSessionId(sessionId)
+      .setServerSideSessionId(sessionHolder.serverSessionId)
       .setSchema(DataTypeProtoConverter.toConnectProtoType(schema))
       .build()
   }
 
   private def createObservedMetricsResponse(
       sessionId: String,
-      dataframe: DataFrame): ExecutePlanResponse = {
-    val observedMetrics = dataframe.queryExecution.observedMetrics.map { case (name, row) =>
-      val cols = (0 until row.length).map(i => toLiteralProto(row(i)))
-      ExecutePlanResponse.ObservedMetrics
+      dataframe: DataFrame): Option[ExecutePlanResponse] = {
+    val observedMetrics = dataframe.queryExecution.observedMetrics.collect {
+      case (name, row) if !executeHolder.observations.contains(name) =>
+        val values = (0 until row.length).map { i =>
+          (if (row.schema != null) Some(row.schema.fieldNames(i)) else None, row(i))
+        }
+        name -> values
+    }
+    if (observedMetrics.nonEmpty) {
+      Some(SparkConnectPlanExecution
+        .createObservedMetricsResponse(sessionId, sessionHolder.serverSessionId, observedMetrics))
+    } else None
+  }
+}
+
+object SparkConnectPlanExecution {
+  def createObservedMetricsResponse(
+      sessionId: String,
+      serverSessionId: String,
+      metrics: Map[String, Seq[(Option[String], Any)]]): ExecutePlanResponse = {
+    val observedMetrics = metrics.map { case (name, values) =>
+      val metrics = ExecutePlanResponse.ObservedMetrics
         .newBuilder()
         .setName(name)
-        .addAllValues(cols.asJava)
-        .build()
+      values.foreach { case (key, value) =>
+        metrics.addValues(toLiteralProto(value))
+        key.foreach(metrics.addKeys)
+      }
+      metrics.build()
     }
     // Prepare a response with the observed metrics.
     ExecutePlanResponse
       .newBuilder()
       .setSessionId(sessionId)
+      .setServerSideSessionId(serverSessionId)
       .addAllObservedMetrics(observedMetrics.asJava)
       .build()
   }

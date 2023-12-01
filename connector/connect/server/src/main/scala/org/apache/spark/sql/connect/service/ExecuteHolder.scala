@@ -19,12 +19,13 @@ package org.apache.spark.sql.connect.service
 
 import java.util.UUID
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.Observation
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.config.Connect.CONNECT_EXECUTE_REATTACHABLE_ENABLED
 import org.apache.spark.sql.connect.execution.{ExecuteGrpcResponseSender, ExecuteResponseObserver, ExecuteThreadRunner}
@@ -89,6 +90,8 @@ private[connect] class ExecuteHolder(
 
   val eventsManager: ExecuteEventsManager = ExecuteEventsManager(this, new SystemClock())
 
+  val observations: mutable.Map[String, Observation] = mutable.Map.empty
+
   private val runner: ExecuteThreadRunner = new ExecuteThreadRunner(this)
 
   /** System.currentTimeMillis when this ExecuteHolder was created. */
@@ -132,6 +135,10 @@ private[connect] class ExecuteHolder(
     runner.join()
   }
 
+  def addObservation(name: String, observation: Observation): Unit = synchronized {
+    observations += (name -> observation)
+  }
+
   /**
    * Attach an ExecuteGrpcResponseSender that will consume responses from the query and send them
    * out on the Grpc response stream. The sender will start from the start of the response stream.
@@ -164,6 +171,10 @@ private[connect] class ExecuteHolder(
   private def addGrpcResponseSender(
       sender: ExecuteGrpcResponseSender[proto.ExecutePlanResponse]) = synchronized {
     if (closedTime.isEmpty) {
+      // Interrupt all other senders - there can be only one active sender.
+      // Interrupted senders will remove themselves with removeGrpcResponseSender when they exit.
+      grpcResponseSenders.foreach(_.interrupt())
+      // And add this one.
       grpcResponseSenders += sender
       lastAttachedRpcTime = None
     } else {

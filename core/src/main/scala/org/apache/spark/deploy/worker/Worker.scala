@@ -45,6 +45,7 @@ import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc._
 import org.apache.spark.util.{RpcUtils, SignalUtils, SparkUncaughtExceptionHandler, ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 private[deploy] class Worker(
     override val rpcEnv: RpcEnv,
@@ -62,6 +63,7 @@ private[deploy] class Worker(
 
   private val host = rpcEnv.address.host
   private val port = rpcEnv.address.port
+  private val workerIdPattern = conf.get(config.Worker.WORKER_ID_PATTERN)
 
   Utils.checkHost(host)
   assert (port > 0)
@@ -103,7 +105,7 @@ private[deploy] class Worker(
   private val FUZZ_MULTIPLIER_INTERVAL_LOWER_BOUND = 0.500
   private val REGISTRATION_RETRY_FUZZ_MULTIPLIER = {
     val randomNumberGenerator = new Random(UUID.randomUUID.getMostSignificantBits)
-    randomNumberGenerator.nextDouble + FUZZ_MULTIPLIER_INTERVAL_LOWER_BOUND
+    randomNumberGenerator.nextDouble() + FUZZ_MULTIPLIER_INTERVAL_LOWER_BOUND
   }
   private val INITIAL_REGISTRATION_RETRY_INTERVAL_SECONDS = (math.round(10 *
     REGISTRATION_RETRY_FUZZ_MULTIPLIER))
@@ -595,7 +597,7 @@ private[deploy] class Worker(
                   logWarning(s"${e.getMessage}. Ignoring this directory.")
                   None
               }
-            }.toSeq
+            }.toImmutableArraySeq
             if (dirs.isEmpty) {
               throw new IOException("No subfolder can be created in " +
                 s"${localRootDirs.mkString(",")}.")
@@ -813,7 +815,7 @@ private[deploy] class Worker(
   }
 
   private def generateWorkerId(): String = {
-    "worker-%s-%s-%d".format(createDateFormat.format(new Date), host, port)
+    workerIdPattern.format(createDateFormat.format(new Date), host, port)
   }
 
   override def onStop(): Unit = {

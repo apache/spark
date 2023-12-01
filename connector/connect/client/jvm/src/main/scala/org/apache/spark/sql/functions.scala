@@ -18,7 +18,7 @@ package org.apache.spark.sql
 
 import java.util.Collections
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.connect.proto
@@ -55,16 +55,28 @@ import org.apache.spark.util.SparkClassUtils
  * only `Column` but also other types such as a native string. The other variants currently exist
  * for historical reasons.
  *
- * @groupname udf_funcs UDF functions
+ * @groupname udf_funcs UDF, UDAF and UDT
  * @groupname agg_funcs Aggregate functions
- * @groupname datetime_funcs Date time functions
- * @groupname sort_funcs Sorting functions
- * @groupname normal_funcs Non-aggregate functions
- * @groupname math_funcs Math functions
+ * @groupname datetime_funcs Date and Timestamp functions
+ * @groupname sort_funcs Sort functions
+ * @groupname normal_funcs Normal functions
+ * @groupname math_funcs Mathematical functions
+ * @groupname bitwise_funcs Bitwise functions
+ * @groupname predicate_funcs Predicate functions
+ * @groupname conditional_funcs Conditional functions
+ * @groupname hash_funcs Hash functions
  * @groupname misc_funcs Misc functions
  * @groupname window_funcs Window functions
+ * @groupname generator_funcs Generator functions
  * @groupname string_funcs String functions
  * @groupname collection_funcs Collection functions
+ * @groupname array_funcs Array functions
+ * @groupname map_funcs Map functions
+ * @groupname struct_funcs Struct functions
+ * @groupname csv_funcs CSV functions
+ * @groupname json_funcs JSON functions
+ * @groupname xml_funcs XML functions
+ * @groupname url_funcs URL functions
  * @groupname partition_transforms Partition transform functions
  * @groupname Ungrouped Support functions for DataFrames
  *
@@ -101,6 +113,7 @@ object functions {
    * Scala Symbol, it is converted into a [[Column]] also. Otherwise, a new [[Column]] is created
    * to represent the literal value.
    *
+   * @group normal_funcs
    * @since 3.4.0
    */
   def lit(literal: Any): Column = {
@@ -145,7 +158,7 @@ object functions {
   /**
    * Creates a struct with the given field names and values.
    *
-   * @group normal_funcs
+   * @group struct_funcs
    * @since 3.5.0
    */
   def named_struct(cols: Column*): Column = Column.fn("named_struct", cols: _*)
@@ -1610,7 +1623,7 @@ object functions {
   /**
    * Creates a new array column. The input columns must all have the same data type.
    *
-   * @group normal_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   @scala.annotation.varargs
@@ -1619,7 +1632,7 @@ object functions {
   /**
    * Creates a new array column. The input columns must all have the same data type.
    *
-   * @group normal_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   @scala.annotation.varargs
@@ -1632,7 +1645,7 @@ object functions {
    * value1, key2, value2, ...). The key columns must all have the same data type, and can't be
    * null. The value columns must all have the same data type.
    *
-   * @group normal_funcs
+   * @group map_funcs
    * @since 3.4.0
    */
   @scala.annotation.varargs
@@ -1642,7 +1655,7 @@ object functions {
    * Creates a new map column. The array in the first column is used for keys. The array in the
    * second column is used for values. All elements in the array for key should not be null.
    *
-   * @group normal_funcs
+   * @group map_funcs
    * @since 3.4.0
    */
   def map_from_arrays(keys: Column, values: Column): Column =
@@ -1698,7 +1711,7 @@ object functions {
    * For example, `coalesce(a, b, c)` will return a if a is not null, or b if a is null and b is
    * not null, or c if both a and b are null but c is not null.
    *
-   * @group normal_funcs
+   * @group conditional_funcs
    * @since 3.4.0
    */
   @scala.annotation.varargs
@@ -1707,7 +1720,7 @@ object functions {
   /**
    * Creates a string column for the file name of the current Spark task.
    *
-   * @group normal_funcs
+   * @group misc_funcs
    * @since 3.4.0
    */
   def input_file_name(): Column = Column.fn("input_file_name")
@@ -1715,7 +1728,7 @@ object functions {
   /**
    * Return true iff the column is NaN.
    *
-   * @group normal_funcs
+   * @group predicate_funcs
    * @since 3.4.0
    */
   def isnan(e: Column): Column = e.isNaN
@@ -1723,7 +1736,7 @@ object functions {
   /**
    * Return true iff the column is null.
    *
-   * @group normal_funcs
+   * @group predicate_funcs
    * @since 3.4.0
    */
   def isnull(e: Column): Column = e.isNull
@@ -1743,7 +1756,7 @@ object functions {
    * 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
    * }}}
    *
-   * @group normal_funcs
+   * @group misc_funcs
    * @since 3.4.0
    */
   @deprecated("Use monotonically_increasing_id()", "2.0.0")
@@ -1764,7 +1777,7 @@ object functions {
    * 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
    * }}}
    *
-   * @group normal_funcs
+   * @group misc_funcs
    * @since 3.4.0
    */
   def monotonically_increasing_id(): Column = Column.fn("monotonically_increasing_id")
@@ -1774,7 +1787,7 @@ object functions {
    *
    * Both inputs should be floating point columns (DoubleType or FloatType).
    *
-   * @group normal_funcs
+   * @group conditional_funcs
    * @since 3.4.0
    */
   def nanvl(col1: Column, col2: Column): Column = Column.fn("nanvl", col1, col2)
@@ -1790,7 +1803,7 @@ object functions {
    *   df.select( negate(df.col("amount")) );
    * }}}
    *
-   * @group normal_funcs
+   * @group math_funcs
    * @since 3.4.0
    */
   def negate(e: Column): Column = -e
@@ -1805,7 +1818,7 @@ object functions {
    *   df.filter( not(df.col("isActive")) );
    * }}}
    *
-   * @group normal_funcs
+   * @group predicate_funcs
    * @since 3.4.0
    */
   def not(e: Column): Column = !e
@@ -1817,7 +1830,7 @@ object functions {
    * @note
    *   The function is non-deterministic in general case.
    *
-   * @group normal_funcs
+   * @group math_funcs
    * @since 3.4.0
    */
   def rand(seed: Long): Column = Column.fn("rand", lit(seed))
@@ -1829,7 +1842,7 @@ object functions {
    * @note
    *   The function is non-deterministic in general case.
    *
-   * @group normal_funcs
+   * @group math_funcs
    * @since 3.4.0
    */
   def rand(): Column = Column.fn("rand", lit(SparkClassUtils.random.nextLong))
@@ -1841,7 +1854,7 @@ object functions {
    * @note
    *   The function is non-deterministic in general case.
    *
-   * @group normal_funcs
+   * @group math_funcs
    * @since 3.4.0
    */
   def randn(seed: Long): Column = Column.fn("randn", lit(seed))
@@ -1853,7 +1866,7 @@ object functions {
    * @note
    *   The function is non-deterministic in general case.
    *
-   * @group normal_funcs
+   * @group math_funcs
    * @since 3.4.0
    */
   def randn(): Column = Column.fn("randn", lit(SparkClassUtils.random.nextLong))
@@ -1864,7 +1877,7 @@ object functions {
    * @note
    *   This is non-deterministic because it depends on data partitioning and task scheduling.
    *
-   * @group normal_funcs
+   * @group misc_funcs
    * @since 3.4.0
    */
   def spark_partition_id(): Column = Column.fn("spark_partition_id")
@@ -1943,7 +1956,7 @@ object functions {
    * StructField's name, otherwise, the newly generated StructField's name would be auto generated
    * as `col` with a suffix `index + 1`, i.e. col1, col2, col3, ...
    *
-   * @group normal_funcs
+   * @group struct_funcs
    * @since 3.4.0
    */
   @scala.annotation.varargs
@@ -1952,7 +1965,7 @@ object functions {
   /**
    * Creates a new struct column that composes multiple input columns.
    *
-   * @group normal_funcs
+   * @group struct_funcs
    * @since 3.4.0
    */
   @scala.annotation.varargs
@@ -1978,7 +1991,7 @@ object functions {
    *     .otherwise(2))
    * }}}
    *
-   * @group normal_funcs
+   * @group conditional_funcs
    * @since 3.4.0
    */
   def when(condition: Column, value: Any): Column = Column { builder =>
@@ -1991,7 +2004,7 @@ object functions {
   /**
    * Computes bitwise NOT (~) of a number.
    *
-   * @group normal_funcs
+   * @group bitwise_funcs
    * @since 3.4.0
    */
   @deprecated("Use bitwise_not", "3.2.0")
@@ -2000,7 +2013,7 @@ object functions {
   /**
    * Computes bitwise NOT (~) of a number.
    *
-   * @group normal_funcs
+   * @group bitwise_funcs
    * @since 3.4.0
    */
   def bitwise_not(e: Column): Column = Column.fn("~", e)
@@ -2512,7 +2525,7 @@ object functions {
    * Returns the greatest value of the list of values, skipping null values. This function takes
    * at least 2 parameters. It will return null iff all parameters are null.
    *
-   * @group normal_funcs
+   * @group math_funcs
    * @since 3.4.0
    */
   @scala.annotation.varargs
@@ -2522,7 +2535,7 @@ object functions {
    * Returns the greatest value of the list of column names, skipping null values. This function
    * takes at least 2 parameters. It will return null iff all parameters are null.
    *
-   * @group normal_funcs
+   * @group math_funcs
    * @since 3.4.0
    */
   @scala.annotation.varargs
@@ -2615,7 +2628,7 @@ object functions {
    * Returns the least value of the list of values, skipping null values. This function takes at
    * least 2 parameters. It will return null iff all parameters are null.
    *
-   * @group normal_funcs
+   * @group math_funcs
    * @since 3.4.0
    */
   @scala.annotation.varargs
@@ -2625,7 +2638,7 @@ object functions {
    * Returns the least value of the list of column names, skipping null values. This function
    * takes at least 2 parameters. It will return null iff all parameters are null.
    *
-   * @group normal_funcs
+   * @group math_funcs
    * @since 3.4.0
    */
   @scala.annotation.varargs
@@ -2909,7 +2922,7 @@ object functions {
    * Shift the given value numBits left. If the given value is a long value, this function will
    * return a long value else it will return an integer value.
    *
-   * @group math_funcs
+   * @group bitwise_funcs
    * @since 3.4.0
    */
   @deprecated("Use shiftleft", "3.2.0")
@@ -2919,7 +2932,7 @@ object functions {
    * Shift the given value numBits left. If the given value is a long value, this function will
    * return a long value else it will return an integer value.
    *
-   * @group math_funcs
+   * @group bitwise_funcs
    * @since 3.4.0
    */
   def shiftleft(e: Column, numBits: Int): Column = Column.fn("shiftleft", e, lit(numBits))
@@ -2928,7 +2941,7 @@ object functions {
    * (Signed) shift the given value numBits right. If the given value is a long value, it will
    * return a long value else it will return an integer value.
    *
-   * @group math_funcs
+   * @group bitwise_funcs
    * @since 3.4.0
    */
   @deprecated("Use shiftright", "3.2.0")
@@ -2938,7 +2951,7 @@ object functions {
    * (Signed) shift the given value numBits right. If the given value is a long value, it will
    * return a long value else it will return an integer value.
    *
-   * @group math_funcs
+   * @group bitwise_funcs
    * @since 3.4.0
    */
   def shiftright(e: Column, numBits: Int): Column = Column.fn("shiftright", e, lit(numBits))
@@ -2947,7 +2960,7 @@ object functions {
    * Unsigned shift the given value numBits right. If the given value is a long value, it will
    * return a long value else it will return an integer value.
    *
-   * @group math_funcs
+   * @group bitwise_funcs
    * @since 3.4.0
    */
   @deprecated("Use shiftrightunsigned", "3.2.0")
@@ -2957,7 +2970,7 @@ object functions {
    * Unsigned shift the given value numBits right. If the given value is a long value, it will
    * return a long value else it will return an integer value.
    *
-   * @group math_funcs
+   * @group bitwise_funcs
    * @since 3.4.0
    */
   def shiftrightunsigned(e: Column, numBits: Int): Column =
@@ -3220,7 +3233,7 @@ object functions {
    * Calculates the MD5 digest of a binary column and returns the value as a 32 character hex
    * string.
    *
-   * @group misc_funcs
+   * @group hash_funcs
    * @since 3.4.0
    */
   def md5(e: Column): Column = Column.fn("md5", e)
@@ -3229,7 +3242,7 @@ object functions {
    * Calculates the SHA-1 digest of a binary column and returns the value as a 40 character hex
    * string.
    *
-   * @group misc_funcs
+   * @group hash_funcs
    * @since 3.4.0
    */
   def sha1(e: Column): Column = Column.fn("sha1", e)
@@ -3243,7 +3256,7 @@ object functions {
    * @param numBits
    *   one of 224, 256, 384, or 512.
    *
-   * @group misc_funcs
+   * @group hash_funcs
    * @since 3.4.0
    */
   def sha2(e: Column, numBits: Int): Column = {
@@ -3257,7 +3270,7 @@ object functions {
    * Calculates the cyclic redundancy check value (CRC32) of a binary column and returns the value
    * as a bigint.
    *
-   * @group misc_funcs
+   * @group hash_funcs
    * @since 3.4.0
    */
   def crc32(e: Column): Column = Column.fn("crc32", e)
@@ -3265,7 +3278,7 @@ object functions {
   /**
    * Calculates the hash code of given columns, and returns the result as an int column.
    *
-   * @group misc_funcs
+   * @group hash_funcs
    * @since 3.4.0
    */
   @scala.annotation.varargs
@@ -3275,7 +3288,7 @@ object functions {
    * Calculates the hash code of given columns using the 64-bit variant of the xxHash algorithm,
    * and returns the result as a long column. The hash computation uses an initial seed of 42.
    *
-   * @group misc_funcs
+   * @group hash_funcs
    * @since 3.4.0
    */
   @scala.annotation.varargs
@@ -3624,7 +3637,7 @@ object functions {
   /**
    * Returns a sha1 hash value as a hex string of the `col`.
    *
-   * @group misc_funcs
+   * @group hash_funcs
    * @since 3.5.0
    */
   def sha(col: Column): Column = Column.fn("sha", col)
@@ -3700,7 +3713,7 @@ object functions {
    * Returns a random value with independent and identically distributed (i.i.d.) uniformly
    * distributed values in [0, 1).
    *
-   * @group misc_funcs
+   * @group math_funcs
    * @since 3.5.0
    */
   def random(seed: Column): Column = Column.fn("random", seed)
@@ -3709,7 +3722,7 @@ object functions {
    * Returns a random value with independent and identically distributed (i.i.d.) uniformly
    * distributed values in [0, 1).
    *
-   * @group misc_funcs
+   * @group math_funcs
    * @since 3.5.0
    */
   def random(): Column = Column.fn("random", lit(SparkClassUtils.random.nextLong))
@@ -3736,7 +3749,7 @@ object functions {
    * Returns a bitmap with the positions of the bits set from all the values from the input
    * column. The input column will most likely be bitmap_bit_position().
    *
-   * @group misc_funcs
+   * @group agg_funcs
    * @since 3.5.0
    */
   def bitmap_construct_agg(col: Column): Column =
@@ -3754,7 +3767,7 @@ object functions {
    * Returns a bitmap that is the bitwise OR of all of the bitmaps from the input column. The
    * input column should be bitmaps created from bitmap_construct_agg().
    *
-   * @group misc_funcs
+   * @group agg_funcs
    * @since 3.5.0
    */
   def bitmap_or_agg(col: Column): Column = Column.fn("bitmap_or_agg", col)
@@ -3985,7 +3998,7 @@ object functions {
   /**
    * Returns true if `str` matches `regexp`, or false otherwise.
    *
-   * @group string_funcs
+   * @group predicate_funcs
    * @since 3.5.0
    */
   def rlike(str: Column, regexp: Column): Column = Column.fn("rlike", str, regexp)
@@ -3993,7 +4006,7 @@ object functions {
   /**
    * Returns true if `str` matches `regexp`, or false otherwise.
    *
-   * @group string_funcs
+   * @group predicate_funcs
    * @since 3.5.0
    */
   def regexp(str: Column, regexp: Column): Column = Column.fn("regexp", str, regexp)
@@ -4001,7 +4014,7 @@ object functions {
   /**
    * Returns true if `str` matches `regexp`, or false otherwise.
    *
-   * @group string_funcs
+   * @group predicate_funcs
    * @since 3.5.0
    */
   def regexp_like(str: Column, regexp: Column): Column = Column.fn("regexp_like", str, regexp)
@@ -4469,7 +4482,7 @@ object functions {
   /**
    * Extracts a part from a URL.
    *
-   * @group string_funcs
+   * @group url_funcs
    * @since 3.5.0
    */
   def parse_url(url: Column, partToExtract: Column, key: Column): Column =
@@ -4478,7 +4491,7 @@ object functions {
   /**
    * Extracts a part from a URL.
    *
-   * @group string_funcs
+   * @group url_funcs
    * @since 3.5.0
    */
   def parse_url(url: Column, partToExtract: Column): Column =
@@ -4497,7 +4510,7 @@ object functions {
    * Decodes a `str` in 'application/x-www-form-urlencoded' format using a specific encoding
    * scheme.
    *
-   * @group string_funcs
+   * @group url_funcs
    * @since 3.5.0
    */
   def url_decode(str: Column): Column = Column.fn("url_decode", str)
@@ -4506,7 +4519,7 @@ object functions {
    * Translates a string into 'application/x-www-form-urlencoded' format using a specific encoding
    * scheme.
    *
-   * @group string_funcs
+   * @group url_funcs
    * @since 3.5.0
    */
   def url_encode(str: Column): Column = Column.fn("url_encode", str)
@@ -4669,7 +4682,7 @@ object functions {
    * Returns true if str matches `pattern` with `escapeChar`, null if any arguments are null,
    * false otherwise.
    *
-   * @group string_funcs
+   * @group predicate_funcs
    * @since 3.5.0
    */
   def like(str: Column, pattern: Column, escapeChar: Column): Column =
@@ -4679,7 +4692,7 @@ object functions {
    * Returns true if str matches `pattern` with `escapeChar`('\'), null if any arguments are null,
    * false otherwise.
    *
-   * @group string_funcs
+   * @group predicate_funcs
    * @since 3.5.0
    */
   def like(str: Column, pattern: Column): Column = Column.fn("like", str, pattern)
@@ -4688,7 +4701,7 @@ object functions {
    * Returns true if str matches `pattern` with `escapeChar` case-insensitively, null if any
    * arguments are null, false otherwise.
    *
-   * @group string_funcs
+   * @group predicate_funcs
    * @since 3.5.0
    */
   def ilike(str: Column, pattern: Column, escapeChar: Column): Column =
@@ -4698,7 +4711,7 @@ object functions {
    * Returns true if str matches `pattern` with `escapeChar`('\') case-insensitively, null if any
    * arguments are null, false otherwise.
    *
-   * @group string_funcs
+   * @group predicate_funcs
    * @since 3.5.0
    */
   def ilike(str: Column, pattern: Column): Column = Column.fn("ilike", str, pattern)
@@ -5937,7 +5950,7 @@ object functions {
 
   /**
    * Returns null if the array is null, true if the array contains `value`, and false otherwise.
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def array_contains(column: Column, value: Any): Column =
@@ -5947,7 +5960,7 @@ object functions {
    * Returns an ARRAY containing all elements from the source ARRAY as well as the new element.
    * The new element/column is located at end of the ARRAY.
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def array_append(column: Column, element: Any): Column =
@@ -5957,7 +5970,7 @@ object functions {
    * Returns `true` if `a1` and `a2` have at least one non-null element in common. If not and both
    * the arrays are non-empty and any of them contains a `null`, it returns `null`. It returns
    * `false` otherwise.
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def arrays_overlap(a1: Column, a2: Column): Column = Column.fn("arrays_overlap", a1, a2)
@@ -5973,7 +5986,7 @@ object functions {
    * @param length
    *   the length of the slice
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def slice(x: Column, start: Int, length: Int): Column =
@@ -5990,7 +6003,7 @@ object functions {
    * @param length
    *   the length of the slice
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def slice(x: Column, start: Column, length: Column): Column =
@@ -5999,7 +6012,7 @@ object functions {
   /**
    * Concatenates the elements of `column` using the `delimiter`. Null values are replaced with
    * `nullReplacement`.
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def array_join(column: Column, delimiter: String, nullReplacement: String): Column =
@@ -6007,7 +6020,7 @@ object functions {
 
   /**
    * Concatenates the elements of `column` using the `delimiter`.
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def array_join(column: Column, delimiter: String): Column =
@@ -6031,7 +6044,7 @@ object functions {
    *   The position is not zero based, but 1 based index. Returns 0 if value could not be found in
    *   array.
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def array_position(column: Column, value: Any): Column =
@@ -6054,7 +6067,7 @@ object functions {
    * (map, key) - Returns value for given key. The function always returns NULL if the key is not
    * contained in the map.
    *
-   * @group map_funcs
+   * @group collection_funcs
    * @since 3.5.0
    */
   def try_element_at(column: Column, value: Column): Column =
@@ -6064,7 +6077,7 @@ object functions {
    * Returns element of array at given (0-based) index. If the index points outside of the array
    * boundaries, then this function returns NULL.
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def get(column: Column, index: Column): Column = Column.fn("get", column, index)
@@ -6094,7 +6107,7 @@ object functions {
   /**
    * Remove all elements that equal to element from the given array.
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def array_remove(column: Column, element: Any): Column =
@@ -6103,7 +6116,7 @@ object functions {
   /**
    * Remove all null elements from the given array.
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def array_compact(column: Column): Column = Column.fn("array_compact", column)
@@ -6112,7 +6125,7 @@ object functions {
    * Returns an array containing value as well as all elements from array. The new element is
    * positioned at the beginning of the array.
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.5.0
    */
   def array_prepend(column: Column, element: Any): Column =
@@ -6120,7 +6133,7 @@ object functions {
 
   /**
    * Removes duplicate values from the array.
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def array_distinct(e: Column): Column = Column.fn("array_distinct", e)
@@ -6129,7 +6142,7 @@ object functions {
    * Returns an array of the elements in the intersection of the given two arrays, without
    * duplicates.
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def array_intersect(col1: Column, col2: Column): Column =
@@ -6138,7 +6151,7 @@ object functions {
   /**
    * Adds an item into a given array at a specified position
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def array_insert(arr: Column, pos: Column, value: Column): Column =
@@ -6147,7 +6160,7 @@ object functions {
   /**
    * Returns an array of the elements in the union of the given two arrays, without duplicates.
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def array_union(col1: Column, col2: Column): Column =
@@ -6157,7 +6170,7 @@ object functions {
    * Returns an array of the elements in the first array but not in the second array, without
    * duplicates. The order of elements in the result is not determined
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def array_except(col1: Column, col2: Column): Column =
@@ -6166,7 +6179,7 @@ object functions {
   /**
    * Returns a string array of values within the nodes of xml that match the XPath expression.
    *
-   * @group "xml_funcs"
+   * @group xml_funcs
    * @since 3.5.0
    */
   def xpath(xml: Column, path: Column): Column =
@@ -6175,7 +6188,7 @@ object functions {
   /**
    * Returns true if the XPath expression evaluates to true, or if a matching node is found.
    *
-   * @group "xml_funcs"
+   * @group xml_funcs
    * @since 3.5.0
    */
   def xpath_boolean(xml: Column, path: Column): Column =
@@ -6185,7 +6198,7 @@ object functions {
    * Returns a double value, the value zero if no match is found, or NaN if a match is found but
    * the value is non-numeric.
    *
-   * @group "xml_funcs"
+   * @group xml_funcs
    * @since 3.5.0
    */
   def xpath_double(xml: Column, path: Column): Column =
@@ -6195,7 +6208,7 @@ object functions {
    * Returns a double value, the value zero if no match is found, or NaN if a match is found but
    * the value is non-numeric.
    *
-   * @group "xml_funcs"
+   * @group xml_funcs
    * @since 3.5.0
    */
   def xpath_number(xml: Column, path: Column): Column =
@@ -6205,7 +6218,7 @@ object functions {
    * Returns a float value, the value zero if no match is found, or NaN if a match is found but
    * the value is non-numeric.
    *
-   * @group "xml_funcs"
+   * @group xml_funcs
    * @since 3.5.0
    */
   def xpath_float(xml: Column, path: Column): Column =
@@ -6215,7 +6228,7 @@ object functions {
    * Returns an integer value, or the value zero if no match is found, or a match is found but the
    * value is non-numeric.
    *
-   * @group "xml_funcs"
+   * @group xml_funcs
    * @since 3.5.0
    */
   def xpath_int(xml: Column, path: Column): Column =
@@ -6225,7 +6238,7 @@ object functions {
    * Returns a long integer value, or the value zero if no match is found, or a match is found but
    * the value is non-numeric.
    *
-   * @group "xml_funcs"
+   * @group xml_funcs
    * @since 3.5.0
    */
   def xpath_long(xml: Column, path: Column): Column =
@@ -6235,7 +6248,7 @@ object functions {
    * Returns a short integer value, or the value zero if no match is found, or a match is found
    * but the value is non-numeric.
    *
-   * @group "xml_funcs"
+   * @group xml_funcs
    * @since 3.5.0
    */
   def xpath_short(xml: Column, path: Column): Column =
@@ -6244,7 +6257,7 @@ object functions {
   /**
    * Returns the text contents of the first xml node that matches the XPath expression.
    *
-   * @group "xml_funcs"
+   * @group xml_funcs
    * @since 3.5.0
    */
   def xpath_string(xml: Column, path: Column): Column =
@@ -6595,7 +6608,7 @@ object functions {
    * name `col` for elements in the array and `key` and `value` for elements in the map unless
    * specified otherwise.
    *
-   * @group collection_funcs
+   * @group generator_funcs
    * @since 3.4.0
    */
   def explode(e: Column): Column = Column.fn("explode", e)
@@ -6605,7 +6618,7 @@ object functions {
    * name `col` for elements in the array and `key` and `value` for elements in the map unless
    * specified otherwise. Unlike explode, if the array/map is null or empty then null is produced.
    *
-   * @group collection_funcs
+   * @group generator_funcs
    * @since 3.4.0
    */
   def explode_outer(e: Column): Column = Column.fn("explode_outer", e)
@@ -6615,7 +6628,7 @@ object functions {
    * default column name `pos` for position, and `col` for elements in the array and `key` and
    * `value` for elements in the map unless specified otherwise.
    *
-   * @group collection_funcs
+   * @group generator_funcs
    * @since 3.4.0
    */
   def posexplode(e: Column): Column = Column.fn("posexplode", e)
@@ -6626,7 +6639,7 @@ object functions {
    * `value` for elements in the map unless specified otherwise. Unlike posexplode, if the
    * array/map is null or empty then the row (null, null) is produced.
    *
-   * @group collection_funcs
+   * @group generator_funcs
    * @since 3.4.0
    */
   def posexplode_outer(e: Column): Column = Column.fn("posexplode_outer", e)
@@ -6634,7 +6647,7 @@ object functions {
   /**
    * Creates a new row for each element in the given array of structs.
    *
-   * @group collection_funcs
+   * @group generator_funcs
    * @since 3.4.0
    */
   def inline(e: Column): Column = Column.fn("inline", e)
@@ -6643,7 +6656,7 @@ object functions {
    * Creates a new row for each element in the given array of structs. Unlike inline, if the array
    * is null or empty then null is produced for each nested column.
    *
-   * @group collection_funcs
+   * @group generator_funcs
    * @since 3.4.0
    */
   def inline_outer(e: Column): Column = Column.fn("inline_outer", e)
@@ -6652,7 +6665,7 @@ object functions {
    * Extracts json object from a json string based on json path specified, and returns json string
    * of the extracted json object. It will return null if the input json string is invalid.
    *
-   * @group collection_funcs
+   * @group json_funcs
    * @since 3.4.0
    */
   def get_json_object(e: Column, path: String): Column =
@@ -6661,7 +6674,7 @@ object functions {
   /**
    * Creates a new row for a json column according to the given field names.
    *
-   * @group collection_funcs
+   * @group json_funcs
    * @since 3.4.0
    */
   @scala.annotation.varargs
@@ -6685,7 +6698,7 @@ object functions {
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
    *
-   * @group collection_funcs
+   * @group json_funcs
    * @since 3.4.0
    */
   // scalastyle:on line.size.limit
@@ -6708,7 +6721,7 @@ object functions {
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
    *
-   * @group collection_funcs
+   * @group json_funcs
    * @since 3.4.0
    */
   // scalastyle:on line.size.limit
@@ -6731,7 +6744,7 @@ object functions {
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
    *
-   * @group collection_funcs
+   * @group json_funcs
    * @since 3.4.0
    */
   // scalastyle:on line.size.limit
@@ -6754,7 +6767,7 @@ object functions {
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
    *
-   * @group collection_funcs
+   * @group json_funcs
    * @since 3.4.0
    */
   // scalastyle:on line.size.limit
@@ -6771,7 +6784,7 @@ object functions {
    * @param schema
    *   the schema to use when parsing the json string
    *
-   * @group collection_funcs
+   * @group json_funcs
    * @since 3.4.0
    */
   def from_json(e: Column, schema: StructType): Column =
@@ -6787,7 +6800,7 @@ object functions {
    * @param schema
    *   the schema to use when parsing the json string
    *
-   * @group collection_funcs
+   * @group json_funcs
    * @since 3.4.0
    */
   def from_json(e: Column, schema: DataType): Column =
@@ -6809,7 +6822,7 @@ object functions {
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
    *
-   * @group collection_funcs
+   * @group json_funcs
    * @since 3.4.0
    */
   // scalastyle:on line.size.limit
@@ -6833,7 +6846,7 @@ object functions {
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
    *
-   * @group collection_funcs
+   * @group json_funcs
    * @since 3.4.0
    */
   // scalastyle:on line.size.limit
@@ -6853,7 +6866,7 @@ object functions {
    * @param schema
    *   the schema to use when parsing the json string
    *
-   * @group collection_funcs
+   * @group json_funcs
    * @since 3.4.0
    */
   def from_json(e: Column, schema: Column): Column = {
@@ -6876,7 +6889,7 @@ object functions {
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
    *
-   * @group collection_funcs
+   * @group json_funcs
    * @since 3.4.0
    */
   // scalastyle:on line.size.limit
@@ -6916,7 +6929,7 @@ object functions {
    * @param json
    *   a JSON string.
    *
-   * @group collection_funcs
+   * @group json_funcs
    * @since 3.4.0
    */
   def schema_of_json(json: String): Column = schema_of_json(lit(json))
@@ -6927,7 +6940,7 @@ object functions {
    * @param json
    *   a foldable string column containing a JSON string.
    *
-   * @group collection_funcs
+   * @group json_funcs
    * @since 3.4.0
    */
   def schema_of_json(json: Column): Column = Column.fn("schema_of_json", json)
@@ -6946,7 +6959,7 @@ object functions {
    * @return
    *   a column with string literal containing schema in DDL format.
    *
-   * @group collection_funcs
+   * @group json_funcs
    * @since 3.4.0
    */
   // scalastyle:on line.size.limit
@@ -6968,7 +6981,7 @@ object functions {
    *   Source Option</a> in the version you use. Additionally the function supports the `pretty`
    *   option which enables pretty JSON generation.
    *
-   * @group collection_funcs
+   * @group json_funcs
    * @since 3.4.0
    */
   // scalastyle:on line.size.limit
@@ -6990,7 +7003,7 @@ object functions {
    *   Source Option</a> in the version you use. Additionally the function supports the `pretty`
    *   option which enables pretty JSON generation.
    *
-   * @group collection_funcs
+   * @group json_funcs
    * @since 3.4.0
    */
   // scalastyle:on line.size.limit
@@ -7004,7 +7017,7 @@ object functions {
    * @param e
    *   a column containing a struct, an array or a map.
    *
-   * @group collection_funcs
+   * @group json_funcs
    * @since 3.4.0
    */
   def to_json(e: Column): Column =
@@ -7027,7 +7040,7 @@ object functions {
    * ordering of the array elements. Null elements will be placed at the beginning of the returned
    * array.
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def sort_array(e: Column): Column = sort_array(e, asc = true)
@@ -7038,7 +7051,7 @@ object functions {
    * double/float type. Null elements will be placed at the beginning of the returned array in
    * ascending order or at the end of the returned array in descending order.
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def sort_array(e: Column, asc: Boolean): Column = Column.fn("sort_array", e, lit(asc))
@@ -7047,7 +7060,7 @@ object functions {
    * Returns the minimum value in the array. NaN is greater than any non-NaN elements for
    * double/float type. NULL elements are skipped.
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def array_min(e: Column): Column = Column.fn("array_min", e)
@@ -7056,7 +7069,7 @@ object functions {
    * Returns the maximum value in the array. NaN is greater than any non-NaN elements for
    * double/float type. NULL elements are skipped.
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def array_max(e: Column): Column = Column.fn("array_max", e)
@@ -7067,7 +7080,7 @@ object functions {
    * @note
    *   The function is non-deterministic.
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def shuffle(e: Column): Column = Column.fn("shuffle", e, lit(SparkClassUtils.random.nextLong))
@@ -7082,7 +7095,7 @@ object functions {
   /**
    * Creates a single array from an array of arrays. If a structure of nested arrays is deeper
    * than two levels, only one level of nesting is removed.
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def flatten(e: Column): Column = Column.fn("flatten", e)
@@ -7090,7 +7103,7 @@ object functions {
   /**
    * Generate a sequence of integers from start to stop, incrementing by step.
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def sequence(start: Column, stop: Column, step: Column): Column =
@@ -7100,7 +7113,7 @@ object functions {
    * Generate a sequence of integers from start to stop, incrementing by 1 if start is less than
    * or equal to stop, otherwise -1.
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def sequence(start: Column, stop: Column): Column =
@@ -7110,7 +7123,7 @@ object functions {
    * Creates an array containing the left argument repeated the number of times given by the right
    * argument.
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def array_repeat(left: Column, right: Column): Column = Column.fn("array_repeat", left, right)
@@ -7119,14 +7132,14 @@ object functions {
    * Creates an array containing the left argument repeated the number of times given by the right
    * argument.
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   def array_repeat(e: Column, count: Int): Column = array_repeat(e, lit(count))
 
   /**
    * Returns true if the map contains the key.
-   * @group collection_funcs
+   * @group map_funcs
    * @since 3.4.0
    */
   def map_contains_key(column: Column, key: Any): Column =
@@ -7134,28 +7147,28 @@ object functions {
 
   /**
    * Returns an unordered array containing the keys of the map.
-   * @group collection_funcs
+   * @group map_funcs
    * @since 3.4.0
    */
   def map_keys(e: Column): Column = Column.fn("map_keys", e)
 
   /**
    * Returns an unordered array containing the values of the map.
-   * @group collection_funcs
+   * @group map_funcs
    * @since 3.4.0
    */
   def map_values(e: Column): Column = Column.fn("map_values", e)
 
   /**
    * Returns an unordered array of all entries in the given map.
-   * @group collection_funcs
+   * @group map_funcs
    * @since 3.4.0
    */
   def map_entries(e: Column): Column = Column.fn("map_entries", e)
 
   /**
    * Returns a map created from the given array of entries.
-   * @group collection_funcs
+   * @group map_funcs
    * @since 3.4.0
    */
   def map_from_entries(e: Column): Column = Column.fn("map_from_entries", e)
@@ -7163,7 +7176,7 @@ object functions {
   /**
    * Returns a merged array of structs in which the N-th struct contains all N-th values of input
    * arrays.
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.4.0
    */
   @scala.annotation.varargs
@@ -7171,7 +7184,7 @@ object functions {
 
   /**
    * Returns the union of all the given maps.
-   * @group collection_funcs
+   * @group map_funcs
    * @since 3.4.0
    */
   @scala.annotation.varargs
@@ -7192,7 +7205,7 @@ object functions {
    *   "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
    *
-   * @group collection_funcs
+   * @group csv_funcs
    * @since 3.4.0
    */
   // scalastyle:on line.size.limit
@@ -7214,7 +7227,7 @@ object functions {
    *   "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
    *
-   * @group collection_funcs
+   * @group csv_funcs
    * @since 3.4.0
    */
   // scalastyle:on line.size.limit
@@ -7230,7 +7243,7 @@ object functions {
    * @param csv
    *   a CSV string.
    *
-   * @group collection_funcs
+   * @group csv_funcs
    * @since 3.4.0
    */
   def schema_of_csv(csv: String): Column = schema_of_csv(lit(csv))
@@ -7241,7 +7254,7 @@ object functions {
    * @param csv
    *   a foldable string column containing a CSV string.
    *
-   * @group collection_funcs
+   * @group csv_funcs
    * @since 3.4.0
    */
   def schema_of_csv(csv: Column): Column = schema_of_csv(csv, Collections.emptyMap())
@@ -7260,7 +7273,7 @@ object functions {
    * @return
    *   a column with string literal containing schema in DDL format.
    *
-   * @group collection_funcs
+   * @group csv_funcs
    * @since 3.4.0
    */
   // scalastyle:on line.size.limit
@@ -7280,7 +7293,7 @@ object functions {
    *   "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
    *
-   * @group collection_funcs
+   * @group csv_funcs
    * @since 3.4.0
    */
   // scalastyle:on line.size.limit
@@ -7294,7 +7307,7 @@ object functions {
    * @param e
    *   a column containing a struct.
    *
-   * @group collection_funcs
+   * @group csv_funcs
    * @since 3.4.0
    */
   def to_csv(e: Column): Column = to_csv(e, Collections.emptyMap())
@@ -7313,12 +7326,12 @@ object functions {
    *   See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
-   * @group collection_funcs
+   * @group xml_funcs
    * @since 4.0.0
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
-    from_xml(e, lit(schema.json), options.asScala.toIterator)
+    from_xml(e, lit(schema.json), options.asScala.iterator)
 
   // scalastyle:off line.size.limit
 
@@ -7335,7 +7348,7 @@ object functions {
    *   See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
-   * @group collection_funcs
+   * @group xml_funcs
    * @since 4.0.0
    */
   // scalastyle:on line.size.limit
@@ -7358,7 +7371,7 @@ object functions {
    *   a string column containing XML data.
    * @param schema
    *   the schema to use when parsing the XML string
-   * @group collection_funcs
+   * @group xml_funcs
    * @since 4.0.0
    */
   // scalastyle:on line.size.limit
@@ -7380,7 +7393,7 @@ object functions {
    *   See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
-   * @group collection_funcs
+   * @group xml_funcs
    *
    * @since 4.0.0
    */
@@ -7396,7 +7409,7 @@ object functions {
    *   a string column containing XML data.
    * @param schema
    *   the schema to use when parsing the XML string
-   * @group collection_funcs
+   * @group xml_funcs
    *
    * @since 4.0.0
    */
@@ -7422,7 +7435,7 @@ object functions {
    *
    * @param xml
    *   a foldable string column containing a XML string.
-   * @group collection_funcs
+   * @group xml_funcs
    * @since 4.0.0
    */
   def schema_of_xml(xml: Column): Column = Column.fn("schema_of_xml", xml)
@@ -7441,7 +7454,7 @@ object functions {
    *   Source Option</a> in the version you use.
    * @return
    *   a column with string literal containing schema in DDL format.
-   * @group collection_funcs
+   * @group xml_funcs
    * @since 4.0.0
    */
   // scalastyle:on line.size.limit
@@ -7449,10 +7462,41 @@ object functions {
     fnWithOptions("schema_of_xml", options.asScala.iterator, xml)
   }
 
+  // scalastyle:off line.size.limit
+
+  /**
+   * (Java-specific) Converts a column containing a `StructType` into a XML string with the
+   * specified schema. Throws an exception, in the case of an unsupported type.
+   *
+   * @param e
+   *   a column containing a struct.
+   * @param options
+   *   options to control how the struct column is converted into a XML string. It accepts the
+   *   same options as the XML data source. See <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
+   *   Source Option</a> in the version you use.
+   * @group xml_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def to_xml(e: Column, options: java.util.Map[String, String]): Column =
+    fnWithOptions("to_xml", options.asScala.iterator, e)
+
+  /**
+   * Converts a column containing a `StructType` into a XML string with the specified schema.
+   * Throws an exception, in the case of an unsupported type.
+   *
+   * @param e
+   *   a column containing a struct.
+   * @group xml_funcs
+   * @since 4.0.0
+   */
+  def to_xml(e: Column): Column = to_xml(e, Collections.emptyMap())
+
   /**
    * Returns the total number of elements in the array. The function returns null for null input.
    *
-   * @group collection_funcs
+   * @group array_funcs
    * @since 3.5.0
    */
   def array_size(e: Column): Column = Column.fn("array_size", e)
@@ -7473,7 +7517,7 @@ object functions {
    * Returns the number of elements in the outermost JSON array. `NULL` is returned in case of any
    * other valid JSON string, `NULL` or an invalid JSON.
    *
-   * @group collection_funcs
+   * @group json_funcs
    * @since 3.5.0
    */
   def json_array_length(e: Column): Column = Column.fn("json_array_length", e)
@@ -7483,7 +7527,7 @@ object functions {
    * given, all the keys of the outermost object will be returned as an array. If it is any other
    * valid JSON string, an invalid JSON string or an empty string, the function returns null.
    *
-   * @group collection_funcs
+   * @group json_funcs
    * @since 3.5.0
    */
   def json_object_keys(e: Column): Column = Column.fn("json_object_keys", e)
@@ -7493,36 +7537,36 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * A transform for timestamps and dates to partition data into years.
+   * (Java-specific) A transform for timestamps and dates to partition data into years.
    *
    * @group partition_transforms
    * @since 3.4.0
    */
-  def years(e: Column): Column = Column.fn("years", e)
+  def years(e: Column): Column = partitioning.years(e)
 
   /**
-   * A transform for timestamps and dates to partition data into months.
+   * (Java-specific) A transform for timestamps and dates to partition data into months.
    *
    * @group partition_transforms
    * @since 3.4.0
    */
-  def months(e: Column): Column = Column.fn("months", e)
+  def months(e: Column): Column = partitioning.months(e)
 
   /**
-   * A transform for timestamps and dates to partition data into days.
+   * (Java-specific) A transform for timestamps and dates to partition data into days.
    *
    * @group partition_transforms
    * @since 3.4.0
    */
-  def days(e: Column): Column = Column.fn("days", e)
+  def days(e: Column): Column = partitioning.days(e)
 
   /**
-   * A transform for timestamps to partition data into hours.
+   * (Java-specific) A transform for timestamps to partition data into hours.
    *
    * @group partition_transforms
    * @since 3.4.0
    */
-  def hours(e: Column): Column = Column.fn("hours", e)
+  def hours(e: Column): Column = partitioning.hours(e)
 
   /**
    * Converts the timestamp without time zone `sourceTs` from the `sourceTz` time zone to
@@ -7804,22 +7848,20 @@ object functions {
   def make_ym_interval(): Column = Column.fn("make_ym_interval")
 
   /**
-   * A transform for any type that partitions by a hash of the input column.
+   * (Java-specific) A transform for any type that partitions by a hash of the input column.
    *
    * @group partition_transforms
    * @since 3.4.0
    */
-  def bucket(numBuckets: Column, e: Column): Column =
-    Column.fn("bucket", numBuckets, e)
+  def bucket(numBuckets: Column, e: Column): Column = partitioning.bucket(numBuckets, e)
 
   /**
-   * A transform for any type that partitions by a hash of the input column.
+   * (Java-specific) A transform for any type that partitions by a hash of the input column.
    *
    * @group partition_transforms
    * @since 3.4.0
    */
-  def bucket(numBuckets: Int, e: Column): Column =
-    Column.fn("bucket", lit(numBuckets), e)
+  def bucket(numBuckets: Int, e: Column): Column = partitioning.bucket(numBuckets, e)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Predicates functions
@@ -7828,7 +7870,7 @@ object functions {
   /**
    * Returns `col2` if `col1` is null, or `col1` otherwise.
    *
-   * @group predicates_funcs
+   * @group conditional_funcs
    * @since 3.5.0
    */
   def ifnull(col1: Column, col2: Column): Column = Column.fn("ifnull", col1, col2)
@@ -7836,7 +7878,7 @@ object functions {
   /**
    * Returns true if `col` is not null, or false otherwise.
    *
-   * @group predicates_funcs
+   * @group predicate_funcs
    * @since 3.5.0
    */
   def isnotnull(col: Column): Column = Column.fn("isnotnull", col)
@@ -7845,7 +7887,7 @@ object functions {
    * Returns same result as the EQUAL(=) operator for non-null operands, but returns true if both
    * are null, false if one of the them is null.
    *
-   * @group predicates_funcs
+   * @group predicate_funcs
    * @since 3.5.0
    */
   def equal_null(col1: Column, col2: Column): Column = Column.fn("equal_null", col1, col2)
@@ -7853,7 +7895,7 @@ object functions {
   /**
    * Returns null if `col1` equals to `col2`, or `col1` otherwise.
    *
-   * @group predicates_funcs
+   * @group conditional_funcs
    * @since 3.5.0
    */
   def nullif(col1: Column, col2: Column): Column = Column.fn("nullif", col1, col2)
@@ -7861,7 +7903,7 @@ object functions {
   /**
    * Returns `col2` if `col1` is null, or `col1` otherwise.
    *
-   * @group predicates_funcs
+   * @group conditional_funcs
    * @since 3.5.0
    */
   def nvl(col1: Column, col2: Column): Column = Column.fn("nvl", col1, col2)
@@ -7869,7 +7911,7 @@ object functions {
   /**
    * Returns `col2` if `col1` is not null, or `col3` otherwise.
    *
-   * @group predicates_funcs
+   * @group conditional_funcs
    * @since 3.5.0
    */
   def nvl2(col1: Column, col2: Column, col3: Column): Column = Column.fn("nvl2", col1, col2, col3)
@@ -8342,6 +8384,7 @@ object functions {
    *   function name that follows the SQL identifier syntax (can be quoted, can be qualified)
    * @param cols
    *   the expression parameters of function
+   * @group normal_funcs
    * @since 3.5.0
    */
   @scala.annotation.varargs
@@ -8351,4 +8394,58 @@ object functions {
       .addAllArguments(cols.map(_.expr).asJava)
   }
 
+  // scalastyle:off
+  // TODO(SPARK-45970): Use @static annotation so Java can access to those
+  //   API in the same way. Once we land this fix, should deprecate
+  //   functions.hours, days, months, years and bucket.
+  object partitioning {
+    // scalastyle:on
+    /**
+     * (Scala-specific) A transform for timestamps and dates to partition data into years.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def years(e: Column): Column = Column.fn("years", e)
+
+    /**
+     * (Scala-specific) A transform for timestamps and dates to partition data into months.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def months(e: Column): Column = Column.fn("months", e)
+
+    /**
+     * (Scala-specific) A transform for timestamps and dates to partition data into days.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def days(e: Column): Column = Column.fn("days", e)
+
+    /**
+     * (Scala-specific) A transform for timestamps to partition data into hours.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def hours(e: Column): Column = Column.fn("hours", e)
+
+    /**
+     * (Scala-specific) A transform for any type that partitions by a hash of the input column.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def bucket(numBuckets: Column, e: Column): Column = Column.fn("bucket", numBuckets, e)
+
+    /**
+     * (Scala-specific) A transform for any type that partitions by a hash of the input column.
+     *
+     * @group partition_transforms
+     * @since 4.0.0
+     */
+    def bucket(numBuckets: Int, e: Column): Column = Column.fn("bucket", lit(numBuckets), e)
+  }
 }

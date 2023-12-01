@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-[SQLSTATE: 46110](sql-error-conditions-sqlstates.html#class-46-java-ddl-1)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Not supported command in JDBC catalog:
 

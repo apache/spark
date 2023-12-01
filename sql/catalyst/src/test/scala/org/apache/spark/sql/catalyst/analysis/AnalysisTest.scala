@@ -35,8 +35,6 @@ import org.apache.spark.sql.types.StructType
 
 trait AnalysisTest extends PlanTest {
 
-  import org.apache.spark.QueryContext
-
   protected def extendedAnalysisRules: Seq[Rule[LogicalPlan]] = Nil
 
   protected def createTempView(
@@ -84,6 +82,8 @@ trait AnalysisTest extends PlanTest {
     createTempView(catalog, "TaBlE3", TestRelations.testRelation3, overrideIfExists = true)
     createGlobalTempView(catalog, "TaBlE4", TestRelations.testRelation4, overrideIfExists = true)
     createGlobalTempView(catalog, "TaBlE5", TestRelations.testRelation5, overrideIfExists = true)
+    createTempView(catalog, "streamingTable", TestRelations.streamingRelation,
+      overrideIfExists = true)
     new Analyzer(catalog) {
       override val extendedResolutionRules = extendedAnalysisRules
     }
@@ -177,7 +177,7 @@ trait AnalysisTest extends PlanTest {
       inputPlan: LogicalPlan,
       expectedErrorClass: String,
       expectedMessageParameters: Map[String, String],
-      queryContext: Array[QueryContext] = Array.empty,
+      queryContext: Array[ExpectedContext] = Array.empty,
       caseSensitive: Boolean = true): Unit = {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
       val analyzer = getAnalyzer

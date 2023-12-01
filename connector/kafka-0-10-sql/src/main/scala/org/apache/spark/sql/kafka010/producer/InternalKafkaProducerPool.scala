@@ -21,8 +21,8 @@ import java.{util => ju}
 import java.util.concurrent.{ScheduledExecutorService, ScheduledFuture, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.clients.producer.KafkaProducer
 
@@ -120,7 +120,7 @@ private[producer] class InternalKafkaProducerPool(
     val curTimeNs = clock.nanoTime()
     val producers = new mutable.ArrayBuffer[CachedProducerEntry]()
     synchronized {
-      cache.retain { case (_, v) =>
+      cache.filterInPlace { case (_, v) =>
         if (v.expired(curTimeNs)) {
           producers += v
           false

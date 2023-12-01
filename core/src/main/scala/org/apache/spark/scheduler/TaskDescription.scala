@@ -22,9 +22,9 @@ import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util.Properties
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{JobArtifactSet, JobArtifactState}
 import org.apache.spark.resource.ResourceInformation
@@ -80,7 +80,7 @@ private[spark] object TaskDescription {
     map.foreach { case (key, value) =>
       dataOut.writeUTF(key)
       dataOut.writeUTF(value.name)
-      dataOut.writeInt(value.addresses.size)
+      dataOut.writeInt(value.addresses.length)
       value.addresses.foreach(dataOut.writeUTF(_))
     }
   }

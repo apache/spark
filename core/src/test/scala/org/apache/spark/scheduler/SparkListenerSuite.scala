@@ -20,8 +20,8 @@ package org.apache.spark.scheduler
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.util.concurrent.Semaphore
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.mockito.Mockito
 import org.scalatest.matchers.must.Matchers
@@ -328,10 +328,10 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
        */
       checkNonZeroAvg(
         taskInfoMetrics.map(_._2.executorRunTime),
-        stageInfo + " executorRunTime")
+        stageInfo.toString + " executorRunTime")
       checkNonZeroAvg(
         taskInfoMetrics.map(_._2.executorDeserializeTime),
-        stageInfo + " executorDeserializeTime")
+        stageInfo.toString + " executorDeserializeTime")
 
       /* Test is disabled (SEE SPARK-2208)
       if (stageInfo.rddInfos.exists(_.name == d4.name)) {

@@ -24,8 +24,8 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
@@ -34,7 +34,7 @@ import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModul
 import org.apache.commons.io.{FilenameUtils, IOUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path, PathFilter}
-import org.json4s.NoTypeHints
+import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkConf, SparkEnv}
@@ -42,6 +42,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -126,7 +127,7 @@ class RocksDBFileManager(
     dfsRootDir: String,
     localTempDir: File,
     hadoopConf: Configuration,
-    codecName: String = "zstd",
+    codecName: String = CompressionCodec.ZSTD,
     loggingId: String = "")
   extends Logging {
 
@@ -146,10 +147,15 @@ class RocksDBFileManager(
 
   private def codec = CompressionCodec.createCodec(sparkConf, codecName)
 
+  @volatile private var rootDirChecked: Boolean = false
+
   def getChangeLogWriter(version: Long): StateStoreChangelogWriter = {
-    val rootDir = new Path(dfsRootDir)
     val changelogFile = dfsChangelogFile(version)
-    if (!fm.exists(rootDir)) fm.mkdirs(rootDir)
+    if (!rootDirChecked) {
+      val rootDir = new Path(dfsRootDir)
+      if (!fm.exists(rootDir)) fm.mkdirs(rootDir)
+      rootDirChecked = true
+    }
     val changelogWriter = new StateStoreChangelogWriter(fm, changelogFile, codec)
     changelogWriter
   }
@@ -193,8 +199,11 @@ class RocksDBFileManager(
       // CheckpointFileManager.createAtomic API which doesn't auto-initialize parent directories.
       // Moreover, once we disable to track the number of keys, in which the numKeys is -1, we
       // still need to create the initial dfs root directory anyway.
-      val path = new Path(dfsRootDir)
-      if (!fm.exists(path)) fm.mkdirs(path)
+      if (!rootDirChecked) {
+        val path = new Path(dfsRootDir)
+        if (!fm.exists(path)) fm.mkdirs(path)
+        rootDirChecked = true
+      }
     }
     zipToDfsFile(localOtherFiles :+ metadataFile, dfsBatchZipFile(version))
     logInfo(s"Saved checkpoint file for version $version")
@@ -208,6 +217,10 @@ class RocksDBFileManager(
    */
   def loadCheckpointFromDfs(version: Long, localDir: File): RocksDBCheckpointMetadata = {
     logInfo(s"Loading checkpoint files for version $version")
+    // The unique ids of SST files are checked when opening a rocksdb instance. The SST files
+    // in larger versions can't be reused even if they have the same size and name because
+    // they belong to another rocksdb instance.
+    versionToRocksDBFiles.keySet().removeIf(_ >= version)
     val metadata = if (version == 0) {
       if (localDir.exists) Utils.deleteRecursively(localDir)
       localDir.mkdirs()
@@ -392,8 +405,8 @@ class RocksDBFileManager(
 
     val sstDir = new Path(dfsRootDir, RocksDBImmutableFile.SST_FILES_DFS_SUBDIR)
     val logDir = new Path(dfsRootDir, RocksDBImmutableFile.LOG_FILES_DFS_SUBDIR)
-    val allSstFiles = if (fm.exists(sstDir)) fm.list(sstDir).toSeq else Seq.empty
-    val allLogFiles = if (fm.exists(logDir)) fm.list(logDir).toSeq else Seq.empty
+    val allSstFiles = if (fm.exists(sstDir)) fm.list(sstDir).toImmutableArraySeq else Seq.empty
+    val allLogFiles = if (fm.exists(logDir)) fm.list(logDir).toImmutableArraySeq else Seq.empty
     filesToDelete ++= findOrphanFiles(fileToMaxUsedVersion.keys.toSeq, allSstFiles ++ allLogFiles)
       .map(_ -> -1L)
     logInfo(s"Deleting ${filesToDelete.size} files not used in versions >= $minVersionToRetain")
@@ -446,7 +459,7 @@ class RocksDBFileManager(
     // Get the immutable files used in previous versions, as some of those uploaded files can be
     // reused for this version
     logInfo(s"Saving RocksDB files to DFS for $version")
-    val prevFilesToSizes = versionToRocksDBFiles.asScala.filterKeys(_ < version)
+    val prevFilesToSizes = versionToRocksDBFiles.asScala.view.filterKeys(_ < version)
       .values.flatten.map { f =>
       f.localFileName -> f
     }.toMap
@@ -645,7 +658,8 @@ class RocksDBFileManager(
         // To ignore .log.crc files
         .filter(file => isLogFile(file.getName))
     val (topLevelSstFiles, topLevelOtherFiles) = topLevelFiles.partition(f => isSstFile(f.getName))
-    (topLevelSstFiles ++ archivedLogFiles, topLevelOtherFiles)
+    ((topLevelSstFiles ++ archivedLogFiles).toImmutableArraySeq,
+      topLevelOtherFiles.toImmutableArraySeq)
   }
 }
 
@@ -701,7 +715,7 @@ case class RocksDBCheckpointMetadata(
 object RocksDBCheckpointMetadata {
   val VERSION = 1
 
-  implicit val format = Serialization.formats(NoTypeHints)
+  implicit val format: Formats = Serialization.formats(NoTypeHints)
 
   /** Used to convert between classes and JSON. */
   lazy val mapper = {

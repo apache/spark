@@ -694,7 +694,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       putNull(elementsAppended);
       elementsAppended++;
       for (WritableColumnVector c: childColumns) {
-        if (c.type instanceof StructType) {
+        if (c.type instanceof StructType || c.type instanceof VariantType) {
           c.appendStruct(true);
         } else {
           c.appendNull();
@@ -721,13 +721,20 @@ public abstract class WritableColumnVector extends ColumnVector {
     if (value instanceof Byte) {
       return Optional.of(appendBytes(length, (Byte) value));
     }
-    if (value instanceof Decimal) {
-      Decimal decimal = (Decimal) value;
+    if (value instanceof Decimal decimal) {
       long unscaled = decimal.toUnscaledLong();
-      if (decimal.precision() < 10) {
+      if (decimal.precision() <= Decimal.MAX_INT_DIGITS()) {
         return Optional.of(appendInts(length, (int) unscaled));
-      } else {
+      } else if (decimal.precision() <= Decimal.MAX_LONG_DIGITS()) {
         return Optional.of(appendLongs(length, unscaled));
+      } else {
+        BigInteger integer = decimal.toJavaBigDecimal().unscaledValue();
+        byte[] bytes = integer.toByteArray();
+        int result = 0;
+        for (int i = 0; i < length; ++i) {
+          result += appendByteArray(bytes, 0, bytes.length);
+        }
+        return Optional.of(result);
       }
     }
     if (value instanceof Double) {
@@ -745,8 +752,7 @@ public abstract class WritableColumnVector extends ColumnVector {
     if (value instanceof Short) {
       return Optional.of(appendShorts(length, (Short) value));
     }
-    if (value instanceof UTF8String) {
-      UTF8String utf8 = (UTF8String) value;
+    if (value instanceof UTF8String utf8) {
       byte[] bytes = utf8.getBytes();
       int result = 0;
       for (int i = 0; i < length; ++i) {
@@ -754,13 +760,12 @@ public abstract class WritableColumnVector extends ColumnVector {
       }
       return Optional.of(result);
     }
-    if (value instanceof GenericArrayData) {
-      GenericArrayData arrayData = (GenericArrayData) value;
+    if (value instanceof GenericArrayData arrayData) {
       int result = 0;
       for (int i = 0; i < length; ++i) {
         appendArray(arrayData.numElements());
         for (Object element : arrayData.array()) {
-          if (!arrayData().appendObjects(1, element).isPresent()) {
+          if (arrayData().appendObjects(1, element).isEmpty()) {
             return Optional.empty();
           }
         }
@@ -768,14 +773,13 @@ public abstract class WritableColumnVector extends ColumnVector {
       }
       return Optional.of(result);
     }
-    if (value instanceof GenericInternalRow) {
-      GenericInternalRow row = (GenericInternalRow) value;
+    if (value instanceof GenericInternalRow row) {
       int result = 0;
       for (int i = 0; i < length; ++i) {
         appendStruct(false);
         for (int j = 0; j < row.values().length; ++j) {
           Object element = row.values()[j];
-          if (!childColumns[j].appendObjects(1, element).isPresent()) {
+          if (childColumns[j].appendObjects(1, element).isEmpty()) {
             return Optional.empty();
           }
         }
@@ -783,18 +787,17 @@ public abstract class WritableColumnVector extends ColumnVector {
       }
       return Optional.of(result);
     }
-    if (value instanceof ArrayBasedMapData) {
-      ArrayBasedMapData data = (ArrayBasedMapData) value;
+    if (value instanceof ArrayBasedMapData data) {
       appendArray(length);
       int result = 0;
       for (int i = 0; i < length; ++i) {
         for (Object key : data.keyArray().array()) {
-          if (!childColumns[0].appendObjects(1, key).isPresent()) {
+          if (childColumns[0].appendObjects(1, key).isEmpty()) {
             return Optional.empty();
           }
         }
         for (Object val: data.valueArray().array()) {
-          if (!childColumns[1].appendObjects(1, val).isPresent()) {
+          if (childColumns[1].appendObjects(1, val).isEmpty()) {
             return Optional.empty();
           }
         }
@@ -965,14 +968,12 @@ public abstract class WritableColumnVector extends ColumnVector {
       }
       this.childColumns = new WritableColumnVector[1];
       this.childColumns[0] = reserveNewColumn(childCapacity, childType);
-    } else if (type instanceof StructType) {
-      StructType st = (StructType)type;
+    } else if (type instanceof StructType st) {
       this.childColumns = new WritableColumnVector[st.fields().length];
       for (int i = 0; i < childColumns.length; ++i) {
         this.childColumns[i] = reserveNewColumn(capacity, st.fields()[i].dataType());
       }
-    } else if (type instanceof MapType) {
-      MapType mapType = (MapType) type;
+    } else if (type instanceof MapType mapType) {
       this.childColumns = new WritableColumnVector[2];
       this.childColumns[0] = reserveNewColumn(capacity, mapType.keyType());
       this.childColumns[1] = reserveNewColumn(capacity, mapType.valueType());
@@ -982,6 +983,10 @@ public abstract class WritableColumnVector extends ColumnVector {
       this.childColumns[0] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[1] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[2] = reserveNewColumn(capacity, DataTypes.LongType);
+    } else if (type instanceof VariantType) {
+      this.childColumns = new WritableColumnVector[2];
+      this.childColumns[0] = reserveNewColumn(capacity, DataTypes.BinaryType);
+      this.childColumns[1] = reserveNewColumn(capacity, DataTypes.BinaryType);
     } else {
       this.childColumns = null;
     }

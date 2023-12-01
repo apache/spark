@@ -20,7 +20,7 @@ package org.apache.spark.errors
 import java.io.{File, IOException}
 import java.util.concurrent.TimeoutException
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
@@ -97,7 +97,7 @@ private[spark] object SparkCoreErrors {
 
   def checkpointRDDBlockIdNotFoundError(rddBlockId: RDDBlockId): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3007",
+      errorClass = "CHECKPOINT_RDD_BLOCK_ID_NOT_FOUND",
       messageParameters = Map("rddBlockId" -> s"$rddBlockId"),
       cause = null
     )
@@ -219,6 +219,18 @@ private[spark] object SparkCoreErrors {
 
   def noExecutorIdleError(id: String): Throwable = {
     new NoSuchElementException(id)
+  }
+
+  def sparkJobCancelled(jobId: Int, reason: String, e: Exception): SparkException = {
+    new SparkException(
+      errorClass = "SPARK_JOB_CANCELLED",
+      messageParameters = Map("jobId" -> jobId.toString, "reason" -> reason),
+      cause = e
+    )
+  }
+
+  def sparkJobCancelledAsPartOfJobGroupError(jobId: Int, jobGroupId: String): SparkException = {
+    sparkJobCancelled(jobId, s"part of cancelled job group $jobGroupId", null)
   }
 
   def barrierStageWithRDDChainPatternError(): Throwable = {

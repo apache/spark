@@ -57,8 +57,7 @@ public final class SpecializedGettersReader {
     if (physicalDataType instanceof PhysicalStringType) {
       return obj.getUTF8String(ordinal);
     }
-    if (physicalDataType instanceof PhysicalDecimalType) {
-      PhysicalDecimalType dt = (PhysicalDecimalType) physicalDataType;
+    if (physicalDataType instanceof PhysicalDecimalType dt) {
       return obj.getDecimal(ordinal, dt.precision(), dt.scale());
     }
     if (physicalDataType instanceof PhysicalCalendarIntervalType) {
@@ -66,6 +65,9 @@ public final class SpecializedGettersReader {
     }
     if (physicalDataType instanceof PhysicalBinaryType) {
       return obj.getBinary(ordinal);
+    }
+    if (physicalDataType instanceof PhysicalVariantType) {
+      return obj.getVariant(ordinal);
     }
     if (physicalDataType instanceof PhysicalStructType) {
       return obj.getStruct(ordinal, ((PhysicalStructType) physicalDataType).fields().length);

@@ -23,6 +23,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, Serializer}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 
@@ -53,10 +54,11 @@ private[master] class FileSystemPersistenceEngine(
 
   override def read[T: ClassTag](prefix: String): Seq[T] = {
     val files = new File(dir).listFiles().filter(_.getName.startsWith(prefix))
-    files.map(deserializeFromFile[T])
+    files.map(deserializeFromFile[T]).toImmutableArraySeq
   }
 
   private def serializeIntoFile(file: File, value: AnyRef): Unit = {
+    if (file.exists()) { throw new IllegalStateException("File already exists: " + file) }
     val created = file.createNewFile()
     if (!created) { throw new IllegalStateException("Could not create file: " + file) }
     val fileOut = new FileOutputStream(file)

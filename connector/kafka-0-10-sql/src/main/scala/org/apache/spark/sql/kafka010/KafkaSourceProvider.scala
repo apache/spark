@@ -20,7 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 import java.util.{Locale, UUID}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.ProducerConfig
@@ -41,6 +41,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The provider class for all Kafka readers and writers. It is designed such that it throws
@@ -161,7 +162,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     val caseInsensitiveParameters = CaseInsensitiveMap(parameters)
     val defaultTopic = caseInsensitiveParameters.get(TOPIC_OPTION_KEY).map(_.trim)
     val specifiedKafkaParams = kafkaParamsForProducer(caseInsensitiveParameters)
-    new KafkaSink(sqlContext, specifiedKafkaParams, defaultTopic)
+    new KafkaSink(specifiedKafkaParams, defaultTopic)
   }
 
   override def createRelation(
@@ -179,8 +180,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     val caseInsensitiveParameters = CaseInsensitiveMap(parameters)
     val topic = caseInsensitiveParameters.get(TOPIC_OPTION_KEY).map(_.trim)
     val specifiedKafkaParams = kafkaParamsForProducer(caseInsensitiveParameters)
-    KafkaWriter.write(outerSQLContext.sparkSession, data.queryExecution, specifiedKafkaParams,
-      topic)
+    KafkaWriter.write(data.queryExecution, specifiedKafkaParams, topic)
 
     /* This method is suppose to return a relation that reads the data that was written.
      * We cannot support this for Kafka. Therefore, in order to make things consistent,
@@ -205,7 +205,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       case (ASSIGN, value) =>
         AssignStrategy(JsonUtils.partitions(value))
       case (SUBSCRIBE, value) =>
-        SubscribeStrategy(value.split(",").map(_.trim()).filter(_.nonEmpty))
+        SubscribeStrategy(value.split(",").map(_.trim()).filter(_.nonEmpty).toImmutableArraySeq)
       case (SUBSCRIBE_PATTERN, value) =>
         SubscribePatternStrategy(value.trim())
       case _ =>

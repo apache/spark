@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.analysis.{PartitionSpec, ResolvedPartitionSpec, UnresolvedPartitionSpec}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, MetadataAttribute}
@@ -63,6 +63,11 @@ object DataSourceV2Implicits {
         case _ =>
           throw QueryCompilationErrors.tableDoesNotSupportTruncatesError(table)
       }
+    }
+
+    def supportsPartitions: Boolean = table match {
+      case _: SupportsPartitionManagement => true
+      case _ => false
     }
 
     def asPartitionable: SupportsPartitionManagement = {

@@ -21,7 +21,7 @@ import java.util.UUID
 
 import scala.collection.mutable
 
-import org.scalactic.TolerantNumerics
+import org.scalactic.{Equality, TolerantNumerics}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.concurrent.Waiters.Waiter
@@ -44,7 +44,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   import testImplicits._
 
   // To make === between double tolerate inexact values
-  implicit val doubleEquality = TolerantNumerics.tolerantDoubleEquality(0.01)
+  implicit val doubleEquality: Equality[Double] = TolerantNumerics.tolerantDoubleEquality(0.01)
 
   after {
     spark.streams.active.foreach(_.stop())
@@ -66,7 +66,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       extends AssertOnQuery(q => {
         eventually(Timeout(streamingTimeout)) {
           if (q.exception.isEmpty) {
-            assert(clock.isStreamWaitingAt(clock.getTimeMillis))
+            assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
           }
         }
         if (q.exception.isDefined) {
@@ -210,7 +210,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   test("adding and removing listener") {
     def isListenerActive(listener: EventCollector): Boolean = {
       listener.reset()
-      testStream(MemoryStream[Int].toDS)(
+      testStream(MemoryStream[Int].toDS())(
         StartStream(),
         StopStream
       )
@@ -241,7 +241,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       for (i <- 1 to 50) {
         listener.reset()
         require(listener.startEvent === null)
-        testStream(MemoryStream[Int].toDS)(
+        testStream(MemoryStream[Int].toDS())(
           StartStream(),
           Assert(listener.startEvent !== null, "onQueryStarted not called before query returned"),
           StopStream,
@@ -268,7 +268,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   test("QueryProgressEvent serialization") {
     def testSerialization(event: QueryProgressEvent): Unit = {
-      import scala.collection.JavaConverters._
+      import scala.jdk.CollectionConverters._
       val json = JsonProtocol.sparkEventToJsonString(event)
       val newEvent = JsonProtocol.sparkEventFromJson(json).asInstanceOf[QueryProgressEvent]
       assert(newEvent.progress.json === event.progress.json)  // json as a proxy for equality
@@ -333,9 +333,9 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         }
         // `recentProgress` should not receive too many no data events
         actions += AssertOnQuery { q =>
-          q.recentProgress.size > 1 && q.recentProgress.size <= 11
+          q.recentProgress.length > 1 && q.recentProgress.length <= 11
         }
-        testStream(input.toDS)(actions.toSeq: _*)
+        testStream(input.toDS())(actions.toSeq: _*)
         spark.sparkContext.listenerBus.waitUntilEmpty()
         // 11 is the max value of the possible numbers of events.
         assert(numIdleEvent > 1 && numIdleEvent <= 11)
@@ -355,7 +355,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       collector1.reset()
       collector2.reset()
       val mem = MemoryStream[Int](implicitly[Encoder[Int]], session.sqlContext)
-      testStream(mem.toDS)(
+      testStream(mem.toDS())(
         AddData(mem, 1, 2, 3),
         CheckAnswer(1, 2, 3)
       )

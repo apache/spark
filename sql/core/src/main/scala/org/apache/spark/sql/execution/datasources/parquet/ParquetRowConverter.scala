@@ -21,8 +21,8 @@ import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteOrder
 import java.time.{ZoneId, ZoneOffset}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.parquet.column.Dictionary
 import org.apache.parquet.io.ColumnIOFactory
@@ -42,7 +42,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -234,7 +234,7 @@ private[parquet] class ParquetRowConverter(
     // maintain a boolean array to track which fields have been explicitly assigned for each row.
     if (ResolveDefaultColumns.hasExistenceDefaultValues(catalystType)) {
       val existingValues = ResolveDefaultColumns.existenceDefaultValues(catalystType)
-      for (i <- 0 until existingValues.size) {
+      for (i <- 0 until existingValues.length) {
        bitmask(i) =
           // Assume the schema for a Parquet file-based table contains N fields. Then if we later
           // run a command "ALTER TABLE t ADD COLUMN c DEFAULT <value>" on the Parquet table, this
@@ -311,7 +311,7 @@ private[parquet] class ParquetRowConverter(
       case LongType if isUnsignedIntTypeMatched(32) =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit =
-            updater.setLong(Integer.toUnsignedLong(value))
+            this.updater.setLong(Integer.toUnsignedLong(value))
         }
       case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType |
         _: AnsiIntervalType =>
@@ -320,13 +320,13 @@ private[parquet] class ParquetRowConverter(
       case ByteType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit =
-            updater.setByte(value.asInstanceOf[PhysicalByteType#InternalType])
+            this.updater.setByte(value.asInstanceOf[PhysicalByteType#InternalType])
         }
 
       case ShortType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit =
-            updater.setShort(value.asInstanceOf[PhysicalShortType#InternalType])
+            this.updater.setShort(value.asInstanceOf[PhysicalShortType#InternalType])
         }
 
       // For INT32 backed decimals
@@ -346,7 +346,7 @@ private[parquet] class ParquetRowConverter(
       case _: DecimalType if isUnsignedIntTypeMatched(64) =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
-            updater.set(Decimal(java.lang.Long.toUnsignedString(value)))
+            this.updater.set(Decimal(java.lang.Long.toUnsignedString(value)))
           }
         }
 
@@ -391,7 +391,7 @@ private[parquet] class ParquetRowConverter(
              .asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.MICROS =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
-            updater.setLong(timestampRebaseFunc(value))
+            this.updater.setLong(timestampRebaseFunc(value))
           }
         }
 
@@ -404,7 +404,7 @@ private[parquet] class ParquetRowConverter(
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
             val micros = DateTimeUtils.millisToMicros(value)
-            updater.setLong(timestampRebaseFunc(micros))
+            this.updater.setLong(timestampRebaseFunc(micros))
           }
         }
 
@@ -417,7 +417,7 @@ private[parquet] class ParquetRowConverter(
             val gregorianMicros = int96RebaseFunc(julianMicros)
             val adjTime = convertTz.map(DateTimeUtils.convertTz(gregorianMicros, _, ZoneOffset.UTC))
               .getOrElse(gregorianMicros)
-            updater.setLong(adjTime)
+            this.updater.setLong(adjTime)
           }
         }
 
@@ -434,14 +434,14 @@ private[parquet] class ParquetRowConverter(
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
             val micros = DateTimeUtils.millisToMicros(value)
-            updater.setLong(micros)
+            this.updater.setLong(micros)
           }
         }
 
       case DateType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit = {
-            updater.set(dateRebaseFunc(value))
+            this.updater.set(dateRebaseFunc(value))
           }
         }
 
@@ -497,6 +497,9 @@ private[parquet] class ParquetRowConverter(
           datetimeRebaseSpec,
           int96RebaseSpec,
           wrappedUpdater)
+
+      case t: VariantType =>
+        new ParquetVariantConverter(parquetType.asGroupType(), updater)
 
       case t =>
         throw QueryExecutionErrors.cannotCreateParquetConverterForDataTypeError(
@@ -807,6 +810,40 @@ private[parquet] class ParquetRowConverter(
         currentKey = null
         currentValue = null
       }
+    }
+  }
+
+  /** Parquet converter for Variant */
+  private final class ParquetVariantConverter(
+     parquetType: GroupType,
+     updater: ParentContainerUpdater)
+    extends ParquetGroupConverter(updater) {
+
+    private[this] var currentValue: Any = _
+    private[this] var currentMetadata: Any = _
+
+    private[this] val converters = Array(
+      // Converter for value
+      newConverter(parquetType.getType(0), BinaryType, new ParentContainerUpdater {
+        override def set(value: Any): Unit = currentValue = value
+      }),
+
+      // Converter for metadata
+      newConverter(parquetType.getType(1), BinaryType, new ParentContainerUpdater {
+        override def set(value: Any): Unit = currentMetadata = value
+      }))
+
+    override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
+
+    override def end(): Unit = {
+      updater.set(
+        new VariantVal(currentValue.asInstanceOf[Array[Byte]],
+            currentMetadata.asInstanceOf[Array[Byte]]))
+    }
+
+    override def start(): Unit = {
+      currentValue = null
+      currentMetadata = null
     }
   }
 

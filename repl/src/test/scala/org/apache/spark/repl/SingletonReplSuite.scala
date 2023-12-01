@@ -191,7 +191,7 @@ class SingletonReplSuite extends SparkFunSuite {
 
   test("interacting with files") {
     val tempDir = Utils.createTempDir()
-    val out = new FileWriter(tempDir + "/input")
+    val out = new FileWriter(s"$tempDir/input")
     out.write("Hello world!\n")
     out.write("What's up?\n")
     out.write("Goodbye\n")
@@ -410,6 +410,71 @@ class SingletonReplSuite extends SparkFunSuite {
 
     assertContains("r: Foo = Foo(bar)", output)
     assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+  }
+
+  test("SPARK-31399: should clone+clean line object w/ non-serializable state in ClosureCleaner") {
+    // Test ClosureCleaner when a closure captures the enclosing `this` REPL line object, and that
+    // object contains an unused non-serializable field.
+    // Specifically, the closure in this test case contains a directly nested closure, and the
+    // capture is triggered by the inner closure.
+    // `ns` should be nulled out, but `topLevelValue` should stay intact.
+
+    // Can't use :paste mode because PipedOutputStream/PipedInputStream doesn't work well with the
+    // EOT control character (i.e. Ctrl+D).
+    // Just write things on a single line to emulate :paste mode.
+
+    // NOTE: in order for this test case to trigger the intended scenario, the following three
+    //       variables need to be in the same "input", which will make the REPL pack them into the
+    //       same REPL line object:
+    //         - ns: a non-serializable state, not accessed by the closure;
+    //         - topLevelValue: a serializable state, accessed by the closure;
+    //         - closure: the starting closure, captures the enclosing REPL line object.
+    val output = runInterpreter(
+      """
+        |class NotSerializableClass(val x: Int)
+        |val ns = new NotSerializableClass(42); val topLevelValue = "someValue"; val closure =
+        |(j: Int) => {
+        |  (1 to j).flatMap { x =>
+        |    (1 to x).map { y => y + topLevelValue }
+        |  }
+        |}
+        |val r = sc.parallelize(0 to 2).map(closure).collect
+      """.stripMargin)
+    //  assertContains("r: Array[scala.collection.immutable.IndexedSeq[String]] = " +
+    //    "Array(Vector(), Vector(1someValue), Vector(1someValue, 1someValue, 2someValue))", output)
+    assertContains("r: Array[IndexedSeq[String]] = " +
+      "Array(Vector(), Vector(1someValue), Vector(1someValue, 1someValue, 2someValue))", output)
+    assertDoesNotContain("Exception", output)
+  }
+
+  test("SPARK-31399: ClosureCleaner should discover indirectly nested closure in inner class") {
+    // Similar to the previous test case, but with indirect closure nesting instead.
+    // There's still nested closures involved, but the inner closure is indirectly nested in the
+    // outer closure, with a level of inner class in between them.
+    // This changes how the inner closure references/captures the outer closure/enclosing `this`
+    // REPL line object, and covers a different code path in inner closure discovery.
+
+    // `ns` should be nulled out, but `topLevelValue` should stay intact.
+
+    val output = runInterpreter(
+      """
+        |class NotSerializableClass(val x: Int)
+        |val ns = new NotSerializableClass(42); val topLevelValue = "someValue"; val closure =
+        |(j: Int) => {
+        |  class InnerFoo {
+        |    val innerClosure = (x: Int) => (1 to x).map { y => y + topLevelValue }
+        |  }
+        |  val innerFoo = new InnerFoo
+        |  (1 to j).flatMap(innerFoo.innerClosure)
+        |}
+        |val r = sc.parallelize(0 to 2).map(closure).collect
+      """.stripMargin)
+    //  assertContains("r: Array[scala.collection.immutable.IndexedSeq[String]] = " +
+    //    "Array(Vector(), Vector(1someValue), Vector(1someValue, 1someValue, 2someValue))", output)
+    assertContains("r: Array[IndexedSeq[String]] = " +
+      "Array(Vector(), Vector(1someValue), Vector(1someValue, 1someValue, 2someValue))", output)
+    assertDoesNotContain("Array(Vector(), Vector(1null), Vector(1null, 1null, 2null)", output)
     assertDoesNotContain("Exception", output)
   }
 }

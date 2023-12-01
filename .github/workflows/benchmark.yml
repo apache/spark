@@ -65,7 +65,7 @@ jobs:
       SPARK_LOCAL_IP: localhost
     steps:
       - name: Checkout Spark repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         # In order to get diff files
         with:
           fetch-depth: 0
@@ -95,7 +95,7 @@ jobs:
           key: tpcds-${{ hashFiles('.github/workflows/benchmark.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
       - name: Checkout tpcds-kit repository
         if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: databricks/tpcds-kit
           ref: 2a5078a782192ddb6efbcead8de9973d6ab4f069
@@ -107,7 +107,7 @@ jobs:
         if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
         uses: actions/setup-java@v3
         with:
-          distribution: temurin
+          distribution: zulu
           java-version: ${{ github.event.inputs.jdk }}
       - name: Generate TPC-DS (SF=1) table data
         if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
@@ -134,7 +134,7 @@ jobs:
       SPARK_TPCDS_DATA: ${{ github.workspace }}/tpcds-sf-1
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       # In order to get diff files
       with:
         fetch-depth: 0
@@ -159,7 +159,7 @@ jobs:
     - name: Install Java ${{ github.event.inputs.jdk }}
       uses: actions/setup-java@v3
       with:
-        distribution: temurin
+        distribution: zulu
         java-version: ${{ github.event.inputs.jdk }}
     - name: Cache TPC-DS generated data
       if: contains(github.event.inputs.class, 'TPCDSQueryBenchmark') || contains(github.event.inputs.class, '*')
@@ -170,14 +170,14 @@ jobs:
         key: tpcds-${{ hashFiles('.github/workflows/benchmark.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
     - name: Run benchmarks
       run: |
-        ./build/sbt -Pscala-${{ github.event.inputs.scala }} -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pspark-ganglia-lgpl Test/package
+        ./build/sbt -Pscala-${{ github.event.inputs.scala }} -Pyarn -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pspark-ganglia-lgpl Test/package
         # Make less noisy
         cp conf/log4j2.properties.template conf/log4j2.properties
         sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' conf/log4j2.properties
         # In benchmark, we use local as master so set driver memory only. Note that GitHub Actions has 7 GB memory limit.
         bin/spark-submit \
           --driver-memory 6g --class org.apache.spark.benchmark.Benchmarks \
-          --jars "`find . -name '*-SNAPSHOT-tests.jar' -o -name '*avro*-SNAPSHOT.jar' | paste -sd ',' -`" \
+          --jars "`find . -name '*-SNAPSHOT-tests.jar' -o -name '*avro*-SNAPSHOT.jar' | paste -sd ',' -`,`find ~/.cache/coursier -name 'curator-test-*.jar'`" \
           "`find . -name 'spark-core*-SNAPSHOT-tests.jar'`" \
           "${{ github.event.inputs.class }}"
         # To keep the directory structure and file permissions, tar them

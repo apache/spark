@@ -20,6 +20,7 @@ package org.apache.spark.ml.attribute
 import scala.annotation.varargs
 
 import org.apache.spark.sql.types.{DoubleType, Metadata, MetadataBuilder, NumericType, StructField}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -434,7 +435,7 @@ class NominalAttribute private[ml] (
           (index == o.index) &&
           (isOrdinal == o.isOrdinal) &&
           (numValues == o.numValues) &&
-          (values.map(_.toSeq) == o.values.map(_.toSeq))
+          (values.map(_.toImmutableArraySeq) == o.values.map(_.toImmutableArraySeq))
       case _ =>
         false
     }
@@ -446,7 +447,7 @@ class NominalAttribute private[ml] (
     sum = 37 * sum + index.hashCode
     sum = 37 * sum + isOrdinal.hashCode
     sum = 37 * sum + numValues.hashCode
-    sum = 37 * sum + values.map(_.toSeq).hashCode
+    sum = 37 * sum + values.map(_.toImmutableArraySeq).hashCode
     sum
   }
 }
@@ -485,7 +486,8 @@ class BinaryAttribute private[ml] (
   extends Attribute {
 
   values.foreach { v =>
-    require(v.length == 2, s"Number of values must be 2 for a binary attribute but got ${v.toSeq}.")
+    require(v.length == 2,
+      s"Number of values must be 2 for a binary attribute but got ${v.toImmutableArraySeq}.")
   }
 
   override def attrType: AttributeType = AttributeType.Binary
@@ -534,7 +536,7 @@ class BinaryAttribute private[ml] (
       case o: BinaryAttribute =>
         (name == o.name) &&
           (index == o.index) &&
-          (values.map(_.toSeq) == o.values.map(_.toSeq))
+          (values.map(_.toImmutableArraySeq) == o.values.map(_.toImmutableArraySeq))
       case _ =>
         false
     }
@@ -544,7 +546,7 @@ class BinaryAttribute private[ml] (
     var sum = 17
     sum = 37 * sum + name.hashCode
     sum = 37 * sum + index.hashCode
-    sum = 37 * sum + values.map(_.toSeq).hashCode
+    sum = 37 * sum + values.map(_.toImmutableArraySeq).hashCode
     sum
   }
 }

@@ -17,8 +17,8 @@
 
 package org.apache.spark.ml.attribute;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class JavaAttributeSuite {
 
@@ -27,29 +27,29 @@ public class JavaAttributeSuite {
     AttributeType numericType = AttributeType.Numeric();
     AttributeType nominalType = AttributeType.Nominal();
     AttributeType binaryType = AttributeType.Binary();
-    Assert.assertEquals(numericType, NumericAttribute.defaultAttr().attrType());
-    Assert.assertEquals(nominalType, NominalAttribute.defaultAttr().attrType());
-    Assert.assertEquals(binaryType, BinaryAttribute.defaultAttr().attrType());
+    Assertions.assertEquals(numericType, NumericAttribute.defaultAttr().attrType());
+    Assertions.assertEquals(nominalType, NominalAttribute.defaultAttr().attrType());
+    Assertions.assertEquals(binaryType, BinaryAttribute.defaultAttr().attrType());
   }
 
   @Test
   public void testNumericAttribute() {
     NumericAttribute attr = NumericAttribute.defaultAttr()
       .withName("age").withIndex(0).withMin(0.0).withMax(1.0).withStd(0.5).withSparsity(0.4);
-    Assert.assertEquals(attr.withoutIndex(), Attribute.fromStructField(attr.toStructField()));
+    Assertions.assertEquals(attr.withoutIndex(), Attribute.fromStructField(attr.toStructField()));
   }
 
   @Test
   public void testNominalAttribute() {
     NominalAttribute attr = NominalAttribute.defaultAttr()
       .withName("size").withIndex(1).withValues("small", "medium", "large");
-    Assert.assertEquals(attr.withoutIndex(), Attribute.fromStructField(attr.toStructField()));
+    Assertions.assertEquals(attr.withoutIndex(), Attribute.fromStructField(attr.toStructField()));
   }
 
   @Test
   public void testBinaryAttribute() {
     BinaryAttribute attr = BinaryAttribute.defaultAttr()
       .withName("clicked").withIndex(2).withValues("no", "yes");
-    Assert.assertEquals(attr.withoutIndex(), Attribute.fromStructField(attr.toStructField()));
+    Assertions.assertEquals(attr.withoutIndex(), Attribute.fromStructField(attr.toStructField()));
   }
 }

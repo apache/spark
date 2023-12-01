@@ -89,7 +89,6 @@ Computations / Descriptive Stats
    GroupBy.bfill
    GroupBy.ffill
    GroupBy.head
-   GroupBy.backfill
    GroupBy.shift
    GroupBy.tail
 

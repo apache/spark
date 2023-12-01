@@ -17,6 +17,7 @@
 #
 
 import unittest
+
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
@@ -37,7 +38,7 @@ class ClassificationTestsOnConnect(ClassificationTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = (
             SparkSession.builder.remote("local[2]")
-            .config("spark.connect.copyFromLocalToFs.allowDestLocal", "true")
+            .config("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
             .getOrCreate()
         )
 

@@ -26,7 +26,7 @@ import java.util.{Date, Locale, TimeZone}
 import javax.servlet.http.HttpServletRequest
 import javax.ws.rs.core.{MediaType, MultivaluedMap, Response}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
@@ -239,7 +239,7 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri(request, "/static/initialize-tooltips.js")}></script>
     <script src={prependBaseUri(request, "/static/table.js")}></script>
     <script src={prependBaseUri(request, "/static/timeline-view.js")}></script>
-    <script src={prependBaseUri(request, "/static/log-view.js")}></script>
+    <script type="module" src={prependBaseUri(request, "/static/log-view.js")}></script>
     <script src={prependBaseUri(request, "/static/webui.js")}></script>
     <script>setUIRoot('{UIUtils.uiRoot(request)}')</script>
   }
@@ -401,7 +401,7 @@ private[spark] object UIUtils extends Logging {
       }
     }
     val colWidth = 100.toDouble / headers.size
-    val colWidthAttr = if (fixedWidth) colWidth + "%" else ""
+    val colWidthAttr = if (fixedWidth) s"$colWidth%" else ""
 
     def getClass(index: Int): String = {
       if (index < headerClasses.size) {
@@ -708,6 +708,9 @@ private[spark] object UIUtils extends Logging {
 
   private final val ERROR_CLASS_REGEX = """\[(?<errorClass>[A-Z][A-Z_.]+[A-Z])]""".r
 
+  /**
+   * This function works exactly the same as utils.errorSummary(javascript), it shall be
+   * remained the same whichever changed */
   def errorSummary(errorMessage: String): (String, Boolean) = {
     var isMultiline = true
     val maybeErrorClass =

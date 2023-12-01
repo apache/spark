@@ -261,6 +261,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NOT_SUPPORTED_CHANGE_COLUMN",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "newName" : "`c`",
     "newType" : "\"CHAR(6)\"",

@@ -20,6 +20,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.connect.common.config.ConnectCommon
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.buildConf
 
 object Connect {
@@ -73,6 +74,24 @@ object Connect {
       .version("3.5.0")
       .intConf
       .createWithDefault(1024)
+
+  val CONNECT_SESSION_MANAGER_DEFAULT_SESSION_TIMEOUT =
+    buildStaticConf("spark.connect.session.manager.defaultSessionTimeout")
+      .internal()
+      .doc("Timeout after which sessions without any new incoming RPC will be removed.")
+      .version("4.0.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("60m")
+
+  val CONNECT_SESSION_MANAGER_CLOSED_SESSIONS_TOMBSTONES_SIZE =
+    buildStaticConf("spark.connect.session.manager.closedSessionsTombstonesSize")
+      .internal()
+      .doc(
+        "Maximum size of the cache of sessions after which sessions that did not receive any " +
+          "requests will be removed.")
+      .version("4.0.0")
+      .intConf
+      .createWithDefaultString("1000")
 
   val CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT =
     buildStaticConf("spark.connect.execute.manager.detachedTimeout")
@@ -186,21 +205,7 @@ object Connect {
           |""".stripMargin)
       .version("3.5.0")
       .intConf
-      .createWithDefault(2048)
-
-  val CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL =
-    buildStaticConf("spark.connect.copyFromLocalToFs.allowDestLocal")
-      .internal()
-      .doc("""
-            |Allow `spark.copyFromLocalToFs` destination to be local file system
-            | path on spark driver node when
-            |`spark.connect.copyFromLocalToFs.allowDestLocal` is true.
-            |This will allow user to overwrite arbitrary file on spark
-            |driver node we should only enable it for testing purpose.
-            |""".stripMargin)
-      .version("3.5.0")
-      .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(1024)
 
   val CONNECT_UI_STATEMENT_LIMIT =
     buildStaticConf("spark.sql.connect.ui.retainedStatements")
@@ -208,6 +213,17 @@ object Connect {
       .version("3.5.0")
       .intConf
       .createWithDefault(200)
+
+  val CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL =
+    buildStaticConf("spark.connect.copyFromLocalToFs.allowDestLocal")
+      .internal()
+      .doc(s"""
+             |(Deprecated since Spark 4.0, please set
+             |'${SQLConf.ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL.key}' instead.
+             |""".stripMargin)
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val CONNECT_UI_SESSION_LIMIT = buildStaticConf("spark.sql.connect.ui.retainedSessions")
     .doc("The number of client sessions kept in the Spark Connect UI history.")

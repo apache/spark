@@ -15,10 +15,10 @@ WithCTE
 :  +- SubqueryAlias t
 :     +- Project [1#x]
 :        +- SubqueryAlias t2
-:           +- CTERelationRef xxxx, true, [1#x]
+:           +- CTERelationRef xxxx, true, [1#x], false
 +- Project [1#x]
    +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [1#x]
+      +- CTERelationRef xxxx, true, [1#x], false
 
 
 -- !query
@@ -37,7 +37,7 @@ Aggregate [max(c#x) AS max(c)#x]
       :           +- OneRowRelation
       +- Project [c#x]
          +- SubqueryAlias t
-            +- CTERelationRef xxxx, true, [c#x]
+            +- CTERelationRef xxxx, true, [c#x], false
 
 
 -- !query
@@ -54,7 +54,7 @@ Project [scalar-subquery#x [] AS scalarsubquery()#x]
 :     :        +- OneRowRelation
 :     +- Project [1#x]
 :        +- SubqueryAlias t
-:           +- CTERelationRef xxxx, true, [1#x]
+:           +- CTERelationRef xxxx, true, [1#x], false
 +- OneRowRelation
 
 
@@ -93,23 +93,16 @@ WITH
   )
 SELECT * FROM t2
 -- !query analysis
-WithCTE
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias t
-:     +- Project [1 AS 1#x]
-:        +- OneRowRelation
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias t
-:     +- Project [2 AS 2#x]
-:        +- OneRowRelation
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias t2
-:     +- Project [2#x]
-:        +- SubqueryAlias t
-:           +- CTERelationRef xxxx, true, [2#x]
-+- Project [2#x]
-   +- SubqueryAlias t2
-      +- CTERelationRef xxxx, true, [2#x]
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "sqlState" : "42KD0",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`t`"
+  }
+}
 
 
 -- !query
@@ -144,11 +137,11 @@ WithCTE
 :        :           :           +- OneRowRelation
 :        :           +- Project [c#x]
 :        :              +- SubqueryAlias t
-:        :                 +- CTERelationRef xxxx, true, [c#x]
+:        :                 +- CTERelationRef xxxx, true, [c#x], false
 :        +- OneRowRelation
 +- Project [scalarsubquery()#x]
    +- SubqueryAlias t2
-      +- CTERelationRef xxxx, true, [scalarsubquery()#x]
+      +- CTERelationRef xxxx, true, [scalarsubquery()#x], false
 
 
 -- !query
@@ -164,32 +157,16 @@ WITH
   )
 SELECT * FROM t2
 -- !query analysis
-WithCTE
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias t
-:     +- Project [1 AS 1#x]
-:        +- OneRowRelation
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias t
-:     +- Project [2 AS 2#x]
-:        +- OneRowRelation
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias t
-:     +- Project [3 AS 3#x]
-:        +- OneRowRelation
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias t2
-:     +- Project [3#x]
-:        +- SubqueryAlias t
-:           +- CTERelationRef xxxx, true, [3#x]
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias t2
-:     +- Project [3#x]
-:        +- SubqueryAlias t2
-:           +- CTERelationRef xxxx, true, [3#x]
-+- Project [3#x]
-   +- SubqueryAlias t2
-      +- CTERelationRef xxxx, true, [3#x]
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "sqlState" : "42KD0",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`t`"
+  }
+}
 
 
 -- !query
@@ -214,7 +191,7 @@ WithCTE
    +- SubqueryAlias __auto_generated_subquery_name
       +- Project [c#x]
          +- SubqueryAlias t
-            +- CTERelationRef xxxx, true, [c#x]
+            +- CTERelationRef xxxx, true, [c#x], false
 
 
 -- !query
@@ -243,7 +220,7 @@ WithCTE
          +- SubqueryAlias __auto_generated_subquery_name
             +- Project [c#x]
                +- SubqueryAlias t
-                  +- CTERelationRef xxxx, true, [c#x]
+                  +- CTERelationRef xxxx, true, [c#x], false
 
 
 -- !query
@@ -278,7 +255,7 @@ WithCTE
          +- SubqueryAlias __auto_generated_subquery_name
             +- Project [c#x]
                +- SubqueryAlias t
-                  +- CTERelationRef xxxx, true, [c#x]
+                  +- CTERelationRef xxxx, true, [c#x], false
 
 
 -- !query
@@ -288,21 +265,16 @@ SELECT (
   SELECT * FROM t
 )
 -- !query analysis
-WithCTE
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias t
-:     +- Project [1 AS 1#x]
-:        +- OneRowRelation
-+- Project [scalar-subquery#x [] AS scalarsubquery()#x]
-   :  +- WithCTE
-   :     :- CTERelationDef xxxx, false
-   :     :  +- SubqueryAlias t
-   :     :     +- Project [2 AS 2#x]
-   :     :        +- OneRowRelation
-   :     +- Project [2#x]
-   :        +- SubqueryAlias t
-   :           +- CTERelationRef xxxx, true, [2#x]
-   +- OneRowRelation
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "sqlState" : "42KD0",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`t`"
+  }
+}
 
 
 -- !query
@@ -314,23 +286,16 @@ SELECT (
   )
 )
 -- !query analysis
-WithCTE
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias t
-:     +- Project [1 AS 1#x]
-:        +- OneRowRelation
-+- Project [scalar-subquery#x [] AS scalarsubquery()#x]
-   :  +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
-   :     :  +- WithCTE
-   :     :     :- CTERelationDef xxxx, false
-   :     :     :  +- SubqueryAlias t
-   :     :     :     +- Project [2 AS 2#x]
-   :     :     :        +- OneRowRelation
-   :     :     +- Project [2#x]
-   :     :        +- SubqueryAlias t
-   :     :           +- CTERelationRef xxxx, true, [2#x]
-   :     +- OneRowRelation
-   +- OneRowRelation
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "sqlState" : "42KD0",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`t`"
+  }
+}
 
 
 -- !query
@@ -343,28 +308,16 @@ SELECT (
   )
 )
 -- !query analysis
-WithCTE
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias t
-:     +- Project [1 AS 1#x]
-:        +- OneRowRelation
-+- Project [scalar-subquery#x [] AS scalarsubquery()#x]
-   :  +- WithCTE
-   :     :- CTERelationDef xxxx, false
-   :     :  +- SubqueryAlias t
-   :     :     +- Project [2 AS 2#x]
-   :     :        +- OneRowRelation
-   :     +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
-   :        :  +- WithCTE
-   :        :     :- CTERelationDef xxxx, false
-   :        :     :  +- SubqueryAlias t
-   :        :     :     +- Project [3 AS 3#x]
-   :        :     :        +- OneRowRelation
-   :        :     +- Project [3#x]
-   :        :        +- SubqueryAlias t
-   :        :           +- CTERelationRef xxxx, true, [3#x]
-   :        +- OneRowRelation
-   +- OneRowRelation
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "sqlState" : "42KD0",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`t`"
+  }
+}
 
 
 -- !query
@@ -375,25 +328,16 @@ WHERE c IN (
   SELECT * FROM t
 )
 -- !query analysis
-WithCTE
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias t
-:     +- Project [1#x AS c#x]
-:        +- Project [1 AS 1#x]
-:           +- OneRowRelation
-+- Project [c#x]
-   +- Filter c#x IN (list#x [])
-      :  +- WithCTE
-      :     :- CTERelationDef xxxx, false
-      :     :  +- SubqueryAlias t
-      :     :     +- Project [2#x AS c#x]
-      :     :        +- Project [2 AS 2#x]
-      :     :           +- OneRowRelation
-      :     +- Project [c#x]
-      :        +- SubqueryAlias t
-      :           +- CTERelationRef xxxx, true, [c#x]
-      +- SubqueryAlias t
-         +- CTERelationRef xxxx, true, [c#x]
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "sqlState" : "42KD0",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`t`"
+  }
+}
 
 
 -- !query
@@ -414,14 +358,14 @@ WithCTE
 :  +- SubqueryAlias t
 :     +- Project [1#x]
 :        +- SubqueryAlias t2
-:           +- CTERelationRef xxxx, true, [1#x]
+:           +- CTERelationRef xxxx, true, [1#x], false
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias t2
 :     +- Project [2 AS 2#x]
 :        +- OneRowRelation
 +- Project [1#x]
    +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [1#x]
+      +- CTERelationRef xxxx, true, [1#x], false
 
 
 -- !query
@@ -433,23 +377,16 @@ WITH
   )
 SELECT * FROM t
 -- !query analysis
-WithCTE
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias abc
-:     +- Project [1 AS 1#x]
-:        +- OneRowRelation
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias aBc
-:     +- Project [2 AS 2#x]
-:        +- OneRowRelation
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias t
-:     +- Project [2#x]
-:        +- SubqueryAlias aBC
-:           +- CTERelationRef xxxx, true, [2#x]
-+- Project [2#x]
-   +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [2#x]
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "sqlState" : "42KD0",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`aBc`"
+  }
+}
 
 
 -- !query
@@ -459,21 +396,16 @@ SELECT (
   SELECT * FROM aBC
 )
 -- !query analysis
-WithCTE
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias abc
-:     +- Project [1 AS 1#x]
-:        +- OneRowRelation
-+- Project [scalar-subquery#x [] AS scalarsubquery()#x]
-   :  +- WithCTE
-   :     :- CTERelationDef xxxx, false
-   :     :  +- SubqueryAlias aBc
-   :     :     +- Project [2 AS 2#x]
-   :     :        +- OneRowRelation
-   :     +- Project [2#x]
-   :        +- SubqueryAlias aBC
-   :           +- CTERelationRef xxxx, true, [2#x]
-   +- OneRowRelation
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "sqlState" : "42KD0",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`aBc`"
+  }
+}
 
 
 -- !query
@@ -496,15 +428,15 @@ WithCTE
 :  +- SubqueryAlias t3
 :     +- Project [1#x]
 :        +- SubqueryAlias t1
-:           +- CTERelationRef xxxx, true, [1#x]
+:           +- CTERelationRef xxxx, true, [1#x], false
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias t2
 :     +- Project [1#x]
 :        +- SubqueryAlias t3
-:           +- CTERelationRef xxxx, true, [1#x]
+:           +- CTERelationRef xxxx, true, [1#x], false
 +- Project [1#x]
    +- SubqueryAlias t2
-      +- CTERelationRef xxxx, true, [1#x]
+      +- CTERelationRef xxxx, true, [1#x], false
 
 
 -- !query
@@ -527,12 +459,12 @@ WithCTE
 :  +- SubqueryAlias cte_inner
 :     +- Project [1#x]
 :        +- SubqueryAlias cte_outer
-:           +- CTERelationRef xxxx, true, [1#x]
+:           +- CTERelationRef xxxx, true, [1#x], false
 +- Project [1#x]
    +- SubqueryAlias __auto_generated_subquery_name
       +- Project [1#x]
          +- SubqueryAlias cte_inner
-            +- CTERelationRef xxxx, true, [1#x]
+            +- CTERelationRef xxxx, true, [1#x], false
 
 
 -- !query
@@ -560,19 +492,19 @@ WithCTE
 :  +- SubqueryAlias cte_inner_inner
 :     +- Project [1#x]
 :        +- SubqueryAlias cte_outer
-:           +- CTERelationRef xxxx, true, [1#x]
+:           +- CTERelationRef xxxx, true, [1#x], false
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte_inner
 :     +- Project [1#x]
 :        +- SubqueryAlias __auto_generated_subquery_name
 :           +- Project [1#x]
 :              +- SubqueryAlias cte_inner_inner
-:                 +- CTERelationRef xxxx, true, [1#x]
+:                 +- CTERelationRef xxxx, true, [1#x], false
 +- Project [1#x]
    +- SubqueryAlias __auto_generated_subquery_name
       +- Project [1#x]
          +- SubqueryAlias cte_inner
-            +- CTERelationRef xxxx, true, [1#x]
+            +- CTERelationRef xxxx, true, [1#x], false
 
 
 -- !query

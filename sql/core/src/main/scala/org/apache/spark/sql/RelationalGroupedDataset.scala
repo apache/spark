@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.annotation.Stable
@@ -37,6 +37,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{NumericType, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A set of methods for aggregations on a `DataFrame`, created by [[Dataset#groupBy groupBy]],
@@ -59,8 +60,8 @@ class RelationalGroupedDataset protected[sql](
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
     val aggregates = if (df.sparkSession.sessionState.conf.dataFrameRetainGroupColumns) {
       groupingExprs match {
-        // call `toList` because `Stream` can't serialize in scala 2.13
-        case s: Stream[Expression] => s.toList ++ aggExprs
+        // call `toList` because `LazyList` can't serialize in scala 2.13
+        case s: LazyList[Expression] => s.toList ++ aggExprs
         case other => other ++ aggExprs
       }
     } else {
@@ -79,6 +80,11 @@ class RelationalGroupedDataset protected[sql](
       case RelationalGroupedDataset.CubeType =>
         Dataset.ofRows(
           df.sparkSession, Aggregate(Seq(Cube(groupingExprs.map(Seq(_)))),
+            aliasedAgg, df.logicalPlan))
+      case RelationalGroupedDataset.GroupingSetsType(groupingSets) =>
+        Dataset.ofRows(
+          df.sparkSession,
+          Aggregate(Seq(GroupingSets(groupingSets, groupingExprs)),
             aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.PivotType(pivotCol, values) =>
         val aliasedGrps = groupingExprs.map(alias)
@@ -427,7 +433,7 @@ class RelationalGroupedDataset protected[sql](
       .sort(pivotColumn)  // ensure that the output columns are in a consistent logical order
       .collect()
       .map(_.get(0))
-      .toSeq
+      .toImmutableArraySeq
 
     if (values.length > maxValues) {
       throw QueryCompilationErrors.aggregationFunctionAppliedOnNonNumericColumnError(
@@ -731,6 +737,11 @@ private[sql] object RelationalGroupedDataset {
    * To indicate it's the ROLLUP
    */
   private[sql] object RollupType extends GroupType
+
+  /**
+   * To indicate it's the GroupingSets
+   */
+  private[sql] case class GroupingSetsType(groupingSets: Seq[Seq[Expression]]) extends GroupType
 
   /**
    * To indicate it's the PIVOT

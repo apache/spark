@@ -22,6 +22,8 @@ import java.util.Properties
 
 import scala.util.control.NonFatal
 
+import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
+
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -38,6 +40,7 @@ import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, 
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHelper {
@@ -61,6 +64,10 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         canonicalName match {
           case "h2.char_length" =>
             s"$funcName(${inputs.mkString(", ")})"
+          case "h2.char_length_magic" =>
+            s"CHAR_LENGTH(${inputs.mkString(", ")})"
+          case "strlen" =>
+            s"CHAR_LENGTH(${inputs.mkString(", ")})"
           case _ => super.visitUserDefinedScalarFunction(funcName, canonicalName, inputs)
         }
       }
@@ -103,6 +110,18 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     override def name(): String = "CHAR_LENGTH"
     override def canonicalName(): String = "h2.char_length"
 
+    override def produceResult(input: InternalRow): Int = {
+      val s = input.getString(0)
+      s.length
+    }
+  }
+
+  case object CharLengthWithMagicMethod extends ScalarFunction[Int] {
+    def invoke(str: UTF8String): Int = str.toString.length
+    override def inputTypes(): Array[DataType] = Array(StringType)
+    override def resultType(): DataType = IntegerType
+    override def name(): String = "CHAR_LENGTH_MAGIC"
+    override def canonicalName(): String = "h2.char_length_magic"
     override def produceResult(input: InternalRow): Int = {
       val s = input.getString(0)
       s.length
@@ -185,6 +204,19 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       conn.prepareStatement("INSERT INTO \"test\".\"datetime\" VALUES " +
         "('alex', '2022-05-18', '2022-05-18 00:00:00')").executeUpdate()
 
+      conn.prepareStatement(
+        "CREATE TABLE \"test\".\"address\" (email TEXT(32) NOT NULL)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"address\" VALUES " +
+        "('abc_def@gmail.com')").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"address\" VALUES " +
+        "('abc%def@gmail.com')").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"address\" VALUES " +
+        "('abc%_def@gmail.com')").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"address\" VALUES " +
+        "('abc_%def@gmail.com')").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"address\" VALUES " +
+        "('abc_''%def@gmail.com')").executeUpdate()
+
       conn.prepareStatement("CREATE TABLE \"test\".\"binary1\" (name TEXT(32),b BINARY(20))")
         .executeUpdate()
       val stmt = conn.prepareStatement("INSERT INTO \"test\".\"binary1\" VALUES (?, ?)")
@@ -194,6 +226,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
     H2Dialect.registerFunction("my_avg", IntegralAverage)
     H2Dialect.registerFunction("my_strlen", StrLen(CharLength))
+    H2Dialect.registerFunction("my_strlen_magic", StrLen(CharLengthWithMagicMethod))
+    H2Dialect.registerFunction(
+      "my_strlen_static_magic", StrLen(new JavaStrLenStaticMagic()))
   }
 
   override def afterAll(): Unit = {
@@ -1096,7 +1131,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
     val df3 = spark.table("h2.test.employee").filter($"name".startsWith("a"))
     checkFiltersRemoved(df3)
-    checkPushedInfo(df3, "PushedFilters: [NAME IS NOT NULL, NAME LIKE 'a%']")
+    checkPushedInfo(df3, raw"PushedFilters: [NAME IS NOT NULL, NAME LIKE 'a%' ESCAPE '\']")
     checkAnswer(df3, Seq(Row(1, "amy", 10000, 1000, true), Row(2, "alex", 12000, 1200, false)))
 
     val df4 = spark.table("h2.test.employee").filter($"is_manager")
@@ -1240,6 +1275,94 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df17, Seq(Row(6, "jen", 12000, 1200, true)))
   }
 
+  test("SPARK-38432: escape the single quote, _ and % for DS V2 pushdown") {
+    val df1 = spark.table("h2.test.address").filter($"email".startsWith("abc_"))
+    checkFiltersRemoved(df1)
+    checkPushedInfo(df1, raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE 'abc\_%' ESCAPE '\']")
+    checkAnswer(df1,
+      Seq(Row("abc_%def@gmail.com"), Row("abc_'%def@gmail.com"), Row("abc_def@gmail.com")))
+
+    val df2 = spark.table("h2.test.address").filter($"email".startsWith("abc%"))
+    checkFiltersRemoved(df2)
+    checkPushedInfo(df2, raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE 'abc\%%' ESCAPE '\']")
+    checkAnswer(df2, Seq(Row("abc%_def@gmail.com"), Row("abc%def@gmail.com")))
+
+    val df3 = spark.table("h2.test.address").filter($"email".startsWith("abc%_"))
+    checkFiltersRemoved(df3)
+    checkPushedInfo(df3, raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE 'abc\%\_%' ESCAPE '\']")
+    checkAnswer(df3, Seq(Row("abc%_def@gmail.com")))
+
+    val df4 = spark.table("h2.test.address").filter($"email".startsWith("abc_%"))
+    checkFiltersRemoved(df4)
+    checkPushedInfo(df4, raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE 'abc\_\%%' ESCAPE '\']")
+    checkAnswer(df4, Seq(Row("abc_%def@gmail.com")))
+
+    val df5 = spark.table("h2.test.address").filter($"email".startsWith("abc_'%"))
+    checkFiltersRemoved(df5)
+    checkPushedInfo(df5,
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE 'abc\_\'\%%' ESCAPE '\']")
+    checkAnswer(df5, Seq(Row("abc_'%def@gmail.com")))
+
+    val df6 = spark.table("h2.test.address").filter($"email".endsWith("_def@gmail.com"))
+    checkFiltersRemoved(df6)
+    checkPushedInfo(df6,
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%\_def@gmail.com' ESCAPE '\']")
+    checkAnswer(df6, Seq(Row("abc%_def@gmail.com"), Row("abc_def@gmail.com")))
+
+    val df7 = spark.table("h2.test.address").filter($"email".endsWith("%def@gmail.com"))
+    checkFiltersRemoved(df7)
+    checkPushedInfo(df7,
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%\%def@gmail.com' ESCAPE '\']")
+    checkAnswer(df7,
+      Seq(Row("abc%def@gmail.com"), Row("abc_%def@gmail.com"), Row("abc_'%def@gmail.com")))
+
+    val df8 = spark.table("h2.test.address").filter($"email".endsWith("%_def@gmail.com"))
+    checkFiltersRemoved(df8)
+    checkPushedInfo(df8,
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%\%\_def@gmail.com' ESCAPE '\']")
+    checkAnswer(df8, Seq(Row("abc%_def@gmail.com")))
+
+    val df9 = spark.table("h2.test.address").filter($"email".endsWith("_%def@gmail.com"))
+    checkFiltersRemoved(df9)
+    checkPushedInfo(df9,
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%\_\%def@gmail.com' ESCAPE '\']")
+    checkAnswer(df9, Seq(Row("abc_%def@gmail.com")))
+
+    val df10 = spark.table("h2.test.address").filter($"email".endsWith("_'%def@gmail.com"))
+    checkFiltersRemoved(df10)
+    checkPushedInfo(df10,
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%\_\'\%def@gmail.com' ESCAPE '\']")
+    checkAnswer(df10, Seq(Row("abc_'%def@gmail.com")))
+
+    val df11 = spark.table("h2.test.address").filter($"email".contains("c_d"))
+    checkFiltersRemoved(df11)
+    checkPushedInfo(df11, raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%c\_d%' ESCAPE '\']")
+    checkAnswer(df11, Seq(Row("abc_def@gmail.com")))
+
+    val df12 = spark.table("h2.test.address").filter($"email".contains("c%d"))
+    checkFiltersRemoved(df12)
+    checkPushedInfo(df12, raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%c\%d%' ESCAPE '\']")
+    checkAnswer(df12, Seq(Row("abc%def@gmail.com")))
+
+    val df13 = spark.table("h2.test.address").filter($"email".contains("c%_d"))
+    checkFiltersRemoved(df13)
+    checkPushedInfo(df13,
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%c\%\_d%' ESCAPE '\']")
+    checkAnswer(df13, Seq(Row("abc%_def@gmail.com")))
+
+    val df14 = spark.table("h2.test.address").filter($"email".contains("c_%d"))
+    checkFiltersRemoved(df14)
+    checkPushedInfo(df14,
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%c\_\%d%' ESCAPE '\']")
+    checkAnswer(df14, Seq(Row("abc_%def@gmail.com")))
+
+    val df15 = spark.table("h2.test.address").filter($"email".contains("c_'%d"))
+    checkFiltersRemoved(df15)
+    checkPushedInfo(df15,
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%c\_\'\%d%' ESCAPE '\']")
+    checkAnswer(df15, Seq(Row("abc_'%def@gmail.com")))
+  }
+
   test("scan with filter push-down with ansi mode") {
     Seq(false, true).foreach { ansiMode =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiMode.toString) {
@@ -1325,10 +1448,11 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         checkFiltersRemoved(df6, ansiMode)
         val expectedPlanFragment6 = if (ansiMode) {
           "PushedFilters: [BONUS IS NOT NULL, DEPT IS NOT NULL, " +
-            "CAST(BONUS AS string) LIKE '%30%', CAST(DEPT AS byte) > 1, " +
+            raw"CAST(BONUS AS string) LIKE '%30%' ESCAPE '\', CAST(DEPT AS byte) > 1, " +
             "CAST(DEPT AS short) > 1, CAST(BONUS AS decimal(20,2)) > 1200.00]"
         } else {
-          "PushedFilters: [BONUS IS NOT NULL, DEPT IS NOT NULL, CAST(BONUS AS string) LIKE '%30%']"
+          "PushedFilters: [BONUS IS NOT NULL, " +
+            raw"DEPT IS NOT NULL, CAST(BONUS AS string) LIKE '%30%' ESCAPE '\']"
         }
         checkPushedInfo(df6, expectedPlanFragment6)
         checkAnswer(df6, Seq(Row(2, "david", 10000, 1300, true)))
@@ -1489,6 +1613,58 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
   }
 
+  test("scan with filter push-down with UDF that has magic method") {
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      val df1 = sql("SELECT * FROM h2.test.people where h2.my_strlen_magic(name) > 2")
+      checkFiltersRemoved(df1)
+      checkPushedInfo(df1, "PushedFilters: [CHAR_LENGTH_MAGIC(NAME) > 2],")
+      checkAnswer(df1, Seq(Row("fred", 1), Row("mary", 2)))
+
+      val df2 = sql(
+        """
+          |SELECT *
+          |FROM h2.test.people
+          |WHERE h2.my_strlen_magic(CASE WHEN NAME = 'fred' THEN NAME ELSE "abc" END) > 2
+          """.stripMargin)
+      checkFiltersRemoved(df2)
+      checkPushedInfo(df2,
+        "PushedFilters: [CHAR_LENGTH_MAGIC(CASE WHEN NAME = 'fred' " +
+          "THEN NAME ELSE 'abc' END) > 2],")
+      checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(H2Dialect)
+    }
+  }
+
+  test("scan with filter push-down with UDF that has static magic method") {
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      val df1 = sql("SELECT * FROM h2.test.people where h2.my_strlen_static_magic(name) > 2")
+      checkFiltersRemoved(df1)
+      checkPushedInfo(df1, "PushedFilters: [strlen(NAME) > 2],")
+      checkAnswer(df1, Seq(Row("fred", 1), Row("mary", 2)))
+
+      val df2 = sql(
+        """
+          |SELECT *
+          |FROM h2.test.people
+          |WHERE h2.my_strlen_static_magic(CASE WHEN NAME = 'fred' THEN NAME ELSE "abc" END) > 2
+          """.stripMargin)
+      checkFiltersRemoved(df2)
+      checkPushedInfo(df2,
+        "PushedFilters: [strlen(CASE WHEN NAME = 'fred' " +
+          "THEN NAME ELSE 'abc' END) > 2],")
+      checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(H2Dialect)
+    }
+  }
+
   test("scan with column pruning") {
     val df = spark.table("h2.test.people").select("id")
     checkSchemaNames(df, Seq("ID"))
@@ -1538,8 +1714,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
   test("show tables") {
     checkAnswer(sql("SHOW TABLES IN h2.test"),
-      Seq(Row("test", "people", false), Row("test", "empty_table", false),
-        Row("test", "employee", false), Row("test", "item", false), Row("test", "dept", false),
+      Seq(Row("test", "address", false), Row("test", "people", false),
+        Row("test", "empty_table", false), Row("test", "employee", false),
+        Row("test", "item", false), Row("test", "dept", false),
         Row("test", "person", false), Row("test", "view1", false), Row("test", "view2", false),
         Row("test", "datetime", false), Row("test", "binary1", false)))
   }

@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.avro;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.QueryTest$;
@@ -33,12 +33,12 @@ import static org.apache.spark.sql.avro.functions.from_avro;
 public class JavaAvroFunctionsSuite {
   private transient TestSparkSession spark;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     spark = new TestSparkSession();
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     spark.stop();
   }

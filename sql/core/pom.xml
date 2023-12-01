@@ -146,10 +146,6 @@
       <artifactId>xmlschema-core</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.glassfish.jaxb</groupId>
-      <artifactId>txw2</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.apache.xbean</groupId>
       <artifactId>xbean-asm9-shaded</artifactId>
     </dependency>
@@ -190,7 +186,7 @@
     </dependency>
     <dependency>
       <groupId>com.oracle.database.jdbc</groupId>
-      <artifactId>ojdbc8</artifactId>
+      <artifactId>ojdbc11</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
