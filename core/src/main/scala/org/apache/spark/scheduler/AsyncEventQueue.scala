@@ -143,7 +143,7 @@ private class AsyncEventQueue(
         errorClass = "SCHEDULER_ASYNC_STOP",
         messageParameters = Map("name" -> name.toString))
     }
-    if (stopped.compareAndSet(false, true)) 
+    if (stopped.compareAndSet(false, true)) {
       eventCount.incrementAndGet()
       eventQueue.put(POISON_PILL)
     }
