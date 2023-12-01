@@ -591,6 +591,16 @@ class SparkSession private[sql] (
   def addArtifact(uri: URI): Unit = client.addArtifact(uri)
 
   /**
+   * Add a single in-memory artifact to the client session with a specified target URI.
+   *
+   * Currently it supports files with extensions .jar and .class.
+   *
+   * @since 4.0.0
+   */
+  @Experimental
+  def addArtifact(target: URI, bytes: Array[Byte]): Unit = client.addArtifact(target, bytes)
+
+  /**
    * Add one or more artifacts to the session.
    *
    * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs

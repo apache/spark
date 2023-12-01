@@ -109,6 +109,30 @@ class ArtifactManager(
   def addArtifact(uri: URI): Unit = addArtifacts(parseArtifacts(uri))
 
   /**
+   * Add a single in-memory artifact to the session.
+   *
+   * Currently it supports files with extensions .jar and .class.
+   */
+  def addArtifact(target: URI, bytes: Array[Byte]): Unit = {
+    target.getScheme match {
+      case "file" =>
+        val path = Paths.get(target)
+        val artifact = path.getFileName.toString match {
+          case jar if jar.endsWith(".jar") =>
+            newJarArtifact(path, new InMemory(bytes))
+          case cf if cf.endsWith(".class") =>
+            newClassArtifact(path, new InMemory(bytes))
+          case other =>
+            throw new UnsupportedOperationException(s"Unsupported file format: $other")
+        }
+        addArtifacts(artifact :: Nil)
+
+      case other =>
+        throw new UnsupportedOperationException(s"Unsupported scheme: $other")
+    }
+  }
+
+  /**
    * Add multiple artifacts to the session.
    *
    * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
@@ -408,14 +432,28 @@ object Artifact {
     jars.map(p => Paths.get(p)).map(path => newJarArtifact(path.getFileName, new LocalFile(path)))
   }
 
+  private def concatenatePaths(basePath: Path, otherPath: Path): Path = {
+    // We avoid using the `.resolve()` method here to ensure that we're concatenating the two
+    // paths even if `otherPath` is absolute.
+    val concatenatedPath = Paths.get(basePath.toString + "/" + otherPath.toString)
+    // Note: The normalized resulting path may still reference parent directories if the
+    // `otherPath` contains sufficient number of parent operators (i.e "..").
+    // Example: `basePath` = "/base", `otherPath` = "subdir/../../file.txt"
+    // Then, `concatenatedPath` = "/base/subdir/../../file.txt"
+    // and `normalizedPath` = "/base/file.txt".
+    val normalizedPath = concatenatedPath.normalize()
+    // Verify that the prefix of the `normalizedPath` starts with `basePath/`.
+    require(normalizedPath != basePath && normalizedPath.startsWith(s"$basePath/"))
+    normalizedPath
+  }
+
   private def newArtifact(
       prefix: Path,
       requiredSuffix: String,
-      fileName: Path,
+      targetFilePath: Path,
       storage: LocalData): Artifact = {
-    require(!fileName.isAbsolute)
-    require(fileName.toString.endsWith(requiredSuffix))
-    new Artifact(prefix.resolve(fileName), storage)
+    require(targetFilePath.toString.endsWith(requiredSuffix))
+    new Artifact(concatenatePaths(prefix, targetFilePath), storage)
   }
 
   /**

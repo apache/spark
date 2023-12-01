@@ -302,6 +302,14 @@ private[sql] class SparkConnectClient(
   def addArtifact(uri: URI): Unit = artifactManager.addArtifact(uri)
 
   /**
+   * Add a single in-memory artifact to the client session.
+   *
+   * Currently only files with extensions .jar and .class are supported.
+   */
+  def addArtifact(target: URI, bytes: Array[Byte]): Unit =
+    artifactManager.addArtifact(target, bytes)
+
+  /**
    * Add multiple artifacts to the session.
    *
    * Currently only local files with extensions .jar and .class are supported.
