@@ -34,7 +34,7 @@ import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModul
 import org.apache.commons.io.{FilenameUtils, IOUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path, PathFilter}
-import org.json4s.NoTypeHints
+import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkConf, SparkEnv}
@@ -715,7 +715,7 @@ case class RocksDBCheckpointMetadata(
 object RocksDBCheckpointMetadata {
   val VERSION = 1
 
-  implicit val format = Serialization.formats(NoTypeHints)
+  implicit val format: Formats = Serialization.formats(NoTypeHints)
 
   /** Used to convert between classes and JSON. */
   lazy val mapper = {

@@ -22,7 +22,7 @@ import java.util.Optional
 
 import scala.util.control.NonFatal
 
-import org.json4s.DefaultFormats
+import org.json4s.{DefaultFormats, Formats}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -253,7 +253,7 @@ private[spark] object ResourceUtils extends Logging {
 
   def parseAllocatedFromJsonFile(resourcesFile: String): Seq[ResourceAllocation] = {
     withResourcesJson[ResourceAllocation](resourcesFile) { json =>
-      implicit val formats = DefaultFormats
+      implicit val formats: Formats = DefaultFormats
       parse(json).extract[Seq[ResourceAllocation]]
     }
   }

@@ -216,7 +216,7 @@ class ApplyInPandasWithStatePythonRunner(
         STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER)
 
       stateMetadataBatch.rowIterator().asScala.take(numRows).flatMap { row =>
-        implicit val formats = org.json4s.DefaultFormats
+        implicit val formats: Formats = org.json4s.DefaultFormats
 
         // NOTE: See ApplyInPandasWithStatePythonRunner.STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER
         // for the schema.

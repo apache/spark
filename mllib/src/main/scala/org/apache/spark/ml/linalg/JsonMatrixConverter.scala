@@ -16,7 +16,7 @@
  */
 package org.apache.spark.ml.linalg
 
-import org.json4s.DefaultFormats
+import org.json4s.{DefaultFormats, Formats}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 
@@ -31,7 +31,7 @@ private[ml] object JsonMatrixConverter {
    * Parses the JSON representation of a Matrix into a [[Matrix]].
    */
   def fromJson(json: String): Matrix = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     val jValue = parseJson(json)
     (jValue \ "type").extract[Int] match {
       case 0 => // sparse

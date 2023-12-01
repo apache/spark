@@ -138,7 +138,7 @@ private[r] object AFTSurvivalRegressionWrapper extends MLReadable[AFTSurvivalReg
   class AFTSurvivalRegressionWrapperReader extends MLReader[AFTSurvivalRegressionWrapper] {
 
     override def load(path: String): AFTSurvivalRegressionWrapper = {
-      implicit val format = DefaultFormats
+      implicit val format: Formats = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
 

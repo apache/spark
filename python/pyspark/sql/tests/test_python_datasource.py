@@ -17,7 +17,7 @@
 import os
 import unittest
 
-from pyspark.sql.datasource import DataSource, DataSourceReader
+from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
 from pyspark.sql.types import Row
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -46,7 +46,6 @@ class BasePythonDataSourceTestsMixin:
                 yield None,
 
         reader = MyDataSourceReader()
-        self.assertEqual(list(reader.partitions()), [None])
         self.assertEqual(list(reader.read(None)), [(None,)])
 
     def test_data_source_register(self):
@@ -91,10 +90,10 @@ class BasePythonDataSourceTestsMixin:
                     num_partitions = int(self.options["num_partitions"])
                 else:
                     num_partitions = self.DEFAULT_NUM_PARTITIONS
-                return range(num_partitions)
+                return [InputPartition(i) for i in range(num_partitions)]
 
             def read(self, partition):
-                yield partition, str(partition)
+                yield partition.value, str(partition.value)
 
         class InMemoryDataSource(DataSource):
             @classmethod
