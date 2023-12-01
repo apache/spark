@@ -221,30 +221,6 @@ private[connect] object ErrorUtils extends Logging {
       .exists(_.toString.contains("org.apache.spark.sql.execution.python"))
   }
 
-  def handleNonQueryError[V](
-      opName: String,
-      observer: StreamObserver[V],
-      sessionHolderOpt: Option[SessionHolder],
-      callback: Option[() => Unit] = None): PartialFunction[Throwable, Unit] = {
-    val partial: PartialFunction[Throwable, Throwable] = {
-      case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
-        StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, sessionHolderOpt))
-      case e: StatusRuntimeException => e
-      case e: Throwable =>
-        Status.UNKNOWN
-          .withCause(e)
-          .withDescription(StringUtils.abbreviate(e.getMessage, 2048))
-          .asRuntimeException()
-    }
-    partial.andThen {
-      // All values must be throwable.
-      case t: Throwable =>
-        logError(s"Error during processing of $opName", t)
-        callback.foreach(c => c())
-        observer.onError(t)
-    }
-  }
-
   /**
    * Common exception handling function for RPC methods. Closes the stream after the error has
    * been sent.
@@ -253,6 +229,17 @@ private[connect] object ErrorUtils extends Logging {
    *   String value indicating the operation type (analysis, execution)
    * @param observer
    *   The GRPC response observer.
+   * @param userId
+   *   The user id.
+   * @param sessionId
+   *   The session id.
+   * @param events
+   *   The ExecuteEventsManager if present to report about failures.
+   * @param isInterrupted
+   *   Whether the error is caused by an interruption or during execution.
+   * @param callback
+   *   Optional callback to be called after the error has been sent that allows to caller to
+   *   execute additional cleanup logic.
    * @tparam V
    * @return
    */
@@ -262,7 +249,8 @@ private[connect] object ErrorUtils extends Logging {
       userId: String,
       sessionId: String,
       events: Option[ExecuteEventsManager] = None,
-      isInterrupted: Boolean = false): PartialFunction[Throwable, Unit] = {
+      isInterrupted: Boolean = false,
+      callback: Option[() => Unit] = None): PartialFunction[Throwable, Unit] = {
 
     // SessionHolder may not be present, e.g. if the session was already closed.
     // When SessionHolder is not present error details will not be available for FetchErrorDetails.
@@ -313,6 +301,7 @@ private[connect] object ErrorUtils extends Logging {
             executeEventsManager.postFailed(wrapped.getMessage)
           }
         }
+        callback.foreach(_.apply())
         observer.onError(wrapped)
       }
   }

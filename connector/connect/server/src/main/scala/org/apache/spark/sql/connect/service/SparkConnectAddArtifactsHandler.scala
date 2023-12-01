@@ -79,13 +79,21 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
       throw new UnsupportedOperationException(s"Unsupported data transfer request: $req")
     }
   } catch {
-    ErrorUtils.handleNonQueryError(
-      "addArtifact - onNext",
+    ErrorUtils.handleError(
+      "addArtifacts.onNext",
       responseObserver,
-      Some(this.holder),
-      Some(() => {
-        cleanUpStagedArtifacts()
-      }))
+      holder.userId,
+      holder.sessionId,
+      None,
+      false)
+
+//    ErrorUtils.handleNonQueryError(
+//      "addArtifacts.onNext",
+//      responseObserver,
+//      Some(this.holder),
+//      Some(() => {
+//        cleanUpStagedArtifacts()
+//      }))
   }
 
   override def onError(throwable: Throwable): Unit = {
@@ -136,7 +144,10 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
       responseObserver.onNext(builder.build())
       responseObserver.onCompleted()
     } catch {
-      ErrorUtils.handleNonQueryError("addArtifact - onNext", responseObserver, Some(this.holder))
+      ErrorUtils.handleNonQueryError(
+        "addArtifacts.onCompleted",
+        responseObserver,
+        Some(this.holder))
     }
   }
 
