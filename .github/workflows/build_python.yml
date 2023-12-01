@@ -39,7 +39,7 @@ jobs:
       hadoop: hadoop3
       envs: >-
         {
-          "PYTHON_TO_TEST": ${{ matrix.pyversion }}
+          "PYTHON_TO_TEST": "${{ matrix.pyversion }}"
         }
       jobs: >-
         {
