@@ -33,7 +33,7 @@ import org.apache.hadoop.util.Progressable
 import org.scalatest.Assertions
 
 import org.apache.spark._
-import org.apache.spark.{Partitioner, SparkException, SparkIllegalArgumentException}
+import org.apache.spark.Partitioner
 import org.apache.spark.util.ArrayImplicits._
 
 class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
@@ -720,7 +720,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
 
     assert(shuffled.partitioner === Some(p))
     assert(shuffled.lookup(1) === Seq(2))
-    intercept[SparkIllegalArgumentException] {shuffled.lookup(-1)}
+    intercept[SparkException] {shuffled.lookup(-1)}
   }
 
   private object StratifiedAuxiliary {

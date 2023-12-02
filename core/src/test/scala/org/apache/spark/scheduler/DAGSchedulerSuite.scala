@@ -36,7 +36,7 @@ import org.scalatest.exceptions.TestFailedException
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
-import org.apache.spark.{SparkException, SparkIllegalArgumentException}
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
