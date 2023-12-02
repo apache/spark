@@ -155,7 +155,7 @@ private[spark] class TaskSchedulerImpl(
       .build[String, ExecutorDecommissionState]()
 
   def runningTasksByExecutors: Map[String, Int] = synchronized {
-    executorIdToRunningTaskIds.toMap.view.mapValues(_.size).toMap
+    executorIdToRunningTaskIds.toMap.transform((_, v) => v.size)
   }
 
   // The set of executors we have on each host; this is used to compute hostsAlive, which
