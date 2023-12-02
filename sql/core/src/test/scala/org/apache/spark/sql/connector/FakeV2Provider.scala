@@ -15,37 +15,49 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.internal.connector
+package org.apache.spark.sql.connector
 
 import java.util
 
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.read.{InputPartition, ScanBuilder}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-// A simple version of `TableProvider` which doesn't support specified table schema/partitioning
-// and treats table properties case-insensitively. This is private and only used in builtin sources.
-trait SimpleTableProvider extends TableProvider {
+/** Used as a V2 DataSource for V2SessionCatalog DDL */
+class FakeV2Provider extends TableProvider {
 
-  def getTable(options: CaseInsensitiveStringMap): Table
+  // Supports external metadata so that users can specify schema and partitions
+  // when creating the table.
+  override def supportsExternalMetadata(): Boolean = true
 
-  private[this] var loadedTable: Table = _
-  private def getOrLoadTable(options: CaseInsensitiveStringMap): Table = {
-    if (loadedTable == null) loadedTable = getTable(options)
-    loadedTable
+  class MyScanBuilder extends SimpleScanBuilder {
+    override def planInputPartitions(): Array[InputPartition] = {
+      Array(RangeInputPartition(0, 5), RangeInputPartition(5, 10))
+    }
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    getOrLoadTable(options).columns.asSchema
+    FakeV2Provider.schema
+  }
+
+  def getTable(options: CaseInsensitiveStringMap): Table = {
+    new SimpleBatchTable {
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new MyScanBuilder()
+      }
+    }
   }
 
   override def getTable(
       schema: StructType,
       partitioning: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    assert(partitioning.isEmpty)
-    getOrLoadTable(new CaseInsensitiveStringMap(properties))
+    getTable(new CaseInsensitiveStringMap(properties))
   }
+}
+
+object FakeV2Provider {
+  val schema: StructType = new StructType().add("i", "int").add("j", "int")
 }

@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, SessionCatalog}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableCatalogCapability, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
@@ -72,6 +72,15 @@ class V2SessionCatalog(catalog: SessionCatalog)
     }
   }
 
+  // Get data source options from the catalog table properties with the path option.
+  private def getDataSourceOptions(
+      properties: Map[String, String],
+      storage: CatalogStorageFormat): CaseInsensitiveStringMap = {
+    val propertiesWithPath = properties ++
+      storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
+    new CaseInsensitiveStringMap(propertiesWithPath.asJava)
+  }
+
   override def loadTable(ident: Identifier): Table = {
     try {
       val table = catalog.getTableMetadata(ident.asTableIdentifier)
@@ -80,10 +89,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
           case Some(provider) =>
             // Get the table properties during creation and append the path option
             // to the properties.
-            val tableProperties = table.properties
-            val properties = tableProperties ++
-              table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
-            val dsOptions = new CaseInsensitiveStringMap(properties.asJava)
+            val dsOptions = getDataSourceOptions(table.properties, table.storage)
             // If the source accepts external table metadata, we can pass the schema and
             // partitioning information stored in Hive to `getTable` to avoid expensive
             // schema/partitioning inference.
@@ -156,6 +162,16 @@ class V2SessionCatalog(catalog: SessionCatalog)
       properties: util.Map[String, String]): Table = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     val provider = properties.getOrDefault(TableCatalog.PROP_PROVIDER, conf.defaultDataSourceName)
+    val tableProperties = properties.asScala.toMap
+    val location = Option(properties.get(TableCatalog.PROP_LOCATION))
+    val storage = DataSource.buildStorageFormatFromOptions(toOptions(tableProperties))
+      .copy(locationUri = location.map(CatalogUtils.stringToURI))
+    val isExternal = properties.containsKey(TableCatalog.PROP_EXTERNAL)
+    val tableType = if (isExternal || location.isDefined) {
+      CatalogTableType.EXTERNAL
+    } else {
+      CatalogTableType.MANAGED
+    }
 
     val (newSchema, newPartitions) = DataSourceV2Utils.getTableProvider(provider, conf) match {
       // If the provider does not support external metadata, users should not be allowed to
@@ -165,7 +181,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
         if (schema.nonEmpty) {
           throw new SparkUnsupportedOperationException(
             errorClass = "CANNOT_CREATE_DATA_SOURCE_TABLE.EXTERNAL_METADATA_UNSUPPORTED",
-            messageParameters = Map("tableName" -> ident.quoted, "provider" -> provider))
+            messageParameters = Map("tableName" -> ident.fullyQuoted, "provider" -> provider))
         }
         // V2CreateTablePlan does not allow non-empty partitions when schema is empty. This
         // is checked in `PreProcessTableCreation` rule.
@@ -175,7 +191,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
 
       case Some(tableProvider) =>
         assert(tableProvider.supportsExternalMetadata())
-        lazy val dsOptions = new CaseInsensitiveStringMap(properties)
+        lazy val dsOptions = getDataSourceOptions(tableProperties, storage)
         if (schema.isEmpty) {
           assert(partitions.isEmpty,
             s"Partitions should be empty when the schema is empty: ${partitions.mkString(", ")}")
@@ -194,16 +210,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
 
     val (partitionColumns, maybeBucketSpec, maybeClusterBySpec) =
       newPartitions.toImmutableArraySeq.convertTransforms
-    val tableProperties = properties.asScala
-    val location = Option(properties.get(TableCatalog.PROP_LOCATION))
-    val storage = DataSource.buildStorageFormatFromOptions(toOptions(tableProperties.toMap))
-        .copy(locationUri = location.map(CatalogUtils.stringToURI))
-    val isExternal = properties.containsKey(TableCatalog.PROP_EXTERNAL)
-    val tableType = if (isExternal || location.isDefined) {
-      CatalogTableType.EXTERNAL
-    } else {
-      CatalogTableType.MANAGED
-    }
 
     val tableDesc = CatalogTable(
       identifier = ident.asTableIdentifier,
@@ -213,7 +219,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
       provider = Some(provider),
       partitionColumnNames = partitionColumns,
       bucketSpec = maybeBucketSpec,
-      properties = tableProperties.toMap ++
+      properties = tableProperties ++
         maybeClusterBySpec.map(
           clusterBySpec => ClusterBySpec.toProperty(newSchema, clusterBySpec, conf.resolver)),
       tracksPartitionsInCatalog = conf.manageFilesourcePartitions,

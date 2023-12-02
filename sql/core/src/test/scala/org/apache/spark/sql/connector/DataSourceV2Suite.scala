@@ -651,7 +651,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
             sql(s"CREATE TABLE test(a INT, b INT) USING ${cls.getName}")
           },
           errorClass = "CANNOT_CREATE_DATA_SOURCE_TABLE.EXTERNAL_METADATA_UNSUPPORTED",
-          parameters = Map("tableName" -> "default.test", "provider" -> cls.getName)
+          parameters = Map("tableName" -> "`default`.`test`", "provider" -> cls.getName)
         )
       }
     }
