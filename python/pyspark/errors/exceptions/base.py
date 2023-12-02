@@ -258,3 +258,9 @@ class PySparkPicklingError(PySparkException, PicklingError):
     """
     Wrapper class for pickle.PicklingError to support error classes.
     """
+
+
+class PySparkImportError(PySparkException, ImportError):
+    """
+    Wrapper class for ImportError to support error classes.
+    """
