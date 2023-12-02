@@ -17,15 +17,11 @@
 
 package org.apache.spark.sql.execution.bucketing
 
-import scala.annotation.tailrec
-
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SparkPlan}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
+import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 
 /**
  * This rule coalesces one side of the `SortMergeJoin` and `ShuffledHashJoin`
@@ -110,38 +106,13 @@ object CoalesceBucketsInJoin extends Rule[SparkPlan] {
  * are consisted of only the scan operation,
  * and numbers of buckets are not equal but divisible.
  */
-object ExtractJoinWithBuckets {
-  @tailrec
-  private def hasScanOperation(plan: SparkPlan): Boolean = plan match {
-    case f: FilterExec => hasScanOperation(f.child)
-    case p: ProjectExec => hasScanOperation(p.child)
-    case j: BroadcastHashJoinExec =>
-      if (j.buildSide == BuildLeft) hasScanOperation(j.right) else hasScanOperation(j.left)
-    case j: BroadcastNestedLoopJoinExec =>
-      if (j.buildSide == BuildLeft) hasScanOperation(j.right) else hasScanOperation(j.left)
-    case f: FileSourceScanExec => f.relation.bucketSpec.nonEmpty
-    case _ => false
-  }
+object ExtractJoinWithBuckets extends BucketJoinHelper {
 
   private def getBucketSpec(plan: SparkPlan): Option[BucketSpec] = {
     plan.collectFirst {
       case f: FileSourceScanExec if f.relation.bucketSpec.nonEmpty &&
           f.optionalNumCoalescedBuckets.isEmpty =>
         f.relation.bucketSpec.get
-    }
-  }
-
-  /**
-   * The join keys should match with expressions for output partitioning. Note that
-   * the ordering does not matter because it will be handled in `EnsureRequirements`.
-   */
-  private def satisfiesOutputPartitioning(
-      keys: Seq[Expression],
-      partitioning: Partitioning): Boolean = {
-    partitioning match {
-      case HashPartitioning(exprs, _) if exprs.length == keys.length =>
-        exprs.forall(e => keys.exists(_.semanticEquals(e)))
-      case _ => false
     }
   }
 

@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
-import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
+import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan, UnwrapCastInJoinCondition}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
@@ -121,6 +121,7 @@ case class AdaptiveSparkPlanExec(
     // EnsureRequirements
     Seq(
       CoalesceBucketsInJoin,
+      UnwrapCastInJoinCondition,
       RemoveRedundantProjects,
       ensureRequirements,
       AdjustShuffleExchangePosition,
