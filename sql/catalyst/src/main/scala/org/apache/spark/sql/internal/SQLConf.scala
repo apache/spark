@@ -564,6 +564,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val UNWRAP_CAST_IN_JOIN_CONDITION_ENABLED =
+    buildConf("spark.sql.unwrapCastInJoinCondition.enabled")
+      .doc("When true, unwrap the cast in the join condition to reduce shuffle if they are " +
+        "integral types.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val MAX_SINGLE_PARTITION_BYTES = buildConf("spark.sql.maxSinglePartitionBytes")
     .doc("The maximum number of bytes allowed for a single partition. Otherwise, The planner " +
       "will introduce shuffle to improve parallelism.")
@@ -4178,14 +4186,6 @@ object SQLConf {
       .intConf
       .checkValue(_ > 0, "The difference must be positive.")
       .createWithDefault(4)
-
-  val UNWRAP_CAST_IN_JOIN_CONDITION_ENABLED =
-    buildConf("spark.sql.bucketing.unwrapCastInJoinCondition.enabled")
-      .doc("When true, unwrap the cast in the join condition to unlock bucketed reads if they " +
-        "are integral types.")
-      .version("3.5.0")
-      .booleanConf
-      .createWithDefault(false)
 
   val BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT =
     buildConf("spark.sql.execution.broadcastHashJoin.outputPartitioningExpandLimit")

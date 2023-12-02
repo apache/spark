@@ -84,7 +84,10 @@ object ExtractJoinWithUnwrappedCastInJoinPredicates {
       val leftSatisfies = satisfiesOutputPartitioning(leftKeys, j.left.outputPartitioning)
       val rightSatisfies = satisfiesOutputPartitioning(rightKeys, j.right.outputPartitioning)
       if (leftSatisfies && rightSatisfies) {
-        // Follows join side key types with larger bucket numbers.
+        // If there is a bucketed read, their number of partitions may be inconsistent.
+        // If the number of partitions on the left side is less than the number of partitions
+        // on the right side, cast the left side keys to the data type of the right side keys.
+        // Otherwise, cast the right side keys to the data type of the left side keys.
         Some(coerceJoinKeyType(leftKeys, rightKeys,
           j.left.outputPartitioning.numPartitions < j.right.outputPartitioning.numPartitions))
       } else if (leftSatisfies) {

@@ -341,17 +341,21 @@ case class EnsureRequirements(
    * Unwrap the cast in join predicates to reduce shuffle.
    */
   private def unwrapCastInJoinPredicates(plan: SparkPlan): SparkPlan = {
-    plan match {
-      case ExtractJoinWithUnwrappedCastInJoinPredicates(join, joinKeys) =>
-        val (leftKeys, rightKeys) = joinKeys.unzip
-        join match {
-          case j: SortMergeJoinExec =>
-            j.copy(leftKeys = leftKeys, rightKeys = rightKeys)
-          case j: ShuffledHashJoinExec =>
-            j.copy(leftKeys = leftKeys, rightKeys = rightKeys)
-          case other => other
-        }
-      case _ => plan
+    if (conf.unwrapCastInJoinConditionEnabled) {
+      plan match {
+        case ExtractJoinWithUnwrappedCastInJoinPredicates(join, joinKeys) =>
+          val (leftKeys, rightKeys) = joinKeys.unzip
+          join match {
+            case j: SortMergeJoinExec =>
+              j.copy(leftKeys = leftKeys, rightKeys = rightKeys)
+            case j: ShuffledHashJoinExec =>
+              j.copy(leftKeys = leftKeys, rightKeys = rightKeys)
+            case other => other
+          }
+        case _ => plan
+      }
+    } else {
+      plan
     }
   }
 
@@ -625,14 +629,14 @@ case class EnsureRequirements(
 
       case operator: SparkPlan =>
         val reordered = reorderJoinPredicates(operator)
-        val unwrappedCast = unwrapCastInJoinPredicates(reordered)
+        val unwrapped = unwrapCastInJoinPredicates(reordered)
         val newChildren = ensureDistributionAndOrdering(
-          Some(unwrappedCast),
-          unwrappedCast.children,
-          unwrappedCast.requiredChildDistribution,
-          unwrappedCast.requiredChildOrdering,
+          Some(unwrapped),
+          unwrapped.children,
+          unwrapped.requiredChildDistribution,
+          unwrapped.requiredChildOrdering,
           ENSURE_REQUIREMENTS)
-        unwrappedCast.withNewChildren(newChildren)
+        unwrapped.withNewChildren(newChildren)
     }
 
     if (requiredDistribution.isDefined) {
