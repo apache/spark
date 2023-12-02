@@ -43,6 +43,7 @@ Classes
     PySparkRuntimeError
     PySparkTypeError
     PySparkValueError
+    PySparkImportError
     PySparkIndexError
     PythonException
     QueryExecutionException
