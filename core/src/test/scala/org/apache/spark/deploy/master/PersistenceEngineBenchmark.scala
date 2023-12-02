@@ -46,8 +46,7 @@ import org.apache.spark.util.Utils
 object PersistenceEngineBenchmark extends BenchmarkBase {
 
   val conf = new SparkConf()
-  val serializerJava = new JavaSerializer(conf)
-  val serializerKryo = new KryoSerializer(conf)
+  val serializers = Seq(new JavaSerializer(conf), new KryoSerializer(conf))
   val zkTestServer = new TestingServer(findFreePort(conf))
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
@@ -61,38 +60,27 @@ object PersistenceEngineBenchmark extends BenchmarkBase {
     runBenchmark("PersistenceEngineBenchmark") {
       val benchmark = new Benchmark(s"$numWorkers Workers", numWorkers, output = output)
 
-      benchmark.addCase("ZooKeeperPersistenceEngine with JavaSerializer", numIters) { _ =>
-        val engine = new ZooKeeperPersistenceEngine(conf, serializerJava)
-        workers.foreach(engine.addWorker)
-        engine.read[WorkerInfo]("worker_")
-        workers.foreach(engine.removeWorker)
-        engine.close()
+      serializers.foreach { serializer =>
+        val serializerName = serializer.getClass.getSimpleName
+        benchmark.addCase(s"ZooKeeperPersistenceEngine with $serializerName", numIters) { _ =>
+          val engine = new ZooKeeperPersistenceEngine(conf, serializer)
+          workers.foreach(engine.addWorker)
+          engine.read[WorkerInfo]("worker_")
+          workers.foreach(engine.removeWorker)
+          engine.close()
+        }
       }
 
-      benchmark.addCase("ZooKeeperPersistenceEngine with KryoSerializer", numIters) { _ =>
-        val engine = new ZooKeeperPersistenceEngine(conf, serializerKryo)
-        workers.foreach(engine.addWorker)
-        engine.read[WorkerInfo]("worker_")
-        workers.foreach(engine.removeWorker)
-        engine.close()
-      }
-
-      benchmark.addCase("FileSystemPersistenceEngine with JavaSerializer", numIters) { _ =>
-        val dir = Utils.createTempDir().getAbsolutePath
-        val engine = new FileSystemPersistenceEngine(dir, serializerJava)
-        workers.foreach(engine.addWorker)
-        engine.read[WorkerInfo]("worker_")
-        workers.foreach(engine.removeWorker)
-        engine.close()
-      }
-
-      benchmark.addCase("FileSystemPersistenceEngine with KryoSerializer", numIters) { _ =>
-        val dir = Utils.createTempDir().getAbsolutePath
-        val engine = new FileSystemPersistenceEngine(dir, serializerKryo)
-        workers.foreach(engine.addWorker)
-        engine.read[WorkerInfo]("worker_")
-        workers.foreach(engine.removeWorker)
-        engine.close()
+      serializers.foreach { serializer =>
+        val serializerName = serializer.getClass.getSimpleName
+        benchmark.addCase(s"FileSystemPersistenceEngine with $serializerName", numIters) { _ =>
+          val dir = Utils.createTempDir().getAbsolutePath
+          val engine = new FileSystemPersistenceEngine(dir, serializer)
+          workers.foreach(engine.addWorker)
+          engine.read[WorkerInfo]("worker_")
+          workers.foreach(engine.removeWorker)
+          engine.close()
+        }
       }
 
       benchmark.addCase("BlackHolePersistenceEngine", numIters) { _ =>
