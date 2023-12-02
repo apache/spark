@@ -220,7 +220,7 @@ def _get_ipython_scope() -> Dict[str, Any]:
 
         shell = get_ipython()
         return shell.user_ns
-    except (NameError, AttributeError):
+    except (AttributeError, ModuleNotFoundError):
         return None
 
 
