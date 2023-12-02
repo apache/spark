@@ -29,7 +29,6 @@ import org.apache.spark.rpc.{RpcEndpoint, RpcEnv}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, Serializer}
 import org.apache.spark.util.Utils
 
-
 class PersistenceEngineSuite extends SparkFunSuite {
 
   test("FileSystemPersistenceEngine") {
