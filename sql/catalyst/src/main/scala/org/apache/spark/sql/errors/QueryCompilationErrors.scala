@@ -646,12 +646,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("funcName" -> toSQLId(funcName)))
   }
 
-  def inverseDistributionFunctionMissingPercentageError(funcName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "INVALID_INVERSE_DISTRIBUTION_FUNCTION.PERCENTILE_PERCENTAGE_MISSING",
-      messageParameters = Map("funcName" -> toSQLId(funcName)))
-  }
-
   def inverseDistributionFunctionMissingWithinGroupError(funcName: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WITHIN_GROUP_MISSING",

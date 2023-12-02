@@ -2325,6 +2325,16 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         numArgs: Int,
         u: UnresolvedFunction): Expression = {
       func match {
+        case owg: SupportsOrderingWithinGroup if u.isDistinct =>
+          throw QueryCompilationErrors.distinctInverseDistributionFunctionUnsupportedError(
+            owg.prettyName)
+        case owg: SupportsOrderingWithinGroup if u.orderingWithinGroup.isEmpty =>
+          throw QueryCompilationErrors.inverseDistributionFunctionMissingWithinGroupError(
+            owg.prettyName)
+        case f
+          if !f.isInstanceOf[SupportsOrderingWithinGroup] && u.orderingWithinGroup.nonEmpty =>
+          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+            func.prettyName, "WITHIN GROUP (ORDER BY ...)")
         // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
         // the context of a Window clause. They do not need to be wrapped in an
         // AggregateExpression.
@@ -2367,25 +2377,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         case agg: AggregateFunction =>
           // Note: PythonUDAF does not support these advanced clauses.
           if (agg.isInstanceOf[PythonUDAF]) checkUnsupportedAggregateClause(agg, u)
+          // After parse, the inverse distribution functions not set the ordering within group yet.
           val newAgg = agg match {
-            case idf: SupportsOrderingWithinGroup if u.orderingWithinGroup.isDefined =>
-              if (u.isDistinct) {
-                throw QueryCompilationErrors.distinctInverseDistributionFunctionUnsupportedError(
-                  idf.prettyName)
-              }
-              if (idf.isFake) {
-                idf.withOrderingWithinGroup(u.orderingWithinGroup.get)
-              } else {
-                idf
-              }
-            case idf: SupportsOrderingWithinGroup =>
-              throw QueryCompilationErrors.inverseDistributionFunctionMissingWithinGroupError(
-                idf.prettyName)
+            case owg: SupportsOrderingWithinGroup if u.orderingWithinGroup.nonEmpty =>
+              owg.withOrderingWithinGroup(u.orderingWithinGroup)
             case _ =>
-              if (u.orderingWithinGroup.isDefined) {
-                throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                  func.prettyName, "WITHIN GROUP (ORDER BY clause)")
-              }
               agg
           }
 
@@ -2440,10 +2436,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       if (u.ignoreNulls) {
         throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
           func.prettyName, "IGNORE NULLS")
-      }
-      if (u.orderingWithinGroup.isDefined) {
-        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-          func.prettyName, "WITHIN GROUP (ORDER BY clause)")
       }
     }
 

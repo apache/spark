@@ -125,7 +125,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_1023",
   "messageParameters" : {
     "prettyName" : "round",
-    "syntax" : "WITHIN GROUP (ORDER BY clause)"
+    "syntax" : "WITHIN GROUP (ORDER BY ...)"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -149,7 +149,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_1023",
   "messageParameters" : {
     "prettyName" : "round",
-    "syntax" : "WITHIN GROUP (ORDER BY clause)"
+    "syntax" : "WITHIN GROUP (ORDER BY ...)"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -173,7 +173,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_1023",
   "messageParameters" : {
     "prettyName" : "percentile",
-    "syntax" : "WITHIN GROUP (ORDER BY clause)"
+    "syntax" : "WITHIN GROUP (ORDER BY ...)"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -197,7 +197,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_1023",
   "messageParameters" : {
     "prettyName" : "percentile",
-    "syntax" : "WITHIN GROUP (ORDER BY clause)"
+    "syntax" : "WITHIN GROUP (ORDER BY ...)"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -266,10 +266,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.PERCENTILE_PERCENTAGE_MISSING",
-  "sqlState" : "ID001",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
-    "funcName" : "`percentile_cont`"
+    "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`percentile_cont`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -290,10 +293,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.PERCENTILE_PERCENTAGE_MISSING",
-  "sqlState" : "ID001",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
-    "funcName" : "`percentile_cont`"
+    "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`percentile_cont`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -349,6 +355,60 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 10,
     "stopIndex" : 51,
     "fragment" : "percentile_cont(0.5) OVER (PARTITION BY k)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY k, v)
+FROM aggr
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "3",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "2",
+    "functionName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 58,
+    "fragment" : "percentile_cont(0.5) WITHIN GROUP (ORDER BY k, v)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont(k, 0.5) WITHIN GROUP (ORDER BY v)
+FROM aggr
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "2",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 58,
+    "fragment" : "percentile_cont(k, 0.5) WITHIN GROUP (ORDER BY v)"
   } ]
 }
 

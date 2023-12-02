@@ -2247,7 +2247,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       case expressions =>
         expressions
     }
-    val sortOrder = Option(ctx.sortItem).map(visitSortItem(_))
+    val order = ctx.sortItem.asScala.map(visitSortItem)
     val filter = Option(ctx.where).map(expression(_))
     val ignoreNulls =
       Option(ctx.nullsOption).map(_.getType == SqlBaseParser.IGNORE).getOrElse(false)
@@ -2265,7 +2265,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       val funcCtx = ctx.functionName
       val func = withFuncIdentClause(
         funcCtx,
-        ident => UnresolvedFunction(ident, arguments, isDistinct, filter, ignoreNulls, sortOrder)
+        ident => UnresolvedFunction(ident, arguments, isDistinct, filter, ignoreNulls, order.toSeq)
       )
 
       // Check if the function is evaluated in a windowed context.

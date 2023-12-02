@@ -975,7 +975,7 @@ primaryExpression
     | LEFT_PAREN query RIGHT_PAREN                                                             #subqueryExpression
     | functionName LEFT_PAREN (setQuantifier? argument+=functionArgument
        (COMMA argument+=functionArgument)*)? RIGHT_PAREN
-       (WITHIN GROUP LEFT_PAREN ORDER BY sortItem RIGHT_PAREN)?
+       (WITHIN GROUP LEFT_PAREN ORDER BY sortItem (COMMA sortItem)* RIGHT_PAREN)?
        (FILTER LEFT_PAREN WHERE where=booleanExpression RIGHT_PAREN)?
        (nullsOption=(IGNORE | RESPECT) NULLS)? ( OVER windowSpec)?                             #functionCall
     | identifier ARROW expression                                                              #lambda

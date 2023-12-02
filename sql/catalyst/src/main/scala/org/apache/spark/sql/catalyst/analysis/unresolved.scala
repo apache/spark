@@ -299,11 +299,11 @@ case class UnresolvedFunction(
     isDistinct: Boolean,
     filter: Option[Expression] = None,
     ignoreNulls: Boolean = false,
-    orderingWithinGroup: Option[SortOrder] = None)
+    orderingWithinGroup: Seq[SortOrder] = Seq.empty)
   extends Expression with Unevaluable {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  override def children: Seq[Expression] = arguments ++ filter.toSeq ++ orderingWithinGroup.toSeq
+  override def children: Seq[Expression] = arguments ++ filter.toSeq ++ orderingWithinGroup
 
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
@@ -319,19 +319,22 @@ case class UnresolvedFunction(
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): UnresolvedFunction = {
     if (filter.isDefined) {
-      if (orderingWithinGroup.isDefined) {
-        val newSortOrder = Some(newChildren.last.asInstanceOf[SortOrder])
-        val args = newChildren.dropRight(1)
-        copy(arguments = args.dropRight(1), filter = Some(args.last),
-          orderingWithinGroup = newSortOrder)
-      } else {
+      if (orderingWithinGroup.isEmpty) {
         copy(arguments = newChildren.dropRight(1), filter = Some(newChildren.last))
+      } else {
+        val nonArgs = newChildren.takeRight(orderingWithinGroup.length + 1)
+        val newSortOrders = nonArgs.tail.asInstanceOf[Seq[SortOrder]]
+        val newFilter = Some(nonArgs.head)
+        val newArgs = newChildren.dropRight(orderingWithinGroup.length + 1)
+        copy(arguments = newArgs, filter = newFilter, orderingWithinGroup = newSortOrders)
       }
-    } else if (orderingWithinGroup.isDefined) {
-      val newSortOrder = Some(newChildren.last.asInstanceOf[SortOrder])
-      copy(arguments = newChildren.dropRight(1), orderingWithinGroup = newSortOrder)
-    } else {
+    } else if (orderingWithinGroup.isEmpty) {
       copy(arguments = newChildren)
+    } else {
+      val newSortOrders =
+        newChildren.takeRight(orderingWithinGroup.length).asInstanceOf[Seq[SortOrder]]
+      val newArgs = newChildren.dropRight(orderingWithinGroup.length)
+      copy(arguments = newArgs, orderingWithinGroup = newSortOrders)
     }
   }
 }

@@ -29,10 +29,6 @@ This error class has the following derived error classes:
 
 Cannot use DISTINCT with WITHIN GROUP.
 
-## PERCENTILE_PERCENTAGE_MISSING
-
-Missing percentage.
-
 ## WITHIN_GROUP_MISSING
 
 WITHIN GROUP is required for inverse distribution function.

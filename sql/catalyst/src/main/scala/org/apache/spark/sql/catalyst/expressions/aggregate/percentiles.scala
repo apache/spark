@@ -375,10 +375,12 @@ case class PercentileCont(left: Expression, right: Expression, reverse: Boolean 
     percentile.checkInputDataTypes()
   }
 
-  override def isFake: Boolean = left == UnresolvedWithinGroup
-
-  override def withOrderingWithinGroup(orderingWithGroup: SortOrder): AggregateFunction = {
-    orderingWithGroup match {
+  override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction = {
+    if (orderingWithinGroup.length != 1) {
+      throw QueryCompilationErrors.wrongNumArgsError(
+        nodeName, Seq(2), orderingWithinGroup.length + 1)
+    }
+    orderingWithinGroup.head match {
       case SortOrder(child, Ascending, _, _) => this.copy(left = child)
       case SortOrder(child, Descending, _, _) => this.copy(left = child, reverse = true)
     }
@@ -427,10 +429,12 @@ case class PercentileDisc(
     s"$prettyName($distinct${right.sql}) WITHIN GROUP (ORDER BY ${left.sql}$direction)"
   }
 
-  override def isFake: Boolean = child == UnresolvedWithinGroup
-
-  override def withOrderingWithinGroup(orderingWithGroup: SortOrder): AggregateFunction = {
-    orderingWithGroup match {
+  override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction = {
+    if (orderingWithinGroup.length != 1) {
+      throw QueryCompilationErrors.wrongNumArgsError(
+        nodeName, Seq(2), orderingWithinGroup.length + 1)
+    }
+    orderingWithinGroup.head match {
       case SortOrder(expr, Ascending, _, _) => this.copy(child = expr)
       case SortOrder(expr, Descending, _, _) => this.copy(child = expr, reverse = true)
     }
@@ -484,10 +488,8 @@ object PercentileContBuilder extends ExpressionBuilder {
     val numArgs = expressions.length
     if (numArgs == 1) {
       PercentileCont(UnresolvedWithinGroup, expressions(0))
-    } else if (numArgs == 0) {
-      throw QueryCompilationErrors.inverseDistributionFunctionMissingPercentageError(funcName)
     } else {
-      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1), numArgs)
     }
   }
 }
@@ -512,10 +514,8 @@ object PercentileDiscBuilder extends ExpressionBuilder {
     val numArgs = expressions.length
     if (numArgs == 1) {
       PercentileDisc(UnresolvedWithinGroup, expressions(0))
-    } else if (numArgs == 0) {
-      throw QueryCompilationErrors.inverseDistributionFunctionMissingPercentageError(funcName)
     } else {
-      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1), numArgs)
     }
   }
 }
