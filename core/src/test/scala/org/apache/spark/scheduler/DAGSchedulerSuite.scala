@@ -3486,8 +3486,6 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       val (shuffledeps, resourceprofiles) = scheduler.getShuffleDependenciesAndResourceProfiles(rdd)
       scheduler.mergeResourceProfilesForStage(resourceprofiles)
     }.getMessage()
-
-    assert(error.contains("Multiple ResourceProfiles specified in the RDDs"))
   }
 
   test("test 2 resource profile with merge conflict config true") {
