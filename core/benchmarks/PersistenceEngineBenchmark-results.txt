@@ -1,0 +1,13 @@
+================================================================================================
+PersistenceEngineBenchmark
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1051-azure
+AMD EPYC 7763 64-Core Processor
+1000 Workers:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+ZooKeeperPersistenceEngine                         1086           1215         162          0.0     1085606.9       1.0X
+FileSystemPersistenceEngine                         224            225           1          0.0      223834.2       4.9X
+BlackHolePersistenceEngine                            0              0           0         40.7          24.6   44209.4X
+
+
