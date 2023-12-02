@@ -67,10 +67,10 @@ private[master] class FileSystemPersistenceEngine(
       out = serializer.newInstance().serializeStream(fileOut)
       out.writeObject(value)
     } {
-      fileOut.close()
       if (out != null) {
         out.close()
       }
+      fileOut.close()
     }
   }
 
