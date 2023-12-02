@@ -21,6 +21,7 @@ PySpark exceptions.
 from pyspark.errors.exceptions.base import (  # noqa: F401
     PySparkException,
     AnalysisException,
+    SessionNotSameException,
     TempTableAlreadyExistsException,
     ParseException,
     IllegalArgumentException,
@@ -50,6 +51,7 @@ from pyspark.errors.exceptions.base import (  # noqa: F401
 __all__ = [
     "PySparkException",
     "AnalysisException",
+    "SessionNotSameException",
     "TempTableAlreadyExistsException",
     "ParseException",
     "IllegalArgumentException",
