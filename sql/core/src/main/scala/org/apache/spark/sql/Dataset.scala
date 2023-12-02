@@ -4097,6 +4097,16 @@ class Dataset[T] private[sql](
     new DataFrameWriterV2[T](table, this)
   }
 
+  def mergeInto(table: String): DataFrameWriterV2[T] = {
+    // TODO: streaming could be adapted to use this interface
+    if (isStreaming) {
+      logicalPlan.failAnalysis(
+        errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
+        messageParameters = Map("methodName" -> toSQLId("mergeInto")))
+    }
+    new DataFrameWriterV2[T](table, this)
+  }
+
   /**
    * Interface for saving the content of the streaming Dataset out into external storage.
    *

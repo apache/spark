@@ -22,11 +22,12 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException, UnresolvedIdentifier, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Days, Hours, Literal, Months, Years}
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OptionList, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, UnresolvedTableSpec}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Days, Expression, Hours, Literal, Months, Years}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Assignment, CreateTableAsSelect, DeleteAction, InsertAction, InsertStarAction, LogicalPlan, MergeAction, MergeIntoTable, OptionList, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, UnresolvedTableSpec, UpdateAction, UpdateStarAction}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.types.IntegerType
 
 /**
@@ -53,6 +54,11 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   private val properties = new mutable.HashMap[String, String]()
 
   private var partitioning: Option[Seq[Transform]] = None
+
+  private var on: Option[Column] = None
+  var matchedActions: Seq[MergeAction] = Seq.empty[MergeAction]
+  var notMatchedActions: Seq[MergeAction] = Seq.empty[MergeAction]
+  var notMatchedBySourceActions: Seq[MergeAction] = Seq.empty[MergeAction]
 
   override def using(provider: String): CreateTableWriter[T] = {
     this.provider = Some(provider)
@@ -165,6 +171,63 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     val overwrite = OverwriteByExpression.byName(
       UnresolvedRelation(tableName), logicalPlan, condition.expr, options.toMap)
     runCommand(overwrite)
+  }
+
+  def on(condition: String): DataFrameWriterV2[T] = {
+    on(Column(condition))
+  }
+
+  def on(condition: Column): DataFrameWriterV2[T] = {
+    this.on = Some(condition)
+    this
+  }
+
+  def whenMatched(): WhenMatched[T] = {
+    new WhenMatched[T](this, None)
+  }
+
+  def whenMatched(condition: Column): WhenMatched[T] = {
+    new WhenMatched[T](this, Some(condition.expr))
+  }
+
+  def whenMatched(condition: String): WhenMatched[T] = {
+    whenMatched(Column(condition))
+  }
+
+  def whenNotMatched(): WhenNotMatched[T] = {
+    new WhenNotMatched[T](this, None)
+  }
+
+  def whenNotMatched(condition: Column): WhenNotMatched[T] = {
+    new WhenNotMatched[T](this, Some(condition.expr))
+  }
+
+  def whenNotMatched(condition: String): WhenNotMatched[T] = {
+    whenNotMatched(Column(condition))
+  }
+
+  def whenNotMatchedBySource(): WhenNotMatchedBySource[T] = {
+    new WhenNotMatchedBySource[T](this, None)
+  }
+
+  def whenNotMatchedBySource(condition: Column): WhenNotMatchedBySource[T] = {
+    new WhenNotMatchedBySource[T](this, Some(condition.expr))
+  }
+
+  def whenNotMatchedBySource(condition: String): WhenNotMatchedBySource[T] = {
+    whenNotMatchedBySource(Column(condition))
+  }
+
+  def merge(): Unit = {
+    val merge = MergeIntoTable(
+      UnresolvedRelation(tableName),
+      logicalPlan,
+      on.get.expr,
+      matchedActions,
+      notMatchedActions,
+      notMatchedBySourceActions)
+    val qe = sparkSession.sessionState.executePlan(merge)
+    qe.assertCommandExecuted()
   }
 
   /**
@@ -342,4 +405,85 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
    * Add a table property.
    */
   def tableProperty(property: String, value: String): CreateTableWriter[T]
+}
+
+case class WhenMatched[T] (dfWriter: DataFrameWriterV2[T], condition: Option[Expression]) {
+  def updateAll(): DataFrameWriterV2[T] = {
+    dfWriter.matchedActions = dfWriter.matchedActions :+ UpdateStarAction(condition)
+    this.dfWriter
+  }
+
+  def update(set: Map[String, Column]): DataFrameWriterV2[T] = {
+    dfWriter.matchedActions = dfWriter.matchedActions :+
+      UpdateAction(condition, set.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
+    this.dfWriter
+  }
+
+  def delete(): DataFrameWriterV2[T] = {
+    dfWriter.matchedActions = dfWriter.matchedActions :+ DeleteAction(condition)
+    this.dfWriter
+  }
+}
+
+case class WhenNotMatched[T] (dfWriter: DataFrameWriterV2[T], condition: Option[Expression]) {
+  def updateAll(): DataFrameWriterV2[T] = {
+    dfWriter.notMatchedActions = dfWriter.notMatchedActions :+ UpdateStarAction(condition)
+    this.dfWriter
+  }
+
+  def update(set: Map[String, Column]): DataFrameWriterV2[T] = {
+    dfWriter.notMatchedActions = dfWriter.notMatchedActions :+
+      UpdateAction(condition, set.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
+    this.dfWriter
+  }
+
+  def insertAll(): DataFrameWriterV2[T] = {
+    dfWriter.notMatchedActions = dfWriter.notMatchedActions :+ InsertStarAction(condition)
+    this.dfWriter
+  }
+
+  def insert(set: Map[String, Column]): DataFrameWriterV2[T] = {
+    dfWriter.notMatchedActions = dfWriter.notMatchedActions :+
+      InsertAction(condition, set.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
+    this.dfWriter
+  }
+
+  def delete(): DataFrameWriterV2[T] = {
+    dfWriter.notMatchedActions = dfWriter.notMatchedActions :+ DeleteAction(condition)
+    this.dfWriter
+  }
+}
+
+case class WhenNotMatchedBySource[T] (
+    dfWriter: DataFrameWriterV2[T],
+    condition: Option[Expression]) {
+  def updateAll(): DataFrameWriterV2[T] = {
+    dfWriter.notMatchedBySourceActions =
+      dfWriter.notMatchedBySourceActions :+ UpdateStarAction(condition)
+    this.dfWriter
+  }
+
+  def update(set: Map[String, Column]): DataFrameWriterV2[T] = {
+    dfWriter.notMatchedBySourceActions = dfWriter.notMatchedBySourceActions :+
+      UpdateAction(condition, set.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
+    this.dfWriter
+  }
+
+  def insertAll(): DataFrameWriterV2[T] = {
+    dfWriter.notMatchedBySourceActions =
+      dfWriter.notMatchedBySourceActions :+ InsertStarAction(condition)
+    this.dfWriter
+  }
+
+  def insert(set: Map[String, Column]): DataFrameWriterV2[T] = {
+    dfWriter.notMatchedBySourceActions = dfWriter.notMatchedBySourceActions :+
+      InsertAction(condition, set.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
+    this.dfWriter
+  }
+
+  def delete(): DataFrameWriterV2[T] = {
+    dfWriter.notMatchedBySourceActions =
+      dfWriter.notMatchedBySourceActions :+ DeleteAction(condition)
+    this.dfWriter
+  }
 }
