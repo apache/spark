@@ -21,7 +21,7 @@ import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
@@ -79,7 +79,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   // Track the last time in ns that at least one task is running. If no task is running and all
   // shuffle/RDD data migration are done, the decommissioned executor should exit.
-  private var lastTaskFinishTime = System.nanoTime()
+  private var lastTaskFinishTime = new AtomicLong(System.nanoTime())
 
   override def onStart(): Unit = {
     if (env.conf.get(DECOMMISSION_ENABLED)) {
@@ -277,7 +277,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     val msg = StatusUpdate(executorId, taskId, state, data, cpus, resources)
     if (TaskState.isFinished(state)) {
       taskResources.remove(taskId)
-      lastTaskFinishTime = System.nanoTime()
+      lastTaskFinishTime.set(System.nanoTime())
     }
     driver match {
       case Some(driverRef) => driverRef.send(msg)
@@ -366,7 +366,7 @@ private[spark] class CoarseGrainedExecutorBackend(
                 val (migrationTime, allBlocksMigrated) = env.blockManager.lastMigrationInfo()
                 // We can only trust allBlocksMigrated boolean value if there were no tasks running
                 // since the start of computing it.
-                if (allBlocksMigrated && (migrationTime > lastTaskFinishTime)) {
+                if (allBlocksMigrated && (migrationTime > lastTaskFinishTime.get())) {
                   logInfo("No running tasks, all blocks migrated, stopping.")
                   exitExecutor(0, ExecutorLossMessage.decommissionFinished, notifyDriver = true)
                 } else {
