@@ -20,7 +20,8 @@ package org.apache.spark.deploy.master
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.Deploy.RECOVERY_DIRECTORY
+import org.apache.spark.internal.config.Deploy.{RECOVERY_COMPRESSION_CODEC, RECOVERY_DIRECTORY}
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.Serializer
 
 /**
@@ -57,7 +58,8 @@ private[master] class FileSystemRecoveryModeFactory(conf: SparkConf, serializer:
 
   def createPersistenceEngine(): PersistenceEngine = {
     logInfo("Persisting recovery state to directory: " + recoveryDir)
-    new FileSystemPersistenceEngine(recoveryDir, serializer)
+    new FileSystemPersistenceEngine(recoveryDir, serializer,
+      Some(CompressionCodec.createCodec(conf, conf.get(RECOVERY_COMPRESSION_CODEC))))
   }
 
   def createLeaderElectionAgent(master: LeaderElectable): LeaderElectionAgent = {

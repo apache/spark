@@ -25,6 +25,7 @@ import org.apache.curator.test.TestingServer
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.internal.config.Deploy.ZOOKEEPER_URL
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.util.Utils
@@ -52,7 +53,7 @@ object PersistenceEngineBenchmark extends BenchmarkBase {
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
 
     val numIters = 3
-    val numWorkers = 1000
+    val numWorkers = 2000
     val workers = (1 to numWorkers).map(createWorkerInfo).toArray
 
     conf.set(ZOOKEEPER_URL, zkTestServer.getConnectString)
@@ -73,13 +74,27 @@ object PersistenceEngineBenchmark extends BenchmarkBase {
 
       serializers.foreach { serializer =>
         val serializerName = serializer.getClass.getSimpleName
-        benchmark.addCase(s"FileSystemPersistenceEngine with $serializerName", numIters) { _ =>
+        val name = s"FileSystemPersistenceEngine with $serializerName"
+        benchmark.addCase(name, numIters) { _ =>
           val dir = Utils.createTempDir().getAbsolutePath
           val engine = new FileSystemPersistenceEngine(dir, serializer)
           workers.foreach(engine.addWorker)
           engine.read[WorkerInfo]("worker_")
           workers.foreach(engine.removeWorker)
           engine.close()
+        }
+        CompressionCodec.ALL_COMPRESSION_CODECS.foreach { c =>
+          val codec = CompressionCodec.createCodec(conf, c)
+          val shortCodecName = CompressionCodec.getShortName(c)
+          val name = s"FileSystemPersistenceEngine with $serializerName ($shortCodecName)"
+          benchmark.addCase(name, numIters) { _ =>
+            val dir = Utils.createTempDir().getAbsolutePath
+            val engine = new FileSystemPersistenceEngine(dir, serializer, Some(codec))
+            workers.foreach(engine.addWorker)
+            engine.read[WorkerInfo]("worker_")
+            workers.foreach(engine.removeWorker)
+            engine.close()
+          }
         }
       }
 

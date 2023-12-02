@@ -19,6 +19,8 @@ package org.apache.spark.internal.config
 
 import java.util.Locale
 
+import org.apache.spark.io.CompressionCodec
+
 private[spark] object Deploy {
   val RECOVERY_MODE = ConfigBuilder("spark.deploy.recoveryMode")
     .version("0.8.1")
@@ -38,6 +40,14 @@ private[spark] object Deploy {
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(RecoverySerializer.values.map(_.toString))
     .createWithDefault(RecoverySerializer.JAVA.toString)
+
+  val RECOVERY_COMPRESSION_CODEC = ConfigBuilder("spark.deploy.recoveryCompressionCodec")
+    .doc("A compression codec for persistence engines. lz4 (default), lzf, snappy, and zstd. " +
+      "Currently, only FILESYSTEM mode supports this configuration.")
+    .version("4.0.0")
+    .stringConf
+    .transform(_.toLowerCase(Locale.ROOT))
+    .createWithDefaultString(CompressionCodec.LZ4)
 
   val RECOVERY_MODE_FACTORY = ConfigBuilder("spark.deploy.recoveryMode.factory")
     .version("1.2.0")
