@@ -4,10 +4,12 @@ PersistenceEngineBenchmark
 
 OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1051-azure
 AMD EPYC 7763 64-Core Processor
-1000 Workers:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
-------------------------------------------------------------------------------------------------------------------------
-ZooKeeperPersistenceEngine                         1086           1215         162          0.0     1085606.9       1.0X
-FileSystemPersistenceEngine                         224            225           1          0.0      223834.2       4.9X
-BlackHolePersistenceEngine                            0              0           0         40.7          24.6   44209.4X
+1000 Workers:                                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+ZooKeeperPersistenceEngine with JavaSerializer            1202           1298         138          0.0     1201614.2       1.0X
+ZooKeeperPersistenceEngine with KryoSerializer             951           1004          48          0.0      950559.0       1.3X
+FileSystemPersistenceEngine with JavaSerializer            212            217           6          0.0      211623.2       5.7X
+FileSystemPersistenceEngine with KryoSerializer             79             81           2          0.0       79132.5      15.2X
+BlackHolePersistenceEngine                                   0              0           0         30.9          32.4   37109.8X
 
 
