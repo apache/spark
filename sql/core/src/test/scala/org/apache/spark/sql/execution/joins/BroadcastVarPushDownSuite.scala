@@ -73,7 +73,7 @@ class BroadcastVarPushDownSuite extends QueryTest with BroadcastVarPushdownUtils
     })
 
     assert(resWithoutBCVar.length > 0)
-    QueryTest.sameRows(resWithBCVar, resWithoutBCVar)
+    QueryTest.sameRows(resWithBCVar.toSeq, resWithoutBCVar.toSeq)
     // verify that broadcast filter pushdown really reduced the streaming side rows seen by the
     // hash join
     // collect all batch scans

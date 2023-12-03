@@ -322,7 +322,7 @@ object BroadcastHashJoinUtil {
 
         case x: AdaptiveSparkPlanExec => plansToCheck.prepend(x.inputPlan)
 
-        case rest => plansToCheck.prepend(rest.children: _*)
+        case rest => plansToCheck.prependAll(rest.children)
       }
     }
     isBuildPlanPrunable

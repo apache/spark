@@ -76,12 +76,12 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
             buildLegBlockingPushFromAncestors.put(cached, cached)
             buildLegBlockingPushFromAncestors.put(buildLeg, buildLeg)
           }
-          nodesToTraverse.prepend(bhj.left, bhj.right)
+          nodesToTraverse.prependAll(Seq(bhj.left, bhj.right))
 
         case _ =>
           val children = nodeToAnalyze.children
           if (children.nonEmpty) {
-            nodesToTraverse.prepend(children: _*)
+            nodesToTraverse.prependAll(children)
           }
       }
     }
