@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.exchange
 
 import org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion.findWiderTypeForTwo
 import org.apache.spark.sql.catalyst.expressions.{Cast, EvalMode, Expression}
-import  org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, PartitioningCollection}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, PartitioningCollection}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.joins.ShuffledJoin
 import org.apache.spark.sql.types.{DataType, DecimalType, IntegralType}
@@ -59,18 +59,6 @@ object ExtractJoinWithUnwrappedCastInJoinPredicates {
     }
   }
 
-  private def satisfiesOutputPartitioning(
-      keys: Seq[Expression],
-      partitioning: Partitioning): Boolean = {
-    partitioning match {
-      case PartitioningCollection(partitionings) =>
-        partitionings.exists(satisfiesOutputPartitioning(keys, _))
-      case HashPartitioning(exprs, _) if exprs.length == keys.length =>
-        exprs.forall(e => keys.exists(_.semanticEquals(e)))
-      case _ => false
-    }
-  }
-
   private def unwrapCastInJoinPredicates(j: ShuffledJoin): Option[Seq[(Expression, Expression)]] = {
     val leftKeys = unwrapCastInJoinKeys(j.leftKeys)
     val rightKeys = unwrapCastInJoinKeys(j.rightKeys)
@@ -81,8 +69,8 @@ object ExtractJoinWithUnwrappedCastInJoinPredicates {
         findWiderTypeForTwo(e1.dataType, e2.dataType).contains(j.leftKeys(i).dataType)
     }
     if (isCastToWiderType) {
-      val leftSatisfies = satisfiesOutputPartitioning(leftKeys, j.left.outputPartitioning)
-      val rightSatisfies = satisfiesOutputPartitioning(rightKeys, j.right.outputPartitioning)
+      val leftSatisfies = j.satisfiesOutputPartitioning(leftKeys, j.left.outputPartitioning)
+      val rightSatisfies = j.satisfiesOutputPartitioning(rightKeys, j.right.outputPartitioning)
       if (leftSatisfies && rightSatisfies) {
         // If there is a bucketed read, their number of partitions may be inconsistent.
         // If the number of partitions on the left side is less than the number of partitions
@@ -103,10 +91,9 @@ object ExtractJoinWithUnwrappedCastInJoinPredicates {
   }
 
   private def isTryToUnwrapCastInJoinPredicates(j: ShuffledJoin): Boolean = {
-    (j.leftKeys.exists(_.isInstanceOf[Cast]) ||
-      j.rightKeys.exists(_.isInstanceOf[Cast])) &&
-      !satisfiesOutputPartitioning(j.leftKeys, j.left.outputPartitioning) &&
-      !satisfiesOutputPartitioning(j.rightKeys, j.right.outputPartitioning) &&
+    (j.leftKeys.exists(_.isInstanceOf[Cast]) || j.rightKeys.exists(_.isInstanceOf[Cast])) &&
+      !j.satisfiesOutputPartitioning(j.leftKeys, j.left.outputPartitioning) &&
+      !j.satisfiesOutputPartitioning(j.rightKeys, j.right.outputPartitioning) &&
       j.children.map(_.outputPartitioning).exists { _ match {
         case _: PartitioningCollection => true
         case _: HashPartitioning => true
