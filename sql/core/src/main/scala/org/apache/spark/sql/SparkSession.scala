@@ -700,7 +700,7 @@ class SparkSession private(
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
         if (args.nonEmpty) {
-          NameParameterizedQuery(parsedPlan, args.view.mapValues(lit(_).expr).toMap)
+          NameParameterizedQuery(parsedPlan, args.transform((_, v) => lit(v).expr))
         } else {
           parsedPlan
         }

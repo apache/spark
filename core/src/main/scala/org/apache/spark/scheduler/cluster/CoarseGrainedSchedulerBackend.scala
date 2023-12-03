@@ -739,7 +739,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   def getExecutorsWithRegistrationTs(): Map[String, Long] = synchronized {
-    executorDataMap.view.mapValues(v => v.registrationTs).toMap
+    executorDataMap.toMap.transform((_, v) => v.registrationTs)
   }
 
   override def isExecutorActive(id: String): Boolean = synchronized {
