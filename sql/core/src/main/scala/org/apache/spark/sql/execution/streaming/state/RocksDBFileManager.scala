@@ -34,7 +34,7 @@ import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModul
 import org.apache.commons.io.{FilenameUtils, IOUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path, PathFilter}
-import org.json4s.NoTypeHints
+import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkConf, SparkEnv}
@@ -405,8 +405,8 @@ class RocksDBFileManager(
 
     val sstDir = new Path(dfsRootDir, RocksDBImmutableFile.SST_FILES_DFS_SUBDIR)
     val logDir = new Path(dfsRootDir, RocksDBImmutableFile.LOG_FILES_DFS_SUBDIR)
-    val allSstFiles = if (fm.exists(sstDir)) fm.list(sstDir).toSeq else Seq.empty
-    val allLogFiles = if (fm.exists(logDir)) fm.list(logDir).toSeq else Seq.empty
+    val allSstFiles = if (fm.exists(sstDir)) fm.list(sstDir).toImmutableArraySeq else Seq.empty
+    val allLogFiles = if (fm.exists(logDir)) fm.list(logDir).toImmutableArraySeq else Seq.empty
     filesToDelete ++= findOrphanFiles(fileToMaxUsedVersion.keys.toSeq, allSstFiles ++ allLogFiles)
       .map(_ -> -1L)
     logInfo(s"Deleting ${filesToDelete.size} files not used in versions >= $minVersionToRetain")
@@ -715,7 +715,7 @@ case class RocksDBCheckpointMetadata(
 object RocksDBCheckpointMetadata {
   val VERSION = 1
 
-  implicit val format = Serialization.formats(NoTypeHints)
+  implicit val format: Formats = Serialization.formats(NoTypeHints)
 
   /** Used to convert between classes and JSON. */
   lazy val mapper = {

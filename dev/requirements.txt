@@ -11,7 +11,7 @@ plotly
 mlflow>=2.3.1
 scikit-learn
 matplotlib
-memory-profiler==0.60.0
+memory-profiler>=0.61.0
 
 # PySpark test dependencies
 unittest-xml-reporting
@@ -31,17 +31,16 @@ pandas-stubs<1.2.0.54
 mkdocs
 
 # Documentation (Python)
-pydata_sphinx_theme
+pydata_sphinx_theme>=0.13
 ipython
 nbsphinx
 numpydoc
-jinja2<3.0.0
-sphinx<3.1.0
+jinja2
+sphinx==4.2.0
 sphinx-plotly-directive
 sphinx-copybutton
 docutils<0.18.0
-# See SPARK-38279.
-markupsafe==2.0.1
+markupsafe
 
 # Development scripts
 jira>=3.5.2

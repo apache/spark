@@ -66,7 +66,7 @@ class MicroBatchExecution(
         // When the flag is disabled, Spark will fall back to single batch execution, whenever
         // it figures out any source does not support Trigger.AvailableNow.
         // See SPARK-45178 for more details.
-        if (sparkSession.sqlContext.conf.getConf(
+        if (sparkSession.sessionState.conf.getConf(
             SQLConf.STREAMING_TRIGGER_AVAILABLE_NOW_WRAPPER_ENABLED)) {
           logInfo("Configured to use the wrapper of Trigger.AvailableNow for query " +
             s"$prettyIdString.")
@@ -113,7 +113,7 @@ class MicroBatchExecution(
     // transformation is responsible for replacing attributes with their final values.
 
     val disabledSources =
-      Utils.stringToSeq(sparkSession.sqlContext.conf.disabledV2StreamingMicroBatchReaders)
+      Utils.stringToSeq(sparkSession.sessionState.conf.disabledV2StreamingMicroBatchReaders)
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     val _logicalPlan = analyzedPlan.transform {
@@ -144,7 +144,7 @@ class MicroBatchExecution(
           })
         } else if (v1.isEmpty) {
           throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(
-            srcName, sparkSession.sqlContext.conf.disabledV2StreamingMicroBatchReaders, table)
+            srcName, sparkSession.sessionState.conf.disabledV2StreamingMicroBatchReaders, table)
         } else {
           v2ToExecutionRelationMap.getOrElseUpdate(s, {
             // Materialize source to avoid creating it in every batch

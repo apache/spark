@@ -378,7 +378,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         resources.foreach { case (k, v) =>
           PythonRDD.writeUTF(k, dataOut)
           PythonRDD.writeUTF(v.name, dataOut)
-          dataOut.writeInt(v.addresses.size)
+          dataOut.writeInt(v.addresses.length)
           v.addresses.foreach { case addr =>
             PythonRDD.writeUTF(addr, dataOut)
           }

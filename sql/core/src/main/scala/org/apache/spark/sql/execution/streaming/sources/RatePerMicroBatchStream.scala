@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
-import org.json4s.NoTypeHints
+import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
@@ -130,7 +130,7 @@ case class RatePerMicroBatchStreamOffset(offset: Long, timestamp: Long) extends 
 }
 
 object RatePerMicroBatchStreamOffset {
-  implicit val formats = Serialization.formats(NoTypeHints)
+  implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
   def apply(json: String): RatePerMicroBatchStreamOffset =
     Serialization.read[RatePerMicroBatchStreamOffset](json)

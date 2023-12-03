@@ -95,8 +95,9 @@ object StaxXmlParserUtils {
     } else {
       attributes.map { attr =>
         val key = options.attributePrefix + getName(attr.getName, options)
-        val value = attr.getValue match {
-          case v if (options.nullValue == "") && v.trim.isEmpty => null
+        val data = if (options.ignoreSurroundingSpaces) attr.getValue.trim else attr.getValue
+        val value = data match {
+          case v if (v == options.nullValue) => null
           case v => v
         }
         key -> value

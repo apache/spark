@@ -584,7 +584,7 @@ private[kafka010] class KafkaDataConsumer(
   }
 
   private[kafka010] def getOrRetrieveConsumer(): InternalKafkaConsumer = {
-    if (!_consumer.isDefined) {
+    if (_consumer.isEmpty) {
       retrieveConsumer()
     }
     require(_consumer.isDefined, "Consumer must be defined")

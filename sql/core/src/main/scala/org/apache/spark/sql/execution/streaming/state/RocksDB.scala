@@ -26,7 +26,7 @@ import scala.ref.WeakReference
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
-import org.json4s.NoTypeHints
+import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 import org.rocksdb.{RocksDB => NativeRocksDB, _}
 import org.rocksdb.CompressionType._
@@ -886,7 +886,7 @@ case class RocksDBMetrics(
 }
 
 object RocksDBMetrics {
-  val format = Serialization.formats(NoTypeHints)
+  val format: Formats = Serialization.formats(NoTypeHints)
 }
 
 /** Class to wrap RocksDB's native histogram */

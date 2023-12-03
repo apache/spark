@@ -171,7 +171,7 @@ class HadoopTableReader(
 
       val partColsDelimited: String = partProps.getProperty(META_TABLE_PARTITION_COLUMNS)
       // Partitioning columns are delimited by "/"
-      val partCols = partColsDelimited.trim().split("/").toSeq
+      val partCols = partColsDelimited.trim().split("/").toImmutableArraySeq
       // 'partValues[i]' contains the value for the partitioning column at 'partCols[i]'.
       val partValues = if (partSpec == null) {
         Array.fill(partCols.size)(new String)

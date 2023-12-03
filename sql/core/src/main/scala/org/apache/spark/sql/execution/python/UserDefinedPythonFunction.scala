@@ -133,7 +133,7 @@ case class UserDefinedPythonTableFunction(
           case _ => false
         }
         val runAnalyzeInPython = (func: PythonFunction, exprs: Seq[Expression]) => {
-          val runner = new UserDefinedPythonTableFunctionAnalyzeRunner(func, exprs, tableArgs)
+          val runner = new UserDefinedPythonTableFunctionAnalyzeRunner(name, func, exprs, tableArgs)
           runner.runInPython()
         }
         UnresolvedPolymorphicPythonUDTF(
@@ -184,6 +184,7 @@ case class UserDefinedPythonTableFunction(
  * will be thrown when an exception is raised in Python.
  */
 class UserDefinedPythonTableFunctionAnalyzeRunner(
+    name: String,
     func: PythonFunction,
     exprs: Seq[Expression],
     tableArgs: Seq[Boolean]) extends PythonPlannerRunner[PythonUDTFAnalyzeResult](func) {
@@ -192,6 +193,7 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
 
   override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
     // Send Python UDTF
+    PythonWorkerUtils.writeUTF(name, dataOut)
     PythonWorkerUtils.writePythonFunction(func, dataOut)
 
     // Send arguments
@@ -226,6 +228,9 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
     val length = dataIn.readInt()
     if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
+        // Remove the leading traceback stack trace from the error message string, if any, since it
+        // usually only includes the "analyze_udtf.py" filename and a line number.
+        .split("PySparkValueError:").last.strip()
       throw QueryCompilationErrors.tableValuedFunctionFailedToAnalyseInPythonError(msg)
     }
 

@@ -58,6 +58,7 @@ private[master] class FileSystemPersistenceEngine(
   }
 
   private def serializeIntoFile(file: File, value: AnyRef): Unit = {
+    if (file.exists()) { throw new IllegalStateException("File already exists: " + file) }
     val created = file.createNewFile()
     if (!created) { throw new IllegalStateException("Could not create file: " + file) }
     val fileOut = new FileOutputStream(file)
@@ -66,10 +67,10 @@ private[master] class FileSystemPersistenceEngine(
       out = serializer.newInstance().serializeStream(fileOut)
       out.writeObject(value)
     } {
-      fileOut.close()
       if (out != null) {
         out.close()
       }
+      fileOut.close()
     }
   }
 

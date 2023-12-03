@@ -62,7 +62,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     }
     assert(thrown.getMessage.contains("using broadcast variables for large values"))
     val smaller = sc.parallelize(1 to 4).collect()
-    assert(smaller.size === 4)
+    assert(smaller.length === 4)
   }
 
   test("compute max number of concurrent tasks can be launched") {

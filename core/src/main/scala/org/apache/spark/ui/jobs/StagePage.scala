@@ -205,6 +205,12 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
 
     val currentTime = System.currentTimeMillis()
 
+    val js =
+      s"""
+         |import { setTaskThreadDumpEnabled } from "/static/stagepage.js";
+         |
+         |setTaskThreadDumpEnabled(${parent.threadDumpEnabled});
+         |""".stripMargin
     val content =
       summary ++
       dagViz ++ <div id="showAdditionalMetrics"></div> ++
@@ -221,9 +227,10 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
         eventTimelineTaskPage, eventTimelineTaskPageSize, eventTimelineTotalPages, stageId,
         stageAttemptId, totalTasks) ++
         <div id="parent-container">
-          <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script>
-          <script src={UIUtils.prependBaseUri(request, "/static/stagepage.js")}></script>
-          <script>setTaskThreadDumpEnabled({parent.threadDumpEnabled})</script>
+          <script type="module" src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script>
+          <script type="module"
+                  src={UIUtils.prependBaseUri(request, "/static/stagepage.js")}></script>
+          <script type="module">{Unparsed(js)}</script>
         </div>
         UIUtils.headerSparkPage(request, stageHeader, content, parent, showVisualization = true,
           useDataTables = true)
@@ -350,7 +357,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
                  |Status: ${taskInfo.status}<br>
                  |Launch Time: ${UIUtils.formatDate(new Date(launchTime))}
                  |${
-                     if (!taskInfo.duration.isDefined) {
+                     if (taskInfo.duration.isEmpty) {
                        s"""<br>Finish Time: ${UIUtils.formatDate(new Date(finishTime))}"""
                      } else {
                         ""

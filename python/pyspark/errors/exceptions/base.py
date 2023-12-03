@@ -214,6 +214,12 @@ class PySparkTypeError(PySparkException, TypeError):
     """
 
 
+class PySparkIndexError(PySparkException, IndexError):
+    """
+    Wrapper class for IndexError to support error classes.
+    """
+
+
 class PySparkAttributeError(PySparkException, AttributeError):
     """
     Wrapper class for AttributeError to support error classes.
@@ -251,4 +257,10 @@ class PySparkNotImplementedError(PySparkException, NotImplementedError):
 class PySparkPicklingError(PySparkException, PicklingError):
     """
     Wrapper class for pickle.PicklingError to support error classes.
+    """
+
+
+class PySparkImportError(PySparkException, ImportError):
+    """
+    Wrapper class for ImportError to support error classes.
     """

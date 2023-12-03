@@ -102,6 +102,8 @@ class XmlOptions(
   val wildcardColName =
     parameters.getOrElse(WILDCARD_COL_NAME, XmlOptions.DEFAULT_WILDCARD_COL_NAME)
   val ignoreNamespace = getBool(IGNORE_NAMESPACE, false)
+  val prefersDecimal =
+    parameters.get(PREFERS_DECIMAL).map(_.toBoolean).getOrElse(false)
   // setting indent to "" disables indentation in the generated XML.
   // Each row will be written in a new line.
   val indent = parameters.getOrElse(INDENT, DEFAULT_INDENT)
@@ -207,6 +209,7 @@ object XmlOptions extends DataSourceOptions {
   val TIMESTAMP_NTZ_FORMAT = newOption("timestampNTZFormat")
   val TIME_ZONE = newOption("timeZone")
   val INDENT = newOption("indent")
+  val PREFERS_DECIMAL = newOption("prefersDecimal")
   // Options with alternative
   val ENCODING = "encoding"
   val CHARSET = "charset"

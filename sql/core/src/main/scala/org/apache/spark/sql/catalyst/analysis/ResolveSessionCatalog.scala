@@ -625,10 +625,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
   private object DatabaseInSessionCatalog {
     def unapply(resolved: ResolvedNamespace): Option[String] = resolved match {
-      case ResolvedNamespace(catalog, _) if !isSessionCatalog(catalog) => None
-      case ResolvedNamespace(_, Seq()) =>
+      case ResolvedNamespace(catalog, _, _) if !isSessionCatalog(catalog) => None
+      case ResolvedNamespace(_, Seq(), _) =>
         throw QueryCompilationErrors.databaseFromV1SessionCatalogNotSpecifiedError()
-      case ResolvedNamespace(_, Seq(dbName)) => Some(dbName)
+      case ResolvedNamespace(_, Seq(dbName), _) => Some(dbName)
       case _ =>
         assert(resolved.namespace.length > 1)
         throw QueryCompilationErrors.nestedDatabaseUnsupportedByV1SessionCatalogError(
@@ -638,8 +638,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
   private object DatabaseNameInSessionCatalog {
     def unapply(resolved: ResolvedNamespace): Option[String] = resolved match {
-      case ResolvedNamespace(catalog, _) if !isSessionCatalog(catalog) => None
-      case ResolvedNamespace(_, Seq(dbName)) => Some(dbName)
+      case ResolvedNamespace(catalog, _, _) if !isSessionCatalog(catalog) => None
+      case ResolvedNamespace(_, Seq(dbName), _) => Some(dbName)
       case _ =>
         assert(resolved.namespace.length > 1)
         throw QueryCompilationErrors.requiresSinglePartNamespaceError(resolved.namespace)

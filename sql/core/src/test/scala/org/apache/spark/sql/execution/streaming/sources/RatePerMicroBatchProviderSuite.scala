@@ -29,7 +29,7 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
   import testImplicits._
 
   test("RatePerMicroBatchProvider in registry") {
-    val ds = DataSource.lookupDataSource("rate-micro-batch", spark.sqlContext.conf)
+    val ds = DataSource.lookupDataSource("rate-micro-batch", spark.sessionState.conf)
       .getConstructor().newInstance()
     assert(ds.isInstanceOf[RatePerMicroBatchProvider], "Could not find rate-micro-batch source")
   }
@@ -130,7 +130,7 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
 
   private def waitUntilBatchProcessed(clock: StreamManualClock) = AssertOnQuery { q =>
     eventually(Timeout(streamingTimeout)) {
-      if (!q.exception.isDefined) {
+      if (q.exception.isEmpty) {
         assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
       }
     }

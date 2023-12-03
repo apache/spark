@@ -24,7 +24,7 @@ import scala.io.{Source => IOSource}
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.Path
-import org.json4s.NoTypeHints
+import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.SparkSession
@@ -49,9 +49,10 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
 
   import CompactibleFileStreamLog._
 
-  private implicit val formats = Serialization.formats(NoTypeHints)
+  private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
   /** Needed to serialize type T into JSON when using Jackson */
+  @scala.annotation.nowarn
   private implicit val manifest = Manifest.classType[T](implicitly[ClassTag[T]].runtimeClass)
 
   protected val minBatchesToRetain = sparkSession.sessionState.conf.minBatchesToRetain

@@ -231,7 +231,7 @@ case class FooAgg(s: Int) extends Aggregator[Row, Int, Int] {
 class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
-  private implicit val ordering = Ordering.by((c: AggData) => c.a -> c.b)
+  private implicit val ordering: Ordering[AggData] = Ordering.by((c: AggData) => c.a -> c.b)
 
   test("typed aggregation: complex result type") {
     val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()

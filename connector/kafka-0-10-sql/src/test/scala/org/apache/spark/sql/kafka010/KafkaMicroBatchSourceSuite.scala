@@ -189,7 +189,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
 
   private def waitUntilBatchProcessed(clock: StreamManualClock) = AssertOnQuery { q =>
     eventually(Timeout(streamingTimeout)) {
-      if (!q.exception.isDefined) {
+      if (q.exception.isEmpty) {
         assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
       }
     }
@@ -1295,7 +1295,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
     // ensure all batches we are waiting for have been processed.
     val waitUntilBatchProcessed = Execute { q =>
       eventually(Timeout(streamingTimeout)) {
-        if (!q.exception.isDefined) {
+        if (q.exception.isEmpty) {
           assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
         }
       }
@@ -1418,7 +1418,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
     // ensure all batches we are waiting for have been processed.
     val waitUntilBatchProcessed = Execute { q =>
       eventually(Timeout(streamingTimeout)) {
-        if (!q.exception.isDefined) {
+        if (q.exception.isEmpty) {
           assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
         }
       }
@@ -1687,7 +1687,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
           KafkaSourceOffset(Map(tp -> 100L))).map(_.asInstanceOf[KafkaBatchInputPartition])
         withClue(s"minPartitions = $minPartitions generated factories " +
           s"${inputPartitions.mkString("inputPartitions(", ", ", ")")}\n\t") {
-          assert(inputPartitions.size == numPartitionsGenerated)
+          assert(inputPartitions.length == numPartitionsGenerated)
         }
       }
     }

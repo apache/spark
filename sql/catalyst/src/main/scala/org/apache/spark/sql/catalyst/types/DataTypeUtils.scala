@@ -139,16 +139,16 @@ object DataTypeUtils {
             }
         }
 
-        if (readFields.size > writeFields.size) {
-          val missingFieldsStr = readFields.takeRight(readFields.size - writeFields.size)
+        if (readFields.length > writeFields.length) {
+          val missingFieldsStr = readFields.takeRight(readFields.length - writeFields.length)
             .map(f => s"${toSQLId(f.name)}").mkString(", ")
           if (missingFieldsStr.nonEmpty) {
             throw QueryCompilationErrors.incompatibleDataToTableStructMissingFieldsError(
               tableName, context, missingFieldsStr)
           }
 
-        } else if (writeFields.size > readFields.size) {
-          val extraFieldsStr = writeFields.takeRight(writeFields.size - readFields.size)
+        } else if (writeFields.length > readFields.length) {
+          val extraFieldsStr = writeFields.takeRight(writeFields.length - readFields.length)
             .map(f => s"${toSQLId(f.name)}").mkString(", ")
           throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
             tableName, context, extraFieldsStr

@@ -23,13 +23,14 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.{Catalog, CatalogMetadata, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.DefinedByConstructorParams
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, LogicalPlan, OptionList, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, UnresolvedTableSpec, View}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, SupportsNamespaces, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, MultipartIdentifierHelper, NamespaceHelper, TransformHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.ShowTablesCommand
@@ -81,17 +82,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   /**
    * Returns a list of databases available across all sessions.
    */
-  override def listDatabases(): Dataset[Database] = {
-    val plan = ShowNamespaces(UnresolvedNamespace(Nil), None)
-    val qe = sparkSession.sessionState.executePlan(plan)
-    val catalog = qe.analyzed.collectFirst {
-      case ShowNamespaces(r: ResolvedNamespace, _, _) => r.catalog
-    }.get
-    val databases = qe.toRdd.collect().map { row =>
-      getNamespace(catalog, parseIdent(row.getString(0)))
-    }
-    CatalogImpl.makeDataset(databases.toImmutableArraySeq, sparkSession)
-  }
+  override def listDatabases(): Dataset[Database] = listDatabasesInternal(None)
 
   /**
    * Returns a list of databases (namespaces) which name match the specify pattern and
@@ -99,14 +90,17 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *
    * @since 3.5.0
    */
-  override def listDatabases(pattern: String): Dataset[Database] = {
-    val plan = ShowNamespaces(UnresolvedNamespace(Nil), Some(pattern))
+  override def listDatabases(pattern: String): Dataset[Database] =
+    listDatabasesInternal(Some(pattern))
+
+  private def listDatabasesInternal(patternOpt: Option[String]): Dataset[Database] = {
+    val plan = ShowNamespaces(UnresolvedNamespace(Nil), patternOpt)
     val qe = sparkSession.sessionState.executePlan(plan)
     val catalog = qe.analyzed.collectFirst {
       case ShowNamespaces(r: ResolvedNamespace, _, _) => r.catalog
     }.get
     val databases = qe.toRdd.collect().map { row =>
-      getNamespace(catalog, parseIdent(row.getString(0)))
+      makeDatabase(Some(catalog.name()), row.getString(0))
     }
     CatalogImpl.makeDataset(databases.toImmutableArraySeq, sparkSession)
   }
@@ -153,32 +147,38 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       case _: ShowTablesCommand =>
         sparkSession.sessionState.catalogManager.v2SessionCatalog
     }.get
-    val tables = qe.toRdd.collect().map { row =>
-      val tableName = row.getString(1)
-      val namespaceName = row.getString(0)
-      val isTemp = row.getBoolean(2)
+    val tables = qe.toRdd.collect().flatMap { row => resolveTable(row, catalog.name()) }
+    CatalogImpl.makeDataset(tables.toImmutableArraySeq, sparkSession)
+  }
+
+  private[sql] def resolveTable(row: InternalRow, catalogName: String): Option[Table] = {
+    val tableName = row.getString(1)
+    val namespaceName = row.getString(0)
+    val isTemp = row.getBoolean(2)
+    try {
       if (isTemp) {
         // Temp views do not belong to any catalog. We shouldn't prepend the catalog name here.
         val ns = if (namespaceName.isEmpty) Nil else Seq(namespaceName)
-        makeTable(ns :+ tableName)
+        Some(makeTable(ns :+ tableName))
       } else {
         val ns = parseIdent(namespaceName)
         try {
-          makeTable(catalog.name() +: ns :+ tableName)
+          Some(makeTable(catalogName +: ns :+ tableName))
         } catch {
           case e: AnalysisException if e.getErrorClass == "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE" =>
-            new Table(
+            Some(new Table(
               name = tableName,
-              catalog = catalog.name(),
+              catalog = catalogName,
               namespace = ns.toArray,
               description = null,
               tableType = null,
               isTemporary = false
-            )
+            ))
         }
       }
+    } catch {
+      case e: AnalysisException if e.getErrorClass == "TABLE_OR_VIEW_NOT_FOUND" => None
     }
-    CatalogImpl.makeDataset(tables.toImmutableArraySeq, sparkSession)
   }
 
   private def tableExists(nameParts: Seq[String]): Boolean = {
@@ -384,7 +384,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     val columns = sparkSession.sessionState.executePlan(plan).analyzed match {
       case ResolvedTable(_, _, table, _) =>
         // TODO (SPARK-45787): Support clusterBySpec for listColumns().
-        val (partitionColumnNames, bucketSpecOpt, _) = table.partitioning.toSeq.convertTransforms
+        val (partitionColumnNames, bucketSpecOpt, _) =
+          table.partitioning.toImmutableArraySeq.convertTransforms
         val bucketColumnNames = bucketSpecOpt.map(_.bucketColumnNames).getOrElse(Nil)
         schemaToColumns(table.schema(), partitionColumnNames.contains, bucketColumnNames.contains)
 
@@ -415,35 +416,28 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     }
   }
 
-  private def getNamespace(catalog: CatalogPlugin, ns: Seq[String]): Database = catalog match {
-    case catalog: SupportsNamespaces =>
-      val metadata = catalog.loadNamespaceMetadata(ns.toArray)
-      new Database(
-        name = ns.quoted,
-        catalog = catalog.name,
-        description = metadata.get(SupportsNamespaces.PROP_COMMENT),
-        locationUri = metadata.get(SupportsNamespaces.PROP_LOCATION))
-    // If the catalog doesn't support namespaces, we assume it's an implicit namespace, which always
-    // exists but has no metadata.
-    case catalog: CatalogPlugin =>
-      new Database(
-        name = ns.quoted,
-        catalog = catalog.name,
-        description = null,
-        locationUri = null)
-    case _ => new Database(name = ns.quoted, description = null, locationUri = null)
-  }
-
   /**
    * Gets the database with the specified name. This throws an `AnalysisException` when no
    * `Database` can be found.
    */
   override def getDatabase(dbName: String): Database = {
-    val namespace = resolveNamespace(dbName)
-    val plan = UnresolvedNamespace(namespace)
+    makeDatabase(None, dbName)
+  }
+
+  private def makeDatabase(catalogNameOpt: Option[String], dbName: String): Database = {
+    val idents = catalogNameOpt match {
+      case Some(catalogName) => catalogName +: parseIdent(dbName)
+      case None => resolveNamespace(dbName)
+    }
+    val plan = UnresolvedNamespace(idents, fetchMetadata = true)
     sparkSession.sessionState.executePlan(plan).analyzed match {
-      case ResolvedNamespace(catalog, namespace) =>
-        getNamespace(catalog, namespace)
+      case ResolvedNamespace(catalog, namespace, metadata) =>
+        new Database(
+          name = namespace.quoted,
+          catalog = catalog.name,
+          description = metadata.get(SupportsNamespaces.PROP_COMMENT).orNull,
+          locationUri = metadata.get(SupportsNamespaces.PROP_LOCATION).orNull
+        )
       case _ => new Database(name = dbName, description = null, locationUri = null)
     }
   }
@@ -516,18 +510,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Checks if the database with the specified name exists.
    */
   override def databaseExists(dbName: String): Boolean = {
-    // To maintain backwards compatibility, we first treat the input is a simple dbName and check
-    // if sessionCatalog contains it. If no, we try to parse it, resolve catalog and namespace,
-    // and check if namespace exists in the catalog.
-    if (!sessionCatalog.databaseExists(dbName)) {
-      val plan = UnresolvedNamespace(parseIdent(dbName))
-      sparkSession.sessionState.executePlan(plan).analyzed match {
-        case ResolvedNamespace(catalog: SupportsNamespaces, ns) =>
-          catalog.namespaceExists(ns.toArray)
-        case _ => true
-      }
-    } else {
+    try {
+      getDatabase(dbName)
       true
+    } catch {
+      case _: NoSuchNamespaceException => false
     }
   }
 
