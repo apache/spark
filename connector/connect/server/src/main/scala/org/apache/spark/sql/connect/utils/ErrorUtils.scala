@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 
 import com.google.protobuf.{Any => ProtoAny}
 import com.google.rpc.{Code => RPCCode, ErrorInfo, Status => RPCStatus}
-import io.grpc.{Status, StatusRuntimeException}
+import io.grpc.Status
 import io.grpc.protobuf.StatusProto
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.StringUtils
