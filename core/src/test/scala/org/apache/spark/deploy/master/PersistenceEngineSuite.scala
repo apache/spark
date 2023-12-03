@@ -53,6 +53,15 @@ class PersistenceEngineSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-46215: FileSystemPersistenceEngine with a non-existent parent dir") {
+    withTempDir { dir =>
+      val conf = new SparkConf()
+      testPersistenceEngine(conf, serializer =>
+        new FileSystemPersistenceEngine(dir.getAbsolutePath + "/a/b/c/dir", serializer)
+      )
+    }
+  }
+
   test("SPARK-46205: Support KryoSerializer in FileSystemPersistenceEngine") {
     withTempDir { dir =>
       val conf = new SparkConf()

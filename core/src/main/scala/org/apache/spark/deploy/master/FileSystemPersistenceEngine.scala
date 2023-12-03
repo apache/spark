@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.master
 
 import java.io._
+import java.nio.file.{Files, Paths}
 
 import scala.reflect.ClassTag
 
@@ -31,7 +32,7 @@ import org.apache.spark.util.Utils
  * Stores data in a single on-disk directory with one file per application and worker.
  * Files are deleted when applications and workers are removed.
  *
- * @param dir Directory to store files. Created if non-existent (but not recursively).
+ * @param dir Directory to store files. Created if non-existent.
  * @param serializer Used to serialize our objects.
  */
 private[master] class FileSystemPersistenceEngine(
@@ -39,7 +40,7 @@ private[master] class FileSystemPersistenceEngine(
     val serializer: Serializer)
   extends PersistenceEngine with Logging {
 
-  new File(dir).mkdir()
+  Files.createDirectories(Paths.get(dir))
 
   override def persist(name: String, obj: Object): Unit = {
     serializeIntoFile(new File(dir + File.separator + name), obj)
