@@ -22,8 +22,6 @@ import java.util.concurrent.{Future => JFuture}
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
 
-import com.google.common.base.Objects
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
