@@ -539,7 +539,7 @@ case class UnresolvedStarExcept(target: Option[Seq[String]], excepts: Seq[Seq[St
       : Seq[NamedExpression] = {
       // group the except pairs by the column they refer to. NOTE: no groupMap until scala 2.13
       val groupedExcepts: AttributeMap[Seq[Seq[String]]] =
-        AttributeMap(excepts.groupBy(_._1.toAttribute).view.mapValues(v => v.map(_._2)))
+        AttributeMap(excepts.groupBy(_._1.toAttribute).transform((_, v) => v.map(_._2)))
 
       // map input columns while searching for the except entry corresponding to the current column
       columns.map(col => col -> groupedExcepts.get(col.toAttribute)).collect {

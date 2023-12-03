@@ -726,8 +726,8 @@ class DirectKafkaStreamSuite
   /** Get the generated offset ranges from the DirectKafkaStream */
   private def getOffsetRanges[K, V](
       kafkaStream: DStream[ConsumerRecord[K, V]]): Seq[(Time, Array[OffsetRange])] = {
-    kafkaStream.generatedRDDs.view.mapValues { rdd =>
-      rdd.asInstanceOf[HasOffsetRanges].offsetRanges
+    kafkaStream.generatedRDDs.map { case (t, rdd) =>
+      (t, rdd.asInstanceOf[HasOffsetRanges].offsetRanges)
     }.toSeq.sortBy { _._1 }
   }
 

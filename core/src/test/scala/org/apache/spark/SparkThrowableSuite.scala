@@ -65,7 +65,7 @@ class SparkThrowableSuite extends SparkFunSuite {
   }
 
   def checkIfUnique(ss: Seq[Any]): Unit = {
-    val dups = ss.groupBy(identity).view.mapValues(_.size).filter(_._2 > 1).keys.toSeq
+    val dups = ss.groupBy(identity).transform((_, v) => v.size).filter(_._2 > 1).keys.toSeq
     assert(dups.isEmpty, s"Duplicate error classes: ${dups.mkString(", ")}")
   }
 
