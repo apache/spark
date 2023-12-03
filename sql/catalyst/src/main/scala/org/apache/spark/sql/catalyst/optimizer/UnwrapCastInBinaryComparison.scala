@@ -139,7 +139,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       Some(unwrapDateToTimestamp(be, fromExp, date, timeZoneId, evalMode))
 
     case be @ BinaryComparison(
-      Cast(fromExp, _, timeZoneId, evalMode), ts @ Literal(value, _))
+      Cast(fromExp: DateType, _, timeZoneId, evalMode), ts @ Literal(value, _))
         if AnyTimestampType.acceptsType(ts.dataType) && value != null =>
       Some(unwrapTimeStampToDate(be, fromExp, ts, timeZoneId, evalMode))
 
