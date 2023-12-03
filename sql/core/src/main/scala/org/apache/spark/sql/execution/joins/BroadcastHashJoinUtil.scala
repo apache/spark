@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, ObjectType}
 
+
 object BroadcastHashJoinUtil {
   def canPushBroadcastedKeysAsFilter(
       conf: SQLConf,

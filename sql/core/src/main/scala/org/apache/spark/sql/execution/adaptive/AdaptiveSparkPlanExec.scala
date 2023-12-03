@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.adaptive
 import java.util
 import java.util.concurrent.LinkedBlockingQueue
 
-import scala.collection.{mutable, Seq}
 import scala.collection.concurrent.TrieMap
+import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
