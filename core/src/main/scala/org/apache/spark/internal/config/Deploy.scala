@@ -39,6 +39,13 @@ private[spark] object Deploy {
     .checkValues(RecoverySerializer.values.map(_.toString))
     .createWithDefault(RecoverySerializer.JAVA.toString)
 
+  val RECOVERY_COMPRESSION_CODEC = ConfigBuilder("spark.deploy.recoveryCompressionCodec")
+    .doc("A compression codec for persistence engines. none (default), lz4, lzf, snappy, and " +
+      "zstd. Currently, only FILESYSTEM mode supports this configuration.")
+    .version("4.0.0")
+    .stringConf
+    .createOptional
+
   val RECOVERY_MODE_FACTORY = ConfigBuilder("spark.deploy.recoveryMode.factory")
     .version("1.2.0")
     .stringConf

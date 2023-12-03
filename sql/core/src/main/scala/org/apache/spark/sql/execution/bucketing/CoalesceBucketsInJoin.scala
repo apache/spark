@@ -22,7 +22,7 @@ import scala.annotation.tailrec
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
@@ -141,6 +141,8 @@ object ExtractJoinWithBuckets {
     partitioning match {
       case HashPartitioning(exprs, _) if exprs.length == keys.length =>
         exprs.forall(e => keys.exists(_.semanticEquals(e)))
+      case PartitioningCollection(partitionings) =>
+        partitionings.exists(satisfiesOutputPartitioning(keys, _))
       case _ => false
     }
   }

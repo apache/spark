@@ -426,7 +426,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       // We need to do cartesian product for all the config dimensions, to get a list of
       // config sets, and run the query once for each config set.
       val configDimLines = comments.filter(_.startsWith("--CONFIG_DIM")).map(_.substring(12))
-      val configDims = configDimLines.groupBy(_.takeWhile(_ != ' ')).view.mapValues { lines =>
+      val configDims = configDimLines.groupBy(_.takeWhile(_ != ' ')).transform { (_, lines) =>
         lines.map(_.dropWhile(_ != ' ').substring(1)).map(_.split(",").map { kv =>
           val (conf, value) = kv.span(_ != '=')
           conf.trim -> value.substring(1).trim
