@@ -58,8 +58,8 @@ private[master] class FileSystemRecoveryModeFactory(conf: SparkConf, serializer:
 
   def createPersistenceEngine(): PersistenceEngine = {
     logInfo("Persisting recovery state to directory: " + recoveryDir)
-    new FileSystemPersistenceEngine(recoveryDir, serializer,
-      Some(CompressionCodec.createCodec(conf, conf.get(RECOVERY_COMPRESSION_CODEC))))
+    val codec = conf.get(RECOVERY_COMPRESSION_CODEC).map(c => CompressionCodec.createCodec(conf, c))
+    new FileSystemPersistenceEngine(recoveryDir, serializer, codec)
   }
 
   def createLeaderElectionAgent(master: LeaderElectable): LeaderElectionAgent = {
