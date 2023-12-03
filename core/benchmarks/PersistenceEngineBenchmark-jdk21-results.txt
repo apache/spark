@@ -4,20 +4,20 @@ PersistenceEngineBenchmark
 
 OpenJDK 64-Bit Server VM 21.0.1+12-LTS on Linux 5.15.0-1051-azure
 AMD EPYC 7763 64-Core Processor
-2000 Workers:                                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+1000 Workers:                                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ----------------------------------------------------------------------------------------------------------------------------------------
-ZooKeeperPersistenceEngine with JavaSerializer                     2254           2329         119          0.0     1126867.1       1.0X
-ZooKeeperPersistenceEngine with KryoSerializer                     1911           1912           1          0.0      955667.1       1.2X
-FileSystemPersistenceEngine with JavaSerializer                     438            448          15          0.0      218868.1       5.1X
-FileSystemPersistenceEngine with JavaSerializer (lz4)               187            195           8          0.0       93337.8      12.1X
-FileSystemPersistenceEngine with JavaSerializer (lzf)               193            216          20          0.0       96678.8      11.7X
-FileSystemPersistenceEngine with JavaSerializer (snappy)            175            183          10          0.0       87652.3      12.9X
-FileSystemPersistenceEngine with JavaSerializer (zstd)              243            255          14          0.0      121695.2       9.3X
-FileSystemPersistenceEngine with KryoSerializer                     150            160          15          0.0       75089.7      15.0X
-FileSystemPersistenceEngine with KryoSerializer (lz4)               170            177          10          0.0       84996.7      13.3X
-FileSystemPersistenceEngine with KryoSerializer (lzf)               192            203          12          0.0       96019.1      11.7X
-FileSystemPersistenceEngine with KryoSerializer (snappy)            184            202          16          0.0       92241.3      12.2X
-FileSystemPersistenceEngine with KryoSerializer (zstd)              232            238           5          0.0      116075.2       9.7X
-BlackHolePersistenceEngine                                            0              0           0         27.3          36.6   30761.0X
+ZooKeeperPersistenceEngine with JavaSerializer                     5402           5546         233          0.0     5402030.8       1.0X
+ZooKeeperPersistenceEngine with KryoSerializer                     4185           4220          32          0.0     4184623.1       1.3X
+FileSystemPersistenceEngine with JavaSerializer                    1591           1634          37          0.0     1590836.4       3.4X
+FileSystemPersistenceEngine with JavaSerializer (lz4)               611            623          14          0.0      611256.6       8.8X
+FileSystemPersistenceEngine with JavaSerializer (lzf)               626            640          13          0.0      626072.2       8.6X
+FileSystemPersistenceEngine with JavaSerializer (snappy)            595            628          29          0.0      594744.4       9.1X
+FileSystemPersistenceEngine with JavaSerializer (zstd)              755            774          21          0.0      754604.4       7.2X
+FileSystemPersistenceEngine with KryoSerializer                     479            489           8          0.0      479404.7      11.3X
+FileSystemPersistenceEngine with KryoSerializer (lz4)               392            406          12          0.0      392165.7      13.8X
+FileSystemPersistenceEngine with KryoSerializer (lzf)               525            536          14          0.0      524916.7      10.3X
+FileSystemPersistenceEngine with KryoSerializer (snappy)            519            533          14          0.0      518569.3      10.4X
+FileSystemPersistenceEngine with KryoSerializer (zstd)              627            663          31          0.0      627233.2       8.6X
+BlackHolePersistenceEngine                                            0              0           0          6.0         166.0   32541.8X
 
 
