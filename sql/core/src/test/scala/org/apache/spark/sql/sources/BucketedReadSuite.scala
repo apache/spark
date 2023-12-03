@@ -1090,7 +1090,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
     }
   }
 
-  test("SPARK-40609: Unwrap cast in join condition") {
+  test("SPARK-46219: Unwrap cast in join condition") {
     def verify(
         query: String,
         expectedNumShuffles: Int,

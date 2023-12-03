@@ -1373,7 +1373,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("SPARK-40609: Unwrap cast in join condition") {
+  test("SPARK-46219: Unwrap cast in join condition") {
     val intExpr = Literal(1)
     val longExpr = Literal(1L)
     val smjExec = SortMergeJoinExec(
@@ -1410,7 +1410,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("SPARK-40609: Number of partitions may be inconsistent") {
+  test("SPARK-46219: Number of partitions may be inconsistent") {
     val longExpr = Literal(1L)
     val decimalExpr = Literal(Decimal(1L, 18, 0))
     val smjExec = SortMergeJoinExec(
