@@ -345,23 +345,23 @@ struct<partition_col:int,count:int,total:int,last:int>
 
 
 -- !query
-SELECT * FROM InvalidTestPythonUDTFOrderByAscKeyword(TABLE(t2))
+SELECT * FROM UDTFInvalidOrderByAscKeyword(TABLE(t2))
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVABLE_TABLE_VALUED_FUNCTION",
-  "sqlState" : "42883",
+  "errorClass" : "UDTF_INVALID_ALIAS_IN_REQUESTED_ORDERING_STRING_FROM_ANALYZE_METHOD",
+  "sqlState" : "42802",
   "messageParameters" : {
-    "name" : "`InvalidTestPythonUDTFOrderByAscKeyword`"
+    "aliasName" : "ASC"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 15,
-    "stopIndex" : 63,
-    "fragment" : "InvalidTestPythonUDTFOrderByAscKeyword(TABLE(t2))"
+    "stopIndex" : 53,
+    "fragment" : "UDTFInvalidOrderByAscKeyword(TABLE(t2))"
   } ]
 }
 
