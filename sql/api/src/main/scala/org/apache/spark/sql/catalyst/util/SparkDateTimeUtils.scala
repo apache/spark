@@ -321,11 +321,15 @@ trait SparkDateTimeUtils {
       j += 1;
     }
 
-    if (j < bytes.length && (bytes(j) == '-' || bytes(j) == '+')) {
+    if (j == bytes.length) {
+      return None;
+    }
+
+    if (bytes(j) == '-' || bytes(j) == '+') {
       sign = if (bytes(j) == '-') -1 else 1
       j += 1
     }
-    while ( j < bytes.length &&
+    while (j < bytes.length &&
       (i < 3 && !(UTF8String.isWhitespaceOrISOControl(bytes(j)) || bytes(j) == 'T'))) {
       val b = bytes(j)
       if (i < 2 && b == '-') {
