@@ -16,7 +16,7 @@
 #
 
 from pyspark.loose_version import LooseVersion
-from pyspark.errors import PySparkImportError
+from pyspark.errors import PySparkImportError, PySparkRuntimeError
 
 
 def require_minimum_pandas_version() -> None:
@@ -82,7 +82,7 @@ def require_minimum_pyarrow_version() -> None:
             },
         )
     if os.environ.get("ARROW_PRE_0_15_IPC_FORMAT", "0") == "1":
-        raise RuntimeError(
-            "Arrow legacy IPC format is not supported in PySpark, "
-            "please unset ARROW_PRE_0_15_IPC_FORMAT"
+        raise PySparkRuntimeError(
+            error_class="ARROW_LEGACY_IPC_FORMAT",
+            message_parameters={},
         )
