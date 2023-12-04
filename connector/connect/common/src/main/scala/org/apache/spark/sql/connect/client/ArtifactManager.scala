@@ -125,7 +125,7 @@ class ArtifactManager(
       .addAllNames(Arrays.asList(artifactName))
       .build()
     val response = bstub.artifactStatus(request)
-    if (response.getSessionId != sessionId) {
+    if (StringUtils.isNotEmpty(response.getSessionId) && response.getSessionId != sessionId) {
       throw new IllegalStateException(
         s"Session ID mismatch: $sessionId != ${response.getSessionId}")
     }
@@ -185,7 +185,7 @@ class ArtifactManager(
     val responseHandler = new StreamObserver[proto.AddArtifactsResponse] {
       private val summaries = mutable.Buffer.empty[ArtifactSummary]
       override def onNext(v: AddArtifactsResponse): Unit = {
-        if (v.getSessionId != sessionId) {
+        if (StringUtils.isNotEmpty(v.getSessionId) && v.getSessionId != sessionId) {
           throw new IllegalStateException(s"Session ID mismatch: $sessionId != ${v.getSessionId}")
         }
         v.getArtifactsList.forEach { summary =>
