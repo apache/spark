@@ -22,6 +22,7 @@ import typing
 from typing import Optional, Callable, Generator, List, Type
 from types import TracebackType
 from pyspark.sql.connect.client.logging import logger
+from pyspark.errors import RetryException, RetriesExceeded
 
 """
 This module contains retry system. The system is designed to be
@@ -248,13 +249,6 @@ class Retrying:
             yield AttemptManager(self)
 
 
-class RetryException(Exception):
-    """
-    An exception that can be thrown upstream when inside retry and which is always retryable
-    even without policies
-    """
-
-
 class DefaultPolicy(RetryPolicy):
     # Please synchronize changes here with Scala side in
     # org.apache.spark.sql.connect.client.RetryPolicy
@@ -311,10 +305,3 @@ class DefaultPolicy(RetryPolicy):
             return True
 
         return False
-
-
-class RetriesExceeded(Exception):
-    """
-    Represents an exception which is considered retriable, but retry limits
-    were exceeded
-    """

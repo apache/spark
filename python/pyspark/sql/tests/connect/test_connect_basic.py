@@ -31,10 +31,11 @@ from pyspark.errors import (
     PySparkTypeError,
     PySparkException,
     PySparkValueError,
+    RetriesExceeded,
 )
 from pyspark.errors.exceptions.base import SessionNotSameException
 from pyspark.sql import SparkSession as PySparkSession, Row
-from pyspark.sql.connect.client.retries import RetryPolicy, RetriesExceeded
+from pyspark.sql.connect.client.retries import RetryPolicy
 from pyspark.sql.types import (
     StructType,
     StructField,
