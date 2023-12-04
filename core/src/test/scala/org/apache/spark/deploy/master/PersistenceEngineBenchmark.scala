@@ -18,12 +18,14 @@
 package org.apache.spark.deploy.master
 
 import java.net.ServerSocket
+import java.util.Date
 import java.util.concurrent.ThreadLocalRandom
 
 import org.apache.curator.test.TestingServer
 
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.deploy.{DeployTestUtils, DriverDescription}
 import org.apache.spark.internal.config.Deploy.ZOOKEEPER_URL
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
@@ -53,10 +55,26 @@ object PersistenceEngineBenchmark extends BenchmarkBase {
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
 
     val numIters = 3
-    val numWorkers = 2000
+    val numWorkers = 1000
+    val numDrivers = 2000
+    val numApplications = 2000
     val workers = (1 to numWorkers).map(createWorkerInfo).toArray
+    val drivers = (1 to numDrivers).map(createDriverInfo).toArray
+    val applications = (1 to numApplications).map(createApplicationInfo).toArray
 
     conf.set(ZOOKEEPER_URL, zkTestServer.getConnectString)
+
+    def writeAndRead(engine: PersistenceEngine): Unit = {
+      workers.foreach(engine.addWorker)
+      drivers.foreach(engine.addDriver)
+      applications.foreach(engine.addApplication)
+      engine.read[WorkerInfo]("worker_")
+      engine.read[DriverInfo]("driver_")
+      engine.read[ApplicationInfo]("app_")
+      applications.foreach(engine.removeApplication)
+      drivers.foreach(engine.removeDriver)
+      workers.foreach(engine.removeWorker)
+    }
 
     runBenchmark("PersistenceEngineBenchmark") {
       val benchmark = new Benchmark(s"$numWorkers Workers", numWorkers, output = output)
@@ -65,9 +83,7 @@ object PersistenceEngineBenchmark extends BenchmarkBase {
         val serializerName = serializer.getClass.getSimpleName
         benchmark.addCase(s"ZooKeeperPersistenceEngine with $serializerName", numIters) { _ =>
           val engine = new ZooKeeperPersistenceEngine(conf, serializer)
-          workers.foreach(engine.addWorker)
-          engine.read[WorkerInfo]("worker_")
-          workers.foreach(engine.removeWorker)
+          writeAndRead(engine)
           engine.close()
         }
       }
@@ -78,9 +94,7 @@ object PersistenceEngineBenchmark extends BenchmarkBase {
         benchmark.addCase(name, numIters) { _ =>
           val dir = Utils.createTempDir().getAbsolutePath
           val engine = new FileSystemPersistenceEngine(dir, serializer)
-          workers.foreach(engine.addWorker)
-          engine.read[WorkerInfo]("worker_")
-          workers.foreach(engine.removeWorker)
+          writeAndRead(engine)
           engine.close()
         }
         CompressionCodec.ALL_COMPRESSION_CODECS.foreach { c =>
@@ -90,9 +104,7 @@ object PersistenceEngineBenchmark extends BenchmarkBase {
           benchmark.addCase(name, numIters) { _ =>
             val dir = Utils.createTempDir().getAbsolutePath
             val engine = new FileSystemPersistenceEngine(dir, serializer, Some(codec))
-            workers.foreach(engine.addWorker)
-            engine.read[WorkerInfo]("worker_")
-            workers.foreach(engine.removeWorker)
+            writeAndRead(engine)
             engine.close()
           }
         }
@@ -100,9 +112,7 @@ object PersistenceEngineBenchmark extends BenchmarkBase {
 
       benchmark.addCase("BlackHolePersistenceEngine", numIters) { _ =>
         val engine = new BlackHolePersistenceEngine()
-        workers.foreach(engine.addWorker)
-        engine.read[WorkerInfo]("worker_")
-        workers.foreach(engine.removeWorker)
+        writeAndRead(engine)
         engine.close()
       }
 
@@ -122,6 +132,35 @@ object PersistenceEngineBenchmark extends BenchmarkBase {
       1234, null, "http://publicAddress:80", resources)
     workerInfo.lastHeartbeat = System.currentTimeMillis()
     workerInfo
+  }
+
+  private def createDriverInfo(id: Int): DriverInfo = {
+    val now = System.currentTimeMillis()
+    val date = new Date(now)
+    new DriverInfo(now, f"driver-20240101000000-$id%04d", DriverDescription(
+      jarUrl = "local:///opt/spark/examples/jars/spark-examples.jar",
+      mem = 1024,
+      cores = 1,
+      supervise = false,
+      command = DeployTestUtils.createDriverCommand()
+    ), date)
+  }
+
+  private def createApplicationInfo(id: Int): ApplicationInfo = {
+    val now = System.currentTimeMillis()
+    val submitDate = new Date(now)
+    val customResources = Map(
+      GPU -> 3,
+      FPGA -> 3)
+    val appDesc = DeployTestUtils.createAppDesc(customResources)
+    val appInfo = new ApplicationInfo(
+      now.toLong,
+      f"app-20231031224509-$id%04d",
+      appDesc, submitDate,
+      null,
+      Int.MaxValue)
+    appInfo.endTime = now + 1000 // Elapsed 1s from submitDate in order to give different values
+    appInfo
   }
 
   def findFreePort(conf: SparkConf): Int = {
