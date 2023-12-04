@@ -2192,6 +2192,33 @@ class PlanResolutionSuite extends AnalysisTest {
           stop = 78 + target.length * 2 + source.length * 2))
     }
 
+    // testcat.tab: [i, s], testcat.tab2: [i, x]
+    // UPDATE/INSERT * should only handle column i.
+    parseAndResolve(
+      """
+        |MERGE INTO testcat.tab
+        |USING testcat.tab2
+        |ON 1 = 1
+        |WHEN MATCHED THEN UPDATE SET *
+        |WHEN NOT MATCHED THEN INSERT *
+        |""".stripMargin) match {
+      case MergeIntoTable(
+          AsDataSourceV2Relation(target),
+          AsDataSourceV2Relation(source),
+          _,
+          Seq(UpdateAction(None, Seq(updateAssign))),
+          Seq(InsertAction(None, Seq(insertAssign))),
+          Seq()) =>
+        val targetI = target.output.head
+        val sourceI = source.output.head
+        assert(updateAssign.key.semanticEquals(targetI))
+        assert(updateAssign.value.semanticEquals(sourceI))
+        assert(insertAssign.key.semanticEquals(targetI))
+        assert(insertAssign.value.semanticEquals(sourceI))
+
+      case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
+    }
+
     val sql1 =
       s"""
          |MERGE INTO non_exist_target
@@ -2209,31 +2236,7 @@ class PlanResolutionSuite extends AnalysisTest {
       case _ => fail("Expect MergeIntoTable, but got:\n" + parsed.treeString)
     }
 
-    // UPDATE * with incompatible schema between source and target tables.
     val sql2 =
-      """MERGE INTO testcat.tab
-         |USING testcat.tab2
-         |ON 1 = 1
-         |WHEN MATCHED THEN UPDATE SET *""".stripMargin
-    checkError(
-      exception = intercept[AnalysisException](parseAndResolve(sql2)),
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      parameters = Map("objectName" -> "`s`", "proposal" -> "`i`, `x`"),
-      context = ExpectedContext(fragment = sql2, start = 0, stop = 80))
-
-    // INSERT * with incompatible schema between source and target tables.
-    val sql3 =
-      """MERGE INTO testcat.tab
-        |USING testcat.tab2
-        |ON 1 = 1
-        |WHEN NOT MATCHED THEN INSERT *""".stripMargin
-    checkError(
-      exception = intercept[AnalysisException](parseAndResolve(sql3)),
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      parameters = Map("objectName" -> "`s`", "proposal" -> "`i`, `x`"),
-      context = ExpectedContext(fragment = sql3, start = 0, stop = 80))
-
-    val sql4 =
       """
         |MERGE INTO testcat.charvarchar
         |USING testcat.tab2
@@ -2242,7 +2245,7 @@ class PlanResolutionSuite extends AnalysisTest {
         |WHEN NOT MATCHED THEN INSERT (c1, c2) VALUES ('b', 2)
         |WHEN NOT MATCHED BY SOURCE THEN UPDATE SET c1='a', c2=1
         |""".stripMargin
-    val parsed4 = parseAndResolve(sql4)
+    val parsed4 = parseAndResolve(sql2)
     parsed4 match {
       case m: MergeIntoTable =>
         assert(m.matchedActions.length == 1)

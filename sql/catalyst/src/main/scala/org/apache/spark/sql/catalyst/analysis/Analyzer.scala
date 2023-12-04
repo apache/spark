@@ -1677,8 +1677,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 }
                 UpdateAction(
                   updateCondition.map(resolveExpressionByPlanChildren(_, m)),
-                  // For UPDATE *, the value must be from source table.
-                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE))
+                  // For UPDATE *, the value must be from source table. If a column does not have a
+                  // match in the source table, we exclude it.
+                  resolveAssignments(
+                    assignments,
+                    m,
+                    MergeResolvePolicy.SOURCE,
+                    dropAssignmentsWithMissingCol = true))
               case o => o
             }
             val newNotMatchedActions = m.notMatchedActions.map {
@@ -1700,7 +1705,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 }
                 InsertAction(
                   resolvedInsertCondition,
-                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE))
+                  // For INSERT *, the value must be from source table. If a column does not have a
+                  // match in the source table, we exclude it.
+                  resolveAssignments(
+                    assignments,
+                    m,
+                    MergeResolvePolicy.SOURCE,
+                    dropAssignmentsWithMissingCol = true))
               case o => o
             }
             val newNotMatchedBySourceActions = m.notMatchedBySourceActions.map {
@@ -1787,22 +1798,25 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def resolveAssignments(
         assignments: Seq[Assignment],
         mergeInto: MergeIntoTable,
-        resolvePolicy: MergeResolvePolicy.Value): Seq[Assignment] = {
-      assignments.map { assign =>
+        resolvePolicy: MergeResolvePolicy.Value,
+        dropAssignmentsWithMissingCol: Boolean = false): Seq[Assignment] = {
+      assignments.flatMap { assign =>
         val resolvedKey = assign.key match {
           case c if !c.resolved =>
+            // The assignment key must from the target table.
             resolveMergeExprOrFail(c, Project(Nil, mergeInto.targetTable))
           case o => o
         }
+        // The assignment value can come from either the source table or the target table, or both.
+        val resolvePlan = resolvePolicy match {
+          case MergeResolvePolicy.BOTH => mergeInto
+          case MergeResolvePolicy.SOURCE => Project(Nil, mergeInto.sourceTable)
+          case MergeResolvePolicy.TARGET => Project(Nil, mergeInto.targetTable)
+        }
         val resolvedValue = assign.value match {
           case c if !c.resolved =>
-            val resolvePlan = resolvePolicy match {
-              case MergeResolvePolicy.BOTH => mergeInto
-              case MergeResolvePolicy.SOURCE => Project(Nil, mergeInto.sourceTable)
-              case MergeResolvePolicy.TARGET => Project(Nil, mergeInto.targetTable)
-            }
             val resolvedExpr = resolveExprInAssignment(c, resolvePlan)
-            val withDefaultResolved = if (conf.enableDefaultColumns) {
+            if (conf.enableDefaultColumns) {
               resolveColumnDefaultInAssignmentValue(
                 resolvedKey,
                 resolvedExpr,
@@ -1811,11 +1825,17 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             } else {
               resolvedExpr
             }
-            checkResolvedMergeExpr(withDefaultResolved, resolvePlan)
-            withDefaultResolved
           case o => o
         }
-        Assignment(resolvedKey, resolvedValue)
+        resolvedValue match {
+          // This is for INSERT/UPDATE * to ignore columns from the target table that do not exist
+          // in the source table.
+          case _: UnresolvedAttribute if dropAssignmentsWithMissingCol =>
+            None
+          case _ =>
+            checkResolvedMergeExpr(resolvedValue, resolvePlan)
+            Some(Assignment(resolvedKey, resolvedValue))
+        }
       }
     }
 
