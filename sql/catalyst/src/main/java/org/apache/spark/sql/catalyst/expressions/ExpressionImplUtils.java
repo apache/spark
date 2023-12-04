@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import org.apache.spark.SparkBuildInfo;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.util.VersionUtils;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
@@ -143,6 +145,15 @@ public class ExpressionImplUtils {
             aad
     );
   }
+
+  // TODO: Find proper place for this method. It shouldn't be combined with AES stuff.
+  public static UTF8String GetSparkVersion()
+  {
+    String shortVersion = VersionUtils.shortVersion(SparkBuildInfo.spark_version());
+    String revision = SparkBuildInfo.spark_revision();
+    return UTF8String.fromString(shortVersion + " " + revision);
+  }
+
 
   private static SecretKeySpec getSecretKeySpec(byte[] key) {
     return switch (key.length) {

@@ -27,8 +27,8 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
-
 import org.apache.spark.{SparkConf, SparkException, TaskContext}
+
 import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -928,6 +928,13 @@ class DatasetSuite extends QueryTest
         checkDatasetUnorderly(cogrouped, expected.toList: _*)
       }
     }
+  }
+
+  test("Switching from CodeGenFallback to Invoke") {
+    // TODO: Find proper place for this test
+    val ret_version = sql("select version()").collect().head.get(0)
+    // noinspection ScalaStyle
+    println(ret_version)
   }
 
   test("SPARK-43781: cogroup two datasets derived from the same source") {
