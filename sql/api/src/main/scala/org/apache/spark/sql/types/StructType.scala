@@ -417,7 +417,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   override def defaultSize: Int = fields.map(_.dataType.defaultSize).sum
 
   override def simpleString: String = {
-    val fieldTypes = fields.view.map(field => s"${field.name}:${field.dataType.simpleString}").toSeq
+    val fieldTypes = fields.map(field => s"${field.name}:${field.dataType.simpleString}").toSeq
     SparkStringUtils.truncatedString(
       fieldTypes,
       "struct<", ",", ">",
