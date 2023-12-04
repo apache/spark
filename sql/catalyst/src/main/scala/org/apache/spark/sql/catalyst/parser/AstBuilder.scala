@@ -168,15 +168,34 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   }
 
   override def visitExecuteImmediate(ctx: ExecuteImmediateContext): LogicalPlan = withOrigin(ctx) {
-    // need to figure out based on parsed plan whether its named or parametrized
+    // because of parsing rules, we know that either queryParam or targetVariable is set
+    // hence use Either to represent this
     val queryString = Option(ctx.queryParam.stringLit()).map(sl => Left(stringLitToStr(sl)))
     val queryVariable = Option(ctx.queryParam.multipartIdentifier)
       .map(mpi => Right(UnresolvedAttribute(visitMultipartIdentifier(mpi))))
+
     val targetVars = Option(ctx.targetVariable)
       .map(v => visitMultipartIdentifierList(v))
     val exprs = visitExecuteImmediateArgumentSeq(ctx.params)
 
+    validateExecImmediateArguments(exprs, ctx.params)
     ExecuteImmediateQuery(exprs, queryString.getOrElse(queryVariable.get), targetVars)
+  }
+
+  private def validateExecImmediateArguments(
+    expressions: Seq[Expression],
+    ctx : ExecuteImmediateArgumentSeqContext) : Unit = {
+    val duplicateAliases = expressions
+      .filter {
+        case a: Alias => true
+        case _ => false
+      }.groupBy {
+      case Alias(arg, name) => name
+    }.filter(group => group._2.size > 1)
+
+    if (duplicateAliases.nonEmpty) {
+      throw QueryParsingErrors.duplicateArgumentNamesError(duplicateAliases.keys.toSeq, ctx)
+    }
   }
 
   override def visitExecuteImmediateArgumentSeq

@@ -23,18 +23,24 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
 
+/**
+ * This class resolves variables in a parametrized query.
+ *
+ * @param catalogManager Catalog manager
+ */
 class ResolveReferencesInParametrizedQuery(val catalogManager: CatalogManager)
   extends SQLConfHelper with ColumnResolutionHelper {
 
   def resolveVariable(e: Expression) : Expression = {
+    /* We know that the expression is either UnresolvedAttribute or Alias,
+     * as passed from the parser.
+     * If it is an UnresolvedAttribute, we look it up in the catalog and return it.
+     * If it is an Alias, we resolve the child and return an Alias with the same name.
+     */
     e match {
       case u: UnresolvedAttribute =>
         lookupVariable(u.nameParts) match {
           case Some(variable) =>
-            if (!variable.isInstanceOf[VariableReference]) {
-              throw unresolvedVariableError(u.nameParts, Seq("SYSTEM", "SESSION"))
-            }
-
             variable.copy(canFold = false)
           case _ => throw unresolvedVariableError(u.nameParts, Seq("SYSTEM", "SESSION"))
         }

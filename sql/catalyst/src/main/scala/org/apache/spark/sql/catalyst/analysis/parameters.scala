@@ -113,7 +113,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
   private def checkArgs(args: Iterable[(String, Expression)]): Unit = {
     def isNotAllowed(expr: Expression): Boolean = expr.exists {
       case _: Literal | _: CreateArray | _: CreateNamedStruct |
-          _: CreateMap | _: MapFromArrays |  _: MapFromEntries | _: VariableReference => false
+        _: CreateMap | _: MapFromArrays |  _: MapFromEntries | _: VariableReference => false
       case a: Alias => isNotAllowed(a.child)
       case _ => true
     }

@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -29,7 +29,7 @@ Executes a sql statement provided as a `STRING`, optionally passing `arg_exprN` 
 EXECUTE IMMEDIATE sql_string
         [ INTO (var_name [, …] ) ]
         [ USING ( arg_expr [ AS ] [alias] [, …] ) ]
-        ```
+```
 
 ### Parameters
 
@@ -37,7 +37,7 @@ EXECUTE IMMEDIATE sql_string
 
   A STRING expression producing a well-formed SQL statement.
 
-* **INTO ( var_name [, …] )** 
+* **INTO ( var_name [, …] )**
 
     Optionally returns the results of a single row query into SQL variables.
     If the query returns no rows the result is NULL.
@@ -69,7 +69,7 @@ DECLARE sqlStr = ‘SELECT SUM(c1) FROM VALUES(?), (?)’;
 DECLARE arg1 = 5;
 DECLARE arg2 = 6;
 EXECUTE IMMEDIATE sqlStr USING (arg1, arg2);
- 11  
+ 11
 
 -- Using the INTO clause
 DECLARE sum INT;

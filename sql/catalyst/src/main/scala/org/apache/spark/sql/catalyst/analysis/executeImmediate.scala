@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, EXECUTE_IMMEDIATE, TreePattern}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types.StringType
 
 /**
  * Logical plan representing execute immediate query.
@@ -57,15 +57,16 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
       val queryString = query match {
         case Left(v) => v
         case Right(u) =>
-          var varReference = lookupVariable(u.nameParts) match {
+          val varReference = lookupVariable(u.nameParts) match {
             case Some(variable) => variable.copy(canFold = false)
             case _ => throw unresolvedVariableError(u.nameParts, Seq("SYSTEM", "SESSION"))
           }
 
-          if (!varReference.eval(null).isInstanceOf[UTF8String]) {
+          if (!varReference.dataType.sameType(StringType)) {
             throw new AnalysisException(
               errorClass = "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
-              messageParameters = Map.empty)
+              messageParameters = Map(
+                "varType" -> varReference.dataType.simpleString))
           }
 
           // call eval with null row.
@@ -96,8 +97,7 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
           PosParameterizedQuery(
             plan,
             expressions)
-        }
-        else {
+        } else {
           val namedExpressions = expressions.collect {
             case (e: NamedExpression) => e
           }
@@ -111,15 +111,11 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
 
       targetVariablesOpt.map (
         expressions => {
-          queryPlan.find {
-            c => c.containsPattern(COMMAND)
-          }.map { c =>
+          if (queryPlan.exists(_.containsPattern(COMMAND))) {
             throw new AnalysisException(
               errorClass = "INVALID_STATEMENT_FOR_EXECUTE_INTO",
               messageParameters = Map(
-                "sqlString" -> queryString,
-                // TODO: change command with proper statement type
-                "stmtType" -> "Command"
+                "sqlString" -> queryString
               ))
           }
 

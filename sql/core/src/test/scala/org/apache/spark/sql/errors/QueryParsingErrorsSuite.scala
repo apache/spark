@@ -32,7 +32,22 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
     intercept[ParseException](sql(sqlText).collect())
   }
 
-  test("NAMED_PARAMETER_SUPPORT_DISABLED: named arguments not turned on") {
+  test("EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES: duplicate aliases provided in using statement") {
+    checkError(
+      exception = parseException(
+        "EXECUTE IMMEDIATE 'SELECT 1707 WHERE ? = 1' USING 1 as first" +
+          ", 2 as first, 3 as second, 4 as second, 5 as third"),
+      errorClass = "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES",
+      parameters = Map("aliases"-> "`second`, `first`"),
+      context = ExpectedContext(
+        "EXECUTE IMMEDIATE 'SELECT 1707 WHERE ? = 1' USING 1 as first" +
+          ", 2 as first, 3 as second, 4 as second, 5 as third",
+        start = 0,
+        stop = 109)
+    )
+  }
+
+test("NAMED_PARAMETER_SUPPORT_DISABLED: named arguments not turned on") {
     withSQLConf("spark.sql.allowNamedFunctionArguments" -> "false") {
       checkError(
         exception = parseException("SELECT explode(arr => array(10, 20))"),

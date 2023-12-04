@@ -599,6 +599,12 @@ EXCEPT column `<columnName>` was resolved and expected to be StructType, but fou
 
 Columns in an EXCEPT list must be distinct and non-overlapping, but got (`<columns>`).
 
+### EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES
+
+SQLSTATE: none assigned
+
+Using statement contains multiple arguments with same alias (`<aliases>`).
+
 ### EXPECT_PERMANENT_VIEW_NOT_TEMP
 
 [SQLSTATE: 42809](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1271,7 +1277,7 @@ For more details see [INVALID_SQL_SYNTAX](sql-error-conditions-invalid-sql-synta
 
 [SQLSTATE: 42606](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-The INTO clause of EXECUTE IMMEDIATE is only valid for queries. The statement starting with: `<sqlString>` is a(n) `<stmtType>`.
+The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement isn't: `<sqlString>` .
 
 ### [INVALID_SUBQUERY_EXPRESSION](sql-error-conditions-invalid-subquery-expression-error-class.html)
 
@@ -1329,7 +1335,7 @@ Invalid usage of `<elem>` in `<prettyName>`.
 
 [SQLSTATE: 42609](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Variable passed query must be of type STRING
+Variable type must be "STRING" but got `<varType>`
 
 ### INVALID_VIEW_TEXT
 

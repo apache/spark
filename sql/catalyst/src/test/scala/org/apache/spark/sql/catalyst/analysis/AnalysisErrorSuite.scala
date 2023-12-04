@@ -785,6 +785,41 @@ class AnalysisErrorSuite extends AnalysisTest {
        "filter (where nth_value(e, 2) over(order by b) > 1) FROM TaBlE2"),
     "FILTER expression contains window function" :: Nil)
 
+  errorClassTest(
+    "EXEC IMMEDIATE - both positional and named used",
+    CatalystSqlParser.parsePlan("EXECUTE IMMEDIATE 'SELECT 42 where ? = :first'" +
+      " USING 1, 2 as first"),
+    "INVALID_PARAMETRIZED_QUERY",
+    Map.empty);
+
+  test("EXEC IMMEDIATE - non string variable as sqlString parameter") {
+    var execImmediatePlan = ExecuteImmediateQuery(
+      Seq.empty,
+      scala.util.Right(UnresolvedAttribute("testVarA")),
+      Some(Seq(UnresolvedAttribute("testVarA"))))
+
+    assertAnalysisErrorClass(
+      inputPlan = execImmediatePlan,
+      expectedErrorClass = "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+      expectedMessageParameters = Map(
+        "varType" -> "int"
+      ))
+  }
+
+  test("EXEC IMMEDIATE - INTO specified for COMMAND query") {
+    var execImmediateSetVariablePlan = ExecuteImmediateQuery(
+      Seq.empty,
+      scala.util.Left("SET VAR testVarA = 1"),
+      Some(Seq(UnresolvedAttribute("testVarA"))))
+
+    assertAnalysisErrorClass(
+      inputPlan = execImmediateSetVariablePlan,
+      expectedErrorClass = "INVALID_STATEMENT_FOR_EXECUTE_INTO",
+      expectedMessageParameters = Map(
+        "sqlString" -> "SET VAR testVarA = 1"
+      ))
+  }
+
   test("SPARK-6452 regression test") {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
     // Since we manually construct the logical plan at here and Sum only accept
