@@ -107,8 +107,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
   override def runQueries(
       queries: Seq[String],
       testCase: TestCase,
-      configSet: Seq[(String, String)],
-      otherConfigs: Map[String, String] = Map.empty): Unit = {
+      configSet: Seq[(String, String)]): Unit = {
     // We do not test with configSet.
     withJdbcStatement() { statement =>
 
