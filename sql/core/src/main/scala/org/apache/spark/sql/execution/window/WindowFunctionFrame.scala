@@ -197,7 +197,13 @@ abstract class OffsetWindowFunctionFrameBase(
 
   protected def prepareForIgnoreNulls(): Unit = findNextRowWithNonNullInput()
 
-  protected def prepareForRespectNulls(): Unit
+  protected def prepareForRespectNulls(): Unit = {
+    // drain the first few rows if offset is larger than one
+    while (inputIndex < offset) {
+      nextSelectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
+      inputIndex += 1
+    }
+  }
 
   override def currentLowerBound(): Int = throw new UnsupportedOperationException()
 
@@ -223,16 +229,15 @@ class FrameLessOffsetWindowFunctionFrame(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset, ignoreNulls) {
 
   override def prepareForDefaultValue(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    // During the write phase, always access the current window group. So need reset the states.
     resetStates(rows)
-    fillDefaultValue(EmptyRow)
+    super.prepareForDefaultValue(rows)
   }
 
   override def prepareForRespectNulls(): Unit = {
-    // drain the first few rows if offset is larger than zero
-    while (inputIndex < offset) {
-      if (inputIterator.hasNext) inputIterator.next()
-      inputIndex += 1
-    }
+    super.prepareForRespectNulls()
+    // In order to match the correct index during the write phase even if the offset is lager than
+    // the window group size or is negative.
     inputIndex = offset
   }
 
@@ -342,7 +347,7 @@ class UnboundedOffsetWindowFunctionFrame(
   assert(offset > 0)
 
   override def prepareForIgnoreNulls(): Unit = {
-    findNextRowWithNonNullInput()
+    super.prepareForIgnoreNulls()
     if (nextSelectedRow == EmptyRow) {
       // Use default values since the offset row whose input value is not null does not exist.
       fillDefaultValue(EmptyRow)
@@ -352,13 +357,8 @@ class UnboundedOffsetWindowFunctionFrame(
   }
 
   override def prepareForRespectNulls(): Unit = {
-    var selectedRow: UnsafeRow = null
-    // drain the first few rows if offset is larger than one
-    while (inputIndex < offset) {
-      selectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
-      inputIndex += 1
-    }
-    projection(selectedRow)
+    super.prepareForRespectNulls()
+    projection(nextSelectedRow)
   }
 
   override def write(index: Int, current: InternalRow): Unit = {
@@ -388,14 +388,6 @@ class UnboundedPrecedingOffsetWindowFunctionFrame(
   extends OffsetWindowFunctionFrameBase(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset, ignoreNulls) {
   assert(offset > 0)
-
-  override def prepareForRespectNulls(): Unit = {
-    // drain the first few rows if offset is larger than one
-    while (inputIndex < offset) {
-      nextSelectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
-      inputIndex += 1
-    }
-  }
 
   override def write(index: Int, current: InternalRow): Unit = {
     if (index >= inputIndex - 1 && nextSelectedRow != null) {
