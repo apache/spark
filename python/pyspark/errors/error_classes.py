@@ -287,6 +287,11 @@ ERROR_CLASSES_JSON = """
       "NumPy array input should be of <dimensions> dimensions."
     ]
   },
+  "INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP" : {
+    "message" : [
+      "Invalid number of dataframes in group <dataframes_in_group>."
+    ]
+  },
   "INVALID_PANDAS_UDF" : {
     "message" : [
       "Invalid function: <detail>"
@@ -803,9 +808,9 @@ ERROR_CLASSES_JSON = """
       "Expected <expected> values for `<item>`, got <actual>."
     ]
   },
-  "TYPE_HINT_REQUIRED" : {
+  "TYPE_HINT_SHOULD_BE_SPECIFIED" : {
     "message" : [
-      "A <arg_type> is required <where>."
+      "Type hints for <target> should be specified; however, got <sig>."
     ]
   },
   "UDF_RETURN_TYPE" : {
@@ -886,6 +891,11 @@ ERROR_CLASSES_JSON = """
   "UNKNOWN_RESPONSE" : {
     "message" : [
       "Unknown response: <response>."
+    ]
+  },
+  "UNKNOWN_VALUE_FOR" : {
+    "message" : [
+      "Unknown value for `<var>`."
     ]
   },
   "UNSUPPORTED_DATA_TYPE" : {
@@ -981,6 +991,11 @@ ERROR_CLASSES_JSON = """
   "VALUE_NOT_PEARSON" : {
     "message" : [
       "Value for `<arg_name>` only supports the 'pearson', got '<arg_value>'."
+    ]
+  },
+  "VALUE_NOT_PLAIN_COLUMN_REFERENCE" : {
+    "message" : [
+      "Value <val> in <field_name> should be a plain column reference such as `df.col` or `col('column')`."
     ]
   },
   "VALUE_NOT_POSITIVE" : {
