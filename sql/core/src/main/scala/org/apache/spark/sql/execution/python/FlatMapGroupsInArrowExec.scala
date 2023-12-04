@@ -18,41 +18,47 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.types.{StructField, StructType}
 
 
 /**
- * Physical node for [[org.apache.spark.sql.catalyst.plans.logical.FlatMapCoGroupsInPandas]]
+ * Physical node for [[org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsInPandas]]
  *
- * The input dataframes are first Cogrouped.  Rows from each side of the cogroup are passed to the
- * Python worker via Arrow.  As each side of the cogroup may have a different schema we send every
- * group in its own Arrow stream.
- * The Python worker turns the resulting record batches to `pandas.DataFrame`s, invokes the
+ * Rows in each group are passed to the Python worker as an Arrow record batch.
+ * The Python worker turns the record batch to a `pandas.DataFrame`, invoke the
  * user-defined function, and passes the resulting `pandas.DataFrame`
  * as an Arrow record batch. Finally, each record batch is turned to
  * Iterator[InternalRow] using ColumnarBatch.
  *
  * Note on memory usage:
  * Both the Python worker and the Java executor need to have enough memory to
- * hold the largest cogroup. The memory on the Java side is used to construct the
- * record batches (off heap memory). The memory on the Python side is used for
+ * hold the largest group. The memory on the Java side is used to construct the
+ * record batch (off heap memory). The memory on the Python side is used for
  * holding the `pandas.DataFrame`. It's possible to further split one group into
  * multiple record batches to reduce the memory footprint on the Java side, this
  * is left as future work.
  */
-case class FlatMapCoGroupsInPandasExec(
-    leftGroup: Seq[Attribute],
-    rightGroup: Seq[Attribute],
+case class FlatMapGroupsInArrowExec(
+    groupingAttributes: Seq[Attribute],
     func: Expression,
     output: Seq[Attribute],
-    left: SparkPlan,
-    right: SparkPlan)
-  extends FlatMapCoGroupsInPythonExec {
+    child: SparkPlan)
+  extends FlatMapGroupsInPythonExec {
 
-  protected val pythonEvalType: Int = PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF
+  protected val pythonEvalType: Int = PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
 
-  override protected def withNewChildrenInternal(
-      newLeft: SparkPlan, newRight: SparkPlan): FlatMapCoGroupsInPandasExec =
-    copy(left = newLeft, right = newRight)
+  override protected def groupedData(iter: Iterator[InternalRow], attrs: Seq[Attribute]):
+      Iterator[Iterator[InternalRow]] =
+    super.groupedData(iter, attrs)
+      // Here we wrap it via another row so that Python sides understand it as a DataFrame.
+      .map(_.map(InternalRow(_)))
+
+  override protected def groupedSchema(attrs: Seq[Attribute]): StructType =
+    StructType(StructField("struct", super.groupedSchema(attrs)) :: Nil)
+
+  override protected def withNewChildInternal(newChild: SparkPlan): FlatMapGroupsInArrowExec =
+    copy(child = newChild)
 }
