@@ -1066,7 +1066,7 @@ class BaseUDFTestsMixin(object):
         self.check_error(
             exception=pe.exception,
             error_class="NOT_DATATYPE_OR_STR",
-            message_parameters={"arg_name": "returnType", "return_type": "int"},
+            message_parameters={"arg_name": "returnType", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1075,7 +1075,7 @@ class BaseUDFTestsMixin(object):
         self.check_error(
             exception=pe.exception,
             error_class="NOT_INT",
-            message_parameters={"arg_name": "evalType", "return_type": "str"},
+            message_parameters={"arg_name": "evalType", "arg_type": "str"},
         )
 
 
