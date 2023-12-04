@@ -652,7 +652,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("funcName" -> toSQLId(funcName)))
   }
 
-  def inverseDistributionFunctionWrongNumOrderingsError(
+  def wrongNumOrderingsForInverseDistributionFunctionError(
       funcName: String,
       validOrderingsNumber: Int,
       actualOrderingsNumber: Int): Throwable = {
