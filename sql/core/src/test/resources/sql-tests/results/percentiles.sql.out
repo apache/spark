@@ -368,13 +368,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-  "sqlState" : "42605",
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WRONG_NUM_ORDERINGS",
+  "sqlState" : "ID001",
   "messageParameters" : {
-    "actualNum" : "3",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "2",
-    "functionName" : "`percentile_cont`"
+    "actualNum" : "2",
+    "expectedNum" : "1",
+    "funcName" : "`percentile_cont`"
   },
   "queryContext" : [ {
     "objectType" : "",

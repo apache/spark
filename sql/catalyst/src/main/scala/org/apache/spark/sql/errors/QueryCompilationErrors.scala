@@ -652,6 +652,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("funcName" -> toSQLId(funcName)))
   }
 
+  def inverseDistributionFunctionWrongNumOrderingsError(
+      funcName: String,
+      validOrderingsNumber: Int,
+      actualOrderingsNumber: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WRONG_NUM_ORDERINGS",
+      messageParameters = Map(
+        "funcName" -> toSQLId(funcName),
+        "expectedNum" -> validOrderingsNumber.toString,
+        "actualNum" -> actualOrderingsNumber.toString))
+  }
+
   def aliasNumberNotMatchColumnNumberError(
       columnSize: Int, outputSize: Int, t: TreeNode[_]): Throwable = {
     new AnalysisException(

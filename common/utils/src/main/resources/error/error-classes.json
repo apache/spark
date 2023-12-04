@@ -1860,6 +1860,11 @@
         "message" : [
           "WITHIN GROUP is required for inverse distribution function."
         ]
+      },
+      "WRONG_NUM_ORDERINGS" : {
+        "message" : [
+          "WITHIN GROUP requires <expectedNum> orderings but the actual number is <actualNum>."
+        ]
       }
     },
     "sqlState" : "ID001"

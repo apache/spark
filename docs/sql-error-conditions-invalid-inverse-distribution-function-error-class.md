@@ -33,4 +33,8 @@ Cannot use DISTINCT with WITHIN GROUP.
 
 WITHIN GROUP is required for inverse distribution function.
 
+## WRONG_NUM_ORDERINGS
+
+WITHIN GROUP requires `<expectedNum>` orderings but the actual number is `<actualNum>`.
+
 

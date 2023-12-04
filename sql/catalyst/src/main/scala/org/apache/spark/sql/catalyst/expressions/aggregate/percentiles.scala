@@ -377,8 +377,8 @@ case class PercentileCont(left: Expression, right: Expression, reverse: Boolean 
 
   override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction = {
     if (orderingWithinGroup.length != 1) {
-      throw QueryCompilationErrors.wrongNumArgsError(
-        nodeName, Seq(2), orderingWithinGroup.length + 1)
+      throw QueryCompilationErrors.inverseDistributionFunctionWrongNumOrderingsError(
+        nodeName, 1, orderingWithinGroup.length)
     }
     orderingWithinGroup.head match {
       case SortOrder(child, Ascending, _, _) => this.copy(left = child)
@@ -431,8 +431,8 @@ case class PercentileDisc(
 
   override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction = {
     if (orderingWithinGroup.length != 1) {
-      throw QueryCompilationErrors.wrongNumArgsError(
-        nodeName, Seq(2), orderingWithinGroup.length + 1)
+      throw QueryCompilationErrors.inverseDistributionFunctionWrongNumOrderingsError(
+        nodeName, 1, orderingWithinGroup.length)
     }
     orderingWithinGroup.head match {
       case SortOrder(expr, Ascending, _, _) => this.copy(child = expr)
