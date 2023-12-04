@@ -2594,6 +2594,11 @@ object Decode {
       the corresponding result. If no match is found, then it returns default. If default
       is omitted, it returns null.
   """,
+  arguments = """
+    Arguments:
+      * bin - a binary expression to decode
+      * charset - one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16' to decode `bin` into a STRING. It is case insensitive.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(encode('abc', 'utf-8'), 'utf-8');
