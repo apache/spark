@@ -212,6 +212,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
     val exc = intercept[StateDataSourceUnspecifiedRequiredOption] {
       spark.read.format("state-metadata").load().collect()
     }
-    assert(exc.getMessage.contains(StateSourceOptions.PATH))
+    checkError(exc, "STDS_REQUIRED_OPTION_UNSPECIFIED", "42601",
+      Map("optionName" -> StateSourceOptions.PATH))
   }
 }
