@@ -440,8 +440,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_SPECIFY_RETURN_TYPE_FOR_UDF",
-            message_parameters={"arg_name": "f", "return_type": "int"},
+            error_class="NOT_CALLABLE",
+            message_parameters={"arg_name": "func", "arg_type": "str"},
         )
 
     def test_non_existed_udf(self):
@@ -1057,7 +1057,7 @@ class BaseUDFTestsMixin(object):
         self.check_error(
             exception=pe.exception,
             error_class="NOT_CALLABLE",
-            message_parameters={"arg_name": "func", "return_type": "str"},
+            message_parameters={"arg_name": "func", "arg_type": "str"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
