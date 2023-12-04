@@ -382,6 +382,11 @@ ERROR_CLASSES_JSON = """
       "Attribute `<attr_name>` is not supported in Spark Connect as it depends on the JVM. If you need to use this attribute, do not use Spark Connect when creating your session. Visit https://spark.apache.org/docs/latest/sql-getting-started.html#starting-point-sparksession for creating regular Spark Session in detail."
     ]
   },
+  "KEY_NOT_EXISTS" : {
+    "message" : [
+      "Key `<key>` is not exists."
+    ]
+  },
   "KEY_VALUE_PAIR_REQUIRED" : {
     "message" : [
       "Key-value pair or a list of pairs is required."
