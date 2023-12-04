@@ -35,6 +35,6 @@ WITHIN GROUP is required for inverse distribution function.
 
 ## WRONG_NUM_ORDERINGS
 
-WITHIN GROUP requires `<expectedNum>` orderings but the actual number is `<actualNum>`.
+Requires `<expectedNum>` orderings in WITHIN GROUP but got `<actualNum>`.
 
 
