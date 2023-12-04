@@ -279,6 +279,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("data source read with custom partitions") {
+    assume(shouldTestPythonUDFs)
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
@@ -309,6 +310,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("data source read with empty partitions") {
+    assume(shouldTestPythonUDFs)
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader
@@ -335,6 +337,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("data source read with invalid partitions") {
+    assume(shouldTestPythonUDFs)
     val reader1 =
       s"""
          |class SimpleDataSourceReader(DataSourceReader):
