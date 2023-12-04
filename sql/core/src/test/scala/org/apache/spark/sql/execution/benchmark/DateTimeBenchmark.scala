@@ -24,10 +24,8 @@ import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA}
-import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.stringToDate
 import org.apache.spark.sql.execution.HiveResult
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Synthetic benchmark for date and timestamp functions.
@@ -176,22 +174,6 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
           val dateStrExpr = "concat('2019-01-', lpad(mod(id, 25), 2, '0'))"
           run(n, "to date str", dateStrExpr)
           run(n, "to_date", s"to_date($dateStrExpr, 'yyyy-MM-dd')")
-
-          val benchmark = new Benchmark("to_date_with_trimming", 10, output = output)
-
-          val inputStringForTrimming =
-            UTF8String.fromString(" ".*(65000) + "2019-01-27 11:02:01.123456789" + " ".*(65000))
-          benchmark.addCase("to_date_with_trimming") { _ =>
-            Seq.range(0, 10000).foreach(_ => stringToDate(inputStringForTrimming))
-          }
-
-          val inputStringForTrimmingOnlySuffix =
-            UTF8String.fromString("2019-01-27 11:02:01.123456789" + " ".*(65000))
-          benchmark.addCase("to_date_with_trimming_only_suffix") { _ =>
-            Seq.range(0, 10000).foreach(_ => stringToDate(inputStringForTrimmingOnlySuffix))
-          }
-
-          benchmark.run()
         }
         runBenchmark("Conversion from/to external types") {
           import spark.implicits._
