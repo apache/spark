@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, AUTO_GENERATED_ALIAS, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, AUTO_GENERATED_ALIAS, CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.{View => _, _}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -56,7 +56,7 @@ import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssig
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.DAY
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -323,6 +323,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       RewriteDeleteFromTable ::
       RewriteUpdateTable ::
       RewriteMergeIntoTable ::
+      RewriteWithColumns ::
       BindParameters ::
       typeCoercionRules() ++
       Seq(
@@ -3466,6 +3467,52 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         } else {
           v2Write
         }
+    }
+  }
+
+  /**
+   * Rewrite [[UnresolvedWithColumns]] into a [[Project]].
+   *
+   * `withColumns` can both update an existing columns and add new columns.
+   */
+  object RewriteWithColumns extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+      _.containsPattern(UNRESOLVED_WITH_COLUMNS), ruleId) {
+      case UnresolvedWithColumns(projectList, child) if child.resolved =>
+        SchemaUtils.checkColumnNameDuplication(
+          projectList.map(_.name),
+          resolver)
+        val usedProjectListIndices = mutable.Set.empty[Int]
+        val outputProjectListBuilder = Seq.newBuilder[NamedExpression]
+        val lookup = {
+          val caseSensitiveLookup = projectList.zipWithIndex.map {
+            case pair @ (ne, _) => ne.name -> pair
+          }.toMap
+          if (conf.caseSensitiveAnalysis) {
+            caseSensitiveLookup
+          } else {
+            CaseInsensitiveMap(caseSensitiveLookup)
+          }
+        }
+        // Replace columns
+        child.output.foreach { column =>
+          val newColumn = lookup.get(column.name) match {
+            case Some((ne, index)) =>
+              usedProjectListIndices += index
+              ne
+            case None =>
+              column
+          }
+          outputProjectListBuilder += newColumn
+        }
+        // Add new columns
+        projectList.zipWithIndex.foreach {
+          case (alias, index) =>
+            if (!usedProjectListIndices(index)) {
+              outputProjectListBuilder += alias
+            }
+        }
+        Project(outputProjectListBuilder.result(), child)
     }
   }
 

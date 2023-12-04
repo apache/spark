@@ -45,7 +45,7 @@ import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedWithColumns}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -965,26 +965,26 @@ class SparkConnectPlanner(
   }
 
   private def transformWithColumns(rel: proto.WithColumns): LogicalPlan = {
-    val (colNames, cols, metadata) =
-      rel.getAliasesList.asScala.toSeq.map { alias =>
-        if (alias.getNameCount != 1) {
-          throw InvalidPlanInput(s"""WithColumns require column name only contains one name part,
+    val projectLists = Iterator.single(rel.getAliasesList) ++
+      rel.getStackList.asScala.iterator.map(_.getAliasesList)
+    projectLists.filter(_.isEmpty).foldLeft(transformRelation(rel.getInput)) {
+      case (input, projectList) =>
+        transformWithColumn(projectList, input)
+    }
+  }
+
+  private def transformWithColumn(
+      aliases: java.util.List[proto.Expression.Alias],
+      input: LogicalPlan): LogicalPlan = {
+    val catalystAliases = aliases.asScala.map { alias =>
+      if (alias.getNameCount != 1) {
+        throw InvalidPlanInput(
+          s"""WithColumns require column name only contains one name part,
              |but got ${alias.getNameList.toString}""".stripMargin)
-        }
-
-        val metadata = if (alias.hasMetadata && alias.getMetadata.nonEmpty) {
-          Metadata.fromJson(alias.getMetadata)
-        } else {
-          Metadata.empty
-        }
-
-        (alias.getName(0), Column(transformExpression(alias.getExpr)), metadata)
-      }.unzip3
-
-    Dataset
-      .ofRows(session, transformRelation(rel.getInput))
-      .withColumns(colNames, cols, metadata)
-      .logicalPlan
+      }
+      transformAlias(alias)
+    }
+    UnresolvedWithColumns(catalystAliases.toSeq, input)
   }
 
   private def transformWithWatermark(rel: proto.WithWatermark): LogicalPlan = {

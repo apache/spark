@@ -1,0 +1,51 @@
+{
+  "common": {
+    "planId": "3"
+  },
+  "withColumns": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "aliases": [{
+      "expr": {
+        "expressionString": {
+          "expression": "a + 100"
+        }
+      },
+      "name": ["z"]
+    }],
+    "stack": [{
+      "aliases": [{
+        "expr": {
+          "literal": {
+            "string": "redacted"
+          }
+        },
+        "name": ["b"]
+      }]
+    }, {
+      "aliases": [{
+        "expr": {
+          "unresolvedFunction": {
+            "functionName": "concat",
+            "arguments": [{
+              "unresolvedAttribute": {
+                "unparsedIdentifier": "b"
+              }
+            }, {
+              "literal": {
+                "string": "_m"
+              }
+            }]
+          }
+        },
+        "name": ["b"]
+      }]
+    }]
+  }
+}

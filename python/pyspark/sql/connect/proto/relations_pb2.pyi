@@ -2827,8 +2827,31 @@ class WithColumns(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    class Columns(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        ALIASES_FIELD_NUMBER: builtins.int
+        @property
+        def aliases(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            pyspark.sql.connect.proto.expressions_pb2.Expression.Alias
+        ]: ...
+        def __init__(
+            self,
+            *,
+            aliases: collections.abc.Iterable[
+                pyspark.sql.connect.proto.expressions_pb2.Expression.Alias
+            ]
+            | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["aliases", b"aliases"]
+        ) -> None: ...
+
     INPUT_FIELD_NUMBER: builtins.int
     ALIASES_FIELD_NUMBER: builtins.int
+    STACK_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
@@ -2838,7 +2861,7 @@ class WithColumns(google.protobuf.message.Message):
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
         pyspark.sql.connect.proto.expressions_pb2.Expression.Alias
     ]:
-        """(Required)
+        """(Optional when `stack` is set)
 
         Given a column name, apply the corresponding expression on the column. If column
         name exists in the input relation, then replace the column. If the column name
@@ -2848,6 +2871,13 @@ class WithColumns(google.protobuf.message.Message):
 
         An exception is thrown when duplicated names are present in the mapping.
         """
+    @property
+    def stack(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___WithColumns.Columns
+    ]:
+        """(Optional when `aliases` is set)"""
     def __init__(
         self,
         *,
@@ -2856,12 +2886,16 @@ class WithColumns(google.protobuf.message.Message):
             pyspark.sql.connect.proto.expressions_pb2.Expression.Alias
         ]
         | None = ...,
+        stack: collections.abc.Iterable[global___WithColumns.Columns] | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]
     ) -> builtins.bool: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["aliases", b"aliases", "input", b"input"]
+        self,
+        field_name: typing_extensions.Literal[
+            "aliases", b"aliases", "input", b"input", "stack", b"stack"
+        ],
     ) -> None: ...
 
 global___WithColumns = WithColumns

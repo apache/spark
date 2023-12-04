@@ -605,6 +605,12 @@ class PlanGenerationTestSuite
     simple.withColumns(map)
   }
 
+  test("withColumn stacked") {
+    simple.withColumn("z", fn.expr("a + 100"))
+      .withColumn("b", fn.lit("redacted"))
+      .withColumn("b", fn.concat(fn.col("b"), fn.lit("_m")))
+  }
+
   test("withColumnRenamed single") {
     simple.withColumnRenamed("id", "nid")
   }

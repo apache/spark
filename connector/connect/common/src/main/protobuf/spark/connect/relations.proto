@@ -787,10 +787,14 @@ message WithColumnsRenamed {
 
 // Adding columns or replacing the existing columns that have the same names.
 message WithColumns {
+  message Columns {
+    repeated Expression.Alias aliases = 1;
+  }
+
   // (Required) The input relation.
   Relation input = 1;
 
-  // (Required)
+  // (Optional when `stack` is set)
   //
   // Given a column name, apply the corresponding expression on the column. If column
   // name exists in the input relation, then replace the column. If the column name
@@ -800,6 +804,9 @@ message WithColumns {
   //
   // An exception is thrown when duplicated names are present in the mapping.
   repeated Expression.Alias aliases = 2;
+
+  // (Optional when `aliases` is set)
+  repeated Columns stack = 3;
 }
 
 message WithWatermark {

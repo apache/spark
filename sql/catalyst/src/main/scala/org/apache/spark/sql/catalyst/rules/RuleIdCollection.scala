@@ -75,6 +75,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveUserSpecifiedColumns" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveWindowFrame" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveWindowOrder" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$RewriteWithColumns" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$WindowsSubstitution" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$WrapLateralColumnAliasReference" ::
       "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$AnsiCombinedTypeCoercionRule" ::

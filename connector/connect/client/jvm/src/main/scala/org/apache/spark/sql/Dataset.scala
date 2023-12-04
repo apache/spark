@@ -2183,9 +2183,16 @@ class Dataset[T] private[sql] (
       value.name(name).expr.getAlias
     }
     sparkSession.newDataFrame { builder =>
-      builder.getWithColumnsBuilder
-        .setInput(plan.getRoot)
-        .addAllAliases(aliases.asJava)
+      val withColumsBuilder = builder.getWithColumnsBuilder
+      if (plan.getRoot.hasWithColumns) {
+        withColumsBuilder
+          .mergeFrom(plan.getRoot.getWithColumns)
+          .addStackBuilder().addAllAliases(aliases.asJava)
+      } else {
+        withColumsBuilder
+          .setInput(plan.getRoot)
+          .addAllAliases(aliases.asJava)
+      }
     }
   }
 

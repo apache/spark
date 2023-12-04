@@ -854,3 +854,16 @@ case class TempResolvedColumn(
     copy(child = newChild)
   final override val nodePatterns: Seq[TreePattern] = Seq(TEMP_RESOLVED_COLUMN)
 }
+
+/**
+ * Represents a `withColumns` operation. This operator both replaces existing columns
+ * (based on the name), or appends new columns.
+ */
+case class UnresolvedWithColumns(
+    projectList: Seq[NamedExpression],
+    child: LogicalPlan)
+  extends UnresolvedUnaryNode {
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedWithColumns =
+    copy(child = newChild)
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_WITH_COLUMNS)
+}

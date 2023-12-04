@@ -2835,29 +2835,12 @@ class Dataset[T] private[sql](
     require(colNames.size == cols.size,
       s"The size of column names: ${colNames.size} isn't equal to " +
         s"the size of columns: ${cols.size}")
-    SchemaUtils.checkColumnNameDuplication(
-      colNames,
-      sparkSession.sessionState.conf.caseSensitiveAnalysis)
-
-    val resolver = sparkSession.sessionState.analyzer.resolver
-    val output = queryExecution.analyzed.output
-
-    val columnSeq = colNames.zip(cols)
-
-    val replacedAndExistingColumns = output.map { field =>
-      columnSeq.find { case (colName, _) =>
-        resolver(field.name, colName)
-      } match {
-        case Some((colName: String, col: Column)) => col.as(colName)
-        case _ => Column(field)
+    withPlan {
+      val aliases = cols.zip(colNames).map {
+        case (column, name) => Alias(column.expr, name)()
       }
+      UnresolvedWithColumns(aliases, logicalPlan)
     }
-
-    val newColumns = columnSeq.filter { case (colName, col) =>
-      !output.exists(f => resolver(f.name, colName))
-    }.map { case (colName, col) => col.as(colName) }
-
-    select(replacedAndExistingColumns ++ newColumns : _*)
   }
 
   /**
