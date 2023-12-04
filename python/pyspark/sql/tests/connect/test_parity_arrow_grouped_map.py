@@ -28,7 +28,7 @@ class GroupedApplyInArrowParityTests(GroupedMapInArrowTestsMixin, ReusedConnectT
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.test_parity_pandas_grouped_map import *  # noqa: F401
+    from pyspark.sql.tests.connect.test_parity_arrow_grouped_map import *  # noqa: F401
 
     try:
         import xmlrunner

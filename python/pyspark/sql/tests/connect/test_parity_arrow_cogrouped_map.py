@@ -28,7 +28,7 @@ class CogroupedMapInArrowParityTests(CogroupedMapInArrowTestsMixin, ReusedConnec
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.test_parity_pandas_cogrouped_map import *  # noqa: F401
+    from pyspark.sql.tests.connect.test_parity_arrow_cogrouped_map import *  # noqa: F401
 
     try:
         import xmlrunner
