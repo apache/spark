@@ -469,7 +469,7 @@ private[spark] class TaskSchedulerImpl(
     // check if the ResourceProfile has cpus first since that is common case
     if (availCpus < taskCpus) return None
     // only look at the resource other than cpus
-    availWorkerResources.assignResources(taskSetProf)
+    availWorkerResources.assignAddressesCustomResources(taskSetProf)
   }
 
   private def minTaskLocality(

@@ -173,10 +173,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             case Some(executorInfo) =>
               executorInfo.freeCores += taskCpus
               resources.foreach { case (rName, addressAmount) =>
-                addressAmount.foreach { case (address, amount) =>
-                  executorInfo.resourcesInfo.get(rName).foreach { r =>
-                    r.release(Map(address -> amount))
-                  }
+                executorInfo.resourcesInfo.get(rName).foreach { r =>
+                  r.release(addressAmount)
                 }
               }
               makeOffers(executorId)

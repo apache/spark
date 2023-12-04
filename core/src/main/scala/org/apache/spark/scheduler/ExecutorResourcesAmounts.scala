@@ -75,7 +75,7 @@ private[spark] class ExecutorResourcesAmounts(
   }
 
   /**
-   * Acquire the resource and update the resource
+   * Acquire the resource.
    * @param assignedResource the assigned resource information
    */
   def acquire(assignedResource: Map[String, Map[String, Long]]): Unit = {
@@ -122,13 +122,26 @@ private[spark] class ExecutorResourcesAmounts(
   }
 
   /**
-   * Try to assign the addresses according to the task requirement.
-   * Please note that this function will not update the values.
+   * Try to assign the addresses according to the task requirement. This function always goes
+   * through the available resources starting from the "small" address. If the resources amount
+   * of the address is matching the task requirement, we will assign this address to this task.
+   * Eg, assuming the available resources are {"gpu" -&gt; {"0"-&gt; 0.7, "1" -&gt; 1.0}) and the
+   * task requirement is 0.5, this function will return Some(Map("gpu" -&gt; {"0" -&gt; 0.5})).
+   *
+   * TODO: as we consistently allocate addresses beginning from the "small" address, it can
+   * potentially result in an undesired consequence where a portion of the resource is being wasted.
+   * Eg, assuming the available resources are {"gpu" -&gt; {"0"-&gt; 1.0, "1" -&gt; 0.5}) and the
+   * task amount requirement is 0.5, this function will return
+   * Some(Map("gpu" -&gt; {"0" -&gt; 0.5})), and the left available resource will be
+   * {"gpu" -&gt; {"0"-&gt; 0.5, "1" -&gt; 0.5}) which can't assign to the task that
+   * requires &gt; 0.5 any more.
    *
    * @param taskSetProf assign resources based on which resource profile
-   * @return the optional resources amounts
+   * @return the optional assigned resources amounts. returns None if any
+   *         of the task requests for resources aren't met.
    */
-  def assignResources(taskSetProf: ResourceProfile): Option[Map[String, Map[String, Long]]] = {
+  def assignAddressesCustomResources(taskSetProf: ResourceProfile):
+      Option[Map[String, Map[String, Long]]] = {
     // only look at the resource other than cpus
     val tsResources = taskSetProf.getCustomTaskResources()
     if (tsResources.isEmpty) {
@@ -137,7 +150,7 @@ private[spark] class ExecutorResourcesAmounts(
 
     val allocatedAddresses = HashMap[String, Map[String, Long]]()
 
-    // we go through all resources here so that we can make sure they match and also get what the
+    // Go through all resources here so that we can make sure they match and also get what the
     // assignments are for the next task
     for ((rName, taskReqs) <- tsResources) {
       // TaskResourceRequest checks the task amount should be in (0, 1] or a whole number
@@ -147,7 +160,7 @@ private[spark] class ExecutorResourcesAmounts(
         case Some(addressesAmountMap) =>
           val allocatedAddressesMap = HashMap[String, Long]()
 
-          // always sort the addresses
+          // Always sort the addresses
           val addresses = addressesAmountMap.keys.toSeq.sorted
 
           // task.amount is a whole number
@@ -173,7 +186,9 @@ private[spark] class ExecutorResourcesAmounts(
 
           if (taskAmount == 0 && allocatedAddressesMap.size > 0) {
             allocatedAddresses.put(rName, allocatedAddressesMap.toMap)
-          } else return None
+          } else {
+            return None
+          }
 
         case None => return None
       }

@@ -56,7 +56,7 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
     val rp = new ResourceProfileBuilder().require(treqs).build()
 
     // assign nothing to rp without resource profile
-    val assigned = availableExecResAmounts.assignResources(rp)
+    val assigned = availableExecResAmounts.assignAddressesCustomResources(rp)
     assert(assigned.isDefined)
     assigned.foreach { case resource => assert(resource.isEmpty) }
   }
@@ -142,7 +142,7 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
     val rp = new ResourceProfileBuilder().require(treqs).build()
 
     // taskMount = 0.1 < 1.0 which can be assigned.
-    val assigned = availableExecResAmounts.assignResources(rp)
+    val assigned = availableExecResAmounts.assignAddressesCustomResources(rp)
     // update the value
     availableExecResAmounts.acquire(assigned.get)
 
@@ -175,7 +175,7 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
       .resource("gpu", gpuTaskAmount)
     val rp = new ResourceProfileBuilder().require(treqs).build()
 
-    val assigned = availableExecResAmounts.assignResources(rp)
+    val assigned = availableExecResAmounts.assignAddressesCustomResources(rp)
     assert(assigned.isEmpty)
   }
 
@@ -191,7 +191,7 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
       .resource("fpga", fpgaTaskAmount)
     val rp = new ResourceProfileBuilder().require(treqs).build()
 
-    var assigned = availableExecResAmounts.assignResources(rp)
+    var assigned = availableExecResAmounts.assignAddressesCustomResources(rp)
     assert(!assigned.isEmpty)
     assigned.foreach { case resource => assert(!resource.isEmpty)}
 
@@ -200,7 +200,7 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
       .resource("fpga", 0.9) // couldn't allocate fpga
     val rp1 = new ResourceProfileBuilder().require(treqs1).build()
 
-    assigned = availableExecResAmounts.assignResources(rp1)
+    assigned = availableExecResAmounts.assignAddressesCustomResources(rp1)
     assert(assigned.isEmpty)
   }
 
@@ -274,7 +274,7 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
     val rp = new ResourceProfileBuilder().require(treqs).build()
 
     // taskMount = 0.1 < 1.0 which can be assigned.
-    val assigned = availableExecResAmounts.assignResources(rp)
+    val assigned = availableExecResAmounts.assignAddressesCustomResources(rp)
     assert(!assigned.isEmpty)
     assigned.foreach { case resource =>
       assert(resource.size === 1)
@@ -341,7 +341,7 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
     val rp = new ResourceProfileBuilder().require(treqs).build()
 
     // taskMount = 0.1 < 1.0 which can be assigned.
-    val assigned = availableExecResAmounts.assignResources(rp)
+    val assigned = availableExecResAmounts.assignAddressesCustomResources(rp)
     assert(!assigned.isEmpty)
     assigned.foreach { case resourceAmounts =>
       assert(resourceAmounts.size === 2)
@@ -406,7 +406,7 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
                       ): Unit = {
       val treqs = new TaskResourceRequests().resource("gpu", taskAmount)
       val rp = new ResourceProfileBuilder().require(treqs).build()
-      val assigned = availableExecResAmounts.assignResources(rp)
+      val assigned = availableExecResAmounts.assignAddressesCustomResources(rp)
       assert(!assigned.isEmpty)
       assigned.foreach { case resources =>
         assert(
