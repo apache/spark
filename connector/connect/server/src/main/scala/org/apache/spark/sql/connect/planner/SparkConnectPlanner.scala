@@ -728,10 +728,10 @@ class SparkConnectPlanner(
           .groupBy(otherCols: _*)
 
         pythonUdf.evalType match {
-          case PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF =>
+          case PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF =>
             input.flatMapCoGroupsInPandas(other, pythonUdf).logicalPlan
 
-          case PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF =>
+          case PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF =>
             input.flatMapCoGroupsInArrow(other, pythonUdf).logicalPlan
 
           case _ =>

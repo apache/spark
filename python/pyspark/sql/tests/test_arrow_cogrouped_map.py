@@ -53,27 +53,6 @@ class CogroupedMapInArrowTestsMixin:
         grouped_right_df = self.right.groupBy((col("id") / 4).cast("int"))
         return grouped_left_df.cogroup(grouped_right_df)
 
-    @classmethod
-    def setUpClass(cls):
-        ReusedSQLTestCase.setUpClass()
-
-        # Synchronize default timezone between Python and Java
-        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
-        tz = "America/Los_Angeles"
-        os.environ["TZ"] = tz
-        time.tzset()
-
-        cls.sc.environment["TZ"] = tz
-        cls.spark.conf.set("spark.sql.session.timeZone", tz)
-
-    @classmethod
-    def tearDownClass(cls):
-        del os.environ["TZ"]
-        if cls.tz_prev is not None:
-            os.environ["TZ"] = cls.tz_prev
-        time.tzset()
-        ReusedSQLTestCase.tearDownClass()
-
     @staticmethod
     def apply_in_arrow_func(left, right):
         assert isinstance(left, pa.Table)
@@ -149,7 +128,7 @@ class CogroupedMapInArrowTestsMixin:
         def func(key, left, right):
             return key
 
-        with QuietTest(self.sc):
+        with self.quiet_test():
             with self.assertRaisesRegex(
                 PythonException,
                 "Return type of the user-defined function should be pyarrow.Table, but is tuple",
@@ -168,7 +147,7 @@ class CogroupedMapInArrowTestsMixin:
             ("id long, v string", "column 'v' \\(expected string, actual int64\\)"),
         ]:
             with self.subTest(schema=schema):
-                with QuietTest(self.sc):
+                with self.quiet_test():
                     with self.assertRaisesRegex(
                         PythonException,
                         f"Columns do not match in their data type: {expected}",
@@ -192,7 +171,7 @@ class CogroupedMapInArrowTestsMixin:
                 with self.sql_conf(
                     {"spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName": False}
                 ):
-                    with QuietTest(self.sc):
+                    with self.quiet_test():
                         with self.assertRaisesRegex(
                             PythonException,
                             f"Columns do not match in their data type: {expected}",
@@ -212,7 +191,7 @@ class CogroupedMapInArrowTestsMixin:
                 }
             )
 
-        with QuietTest(self.sc):
+        with self.quiet_test():
             with self.assertRaisesRegex(
                 PythonException,
                 "Column names of the returned pyarrow.Table do not match specified schema. "
@@ -248,7 +227,7 @@ class CogroupedMapInArrowTestsMixin:
                     {"id": [key[0].as_py()], "m": [pc.mean(left.column("v")).as_py()]}
                 )
 
-        with QuietTest(self.sc):
+        with self.quiet_test():
             with self.assertRaisesRegex(
                 PythonException,
                 "Column names of the returned pyarrow.Table do not match specified schema. "
@@ -289,11 +268,33 @@ class CogroupedMapInArrowTestsMixin:
 
 
 class CogroupedMapInArrowTests(CogroupedMapInArrowTestsMixin, ReusedSQLTestCase):
-    pass
+    @classmethod
+    def setUpClass(cls):
+        ReusedSQLTestCase.setUpClass()
+
+        # Synchronize default timezone between Python and Java
+        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
+        tz = "America/Los_Angeles"
+        os.environ["TZ"] = tz
+        time.tzset()
+
+        cls.sc.environment["TZ"] = tz
+        cls.spark.conf.set("spark.sql.session.timeZone", tz)
+
+    @classmethod
+    def tearDownClass(cls):
+        del os.environ["TZ"]
+        if cls.tz_prev is not None:
+            os.environ["TZ"] = cls.tz_prev
+        time.tzset()
+        ReusedSQLTestCase.tearDownClass()
+
+    def quiet_test(self):
+        return QuietTest(self.sc)
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.arrow.test_arrow_cogrouped_map import *  # noqa: F401
+    from pyspark.sql.tests.test_arrow_cogrouped_map import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
