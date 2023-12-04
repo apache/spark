@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, Proje
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.PYTHON_DATA_SOURCE
 import org.apache.spark.sql.execution.python.UserDefinedPythonDataSourceReadRunner
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A logical rule to plan reads from a Python data source.
@@ -53,7 +54,7 @@ object PlanPythonDataSourceScan extends Rule[LogicalPlan] {
       val info = new UserDefinedPythonDataSourceReadRunner(dataSource, schema).runInPython()
 
       val readerFunc = SimplePythonFunction(
-        command = info.func.toSeq,
+        command = info.func.toImmutableArraySeq,
         envVars = dataSource.envVars,
         pythonIncludes = dataSource.pythonIncludes,
         pythonExec = dataSource.pythonExec,

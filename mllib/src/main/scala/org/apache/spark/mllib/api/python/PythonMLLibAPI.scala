@@ -55,6 +55,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -1316,7 +1317,7 @@ private[spark] abstract class SerDeBase {
     obj match {
       // Pickler in Python side cannot deserialize Scala Array normally. See SPARK-12834.
       case array: Array[_] => new Pickler(/* useMemo = */ true,
-        /* valueCompare = */ false).dumps(array.toSeq.asJava)
+        /* valueCompare = */ false).dumps(array.toImmutableArraySeq.asJava)
       case _ => new Pickler(/* useMemo = */ true,
         /* valueCompare = */ false).dumps(obj)
     }

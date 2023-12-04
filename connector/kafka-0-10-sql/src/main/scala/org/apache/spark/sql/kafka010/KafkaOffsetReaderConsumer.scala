@@ -466,7 +466,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
           val end = splitOffsetRanges.last.copy(untilOffset = untilOffsetsMap(tp))
           Seq(first) ++ splitOffsetRanges.drop(1).dropRight(1) :+ end
         }
-      }.toArray.toSeq
+      }.toArray.toImmutableArraySeq
     } else {
       offsetRangesBase
     }

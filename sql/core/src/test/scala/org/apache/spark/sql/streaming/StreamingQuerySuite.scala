@@ -29,7 +29,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.RandomStringUtils
 import org.apache.hadoop.fs.Path
 import org.mockito.Mockito.when
-import org.scalactic.TolerantNumerics
+import org.scalactic.{Equality, TolerantNumerics}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatestplus.mockito.MockitoSugar
@@ -60,7 +60,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
   import testImplicits._
 
   // To make === between double tolerate inexact values
-  implicit val doubleEquality = TolerantNumerics.tolerantDoubleEquality(0.01)
+  implicit val doubleEquality: Equality[Double] = TolerantNumerics.tolerantDoubleEquality(0.01)
 
   after {
     sqlContext.streams.active.foreach(_.stop())
@@ -491,7 +491,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     val progress = getStreamingQuery(streamingInputDF.join(streamingInputDF, "value"))
       .recentProgress.head
     assert(progress.numInputRows === 20) // data is read multiple times in self-joins
-    assert(progress.sources.size === 1)
+    assert(progress.sources.length === 1)
     assert(progress.sources(0).numInputRows === 20)
   }
 
@@ -505,7 +505,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     val progress = getStreamingQuery(streamingInputDF.join(staticInputDF, "value"))
       .recentProgress.head
     assert(progress.numInputRows === 10)
-    assert(progress.sources.size === 1)
+    assert(progress.sources.length === 1)
     assert(progress.sources(0).numInputRows === 10)
   }
 
@@ -518,7 +518,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     // After the first trigger, the calculated input rows should be 10
     val progress = getStreamingQuery(streamingInputDF).recentProgress.head
     assert(progress.numInputRows === 10)
-    assert(progress.sources.size === 1)
+    assert(progress.sources.length === 1)
     assert(progress.sources(0).numInputRows === 10)
   }
 
@@ -756,7 +756,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
   private def waitUntilBatchProcessed(clock: StreamManualClock) = AssertOnQuery { q =>
     eventually(Timeout(streamingTimeout)) {
-      if (!q.exception.isDefined) {
+      if (q.exception.isEmpty) {
         assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
       }
     }

@@ -628,7 +628,7 @@ case class NewInstance(
 
     ev.isNull = resultIsNull
 
-    val constructorCall = cls.getConstructors.size match {
+    val constructorCall = cls.getConstructors.length match {
       // If there are no constructors, the `new` method will fail. In
       // this case we can try to call the apply method constructor
       // that might be defined on the companion object.
@@ -903,13 +903,13 @@ case class MapObjects private(
     case ObjectType(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
       _.asInstanceOf[scala.collection.Seq[_]].toSeq
     case ObjectType(cls) if cls.isArray =>
-      _.asInstanceOf[Array[_]].toSeq
+      _.asInstanceOf[Array[_]].toImmutableArraySeq
     case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
       _.asInstanceOf[java.util.List[_]].asScala.toSeq
     case ObjectType(cls) if cls == classOf[Object] =>
       (inputCollection) => {
         if (inputCollection.getClass.isArray) {
-          inputCollection.asInstanceOf[Array[_]].toSeq
+          inputCollection.asInstanceOf[Array[_]].toImmutableArraySeq
         } else {
           inputCollection.asInstanceOf[scala.collection.Seq[_]]
         }

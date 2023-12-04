@@ -137,7 +137,7 @@ class KafkaRDDSuite extends SparkFunSuite {
 
     val kafkaParams = getKafkaParams()
 
-    val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
+    val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.length))
 
     val rdd = KafkaUtils.createRDD[String, String](sc, kafkaParams, offsetRanges, preferredHosts)
       .map(_.value)
@@ -146,12 +146,12 @@ class KafkaRDDSuite extends SparkFunSuite {
     assert(received === messages.toSet)
 
     // size-related method optimizations return sane results
-    assert(rdd.count() === messages.size)
-    assert(rdd.countApprox(0).getFinalValue().mean === messages.size)
+    assert(rdd.count() === messages.length)
+    assert(rdd.countApprox(0).getFinalValue().mean === messages.length)
     assert(!rdd.isEmpty())
-    assert(rdd.take(1).size === 1)
+    assert(rdd.take(1).length === 1)
     assert(rdd.take(1).head === messages.head)
-    assert(rdd.take(messages.size + 10).size === messages.size)
+    assert(rdd.take(messages.size + 10).length === messages.length)
 
     val emptyRdd = KafkaUtils.createRDD[String, String](
       sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0)), preferredHosts)
@@ -159,7 +159,7 @@ class KafkaRDDSuite extends SparkFunSuite {
     assert(emptyRdd.isEmpty())
 
     // invalid offset ranges throw exceptions
-    val badRanges = Array(OffsetRange(topic, 0, 0, messages.size + 1))
+    val badRanges = Array(OffsetRange(topic, 0, 0, messages.length + 1))
     intercept[SparkException] {
       val result = KafkaUtils.createRDD[String, String](sc, kafkaParams, badRanges, preferredHosts)
         .map(_.value)
@@ -201,7 +201,7 @@ class KafkaRDDSuite extends SparkFunSuite {
 
     val kafkaParams = getKafkaParams()
 
-    val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
+    val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.length))
 
     val rdd = KafkaUtils.createRDD[String, String](
       sc, kafkaParams, offsetRanges, preferredHosts
@@ -216,12 +216,12 @@ class KafkaRDDSuite extends SparkFunSuite {
     assert(received === compactedMessages.toSet)
 
     // size-related method optimizations return sane results
-    assert(rdd.count() === compactedMessages.size)
-    assert(rdd.countApprox(0).getFinalValue().mean === compactedMessages.size)
+    assert(rdd.count() === compactedMessages.length)
+    assert(rdd.countApprox(0).getFinalValue().mean === compactedMessages.length)
     assert(!rdd.isEmpty())
-    assert(rdd.take(1).size === 1)
+    assert(rdd.take(1).length === 1)
     assert(rdd.take(1).head === compactedMessages.head)
-    assert(rdd.take(messages.size + 10).size === compactedMessages.size)
+    assert(rdd.take(messages.size + 10).length === compactedMessages.length)
 
     val emptyRdd = KafkaUtils.createRDD[String, String](
       sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0)), preferredHosts)
@@ -229,7 +229,7 @@ class KafkaRDDSuite extends SparkFunSuite {
     assert(emptyRdd.isEmpty())
 
     // invalid offset ranges throw exceptions
-    val badRanges = Array(OffsetRange(topic, 0, 0, messages.size + 1))
+    val badRanges = Array(OffsetRange(topic, 0, 0, messages.length + 1))
     intercept[SparkException] {
       val result = KafkaUtils.createRDD[String, String](sc, kafkaParams, badRanges, preferredHosts)
         .map(_.value)
@@ -268,7 +268,7 @@ class KafkaRDDSuite extends SparkFunSuite {
 
     kafkaTestUtils.sendMessages(topic, sentOnlyOne)
 
-    assert(rdd2.map(_.value).collect().size === 0, "got messages when there shouldn't be any")
+    assert(rdd2.map(_.value).collect().length === 0, "got messages when there shouldn't be any")
 
     // this is the "exactly 1 message" case, namely the single message from sentOnlyOne above
     val rdd3 = KafkaUtils.createRDD[String, String](sc, kafkaParams,

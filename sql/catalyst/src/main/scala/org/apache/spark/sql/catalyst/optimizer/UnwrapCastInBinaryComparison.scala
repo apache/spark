@@ -138,6 +138,11 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         if AnyTimestampType.acceptsType(fromExp.dataType) && value != null =>
       Some(unwrapDateToTimestamp(be, fromExp, date, timeZoneId, evalMode))
 
+    case be @ BinaryComparison(
+      Cast(fromExp, _, timeZoneId, evalMode), ts @ Literal(value, _))
+        if AnyTimestampType.acceptsType(ts.dataType) && value != null =>
+      Some(unwrapTimeStampToDate(be, fromExp, ts, timeZoneId, evalMode))
+
     // As the analyzer makes sure that the list of In is already of the same data type, then the
     // rule can simply check the first literal in `in.list` can implicitly cast to `toType` or not,
     // and note that:
@@ -325,6 +330,48 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         LessThan(fromExp, Cast(date, fromExp.dataType, tz, evalMode))
       case _: LessThanOrEqual =>
         LessThan(fromExp, Cast(dateAddOne, fromExp.dataType, tz, evalMode))
+      case _ => exp
+    }
+  }
+
+  private def unwrapTimeStampToDate(
+      exp: BinaryComparison,
+      fromExp: Expression,
+      ts: Literal,
+      tz: Option[String],
+      evalMode: EvalMode.Value): Expression = {
+    val floorDate = Cast(ts, fromExp.dataType, tz, evalMode)
+    val dateAddOne = DateAdd(floorDate, Literal(1, IntegerType))
+    val isStartOfDay =
+      EqualTo(ts, Cast(floorDate, ts.dataType, tz, evalMode)).eval(EmptyRow).asInstanceOf[Boolean]
+
+    exp match {
+      case _: GreaterThan =>
+        GreaterThan(fromExp, floorDate)
+      case _: GreaterThanOrEqual =>
+        if (isStartOfDay) {
+          GreaterThanOrEqual(fromExp, floorDate)
+        } else {
+          GreaterThanOrEqual(fromExp, dateAddOne)
+        }
+      case _: EqualTo =>
+        if (isStartOfDay) {
+          EqualTo(fromExp, floorDate)
+        } else if (!fromExp.nullable) {
+          FalseLiteral
+        } else {
+          And(EqualTo(fromExp, floorDate), EqualTo(fromExp, dateAddOne))
+        }
+      case _: EqualNullSafe =>
+        if (isStartOfDay) EqualNullSafe(fromExp, floorDate) else FalseLiteral
+      case _: LessThan =>
+        if (isStartOfDay) {
+          LessThan(fromExp, floorDate)
+        } else {
+          LessThan(fromExp, dateAddOne)
+        }
+      case _: LessThanOrEqual =>
+        LessThanOrEqual(fromExp, floorDate)
       case _ => exp
     }
   }

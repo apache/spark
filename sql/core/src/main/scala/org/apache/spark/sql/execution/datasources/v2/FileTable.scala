@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.streaming.{FileStreamSink, MetadataLogFile
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.ArrayImplicits._
 
 abstract class FileTable(
     sparkSession: SparkSession,
@@ -99,7 +100,8 @@ abstract class FileTable(
     StructType(fields)
   }
 
-  override def partitioning: Array[Transform] = fileIndex.partitionSchema.names.toSeq.asTransforms
+  override def partitioning: Array[Transform] =
+    fileIndex.partitionSchema.names.toImmutableArraySeq.asTransforms
 
   override def properties: util.Map[String, String] = options.asCaseSensitiveMap
 

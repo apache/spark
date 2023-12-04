@@ -29,6 +29,7 @@ import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Common params for [[TrainValidationSplitParams]] and [[CrossValidatorParams]].
@@ -147,7 +148,7 @@ private[ml] object ValidatorParams {
                 "isJson" -> compact(render(JBool(true))))
           }
         }
-      }.toSeq
+      }.toImmutableArraySeq
     ))
 
     val params = instance.extractParamMap().toSeq

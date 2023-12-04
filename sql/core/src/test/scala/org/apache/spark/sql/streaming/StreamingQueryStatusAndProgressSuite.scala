@@ -279,7 +279,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
 
       // Make sure it generates the progress objects we want to test
       assert(progress.exists { p =>
-        p.sources.size >= 1 && p.stateOperators.size >= 1 && p.sink != null
+        p.sources.length >= 1 && p.stateOperators.length >= 1 && p.sink != null
       })
 
       val array = spark.sparkContext.parallelize(progress.toImmutableArraySeq).collect()
@@ -436,7 +436,7 @@ object StreamingQueryStatusAndProgressSuite {
     timestamp = "2016-12-05T20:54:20.827Z",
     batchId = 2L,
     batchDuration = 0L,
-    durationMs = new java.util.HashMap(Map("total" -> 0L).view.mapValues(long2Long).toMap.asJava),
+    durationMs = new java.util.HashMap(Map("total" -> 0L).transform((_, v) => long2Long(v)).asJava),
     eventTime = new java.util.HashMap(Map(
       "max" -> "2016-12-05T20:54:20.827Z",
       "min" -> "2016-12-05T20:54:20.827Z",
@@ -448,7 +448,7 @@ object StreamingQueryStatusAndProgressSuite {
       numShufflePartitions = 2, numStateStoreInstances = 2,
       customMetrics = new java.util.HashMap(Map("stateOnCurrentVersionSizeBytes" -> 2L,
         "loadedMapCacheHitCount" -> 1L, "loadedMapCacheMissCount" -> 0L)
-        .view.mapValues(long2Long).toMap.asJava)
+        .transform((_, v) => long2Long(v)).asJava)
     )),
     sources = Array(
       new SourceProgress(
@@ -474,7 +474,7 @@ object StreamingQueryStatusAndProgressSuite {
     timestamp = "2016-12-05T20:54:20.827Z",
     batchId = 2L,
     batchDuration = 0L,
-    durationMs = new java.util.HashMap(Map("total" -> 0L).view.mapValues(long2Long).toMap.asJava),
+    durationMs = new java.util.HashMap(Map("total" -> 0L).transform((_, v) => long2Long(v)).asJava),
     // empty maps should be handled correctly
     eventTime = new java.util.HashMap(Map.empty[String, String].asJava),
     stateOperators = Array(new StateOperatorProgress(operatorName = "op2",

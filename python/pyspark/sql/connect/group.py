@@ -109,6 +109,8 @@ class GroupedData:
             type_str = "RollUp"
         elif self._group_type == "cube":
             type_str = "Cube"
+        elif self._group_type == "grouping_sets":
+            type_str = "GroupingSets"
         else:
             type_str = "Pivot"
 
@@ -134,7 +136,7 @@ class GroupedData:
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
             aggregate_cols = cast(List[Column], list(exprs))
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.Aggregate(
                 child=self._df._plan,
                 group_type=self._group_type,
@@ -176,7 +178,7 @@ class GroupedData:
             # if no column is provided, then all numerical columns are selected
             agg_cols = numerical_cols
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.Aggregate(
                 child=self._df._plan,
                 group_type=self._group_type,
@@ -296,7 +298,7 @@ class GroupedData:
             evalType=PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         )
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.GroupMap(
                 child=self._df._plan,
                 grouping_cols=self._grouping_cols,
@@ -335,7 +337,7 @@ class GroupedData:
             stateStructType.json() if isinstance(stateStructType, StructType) else stateStructType
         )
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.ApplyInPandasWithState(
                 child=self._df._plan,
                 grouping_cols=self._grouping_cols,
@@ -378,7 +380,7 @@ class PandasCogroupedOps:
             evalType=PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         )
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.CoGroupMap(
                 input=self._gd1._df._plan,
                 input_grouping_cols=self._gd1._grouping_cols,

@@ -151,7 +151,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // scheduler can modify the SparkConf object before this view is created.
     private lazy val sparkProperties = scheduler.sc.conf.getAll
       .filter { case (k, _) => k.startsWith("spark.") }
-      .toSeq
+      .toImmutableArraySeq
 
     private val logUrlHandler: ExecutorLogUrlHandler = new ExecutorLogUrlHandler(
       conf.get(UI.CUSTOM_EXECUTOR_LOG_URL))
@@ -734,7 +734,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   def getExecutorsWithRegistrationTs(): Map[String, Long] = synchronized {
-    executorDataMap.view.mapValues(v => v.registrationTs).toMap
+    executorDataMap.toMap.transform((_, v) => v.registrationTs)
   }
 
   override def isExecutorActive(id: String): Boolean = synchronized {

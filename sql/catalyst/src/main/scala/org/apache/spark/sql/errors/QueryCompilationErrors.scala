@@ -229,9 +229,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       case seq => Some(CreateStruct(seq)).map(e => Alias(e, e.sql)()).get
     }
       .groupBy(_.dataType)
-      .view
-      .mapValues(values => values.map(value => toSQLId(value.name)).sorted)
-      .mapValues(values => if (values.length > 3) values.take(3) :+ "..." else values)
+      .transform((_, values) => values.map(value => toSQLId(value.name)).sorted)
+      .transform((_, values) => if (values.length > 3) values.take(3) :+ "..." else values)
       .toList.sortBy(_._1.sql)
       .map { case (dataType, values) => s"${toSQLType(dataType)} (${values.mkString(", ")})" }
 

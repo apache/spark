@@ -289,11 +289,13 @@ class SparkConnectPlanner(
     if (!namedArguments.isEmpty) {
       NameParameterizedQuery(
         parsedPlan,
-        namedArguments.asScala.view.mapValues(transformExpression).toMap)
+        namedArguments.asScala.toMap.transform((_, v) => transformExpression(v)))
     } else if (!posArguments.isEmpty) {
       PosParameterizedQuery(parsedPlan, posArguments.asScala.map(transformExpression).toSeq)
     } else if (!args.isEmpty) {
-      NameParameterizedQuery(parsedPlan, args.asScala.view.mapValues(transformLiteral).toMap)
+      NameParameterizedQuery(
+        parsedPlan,
+        args.asScala.toMap.transform((_, v) => transformLiteral(v)))
     } else if (!posArgs.isEmpty) {
       PosParameterizedQuery(parsedPlan, posArgs.asScala.map(transformLiteral).toSeq)
     } else {
@@ -379,7 +381,7 @@ class SparkConnectPlanner(
     val values = rel.getValuesList.asScala.toArray
     if (values.length == 1) {
       val value = LiteralValueProtoConverter.toCatalystValue(values.head)
-      val columns = if (cols.nonEmpty) Some(cols.toSeq) else None
+      val columns = if (cols.nonEmpty) Some(cols.toImmutableArraySeq) else None
       dataset.na.fillValue(value, columns).logicalPlan
     } else {
       val valueMap = mutable.Map.empty[String, Any]
@@ -2235,7 +2237,7 @@ class SparkConnectPlanner(
 
     JoinWith.typedJoinWith(
       joined,
-      session.sqlContext.conf.dataFrameSelfJoinAutoResolveAmbiguity,
+      session.sessionState.conf.dataFrameSelfJoinAutoResolveAmbiguity,
       session.sessionState.analyzer.resolver,
       rel.getJoinDataType.getIsLeftStruct,
       rel.getJoinDataType.getIsRightStruct)
@@ -2434,7 +2436,7 @@ class SparkConnectPlanner(
             .sort(pivotCol) // ensure that the output columns are in a consistent logical order
             .collect()
             .map(_.get(0))
-            .toSeq
+            .toImmutableArraySeq
             .map(expressions.Literal.apply)
         }
 
@@ -2535,7 +2537,7 @@ class SparkConnectPlanner(
     val df = if (!namedArguments.isEmpty) {
       session.sql(
         getSqlCommand.getSql,
-        namedArguments.asScala.view.mapValues(e => Column(transformExpression(e))).toMap,
+        namedArguments.asScala.toMap.transform((_, e) => Column(transformExpression(e))),
         tracker)
     } else if (!posArguments.isEmpty) {
       session.sql(
@@ -2545,7 +2547,7 @@ class SparkConnectPlanner(
     } else if (!args.isEmpty) {
       session.sql(
         getSqlCommand.getSql,
-        args.asScala.view.mapValues(transformLiteral).toMap,
+        args.asScala.toMap.transform((_, v) => transformLiteral(v)),
         tracker)
     } else if (!posArgs.isEmpty) {
       session.sql(getSqlCommand.getSql, posArgs.asScala.map(transformLiteral).toArray, tracker)
@@ -2563,6 +2565,8 @@ class SparkConnectPlanner(
     // To avoid explicit handling of the result on the client, we build the expected input
     // of the relation on the server. The client has to simply forward the result.
     val result = SqlCommandResult.newBuilder()
+    // Only filled when isCommand
+    val metrics = ExecutePlanResponse.Metrics.newBuilder()
     if (isCommand) {
       // Convert the results to Arrow.
       val schema = df.schema
@@ -2596,10 +2600,10 @@ class SparkConnectPlanner(
             proto.LocalRelation
               .newBuilder()
               .setData(ByteString.copyFrom(bytes))))
+      metrics.addAllMetrics(MetricGenerator.transformPlan(df).asJava)
     } else {
-      // Trigger assertExecutedPlanPrepared to ensure post ReadyForExecution before finished
-      // executedPlan is currently called by createMetricsResponse below
-      df.queryExecution.assertExecutedPlanPrepared()
+      // No execution triggered for relations. Manually set ready
+      tracker.setReadyForExecution()
       result.setRelation(
         proto.Relation
           .newBuilder()
@@ -2622,8 +2626,17 @@ class SparkConnectPlanner(
         .setSqlCommandResult(result)
         .build())
 
-    // Send Metrics
-    responseObserver.onNext(MetricGenerator.createMetricsResponse(sessionHolder, df))
+    // Send Metrics when isCommand (i.e. show tables) which is eagerly executed & has metrics
+    // Skip metrics when !isCommand (i.e. select 1) which is not executed & doesn't have metrics
+    if (isCommand) {
+      responseObserver.onNext(
+        ExecutePlanResponse
+          .newBuilder()
+          .setSessionId(sessionHolder.sessionId)
+          .setServerSideSessionId(sessionHolder.serverSessionId)
+          .setMetrics(metrics.build)
+          .build)
+    }
   }
 
   private def handleRegisterUserDefinedFunction(
@@ -3062,7 +3075,7 @@ class SparkConnectPlanner(
         val progressReports = if (command.getLastProgress) {
           Option(query.lastProgress).toSeq
         } else {
-          query.recentProgress.toSeq
+          query.recentProgress.toImmutableArraySeq
         }
         respBuilder.setRecentProgress(
           StreamingQueryCommandResult.RecentProgressResult
@@ -3287,14 +3300,13 @@ class SparkConnectPlanner(
           proto.GetResourcesCommandResult
             .newBuilder()
             .putAllResources(
-              session.sparkContext.resources.view
-                .mapValues(resource =>
+              session.sparkContext.resources.toMap
+                .transform((_, resource) =>
                   proto.ResourceInformation
                     .newBuilder()
                     .setName(resource.name)
                     .addAllAddresses(resource.addresses.toImmutableArraySeq.asJava)
                     .build())
-                .toMap
                 .asJava)
             .build())
         .build())

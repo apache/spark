@@ -514,6 +514,11 @@ trait ConditionalExpression extends Expression {
   def alwaysEvaluatedInputs: Seq[Expression]
 
   /**
+   * Return a copy of itself with a new `alwaysEvaluatedInputs`.
+   */
+  def withNewAlwaysEvaluatedInputs(alwaysEvaluatedInputs: Seq[Expression]): ConditionalExpression
+
+  /**
    * Return groups of branches. For each group, at least one branch will be hit at runtime,
    * so that we can eagerly evaluate the common expressions of a group.
    */
