@@ -109,6 +109,8 @@ class GroupedData:
             type_str = "RollUp"
         elif self._group_type == "cube":
             type_str = "Cube"
+        elif self._group_type == "grouping_sets":
+            type_str = "GroupingSets"
         else:
             type_str = "Pivot"
 
