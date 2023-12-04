@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
@@ -67,7 +68,7 @@ case class DataSourceV2Relation(
       case (Some(cat), Some(ident)) => s"${quoteIfNeeded(cat.name())}.${ident.quoted}"
       case (None, None) => table.name()
       case _ =>
-        throw new IllegalArgumentException(
+        throw SparkException.internalError(
           "Invalid catalog and identifier pair. Both 'catalog' and 'identifier' must be " +
             s"specified or leave as None. Current input - " +
             s"catalog: '${catalog.map(_.name()).getOrElse(None)}', " +
