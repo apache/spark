@@ -137,6 +137,8 @@ class RocksDB(
   @volatile private var numKeysOnWritingVersion = 0L
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
 
+  @volatile private var prevRecordedMetrics: Option[RocksDBMetrics] = None
+
   @GuardedBy("acquireLock")
   @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
 
@@ -148,6 +150,7 @@ class RocksDB(
   def load(version: Long, readOnly: Boolean = false): RocksDB = {
     assert(version >= 0)
     acquire()
+    prevRecordedMetrics = None
     logInfo(s"Loading $version")
     try {
       if (loadedVersion != version) {
@@ -397,7 +400,8 @@ class RocksDB(
         "checkpoint" -> checkpointTimeMs,
         "fileSync" -> fileSyncTimeMs
       )
-      logInfo(s"Committed $newVersion, stats = ${metrics.json}")
+      prevRecordedMetrics = Some(metrics)
+      logInfo(s"Committed $newVersion, stats = ${prevRecordedMetrics.get.json}")
       loadedVersion
     } catch {
       case t: Throwable =>
@@ -495,7 +499,7 @@ class RocksDB(
   def getWriteBufferManagerAndCache(): (WriteBufferManager, Cache) = (writeBufferManager, lruCache)
 
   /** Get current instantaneous statistics */
-  def metrics: RocksDBMetrics = {
+  private def metrics: RocksDBMetrics = {
     import HistogramType._
     val totalSSTFilesBytes = getDBProperty("rocksdb.total-sst-files-size")
     val readerMemUsage = getDBProperty("rocksdb.estimate-table-readers-mem")
@@ -547,6 +551,20 @@ class RocksDB(
       filesReused = fileManagerMetrics.filesReused,
       zipFileBytesUncompressed = fileManagerMetrics.zipFileBytesUncompressed,
       nativeOpsMetrics = nativeOpsMetrics.toMap)
+  }
+
+  def metricsOpt: Option[RocksDBMetrics] = {
+    var rocksDBMetricsOpt: Option[RocksDBMetrics] = None
+    try {
+      acquire()
+      rocksDBMetricsOpt = prevRecordedMetrics
+    } catch {
+      case ex: Exception =>
+        logInfo(s"Failed to acquire metrics with exception=$ex")
+    } finally {
+      release()
+    }
+    rocksDBMetricsOpt
   }
 
   private def acquire(): Unit = acquireLock.synchronized {
