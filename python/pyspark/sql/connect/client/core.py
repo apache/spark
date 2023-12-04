@@ -1515,7 +1515,7 @@ class SparkConnectClient(object):
         -------
         Throws the appropriate internal Python exception.
         """
-        if True or self._forbid_recursive_error_handling.can_enter:
+        if self._forbid_recursive_error_handling.can_enter:
             with self._forbid_recursive_error_handling:
                 if isinstance(error, grpc.RpcError):
                     self._handle_rpc_error(error)
