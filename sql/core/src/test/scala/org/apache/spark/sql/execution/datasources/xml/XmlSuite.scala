@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.xml
 
+import java.io.EOFException
 import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
@@ -31,12 +32,13 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkFileNotFoundException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.xml.XmlOptions
 import org.apache.spark.sql.catalyst.xml.XmlOptions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.execution.datasources.xml.TestUtils._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -44,12 +46,18 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-class XmlSuite extends QueryTest with SharedSparkSession {
+class XmlSuite
+    extends QueryTest
+    with SharedSparkSession
+    with CommonFileDataSourceSuite
+    with TestXmlData {
   import testImplicits._
 
   private val resDir = "test-data/xml-resources/"
 
   private var tempDir: Path = _
+
+  override protected def dataSourceFormat: String = "xml"
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -2177,5 +2185,59 @@ class XmlSuite extends QueryTest with SharedSparkSession {
         "this is a simple string.")
     )
     testWriteReadRoundTrip(df, Map("nullValue" -> "null", "prefersDecimal" -> "true"))
+  }
+
+  test("Enabling/disabling ignoreCorruptFiles/ignoreMissingFiles") {
+    withCorruptFile(inputFile => {
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+        val e = intercept[SparkException] {
+          spark.read.option("rowTag", "ROW").xml(inputFile.toURI.toString).collect()
+        }
+        assert(ExceptionUtils.getRootCause(e).isInstanceOf[EOFException])
+        assert(ExceptionUtils.getRootCause(e).getMessage === "Unexpected end of input stream")
+        val e2 = intercept[SparkException] {
+          spark.read
+            .option("rowTag", "ROW")
+            .option("multiLine", true)
+            .xml(inputFile.toURI.toString)
+            .collect()
+        }
+        assert(ExceptionUtils.getRootCause(e2).isInstanceOf[EOFException])
+        assert(ExceptionUtils.getRootCause(e2).getMessage === "Unexpected end of input stream")
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+        assert(spark.read.option("rowTag", "ROW").xml(inputFile.toURI.toString).collect().isEmpty)
+        assert(
+          spark.read
+            .option("rowTag", "ROW")
+            .option("multiLine", true)
+            .xml(inputFile.toURI.toString)
+            .collect()
+            .isEmpty)
+      }
+    })
+    withTempPath { dir =>
+      import org.apache.hadoop.fs.Path
+      val xmlPath = new Path(dir.getCanonicalPath, "xml")
+      val fs = xmlPath.getFileSystem(spark.sessionState.newHadoopConf())
+
+      sampledTestData.write.option("rowTag", "ROW").xml(xmlPath.toString)
+      val df = spark.read.option("rowTag", "ROW").option("multiLine", true).xml(xmlPath.toString)
+      fs.delete(xmlPath, true)
+      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "false") {
+        val e = intercept[SparkException] {
+          df.collect()
+        }
+        assert(e.getCause.isInstanceOf[SparkFileNotFoundException])
+        assert(e.getCause.getMessage.contains(".xml does not exist"))
+      }
+
+      sampledTestData.write.option("rowTag", "ROW").xml(xmlPath.toString)
+      val df2 = spark.read.option("rowTag", "ROW").option("multiLine", true).xml(xmlPath.toString)
+      fs.delete(xmlPath, true)
+      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "true") {
+        assert(df2.collect().isEmpty)
+      }
+    }
   }
 }

@@ -144,7 +144,7 @@ class StaxXmlParser(
         throw BadRecordException(() => xmlRecord, () => Array.empty, e)
       case e: CharConversionException if options.charset.isEmpty =>
         val msg =
-          """JSON parser cannot handle a character in its input.
+          """XML parser cannot handle a character in its input.
             |Specifying encoding as an input option explicitly might help to resolve the issue.
             |""".stripMargin + e.getMessage
         val wrappedCharException = new CharConversionException(msg)
