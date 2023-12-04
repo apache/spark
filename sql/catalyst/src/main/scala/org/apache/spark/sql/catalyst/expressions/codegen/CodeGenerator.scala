@@ -544,7 +544,7 @@ class CodegenContext extends Logging {
         s"private $className $classInstance = new $className();"
     }
 
-    val declareNestedClasses = classFunctions.view.filterKeys(_ != outerClassName).map {
+    val declareNestedClasses = classFunctions.filter { case (k, _) => k != outerClassName }.map {
       case (className, functions) =>
         s"""
            |private class $className {

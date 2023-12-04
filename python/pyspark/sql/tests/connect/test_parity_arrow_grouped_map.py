@@ -14,3 +14,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import contextlib
+import unittest
+
+from pyspark.sql.tests.test_arrow_grouped_map import GroupedMapInArrowTestsMixin
+from pyspark.testing.connectutils import ReusedConnectTestCase
+
+
+class GroupedApplyInArrowParityTests(GroupedMapInArrowTestsMixin, ReusedConnectTestCase):
+    def quiet_test(self):
+        # No-op
+        return contextlib.nullcontext()
+
+
+if __name__ == "__main__":
+    from pyspark.sql.tests.connect.test_parity_arrow_grouped_map import *  # noqa: F401
+
+    try:
+        import xmlrunner
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
+    except ImportError:
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)
