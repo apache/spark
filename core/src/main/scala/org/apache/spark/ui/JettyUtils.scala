@@ -314,6 +314,12 @@ private[spark] object JettyUtils extends Logging {
       logDebug(s"Using requestHeaderSize: $requestHeaderSize")
       httpConfig.setRequestHeaderSize(requestHeaderSize)
 
+      // spark-46239: Hide version information to avoid obtaining remote WWW service information through HTTP.
+      logDebug(s"Using setSendServerVersion: false ")
+      httpConfig.setSendServerVersion(false)
+      logDebug(s"Using setSendXPoweredBy: false ")
+      httpConfig.setSendXPoweredBy(false)
+
       // If SSL is configured, create the secure connector first.
       val securePort = sslOptions.createJettySslContextFactory().map { factory =>
         val securePort = sslOptions.port.getOrElse(if (port > 0) Utils.userPort(port, 400) else 0)
