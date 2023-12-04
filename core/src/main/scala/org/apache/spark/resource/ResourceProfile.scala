@@ -95,12 +95,12 @@ class ResourceProfile(
   }
 
   private[spark] def getCustomTaskResources(): Map[String, TaskResourceRequest] = {
-    taskResources.view.filterKeys(k => !k.equals(ResourceProfile.CPUS)).toMap
+    taskResources.filter { case (k, _) => !k.equals(ResourceProfile.CPUS) }
   }
 
   protected[spark] def getCustomExecutorResources(): Map[String, ExecutorResourceRequest] = {
     executorResources.
-      view.filterKeys(k => !ResourceProfile.allSupportedExecutorResources.contains(k)).toMap
+      filter { case (k, _) => !ResourceProfile.allSupportedExecutorResources.contains(k) }
   }
 
   /*
