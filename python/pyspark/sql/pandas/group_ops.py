@@ -407,7 +407,6 @@ class PandasGroupedOpsMixin:
         >>> df.groupby("id").applyInArrow(
         ...     normalize, schema="id long, v double").show()  # doctest: +SKIP
         +---+-------------------+
-        +---+-------------------+
         | id|                  v|
         +---+-------------------+
         |  1|-0.7071067811865475|
@@ -467,7 +466,7 @@ class PandasGroupedOpsMixin:
         into memory, so the user should be aware of the potential OOM risk if data is skewed
         and certain groups are too large to fit in memory.
 
-        This API is experimental.
+        This API is unstable, and for developers.
 
         See Also
         --------
@@ -707,7 +706,7 @@ class PandasCogroupedOps:
         into memory, so the user should be aware of the potential OOM risk if data is skewed
         and certain groups are too large to fit in memory.
 
-        This API is experimental.
+        This API is unstable, and for developers.
 
         See Also
         --------
