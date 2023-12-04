@@ -1046,6 +1046,38 @@ class BaseUDFTestsMixin(object):
 
                 self.spark.range(1).select(udf(lambda x: ctypes.string_at(0))("id")).collect()
 
+    def test_err_udf_init(self):
+        with QuietTest(self.sc):
+            self.check_err_udf_init()
+
+    def check_err_udf_init(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            UserDefinedFunction("x", StringType())
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_CALLABLE",
+            message_parameters={"arg_name": "func", "return_type": "str"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            UserDefinedFunction(lambda x: x, 1)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_DATATYPE_OR_STR",
+            message_parameters={"arg_name": "returnType", "return_type": "int"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            UserDefinedFunction(lambda x: x, StringType(), evalType="SQL_BATCHED_UDF")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_INT",
+            message_parameters={"arg_name": "evalType", "return_type": "str"},
+        )
+
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
     @classmethod
@@ -1080,38 +1112,6 @@ class UDFInitializationTests(unittest.TestCase):
             "SparkContext or SparkSession should be created first",
         ):
             udf(lambda x: x, "integer")
-
-    def test_err_udf_init(self):
-        with QuietTest(self.sc):
-            self.check_err_udf_init()
-
-    def check_err_udf_init(self):
-        with self.assertRaises(PySparkTypeError) as pe:
-            UserDefinedFunction("x", StringType())
-
-        self.check_error(
-            exception=pe.exception,
-            error_class="NOT_CALLABLE",
-            message_parameters={"arg_name": "func", "return_type": "str"},
-        )
-
-        with self.assertRaises(PySparkTypeError) as pe:
-            UserDefinedFunction(lambda x: x, 1)
-
-        self.check_error(
-            exception=pe.exception,
-            error_class="NOT_DATATYPE_OR_STR",
-            message_parameters={"arg_name": "returnType", "return_type": "int"},
-        )
-
-        with self.assertRaises(PySparkTypeError) as pe:
-            UserDefinedFunction(lambda x: x, StringType(), evalType="SQL_BATCHED_UDF")
-
-        self.check_error(
-            exception=pe.exception,
-            error_class="NOT_INT",
-            message_parameters={"arg_name": "evalType", "return_type": "str"},
-        )
 
 
 if __name__ == "__main__":
