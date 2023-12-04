@@ -38,6 +38,7 @@ Classes
     PySparkAssertionError
     PySparkAttributeError
     PySparkException
+    PySparkKeyError
     PySparkNotImplementedError
     PySparkPicklingError
     PySparkRuntimeError

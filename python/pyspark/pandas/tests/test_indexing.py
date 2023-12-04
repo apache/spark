@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.exceptions import SparkPandasIndexingError
+from pyspark.pandas.exceptions import SparkPandasIndexingError, SparkPandasNotImplementedError
 from pyspark.testing.pandasutils import ComparisonTestBase, compare_both
 
 
@@ -901,6 +901,12 @@ class IndexingTest(ComparisonTestBase):
             self.assert_eq(psdf.iloc[:1, indexer], pdf.iloc[:1, indexer])
             self.assert_eq(psdf.iloc[:-1, indexer], pdf.iloc[:-1, indexer])
             # self.assert_eq(psdf.iloc[psdf.index == 2, indexer], pdf.iloc[pdf.index == 2, indexer])
+
+        self.assertRaisesRegex(
+            SparkPandasNotImplementedError,
+            ".iloc requires numeric slice, conditional boolean",
+            lambda: ps.range(10).iloc["a", :],
+        )
 
     def test_iloc_multiindex_columns(self):
         arrays = [np.array(["bar", "bar", "baz", "baz"]), np.array(["one", "two", "one", "two"])]
