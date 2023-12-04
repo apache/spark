@@ -130,7 +130,8 @@ class ProfilerTests2(unittest.TestCase, PySparkErrorTestUtils):
                 exception=pe.exception,
                 error_class="CANNOT_SET_TOGETHER",
                 message_parameters={
-                    "arg_list": "'spark.python.profile' and 'spark.python.profile.memory' configuration"
+                    "arg_list": "'spark.python.profile' and "
+                    "'spark.python.profile.memory' configuration"
                 },
             )
         finally:
