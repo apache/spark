@@ -314,7 +314,7 @@ private[spark] object JettyUtils extends Logging {
       logDebug(s"Using requestHeaderSize: $requestHeaderSize")
       httpConfig.setRequestHeaderSize(requestHeaderSize)
 
-      // spark-46239: Hide version information to avoid obtaining remote WWW service information through HTTP.
+      // Hide information.
       logDebug(s"Using setSendServerVersion: false ")
       httpConfig.setSendServerVersion(false)
       logDebug(s"Using setSendXPoweredBy: false ")
