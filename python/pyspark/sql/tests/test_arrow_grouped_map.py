@@ -39,7 +39,7 @@ if have_pyarrow:
     not have_pyarrow,
     pyarrow_requirement_message,  # type: ignore[arg-type]
 )
-class GroupedMapInArrowTests(ReusedSQLTestCase):
+class GroupedMapInArrowTestsMixin:
     @property
     def data(self):
         return (
@@ -277,6 +277,10 @@ class GroupedMapInArrowTests(ReusedSQLTestCase):
             for r in result:
                 self.assertEqual(r.a, "hi")
                 self.assertEqual(r.b, 1)
+
+
+class GroupedMapInArrowTests(GroupedMapInArrowTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

@@ -38,7 +38,7 @@ if have_pyarrow:
     not have_pyarrow,
     pyarrow_requirement_message,  # type: ignore[arg-type]
 )
-class CogroupedMapInArrowTests(ReusedSQLTestCase):
+class CogroupedMapInArrowTestsMixin:
     @property
     def left(self):
         return self.spark.range(0, 10, 2, 3).withColumn("v", col("id") * 10)
@@ -101,14 +101,14 @@ class CogroupedMapInArrowTests(ReusedSQLTestCase):
                     for table in [left, right]
                     for k in table.column(key_column)
                 )
-            return CogroupedMapInArrowTests.apply_in_arrow_func(left, right)
+            return CogroupedMapInArrowTestsMixin.apply_in_arrow_func(left, right)
 
         return func
 
     @staticmethod
     def apply_in_pandas_with_key_func(key_column):
         def func(key, left, right):
-            return CogroupedMapInArrowTests.apply_in_arrow_with_key_func(key_column)(
+            return CogroupedMapInArrowTestsMixin.apply_in_arrow_with_key_func(key_column)(
                 tuple(pa.scalar(k) for k in key),
                 pa.Table.from_pandas(left),
                 pa.Table.from_pandas(right),
@@ -121,18 +121,18 @@ class CogroupedMapInArrowTests(ReusedSQLTestCase):
 
         # compare with result of applyInPandas
         expected = cogrouped_df.applyInPandas(
-            CogroupedMapInArrowTests.apply_in_pandas_with_key_func(key_column), schema
+            CogroupedMapInArrowTestsMixin.apply_in_pandas_with_key_func(key_column), schema
         )
 
         # apply in arrow without key
         actual = cogrouped_df.applyInArrow(
-            CogroupedMapInArrowTests.apply_in_arrow_func, schema
+            CogroupedMapInArrowTestsMixin.apply_in_arrow_func, schema
         ).collect()
         self.assertEqual(actual, expected.collect())
 
         # apply in arrow with key
         actual2 = cogrouped_df.applyInArrow(
-            CogroupedMapInArrowTests.apply_in_arrow_with_key_func(key_column), schema
+            CogroupedMapInArrowTestsMixin.apply_in_arrow_with_key_func(key_column), schema
         ).collect()
         self.assertEqual(actual2, expected.collect())
 
@@ -286,6 +286,10 @@ class CogroupedMapInArrowTests(ReusedSQLTestCase):
             for r in result:
                 self.assertEqual(r.a, "hi")
                 self.assertEqual(r.b, 1)
+
+
+class CogroupedMapInArrowTests(CogroupedMapInArrowTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":
