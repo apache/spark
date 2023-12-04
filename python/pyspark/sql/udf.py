@@ -339,7 +339,10 @@ class UserDefinedFunction:
             try:
                 # StructType is not yet allowed as a return type, explicitly check here to fail fast
                 if isinstance(self._returnType_placeholder, StructType):
-                    raise TypeError
+                    raise PySparkNotImplementedError(
+                        error_class="NOT_IMPLEMENTED",
+                        message_parameters={"feature": "StructType as a return type"},
+                    )
                 to_arrow_type(self._returnType_placeholder)
             except TypeError:
                 raise PySparkNotImplementedError(
