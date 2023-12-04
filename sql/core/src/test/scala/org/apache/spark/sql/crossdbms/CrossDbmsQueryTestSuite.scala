@@ -134,7 +134,7 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
             // 2. Error thrown in other DBMS execution:
             //    a. The query is either incompatible between Spark and the other DBMS
             //    b. Some test table/view is not created on the other DBMS.
-            val sparkDf = spark.sql(sql)
+            val sparkDf = localSparkSession.sql(sql)
             val output = runner.map(_.runQuery(sql)).get
             // Use Spark analyzed plan to check if the query result is already semantically sorted.
             if (isSemanticallySorted(sparkDf.queryExecution.analyzed)) {
@@ -162,7 +162,10 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
         schema = None,
         output = normalizeTestResults(output.mkString("\n")))
     }
-    runner.foreach(_.cleanUp())
+    if (runner.isDefined) {
+      runner.foreach(_.cleanUp())
+      runner = None
+    }
 
     if (regenerateGoldenFiles) {
       val goldenOutput = {

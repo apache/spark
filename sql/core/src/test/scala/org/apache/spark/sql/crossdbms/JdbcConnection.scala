@@ -66,7 +66,8 @@ private[sql] trait JdbcConnection {
 private[sql] case class PostgresConnection(connection_url: Option[String] = None)
   extends JdbcConnection {
 
-  DriverRegistry.register("org.postgresql.Driver")
+  private final val POSTGRES_DRIVER_CLASS_NAME = "org.postgresql.Driver"
+  DriverRegistry.register(POSTGRES_DRIVER_CLASS_NAME)
   private final val DEFAULT_USER = "pg"
   private final val DEFAULT_CONNECTION_URL =
     s"jdbc:postgresql://localhost:5432/postgres?user=$DEFAULT_USER"
@@ -103,7 +104,7 @@ private[sql] case class PostgresConnection(connection_url: Option[String] = None
   }
 
   def loadData(df: DataFrame, tableName: String): Unit = {
-    df.write.option("driver", "org.postgresql.Driver").mode("append")
+    df.write.option("driver", POSTGRES_DRIVER_CLASS_NAME).mode("append")
       .jdbc(url, tableName, new Properties())
   }
 
