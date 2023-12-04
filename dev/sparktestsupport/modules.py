@@ -491,6 +491,8 @@ pyspark_sql = Module(
         "pyspark.sql.pandas.utils",
         "pyspark.sql.observation",
         # unittests
+        "pyspark.sql.tests.arrow.test_arrow_cogrouped_map",
+        "pyspark.sql.tests.arrow.test_arrow_grouped_map",
         "pyspark.sql.tests.test_arrow",
         "pyspark.sql.tests.test_arrow_python_udf",
         "pyspark.sql.tests.test_catalog",
