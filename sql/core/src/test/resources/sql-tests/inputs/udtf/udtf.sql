@@ -136,7 +136,6 @@ SELECT * FROM UDTFWithSinglePartition(1, invalid_arg_name => 2);
 SELECT * FROM UDTFWithSinglePartition(1, initial_count => 2);
 SELECT * FROM UDTFWithSinglePartition(initial_count => 1, initial_count => 2);
 SELECT * FROM UDTFInvalidPartitionByOrderByParseError(TABLE(t2));
-SELECT * FROM UDTFInvalidOrderByAscKeyword(TABLE(t2))
 
 -- cleanup
 DROP VIEW t1;

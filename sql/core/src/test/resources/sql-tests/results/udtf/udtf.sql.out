@@ -950,21 +950,11 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT * FROM UDTFInvalidOrderByAscKeyword(TABLE(t2))
-
 DROP VIEW t1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'VIEW'",
-    "hint" : ""
-  }
-}
+
 
 
 -- !query
