@@ -2546,6 +2546,9 @@ def tanh(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def toDegrees(col: "ColumnOrName") -> Column:
     """
+    Converts an angle measured in radians to an approximately equivalent angle
+    measured in degrees.
+
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
@@ -2561,6 +2564,9 @@ def toDegrees(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def toRadians(col: "ColumnOrName") -> Column:
     """
+    Converts an angle measured in degrees to an approximately equivalent angle
+    measured in radians.
+
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
@@ -4025,6 +4031,9 @@ def radians(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def atan2(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) -> Column:
     """
+    Compute the angle in radians between the positive x-axis of a plane
+    and the point given by the coordinates
+
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
@@ -4412,6 +4421,9 @@ def percent_rank() -> Column:
 @_try_remote_functions
 def approxCountDistinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
     """
+    This aggregate function returns a new :class:`~pyspark.sql.Column`, which estimates
+    the approximate distinct count of elements in a specified column or a group of columns.
+
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
@@ -13741,7 +13753,7 @@ def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Co
 
 
 @_try_remote_functions
-def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+def schema_of_json(json: Union[Column, str], options: Optional[Dict[str, str]] = None) -> Column:
     """
     Parses a JSON string and infers its schema in DDL format.
 
@@ -13929,7 +13941,7 @@ def from_xml(
 
 
 @_try_remote_functions
-def schema_of_xml(xml: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+def schema_of_xml(xml: Union[Column, str], options: Optional[Dict[str, str]] = None) -> Column:
     """
     Parses a XML string and infers its schema in DDL format.
 
@@ -14043,7 +14055,7 @@ def to_xml(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Col
 
 
 @_try_remote_functions
-def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+def schema_of_csv(csv: Union[Column, str], options: Optional[Dict[str, str]] = None) -> Column:
     """
     Parses a CSV string and infers its schema in DDL format.
 

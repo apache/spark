@@ -115,7 +115,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TransformHelper
-    val (partitionColumns, maybeBucketSpec, maybeClusterBySpec) = partitions.toSeq.convertTransforms
+    val (partitionColumns, maybeBucketSpec, maybeClusterBySpec) =
+      partitions.toImmutableArraySeq.convertTransforms
     val provider = properties.getOrDefault(TableCatalog.PROP_PROVIDER, conf.defaultDataSourceName)
     val tableProperties = properties.asScala
     val location = Option(properties.get(TableCatalog.PROP_LOCATION))
@@ -153,9 +154,9 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   private def toOptions(properties: Map[String, String]): Map[String, String] = {
-    properties.view.filterKeys(_.startsWith(TableCatalog.OPTION_PREFIX)).map {
+    properties.filter { case (k, _) => k.startsWith(TableCatalog.OPTION_PREFIX) }.map {
       case (key, value) => key.drop(TableCatalog.OPTION_PREFIX.length) -> value
-    }.toMap
+    }
   }
 
   override def alterTable(

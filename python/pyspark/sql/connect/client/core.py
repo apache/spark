@@ -1575,12 +1575,15 @@ class SparkConnectClient(object):
             raise SparkConnectGrpcException(str(rpc_error)) from None
 
     def add_artifacts(self, *paths: str, pyfile: bool, archive: bool, file: bool) -> None:
-        for path in paths:
-            for attempt in self._retrying():
-                with attempt:
-                    self._artifact_manager.add_artifacts(
-                        path, pyfile=pyfile, archive=archive, file=file
-                    )
+        try:
+            for path in paths:
+                for attempt in self._retrying():
+                    with attempt:
+                        self._artifact_manager.add_artifacts(
+                            path, pyfile=pyfile, archive=archive, file=file
+                        )
+        except Exception as error:
+            self._handle_error(error)
 
     def copy_from_local_to_fs(self, local_path: str, dest_path: str) -> None:
         for attempt in self._retrying():

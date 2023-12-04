@@ -18,6 +18,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, NamedArgumentExpression}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * This is a base trait that is used for implementing builder classes that can be used to construct
@@ -150,7 +151,7 @@ object NamedParametersSupport {
     // Check the argument list size against the provided parameter list length.
     if (parameters.size < args.length) {
       val validParameterSizes =
-        Array.range(parameters.count(_.default.isEmpty), parameters.size + 1).toSeq
+        Array.range(parameters.count(_.default.isEmpty), parameters.size + 1).toImmutableArraySeq
       throw QueryCompilationErrors.wrongNumArgsError(
         functionName, validParameterSizes, args.length)
     }

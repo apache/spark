@@ -153,7 +153,15 @@ private[connect] object ErrorUtils extends Logging {
       .build()
   }
 
-  private def buildStatusFromThrowable(
+  /**
+   * This is a helper method that can be used by any GRPC handler to convert existing Throwables
+   * into GRPC conform status objects.
+   *
+   * @param st
+   * @param sessionHolderOpt
+   * @return
+   */
+  private[connect] def buildStatusFromThrowable(
       st: Throwable,
       sessionHolderOpt: Option[SessionHolder]): RPCStatus = {
     val errorInfo = ErrorInfo
@@ -221,6 +229,17 @@ private[connect] object ErrorUtils extends Logging {
    *   String value indicating the operation type (analysis, execution)
    * @param observer
    *   The GRPC response observer.
+   * @param userId
+   *   The user id.
+   * @param sessionId
+   *   The session id.
+   * @param events
+   *   The ExecuteEventsManager if present to report about failures.
+   * @param isInterrupted
+   *   Whether the error is caused by an interruption or during execution.
+   * @param callback
+   *   Optional callback to be called after the error has been sent that allows to caller to
+   *   execute additional cleanup logic.
    * @tparam V
    * @return
    */
@@ -230,7 +249,8 @@ private[connect] object ErrorUtils extends Logging {
       userId: String,
       sessionId: String,
       events: Option[ExecuteEventsManager] = None,
-      isInterrupted: Boolean = false): PartialFunction[Throwable, Unit] = {
+      isInterrupted: Boolean = false,
+      callback: Option[() => Unit] = None): PartialFunction[Throwable, Unit] = {
 
     // SessionHolder may not be present, e.g. if the session was already closed.
     // When SessionHolder is not present error details will not be available for FetchErrorDetails.
@@ -281,6 +301,7 @@ private[connect] object ErrorUtils extends Logging {
             executeEventsManager.postFailed(wrapped.getMessage)
           }
         }
+        callback.foreach(_.apply())
         observer.onError(wrapped)
       }
   }

@@ -146,7 +146,7 @@ class RegexTokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     // scalastyle:off caselocale
     val str = if ($(toLowercase)) originStr.toLowerCase() else originStr
     // scalastyle:on caselocale
-    val tokens = if ($(gaps)) re.split(str).toSeq else re.findAllIn(str).toSeq
+    val tokens = if ($(gaps)) re.split(str).toImmutableArraySeq else re.findAllIn(str).toSeq
     val minLength = $(minTokenLength)
     tokens.filter(_.length >= minLength)
   }

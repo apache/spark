@@ -287,6 +287,11 @@ ERROR_CLASSES_JSON = """
       "NumPy array input should be of <dimensions> dimensions."
     ]
   },
+  "INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP" : {
+    "message" : [
+      "Invalid number of dataframes in group <dataframes_in_group>."
+    ]
+  },
   "INVALID_PANDAS_UDF" : {
     "message" : [
       "Invalid function: <detail>"
@@ -295,6 +300,11 @@ ERROR_CLASSES_JSON = """
   "INVALID_PANDAS_UDF_TYPE" : {
     "message" : [
       "`<arg_name>` should be one the values from PandasUDFType, got <arg_type>"
+    ]
+  },
+  "INVALID_RETURN_TYPE_FOR_ARROW_UDF": {
+    "message": [
+      "Grouped and Cogrouped map Arrow UDF should return StructType for <eval_type>, got <return_type>."
     ]
   },
   "INVALID_RETURN_TYPE_FOR_PANDAS_UDF": {
@@ -375,6 +385,11 @@ ERROR_CLASSES_JSON = """
   "JVM_ATTRIBUTE_NOT_SUPPORTED" : {
     "message" : [
       "Attribute `<attr_name>` is not supported in Spark Connect as it depends on the JVM. If you need to use this attribute, do not use Spark Connect when creating your session. Visit https://spark.apache.org/docs/latest/sql-getting-started.html#starting-point-sparksession for creating regular Spark Session in detail."
+    ]
+  },
+  "KEY_NOT_EXISTS" : {
+    "message" : [
+      "Key `<key>` is not exists."
     ]
   },
   "KEY_VALUE_PAIR_REQUIRED" : {
@@ -667,6 +682,11 @@ ERROR_CLASSES_JSON = """
       "Only a single trigger is allowed."
     ]
   },
+  "PACKAGE_NOT_INSTALLED" : {
+    "message" : [
+      "<package_name> >= <minimum_version> must be installed; however, it was not found."
+    ]
+  },
   "PIPE_FUNCTION_EXITED" : {
     "message" : [
       "Pipe function `<func_name>` exited with error code <error_code>."
@@ -708,6 +728,11 @@ ERROR_CLASSES_JSON = """
       "transformation. For more information, see SPARK-5063."
     ]
   },
+  "RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDF" : {
+    "message" : [
+      "Column names of the returned pyarrow.Table do not match specified schema.<missing><extra>"
+    ]
+  },
   "RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF" : {
     "message" : [
       "Column names of the returned pandas.DataFrame do not match specified schema.<missing><extra>"
@@ -721,6 +746,11 @@ ERROR_CLASSES_JSON = """
   "RESULT_LENGTH_MISMATCH_FOR_SCALAR_ITER_PANDAS_UDF" : {
     "message" : [
       "The length of output in Scalar iterator pandas UDF should be the same with the input's; however, the length of output was <output_length> and the length of input was <input_length>."
+    ]
+  },
+  "RESULT_TYPE_MISMATCH_FOR_ARROW_UDF" : {
+    "message" : [
+      "Columns do not match in their data type: <mismatch>."
     ]
   },
   "SCHEMA_MISMATCH_FOR_PANDAS_UDF" : {
@@ -783,9 +813,9 @@ ERROR_CLASSES_JSON = """
       "Expected <expected> values for `<item>`, got <actual>."
     ]
   },
-  "TYPE_HINT_REQUIRED" : {
+  "TYPE_HINT_SHOULD_BE_SPECIFIED" : {
     "message" : [
-      "A <arg_type> is required <where>."
+      "Type hints for <target> should be specified; however, got <sig>."
     ]
   },
   "UDF_RETURN_TYPE" : {
@@ -796,6 +826,21 @@ ERROR_CLASSES_JSON = """
   "UDTF_ARROW_TYPE_CAST_ERROR" : {
     "message" : [
       "Cannot convert the output value of the column '<col_name>' with type '<col_type>' to the specified return type of the column: '<arrow_type>'. Please check if the data types match and try again."
+    ]
+  },
+  "UDTF_CONSTRUCTOR_INVALID_IMPLEMENTS_ANALYZE_METHOD" : {
+    "message" : [
+      "Failed to evaluate the user-defined table function '<name>' because its constructor is invalid: the function implements the 'analyze' method, but its constructor has more than two arguments (including the 'self' reference). Please update the table function so that its constructor accepts exactly one 'self' argument, or one 'self' argument plus another argument for the result of the 'analyze' method, and try the query again."
+    ]
+  },
+  "UDTF_CONSTRUCTOR_INVALID_NO_ANALYZE_METHOD" : {
+    "message" : [
+      "Failed to evaluate the user-defined table function '<name>' because its constructor is invalid: the function does not implement the 'analyze' method, and its constructor has more than one argument (including the 'self' reference). Please update the table function so that its constructor accepts exactly one 'self' argument, and try the query again."
+    ]
+  },
+  "UDTF_EVAL_METHOD_ARGUMENTS_DO_NOT_MATCH_SIGNATURE" : {
+    "message" : [
+      "Failed to evaluate the user-defined table function '<name>' because the function arguments did not match the expected signature of the 'eval' method (<reason>). Please update the query so that this table function call provides arguments matching the expected signature, or else update the table function so that its 'eval' method accepts the provided arguments, and then try the query again."
     ]
   },
   "UDTF_EXEC_ERROR" : {
@@ -853,6 +898,11 @@ ERROR_CLASSES_JSON = """
       "Unknown response: <response>."
     ]
   },
+  "UNKNOWN_VALUE_FOR" : {
+    "message" : [
+      "Unknown value for `<var>`."
+    ]
+  },
   "UNSUPPORTED_DATA_TYPE" : {
     "message" : [
       "Unsupported DataType `<data_type>`."
@@ -891,6 +941,11 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operation> is not supported."
+    ]
+  },
+  "UNSUPPORTED_PACKAGE_VERSION" : {
+    "message" : [
+      "<package_name> >= <minimum_version> must be installed; however, your version is <current_version>."
     ]
   },
   "UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION" : {
@@ -941,6 +996,11 @@ ERROR_CLASSES_JSON = """
   "VALUE_NOT_PEARSON" : {
     "message" : [
       "Value for `<arg_name>` only supports the 'pearson', got '<arg_value>'."
+    ]
+  },
+  "VALUE_NOT_PLAIN_COLUMN_REFERENCE" : {
+    "message" : [
+      "Value <val> in <field_name> should be a plain column reference such as `df.col` or `col('column')`."
     ]
   },
   "VALUE_NOT_POSITIVE" : {

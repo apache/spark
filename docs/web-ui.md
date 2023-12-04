@@ -380,7 +380,7 @@ operator shows the number of bytes written by a shuffle.
 
 Here is the list of SQL metrics:
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>SQL metrics</th><th>Meaning</th><th>Operators</th></tr></thead>
 <tr><td> <code>number of output rows</code> </td><td> the number of output rows of the operator </td><td> Aggregate operators, Join operators, Sample, Range, Scan operators, Filter, etc.</td></tr>
 <tr><td> <code>data size</code> </td><td> the size of broadcast/shuffled/collected data of the operator </td><td> BroadcastExchange, ShuffleExchange, Subquery </td></tr>

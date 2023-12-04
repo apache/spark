@@ -284,7 +284,7 @@ If use an individual repository or a repository on GitHub Enterprise, export bel
 
 ### Related environment variables
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Variable Name</th><th>Default</th><th>Meaning</th></tr></thead>
 <tr>
   <td><code>SPARK_PROJECT_URL</code></td>

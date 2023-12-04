@@ -21,6 +21,7 @@ PySpark exceptions.
 from pyspark.errors.exceptions.base import (  # noqa: F401
     PySparkException,
     AnalysisException,
+    SessionNotSameException,
     TempTableAlreadyExistsException,
     ParseException,
     IllegalArgumentException,
@@ -38,18 +39,21 @@ from pyspark.errors.exceptions.base import (  # noqa: F401
     SparkNoSuchElementException,
     PySparkTypeError,
     PySparkValueError,
+    PySparkImportError,
     PySparkIndexError,
     PySparkAttributeError,
     PySparkRuntimeError,
     PySparkAssertionError,
     PySparkNotImplementedError,
     PySparkPicklingError,
+    PySparkKeyError,
 )
 
 
 __all__ = [
     "PySparkException",
     "AnalysisException",
+    "SessionNotSameException",
     "TempTableAlreadyExistsException",
     "ParseException",
     "IllegalArgumentException",
@@ -67,10 +71,12 @@ __all__ = [
     "SparkNoSuchElementException",
     "PySparkTypeError",
     "PySparkValueError",
+    "PySparkImportError",
     "PySparkIndexError",
     "PySparkAttributeError",
     "PySparkRuntimeError",
     "PySparkAssertionError",
     "PySparkNotImplementedError",
     "PySparkPicklingError",
+    "PySparkKeyError",
 ]
