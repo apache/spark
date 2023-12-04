@@ -544,6 +544,25 @@ class ConfigResult:
         )
 
 
+class ForbidRecursion:
+    def __init__(self):
+        self._local = threading.local()
+        self._local.in_recursion = False
+
+    @property
+    def can_enter(self):
+        return self._local.in_recursion
+
+    def __enter__(self):
+        if self._local.in_recursion:
+            raise RecursionError
+
+        self._local.in_recursion = True
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._local.in_recursion = False
+
+
 class SparkConnectClient(object):
     """
     Conceptually the remote spark session that communicates with the server
@@ -630,6 +649,8 @@ class SparkConnectClient(object):
         # Capture the server-side session ID and set it to None initially. It will
         # be updated on the first response received.
         self._server_session_id: Optional[str] = None
+
+        self._forbid_recursive_error_handling = ForbidRecursion()
 
     def _retrying(self) -> "Retrying":
         return Retrying(self._retry_policies)
@@ -1494,13 +1515,15 @@ class SparkConnectClient(object):
         -------
         Throws the appropriate internal Python exception.
         """
-        if isinstance(error, grpc.RpcError):
-            self._handle_rpc_error(error)
-        elif isinstance(error, ValueError):
-            if "Cannot invoke RPC" in str(error) and "closed" in str(error):
-                raise SparkConnectException(
-                    error_class="NO_ACTIVE_SESSION", message_parameters=dict()
-                ) from None
+        if True or self._forbid_recursive_error_handling.can_enter:
+            with self._forbid_recursive_error_handling:
+                if isinstance(error, grpc.RpcError):
+                    self._handle_rpc_error(error)
+                elif isinstance(error, ValueError):
+                    if "Cannot invoke RPC" in str(error) and "closed" in str(error):
+                        raise SparkConnectException(
+                            error_class="NO_ACTIVE_SESSION", message_parameters=dict()
+                        ) from None
         raise error
 
     def _fetch_enriched_error(self, info: "ErrorInfo") -> Optional[pb2.FetchErrorDetailsResponse]:
