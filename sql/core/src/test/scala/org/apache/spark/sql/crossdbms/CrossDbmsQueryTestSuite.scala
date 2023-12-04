@@ -91,12 +91,15 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
     val settings = getSparkSettings(comments)
 
     if (regenerateGoldenFiles) {
-      // If `--DBMS_TO_GENERATE_GOLDEN_FILE` found,
       val dbmsConfig = comments.filter(_.startsWith(s"--${
         CrossDbmsQueryTestSuite.DBMS_TO_GENERATE_GOLDEN_FILE} ")).map(_.substring(31))
-      val otherConfigs = dbmsConfig.map(
-        (CrossDbmsQueryTestSuite.DBMS_TO_GENERATE_GOLDEN_FILE, _)).toMap
-      runQueries(queries, testCase, settings.toImmutableArraySeq, otherConfigs)
+      // If `--DBMS_TO_GENERATE_GOLDEN_FILE` is not found, skip the test.
+      if (!dbmsConfig.contains(crossDbmsToGenerateGoldenFiles)) {
+        log.info(s"This test case (${testCase.name}) is ignored because it does not indicate " +
+          s"testing with $crossDbmsToGenerateGoldenFiles")
+        return
+      }
+      runQueries(queries, testCase, settings.toImmutableArraySeq)
     } else {
       val configSets = getSparkConfigDimensions(comments)
       runQueriesWithSparkConfigDimensions(
@@ -107,19 +110,10 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
   override protected def runQueries(
       queries: Seq[String],
       testCase: TestCase,
-      sparkConfigSet: Seq[(String, String)],
-      otherConfigs: Map[String, String] = Map.empty): Unit = {
+      sparkConfigSet: Seq[(String, String)]): Unit = {
     val localSparkSession = spark.newSession()
-
-    if (!otherConfigs.contains(CrossDbmsQueryTestSuite.DBMS_TO_GENERATE_GOLDEN_FILE) ||
-      !otherConfigs.get(CrossDbmsQueryTestSuite.DBMS_TO_GENERATE_GOLDEN_FILE)
-        .contains(crossDbmsToGenerateGoldenFiles)) {
-      log.info(s"This test case (${testCase.name}) is ignored because it does not indicate " +
-        s"testing with $crossDbmsToGenerateGoldenFiles")
-      return
-    }
-
     var runner: Option[SQLQueryTestRunner] = None
+
     val outputs: Seq[QueryTestOutput] = queries.map { sql =>
       val output = {
         // Use the runner when generating golden files, and Spark when running the test against

@@ -516,8 +516,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   protected def runQueries(
       queries: Seq[String],
       testCase: TestCase,
-      sparkConfigSet: Seq[(String, String)],
-      otherConfigs: Map[String, String] = Map.empty): Unit = {
+      sparkConfigSet: Seq[(String, String)]): Unit = {
     // Create a local SparkSession to have stronger isolation between different test cases.
     // This does not isolate catalog changes.
     val localSparkSession = spark.newSession()
