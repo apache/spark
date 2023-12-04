@@ -30,10 +30,10 @@ import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 // scalastyle:off line.size.limit
 /**
  * See SQLQueryTestSuite.scala for more information. This class builds off of that to allow us
- * to generate golden files with other DBMS to perform cross-checking for correctness. Note that the
- * input directory path is currently limited because most, if not all, of our current SQL query
- * tests will not be compatible with other DBMSes. There will be more work in the future, such as
- * some kind of conversion, to increase coverage.
+ * to generate golden files with other DBMS to perform cross-checking for correctness. Note that
+ * this is not currently run on all SQL input files by default because there is incompatibility
+ * between Spark SQL and the DBMS SQL. More work will be done to increase coverage, focusing on
+ * postgres.
  *
  * You need to have a database server up before running this test.
  * For example, for postgres:
