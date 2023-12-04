@@ -440,9 +440,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           // finishes.
           executorData.freeCores -= task.cpus
           task.resources.foreach { case (rName, addressAmounts) =>
-            addressAmounts.foreach { case (address, amount) =>
-              executorData.resourcesInfo(rName).acquire(Map(address -> amount))
-            }
+            executorData.resourcesInfo(rName).acquire(addressAmounts)
           }
           logDebug(s"Launching task ${task.taskId} on executor id: ${task.executorId} hostname: " +
             s"${executorData.executorHost}.")
