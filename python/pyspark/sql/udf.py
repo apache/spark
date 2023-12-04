@@ -341,7 +341,10 @@ class UserDefinedFunction:
                 if isinstance(self._returnType_placeholder, StructType):
                     raise PySparkNotImplementedError(
                         error_class="NOT_IMPLEMENTED",
-                        message_parameters={"feature": "StructType as a return type"},
+                        message_parameters={
+                            "feature": f"Invalid return type with grouped aggregate Pandas UDFs: "
+                            f"{self._returnType_placeholder}"
+                        },
                     )
                 to_arrow_type(self._returnType_placeholder)
             except TypeError:
