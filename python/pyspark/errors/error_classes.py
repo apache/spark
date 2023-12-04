@@ -159,14 +159,14 @@ ERROR_CLASSES_JSON = """
       "<arg_list> should not be set together."
     ]
   },
-  "CANNOT_WITHOUT": {
-    "message": [
-      "Cannot <condition1> without <condition2>."
-    ]
-  },
   "CANNOT_SPECIFY_RETURN_TYPE_FOR_UDF": {
     "message": [
       "returnType can not be specified when `<arg_name>` is a user-defined function, but got <return_type>."
+    ]
+  },
+  "CANNOT_WITHOUT": {
+    "message": [
+      "Cannot <condition1> without <condition2>."
     ]
   },
   "COLUMN_IN_LIST": {
@@ -335,6 +335,11 @@ ERROR_CLASSES_JSON = """
   "INVALID_PANDAS_UDF_TYPE" : {
     "message" : [
       "`<arg_name>` should be one the values from PandasUDFType, got <arg_type>"
+    ]
+  },
+  "INVALID_RETURN_TYPE_FOR_ARROW_UDF": {
+    "message": [
+      "Grouped and Cogrouped map Arrow UDF should return StructType for <eval_type>, got <return_type>."
     ]
   },
   "INVALID_RETURN_TYPE_FOR_PANDAS_UDF": {
@@ -773,6 +778,11 @@ ERROR_CLASSES_JSON = """
       "OPERATION_NOT_FOUND on the server but responses were already received from it."
     ]
   },
+  "RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDF" : {
+    "message" : [
+      "Column names of the returned pyarrow.Table do not match specified schema.<missing><extra>"
+    ]
+  },
   "RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF" : {
     "message" : [
       "Column names of the returned pandas.DataFrame do not match specified schema.<missing><extra>"
@@ -786,6 +796,11 @@ ERROR_CLASSES_JSON = """
   "RESULT_LENGTH_MISMATCH_FOR_SCALAR_ITER_PANDAS_UDF" : {
     "message" : [
       "The length of output in Scalar iterator pandas UDF should be the same with the input's; however, the length of output was <output_length> and the length of input was <input_length>."
+    ]
+  },
+  "RESULT_TYPE_MISMATCH_FOR_ARROW_UDF" : {
+    "message" : [
+      "Columns do not match in their data type: <mismatch>."
     ]
   },
   "SCHEMA_MISMATCH_FOR_PANDAS_UDF" : {
@@ -808,14 +823,14 @@ ERROR_CLASSES_JSON = """
       "Both Datasets must belong to the same SparkSession."
     ]
   },
-  "SESSION_OR_CONTEXT_NOT_EXISTS" : {
-    "message" : [
-      "SparkContext or SparkSession should be created first.."
-    ]
-  },
   "SESSION_OR_CONTEXT_EXISTS" : {
     "message" : [
       "There should not be an existing Spark Session or Spark Context."
+    ]
+  },
+  "SESSION_OR_CONTEXT_NOT_EXISTS" : {
+    "message" : [
+      "SparkContext or SparkSession should be created first.."
     ]
   },
   "SHOULD_NOT_DATAFRAME": {
