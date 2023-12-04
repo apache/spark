@@ -593,7 +593,7 @@ class SparkSession private[sql] (
   /**
    * Add a single in-memory artifact to the client session with a specified target URI.
    *
-   * Currently it supports files with extensions .jar and .class.
+   * Supported files extensions are .jar and .class.
    *
    * @since 4.0.0
    */

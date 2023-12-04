@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect.client
 
-import java.io.{ByteArrayInputStream, InputStream, PrintStream}
+import java.io.{ByteArrayInputStream, File, InputStream, PrintStream}
 import java.net.URI
 import java.nio.file.{Files, Path, Paths}
 import java.util.Arrays
@@ -435,7 +435,7 @@ object Artifact {
   private def concatenatePaths(basePath: Path, otherPath: Path): Path = {
     // We avoid using the `.resolve()` method here to ensure that we're concatenating the two
     // paths even if `otherPath` is absolute.
-    val concatenatedPath = Paths.get(basePath.toString + "/" + otherPath.toString)
+    val concatenatedPath = Paths.get(basePath.toString, otherPath.toString)
     // Note: The normalized resulting path may still reference parent directories if the
     // `otherPath` contains sufficient number of parent operators (i.e "..").
     // Example: `basePath` = "/base", `otherPath` = "subdir/../../file.txt"
@@ -443,7 +443,7 @@ object Artifact {
     // and `normalizedPath` = "/base/file.txt".
     val normalizedPath = concatenatedPath.normalize()
     // Verify that the prefix of the `normalizedPath` starts with `basePath/`.
-    require(normalizedPath != basePath && normalizedPath.startsWith(s"$basePath/"))
+    require(normalizedPath != basePath && normalizedPath.startsWith(s"$basePath${File.separator}"))
     normalizedPath
   }
 
