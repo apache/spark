@@ -439,9 +439,7 @@ private[spark] object UIUtils extends Logging {
                 {getHeaderContent(x._1)}
               </span>
             </th>
-          case None => <th width={colWidthAttr} class={getClass(x._2)}>
-            {getHeaderContent(x._1)}
-          </th>
+          case None => <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
         }
       }
     }
