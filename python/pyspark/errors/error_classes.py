@@ -327,6 +327,11 @@ ERROR_CLASSES_JSON = """
       "NumPy array input should be of <dimensions> dimensions."
     ]
   },
+  "INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP" : {
+    "message" : [
+      "Invalid number of dataframes in group <dataframes_in_group>."
+    ]
+  },
   "INVALID_PANDAS_UDF" : {
     "message" : [
       "Invalid function: <detail>"
@@ -420,6 +425,11 @@ ERROR_CLASSES_JSON = """
   "JVM_ATTRIBUTE_NOT_SUPPORTED" : {
     "message" : [
       "Attribute `<attr_name>` is not supported in Spark Connect as it depends on the JVM. If you need to use this attribute, do not use Spark Connect when creating your session. Visit https://spark.apache.org/docs/latest/sql-getting-started.html#starting-point-sparksession for creating regular Spark Session in detail."
+    ]
+  },
+  "KEY_NOT_EXISTS" : {
+    "message" : [
+      "Key `<key>` is not exists."
     ]
   },
   "KEY_VALUE_PAIR_REQUIRED" : {
@@ -873,9 +883,9 @@ ERROR_CLASSES_JSON = """
       "Expected <expected> values for `<item>`, got <actual>."
     ]
   },
-  "TYPE_HINT_REQUIRED" : {
+  "TYPE_HINT_SHOULD_BE_SPECIFIED" : {
     "message" : [
-      "A <arg_type> is required <where>."
+      "Type hints for <target> should be specified; however, got <sig>."
     ]
   },
   "UDF_RETURN_TYPE" : {
@@ -956,6 +966,11 @@ ERROR_CLASSES_JSON = """
   "UNKNOWN_RESPONSE" : {
     "message" : [
       "Unknown response: <response>."
+    ]
+  },
+  "UNKNOWN_VALUE_FOR" : {
+    "message" : [
+      "Unknown value for `<var>`."
     ]
   },
   "UNSUPPORTED_DATA_TYPE" : {
@@ -1056,6 +1071,11 @@ ERROR_CLASSES_JSON = """
   "VALUE_NOT_PEARSON" : {
     "message" : [
       "Value for `<arg_name>` only supports the 'pearson', got '<arg_value>'."
+    ]
+  },
+  "VALUE_NOT_PLAIN_COLUMN_REFERENCE" : {
+    "message" : [
+      "Value <val> in <field_name> should be a plain column reference such as `df.col` or `col('column')`."
     ]
   },
   "VALUE_NOT_POSITIVE" : {

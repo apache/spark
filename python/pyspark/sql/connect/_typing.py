@@ -14,14 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 import sys
 
 if sys.version_info >= (3, 8):
-    from typing import Protocol
+    from typing import Protocol, Tuple
 else:
     from typing_extensions import Protocol
 
+from typing import Tuple
 from types import FunctionType
 from typing import Any, Callable, Iterable, Union, Optional, NewType
 import datetime
@@ -68,6 +68,14 @@ PandasCogroupedMapFunction = Callable[[DataFrameLike, DataFrameLike], DataFrameL
 
 PandasGroupedMapFunctionWithState = Callable[
     [Any, Iterable[DataFrameLike], GroupState], Iterable[DataFrameLike]
+]
+ArrowGroupedMapFunction = Union[
+    Callable[[pyarrow.Table], pyarrow.Table],
+    Callable[[Tuple[pyarrow.Scalar, ...], pyarrow.Table], pyarrow.Table],
+]
+ArrowCogroupedMapFunction = Union[
+    Callable[[pyarrow.Table, pyarrow.Table], pyarrow.Table],
+    Callable[[Tuple[pyarrow.Scalar, ...], pyarrow.Table, pyarrow.Table], pyarrow.Table],
 ]
 
 

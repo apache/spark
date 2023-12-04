@@ -56,6 +56,7 @@ from pyspark.errors import (
     PySparkValueError,
     PySparkIndexError,
     PySparkRuntimeError,
+    PySparkKeyError,
 )
 
 if has_numpy:
@@ -1049,7 +1050,9 @@ class StructType(DataType):
             for field in self:
                 if field.name == key:
                     return field
-            raise KeyError("No StructField named {0}".format(key))
+            raise PySparkKeyError(
+                error_class="KEY_NOT_EXISTS", message_parameters={"key": str(key)}
+            )
         elif isinstance(key, int):
             try:
                 return self.fields[key]
@@ -2570,7 +2573,9 @@ class Row(tuple):
             idx = self.__fields__.index(item)
             return super(Row, self).__getitem__(idx)
         except IndexError:
-            raise KeyError(item)
+            raise PySparkKeyError(
+                error_class="KEY_NOT_EXISTS", message_parameters={"key": str(item)}
+            )
         except ValueError:
             raise PySparkValueError(item)
 

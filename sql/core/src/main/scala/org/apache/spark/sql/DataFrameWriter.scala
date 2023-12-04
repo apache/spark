@@ -263,7 +263,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
       val optionsWithPath = getOptionsWithPath(path)
 
-      val finalOptions = sessionOptions.view.filterKeys(!optionsWithPath.contains(_)).toMap ++
+      val finalOptions = sessionOptions.filter { case (k, _) => !optionsWithPath.contains(k) } ++
         optionsWithPath.originalMap
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
 
