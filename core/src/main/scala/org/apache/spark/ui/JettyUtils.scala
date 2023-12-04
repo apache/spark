@@ -315,9 +315,9 @@ private[spark] object JettyUtils extends Logging {
       httpConfig.setRequestHeaderSize(requestHeaderSize)
 
       // Hide information.
-      logDebug(s"Using setSendServerVersion: false ")
+      logDebug(s"Using setSendServerVersion: false")
       httpConfig.setSendServerVersion(false)
-      logDebug(s"Using setSendXPoweredBy: false ")
+      logDebug(s"Using setSendXPoweredBy: false")
       httpConfig.setSendXPoweredBy(false)
 
       // If SSL is configured, create the secure connector first.
