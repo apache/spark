@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.SparkPlan
  * multiple record batches to reduce the memory footprint on the Java side, this
  * is left as future work.
  */
-case class FlatMapCoGroupsInPandasExec(
+case class FlatMapCoGroupsInArrowExec(
     leftGroup: Seq[Attribute],
     rightGroup: Seq[Attribute],
     func: Expression,
@@ -50,9 +50,9 @@ case class FlatMapCoGroupsInPandasExec(
     right: SparkPlan)
   extends FlatMapCoGroupsInPythonExec {
 
-  protected val pythonEvalType: Int = PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF
+  protected val pythonEvalType: Int = PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF
 
   override protected def withNewChildrenInternal(
-      newLeft: SparkPlan, newRight: SparkPlan): FlatMapCoGroupsInPandasExec =
+      newLeft: SparkPlan, newRight: SparkPlan): FlatMapCoGroupsInArrowExec =
     copy(left = newLeft, right = newRight)
 }
