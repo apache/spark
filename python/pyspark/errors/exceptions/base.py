@@ -271,10 +271,3 @@ class RetriesExceeded(PySparkException):
     Represents an exception which is considered retriable, but retry limits
     were exceeded
     """
-
-
-class RetryException(PySparkException):
-    """
-    An exception that can be thrown upstream when inside retry and which is always retryable
-    even without policies
-    """

@@ -22,7 +22,7 @@ import typing
 from typing import Optional, Callable, Generator, List, Type
 from types import TracebackType
 from pyspark.sql.connect.client.logging import logger
-from pyspark.errors import RetryException, RetriesExceeded
+from pyspark.errors import RetriesExceeded
 
 """
 This module contains retry system. The system is designed to be
@@ -247,6 +247,13 @@ class Retrying:
         while not self._done:
             self._wait()
             yield AttemptManager(self)
+
+
+class RetryException(Exception):
+    """
+    An exception that can be thrown upstream when inside retry and which is always retryable
+    even without policies
+    """
 
 
 class DefaultPolicy(RetryPolicy):

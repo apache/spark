@@ -48,7 +48,6 @@ Classes
     PythonException
     QueryExecutionException
     RetriesExceeded
-    RetryException
     SessionNotSameException
     SparkRuntimeException
     SparkUpgradeException
