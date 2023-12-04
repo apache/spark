@@ -137,7 +137,9 @@ class RocksDB(
   @volatile private var numKeysOnWritingVersion = 0L
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
 
-  @volatile private var prevRecordedMetrics: Option[RocksDBMetrics] = None
+  // SPARK-46249 - Keep track of recorded metrics per version which can be used for querying later
+  // Updates and access to recordedMetrics are protected by the DB instance lock
+  @volatile private var recordedMetrics: Option[RocksDBMetrics] = None
 
   @GuardedBy("acquireLock")
   @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
@@ -150,7 +152,7 @@ class RocksDB(
   def load(version: Long, readOnly: Boolean = false): RocksDB = {
     assert(version >= 0)
     acquire()
-    prevRecordedMetrics = None
+    recordedMetrics = None
     logInfo(s"Loading $version")
     try {
       if (loadedVersion != version) {
@@ -400,8 +402,8 @@ class RocksDB(
         "checkpoint" -> checkpointTimeMs,
         "fileSync" -> fileSyncTimeMs
       )
-      prevRecordedMetrics = Some(metrics)
-      logInfo(s"Committed $newVersion, stats = ${prevRecordedMetrics.get.json}")
+      recordedMetrics = Some(metrics)
+      logInfo(s"Committed $newVersion, stats = ${recordedMetrics.get.json}")
       loadedVersion
     } catch {
       case t: Throwable =>
@@ -557,7 +559,7 @@ class RocksDB(
     var rocksDBMetricsOpt: Option[RocksDBMetrics] = None
     try {
       acquire()
-      rocksDBMetricsOpt = prevRecordedMetrics
+      rocksDBMetricsOpt = recordedMetrics
     } catch {
       case ex: Exception =>
         logInfo(s"Failed to acquire metrics with exception=$ex")
