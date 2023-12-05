@@ -2187,7 +2187,7 @@ class XmlSuite
     testWriteReadRoundTrip(df, Map("nullValue" -> "null", "prefersDecimal" -> "true"))
   }
 
-  test("Enabling/disabling ignoreCorruptFiles/ignoreMissingFiles") {
+  test("SPARK-46248: Enabling/disabling ignoreCorruptFiles/ignoreMissingFiles") {
     withCorruptFile(inputFile => {
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
         val e = intercept[SparkException] {
@@ -2238,6 +2238,39 @@ class XmlSuite
       withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "true") {
         assert(df2.collect().isEmpty)
       }
+    }
+  }
+
+  test("SPARK-46248: Read from a corrupted compressed file") {
+    withTempDir { dir =>
+      val format = "xml"
+      val numRecords = 10000
+      // create data
+      val data =
+        spark.sparkContext.parallelize(
+          (0 until numRecords).map(i => Row(i.toString, (i * 2).toString)))
+      val df = spark.createDataFrame(data, buildSchema(field("a1"), field("a2")))
+
+      df.coalesce(4)
+        .write
+        .mode(SaveMode.Overwrite)
+        .format(format)
+        .option("compression", "gZiP")
+        .option("rowTag", "row")
+        .save(dir.getCanonicalPath)
+
+      withCorruptedFile(dir) { corruptedDir =>
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+          val dfCorrupted = spark.read
+            .format(format)
+            .option("multiline", "true")
+            .option("compression", "gzip")
+            .option("rowTag", "row")
+            .load(corruptedDir.getCanonicalPath)
+          assert(!dfCorrupted.isEmpty)
+        }
+      }
+
     }
   }
 }

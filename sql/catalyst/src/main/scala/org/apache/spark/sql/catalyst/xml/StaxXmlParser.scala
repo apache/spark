@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
-import java.io.{CharConversionException, InputStream, InputStreamReader, StringReader}
+import java.io.{CharConversionException, FileNotFoundException, InputStream, InputStreamReader, IOException, StringReader}
 import java.nio.charset.{Charset, MalformedInputException}
 import java.text.NumberFormat
 import java.util.Locale
@@ -30,6 +30,8 @@ import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 import scala.xml.SAXException
+
+import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
@@ -96,7 +98,7 @@ class StaxXmlParser(
       options.columnNameOfCorruptRecord)
 
     val xmlTokenizer = new XmlTokenizer(inputStream, options)
-    convertStream(xmlTokenizer) { tokens =>
+    convertStream(xmlTokenizer, options) { tokens =>
       safeParser.parse(tokens)
     }.flatten
   }
@@ -734,11 +736,11 @@ object StaxXmlParser {
    */
   def tokenizeStream(inputStream: InputStream, options: XmlOptions): Iterator[String] = {
     val xmlTokenizer = new XmlTokenizer(inputStream, options)
-    convertStream(xmlTokenizer)(tokens => tokens)
+    convertStream(xmlTokenizer, options)(tokens => tokens)
   }
 
   private def convertStream[T](
-    xmlTokenizer: XmlTokenizer)(
+    xmlTokenizer: XmlTokenizer, options: XmlOptions)(
     convert: String => T) = new Iterator[T] {
 
     private var nextRecord = xmlTokenizer.next()
@@ -750,7 +752,18 @@ object StaxXmlParser {
         throw QueryExecutionErrors.endOfStreamError()
       }
       val curRecord = convert(nextRecord.get)
-      nextRecord = xmlTokenizer.next()
+      try {
+        nextRecord = xmlTokenizer.next()
+      } catch {
+        case _: FileNotFoundException if options.ignoreMissingFiles =>
+          nextRecord = None
+        case NonFatal(e) =>
+          ExceptionUtils.getRootCause(e) match {
+            case _: RuntimeException | _: IOException if options.ignoreCorruptFiles =>
+              nextRecord = None
+            case o => throw o
+          }
+      }
       curRecord
     }
   }

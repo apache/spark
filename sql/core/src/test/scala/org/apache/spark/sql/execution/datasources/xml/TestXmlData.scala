@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.xml
 
+import java.io.{File, RandomAccessFile}
+
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 
 private[xml] trait TestXmlData {
@@ -33,5 +35,36 @@ private[xml] trait TestXmlData {
           (index.toDouble + 0.1).toString
         }
       }(Encoders.STRING)
+  }
+
+  def withCorruptedFile(dir: File, format: String = "gz", numBytesToCorrupt: Int = 50)(
+      f: File => Unit): Unit = {
+    // find the gz file
+    val gzFiles = dir.listFiles().filter(file => file.isFile && file.getName.endsWith(format))
+    val raf = new RandomAccessFile(gzFiles.head.getPath, "rw")
+
+    // disable checksum verification
+    import org.apache.hadoop.fs.Path
+    val fs = new Path(dir.getPath).getFileSystem(spark.sessionState.newHadoopConf())
+    fs.setVerifyChecksum(false)
+    // delete crc files
+    val crcFiles = dir.listFiles
+      .filter(file => file.isFile && file.getName.endsWith("crc"))
+    crcFiles.foreach { file =>
+      assert(file.exists())
+      file.delete()
+      assert(!file.exists())
+    }
+
+    // corrupt the file
+    val fileSize = raf.length()
+    // avoid the last few bytes as it might contain crc
+    raf.seek(fileSize - numBytesToCorrupt - 100)
+    for (_ <- 1 to numBytesToCorrupt) {
+      val randomByte = (Math.random() * 256).toByte
+      raf.writeByte(randomByte)
+    }
+    raf.close()
+    f(dir)
   }
 }
