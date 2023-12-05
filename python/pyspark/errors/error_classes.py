@@ -748,6 +748,11 @@ ERROR_CLASSES_JSON = """
       "Columns do not match in their data type: <mismatch>."
     ]
   },
+  "RETRIES_EXCEEDED" : {
+    "message" : [
+      "The maximum number of retries has been exceeded."
+    ]
+  },
   "SCHEMA_MISMATCH_FOR_PANDAS_UDF" : {
     "message" : [
       "Result vector from pandas_udf was not the required length: expected <expected>, got <actual>."

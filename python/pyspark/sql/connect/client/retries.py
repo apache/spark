@@ -230,7 +230,7 @@ class Retrying:
 
         # Exceeded retries
         logger.debug(f"Given up on retrying. error: {repr(exception)}")
-        raise RetriesExceeded from exception
+        raise RetriesExceeded(error_class="RETRIES_EXCEEDED", message_parameters={}) from exception
 
     def __iter__(self) -> Generator[AttemptManager, None, None]:
         """
