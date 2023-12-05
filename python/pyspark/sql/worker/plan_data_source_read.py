@@ -17,7 +17,9 @@
 
 import os
 import sys
-from typing import Any, IO, Iterator
+import functools
+from itertools import islice
+from typing import cast, IO, List, Iterator, Iterable
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError
@@ -28,8 +30,15 @@ from pyspark.serializers import (
     SpecialLengths,
     CloudPickleSerializer,
 )
+from pyspark.sql.connect.conversion import ArrowTableToRowsConversion, LocalDataToArrowConversion
 from pyspark.sql.datasource import DataSource, InputPartition
-from pyspark.sql.types import _parse_datatype_json_string, StructType
+from pyspark.sql.pandas.types import to_arrow_schema
+from pyspark.sql.types import (
+    _create_row,
+    _parse_datatype_json_string,
+    BinaryType,
+    StructType,
+)
 from pyspark.util import handle_worker_exception
 from pyspark.worker_util import (
     check_python_version,
@@ -146,16 +155,64 @@ def main(infile: IO, outfile: IO) -> None:
                 message_parameters={"type": "reader", "error": str(e)},
             )
 
-        # Construct a UDTF.
-        class PythonDataSourceReaderUDTF:
-            def __init__(self) -> None:
-                self.ser = CloudPickleSerializer()
+        # Wrap the data source read logic in an mapInArrow UDF.
+        import pyarrow as pa
 
-            def eval(self, partition_bytes: Any) -> Iterator:
-                partition = self.ser.loads(partition_bytes)
-                yield from reader.read(partition)
+        return_type = cast(StructType, schema)
 
-        command = PythonDataSourceReaderUDTF
+        def data_source_read_func(iterator: Iterable[pa.RecordBatch]) -> Iterable[pa.RecordBatch]:
+            rows = []
+            # TODO: pass the input schema to this method.
+            converter = ArrowTableToRowsConversion._create_converter(BinaryType())
+            fields = ["partition"]
+
+            # Get the partition value from the input iterator.
+            for batch in iterator:
+                # There should be only one row/column in the batch.
+                if batch.num_columns != 1 or batch.num_rows != 1:
+                    raise PySparkAssertionError(
+                        "Expected each batch to have exactly 1 column and 1 row, "
+                        f"but found {batch.num_columns} columns and {batch.num_rows} rows."
+                    )
+                columns = [column.to_pylist() for column in batch.columns]
+                values = [converter(columns[0][0])]
+                rows.append(_create_row(fields=fields, values=values))
+
+            assert len(rows) == 1 and len(rows[0]) == 1
+
+            # Deserialize the serialized partition value.
+            partition_bytes = rows[0][0]
+            ser = CloudPickleSerializer()
+            partition = ser.loads(partition_bytes)
+
+            if partition is not None and not isinstance(partition, InputPartition):  # type: ignore
+                raise PySparkAssertionError("should be input partition")
+
+            # Convert the results from the `reader.read` method to an iterator of arrow batches.
+            output_iter = reader.read(partition)
+
+            def batched(iterator: Iterator, n: int) -> Iterator:
+                return iter(functools.partial(lambda it: list(islice(it, n)), iterator), [])
+
+            # TODO: do we need to _deduplicate_field_names?
+            pa_schema = to_arrow_schema(return_type)
+            column_names = return_type.fieldNames()
+            column_convs = [
+                LocalDataToArrowConversion._create_converter(field.dataType)
+                for field in return_type.fields
+            ]
+
+            max_batch_size = int(os.environ.get("ARROW_MAX_RECORDS_PER_BATCH", "10000"))
+
+            for batch in batched(output_iter, max_batch_size):
+                pylist: List[List] = [[] for _ in range(len(column_names))]
+                for row in batch:
+                    for i in range(len(column_names)):
+                        pylist[i].append(column_convs[i](row[i]))
+
+                yield pa.RecordBatch.from_arrays(pylist, schema=pa_schema)
+
+        command = (data_source_read_func, return_type)
         pickleSer._write_with_length(command, outfile)
 
         # Return the serialized partition values.
