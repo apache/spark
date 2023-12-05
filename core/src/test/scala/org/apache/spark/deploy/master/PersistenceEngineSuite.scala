@@ -41,6 +41,15 @@ class PersistenceEngineSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-46258: RocksDBPersistenceEngine") {
+    withTempDir { dir =>
+      val conf = new SparkConf()
+      testPersistenceEngine(conf, serializer =>
+        new RocksDBPersistenceEngine(dir.getAbsolutePath, serializer)
+      )
+    }
+  }
+
   test("SPARK-46191: FileSystemPersistenceEngine.persist error message for the existing file") {
     withTempDir { dir =>
       val conf = new SparkConf()
