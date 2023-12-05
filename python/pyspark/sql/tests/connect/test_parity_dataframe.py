@@ -77,7 +77,7 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_toDF_with_string(self):
         super().test_toDF_with_string()
 
-    # TODO(SPARK-46260): DataFrame.withColumnsRenamed should respect the dict ordering
+    # TODO(SPARK-46261): DataFrame.withColumnsRenamed should respect the dict ordering
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_ordering_of_with_columns_renamed(self):
         super().test_ordering_of_with_columns_renamed()
