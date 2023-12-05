@@ -26,7 +26,7 @@ import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.SparkConnectServerTest
 import org.apache.spark.sql.connect.config.Connect
-import org.apache.spark.sql.connect.service.SparkConnectService
+import org.apache.spark.sql.connect.service.{ExecuteStatus, SparkConnectService}
 
 class ReattachableExecuteSuite extends SparkConnectServerTest {
 
@@ -298,6 +298,15 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
   }
 
   test("SPARK-46186 interrupt directly after query start") {
+    // register a sleep udf in the session
+    val serverSession =
+      SparkConnectService.getOrCreateIsolatedSession(defaultUserId, defaultSessionId).session
+    serverSession.udf.register(
+      "sleep",
+      ((ms: Int) => {
+        Thread.sleep(ms);
+        ms
+      }))
     // This test depends on fast timing.
     // If something is wrong, it can fail only from time to time.
     withRawBlockingStub { stub =>
@@ -309,12 +318,21 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
         .setOperationId(operationId)
         .build()
       val iter = stub.executePlan(
-        buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY), operationId = operationId))
+        buildExecutePlanRequest(buildPlan("select sleep(30000) as s"), operationId = operationId))
       // wait for execute holder to exist, but the execute thread may not have started yet.
       Eventually.eventually(timeout(eventuallyTimeout)) {
         assert(SparkConnectService.executionManager.listExecuteHolders.length == 1)
       }
       stub.interrupt(interruptRequest)
+      // make sure the interrupt reaches the server
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        val execution = SparkConnectService.executionManager.listActiveExecutions match {
+          case Right(list) => list.find(_.operationId == operationId)
+          case Left(_) => None
+        }
+        assert(execution.isDefined && execution.get.status == ExecuteStatus.Canceled)
+      }
+      // make sure the client gets the OPERATION_CANCELED error
       val e = intercept[StatusRuntimeException] {
         while (iter.hasNext) iter.next()
       }
