@@ -157,7 +157,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         logWarning("Skipped the rest of the content in the corrupted file", e)
         Some(StructType(Nil))
       case NonFatal(e) =>
-        None
+        handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
     }
   }
 
