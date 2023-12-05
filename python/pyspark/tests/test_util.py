@@ -20,6 +20,7 @@ import unittest
 from py4j.protocol import Py4JJavaError
 
 from pyspark import keyword_only
+from pyspark.util import _parse_memory
 from pyspark.loose_version import LooseVersion
 from pyspark.testing.utils import PySparkTestCase, eventually
 from pyspark.find_spark_home import _find_spark_home
@@ -117,6 +118,11 @@ class UtilTests(PySparkTestCase):
             v1 > v3
         v4 = LooseVersion("1.2.4")
         self.assertTrue(v1 <= v4)
+
+    def test_parse_memory(self):
+        self.assertEqual(_parse_memory("1g"), 1024)
+        with self.assertRaisesRegex(ValueError, "invalid format"):
+            _parse_memory("2gs")
 
 
 if __name__ == "__main__":
