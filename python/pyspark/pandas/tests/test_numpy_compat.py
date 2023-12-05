@@ -41,10 +41,6 @@ class NumPyCompatTestsMixin:
         "log1p",  # flaky
         "modf",
         "floor_divide",  # flaky
-        # Results seem inconsistent in a different version of, I (Hyukjin) suspect, PyArrow.
-        # From PyArrow 0.15, seems it returns the correct results via PySpark. Probably we
-        # can enable it later when Koalas switches to PyArrow 0.15 completely.
-        "left_shift",
     ]
 
     @property
