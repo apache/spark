@@ -507,6 +507,19 @@ class TypesTestsMixin:
             self.assertEqual(1, row.asDict()["l"][0].a)
             self.assertEqual(1.0, row.asDict()["d"]["key"].c)
 
+    def test_convert_list_to_str(self):
+        data = [[[123], 120]]
+        schema = StructType(
+            [
+                StructField("name", StringType(), True),
+                StructField("income", LongType(), True),
+            ]
+        )
+        df = self.spark.createDataFrame(data, schema)
+        self.assertEqual(df.schema, schema)
+        self.assertEqual(df.count(), 1)
+        self.assertEqual(df.head(), Row(name="[123]", income=120))
+
     def test_udt(self):
         from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _make_type_verifier
 
