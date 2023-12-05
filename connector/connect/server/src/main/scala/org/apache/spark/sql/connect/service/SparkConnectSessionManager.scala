@@ -200,6 +200,8 @@ class SparkConnectSessionManager extends Logging {
   }
 
   // Visible for testing.
+  // For testing only: ignoreCustomTimeout lets the check ignore the custom timeout set by
+  // SessionHolder.setCustomInactiveTimeoutMs and use defaultInactiveTimeoutMs only.
   private[connect] def periodicMaintenance(
       defaultInactiveTimeoutMs: Long,
       ignoreCustomTimeout: Boolean = false): Unit = {
@@ -213,7 +215,8 @@ class SparkConnectSessionManager extends Logging {
       } else {
         defaultInactiveTimeoutMs
       }
-      info.lastAccessTimeMs + timeoutMs <= nowMs
+      // timeout of -1 indicates to never timeout
+      timeoutMs != -1 && info.lastAccessTimeMs + timeoutMs <= nowMs
     }
 
     sessionsLock.synchronized {

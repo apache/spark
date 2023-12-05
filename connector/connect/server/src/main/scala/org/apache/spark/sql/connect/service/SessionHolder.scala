@@ -60,6 +60,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
   // Custom timeout after a session expires due to inactivity.
   // Used by SparkConnectSessionManager instead of default timeout if set.
+  // Setting it to -1 indicated forever.
   @volatile private var customInactiveTimeoutMs: Option[Long] = None
 
   private val executions: ConcurrentMap[String, ExecuteHolder] =

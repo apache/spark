@@ -78,7 +78,8 @@ object Connect {
   val CONNECT_SESSION_MANAGER_DEFAULT_SESSION_TIMEOUT =
     buildStaticConf("spark.connect.session.manager.defaultSessionTimeout")
       .internal()
-      .doc("Timeout after which sessions without any new incoming RPC will be removed.")
+      .doc("Timeout after which sessions without any new incoming RPC will be removed. " +
+          "Setting it to -1 indicates that sessions should be kept forever.")
       .version("4.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("60m")
