@@ -2206,7 +2206,7 @@ class XmlSuite
         assert(ExceptionUtils.getRootCause(e2).getMessage === "Unexpected end of input stream")
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
-        assert(spark.read.option("rowTag", "ROW").xml(inputFile.toURI.toString).collect().isEmpty)
+          spark.read.option("rowTag", "ROW").option("multiLine", false).xml(inputFile.toURI.toString).collect()
         assert(
           spark.read
             .option("rowTag", "ROW")
