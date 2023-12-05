@@ -963,6 +963,11 @@
         <version>${derby.version}</version>
       </dependency>
       <dependency>
+        <groupId>org.apache.derby</groupId>
+        <artifactId>derbytools</artifactId>
+        <version>${derby.version}</version>
+      </dependency>
+      <dependency>
         <groupId>io.dropwizard.metrics</groupId>
         <artifactId>metrics-core</artifactId>
         <version>${codahale.metrics.version}</version>
