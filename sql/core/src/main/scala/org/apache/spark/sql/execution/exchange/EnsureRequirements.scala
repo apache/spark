@@ -628,15 +628,15 @@ case class EnsureRequirements(
         }
 
       case operator: SparkPlan =>
-        val reordered = reorderJoinPredicates(operator)
-        val unwrapped = unwrapCastInJoinPredicates(reordered)
+        val unwrapped = unwrapCastInJoinPredicates(operator)
+        val reordered = reorderJoinPredicates(unwrapped)
         val newChildren = ensureDistributionAndOrdering(
-          Some(unwrapped),
-          unwrapped.children,
-          unwrapped.requiredChildDistribution,
-          unwrapped.requiredChildOrdering,
+          Some(reordered),
+          reordered.children,
+          reordered.requiredChildDistribution,
+          reordered.requiredChildOrdering,
           ENSURE_REQUIREMENTS)
-        unwrapped.withNewChildren(newChildren)
+        reordered.withNewChildren(newChildren)
     }
 
     if (requiredDistribution.isDefined) {
