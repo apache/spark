@@ -169,10 +169,10 @@ public class ReadAheadInputStream extends InputStream {
         } while (len > 0 && !isWaiting.get());
       } catch (Throwable ex) {
         exception = ex;
-        if (ex instanceof Error) {
+        if (ex instanceof Error error) {
           // `readException` may not be reported to the user. Rethrow Error to make sure at least
           // The user can see Error in UncaughtExceptionHandler.
-          throw (Error) ex;
+          throw error;
         }
       } finally {
         stateChangeLock.lock();

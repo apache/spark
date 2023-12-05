@@ -192,8 +192,8 @@ public class ParquetVectorUpdaterFactory {
   }
 
   boolean isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit unit) {
-    return logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation &&
-      ((TimestampLogicalTypeAnnotation) logicalTypeAnnotation).getUnit() == unit;
+    return logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation annotation &&
+      annotation.getUnit() == unit;
   }
 
   void validateTimestampType(DataType sparkType) {
@@ -212,9 +212,8 @@ public class ParquetVectorUpdaterFactory {
   }
 
   boolean isUnsignedIntTypeMatched(int bitWidth) {
-    return logicalTypeAnnotation instanceof IntLogicalTypeAnnotation &&
-      !((IntLogicalTypeAnnotation) logicalTypeAnnotation).isSigned() &&
-      ((IntLogicalTypeAnnotation) logicalTypeAnnotation).getBitWidth() == bitWidth;
+    return logicalTypeAnnotation instanceof IntLogicalTypeAnnotation annotation &&
+      !annotation.isSigned() && annotation.getBitWidth() == bitWidth;
   }
 
   private static class BooleanUpdater implements ParquetVectorUpdater {
