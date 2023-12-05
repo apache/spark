@@ -142,7 +142,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       Cast(fromExp, _, timeZoneId, evalMode), ts @ Literal(value, _))
         if fromExp.dataType == DateType && AnyTimestampType.acceptsType(ts.dataType) &&
           value != null =>
-      Some(unwrapTimeStampToDate(be, fromExp, ts, timeZoneId, evalMode))
+      Some(unwrapTimestampToDate(be, fromExp, ts, timeZoneId, evalMode))
 
     // As the analyzer makes sure that the list of In is already of the same data type, then the
     // rule can simply check the first literal in `in.list` can implicitly cast to `toType` or not,
@@ -335,7 +335,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     }
   }
 
-  private def unwrapTimeStampToDate(
+  private def unwrapTimestampToDate(
       exp: BinaryComparison,
       fromExp: Expression,
       ts: Literal,
