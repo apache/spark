@@ -926,8 +926,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     unsupportedTableOperationError(table.name(), "either micro-batch or continuous scan")
   }
 
-  def unsupportedAppendInBatchModeError(table: Table): Throwable = {
-    unsupportedTableOperationError(table.name(), "append in batch mode")
+  def unsupportedAppendInBatchModeError(name: String): Throwable = {
+    unsupportedTableOperationError(name, "append in batch mode")
   }
 
   def unsupportedDynamicOverwriteInBatchModeError(table: Table): Throwable = {

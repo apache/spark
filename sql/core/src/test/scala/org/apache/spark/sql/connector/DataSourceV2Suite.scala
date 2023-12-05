@@ -26,6 +26,7 @@ import test.org.apache.spark.sql.connector._
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
@@ -722,6 +723,158 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
              |""".stripMargin)
         checkAnswer(sql("SELECT * FROM test"), Seq(Row(0, 1), Row(1, 2)))
       }
+    }
+  }
+
+  test("SPARK-46272: create table as select") {
+    val cls = classOf[SupportsExternalMetadataDataSource]
+    withTable("test") {
+      sql(
+        s"""
+           |CREATE TABLE test USING ${cls.getName}
+           |AS VALUES (0, 1), (1, 2)
+           |""".stripMargin)
+      checkAnswer(sql("SELECT * FROM test"), Seq(Row(0, 1), Row(1, 2)))
+      sql(
+        s"""
+           |CREATE OR REPLACE TABLE test USING ${cls.getName}
+           |AS VALUES (2, 3), (4, 5)
+           |""".stripMargin)
+      checkAnswer(sql("SELECT * FROM test"), Seq(Row(2, 3), Row(4, 5)))
+      sql(
+        s"""
+           |CREATE TABLE IF NOT EXISTS test USING ${cls.getName}
+           |AS VALUES (3, 4), (4, 5)
+           |""".stripMargin)
+      checkAnswer(sql("SELECT * FROM test"), Seq(Row(2, 3), Row(4, 5)))
+    }
+  }
+
+  test("SPARK-46272: create table as select - error cases") {
+    val cls = classOf[SupportsExternalMetadataDataSource]
+    // CTAS with too many columns
+    withTable("test") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""
+               |CREATE TABLE test USING ${cls.getName}
+               |AS VALUES (0, 1, 2), (1, 2, 3)
+               |""".stripMargin)
+        },
+        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`test`",
+          "tableColumns" -> "`i`, `j`",
+          "dataColumns" -> "`col1`, `col2`, `col3`"))
+    }
+    // CTAS with not enough columns
+    withTable("test") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""
+               |CREATE TABLE test USING ${cls.getName}
+               |AS VALUES (0), (1)
+               |""".stripMargin)
+        },
+        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`test`",
+          "tableColumns" -> "`i`, `j`",
+          "dataColumns" -> "`col1`"))
+    }
+    // CTAS with type mismatch
+    withTable("test") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""
+               |CREATE TABLE test USING ${cls.getName}
+               |AS VALUES ('a', 'b'), ('c', 'd')
+               |""".stripMargin)
+        },
+        errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`test`",
+          "colName" -> "`i`", "srcType" -> "\"STRING\"", "targetType" -> "\"INT\""))
+    }
+    // CTAS with schema specified
+    withTable("test") {
+      val error = intercept[ParseException] {
+        sql(
+          s"""
+             |CREATE TABLE test(x INT, y INT) USING ${cls.getName}
+             |AS VALUES (1, 2), (3, 4)
+             |""".stripMargin
+        )
+      }
+      assert(error.getMessage.contains(
+        "Operation not allowed: Schema may not be specified in a " +
+        "Create Table As Select (CTAS) statement"))
+    }
+  }
+
+  test("SPARK-46272: create or replace table as select with path options") {
+    val cls = classOf[SupportsExternalMetadataDataSource]
+    withTempDir { dir =>
+      val path = s"${dir.getCanonicalPath}/test"
+      Seq((0, 1), (1, 2)).toDF("x", "y").write.format("csv").save(path)
+      withTable("test") {
+        sql(
+          s"""
+             |CREATE TABLE test USING ${cls.getName}
+             |OPTIONS (PATH '$path')
+             |AS VALUES (0, 1)
+             |""".stripMargin)
+        checkAnswer(sql("SELECT * FROM test"), Seq(Row(0, 1), Row(0, 1), Row(1, 2)))
+        // Check the data currently in the path location.
+        checkAnswer(
+          spark.read.format("csv").load(path),
+          Seq(Row("0", "1"), Row("0", "1"), Row("1", "2")))
+        // Replace the table with new data.
+        sql(
+          s"""
+             |CREATE OR REPLACE TABLE test USING ${cls.getName}
+             |OPTIONS (PATH '$path')
+             |AS VALUES (2, 3)
+             |""".stripMargin)
+        checkAnswer(sql("SELECT * FROM test"), Seq(Row(0, 1), Row(0, 1), Row(1, 2), Row(2, 3)))
+        // Replace the table without the path options.
+        sql(
+          s"""
+             |CREATE OR REPLACE TABLE test USING ${cls.getName}
+             |AS VALUES (3, 4)
+             |""".stripMargin)
+        checkAnswer(sql("SELECT * FROM test"), Seq(Row(3, 4)))
+      }
+    }
+  }
+
+  test("SPARK-46272: create table as select with incompatible data sources") {
+    // CTAS with data sources that do not support external metadata.
+    withTable("test") {
+      val cls = classOf[SimpleDataSourceV2]
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          sql(s"CREATE TABLE test USING ${cls.getName} AS VALUES (0, 1)")
+        },
+        errorClass = "CANNOT_CREATE_DATA_SOURCE_TABLE.EXTERNAL_METADATA_UNSUPPORTED",
+        parameters = Map(
+          "tableName" -> "`default`.`test`",
+          "provider" -> "org.apache.spark.sql.connector.SimpleDataSourceV2"))
+    }
+    // CTAS with data sources that do not support batch write.
+    withTable("test") {
+      val cls = classOf[SchemaRequiredDataSource]
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"CREATE TABLE test USING ${cls.getName} AS SELECT * FROM VALUES (0, 1)")
+        },
+        errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`test`",
+          "operation" -> "append in batch mode"))
     }
   }
 
