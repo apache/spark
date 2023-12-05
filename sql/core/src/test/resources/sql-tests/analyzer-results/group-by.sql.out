@@ -1155,7 +1155,7 @@ Aggregate [a#x], [a#x, collect_list(b#x, 0, 0) AS collect_list(b)#x, collect_lis
 -- !query
 SELECT mode(a), mode(b) FROM testData
 -- !query analysis
-Aggregate [mode(a#x, 0, 0, false) AS mode(a, false)#x, mode(b#x, 0, 0, false) AS mode(b, false)#x]
+Aggregate [mode(a#x, 0, 0, None) AS mode(a)#x, mode(b#x, 0, 0, None) AS mode(b)#x]
 +- SubqueryAlias testdata
    +- View (`testData`, [a#x,b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
@@ -1168,7 +1168,7 @@ Aggregate [mode(a#x, 0, 0, false) AS mode(a, false)#x, mode(b#x, 0, 0, false) AS
 SELECT a, mode(b) FROM testData GROUP BY a ORDER BY a
 -- !query analysis
 Sort [a#x ASC NULLS FIRST], true
-+- Aggregate [a#x], [a#x, mode(b#x, 0, 0, false) AS mode(b, false)#x]
++- Aggregate [a#x], [a#x, mode(b#x, 0, 0, None) AS mode(b)#x]
    +- SubqueryAlias testdata
       +- View (`testData`, [a#x,b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
@@ -1201,7 +1201,7 @@ Aggregate [c#x], [(c#x * 2) AS d#x]
 -- !query
 SELECT mode(col) FROM VALUES (-10), (0), (10) AS tab(col)
 -- !query analysis
-Aggregate [mode(col#x, 0, 0, false) AS mode(col, false)#x]
+Aggregate [mode(col#x, 0, 0, None) AS mode(col)#x]
 +- SubqueryAlias tab
    +- LocalRelation [col#x]
 
@@ -1209,7 +1209,7 @@ Aggregate [mode(col#x, 0, 0, false) AS mode(col, false)#x]
 -- !query
 SELECT mode(col, false) FROM VALUES (-10), (0), (10) AS tab(col)
 -- !query analysis
-Aggregate [mode(col#x, 0, 0, false) AS mode(col, false)#x]
+Aggregate [mode(col#x, 0, 0, None) AS mode(col)#x]
 +- SubqueryAlias tab
    +- LocalRelation [col#x]
 
@@ -1217,7 +1217,7 @@ Aggregate [mode(col#x, 0, 0, false) AS mode(col, false)#x]
 -- !query
 SELECT mode(col, true) FROM VALUES (-10), (0), (10) AS tab(col)
 -- !query analysis
-Aggregate [mode(col#x, 0, 0, true) AS mode(col, true)#x]
+Aggregate [mode(col#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY col DESC)#x]
 +- SubqueryAlias tab
    +- LocalRelation [col#x]
 
@@ -1225,16 +1225,15 @@ Aggregate [mode(col#x, 0, 0, true) AS mode(col, true)#x]
 -- !query
 SELECT mode(col, 'true') FROM VALUES (-10), (0), (10) AS tab(col)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
-    "inputSql" : "\"true\"",
-    "inputType" : "\"STRING\"",
-    "paramIndex" : "2",
-    "requiredType" : "\"BOOLEAN\"",
-    "sqlExpr" : "\"mode(col, true)\""
+    "actualNum" : "2",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "0",
+    "functionName" : "`mode`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1249,13 +1248,15 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT mode(col, null) FROM VALUES (-10), (0), (10) AS tab(col)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
-    "exprName" : "`deterministic`",
-    "sqlExpr" : "\"mode(col, NULL)\""
+    "actualNum" : "2",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "0",
+    "functionName" : "`mode`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1270,15 +1271,15 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT mode(col, b) FROM VALUES (-10, false), (0, false), (10, false) AS tab(col, b)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
-  "sqlState" : "42K09",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
-    "inputExpr" : "\"b\"",
-    "inputName" : "`deterministic`",
-    "inputType" : "\"BOOLEAN\"",
-    "sqlExpr" : "\"mode(col, b)\""
+    "actualNum" : "2",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "0",
+    "functionName" : "`mode`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1293,7 +1294,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT mode(col) FROM VALUES (map(1, 'a')) AS tab(col)
 -- !query analysis
-Aggregate [mode(col#x, 0, 0, false) AS mode(col, false)#x]
+Aggregate [mode(col#x, 0, 0, None) AS mode(col)#x]
 +- SubqueryAlias tab
    +- LocalRelation [col#x]
 
@@ -1301,7 +1302,7 @@ Aggregate [mode(col#x, 0, 0, false) AS mode(col, false)#x]
 -- !query
 SELECT mode(col, false) FROM VALUES (map(1, 'a')) AS tab(col)
 -- !query analysis
-Aggregate [mode(col#x, 0, 0, false) AS mode(col, false)#x]
+Aggregate [mode(col#x, 0, 0, None) AS mode(col)#x]
 +- SubqueryAlias tab
    +- LocalRelation [col#x]
 
@@ -1309,6 +1310,6 @@ Aggregate [mode(col#x, 0, 0, false) AS mode(col, false)#x]
 -- !query
 SELECT mode(col, true) FROM VALUES (map(1, 'a')) AS tab(col)
 -- !query analysis
-Aggregate [mode(col#x, 0, 0, true) AS mode(col, true)#x]
+Aggregate [mode(col#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY col DESC)#x]
 +- SubqueryAlias tab
    +- LocalRelation [col#x]
