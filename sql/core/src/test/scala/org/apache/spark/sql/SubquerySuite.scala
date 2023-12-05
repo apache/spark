@@ -2736,7 +2736,7 @@ class SubquerySuite extends QueryTest
     }
   }
 
-  test("SPARK-45580: Handle case where subquery contains subquery that produces existence join") {
+  test("SPARK-45580: Handle case where a nested subquery becomes an existence join") {
     withTempView("t1", "t2", "t3") {
       Seq((1), (2), (3), (7)).toDF("a").persist().createOrReplaceTempView("t1")
       Seq((1), (2), (3)).toDF("c1").persist().createOrReplaceTempView("t2")
