@@ -126,6 +126,8 @@ class ArtifactManager(
       .build()
     val response = bstub.artifactStatus(request)
     if (StringUtils.isNotEmpty(response.getSessionId) && response.getSessionId != sessionId) {
+      // In older versions of the Spark cluster, the session ID is not set in the response.
+      // Ignore this check to keep compatibility.
       throw new IllegalStateException(
         s"Session ID mismatch: $sessionId != ${response.getSessionId}")
     }
@@ -186,6 +188,8 @@ class ArtifactManager(
       private val summaries = mutable.Buffer.empty[ArtifactSummary]
       override def onNext(v: AddArtifactsResponse): Unit = {
         if (StringUtils.isNotEmpty(v.getSessionId) && v.getSessionId != sessionId) {
+          // In older versions of the Spark cluster, the session ID is not set in the response.
+          // Ignore this check to keep compatibility.
           throw new IllegalStateException(s"Session ID mismatch: $sessionId != ${v.getSessionId}")
         }
         v.getArtifactsList.forEach { summary =>
