@@ -38,6 +38,7 @@ Classes
     PySparkAssertionError
     PySparkAttributeError
     PySparkException
+    PySparkKeyError
     PySparkNotImplementedError
     PySparkPicklingError
     PySparkRuntimeError
@@ -46,6 +47,7 @@ Classes
     PySparkIndexError
     PythonException
     QueryExecutionException
+    SessionNotSameException
     SparkRuntimeException
     SparkUpgradeException
     SparkNoSuchElementException

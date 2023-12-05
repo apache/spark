@@ -310,7 +310,7 @@ class SparkSession private[sql] (
           proto.SqlCommand
             .newBuilder()
             .setSql(sqlText)
-            .putAllNamedArguments(args.asScala.view.mapValues(lit(_).expr).toMap.asJava)))
+            .putAllNamedArguments(args.asScala.map { case (k, v) => (k, lit(v).expr) }.asJava)))
       val plan = proto.Plan.newBuilder().setCommand(cmd)
       val responseIter = client.execute(plan.build())
 

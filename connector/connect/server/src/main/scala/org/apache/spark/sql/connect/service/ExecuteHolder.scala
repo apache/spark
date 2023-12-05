@@ -128,13 +128,6 @@ private[connect] class ExecuteHolder(
     runner.start()
   }
 
-  /**
-   * Wait for the execution thread to finish and join it.
-   */
-  def join(): Unit = {
-    runner.join()
-  }
-
   def addObservation(name: String, observation: Observation): Unit = synchronized {
     observations += (name -> observation)
   }

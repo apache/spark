@@ -459,10 +459,10 @@ class RocksDBFileManager(
     // Get the immutable files used in previous versions, as some of those uploaded files can be
     // reused for this version
     logInfo(s"Saving RocksDB files to DFS for $version")
-    val prevFilesToSizes = versionToRocksDBFiles.asScala.view.filterKeys(_ < version)
+    val prevFilesToSizes = versionToRocksDBFiles.asScala.filter { case (k, _) => k < version }
       .values.flatten.map { f =>
-      f.localFileName -> f
-    }.toMap
+        f.localFileName -> f
+      }.toMap
 
     var bytesCopied = 0L
     var filesCopied = 0L

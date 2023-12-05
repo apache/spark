@@ -1761,6 +1761,17 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.io.compression.zstd.workers</code></td>
+  <td>0</td>
+  <td>
+    Thread size spawned to compress in parallel when using Zstd. When value is 0
+    no worker is spawned, it works in single-threaded mode. When value > 0, it triggers
+    asynchronous mode, corresponding number of threads are spawned. More workers improve
+    performance, but also increase memory cost.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.kryo.classesToRegister</code></td>
   <td>(none)</td>
   <td>
