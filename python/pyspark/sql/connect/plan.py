@@ -532,18 +532,35 @@ class WithColumns(LogicalPlan):
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         plan = self._create_proto_relation()
-        plan.with_columns.input.CopyFrom(self._child.plan(session))
 
+        # Find all chained withColumns plans.
+        chain = []
+        input = self
+        while isinstance(input, WithColumns):
+            chain.append(input)
+            input = input._child
+
+        plan.with_columns.input.CopyFrom(input.plan(session))
+
+        # The start of the chain is added to `aliases`
+        chain.pop().append_aliases(session, plan.with_columns.aliases)
+
+        # The remainder of the chain is added to the stack.
+        for element in reversed(chain):
+            columns = proto.WithColumns.Columns()
+            element.append_aliases(session, columns.aliases)
+            plan.with_columns.stack.append(columns)
+
+        return plan
+
+    def append_aliases(self, session: "SparkConnectClient", aliases) -> None:
         for i in range(0, len(self._columnNames)):
             alias = proto.Expression.Alias()
             alias.expr.CopyFrom(self._columns[i].to_plan(session))
             alias.name.append(self._columnNames[i])
             if self._metadata is not None:
                 alias.metadata = self._metadata[i]
-            plan.with_columns.aliases.append(alias)
-
-        return plan
-
+            aliases.append(alias)
 
 class WithWatermark(LogicalPlan):
     """Logical plan object for a WithWatermark operation."""

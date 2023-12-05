@@ -967,7 +967,7 @@ class SparkConnectPlanner(
   private def transformWithColumns(rel: proto.WithColumns): LogicalPlan = {
     val projectLists = Iterator.single(rel.getAliasesList) ++
       rel.getStackList.asScala.iterator.map(_.getAliasesList)
-    projectLists.filter(_.isEmpty).foldLeft(transformRelation(rel.getInput)) {
+    projectLists.filterNot(_.isEmpty).foldLeft(transformRelation(rel.getInput)) {
       case (input, projectList) =>
         transformWithColumn(projectList, input)
     }

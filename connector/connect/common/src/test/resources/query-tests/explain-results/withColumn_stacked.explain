@@ -1,1 +1,4 @@
-LocalRelation <empty>, [id#0L, a#0, b#0]
+Project [id#0L, a#0, concat(b#0, _m) AS b#0, z#0]
++- Project [id#0L, a#0, redacted AS b#0, z#0]
+   +- Project [id#0L, a#0, b#0, (a#0 + 100) AS z#0]
+      +- LocalRelation <empty>, [id#0L, a#0, b#0]
