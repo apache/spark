@@ -104,11 +104,12 @@ object ZStandardBenchmark extends BenchmarkBase {
   }
 
   private def parallelCompressionBenchmark(): Unit = {
-    val N = 128
-    val data = (1 until 128 * 1024 * 1024).toArray
+    val numberOfLargeObjectToWrite = 128
+    val data: Array[Byte] = (1 until 256 * 1024 * 1024).map(_.toByte).toArray
 
     Seq(3, 9).foreach { level =>
-      val benchmark = new Benchmark(s"Parallel Compression at level $level", N, output = output)
+      val benchmark = new Benchmark(
+        s"Parallel Compression at level $level", numberOfLargeObjectToWrite, output = output)
       Seq(0, 1, 2, 4, 8, 16).foreach { workers =>
         val conf = new SparkConf(false)
           .set(IO_COMPRESSION_ZSTD_LEVEL, level)
@@ -117,7 +118,7 @@ object ZStandardBenchmark extends BenchmarkBase {
           val baos = new ByteArrayOutputStream()
           val zcos = new ZStdCompressionCodec(conf).compressedOutputStream(baos)
           val oos = new ObjectOutputStream(zcos)
-          1 to N foreach { _ =>
+          1 to numberOfLargeObjectToWrite foreach { _ =>
             oos.writeObject(data)
           }
           oos.close()
