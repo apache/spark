@@ -286,17 +286,17 @@ class SparkSession(SparkConversionMixin):
             with self._lock:
                 if conf is not None:
                     for k, v in conf.getAll():
-                        self._validate_startup_urls()
                         self._options[k] = v
+                        self._validate_startup_urls()
                 elif map is not None:
                     for k, v in map.items():  # type: ignore[assignment]
                         v = to_str(v)  # type: ignore[assignment]
-                        self._validate_startup_urls()
                         self._options[k] = v
+                        self._validate_startup_urls()
                 else:
                     value = to_str(value)
-                    self._validate_startup_urls()
                     self._options[cast(str, key)] = value
+                    self._validate_startup_urls()
                 return self
 
         def _validate_startup_urls(

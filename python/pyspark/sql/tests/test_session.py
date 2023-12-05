@@ -352,6 +352,22 @@ class SparkSessionBuilderTests(unittest.TestCase):
             if session is not None:
                 session.stop()
 
+    def test_create_spark_context_with_invalid_configs(self):
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "Spark master cannot be configured with Spark "
+            "Connect server; however, found URL for Spark Connect",
+        ):
+            SparkSession.builder.config(map={"spark.master": "x", "spark.remote": "y"})
+
+        with unittest.mock.patch.dict(
+            "os.environ", {"SPARK_REMOTE": "remote_url", "SPARK_LOCAL_REMOTE": "true"}
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError, "Only one Spark Connect client URL can be set"
+            ):
+                SparkSession.builder.config("spark.remote", "different_remote_url")
+
 
 class SparkExtensionsTest(unittest.TestCase):
     # These tests are separate because it uses 'spark.sql.extensions' which is
