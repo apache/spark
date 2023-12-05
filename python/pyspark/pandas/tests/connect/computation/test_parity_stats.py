@@ -16,7 +16,7 @@
 #
 import unittest
 
-from pyspark.pandas.tests.test_stats import StatsTestsMixin
+from pyspark.pandas.tests.computation.test_stats import StatsTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
@@ -26,7 +26,7 @@ class StatsParityTests(StatsTestsMixin, PandasOnSparkTestUtils, ReusedConnectTes
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_stats import *  # noqa: F401
+    from pyspark.pandas.tests.connect.computation.test_parity_stats import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
