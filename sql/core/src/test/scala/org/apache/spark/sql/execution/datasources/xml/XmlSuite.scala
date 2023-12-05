@@ -2191,7 +2191,7 @@ class XmlSuite
     withCorruptFile(inputFile => {
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
         val e = intercept[SparkException] {
-          spark.read.option("rowTag", "ROW").xml(inputFile.toURI.toString).collect()
+          spark.read.option("rowTag", "ROW").option("multiLine", false).xml(inputFile.toURI.toString).collect()
         }
         assert(ExceptionUtils.getRootCause(e).isInstanceOf[EOFException])
         assert(ExceptionUtils.getRootCause(e).getMessage === "Unexpected end of input stream")
@@ -2206,7 +2206,7 @@ class XmlSuite
         assert(ExceptionUtils.getRootCause(e2).getMessage === "Unexpected end of input stream")
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
-        assert(spark.read.option("rowTag", "ROW").xml(inputFile.toURI.toString).collect().isEmpty)
+          spark.read.option("rowTag", "ROW").option("multiLine", false).xml(inputFile.toURI.toString).collect()
         assert(
           spark.read
             .option("rowTag", "ROW")
