@@ -338,6 +338,28 @@ case class EnsureRequirements(
   }
 
   /**
+   * Unwrap the cast in join predicates to reduce shuffle.
+   */
+  private def unwrapCastInJoinPredicates(plan: SparkPlan): SparkPlan = {
+    if (conf.unwrapCastInJoinConditionEnabled) {
+      plan match {
+        case ExtractJoinWithUnwrappedCastInJoinPredicates(join, joinKeys) =>
+          val (leftKeys, rightKeys) = joinKeys.unzip
+          join match {
+            case j: SortMergeJoinExec =>
+              j.copy(leftKeys = leftKeys, rightKeys = rightKeys)
+            case j: ShuffledHashJoinExec =>
+              j.copy(leftKeys = leftKeys, rightKeys = rightKeys)
+            case other => other
+          }
+        case _ => plan
+      }
+    } else {
+      plan
+    }
+  }
+
+  /**
    * Checks whether two children, `left` and `right`, of a join operator have compatible
    * `KeyGroupedPartitioning`, and can benefit from storage-partitioned join.
    *
@@ -605,7 +627,8 @@ case class EnsureRequirements(
         }
 
       case operator: SparkPlan =>
-        val reordered = reorderJoinPredicates(operator)
+        val unwrapped = unwrapCastInJoinPredicates(operator)
+        val reordered = reorderJoinPredicates(unwrapped)
         val newChildren = ensureDistributionAndOrdering(
           Some(reordered),
           reordered.children,
