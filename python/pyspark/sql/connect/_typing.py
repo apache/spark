@@ -14,9 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Protocol, Tuple
 from types import FunctionType
-from typing import Any, Callable, Iterable, Union, Optional, NewType
+from typing import Any, Callable, Iterable, Union, Optional, NewType, Protocol, Tuple
 import datetime
 import decimal
 
