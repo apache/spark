@@ -38,12 +38,12 @@ Classes
     PySparkAssertionError
     PySparkAttributeError
     PySparkException
+    PySparkKeyError
     PySparkNotImplementedError
     PySparkPicklingError
     PySparkRuntimeError
     PySparkTypeError
     PySparkValueError
-    PySparkImportError
     PySparkIndexError
     PythonException
     QueryExecutionException

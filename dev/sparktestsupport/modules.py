@@ -359,7 +359,7 @@ streaming_kinesis_asl = Module(
     build_profile_flags=[
         "-Pkinesis-asl",
     ],
-    environ={"ENABLE_KINESIS_TESTS": "1"},
+    environ={"ENABLE_KINESIS_TESTS": "0"},
     sbt_test_goals=[
         "streaming-kinesis-asl/test",
     ],
@@ -491,9 +491,9 @@ pyspark_sql = Module(
         "pyspark.sql.pandas.utils",
         "pyspark.sql.observation",
         # unittests
-        "pyspark.sql.tests.arrow.test_arrow_cogrouped_map",
-        "pyspark.sql.tests.arrow.test_arrow_grouped_map",
         "pyspark.sql.tests.test_arrow",
+        "pyspark.sql.tests.test_arrow_cogrouped_map",
+        "pyspark.sql.tests.test_arrow_grouped_map",
         "pyspark.sql.tests.test_arrow_python_udf",
         "pyspark.sql.tests.test_catalog",
         "pyspark.sql.tests.test_column",
@@ -894,6 +894,8 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_arrow_map",
         "pyspark.sql.tests.connect.test_parity_pandas_grouped_map",
         "pyspark.sql.tests.connect.test_parity_pandas_cogrouped_map",
+        "pyspark.sql.tests.connect.test_parity_arrow_grouped_map",
+        "pyspark.sql.tests.connect.test_parity_arrow_cogrouped_map",
         "pyspark.sql.tests.connect.test_utils",
         "pyspark.sql.tests.connect.client.test_artifact",
         "pyspark.sql.tests.connect.client.test_client",

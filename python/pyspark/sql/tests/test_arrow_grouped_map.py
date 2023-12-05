@@ -39,7 +39,7 @@ if have_pyarrow:
     not have_pyarrow,
     pyarrow_requirement_message,  # type: ignore[arg-type]
 )
-class GroupedMapInArrowTests(ReusedSQLTestCase):
+class GroupedMapInArrowTestsMixin:
     @property
     def data(self):
         return (
@@ -49,27 +49,6 @@ class GroupedMapInArrowTests(ReusedSQLTestCase):
             .withColumn("v", explode(col("vs")))
             .drop("vs")
         )
-
-    @classmethod
-    def setUpClass(cls):
-        ReusedSQLTestCase.setUpClass()
-
-        # Synchronize default timezone between Python and Java
-        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
-        tz = "America/Los_Angeles"
-        os.environ["TZ"] = tz
-        time.tzset()
-
-        cls.sc.environment["TZ"] = tz
-        cls.spark.conf.set("spark.sql.session.timeZone", tz)
-
-    @classmethod
-    def tearDownClass(cls):
-        del os.environ["TZ"]
-        if cls.tz_prev is not None:
-            os.environ["TZ"] = cls.tz_prev
-        time.tzset()
-        ReusedSQLTestCase.tearDownClass()
 
     def test_apply_in_arrow(self):
         def func(group):
@@ -132,7 +111,7 @@ class GroupedMapInArrowTests(ReusedSQLTestCase):
         def stats(key, _):
             return key
 
-        with QuietTest(self.sc):
+        with self.quiet_test():
             with self.assertRaisesRegex(
                 PythonException,
                 "Return type of the user-defined function should be pyarrow.Table, but is tuple",
@@ -153,7 +132,7 @@ class GroupedMapInArrowTests(ReusedSQLTestCase):
             ("id long, v string", "column 'v' \\(expected string, actual int32\\)"),
         ]:
             with self.subTest(schema=schema):
-                with QuietTest(self.sc):
+                with self.quiet_test():
                     with self.assertRaisesRegex(
                         PythonException,
                         f"Columns do not match in their data type: {expected}",
@@ -177,7 +156,7 @@ class GroupedMapInArrowTests(ReusedSQLTestCase):
                 with self.sql_conf(
                     {"spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName": False}
                 ):
-                    with QuietTest(self.sc):
+                    with self.quiet_test():
                         with self.assertRaisesRegex(
                             PythonException,
                             f"Columns do not match in their data type: {expected}",
@@ -199,7 +178,7 @@ class GroupedMapInArrowTests(ReusedSQLTestCase):
                 }
             )
 
-        with QuietTest(self.sc):
+        with self.quiet_test():
             with self.assertRaisesRegex(
                 PythonException,
                 "Column names of the returned pyarrow.Table do not match specified schema. "
@@ -235,7 +214,7 @@ class GroupedMapInArrowTests(ReusedSQLTestCase):
                     {"id": [key[0].as_py()], "m": [pc.mean(table.column("v")).as_py()]}
                 )
 
-        with QuietTest(self.sc):
+        with self.quiet_test():
             with self.assertRaisesRegex(
                 PythonException,
                 "Column names of the returned pyarrow.Table do not match specified schema. "
@@ -279,8 +258,34 @@ class GroupedMapInArrowTests(ReusedSQLTestCase):
                 self.assertEqual(r.b, 1)
 
 
+class GroupedMapInArrowTests(GroupedMapInArrowTestsMixin, ReusedSQLTestCase):
+    @classmethod
+    def setUpClass(cls):
+        ReusedSQLTestCase.setUpClass()
+
+        # Synchronize default timezone between Python and Java
+        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
+        tz = "America/Los_Angeles"
+        os.environ["TZ"] = tz
+        time.tzset()
+
+        cls.sc.environment["TZ"] = tz
+        cls.spark.conf.set("spark.sql.session.timeZone", tz)
+
+    @classmethod
+    def tearDownClass(cls):
+        del os.environ["TZ"]
+        if cls.tz_prev is not None:
+            os.environ["TZ"] = cls.tz_prev
+        time.tzset()
+        ReusedSQLTestCase.tearDownClass()
+
+    def quiet_test(self):
+        return QuietTest(self.sc)
+
+
 if __name__ == "__main__":
-    from pyspark.sql.tests.arrow.test_arrow_grouped_map import *  # noqa: F401
+    from pyspark.sql.tests.test_arrow_grouped_map import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

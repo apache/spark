@@ -23,6 +23,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.SparkConnectServerTest
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.SparkConnectService
@@ -293,6 +294,31 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
         stub.reattachExecute(buildReattachExecuteRequest(operationId, Some(lastSeenResponse)))
       assert(reattach2.hasNext)
       while (reattach2.hasNext) reattach2.next()
+    }
+  }
+
+  test("SPARK-46186 interrupt directly after query start") {
+    // This test depends on fast timing.
+    // If something is wrong, it can fail only from time to time.
+    withRawBlockingStub { stub =>
+      val operationId = UUID.randomUUID().toString
+      val interruptRequest = proto.InterruptRequest.newBuilder
+        .setUserContext(userContext)
+        .setSessionId(defaultSessionId)
+        .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_OPERATION_ID)
+        .setOperationId(operationId)
+        .build()
+      val iter = stub.executePlan(
+        buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY), operationId = operationId))
+      // wait for execute holder to exist, but the execute thread may not have started yet.
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        assert(SparkConnectService.executionManager.listExecuteHolders.length == 1)
+      }
+      stub.interrupt(interruptRequest)
+      val e = intercept[StatusRuntimeException] {
+        while (iter.hasNext) iter.next()
+      }
+      assert(e.getMessage.contains("OPERATION_CANCELED"))
     }
   }
 

@@ -68,10 +68,13 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
             )
 
             self.assertTrue(q.isActive)
-            time.sleep(10)
-            self.assertTrue(q.lastProgress["batchId"] > 0)  # ensure at least one batch is ran
+            # ensure at least one batch is ran
+            while q.lastProgress is None or q.lastProgress["batchId"] == 0:
+                time.sleep(5)
             q.stop()
             self.assertFalse(q.isActive)
+
+            time.sleep(60)  # Sleep to make sure listener_terminated_events is written successfully
 
             start_event = pyspark.cloudpickle.loads(
                 self.spark.read.table("listener_start_events").collect()[0][0]

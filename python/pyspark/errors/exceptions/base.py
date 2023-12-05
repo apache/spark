@@ -260,7 +260,7 @@ class PySparkPicklingError(PySparkException, PicklingError):
     """
 
 
-class PySparkImportError(PySparkException, ImportError):
+class PySparkKeyError(PySparkException, KeyError):
     """
-    Wrapper class for ImportError to support error classes.
+    Wrapper class for KeyError to support error classes.
     """
