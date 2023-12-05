@@ -25,6 +25,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLQueryTestSuite
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
+import org.apache.spark.sql.crossdbms.CrossDbmsQueryTestSuite.DBMS_TO_DIALECT_CONVERTER
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
 // scalastyle:off line.size.limit
@@ -115,6 +116,11 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
     var runner: Option[SQLQueryTestRunner] = None
 
     val outputs: Seq[QueryTestOutput] = queries.map { sql =>
+      val convertedSql = if (DBMS_TO_DIALECT_CONVERTER.contains(crossDbmsToGenerateGoldenFiles)) {
+        DBMS_TO_DIALECT_CONVERTER(crossDbmsToGenerateGoldenFiles).preprocessQuery(sql)
+      } else {
+        sql
+      }
       val output = {
         // Use the runner when generating golden files, and Spark when running the test against
         // the already generated golden files.
@@ -134,8 +140,11 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
             // 2. Error thrown in other DBMS execution:
             //    a. The query is either incompatible between Spark and the other DBMS
             //    b. Some test table/view is not created on the other DBMS.
+
+            // Use the original SQL query to run on Spark.
             val sparkDf = localSparkSession.sql(sql)
-            val output = runner.map(_.runQuery(sql)).get
+            // Use the converted SQL query to run on the DBMS.
+            val output = runner.map(_.runQuery(convertedSql)).get
             // Use Spark analyzed plan to check if the query result is already semantically sorted.
             if (isSemanticallySorted(sparkDf.queryExecution.analyzed)) {
               output
@@ -151,13 +160,15 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
           // Execute the list of set operation in order to add the desired configs
           val setOperations = sparkConfigSet.map { case (key, value) => s"set $key=$value" }
           setOperations.foreach(localSparkSession.sql)
+          // Use the original SQL query to run on Spark.
           val (_, output) = handleExceptions(
             getNormalizedQueryExecutionResult(localSparkSession, sql))
           output
         }
       }
       ExecutionOutput(
-        sql = sql,
+        sql = s"Original SQL: \n$sql\n" +
+          s"Converted SQL for $crossDbmsToGenerateGoldenFiles: \n$convertedSql",
         // Don't care about the schema for this test. Only care about correctness.
         schema = None,
         output = normalizeTestResults(output.mkString("\n")))
@@ -234,5 +245,8 @@ object CrossDbmsQueryTestSuite {
   private final val DBMS_TO_CONNECTION_MAPPING = Map(
     POSTGRES -> ((connection_url: Option[String]) =>
       JdbcSQLQueryTestRunner(PostgresConnection(connection_url)))
+  )
+  private final val DBMS_TO_DIALECT_CONVERTER: Map[String, DialectConverter] = Map(
+    POSTGRES -> PostgresDialectConverter
   )
 }

@@ -79,7 +79,12 @@ object PostgresDialectConverter extends DialectConverter {
     valuesClause match {
       case valuesClausePattern(select, allValues) =>
         val selectClause = if (select != null) { select + " " } else { "" }
-        s"$selectClause(VALUES $allValues)" + " " + tableAlias
+        val tableAliasClause = if (tableAlias.isEmpty) {
+          ""
+        } else {
+          s" AS $tableAlias"
+        }
+        s"$selectClause(VALUES $allValues)" + tableAliasClause
       case _ =>
         query
     }
