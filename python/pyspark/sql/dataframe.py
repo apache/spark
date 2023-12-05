@@ -43,7 +43,12 @@ from py4j.java_gateway import JavaObject, JVMView
 from pyspark import copy_func, _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.context import SparkContext
-from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkIndexError
+from pyspark.errors import (
+    PySparkTypeError,
+    PySparkValueError,
+    PySparkIndexError,
+    PySparkAttributeError,
+)
 from pyspark.rdd import (
     RDD,
     _load_from_socket,
@@ -3613,8 +3618,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+
         """
         if name not in self.columns:
-            raise AttributeError(
-                "'%s' object has no attribute '%s'" % (self.__class__.__name__, name)
+            raise PySparkAttributeError(
+                error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
             )
         jc = self._jdf.apply(name)
         return Column(jc)

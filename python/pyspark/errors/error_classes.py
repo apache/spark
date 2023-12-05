@@ -682,11 +682,6 @@ ERROR_CLASSES_JSON = """
       "Only a single trigger is allowed."
     ]
   },
-  "PACKAGE_NOT_INSTALLED" : {
-    "message" : [
-      "<package_name> >= <minimum_version> must be installed; however, it was not found."
-    ]
-  },
   "PIPE_FUNCTION_EXITED" : {
     "message" : [
       "Pipe function `<func_name>` exited with error code <error_code>."
@@ -941,11 +936,6 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operation> is not supported."
-    ]
-  },
-  "UNSUPPORTED_PACKAGE_VERSION" : {
-    "message" : [
-      "<package_name> >= <minimum_version> must be installed; however, your version is <current_version>."
     ]
   },
   "UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION" : {

@@ -2103,9 +2103,7 @@ class DataFrame(Frame, Generic[T]):
             v = [row[c] for c in data_spark_column_names]
             return k, v
 
-        can_return_named_tuples = sys.version_info >= (3, 7) or len(self.columns) + index < 255
-
-        if name is not None and can_return_named_tuples:
+        if name is not None:
             itertuple = namedtuple(name, fields, rename=True)  # type: ignore[misc]
             for k, v in map(
                 extract_kv_from_spark_row,

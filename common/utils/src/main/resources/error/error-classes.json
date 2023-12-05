@@ -149,6 +149,19 @@
     ],
     "sqlState" : "42846"
   },
+  "CANNOT_CREATE_DATA_SOURCE_TABLE" : {
+    "message" : [
+      "Failed to create data source table <tableName>:"
+    ],
+    "subClass" : {
+      "EXTERNAL_METADATA_UNSUPPORTED" : {
+        "message" : [
+          "provider '<provider>' does not support external metadata but a schema is provided. Please remove the schema when creating the table."
+        ]
+      }
+    },
+    "sqlState" : "42KDE"
+  },
   "CANNOT_DECODE_URL" : {
     "message" : [
       "The provided URL cannot be decoded: <url>. Please ensure that the URL is properly formatted and try again."
@@ -1858,6 +1871,29 @@
     },
     "sqlState" : "42000"
   },
+  "INVALID_INVERSE_DISTRIBUTION_FUNCTION" : {
+    "message" : [
+      "Invalid inverse distribution function <funcName>."
+    ],
+    "subClass" : {
+      "DISTINCT_UNSUPPORTED" : {
+        "message" : [
+          "Cannot use DISTINCT with WITHIN GROUP."
+        ]
+      },
+      "WITHIN_GROUP_MISSING" : {
+        "message" : [
+          "WITHIN GROUP is required for inverse distribution function."
+        ]
+      },
+      "WRONG_NUM_ORDERINGS" : {
+        "message" : [
+          "Requires <expectedNum> orderings in WITHIN GROUP but got <actualNum>."
+        ]
+      }
+    },
+    "sqlState" : "ID001"
+  },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
       "Cannot convert JSON root field to target Spark type."
@@ -3107,6 +3143,12 @@
       "The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF.",
       "Expected <aliasesSize> aliases, but got <aliasesNames>.",
       "Please ensure that the number of aliases provided matches the number of columns output by the UDTF."
+    ],
+    "sqlState" : "42802"
+  },
+  "UDTF_INVALID_ALIAS_IN_REQUESTED_ORDERING_STRING_FROM_ANALYZE_METHOD" : {
+    "message" : [
+      "Failed to evaluate the user-defined table function because its 'analyze' method returned a requested OrderingColumn whose column name expression included an unnecessary alias <aliasName>; please remove this alias and then try the query again."
     ],
     "sqlState" : "42802"
   },

@@ -487,7 +487,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
   object UDTFCountSumLast extends TestUDTF {
     val pythonScript: String =
       s"""
-         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
+         |from pyspark.sql.functions import AnalyzeResult
          |from pyspark.sql.types import IntegerType, Row, StructType
          |class $name:
          |    def __init__(self):
@@ -541,7 +541,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
       s"""
         |import json
         |from dataclasses import dataclass
-        |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
+        |from pyspark.sql.functions import AnalyzeResult, OrderingColumn
         |from pyspark.sql.types import IntegerType, Row, StructType
         |
         |@dataclass
@@ -583,7 +583,9 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |""".stripMargin
   }
 
-  object UDTFPartitionByOrderBy extends TestUDTF {
+  abstract class TestPythonUDTFPartitionByOrderByBase(
+      partitionBy: String,
+      orderBy: String) extends TestUDTF {
     val pythonScript: String =
       s"""
         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
@@ -604,10 +606,10 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |                .add("total", IntegerType())
         |                .add("last", IntegerType()),
         |            partitionBy=[
-        |                PartitioningColumn("partition_col")
+        |                PartitioningColumn("$partitionBy")
         |            ],
         |            orderBy=[
-        |                OrderingColumn("input")
+        |                OrderingColumn("$orderBy")
         |            ])
         |
         |    def eval(self, row: Row):
@@ -621,10 +623,30 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |""".stripMargin
   }
 
+  object UDTFPartitionByOrderBy
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "partition_col",
+      orderBy = "input")
+
+  object UDTFPartitionByOrderByComplexExpr
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "partition_col + 1",
+      orderBy = "RANDOM(42)")
+
+  object UDTFInvalidPartitionByOrderByParseError
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "unparsable",
+      orderBy = "input")
+
+  object UDTFInvalidOrderByAscKeyword
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "partition_col",
+      orderBy = "partition_col ASC")
+
   object UDTFInvalidPartitionByAndWithSinglePartition extends TestUDTF {
     val pythonScript: String =
       s"""
-         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
+         |from pyspark.sql.functions import AnalyzeResult, PartitioningColumn
          |from pyspark.sql.types import IntegerType, Row, StructType
          |class $name:
          |    def __init__(self):
@@ -651,7 +673,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
   object UDTFInvalidOrderByWithoutPartitionBy extends TestUDTF {
     val pythonScript: String =
       s"""
-         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
+         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn
          |from pyspark.sql.types import IntegerType, Row, StructType
          |class $name:
          |    def __init__(self):
@@ -1127,10 +1149,13 @@ object IntegratedUDFTestUtils extends SQLHelper {
     UDTFLastString,
     UDTFWithSinglePartition,
     UDTFPartitionByOrderBy,
+    UDTFInvalidOrderByAscKeyword,
     UDTFInvalidPartitionByAndWithSinglePartition,
+    UDTFInvalidPartitionByOrderByParseError,
     UDTFInvalidOrderByWithoutPartitionBy,
     UDTFForwardStateFromAnalyze,
     UDTFForwardStateFromAnalyzeWithKwargs,
+    UDTFPartitionByOrderByComplexExpr,
     InvalidAnalyzeMethodReturnsNonStructTypeSchema,
     InvalidAnalyzeMethodWithSinglePartitionNoInputTable,
     InvalidAnalyzeMethodWithPartitionByNoInputTable,
