@@ -139,6 +139,7 @@ class RocksDB(
 
   // SPARK-46249 - Keep track of recorded metrics per version which can be used for querying later
   // Updates and access to recordedMetrics are protected by the DB instance lock
+  @GuardedBy("acquireLock")
   @volatile private var recordedMetrics: Option[RocksDBMetrics] = None
 
   @GuardedBy("acquireLock")
