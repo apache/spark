@@ -1918,7 +1918,7 @@ package object config {
         "performance, but also increase memory cost.")
       .version("4.0.0")
       .intConf
-      .checkValue(_ >=0, "The number of workers must not be negative.")
+      .checkValue(_ >= 0, "The number of workers must not be negative.")
       .createWithDefault(0)
 
   private[spark] val IO_COMPRESSION_ZSTD_LEVEL =
