@@ -23,7 +23,6 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedParameter, PosParameter, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
@@ -1813,38 +1812,62 @@ class PlanParserSuite extends AnalysisTest {
 
     assertPercentilePlans(
       "SELECT PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY col)",
-      PercentileCont(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
-        .toAggregateExpression()
+      UnresolvedFunction(
+        Seq("PERCENTILE_CONT"),
+        Seq(Literal(Decimal(0.1), DecimalType(1, 1))),
+        false,
+        None,
+        orderingWithinGroup = Seq(SortOrder(UnresolvedAttribute("col"), Ascending)))
     )
 
     assertPercentilePlans(
       "SELECT PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY col DESC)",
-      PercentileCont(UnresolvedAttribute("col"),
-        Literal(Decimal(0.1), DecimalType(1, 1)), true).toAggregateExpression()
+      UnresolvedFunction(
+        Seq("PERCENTILE_CONT"),
+        Seq(Literal(Decimal(0.1), DecimalType(1, 1))),
+        false,
+        None,
+        orderingWithinGroup = Seq(SortOrder(UnresolvedAttribute("col"), Descending)))
     )
 
     assertPercentilePlans(
       "SELECT PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY col) FILTER (WHERE id > 10)",
-      PercentileCont(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
-        .toAggregateExpression(false, Some(GreaterThan(UnresolvedAttribute("id"), Literal(10))))
+      UnresolvedFunction(
+        Seq("PERCENTILE_CONT"),
+        Seq(Literal(Decimal(0.1), DecimalType(1, 1))),
+        false,
+        Some(GreaterThan(UnresolvedAttribute("id"), Literal(10))),
+        orderingWithinGroup = Seq(SortOrder(UnresolvedAttribute("col"), Ascending)))
     )
 
     assertPercentilePlans(
       "SELECT PERCENTILE_DISC(0.1) WITHIN GROUP (ORDER BY col)",
-      PercentileDisc(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
-        .toAggregateExpression()
+      UnresolvedFunction(
+        Seq("PERCENTILE_DISC"),
+        Seq(Literal(Decimal(0.1), DecimalType(1, 1))),
+        false,
+        None,
+        orderingWithinGroup = Seq(SortOrder(UnresolvedAttribute("col"), Ascending)))
     )
 
     assertPercentilePlans(
       "SELECT PERCENTILE_DISC(0.1) WITHIN GROUP (ORDER BY col DESC)",
-      PercentileDisc(UnresolvedAttribute("col"),
-        Literal(Decimal(0.1), DecimalType(1, 1)), true).toAggregateExpression()
+      UnresolvedFunction(
+        Seq("PERCENTILE_DISC"),
+        Seq(Literal(Decimal(0.1), DecimalType(1, 1))),
+        false,
+        None,
+        orderingWithinGroup = Seq(SortOrder(UnresolvedAttribute("col"), Descending)))
     )
 
     assertPercentilePlans(
       "SELECT PERCENTILE_DISC(0.1) WITHIN GROUP (ORDER BY col) FILTER (WHERE id > 10)",
-      PercentileDisc(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
-        .toAggregateExpression(false, Some(GreaterThan(UnresolvedAttribute("id"), Literal(10))))
+      UnresolvedFunction(
+        Seq("PERCENTILE_DISC"),
+        Seq(Literal(Decimal(0.1), DecimalType(1, 1))),
+        false,
+        Some(GreaterThan(UnresolvedAttribute("id"), Literal(10))),
+        orderingWithinGroup = Seq(SortOrder(UnresolvedAttribute("col"), Ascending)))
     )
   }
 
