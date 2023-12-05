@@ -30,8 +30,29 @@ else
   if [ "$(command -v java)" ]; then
     RUNNER="java"
   else
-    echo "JAVA_HOME is not set" >&2
-    exit 1
+    if ! command -v python &> /dev/null || ! command -v pip &> /dev/null; then
+        echo "Python or pip is not installed or not in the PATH."\
+        "You can manually install python and pip and retry."
+        exit 1
+    fi
+
+    echo "JAVA_HOME is not set."\
+    "Press Y to install JDK 17 and set JAVA_HOME, or any key to quit." >&2
+
+    read -r input
+
+    if [ "$input" == "Y" ] || [ "$input" == "y" ]; then
+        TEMP_DIR=$(mktemp -d)
+        pip install --target="$TEMP_DIR" install-jdk
+        export JAVA_HOME=$(PYTHONPATH="$TEMP_DIR":"$PYTHONPATH" python -c 'import jdk; print(jdk.install("17"))')
+        RUNNER="${JAVA_HOME}/bin/java"
+        echo "Java was installed to $JAVA_HOME."\
+        "You can avoid having to re-install it by running `export JAVA_HOME=<path>`."
+    else
+        echo "JDK installation skipped."\
+        "You can manually install JDK (8 or later) and set JAVA_HOME in your environment."
+        exit 1
+    fi
   fi
 fi
 
