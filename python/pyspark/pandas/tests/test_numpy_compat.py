@@ -26,21 +26,17 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 class NumPyCompatTestsMixin:
     blacklist = [
-        # Koalas does not currently support
+        # Pandas-on-Spark does not currently support
         "conj",
         "conjugate",
         "isnat",
         "matmul",
         "frexp",
         # Values are close enough but tests failed.
-        "arccos",
-        "exp",
-        "expm1",
         "log",  # flaky
         "log10",  # flaky
         "log1p",  # flaky
         "modf",
-        "floor_divide",  # flaky
     ]
 
     @property
