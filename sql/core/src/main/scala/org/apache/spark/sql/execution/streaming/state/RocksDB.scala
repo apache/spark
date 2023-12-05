@@ -556,6 +556,11 @@ class RocksDB(
       nativeOpsMetrics = nativeOpsMetrics.toMap)
   }
 
+  /**
+   * Function to return RocksDB metrics if the recorded metrics are available and the operator
+   * has reached the commit stage for this state store instance and version. If not, we return None
+   * @return - Return RocksDBMetrics if available and None otherwise
+   */
   def metricsOpt: Option[RocksDBMetrics] = {
     var rocksDBMetricsOpt: Option[RocksDBMetrics] = None
     try {
