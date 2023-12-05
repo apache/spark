@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-sackage org.apache.spark.sql.crossdbms
+package org.apache.spark.sql.crossdbms
 
 trait DialectConverter {
 
@@ -34,7 +34,7 @@ object PostgresDialectConverter extends DialectConverter {
 
   private def dataTypeConverter(query: String): String = {
     // Convert {some decimal number}D to CAST({decimal number} AS DOUBLE PRECISION)
-    val doublePrecisionPattern = """(\d+\.\d+)D""".r
+    val doublePrecisionPattern = """(\d+(?:\.\d+)?)D""".r
     val doublePrecisionResult = doublePrecisionPattern.replaceAllIn(query,
       m => s"CAST(${m.group(1)} AS DOUBLE PRECISION)")
 
@@ -44,65 +44,74 @@ object PostgresDialectConverter extends DialectConverter {
       s"CAST(${m.group(1)} AS SMALLINT)")
 
     // Convert float({some decimal number}) to CAST({decimal number} AS REAL)
-    val floatPattern = """float\((\d+\.\d+)\)""".r
+    val floatPattern = """float\((\d+(?:\.\d+)?)\)""".r
     val floatResult = floatPattern.replaceAllIn(smallIntResult, m => s"CAST(${m.group(1)} AS REAL)")
 
     // Convert {{some number}E{some number}}BD to CAST({number}E{number} AS DECIMAL)
     val decimalPattern = """(\d+E\d+)BD""".r
-    decimalPattern.replaceAllIn(floatResult, m => s"CAST(${m.group(1)} AS DECIMAL)")
+    val decimalResult = decimalPattern.replaceAllIn(floatResult,
+      m => s"CAST(${m.group(1)} AS DECIMAL)")
+
+    // Convert {some number, like 10}L to CAST(10 AS BIGINT)
+    val bigIntPattern = """(\d+)L""".r
+    bigIntPattern.replaceAllIn(decimalResult, m => s"CAST(${m.group(1)} AS BIGINT)")
   }
 
   // Replace double quotes with single quotes
   private def replaceDoubleQuotes(query: String): String = query.replaceAll("\"", "'")
 
-  private def convertCreateViewSyntax(query: String): String = {
-    // (?i):
-    //    This is a flag for case-insensitive matching.
-    // CREATE\s+:
-    //    Matches the literal string "CREATE" followed by one or more whitespace characters.
-    // ((?:TEMP(?:ORARY)?)?\s+)?:
-    //    This is a capturing group for the optional "TEMP" or "TEMPORARY" part. The (?: ... ) is a
-    //    non-capturing group, and the ? after it makes the entire group optional.
-    // VIEW\s+:
-    //    Matches the literal string "VIEW" followed by one or more whitespace characters.
-    // (IF NOT EXISTS\s+)?:
-    //    This is a capturing group for the optional "IF NOT EXISTS" part followed by one or more
-    //    whitespace characters. The ? after it makes the entire group optional.
-    // (\w+):
-    //    This is a capturing group that matches one or more word characters (letters, digits, or
-    //    underscores), capturing the view name.
-    // \s*:
-    //    Matches zero or more whitespace characters.
-    // (?:\(([\w, ]+)\))?:
-    //    This is a non-capturing group that matches an optional group containing a list of word
-    //    characters, commas, and spaces within parentheses. The \w allows word characters, allows
-    //    for multiple column names separated by commas, and the space allows for spaces within the
-    //    parentheses. The ?: makes it a non-capturing group, and the entire group is optional.
-    // \s+:
-    //    Matches one or more whitespace characters.
-    //  AS:
-    //    Matches the literal string "AS".
-    // \s+:
-    //    Matches one or more whitespace characters.
-    // (.+):
-    //    This is a capturing group that matches one or more of any character (except for a
-    //    newline), capturing the view query.
+  private def convertValuesClause(query: String): String = {
+    var valuesClause = ""
+    var tableAlias = ""
+    if (query.contains("as")) {
+      val split = query.split("as")
+      valuesClause = split(0).trim
+      tableAlias = split(1).trim
+    } else if (query.contains("AS")) {
+      val split = query.split("AS")
+      valuesClause = split(0).trim
+      tableAlias = split(1).trim
+    } else {
+      valuesClause = query
+    }
 
-    val createViewPattern =
-      """(?i)CREATE\s+((?:TEMP(?:ORARY)?)?\s+)?VIEW\s+(IF NOT EXISTS\s+)?(\w+)\s*(?:\(([\w, ]+)\))? AS\s+(.+)""".r
-
-    query match {
-      case createViewPattern(temp, ifNotExists, viewName, columnList, viewQuery) =>
-        s"""
-          | CREATE $temp VIEW $ifNotExists $viewName($columnList) AS ($viewQuery)
-          |""".stripMargin
-      case _ => query
+    val valuesClausePattern = """(?i)(SELECT .+ FROM)?\s*VALUES\s*(\((?:.+\,*)+\))+""".r
+    valuesClause match {
+      case valuesClausePattern(select, allValues) =>
+        val selectClause = if (select != null) { select + " " } else { "" }
+        s"$selectClause(VALUES $allValues)" + " " + tableAlias
+      case _ =>
+        query
     }
   }
 
+  private def convertCreateViewSyntax(query: String): String = {
+    val createViewPattern =
+      """(?i)CREATE\s+((?:TEMP(?:ORARY)?)?\s+)?VIEW\s+(IF NOT EXISTS\s+)?(\w+)\s*(?:\(([\w, ]+)\))?
+        | AS\s+(.+)""".stripMargin.r
+
+    query match {
+      case createViewPattern(temp, ifNotExists, viewName, columnList, viewQuery) =>
+        val ifNotExistsClause = if (ifNotExists != null) {ifNotExists} else { "" }
+        val columnListClause = if (columnList != null) { s"($columnList)" } else { "" }
+        val convertedValuesClause = convertValuesClause(viewQuery)
+        s"""
+           |CREATE $temp VIEW $ifNotExistsClause $viewName$columnListClause
+           |AS $convertedValuesClause
+           |""".stripMargin
+      case _ =>
+        query
+    }
+  }
+
+  private def removeNewlines(input: String): String = {
+    input.replaceAll("\n|\r\n?", "")
+  }
+
   def preprocessQuery(query: String): String = {
-    val singleQuotedQuery = replaceDoubleQuotes(query)
-    val queryWithReplacedDataTypes = dataTypeConverter(singleQuotedQuery)
-    convertCreateViewSyntax(queryWithReplacedDataTypes)
+    val noNewLines = removeNewlines(query)
+    val singleQuotedQuery = replaceDoubleQuotes(noNewLines)
+    val newValuesSyntax = convertCreateViewSyntax(singleQuotedQuery)
+    dataTypeConverter(newValuesSyntax)
   }
 }
