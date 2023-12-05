@@ -74,9 +74,8 @@ private[master] class FileSystemRecoveryModeFactory(conf: SparkConf, serializer:
 private[master] class RocksDBRecoveryModeFactory(conf: SparkConf, serializer: Serializer)
   extends StandaloneRecoveryModeFactory(conf, serializer) with Logging {
 
-  val recoveryDir = conf.get(RECOVERY_DIRECTORY)
-
   def createPersistenceEngine(): PersistenceEngine = {
+    val recoveryDir = conf.get(RECOVERY_DIRECTORY)
     logInfo("Persisting recovery state to directory: " + recoveryDir)
     new RocksDBPersistenceEngine(recoveryDir, serializer)
   }

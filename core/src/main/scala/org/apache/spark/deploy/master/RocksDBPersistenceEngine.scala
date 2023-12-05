@@ -43,7 +43,7 @@ private[master] class RocksDBPersistenceEngine(
 
   RocksDB.loadLibrary()
 
-  val path = Files.createDirectories(Paths.get(dir))
+  private val path = Files.createDirectories(Paths.get(dir))
 
   /**
    * Use full filter.
@@ -73,9 +73,13 @@ private[master] class RocksDBPersistenceEngine(
 
   override def persist(name: String, obj: Object): Unit = {
     val serialized = serializer.newInstance().serialize(obj)
-    val bytes = new Array[Byte](serialized.remaining())
-    serialized.get(bytes)
-    db.put(name.getBytes(UTF_8), bytes)
+    if (serialized.hasArray) {
+      db.put(name.getBytes(UTF_8), serialized.array())
+    } else {
+      val bytes = new Array[Byte](serialized.remaining())
+      serialized.get(bytes)
+      db.put(name.getBytes(UTF_8), bytes)
+    }
   }
 
   override def unpersist(name: String): Unit = {
@@ -85,12 +89,15 @@ private[master] class RocksDBPersistenceEngine(
   override def read[T: ClassTag](name: String): Seq[T] = {
     val result = new ArrayBuffer[T]
     val iter = db.newIterator()
-    iter.seek(name.getBytes(UTF_8))
-    while (iter.isValid && new String(iter.key()).startsWith(name)) {
-      result.append(serializer.newInstance().deserialize[T](ByteBuffer.wrap(iter.value())))
-      iter.next()
+    try {
+      iter.seek(name.getBytes(UTF_8))
+      while (iter.isValid && new String(iter.key()).startsWith(name)) {
+        result.append(serializer.newInstance().deserialize[T](ByteBuffer.wrap(iter.value())))
+        iter.next()
+      }
+    } finally {
+      iter.close()
     }
-    iter.close()
     result.toSeq
   }
 }
