@@ -28,8 +28,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 import org.apache.commons.text.StringEscapeUtils
-
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
@@ -42,7 +41,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{JSONOptions, JacksonGenerator}
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -63,7 +62,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.{ArrowBatchBlockId, StorageLevel}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -4216,6 +4215,24 @@ class Dataset[T] private[sql](
   @DeveloperApi
   def semanticHash(): Int = {
     queryExecution.analyzed.semanticHash()
+  }
+
+  def getCachedArrowBatchBlockIds(): Array[String] = {
+    val rdd = toArrowBatchRdd(queryExecution.executedPlan)
+    rdd.mapPartitions { iter: Iterator[Array[Byte]] =>
+      val blockManager = SparkEnv.get.blockManager
+
+      iter.map { blockData =>
+        val uuid = java.util.UUID.randomUUID()
+        val blockId = ArrowBatchBlockId(uuid)
+        // TODO: If the spark task failed at the half place of the iterator
+        //  clean cached blocks
+        blockManager.putSingle[Array[Byte]](
+          blockId, blockData, StorageLevel.MEMORY_AND_DISK, tellMaster = true
+        )
+        blockId.toString
+      }
+    }.collect()
   }
 
   ////////////////////////////////////////////////////////////////////////////

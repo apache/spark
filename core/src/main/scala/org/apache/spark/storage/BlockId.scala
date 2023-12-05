@@ -185,6 +185,11 @@ private[spark] case class TestBlockId(id: String) extends BlockId {
   override def name: String = "test_" + id
 }
 
+private[spark] case class ArrowBatchBlockId(id: UUID) extends BlockId {
+  override def name: String = "arrow_batch_" + id
+}
+
+
 @DeveloperApi
 class UnrecognizedBlockId(name: String)
     extends SparkException(s"Failed to parse $name into a block ID")
@@ -215,6 +220,7 @@ object BlockId {
   val STREAM = "input-([0-9]+)-([0-9]+)".r
   val TEMP_LOCAL = "temp_local_([-A-Fa-f0-9]+)".r
   val TEMP_SHUFFLE = "temp_shuffle_([-A-Fa-f0-9]+)".r
+  val ARROW_BATCH = "arrow_batch_([-A-Fa-f0-9]+)".r
   val TEST = "test_(.*)".r
 
   def apply(name: String): BlockId = name match {
@@ -254,8 +260,11 @@ object BlockId {
       TempLocalBlockId(UUID.fromString(uuid))
     case TEMP_SHUFFLE(uuid) =>
       TempShuffleBlockId(UUID.fromString(uuid))
+    case ARROW_BATCH(uuid) =>
+      ArrowBatchBlockId(UUID.fromString(uuid))
     case TEST(value) =>
       TestBlockId(value)
+
     case _ => throw SparkCoreErrors.unrecognizedBlockIdError(name)
   }
 }
