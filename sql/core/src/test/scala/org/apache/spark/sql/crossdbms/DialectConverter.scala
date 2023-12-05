@@ -32,7 +32,7 @@ trait DialectConverter {
  */
 object PostgresDialectConverter extends DialectConverter {
 
-  private def dataTypeConverter(query: String): String = {
+  private[crossdbms] def convertDataType(query: String): String = {
     // Convert {some decimal number}D to CAST({decimal number} AS DOUBLE PRECISION)
     val doublePrecisionPattern = """(\d+(?:\.\d+)?)D""".r
     val doublePrecisionResult = doublePrecisionPattern.replaceAllIn(query,
@@ -60,7 +60,7 @@ object PostgresDialectConverter extends DialectConverter {
   // Replace double quotes with single quotes
   private def replaceDoubleQuotes(query: String): String = query.replaceAll("\"", "'")
 
-  private def convertValuesClause(query: String): String = {
+  private[crossdbms] def convertValuesClause(query: String): String = {
     var valuesClause = ""
     var tableAlias = ""
     if (query.contains("as")) {
@@ -90,7 +90,7 @@ object PostgresDialectConverter extends DialectConverter {
     }
   }
 
-  private def convertCreateViewSyntax(query: String): String = {
+  private[crossdbms] def convertCreateViewSyntax(query: String): String = {
     val createViewPattern =
       """(?i)CREATE\s+((?:TEMP(?:ORARY)?)?\s+)?VIEW\s+(IF NOT EXISTS\s+)?(\w+)\s*(?:\(([\w, ]+)\))?
         | AS\s+(.+)""".stripMargin.r
@@ -109,14 +109,9 @@ object PostgresDialectConverter extends DialectConverter {
     }
   }
 
-  private def removeNewlines(input: String): String = {
-    input.replaceAll("\n|\r\n?", "")
-  }
-
   def preprocessQuery(query: String): String = {
-    val noNewLines = removeNewlines(query)
-    val singleQuotedQuery = replaceDoubleQuotes(noNewLines)
+    val singleQuotedQuery = replaceDoubleQuotes(query)
     val newValuesSyntax = convertCreateViewSyntax(singleQuotedQuery)
-    dataTypeConverter(newValuesSyntax)
+    convertDataType(newValuesSyntax)
   }
 }
