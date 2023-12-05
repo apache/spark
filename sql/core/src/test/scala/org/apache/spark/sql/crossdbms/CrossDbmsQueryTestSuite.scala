@@ -90,15 +90,13 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
     val queries = getQueries(code, comments)
     val settings = getSparkSettings(comments)
 
-    if (regenerateGoldenFiles) {
-      val dbmsConfig = comments.filter(_.startsWith(s"--${
-        CrossDbmsQueryTestSuite.DBMS_TO_GENERATE_GOLDEN_FILE} ")).map(_.substring(31))
-      // If `--DBMS_TO_GENERATE_GOLDEN_FILE` is not found, skip the test.
-      if (!dbmsConfig.contains(crossDbmsToGenerateGoldenFiles)) {
-        log.info(s"This test case (${testCase.name}) is ignored because it does not indicate " +
-          s"testing with $crossDbmsToGenerateGoldenFiles")
-        return
-      }
+    val dbmsConfig = comments.filter(_.startsWith(s"--${
+      CrossDbmsQueryTestSuite.DBMS_TO_GENERATE_GOLDEN_FILE} ")).map(_.substring(31))
+    // If `--DBMS_TO_GENERATE_GOLDEN_FILE` is not found, skip the test.
+    if (!dbmsConfig.contains(crossDbmsToGenerateGoldenFiles)) {
+      log.info(s"This test case (${testCase.name}) is ignored because it does not indicate " +
+        s"testing with $crossDbmsToGenerateGoldenFiles")
+    } else if (regenerateGoldenFiles) {
       runQueries(queries, testCase, settings.toImmutableArraySeq)
     } else {
       val configSets = getSparkConfigDimensions(comments)
