@@ -177,12 +177,15 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   }
 
   test("range with invalid (>MAX_LONG) output") {
-      val range = Range(-MAX_LONG, MAX_LONG, 1, None)
-      val rangeStats = Statistics(sizeInBytes = 0, rowCount = Some(0))
-    val extraConfig = Map(SQLConf.HISTOGRAM_ENABLED.key -> "true",
-      SQLConf.HISTOGRAM_NUM_BINS.key -> "3")
-      checkStats(range, expectedStatsCboOn = rangeStats,
-        expectedStatsCboOff = rangeStats, extraConfig)
+    val numElements = BigInt(Long.MaxValue) - BigInt(Long.MinValue)
+    val (col, col_stat) = (AttributeReference("id", IntegerType)(ExprId(1L)),
+        ColumnStat(distinctCount = Some(numElements),
+          nullCount = Some(0), avgLen = Some(8L), maxLen = Some(8L)))
+    val range = Range(Long.MinValue, Long.MaxValue, 1, None)
+    val rangeStats = Statistics(sizeInBytes = numElements * 8, Some(numElements),
+      attributeStats = AttributeMap(Seq((col, col_stat))),
+      origin = Some(StatisticsOrigin.LeafNode))
+    checkStats(range, rangeStats, rangeStats)
   }
 
   test("windows") {
