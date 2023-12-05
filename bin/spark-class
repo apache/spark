@@ -44,13 +44,13 @@ else
     if [ "$input" == "Y" ] || [ "$input" == "y" ]; then
         TEMP_DIR=$(mktemp -d)
         pip install --target="$TEMP_DIR" install-jdk
-        export JAVA_HOME=$(PYTHONPATH="$TEMP_DIR":"$PYTHONPATH" python -c 'import jdk; print(jdk.install("17"))')
+        export JAVA_HOME=$(PYTHONPATH="$TEMP_DIR" python -c 'import jdk; print(jdk.install("17"))')
         RUNNER="${JAVA_HOME}/bin/java"
         echo "Java was installed to $JAVA_HOME."\
-        "You can avoid having to re-install it by running `export JAVA_HOME=<path>`."
+        "You can avoid having to re-install it by running \`export JAVA_HOME=\"$JAVA_HOME\"\`."
     else
         echo "JDK installation skipped."\
-        "You can manually install JDK (8 or later) and set JAVA_HOME in your environment."
+        "You can manually install JDK (17 or later) and set JAVA_HOME in your environment."
         exit 1
     fi
   fi
