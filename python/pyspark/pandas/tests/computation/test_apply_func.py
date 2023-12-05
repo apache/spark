@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.config import option_context
 from pyspark.testing.pandasutils import ComparisonTestBase
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -252,8 +253,8 @@ class FrameApplyFunctionMixin:
         actual.columns = ["a", "b"]
         self.assert_eq(actual, pdf)
 
-        # For NumPy typing, NumPy version should be 1.21+ and Python version should be 3.8+
-        if sys.version_info >= (3, 8):
+        # For NumPy typing, NumPy version should be 1.21+
+        if LooseVersion(np.__version__) >= LooseVersion("1.21"):
             import numpy.typing as ntp
 
             psdf = ps.from_pandas(pdf)
