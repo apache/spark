@@ -16,7 +16,7 @@
 #
 
 import re
-from typing import Dict
+from typing import Dict, Match
 
 from pyspark.errors.error_classes import ERROR_CLASSES_MAP
 
@@ -41,7 +41,7 @@ class ErrorClassesReader:
             f"Parameters: {message_parameters}"
         )
 
-        def replace_match(match):
+        def replace_match(match: Match[str]) -> str:
             return match.group().translate(str.maketrans("<>", "{}"))
 
         # Convert <> to {} only when paired.
