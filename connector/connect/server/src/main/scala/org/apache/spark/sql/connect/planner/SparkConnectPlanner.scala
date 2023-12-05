@@ -1714,7 +1714,7 @@ class SparkConnectPlanner(
         children(2) match {
           case Literal(b, BinaryType) if b != null =>
             (Some(b.asInstanceOf[Array[Byte]]), Map.empty[String, String])
-          case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>
+          case UnresolvedFunction(Seq("map"), arguments, _, _, _, _) =>
             (None, ExprUtils.convertToMapData(CreateMap(arguments)))
           case other =>
             throw InvalidPlanInput(
@@ -1730,7 +1730,7 @@ class SparkConnectPlanner(
               s"DescFilePath in $functionName should be a literal binary, but got $other")
         }
         val map = children(3) match {
-          case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>
+          case UnresolvedFunction(Seq("map"), arguments, _, _, _, _) =>
             ExprUtils.convertToMapData(CreateMap(arguments))
           case other =>
             throw InvalidPlanInput(
@@ -2064,7 +2064,8 @@ class SparkConnectPlanner(
   @scala.annotation.tailrec
   private def extractMapData(expr: Expression, field: String): Map[String, String] = expr match {
     case map: CreateMap => ExprUtils.convertToMapData(map)
-    case UnresolvedFunction(Seq("map"), args, _, _, _) => extractMapData(CreateMap(args), field)
+    case UnresolvedFunction(Seq("map"), args, _, _, _, _) =>
+      extractMapData(CreateMap(args), field)
     case other => throw InvalidPlanInput(s"$field should be created by map, but got $other")
   }
 

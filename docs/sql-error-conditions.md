@@ -1125,6 +1125,14 @@ Invalid inline table.
 
 For more details see [INVALID_INLINE_TABLE](sql-error-conditions-invalid-inline-table-error-class.html)
 
+### [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
+
+SQLSTATE: ID001
+
+Invalid inverse distribution function `<funcName>`.
+
+For more details see [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
+
 ### INVALID_JSON_ROOT_FIELD
 
 [SQLSTATE: 22032](sql-error-conditions-sqlstates.html#class-22-data-exception)
