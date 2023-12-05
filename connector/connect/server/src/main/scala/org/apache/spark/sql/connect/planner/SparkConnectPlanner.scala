@@ -951,7 +951,9 @@ class SparkConnectPlanner(
     fun.getFunctionCase match {
       case proto.CommonInlineUserDefinedTableFunction.FunctionCase.PYTHON_UDTF =>
         val function = createPythonUserDefinedTableFunction(fun)
-        function.builder(fun.getArgumentsList.asScala.map(transformExpression).toSeq)
+        function.builder(
+          fun.getArgumentsList.asScala.map(transformExpression).toSeq,
+          session.sessionState.sqlParser)
       case _ =>
         throw InvalidPlanInput(
           s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
