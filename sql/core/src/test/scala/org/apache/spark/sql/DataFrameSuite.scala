@@ -987,6 +987,12 @@ class DataFrameSuite extends QueryTest
       parameters = Map("columnName" -> "`age`"))
   }
 
+  test("SPARK-46260: withColumnsRenamed should respect the Map ordering") {
+    val df = spark.range(10).toDF()
+    assert(df.withColumnsRenamed(Map("id" -> "a", "a" -> "b")).columns === Array("b"))
+    assert(df.withColumnsRenamed(Map("a" -> "b", "id" -> "a")).columns === Array("a"))
+  }
+
   test("SPARK-20384: Value class filter") {
     val df = spark.sparkContext
       .parallelize(Seq(StringWrapper("a"), StringWrapper("b"), StringWrapper("c")))
