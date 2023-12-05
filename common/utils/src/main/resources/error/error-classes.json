@@ -3058,12 +3058,12 @@
   },
   "STDS_INVALID_OPTION_VALUE" : {
     "message" : [
-      "Invalid value for source option '<optionName>': "
+      "Invalid value for source option '<optionName>':"
     ],
     "subClass" : {
-      "WITH_MESSAGE": {
+      "IS_EMPTY" : {
         "message" : [
-          "<message>"
+          "cannot be empty."
         ]
       },
       "IS_NEGATIVE" : {
@@ -3071,9 +3071,9 @@
           "cannot be negative."
         ]
       },
-      "IS_EMPTY" : {
+      "WITH_MESSAGE" : {
         "message" : [
-          "cannot be empty."
+          "<message>"
         ]
       }
     },

@@ -1940,11 +1940,13 @@ Rerun the streaming query to construct the state schema, and report to the corre
 Internal error: `<message>`
 Please, report this bug to the corresponding communities or vendors, and provide the full stack trace.
 
-### STDS_INVALID_OPTION_VALUE
+### [STDS_INVALID_OPTION_VALUE](sql-error-conditions-stds-invalid-option-value-error-class.html)
 
 [SQLSTATE: 42616](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Invalid value for source option '`<optionName>`': `<message>`
+Invalid value for source option '`<optionName>`':
+
+For more details see [STDS_INVALID_OPTION_VALUE](sql-error-conditions-stds-invalid-option-value-error-class.html)
 
 ### STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE
 
