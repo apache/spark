@@ -139,8 +139,9 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       Some(unwrapDateToTimestamp(be, fromExp, date, timeZoneId, evalMode))
 
     case be @ BinaryComparison(
-      Cast(fromExp: DateType, _, timeZoneId, evalMode), ts @ Literal(value, _))
-        if AnyTimestampType.acceptsType(ts.dataType) && value != null =>
+      Cast(fromExp, _, timeZoneId, evalMode), ts @ Literal(value, _))
+        if fromExp.dataType == DateType && AnyTimestampType.acceptsType(ts.dataType) &&
+          value != null =>
       Some(unwrapTimeStampToDate(be, fromExp, ts, timeZoneId, evalMode))
 
     // As the analyzer makes sure that the list of In is already of the same data type, then the
