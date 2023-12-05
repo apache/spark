@@ -698,6 +698,7 @@ pyspark_pandas = Module(
         "pyspark.pandas.spark.utils",
         "pyspark.pandas.typedef.typehints",
         # unittests
+        "pyspark.pandas.tests.data_type_ops.test_as_type",
         "pyspark.pandas.tests.data_type_ops.test_base",
         "pyspark.pandas.tests.data_type_ops.test_binary_ops",
         "pyspark.pandas.tests.data_type_ops.test_boolean_ops",
@@ -952,6 +953,7 @@ pyspark_pandas_connect_part0 = Module(
     ],
     python_test_goals=[
         # pandas-on-Spark unittests
+        "pyspark.pandas.tests.connect.data_type_ops.test_parity_as_type",
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_base",
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_binary_ops",
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_boolean_ops",
