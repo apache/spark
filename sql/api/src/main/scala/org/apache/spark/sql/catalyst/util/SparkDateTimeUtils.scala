@@ -325,12 +325,21 @@ trait SparkDateTimeUtils {
       return None;
     }
 
+    var strlen = bytes.length
+    while (strlen > j && UTF8String.isWhitespaceOrISOControl(bytes(strlen - 1))) {
+      strlen -= 1;
+    }
+
+    if (j >= strlen)
+    {
+      return None
+    }
+
     if (bytes(j) == '-' || bytes(j) == '+') {
       sign = if (bytes(j) == '-') -1 else 1
       j += 1
     }
-    while (j < bytes.length &&
-      (i < 3 && !(UTF8String.isWhitespaceOrISOControl(bytes(j)) || bytes(j) == 'T'))) {
+    while (j < strlen && (i < 3 && !(bytes(j) == ' ' || bytes(j) == 'T'))) {
       val b = bytes(j)
       if (i < 2 && b == '-') {
         if (!isValidDigits(i, currentSegmentDigits)) {
@@ -354,7 +363,7 @@ trait SparkDateTimeUtils {
     if (!isValidDigits(i, currentSegmentDigits)) {
       return None
     }
-    if (i < 2 && j < bytes.length) {
+    if (i < 2 && j < strlen) {
       // For the `yyyy` and `yyyy-[m]m` formats, entire input must be consumed.
       return None
     }
