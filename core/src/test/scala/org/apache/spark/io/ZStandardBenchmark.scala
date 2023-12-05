@@ -123,8 +123,8 @@ object ZStandardBenchmark extends BenchmarkBase {
           }
           oos.close()
         }
-        benchmark.run()
       }
+      benchmark.run()
     }
   }
 }
