@@ -316,30 +316,24 @@ trait SparkDateTimeUtils {
     var currentSegmentDigits = 0
     val bytes = s.getBytes
     var j = 0
+    var strEndTrimmed = bytes.length
 
     while (j < bytes.length && UTF8String.isWhitespaceOrISOControl(bytes(j))) {
       j += 1;
     }
-
     if (j == bytes.length) {
       return None;
     }
 
-    var strlen = bytes.length
-    while (strlen > j && UTF8String.isWhitespaceOrISOControl(bytes(strlen - 1))) {
-      strlen -= 1;
-    }
-
-    if (j >= strlen)
-    {
-      return None
+    while (strEndTrimmed > j && UTF8String.isWhitespaceOrISOControl(bytes(strEndTrimmed - 1))) {
+      strEndTrimmed -= 1;
     }
 
     if (bytes(j) == '-' || bytes(j) == '+') {
       sign = if (bytes(j) == '-') -1 else 1
       j += 1
     }
-    while (j < strlen && (i < 3 && !(bytes(j) == ' ' || bytes(j) == 'T'))) {
+    while (j < strEndTrimmed && (i < 3 && !(bytes(j) == ' ' || bytes(j) == 'T'))) {
       val b = bytes(j)
       if (i < 2 && b == '-') {
         if (!isValidDigits(i, currentSegmentDigits)) {
@@ -363,7 +357,7 @@ trait SparkDateTimeUtils {
     if (!isValidDigits(i, currentSegmentDigits)) {
       return None
     }
-    if (i < 2 && j < strlen) {
+    if (i < 2 && j < strEndTrimmed) {
       // For the `yyyy` and `yyyy-[m]m` formats, entire input must be consumed.
       return None
     }
