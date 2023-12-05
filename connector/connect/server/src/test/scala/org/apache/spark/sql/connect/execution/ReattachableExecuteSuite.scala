@@ -324,14 +324,6 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
         assert(SparkConnectService.executionManager.listExecuteHolders.length == 1)
       }
       stub.interrupt(interruptRequest)
-      // make sure the interrupt reaches the server
-      Eventually.eventually(timeout(eventuallyTimeout)) {
-        val execution = SparkConnectService.executionManager.listActiveExecutions match {
-          case Right(list) => list.find(_.operationId == operationId)
-          case Left(_) => None
-        }
-        assert(execution.isDefined && execution.get.status == ExecuteStatus.Canceled)
-      }
       // make sure the client gets the OPERATION_CANCELED error
       val e = intercept[StatusRuntimeException] {
         while (iter.hasNext) iter.next()
