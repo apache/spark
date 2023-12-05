@@ -35,7 +35,7 @@ def require_minimum_pandas_version() -> None:
         raise PySparkImportError(
             error_class="PACKAGE_NOT_INSTALLED",
             message_parameters={
-                "package_name:": "Pandas",
+                "package_name": "Pandas",
                 "minimum_version": str(minimum_pandas_version),
             },
         ) from raised_error
@@ -43,7 +43,7 @@ def require_minimum_pandas_version() -> None:
         raise PySparkImportError(
             error_class="UNSUPPORTED_PACKAGE_VERSION",
             message_parameters={
-                "package_name:": "Pandas",
+                "package_name": "Pandas",
                 "minimum_version": str(minimum_pandas_version),
                 "current_version": str(pandas.__version__),
             },
@@ -68,7 +68,7 @@ def require_minimum_pyarrow_version() -> None:
         raise PySparkImportError(
             error_class="PACKAGE_NOT_INSTALLED",
             message_parameters={
-                "package_name:": "PyArrow",
+                "package_name": "PyArrow",
                 "minimum_version": str(minimum_pyarrow_version),
             },
         ) from raised_error
@@ -76,7 +76,7 @@ def require_minimum_pyarrow_version() -> None:
         raise PySparkImportError(
             error_class="UNSUPPORTED_PACKAGE_VERSION",
             message_parameters={
-                "package_name:": "PyArrow",
+                "package_name": "PyArrow",
                 "minimum_version": str(minimum_pyarrow_version),
                 "current_version": str(pyarrow.__version__),
             },
