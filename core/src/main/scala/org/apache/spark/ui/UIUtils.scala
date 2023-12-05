@@ -431,7 +431,7 @@ private[spark] object UIUtils extends Logging {
     }
 
     val headerRow: Seq[Node] = {
-      headers.zipWithIndex.map { x =>
+      headers.to(LazyList).zipWithIndex.map { x =>
         getTooltip(x._2) match {
           case Some(tooltip) =>
             <th width={colWidthAttr} class={getClass(x._2)}>
