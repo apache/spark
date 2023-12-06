@@ -1515,15 +1515,20 @@ class SparkConnectClient(object):
         -------
         Throws the appropriate internal Python exception.
         """
-        if self._forbid_recursive_error_handling.can_enter:
-            with self._forbid_recursive_error_handling:
-                if isinstance(error, grpc.RpcError):
-                    self._handle_rpc_error(error)
-                elif isinstance(error, ValueError):
-                    if "Cannot invoke RPC" in str(error) and "closed" in str(error):
-                        raise SparkConnectException(
-                            error_class="NO_ACTIVE_SESSION", message_parameters=dict()
-                        ) from None
+
+        if not self._forbid_recursive_error_handling.can_enter:
+            # We are already inside error handling routine,
+            # avoid recursive error processing (with potentially infinite recursion)
+            raise error
+
+        with self._forbid_recursive_error_handling:
+            if isinstance(error, grpc.RpcError):
+                self._handle_rpc_error(error)
+            elif isinstance(error, ValueError):
+                if "Cannot invoke RPC" in str(error) and "closed" in str(error):
+                    raise SparkConnectException(
+                        error_class="NO_ACTIVE_SESSION", message_parameters=dict()
+                    ) from None
         raise error
 
     def _fetch_enriched_error(self, info: "ErrorInfo") -> Optional[pb2.FetchErrorDetailsResponse]:
