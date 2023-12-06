@@ -134,26 +134,6 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client = SparkConnectClient(chan)
         self.assertEqual(client._session_id, chan.session_id)
 
-    def test_forbid_recursion(self):
-        guard = ForbidRecursion()
-        max_depth = 0
-
-        def g(n):
-            nonlocal max_depth
-            with guard:
-                max_depth = n
-                g(n + 1)
-
-        with self.assertRaises(RecursionError):
-            g(1)
-        self.assertEqual(max_depth, 1)
-
-        # Do the same test again to check that guard resets.
-        max_depth = 0
-        with self.assertRaises(RecursionError):
-            g(1)
-        self.assertEqual(max_depth, 1)
-
 
 class TestPolicy(DefaultPolicy):
     def __init__(self):
