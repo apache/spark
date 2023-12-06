@@ -26,7 +26,7 @@ import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.SparkConnectServerTest
 import org.apache.spark.sql.connect.config.Connect
-import org.apache.spark.sql.connect.service.{ExecuteStatus, SparkConnectService}
+import org.apache.spark.sql.connect.service.SparkConnectService
 
 class ReattachableExecuteSuite extends SparkConnectServerTest {
 
