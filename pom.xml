@@ -138,8 +138,8 @@
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
     <kafka.version>3.4.1</kafka.version>
-    <!-- After 10.15.1.3, the minimum required version is JDK9 -->
-    <derby.version>10.14.2.0</derby.version>
+    <!-- After 10.17.1.0, the minimum required version is JDK19 -->
+    <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.13.1</parquet.version>
     <orc.version>1.9.2</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
@@ -960,6 +960,11 @@
       <dependency>
         <groupId>org.apache.derby</groupId>
         <artifactId>derby</artifactId>
+        <version>${derby.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.derby</groupId>
+        <artifactId>derbytools</artifactId>
         <version>${derby.version}</version>
       </dependency>
       <dependency>
