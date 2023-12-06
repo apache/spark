@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
 import org.apache.spark.sql.execution.aggregate.{ResolveEncodersInScalaAgg, ScalaUDAF}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
@@ -328,6 +329,10 @@ abstract class BaseSessionStateBuilder(
     extensions.buildColumnarRules(session)
   }
 
+  protected def executedPlanPrepRules: Seq[Rule[SparkPlan]] = {
+    extensions.buildExecutedPlanPrepRules(session)
+  }
+
   protected def adaptiveRulesHolder: AdaptiveRulesHolder = {
     new AdaptiveRulesHolder(
       extensions.buildQueryStagePrepRules(session),
@@ -403,6 +408,7 @@ abstract class BaseSessionStateBuilder(
       createQueryExecution,
       createClone,
       columnarRules,
+      executedPlanPrepRules,
       adaptiveRulesHolder,
       planNormalizationRules,
       () => artifactManager)

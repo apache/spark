@@ -47,6 +47,7 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  * <li>Customized Parser.</li>
  * <li>(External) Catalog listeners.</li>
  * <li>Columnar Rules.</li>
+ * <li>Executed Plan Preparation Rules.</li>
  * <li>Adaptive Query Post Planner Strategy Rules.</li>
  * <li>Adaptive Query Stage Preparation Rules.</li>
  * <li>Adaptive Query Execution Runtime Optimizer Rules.</li>
@@ -113,11 +114,13 @@ class SparkSessionExtensions {
   type FunctionDescription = (FunctionIdentifier, ExpressionInfo, FunctionBuilder)
   type TableFunctionDescription = (FunctionIdentifier, ExpressionInfo, TableFunctionBuilder)
   type ColumnarRuleBuilder = SparkSession => ColumnarRule
+  type ExecutedPlanPrepRuleBuilder = SparkSession => Rule[SparkPlan]
   type QueryPostPlannerStrategyBuilder = SparkSession => Rule[SparkPlan]
   type QueryStagePrepRuleBuilder = SparkSession => Rule[SparkPlan]
   type QueryStageOptimizerRuleBuilder = SparkSession => Rule[SparkPlan]
 
   private[this] val columnarRuleBuilders = mutable.Buffer.empty[ColumnarRuleBuilder]
+  private[this] val executedPlanPrepRuleBuilders = mutable.Buffer.empty[ExecutedPlanPrepRuleBuilder]
   private[this] val queryPostPlannerStrategyRuleBuilders =
     mutable.Buffer.empty[QueryPostPlannerStrategyBuilder]
   private[this] val queryStagePrepRuleBuilders = mutable.Buffer.empty[QueryStagePrepRuleBuilder]
@@ -130,6 +133,13 @@ class SparkSessionExtensions {
    */
   private[sql] def buildColumnarRules(session: SparkSession): Seq[ColumnarRule] = {
     columnarRuleBuilders.map(_.apply(session)).toSeq
+  }
+
+  /**
+   * Build the override rules for the for the executed plan preparation phase.
+   */
+  private[sql] def buildExecutedPlanPrepRules(session: SparkSession): Seq[Rule[SparkPlan]] = {
+    executedPlanPrepRuleBuilders.map(_.apply(session)).toSeq
   }
 
   /**
@@ -166,6 +176,13 @@ class SparkSessionExtensions {
    */
   def injectColumnar(builder: ColumnarRuleBuilder): Unit = {
     columnarRuleBuilders += builder
+  }
+
+  /**
+   * Inject a rule that applied between `plannerStrategy` and executed plan preparation
+   */
+  def injectExecutedPlanPrepRule(builder: ExecutedPlanPrepRuleBuilder): Unit = {
+    executedPlanPrepRuleBuilders += builder
   }
 
   /**
