@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.immutable.Map
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.text.StringEscapeUtils
 import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
@@ -33,10 +33,16 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeFo
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate.newCodeGenContext
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
+import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, V1Scan}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister, RelationProvider, SchemaRelationProvider, TableScan}
+import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister, TableScan}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{ParentClassLoader, Utils}
+
 
 /**
  * A manager for user-defined data sources. It is used to register and lookup data sources by
@@ -96,47 +102,65 @@ class DataSourceManager extends Logging {
 }
 
 /**
- * Data Source V1 default source wrapper for Python Data Source.
+ * Data Source V2 default source wrapper for Python Data Source.
  */
 abstract class PythonDefaultSource
-    extends RelationProvider
-    with SchemaRelationProvider
+    extends TableProvider
     with DataSourceRegister {
 
-  override def createRelation(
-      sqlContext: SQLContext, parameters: Map[String, String]): BaseRelation =
-    new PythonRelation(shortName(), sqlContext, parameters, None)
+  private var sourceDataFrame: DataFrame = _
 
-  override def createRelation(
-      sqlContext: SQLContext,
-      parameters: Map[String, String],
-      schema: StructType): BaseRelation =
-    new PythonRelation(shortName(), sqlContext, parameters, Some(schema))
-}
-
-/**
- * Data Source V1 relation wrapper for Python Data Source.
- */
-class PythonRelation(
-    source: String,
-    override val sqlContext: SQLContext,
-    parameters: Map[String, String],
-    maybeSchema: Option[StructType]) extends BaseRelation with TableScan {
-
-  private lazy val sourceDf: DataFrame = {
-    val caseInsensitiveMap = CaseInsensitiveMap(parameters)
+  private def getOrCreateSourceDataFrame(
+      options: CaseInsensitiveStringMap, maybeSchema: Option[StructType]): DataFrame = {
+    if (sourceDataFrame != null) return sourceDataFrame
     // TODO(SPARK-45600): should be session-based.
-    val builder = sqlContext.sparkSession.sharedState.dataSourceManager.lookupDataSource(source)
+    val builder = SparkSession.active.sessionState.dataSourceManager.lookupDataSource(shortName())
     val plan = builder(
-      sqlContext.sparkSession, source, caseInsensitiveMap.get("path").toSeq,
-      maybeSchema, caseInsensitiveMap)
-    Dataset.ofRows(sqlContext.sparkSession, plan)
+      SparkSession.active,
+      shortName(),
+      maybeSchema,
+      CaseInsensitiveMap(options.asCaseSensitiveMap().asScala.toMap))
+    sourceDataFrame = Dataset.ofRows(SparkSession.active, plan)
+    sourceDataFrame
   }
 
-  override def schema: StructType = sourceDf.schema
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType =
+    getOrCreateSourceDataFrame(options, None).schema
 
-  override def buildScan(): RDD[Row] = sourceDf.rdd
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: java.util.Map[String, String]): Table = {
+    val givenSchema = schema
+    new Table with SupportsRead {
+      override def name(): String = shortName()
+
+      override def capabilities(): java.util.Set[TableCapability] = java.util.EnumSet.of(BATCH_READ)
+
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new ScanBuilder with V1Scan {
+          override def build(): Scan = this
+          override def toV1TableScan[T <: BaseRelation with TableScan](
+              context: SQLContext): T = {
+            new BaseRelation with TableScan {
+              // Avoid Row <> InternalRow conversion
+              override val needConversion: Boolean = false
+              override def buildScan(): RDD[Row] =
+                getOrCreateSourceDataFrame(options, Some(givenSchema))
+                  .queryExecution.toRdd.asInstanceOf[RDD[Row]]
+              override def schema: StructType = givenSchema
+              override def sqlContext: SQLContext = context
+            }.asInstanceOf[T]
+          }
+          override def readSchema(): StructType = givenSchema
+        }
+      }
+
+      override def schema(): StructType = givenSchema
+    }
+  }
 }
+
 
 /**
  * Responsible for generating a class for Python Data Source

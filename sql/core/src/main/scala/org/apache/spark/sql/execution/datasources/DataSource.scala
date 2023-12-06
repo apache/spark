@@ -649,6 +649,9 @@ object DataSource extends Logging {
                 // Found the data source using fully qualified path
                 dataSource
               case Failure(error) =>
+                // TODO(SPARK-45600): should be session-based.
+                val isUserDefinedDataSource = SparkSession.getActiveSession.exists(
+                  _.sessionState.dataSourceManager.dataSourceExists(provider))
                 if (provider1.startsWith("org.apache.spark.sql.hive.orc")) {
                   throw QueryCompilationErrors.orcNotUsedWithHiveEnabledError()
                 } else if (provider1.toLowerCase(Locale.ROOT) == "avro" ||
@@ -657,6 +660,12 @@ object DataSource extends Logging {
                   throw QueryCompilationErrors.failedToFindAvroDataSourceError(provider1)
                 } else if (provider1.toLowerCase(Locale.ROOT) == "kafka") {
                   throw QueryCompilationErrors.failedToFindKafkaDataSourceError(provider1)
+                } else if (isUserDefinedDataSource) {
+                  // TODO(SPARK-45916): Try Python Data Source. Should probably cache
+                  //   to avoid regenerating every time (?), but if we want to allow
+                  //   runtime update of the Python datasource, we should regenerate
+                  //   everytime.
+                  PythonDataSourceCodeGenerator.generateClass(provider)
                 } else {
                   throw QueryExecutionErrors.dataSourceNotFoundError(provider1, error)
                 }
@@ -673,6 +682,14 @@ object DataSource extends Logging {
           }
         case head :: Nil =>
           // there is exactly one registered alias
+          // TODO(SPARK-45600): should be session-based.
+          val isUserDefinedDataSource = SparkSession.getActiveSession.exists(
+            _.sessionState.dataSourceManager.dataSourceExists(provider))
+          // The source can be successfully loaded as either a V1 or a V2 data source.
+          // Check if it is also a user-defined data source.
+          if (isUserDefinedDataSource) {
+            throw QueryCompilationErrors.foundMultipleDataSources(provider)
+          }
           head.getClass
         case sources =>
           // There are multiple registered aliases for the input. If there is single datasource
