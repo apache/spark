@@ -77,4 +77,18 @@ class FileFormatWriterSuite
       }
     }
   }
+
+  test("SPARK-46279: should write partition columns to files if enabled") {
+    withTable("t1") {
+      Seq((0, None), (1, Some("")), (2, None)).toDF("id", "p")
+        .write.partitionBy("p")
+        .option("writePartitionColumns", value = true)
+        .format("parquet")
+        .saveAsTable("t1")
+
+      val filePath = sql("SELECT * from t1").inputFiles.head
+      val fileContent = spark.read.parquet(filePath)
+      assert(fileContent.schema.map(_.name).contains("p"))
+    }
+  }
 }

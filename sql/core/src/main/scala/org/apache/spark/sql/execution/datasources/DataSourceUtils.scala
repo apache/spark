@@ -53,6 +53,11 @@ object DataSourceUtils extends PredicateHelper {
   val PARTITION_OVERWRITE_MODE = "partitionOverwriteMode"
 
   /**
+   * The key control if it should write partition columns to data files
+   */
+  val WRITE_PARTITION_COLUMNS = "writePartitionColumns"
+
+  /**
    * Utility methods for converting partitionBy columns to options and back.
    */
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)

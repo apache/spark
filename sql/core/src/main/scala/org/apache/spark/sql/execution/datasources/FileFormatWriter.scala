@@ -95,8 +95,7 @@ object FileFormatWriter extends Logging {
       bucketSpec: Option[BucketSpec],
       statsTrackers: Seq[WriteJobStatsTracker],
       options: Map[String, String],
-      numStaticPartitionCols: Int = 0,
-      writePartitionColumns: Boolean = false)
+      numStaticPartitionCols: Int = 0)
     : Set[String] = {
     require(partitionColumns.size >= numStaticPartitionCols)
 
@@ -120,6 +119,10 @@ object FileFormatWriter extends Logging {
     val dataSchema = dataColumns.toStructType
     DataSourceUtils.verifySchema(fileFormat, dataSchema)
     DataSourceUtils.checkFieldNames(fileFormat, dataSchema)
+
+    val writePartitionColumns = caseInsensitiveOptions
+      .get(DataSourceUtils.WRITE_PARTITION_COLUMNS)
+      .exists(_.toBoolean == true)
 
     val outputDataColumns =
       if (writePartitionColumns) dataColumns ++ partitionColumns else dataColumns
