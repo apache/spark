@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
+import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.PATH
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV1}
 import org.apache.spark.sql.sources.DataSourceRegister
@@ -95,8 +96,7 @@ class StateMetadataTable extends Table with SupportsRead with SupportsMetadataCo
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     () => {
       if (!options.containsKey("path")) {
-        throw new IllegalArgumentException("Checkpoint path is not specified for" +
-          " state metadata data source.")
+        throw StateDataSourceErrors.requiredOptionUnspecified(PATH)
       }
       new StateMetadataScan(options.get("path"))
     }
