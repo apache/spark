@@ -151,8 +151,11 @@ jobs:
             java${{ matrix.java }}-maven-
       - name: Clear Ivy Cache
         run: |
+          ls -al ~
           rm -rf ~/.ivy2/cache/org.apache.hive/hive-exec
           rm -rf ~/.ivy2/cache/org.slf4j/slf4j-api
+          rm -rf ~/.m2/repository/org/apache/hive/hive-exec/2.3.9
+          rm -rf ~/.m2/repository/org/slf4j/slf4j-api/1.7.30
       - name: Install Java ${{ matrix.java }}
         uses: actions/setup-java@v3
         with:
