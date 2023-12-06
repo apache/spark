@@ -47,17 +47,6 @@ trait AdaptiveSparkPlanHelper {
   }
 
   /**
-   * A variant of [[foreach]] which considers plan nodes inside subqueries as well.
-   */
-  def foreachWithSubqueries(p: SparkPlan)(f: SparkPlan => Unit): Unit = {
-    def actualFunc(plan: SparkPlan): Unit = {
-      f(plan)
-      plan.subqueries.foreach(foreachWithSubqueries(_)(f))
-    }
-    foreach(p)(actualFunc)
-  }
-
-  /**
    * Runs the given function recursively on children then on this node.
    * @param f the function to be applied to each node in the tree.
    */

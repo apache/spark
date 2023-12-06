@@ -4712,14 +4712,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-46285: foreachWithSubqueries") {
-    val sql = "SELECT * FROM q WHERE col_t in (SELECT * FROM b)"
+    val sql = "SELECT * FROM t WHERE col_t in (SELECT * FROM subquery_table)"
     val plan = spark.sessionState.sqlParser.parsePlan(sql)
     val cache = scala.collection.mutable.Set[String]()
     plan.foreachWithSubqueries {
       case UnresolvedRelation(iden, _, _) => cache.add(iden.mkString("."))
       case _ =>
     }
-    assert(cache.contains("b"))
+    assert(cache.contains("subquery_table"))
   }
 }
 
