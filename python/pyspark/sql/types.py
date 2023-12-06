@@ -55,6 +55,7 @@ from pyspark.errors import (
     PySparkTypeError,
     PySparkValueError,
     PySparkIndexError,
+    PySparkRuntimeError,
     PySparkAttributeError,
     PySparkKeyError,
 )
@@ -476,7 +477,10 @@ class DayTimeIntervalType(AnsiIntervalType):
 
         fields = DayTimeIntervalType._fields
         if startField not in fields.keys() or endField not in fields.keys():
-            raise RuntimeError("interval %s to %s is invalid" % (startField, endField))
+            raise PySparkRuntimeError(
+                error_class="INVALID_INTERVAL_CASTING",
+                message_parameters={"start_field": str(startField), "end_field": str(endField)},
+            )
         self.startField = cast(int, startField)
         self.endField = cast(int, endField)
 
@@ -531,7 +535,10 @@ class YearMonthIntervalType(AnsiIntervalType):
 
         fields = YearMonthIntervalType._fields
         if startField not in fields.keys() or endField not in fields.keys():
-            raise RuntimeError("interval %s to %s is invalid" % (startField, endField))
+            raise PySparkRuntimeError(
+                error_class="INVALID_INTERVAL_CASTING",
+                message_parameters={"start_field": str(startField), "end_field": str(endField)},
+            )
         self.startField = cast(int, startField)
         self.endField = cast(int, endField)
 
@@ -2594,7 +2601,10 @@ class Row(tuple):
 
     def __setattr__(self, key: Any, value: Any) -> None:
         if key != "__fields__":
-            raise RuntimeError("Row is read-only")
+            raise PySparkRuntimeError(
+                error_class="READ_ONLY",
+                message_parameters={"object": "Row"},
+            )
         self.__dict__[key] = value
 
     def __reduce__(
