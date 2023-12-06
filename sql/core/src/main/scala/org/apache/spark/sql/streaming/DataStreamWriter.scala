@@ -38,7 +38,7 @@ import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table,
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.{DataSource, PythonTableProvider}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources._
@@ -382,7 +382,11 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       }
 
       val sink = if (classOf[TableProvider].isAssignableFrom(cls) && !useV1Source) {
-        val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
+        val provider = cls match {
+          case cls if classOf[PythonTableProvider].isAssignableFrom(cls) =>
+            cls.getConstructor(classOf[String]).newInstance(source).asInstanceOf[TableProvider]
+          case cls => cls.getDeclaredConstructor().newInstance().asInstanceOf[TableProvider]
+        }
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
           source = provider, conf = df.sparkSession.sessionState.conf)
         val finalOptions = sessionOptions.filter { case (k, _) => !optionsWithPath.contains(k) } ++

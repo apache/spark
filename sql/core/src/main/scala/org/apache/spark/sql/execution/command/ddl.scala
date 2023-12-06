@@ -45,7 +45,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.hiveTableWithAnsiIntervalsError
-import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils, FileFormat, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
@@ -1022,7 +1022,11 @@ object DDLUtils extends Logging {
 
   def checkDataColNames(provider: String, schema: StructType): Unit = {
     val source = try {
-      DataSource.lookupDataSource(provider, SQLConf.get).getConstructor().newInstance()
+      DataSource.lookupDataSource(provider, SQLConf.get) match {
+        case cls if classOf[PythonTableProvider].isAssignableFrom(cls) =>
+          cls.getConstructor(classOf[String]).newInstance(provider)
+        case cls => cls.getDeclaredConstructor().newInstance()
+      }
     } catch {
       case e: Throwable =>
         logError(s"Failed to find data source: $provider when check data column names.", e)
