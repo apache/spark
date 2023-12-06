@@ -1018,6 +1018,11 @@ ERROR_CLASSES_JSON = """
       "<operation> is not supported."
     ]
   },
+  "UNSUPPORTED_PACKAGE_VERSION" : {
+    "message" : [
+      "<package_name> >= <minimum_version> must be installed; however, your version is <current_version>."
+    ]
+  },
   "UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION" : {
     "message" : [
       "Function `<func_name>` should use only POSITIONAL or POSITIONAL OR KEYWORD arguments."
