@@ -16,9 +16,9 @@
     under the License.
 
 
-============
-Input/Output
-============
+==========
+Read/Write
+==========
 .. currentmodule:: pyspark.sql
 
 .. autosummary::

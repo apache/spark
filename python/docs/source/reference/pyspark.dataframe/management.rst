@@ -16,27 +16,23 @@
     under the License.
 
 
-=========
-Spark SQL
-=========
+====================
+DataFrame Management
+====================
+.. currentmodule:: pyspark.sql
 
-This page gives an overview of all public Spark SQL API.
+.. autosummary::
+    :toctree: api/
 
-.. toctree::
-    :maxdepth: 2
-
-    core_classes
-    spark_session
-    configuration
-    column
-    data_types
-    row
-    functions
-    window
-    grouping
-    catalog
-    avro
-    observation
-    udf
-    udtf
-    protobuf
+    DataFrame.cache
+    DataFrame.persist
+    DataFrame.unpersist
+    DataFrame.storageLevel
+    DataFrame.checkpoint
+    DataFrame.localCheckpoint
+    DataFrame.createTempView
+    DataFrame.createGlobalTempView
+    DataFrame.createOrReplaceTempView
+    DataFrame.createOrReplaceGlobalTempView
+    DataFrame.registerTempTable
+    DataFrame.withWatermark

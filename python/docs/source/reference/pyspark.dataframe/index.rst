@@ -17,26 +17,20 @@
 
 
 =========
-Spark SQL
+DataFrame
 =========
 
-This page gives an overview of all public Spark SQL API.
+This page gives an overview of all public DataFrame API.
 
 .. toctree::
     :maxdepth: 2
 
-    core_classes
-    spark_session
-    configuration
-    column
-    data_types
-    row
-    functions
-    window
-    grouping
-    catalog
-    avro
-    observation
-    udf
-    udtf
-    protobuf
+    transformation
+    rw
+    combination
+    statistics
+    retrieval
+    management
+    properties
+    partitioning
+    plan

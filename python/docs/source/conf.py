@@ -45,7 +45,7 @@ generate_errors_doc(output_rst_file_path)
 # Remove previously generated rst files. Ignore errors just in case it stops
 # generating whole docs.
 gen_rst_dirs = ["reference/api", "reference/pyspark.pandas/api",
-    "reference/pyspark.sql/api", "reference/pyspark.ss/api"]
+    "reference/pyspark.sql/api", "reference/pyspark.ss/api", "reference/pyspark.dataframe/api"]
 for gen_rst_dir in gen_rst_dirs:
     absolute_gen_rst_dir = "%s/%s" % (os.path.dirname(os.path.abspath(__file__)), gen_rst_dir)
     shutil.rmtree(absolute_gen_rst_dir, ignore_errors=True)

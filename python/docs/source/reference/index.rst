@@ -30,6 +30,7 @@ This page lists an overview of all public PySpark modules, classes, functions an
    :maxdepth: 2
 
    pyspark.sql/index
+   pyspark.dataframe/index
    pyspark.pandas/index
    pyspark.ss/index
    pyspark.ml
