@@ -16,7 +16,7 @@
 #
 
 from pyspark.loose_version import LooseVersion
-from pyspark.errors import PySparkRuntimeError
+from pyspark.errors import PySparkImportError, PySparkRuntimeError
 
 
 def require_minimum_pandas_version() -> None:
@@ -32,13 +32,21 @@ def require_minimum_pandas_version() -> None:
         have_pandas = False
         raised_error = error
     if not have_pandas:
-        raise ImportError(
-            "Pandas >= %s must be installed; however, " "it was not found." % minimum_pandas_version
+        raise PySparkImportError(
+            error_class="PACKAGE_NOT_INSTALLED",
+            message_parameters={
+                "package_name": "Pandas",
+                "minimum_version": str(minimum_pandas_version),
+            },
         ) from raised_error
     if LooseVersion(pandas.__version__) < LooseVersion(minimum_pandas_version):
-        raise ImportError(
-            "Pandas >= %s must be installed; however, "
-            "your version was %s." % (minimum_pandas_version, pandas.__version__)
+        raise PySparkImportError(
+            error_class="UNSUPPORTED_PACKAGE_VERSION",
+            message_parameters={
+                "package_name": "Pandas",
+                "minimum_version": str(minimum_pandas_version),
+                "current_version": str(pandas.__version__),
+            },
         )
 
 
@@ -57,14 +65,21 @@ def require_minimum_pyarrow_version() -> None:
         have_arrow = False
         raised_error = error
     if not have_arrow:
-        raise ImportError(
-            "PyArrow >= %s must be installed; however, "
-            "it was not found." % minimum_pyarrow_version
+        raise PySparkImportError(
+            error_class="PACKAGE_NOT_INSTALLED",
+            message_parameters={
+                "package_name": "PyArrow",
+                "minimum_version": str(minimum_pyarrow_version),
+            },
         ) from raised_error
     if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
-        raise ImportError(
-            "PyArrow >= %s must be installed; however, "
-            "your version was %s." % (minimum_pyarrow_version, pyarrow.__version__)
+        raise PySparkImportError(
+            error_class="UNSUPPORTED_PACKAGE_VERSION",
+            message_parameters={
+                "package_name": "PyArrow",
+                "minimum_version": str(minimum_pyarrow_version),
+                "current_version": str(pyarrow.__version__),
+            },
         )
     if os.environ.get("ARROW_PRE_0_15_IPC_FORMAT", "0") == "1":
         raise PySparkRuntimeError(

@@ -264,3 +264,9 @@ class PySparkKeyError(PySparkException, KeyError):
     """
     Wrapper class for KeyError to support error classes.
     """
+
+
+class PySparkImportError(PySparkException, ImportError):
+    """
+    Wrapper class for ImportError to support error classes.
+    """
