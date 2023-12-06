@@ -22,6 +22,7 @@ import typing
 from typing import Optional, Callable, Generator, List, Type
 from types import TracebackType
 from pyspark.sql.connect.client.logging import logger
+from pyspark.errors import PySparkRuntimeError
 
 """
 This module contains retry system. The system is designed to be
@@ -201,7 +202,10 @@ class Retrying:
 
     def _last_exception(self) -> BaseException:
         if self._exception is None:
-            raise RuntimeError("No active exception")
+            raise PySparkRuntimeError(
+                error_class="NO_ACTIVE_EXCEPTION",
+                message_parameters={},
+            )
         return self._exception
 
     def _wait(self) -> None:

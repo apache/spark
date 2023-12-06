@@ -66,7 +66,6 @@ class FunctionsTestsMixin:
             "random",  # namespace conflict with python built-in module
             "uuid",  # namespace conflict with python built-in module
             "chr",  # namespace conflict with python built-in function
-            "session_user",  # Scala only for now, needs implementation
             "partitioning$",  # partitioning expressions for DSv2
         ]
 

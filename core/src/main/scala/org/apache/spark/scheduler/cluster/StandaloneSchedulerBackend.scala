@@ -254,8 +254,8 @@ private[spark] class StandaloneSchedulerBackend(
 
   override def getDriverLogUrls: Option[Map[String, String]] = {
     val prefix = "SPARK_DRIVER_LOG_URL_"
-    val driverLogUrls = sys.env.view.filterKeys(_.startsWith(prefix))
-      .map(e => (e._1.substring(prefix.length).toLowerCase(Locale.ROOT), e._2)).toMap
+    val driverLogUrls = sys.env.filter { case (k, _) => k.startsWith(prefix) }
+      .map(e => (e._1.substring(prefix.length).toLowerCase(Locale.ROOT), e._2))
     if (driverLogUrls.nonEmpty) Some(driverLogUrls) else None
   }
 

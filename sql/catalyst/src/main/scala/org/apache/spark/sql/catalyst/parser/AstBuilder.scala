@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableId
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, ClusterBySpec}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AnyValue, First, Last, PercentileCont, PercentileDisc}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AnyValue, First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -2207,35 +2207,6 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   }
 
   /**
-   * Create a Percentile expression.
-   */
-  override def visitPercentile(ctx: PercentileContext): Expression = withOrigin(ctx) {
-    val percentage = expression(ctx.percentage)
-    val sortOrder = visitSortItem(ctx.sortItem)
-    val percentile = ctx.name.getType match {
-      case SqlBaseParser.PERCENTILE_CONT =>
-        sortOrder.direction match {
-          case Ascending => PercentileCont(sortOrder.child, percentage)
-          case Descending => PercentileCont(sortOrder.child, percentage, true)
-        }
-      case SqlBaseParser.PERCENTILE_DISC =>
-        sortOrder.direction match {
-          case Ascending => PercentileDisc(sortOrder.child, percentage)
-          case Descending => PercentileDisc(sortOrder.child, percentage, true)
-        }
-    }
-    val filter = Option(ctx.where).map(expression(_))
-    val aggregateExpression = percentile.toAggregateExpression(false, filter)
-    ctx.windowSpec match {
-      case spec: WindowRefContext =>
-        UnresolvedWindowExpression(aggregateExpression, visitWindowRef(spec))
-      case spec: WindowDefContext =>
-        WindowExpression(aggregateExpression, visitWindowDef(spec))
-      case _ => aggregateExpression
-    }
-  }
-
-  /**
    * Create a Substring/Substr expression.
    */
   override def visitSubstring(ctx: SubstringContext): Expression = withOrigin(ctx) {
@@ -2296,6 +2267,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       case expressions =>
         expressions
     }
+    val order = ctx.sortItem.asScala.map(visitSortItem)
     val filter = Option(ctx.where).map(expression(_))
     val ignoreNulls =
       Option(ctx.nullsOption).map(_.getType == SqlBaseParser.IGNORE).getOrElse(false)
@@ -2313,7 +2285,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       val funcCtx = ctx.functionName
       val func = withFuncIdentClause(
         funcCtx,
-        ident => UnresolvedFunction(ident, arguments, isDistinct, filter, ignoreNulls)
+        ident => UnresolvedFunction(ident, arguments, isDistinct, filter, ignoreNulls, order.toSeq)
       )
 
       // Check if the function is evaluated in a windowed context.

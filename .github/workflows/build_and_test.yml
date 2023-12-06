@@ -150,7 +150,7 @@ jobs:
           - >-
             mllib-local, mllib, graphx
           - >-
-            streaming, sql-kafka-0-10, streaming-kafka-0-10,
+            streaming, sql-kafka-0-10, streaming-kafka-0-10, streaming-kinesis-asl,
             yarn, kubernetes, hadoop-cloud, spark-ganglia-lgpl,
             connect, protobuf
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.

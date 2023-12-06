@@ -309,18 +309,20 @@ class SparkSession(SparkConversionMixin):
             if "spark.master" in self._options and (
                 "spark.remote" in self._options or "SPARK_REMOTE" in os.environ
             ):
-                raise RuntimeError(
-                    "Spark master cannot be configured with Spark Connect server; "
-                    "however, found URL for Spark Connect [%s]"
-                    % self._options.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+                raise PySparkRuntimeError(
+                    error_class="CANNOT_CONFIGURE_SPARK_MASTER",
+                    message_parameters={
+                        "url": self._options.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+                    },
                 )
             if "spark.remote" in self._options and (
                 "spark.master" in self._options or "MASTER" in os.environ
             ):
-                raise RuntimeError(
-                    "Spark Connect server cannot be configured with Spark master; "
-                    "however, found URL for Spark master [%s]"
-                    % self._options.get("spark.master", os.environ.get("MASTER"))
+                raise PySparkRuntimeError(
+                    error_class="CANNOT_CONFIGURE_SPARK_CONNECT",
+                    message_parameters={
+                        "url": self._options.get("spark.master", os.environ.get("MASTER"))
+                    },
                 )
 
             if "spark.remote" in self._options:
@@ -328,10 +330,12 @@ class SparkSession(SparkConversionMixin):
                 if ("SPARK_REMOTE" in os.environ and os.environ["SPARK_REMOTE"] != remote) and (
                     "SPARK_LOCAL_REMOTE" in os.environ and not remote.startswith("local")
                 ):
-                    raise RuntimeError(
-                        "Only one Spark Connect client URL can be set; however, got a "
-                        "different URL [%s] from the existing [%s]"
-                        % (os.environ["SPARK_REMOTE"], remote)
+                    raise PySparkRuntimeError(
+                        error_class="CANNOT_CONFIGURE_SPARK_CONNECT",
+                        message_parameters={
+                            "new_url": os.environ["SPARK_REMOTE"],
+                            "existing_url": remote,
+                        },
                     )
 
         def master(self, master: str) -> "SparkSession.Builder":
@@ -482,11 +486,9 @@ class SparkSession(SparkConversionMixin):
                             url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
 
                             if url is None:
-                                raise RuntimeError(
-                                    "Cannot create a Spark Connect session because the "
-                                    "Spark Connect remote URL has not been set. Please define "
-                                    "the remote URL by setting either the 'spark.remote' option "
-                                    "or the 'SPARK_REMOTE' environment variable."
+                                raise PySparkRuntimeError(
+                                    error_class="CONNECT_URL_NOT_SET",
+                                    message_parameters={},
                                 )
 
                             if url.startswith("local"):
@@ -503,9 +505,9 @@ class SparkSession(SparkConversionMixin):
                             opts["spark.remote"] = url
                             return RemoteSparkSession.builder.config(map=opts).getOrCreate()
                         else:
-                            raise RuntimeError(
-                                "Cannot start a remote Spark session because there "
-                                "is a regular Spark session already running."
+                            raise PySparkRuntimeError(
+                                error_class="SESSION_ALREADY_EXIST",
+                                message_parameters={},
                             )
 
                 session = SparkSession._instantiatedSession
@@ -548,9 +550,9 @@ class SparkSession(SparkConversionMixin):
 
                 url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
                 if url.startswith("local"):
-                    raise RuntimeError(
-                        "Creating new SparkSessions with `local` "
-                        "connection string is not supported."
+                    raise PySparkRuntimeError(
+                        error_class="UNSUPPORTED_LOCAL_CONNECTION_STRING",
+                        message_parameters={},
                     )
 
                 # Mark this Spark Session as Spark Connect. This prevents that local PySpark is
@@ -559,9 +561,9 @@ class SparkSession(SparkConversionMixin):
                 opts["spark.remote"] = url
                 return RemoteSparkSession.builder.config(map=opts).create()
             else:
-                raise RuntimeError(
-                    "SparkSession.builder.create() can only be used with Spark Connect; "
-                    "however, spark.remote was not found."
+                raise PySparkRuntimeError(
+                    error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+                    message_parameters={"feature": "SparkSession.builder.create"},
                 )
 
     # TODO(SPARK-38912): Replace @classproperty with @classmethod + @property once support for
@@ -1916,9 +1918,9 @@ class SparkSession(SparkConversionMixin):
         This is an API dedicated to Spark Connect client only. With regular Spark Session, it throws
         an exception.
         """
-        raise RuntimeError(
-            "SparkSession.client is only supported with Spark Connect; "
-            "however, the current Spark session does not use Spark Connect."
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.client"},
         )
 
     def addArtifacts(
@@ -1949,9 +1951,9 @@ class SparkSession(SparkConversionMixin):
         This is an API dedicated to Spark Connect client only. With regular Spark Session, it throws
         an exception.
         """
-        raise RuntimeError(
-            "SparkSession.addArtifact(s) is only supported with Spark Connect; "
-            "however, the current Spark session does not use Spark Connect."
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.addArtifact(s)"},
         )
 
     addArtifact = addArtifacts
@@ -1979,9 +1981,9 @@ class SparkSession(SparkConversionMixin):
         Also, this is an API dedicated to Spark Connect client only. With regular
         Spark Session, it throws an exception.
         """
-        raise RuntimeError(
-            "SparkSession.copyFromLocalToFs is only supported with Spark Connect; "
-            "however, the current Spark session does not use Spark Connect."
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.copyFromLocalToFs"},
         )
 
     def interruptAll(self) -> List[str]:
@@ -1999,9 +2001,9 @@ class SparkSession(SparkConversionMixin):
         -----
         There is still a possibility of operation finishing just as it is interrupted.
         """
-        raise RuntimeError(
-            "SparkSession.interruptAll is only supported with Spark Connect; "
-            "however, the current Spark session does not use Spark Connect."
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.interruptAll"},
         )
 
     def interruptTag(self, tag: str) -> List[str]:
@@ -2019,9 +2021,9 @@ class SparkSession(SparkConversionMixin):
         -----
         There is still a possibility of operation finishing just as it is interrupted.
         """
-        raise RuntimeError(
-            "SparkSession.interruptTag is only supported with Spark Connect; "
-            "however, the current Spark session does not use Spark Connect."
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.interruptTag"},
         )
 
     def interruptOperation(self, op_id: str) -> List[str]:
@@ -2039,9 +2041,9 @@ class SparkSession(SparkConversionMixin):
         -----
         There is still a possibility of operation finishing just as it is interrupted.
         """
-        raise RuntimeError(
-            "SparkSession.interruptOperation is only supported with Spark Connect; "
-            "however, the current Spark session does not use Spark Connect."
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.interruptOperation"},
         )
 
     def addTag(self, tag: str) -> None:
@@ -2063,9 +2065,9 @@ class SparkSession(SparkConversionMixin):
         tag : str
             The tag to be added. Cannot contain ',' (comma) character or be an empty string.
         """
-        raise RuntimeError(
-            "SparkSession.addTag is only supported with Spark Connect; "
-            "however, the current Spark session does not use Spark Connect."
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.addTag"},
         )
 
     def removeTag(self, tag: str) -> None:
@@ -2080,9 +2082,9 @@ class SparkSession(SparkConversionMixin):
         tag : list of str
             The tag to be removed. Cannot contain ',' (comma) character or be an empty string.
         """
-        raise RuntimeError(
-            "SparkSession.removeTag is only supported with Spark Connect; "
-            "however, the current Spark session does not use Spark Connect."
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.removeTag"},
         )
 
     def getTags(self) -> Set[str]:
@@ -2097,9 +2099,9 @@ class SparkSession(SparkConversionMixin):
         set of str
             Set of tags of interrupted operations.
         """
-        raise RuntimeError(
-            "SparkSession.getTags is only supported with Spark Connect; "
-            "however, the current Spark session does not use Spark Connect."
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.getTags"},
         )
 
     def clearTags(self) -> None:
@@ -2108,9 +2110,9 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 3.5.0
         """
-        raise RuntimeError(
-            "SparkSession.clearTags is only supported with Spark Connect; "
-            "however, the current Spark session does not use Spark Connect."
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.clearTags"},
         )
 
 

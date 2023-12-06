@@ -22,6 +22,7 @@ import java.util.OptionalLong
 
 import test.org.apache.spark.sql.connector._
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, Table, TableCapability, TableProvider}
@@ -231,11 +232,11 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         val e = intercept[IllegalArgumentException](spark.read.format(cls.getName).load())
         assert(e.getMessage.contains("requires a user-supplied schema"))
 
-        val schema = new StructType().add("i", "int").add("s", "string")
+        val schema = new StructType().add("i", "int").add("j", "int")
         val df = spark.read.format(cls.getName).schema(schema).load()
 
         assert(df.schema == schema)
-        assert(df.collect().isEmpty)
+        checkAnswer(df, Seq(Row(0, 0), Row(1, -1)))
       }
     }
   }
@@ -633,6 +634,95 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       }
     }
   }
+
+  test("SPARK-46043: create table in SQL using a DSv2 source") {
+    Seq(classOf[SimpleDataSourceV2], classOf[JavaSimpleDataSourceV2]).foreach { cls =>
+      withClue(cls.getName) {
+        // Create a table with empty schema.
+        withTable("test") {
+          sql(s"CREATE TABLE test USING ${cls.getName}")
+          checkAnswer(
+            sql(s"SELECT * FROM test WHERE i < 3"),
+            Seq(Row(0, 0), Row(1, -1), Row(2, -2)))
+        }
+        // Create a table with non-empty schema is not allowed.
+        checkError(
+          exception = intercept[SparkUnsupportedOperationException] {
+            sql(s"CREATE TABLE test(a INT, b INT) USING ${cls.getName}")
+          },
+          errorClass = "CANNOT_CREATE_DATA_SOURCE_TABLE.EXTERNAL_METADATA_UNSUPPORTED",
+          parameters = Map("tableName" -> "`default`.`test`", "provider" -> cls.getName)
+        )
+      }
+    }
+  }
+
+  test("SPARK-46043: create table in SQL with schema required data source") {
+    val cls = classOf[SchemaRequiredDataSource]
+    val e = intercept[IllegalArgumentException] {
+      sql(s"CREATE TABLE test USING ${cls.getName}")
+    }
+    assert(e.getMessage.contains("requires a user-supplied schema"))
+    withTable("test") {
+      sql(s"CREATE TABLE test(i INT, j INT) USING ${cls.getName}")
+      checkAnswer(sql(s"SELECT * FROM test"), Seq(Row(0, 0), Row(1, -1)))
+    }
+    withTable("test") {
+      sql(s"CREATE TABLE test(i INT) USING ${cls.getName}")
+      checkAnswer(sql(s"SELECT * FROM test"), Seq(Row(0), Row(1)))
+    }
+    withTable("test") {
+      // Test the behavior when there is a mismatch between the schema defined in the
+      // CREATE TABLE command and the actual schema produced by the data source. The
+      // resulting behavior is not guaranteed and may vary based on the data source's
+      // implementation.
+      sql(s"CREATE TABLE test(i INT, j INT, k INT) USING ${cls.getName}")
+      val e = intercept[Exception] {
+        sql("SELECT * FROM test").collect()
+      }
+      assert(e.getMessage.contains(
+        "java.lang.ArrayIndexOutOfBoundsException: Index 2 out of bounds for length 2"))
+    }
+  }
+
+  test("SPARK-46043: create table in SQL with partitioning required data source") {
+    val cls = classOf[PartitionsRequiredDataSource]
+    val e = intercept[IllegalArgumentException](
+      sql(s"CREATE TABLE test(a INT) USING ${cls.getName}"))
+    assert(e.getMessage.contains("user-supplied partitioning"))
+    withTable("test") {
+      sql(s"CREATE TABLE test(i INT, j INT) USING ${cls.getName} PARTITIONED BY (i)")
+      checkAnswer(sql(s"SELECT * FROM test"), Seq(Row(0, 0), Row(1, -1)))
+    }
+  }
+
+  test("SPARK-46043: create table in SQL with path option") {
+    val cls = classOf[SupportsExternalMetadataDataSource]
+    withTempDir { dir =>
+      val path = s"${dir.getCanonicalPath}/test"
+      Seq((0, 1), (1, 2)).toDF("x", "y").write.format("csv").save(path)
+      withTable("test") {
+        sql(
+          s"""
+             |CREATE TABLE test USING ${cls.getName}
+             |OPTIONS (PATH '$path')
+             |""".stripMargin)
+        checkAnswer(sql("SELECT * FROM test"), Seq(Row(0, 1), Row(1, 2)))
+        sql(
+          s"""
+             |CREATE OR REPLACE TABLE test USING ${cls.getName}
+             |OPTIONS (PATH '${dir.getCanonicalPath}/non-existing')
+             |""".stripMargin)
+        checkAnswer(sql("SELECT * FROM test"), Nil)
+        sql(
+          s"""
+             |CREATE OR REPLACE TABLE test USING ${cls.getName}
+             |LOCATION '$path'
+             |""".stripMargin)
+        checkAnswer(sql("SELECT * FROM test"), Seq(Row(0, 1), Row(1, 2)))
+      }
+    }
+  }
 }
 
 
@@ -910,7 +1000,9 @@ class AdvancedReaderFactory(requiredSchema: StructType) extends PartitionReaderF
 class SchemaRequiredDataSource extends TableProvider {
 
   class MyScanBuilder(schema: StructType) extends SimpleScanBuilder {
-    override def planInputPartitions(): Array[InputPartition] = Array.empty
+    override def planInputPartitions(): Array[InputPartition] = {
+      Array(RangeInputPartition(0, 2))
+    }
 
     override def readSchema(): StructType = schema
   }
@@ -933,6 +1025,12 @@ class SchemaRequiredDataSource extends TableProvider {
         new MyScanBuilder(userGivenSchema)
       }
     }
+  }
+}
+
+class PartitionsRequiredDataSource extends SchemaRequiredDataSource {
+  override def inferPartitioning(options: CaseInsensitiveStringMap): Array[Transform] = {
+    throw new IllegalArgumentException("requires user-supplied partitioning")
   }
 }
 
@@ -1125,6 +1223,10 @@ class SimpleWriteOnlyDataSource extends SimpleWritableDataSource {
       }
     }
   }
+}
+
+class SupportsExternalMetadataDataSource extends SimpleWritableDataSource {
+  override def supportsExternalMetadata(): Boolean = true
 }
 
 class SupportsExternalMetadataWritableDataSource extends SimpleWritableDataSource {

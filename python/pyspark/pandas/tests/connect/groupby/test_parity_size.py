@@ -14,24 +14,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import unittest
 
-from pyspark.pandas.tests.test_frame_resample import FrameResampleTestsMixin
+from pyspark.pandas.tests.groupby.test_size import SizeTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class FrameResampleParityTests(
-    FrameResampleTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
-):
+class SizeParityTests(SizeTestsMixin, PandasOnSparkTestCase, ReusedConnectTestCase):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_frame_resample import *  # noqa: F401
+    from pyspark.pandas.tests.connect.groupby.test_parity_size import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
