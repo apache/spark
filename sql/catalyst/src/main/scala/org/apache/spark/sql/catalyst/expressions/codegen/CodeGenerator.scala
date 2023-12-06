@@ -1513,7 +1513,7 @@ object CodeGenerator extends Logging {
     (evaluator.getClazz().getConstructor().newInstance().asInstanceOf[GeneratedClass], codeStats)
   }
 
-  def logGeneratedCode(code: CodeAndComment): Unit = {
+  private def logGeneratedCode(code: CodeAndComment): Unit = {
     val maxLines = SQLConf.get.loggingMaxLinesForCodegen
     if (Utils.isTesting) {
       logError(s"\n${CodeFormatter.format(code, maxLines)}")
@@ -1527,7 +1527,7 @@ object CodeGenerator extends Logging {
    * # of inner classes) of generated classes by inspecting Janino classes.
    * Also, this method updates the metrics information.
    */
-  def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): ByteCodeStats = {
+  private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): ByteCodeStats = {
     // First retrieve the generated classes.
     val classes = evaluator.getBytecodes.asScala
 

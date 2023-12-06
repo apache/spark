@@ -44,6 +44,7 @@ import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.execution.datasources.xml.XmlFileFormat
+import org.apache.spark.sql.execution.python.PythonTableProvider
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
 import org.apache.spark.sql.internal.SQLConf
@@ -105,13 +106,14 @@ case class DataSource(
     // [[FileDataSourceV2]] will still be used if we call the load()/save() method in
     // [[DataFrameReader]]/[[DataFrameWriter]], since they use method `lookupDataSource`
     // instead of `providingClass`.
-    cls.getDeclaredConstructor().newInstance() match {
+    DataSource.newDataSourceInstance(className, cls) match {
       case f: FileDataSourceV2 => f.fallbackFileFormat
       case _ => cls
     }
   }
 
-  private[sql] def providingInstance(): Any = providingClass.getConstructor().newInstance()
+  private[sql] def providingInstance(): Any =
+    DataSource.newDataSourceInstance(className, providingClass)
 
   private def newHadoopConfiguration(): Configuration =
     sparkSession.sessionState.newHadoopConfWithOptions(options)
@@ -622,6 +624,15 @@ object DataSource extends Logging {
     "org.apache.spark.sql.sources.HadoopFsRelationProvider",
     "org.apache.spark.Logging")
 
+  /** Create the instance of the datasource */
+  def newDataSourceInstance(provider: String, providingClass: Class[_]): Any = {
+    providingClass match {
+      case cls if classOf[PythonTableProvider].isAssignableFrom(cls) =>
+        cls.getDeclaredConstructor(classOf[String]).newInstance(provider)
+      case cls => cls.getDeclaredConstructor().newInstance()
+    }
+  }
+
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(provider: String, conf: SQLConf): Class[_] = {
     val provider1 = backwardCompatibilityMap.getOrElse(provider, provider) match {
@@ -649,6 +660,9 @@ object DataSource extends Logging {
                 // Found the data source using fully qualified path
                 dataSource
               case Failure(error) =>
+                // TODO(SPARK-45600): should be session-based.
+                val isUserDefinedDataSource = SparkSession.getActiveSession.exists(
+                  _.sessionState.dataSourceManager.dataSourceExists(provider))
                 if (provider1.startsWith("org.apache.spark.sql.hive.orc")) {
                   throw QueryCompilationErrors.orcNotUsedWithHiveEnabledError()
                 } else if (provider1.toLowerCase(Locale.ROOT) == "avro" ||
@@ -657,6 +671,8 @@ object DataSource extends Logging {
                   throw QueryCompilationErrors.failedToFindAvroDataSourceError(provider1)
                 } else if (provider1.toLowerCase(Locale.ROOT) == "kafka") {
                   throw QueryCompilationErrors.failedToFindKafkaDataSourceError(provider1)
+                } else if (isUserDefinedDataSource) {
+                  classOf[PythonTableProvider]
                 } else {
                   throw QueryExecutionErrors.dataSourceNotFoundError(provider1, error)
                 }
@@ -673,6 +689,14 @@ object DataSource extends Logging {
           }
         case head :: Nil =>
           // there is exactly one registered alias
+          // TODO(SPARK-45600): should be session-based.
+          val isUserDefinedDataSource = SparkSession.getActiveSession.exists(
+            _.sessionState.dataSourceManager.dataSourceExists(provider))
+          // The source can be successfully loaded as either a V1 or a V2 data source.
+          // Check if it is also a user-defined data source.
+          if (isUserDefinedDataSource) {
+            throw QueryCompilationErrors.foundMultipleDataSources(provider)
+          }
           head.getClass
         case sources =>
           // There are multiple registered aliases for the input. If there is single datasource
@@ -708,9 +732,9 @@ object DataSource extends Logging {
   def lookupDataSourceV2(provider: String, conf: SQLConf): Option[TableProvider] = {
     val useV1Sources = conf.getConf(SQLConf.USE_V1_SOURCE_LIST).toLowerCase(Locale.ROOT)
       .split(",").map(_.trim)
-    val cls = lookupDataSource(provider, conf)
+    val providingClass = lookupDataSource(provider, conf)
     val instance = try {
-      cls.getDeclaredConstructor().newInstance()
+      newDataSourceInstance(provider, providingClass)
     } catch {
       // Throw the original error from the data source implementation.
       case e: java.lang.reflect.InvocationTargetException => throw e.getCause
@@ -718,7 +742,8 @@ object DataSource extends Logging {
     instance match {
       case d: DataSourceRegister if useV1Sources.contains(d.shortName()) => None
       case t: TableProvider
-          if !useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
+          if !useV1Sources.contains(
+            providingClass.getCanonicalName.toLowerCase(Locale.ROOT)) =>
         Some(t)
       case _ => None
     }

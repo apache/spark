@@ -20,18 +20,141 @@ package org.apache.spark.sql.execution.python
 import java.io.{DataInputStream, DataOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.Pickler
 
-import org.apache.spark.api.python.{PythonFunction, PythonWorkerUtils, SimplePythonFunction, SpecialLengths}
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, PythonDataSource}
+import org.apache.spark.JobArtifactSet
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonFunction, PythonWorkerUtils, SimplePythonFunction, SpecialLengths}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.PythonUDF
+import org.apache.spark.sql.catalyst.plans.logical.PythonDataSourcePartitions
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH_WRITE}
+import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
+
+
+/**
+ * Data Source V2 wrapper for Python Data Source.
+ */
+class PythonTableProvider(shortName: String) extends TableProvider {
+  private lazy val source: UserDefinedPythonDataSource =
+    SparkSession.active.sessionState.dataSourceManager.lookupDataSource(shortName)
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType =
+    source.inferSchema(shortName, options)
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: java.util.Map[String, String]): Table = {
+    new PythonTable(shortName, source, schema)
+  }
+}
+
+class PythonTable(shortName: String, source: UserDefinedPythonDataSource, givenSchema: StructType)
+      extends Table with SupportsRead {
+  override def name(): String = shortName
+
+  override def capabilities(): java.util.Set[TableCapability] = java.util.EnumSet.of(
+    BATCH_READ, BATCH_WRITE)
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+    new ScanBuilder with Batch with Scan {
+
+      private lazy val pythonFunc: PythonFunction = source.createPythonFunction(
+        shortName, options, Some(givenSchema))
+
+      private lazy val info: PythonDataSourceReadInfo =
+        new UserDefinedPythonDataSourceReadRunner(
+          pythonFunc, PythonDataSourcePartitions.schema, givenSchema).runInPython()
+
+      override def build(): Scan = this
+
+      override def toBatch: Batch = this
+
+      override def readSchema(): StructType = givenSchema
+
+      override def planInputPartitions(): Array[InputPartition] =
+        info.partitions.zipWithIndex.map(p => PythonInputPartition(p._2, p._1)).toArray
+
+      override def createReaderFactory(): PartitionReaderFactory =
+        new PythonPartitionReaderFactory(info, pythonFunc, givenSchema)
+    }
+  }
+
+  override def schema(): StructType = givenSchema
+}
+
+case class PythonInputPartition(index: Int, pickedPartition: Array[Byte]) extends InputPartition
+
+class PythonPartitionReaderFactory(
+      info: PythonDataSourceReadInfo, dataSource: PythonFunction, schema: StructType)
+    extends PartitionReaderFactory {
+
+  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+
+  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
+    val partitionInfo = partition.asInstanceOf[PythonInputPartition]
+
+    val readerFunc = SimplePythonFunction(
+      command = info.func.toImmutableArraySeq,
+      envVars = dataSource.envVars,
+      pythonIncludes = dataSource.pythonIncludes,
+      pythonExec = dataSource.pythonExec,
+      pythonVer = dataSource.pythonVer,
+      broadcastVars = dataSource.broadcastVars,
+      accumulator = dataSource.accumulator)
+
+    val partitionPlan = PythonDataSourcePartitions(
+      PythonDataSourcePartitions.getOutputAttrs, info.partitions)
+
+    val pythonEvalType = PythonEvalType.SQL_MAP_ARROW_ITER_UDF
+
+    val pythonUDF = PythonUDF(
+      name = "read_from_data_source",
+      func = readerFunc,
+      dataType = schema,
+      children = partitionPlan.output,
+      evalType = pythonEvalType,
+      udfDeterministic = false)
+
+    val conf = SQLConf.get
+
+    val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
+    val evaluatorFactory = new MapInBatchEvaluatorFactory(
+      toAttributes(schema),
+      Seq(ChainedPythonFunctions(Seq(pythonUDF.func))),
+      PythonDataSourcePartitions.schema,
+      conf.arrowMaxRecordsPerBatch,
+      pythonEvalType,
+      conf.sessionLocalTimeZone,
+      conf.arrowUseLargeVarTypes,
+      pythonRunnerConf,
+      None,
+      jobArtifactUUID)
+
+    new PartitionReader[InternalRow] {
+
+      private val outputIter = evaluatorFactory.createEvaluator().eval(
+        partitionInfo.index, Iterator.single(InternalRow(partitionInfo.pickedPartition)))
+
+      override def next(): Boolean = outputIter.hasNext
+
+      override def get(): InternalRow = outputIter.next()
+
+      override def close(): Unit = {}
+    }
+  }
+}
 
 /**
  * A user-defined Python data source. This is used by the Python API.
@@ -40,19 +163,36 @@ import org.apache.spark.util.ArrayImplicits._
  */
 case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
 
-  def builder(
-      sparkSession: SparkSession,
-      provider: String,
-      userSpecifiedSchema: Option[StructType],
-      options: CaseInsensitiveMap[String]): LogicalPlan = {
+  private var pythonResult: PythonDataSourceCreationResult = _
 
+  private def getOrCreatePythonResult(
+      shortName: String,
+      options: CaseInsensitiveStringMap,
+      userSpecifiedSchema: Option[StructType]): PythonDataSourceCreationResult = {
+    if (pythonResult != null) return pythonResult
     val runner = new UserDefinedPythonDataSourceRunner(
-      dataSourceCls, provider, userSpecifiedSchema, options)
+      dataSourceCls,
+      shortName,
+      userSpecifiedSchema,
+      CaseInsensitiveMap(options.asCaseSensitiveMap().asScala.toMap))
+    pythonResult = runner.runInPython()
+    pythonResult
+  }
 
-    val result = runner.runInPython()
-    val pickledDataSourceInstance = result.dataSource
+  def inferSchema(
+      shortName: String,
+      options: CaseInsensitiveStringMap): StructType = {
+    getOrCreatePythonResult(shortName, options, None).schema
+  }
 
-    val dataSource = SimplePythonFunction(
+  def createPythonFunction(
+      shortName: String,
+      options: CaseInsensitiveStringMap,
+      userSpecifiedSchema: Option[StructType]): PythonFunction = {
+    val pickledDataSourceInstance = getOrCreatePythonResult(
+      shortName, options, userSpecifiedSchema).dataSource
+
+    SimplePythonFunction(
       command = pickledDataSourceInstance.toImmutableArraySeq,
       envVars = dataSourceCls.envVars,
       pythonIncludes = dataSourceCls.pythonIncludes,
@@ -60,18 +200,6 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       pythonVer = dataSourceCls.pythonVer,
       broadcastVars = dataSourceCls.broadcastVars,
       accumulator = dataSourceCls.accumulator)
-    val schema = result.schema
-
-    PythonDataSource(dataSource, schema, output = toAttributes(schema))
-  }
-
-  def apply(
-      sparkSession: SparkSession,
-      provider: String,
-      userSpecifiedSchema: Option[StructType] = None,
-      options: CaseInsensitiveMap[String] = CaseInsensitiveMap(Map.empty)): DataFrame = {
-    val plan = builder(sparkSession, provider, userSpecifiedSchema, options)
-    Dataset.ofRows(sparkSession, plan)
   }
 }
 

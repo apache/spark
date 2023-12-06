@@ -18,8 +18,6 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
-import org.apache.spark.sql.catalyst.plans.logical.{PythonDataSourcePartitions, PythonMapInArrow}
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
@@ -53,14 +51,10 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val schema = StructType.fromDDL("id INT, partition INT")
     val dataSource = createUserDefinedPythonDataSource(
       name = dataSourceName, pythonScript = dataSourceScript)
-    val df = dataSource.apply(
-      spark, provider = dataSourceName, userSpecifiedSchema = Some(schema))
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    val df = spark.read.format(dataSourceName).schema(schema).load()
     assert(df.rdd.getNumPartitions == 2)
     val plan = df.queryExecution.optimizedPlan
-    plan match {
-      case PythonMapInArrow(_, _, _: PythonDataSourcePartitions, _) =>
-      case _ => fail(s"Plan did not match the expected pattern. Actual plan:\n$plan")
-    }
     checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
   }
 
@@ -79,7 +73,8 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
          |        return SimpleDataSourceReader()
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
-    val df = dataSource(spark, provider = dataSourceName)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    val df = spark.read.format(dataSourceName).load()
     checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
   }
 
@@ -102,7 +97,8 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
          |        return SimpleDataSourceReader()
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
-    val df = dataSource(spark, provider = dataSourceName)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    val df = spark.read.format(dataSourceName).load()
     checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
   }
 
@@ -121,13 +117,14 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
          |        return SimpleDataSourceReader()
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
     checkError(
-      exception = intercept[AnalysisException](dataSource(spark, provider = dataSourceName)),
+      exception = intercept[AnalysisException](spark.read.format(dataSourceName).load()),
       errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
       parameters = Map("inputSchema" -> "INT", "dataType" -> "\"INT\""))
   }
 
-  test("register data source") {
+  test("test dataSourceExists") {
     assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
@@ -145,34 +142,6 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
     assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
-    val ds1 = spark.sessionState.dataSourceManager.lookupDataSource(dataSourceName)
-    checkAnswer(
-      ds1(spark, dataSourceName, None, CaseInsensitiveMap(Map.empty)),
-      Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
-
-    // Should be able to override an already registered data source.
-    val newScript =
-      s"""
-         |from pyspark.sql.datasource import DataSource, DataSourceReader
-         |class SimpleDataSourceReader(DataSourceReader):
-         |    def read(self, partition):
-         |        yield (0, )
-         |
-         |class $dataSourceName(DataSource):
-         |    def schema(self) -> str:
-         |        return "id INT"
-         |
-         |    def reader(self, schema):
-         |        return SimpleDataSourceReader()
-         |""".stripMargin
-    val newDataSource = createUserDefinedPythonDataSource(dataSourceName, newScript)
-    spark.dataSource.registerPython(dataSourceName, newDataSource)
-    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
-
-    val ds2 = spark.sessionState.dataSourceManager.lookupDataSource(dataSourceName)
-    checkAnswer(
-      ds2(spark, dataSourceName, None, CaseInsensitiveMap(Map.empty)),
-      Seq(Row(0)))
   }
 
   test("load data source") {
@@ -215,12 +184,10 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
     spark.dataSource.registerPython("test", dataSource)
-
     checkAnswer(spark.read.format("test").load(), Seq(Row(null, 1)))
     checkAnswer(spark.read.format("test").load("1"), Seq(Row("1", 1)))
     checkAnswer(spark.read.format("test").load("1", "2"), Seq(Row("1", 1), Row("2", 1)))
 
-    // Test SQL
     withTable("tblA") {
       sql("CREATE TABLE tblA USING test")
       // The path will be the actual temp path.
@@ -239,8 +206,9 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val schema = StructType.fromDDL("id INT, partition INT")
     val dataSource = createUserDefinedPythonDataSource(
       name = dataSourceName, pythonScript = dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
     val err = intercept[AnalysisException] {
-      dataSource(spark, dataSourceName, userSpecifiedSchema = Some(schema)).collect()
+      spark.read.format(dataSourceName).schema(schema).load().collect()
     }
     assert(err.getErrorClass == "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON")
     assert(err.getMessage.contains("PYTHON_DATA_SOURCE_METHOD_NOT_IMPLEMENTED"))
@@ -258,8 +226,9 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val schema = StructType.fromDDL("id INT, partition INT")
     val dataSource = createUserDefinedPythonDataSource(
       name = dataSourceName, pythonScript = dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
     val err = intercept[AnalysisException] {
-      dataSource(spark, dataSourceName, userSpecifiedSchema = Some(schema)).collect()
+      spark.read.format(dataSourceName).schema(schema).load().collect()
     }
     assert(err.getErrorClass == "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON")
     assert(err.getMessage.contains("PYTHON_DATA_SOURCE_CREATE_ERROR"))
@@ -277,8 +246,9 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val schema = StructType.fromDDL("id INT, partition INT")
     val dataSource = createUserDefinedPythonDataSource(
       name = dataSourceName, pythonScript = dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
     val err = intercept[AnalysisException] {
-      dataSource(spark, dataSourceName, userSpecifiedSchema = Some(schema)).collect()
+      spark.read.format(dataSourceName).schema(schema).load().collect()
     }
     assert(err.getErrorClass == "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON")
     assert(err.getMessage.contains("PYTHON_DATA_SOURCE_TYPE_MISMATCH"))
@@ -312,7 +282,8 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
          |        return SimpleDataSourceReader()
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
-    val df = dataSource(spark, provider = dataSourceName)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    val df = spark.read.format(dataSourceName).load()
     checkAnswer(df, Seq(Row(1), Row(3)))
   }
 
@@ -339,7 +310,8 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
          |        return SimpleDataSourceReader()
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
-    val df = dataSource(spark, provider = dataSourceName)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    val df = spark.read.format(dataSourceName).load()
     checkAnswer(df, Row("success"))
   }
 
@@ -386,8 +358,9 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
            |        return SimpleDataSourceReader()
            |""".stripMargin
       val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+      spark.dataSource.registerPython(dataSourceName, dataSource)
       val err = intercept[AnalysisException](
-        dataSource(spark, provider = dataSourceName).collect())
+        spark.read.format(dataSourceName).load().collect())
       assert(err.getErrorClass == "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON")
       assert(err.getMessage.contains("PYTHON_DATA_SOURCE_CREATE_ERROR"))
     }
