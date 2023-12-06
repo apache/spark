@@ -201,7 +201,6 @@ jobs:
       SKIP_UNIDOC: true
       SKIP_MIMA: true
       SKIP_PACKAGING: true
-      BRANCH: ${{ inputs.branch }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
